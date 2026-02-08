@@ -14,18 +14,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pandoc
-          
+        run: npm install
+
       - name: Build Documentation
-        run: bash specs/build.sh
+        run: npm run docs:build
 
       - name: Upload Build Artifacts
         uses: actions/upload-pages-artifact@v3
         with:
-          path: specs/build/
+          path: specs/.vitepress/dist/
 
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

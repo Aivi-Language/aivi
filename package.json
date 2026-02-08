@@ -1,0 +1,15 @@
+{
+  "name": "aivi-docs",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@6.14.1",
+  "scripts": {
+    "docs:dev": "vitepress dev specs",
+    "docs:build": "vitepress build specs",
+    "docs:preview": "vitepress preview specs"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4"
+  }
+}
+

@@ -92,7 +92,20 @@ A high-integrity functional language targeting WebAssembly.
 
 ## Building the Specification
 
-Generate HTML:
+### VitePress (recommended)
+
+```bash
+npm install
+npm run docs:dev
+```
+
+Build static site:
+
+```bash
+npm run docs:build
+```
+
+### Legacy (pandoc)
 
 ```bash
 ./build.sh
