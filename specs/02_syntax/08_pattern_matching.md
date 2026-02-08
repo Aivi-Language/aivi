@@ -19,9 +19,3 @@ sum =
   | [] => 0
   | [h, ...t] => h + sum t
 ```
-
-### From Haskell
-Identical to top-level pattern matching function definitions.
-
-### From TypeScript
-No direct equivalent; requires `if/else` or switch statements inside the function body.

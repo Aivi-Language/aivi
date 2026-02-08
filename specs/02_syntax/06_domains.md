@@ -42,9 +42,3 @@ vector1 + vector2
 ```
 
 Valid only if the domain defines the operation.
-
-### From Haskell
-Similar to type classes defining operators, but strictly for domain-specific semantics rather than generic arithmetic.
-
-### From TypeScript
-No direct equivalent; usually handled by libraries like `date-fns` or specialized objects. AIVI makes this a language feature.

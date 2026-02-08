@@ -16,12 +16,6 @@ pi = 3.14159
 add = x y => x + y
 ```
 
-### From TypeScript
-Unlike TypeScript, `const` or `let` keywords are not used. Immutability is the default.
-
-### From Haskell
-Similar to Haskell top-level bindings, but uses `=` consistently for all constructs.
-
 ---
 
 ## 1.2 Shadowing

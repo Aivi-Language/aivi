@@ -9,12 +9,6 @@
 add 5 10
 ```
 
-### From Haskell
-Identical to Haskell function application.
-
-### From TypeScript
-Equivalent to `add(5)(10)` if manually curried, or `add(5, 10)` if not, but syntax is whitespace.
-
 ---
 
 ## 2.2 Lambdas

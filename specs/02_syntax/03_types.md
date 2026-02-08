@@ -32,12 +32,6 @@ Option A = None | Some A
 Result E A = Err E | Ok A
 ```
 
-### From Haskell
-Equivalent to `data Option a = None | Some a`.
-
-### From TypeScript
-Equivalent to discriminated unions: `type Option<A> = { tag: 'None' } | { tag: 'Some', value: A }`.
-
 ---
 
 ## 3.3 Open Records (Row Polymorphism)
@@ -56,9 +50,6 @@ Functions specify **minimum required fields**, not exact shapes.
 ```aivi
 getName = u => u.name
 ```
-
-### From TypeScript
-Similar to interfaces or types, but structural typing is "exact" unless specified otherwise in some contexts; here it's polymorphic on the row.
 
 ---
 
