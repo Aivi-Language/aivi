@@ -70,9 +70,9 @@ domain Db over (Table A) = {
   (?) : Table A -> (A -> Bool) -> Query A
   (?) table pred = queryWhere table pred
   
-  -- Patching rows
-  (|) : Row A -> Patch A -> Effect Db (Row A)
-  (|) row patch = updateRow row patch
+  -- Patching rows (uses language patch operator)
+  (<=) : Row A -> Patch A -> Effect Db (Row A)
+  (<=) row patch = updateRow row patch
   
   -- Insert
   (+) : Table A -> A -> Effect Db (Row A)
@@ -119,13 +119,13 @@ userWithPosts = db.users
 
 ## Patching Rows
 
-Use AIVI's patch syntax to update rows:
+Use AIVI's `<=` patch syntax to update rows:
 
 ```aivi
 user = db.users ? (_.id == 1) |> head
 
 -- Patch the row
-updated = user | { name: `New Name`, email: `new@example.com` }
+updated = user <= { name: `New Name`, email: `new@example.com` }
 ```
 
 ### Batch Updates
@@ -134,7 +134,7 @@ updated = user | { name: `New Name`, email: `new@example.com` }
 -- Update all matching rows
 db.users
   |> filter (_.status == Inactive)
-  |> map (_ | { status: Archived })
+  |> map (_ <= { status: Archived })
 ```
 
 ---
@@ -156,8 +156,8 @@ deleted = db.users - (_.createdAt < cutoffDate)
 ```aivi
 transfer : Account -> Account -> Decimal -> Effect Db Unit
 transfer from to amount = db.transaction do
-  from | { balance: from.balance - amount }
-  to | { balance: to.balance + amount }
+  from <= { balance: from.balance - amount }
+  to <= { balance: to.balance + amount }
   pure Unit
 ```
 

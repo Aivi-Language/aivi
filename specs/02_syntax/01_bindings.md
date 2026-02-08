@@ -72,3 +72,67 @@ Example:
 ```aivi
 describe = u@{ id, name } => `{id}: {name}`
 ```
+
+---
+
+## 1.5 Usage Examples
+
+### Config Binding
+
+```aivi
+config = {
+  host: `localhost`
+  port: 8080
+  debug: True
+}
+
+{ host, port } = config
+serverUrl = `http://{host}:{port}`
+```
+
+### Tuple Destructuring
+
+```aivi
+point = (10, 20)
+(x, y) = point
+
+distance = sqrt (x * x + y * y)
+```
+
+### Nested Destructuring
+
+```aivi
+response = {
+  data: {
+    user: { id: 1, name: `Alice` }
+    token: `abc123`
+  }
+  status: 200
+}
+
+{ data: { user: { name } } } = response
+greeting = `Hello, {name}!`
+```
+
+### List Head/Tail
+
+```aivi
+numbers = [1, 2, 3, 4, 5]
+[first, second, ...rest] = numbers
+
+-- first = 1, second = 2, rest = [3, 4, 5]
+```
+
+### Function Definitions
+
+```aivi
+-- Named function
+greet = name => `Hello, {name}!`
+
+-- Multi-argument
+add = x y => x + y
+
+-- With type annotation
+multiply : Int -> Int -> Int
+multiply = a b => a * b
+```

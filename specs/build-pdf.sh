@@ -30,6 +30,7 @@ FILES=(
   "$SPEC_DIR/02_syntax/10_modules.md"
   "$SPEC_DIR/02_syntax/11_domain_definition.md"
   "$SPEC_DIR/02_syntax/12_external_sources.md"
+  "$SPEC_DIR/02_syntax/13_jsx_literals.md"
   
   # Kernel
   "$SPEC_DIR/03_kernel/01_core_terms.md"

@@ -75,17 +75,50 @@ form attrs children = { tag: `form`, attrs, children }
 
 ## Usage Examples
 
+With [JSX literals](../02_syntax/13_jsx_literals.md), HTML becomes natural:
+
 ```aivi
 use aivi/std/html
 
+header = <div class=`header`>
+  <span>AIVI</span>
+</div>
+
+nav = <ul class=`nav`>
+  <li><a href=`/home`>Home</a></li>
+  <li><a href=`/about`>About</a></li>
+</ul>
+
+page = <div class=`container`>
+  {header}
+  {nav}
+</div>
+```
+
+### Dynamic Content
+
+```aivi
+UserList = users => <ul>
+  {users |> map (u => <li>
+    <a href={`/user/{u.id}`}>{u.name}</a>
+  </li>)}
+</ul>
+
+Dashboard = { user, posts } => <main>
+  <h1>Welcome, {user.name}!</h1>
+  {posts |> isEmpty ? 
+    <p>No posts yet.</p> : 
+    <PostList posts={posts} />}
+</main>
+```
+
+### Underlying Function Syntax
+
+JSX desugars to these constructors (rarely used directly):
+
+```aivi
 header = div [ class `header` ] (
   span [] (TextNode `AIVI`)
 )
-
-nav = ul [ class `nav` ] (Elements [
-  li [] (a [ href `/home` ] (TextNode `Home`))
-  li [] (a [ href `/about` ] (TextNode `About`))
-])
-
-page = div [ class `container` ] Empty + header + nav
 ```
+
