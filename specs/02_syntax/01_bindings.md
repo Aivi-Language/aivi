@@ -73,10 +73,8 @@ Allowed in:
 Example:
 
 ```aivi
-// u is used to pass the entire record, while id/name are used for interpolation
-logUser = u@{ id, name } => 
-  log u 
-  "{id}: {name}"
+// u is bound to the full record; id/name come from destructuring
+formatUser = u@{ id, name } => "{id}: {name}"
 ```
 
 ---
@@ -95,7 +93,6 @@ config = {
 { host, port } = config
 serverUrl = "http://{host}:{port}" 
 ```
-```
 
 ### Tuple Destructuring
 
@@ -106,7 +103,7 @@ point = (10, 20)
 distance = sqrt (x² + y²) // Unicode powers (², ³, etc.) are supported as syntactic sugar for `pow x 2`.
 ```
 
-## 1.5 Deep path destructuring
+### Deep path destructuring
 
 Record destructuring supports **dot-paths** to access nested fields directly. This combines path addressing with the `@` whole-value binder.
 
@@ -141,7 +138,7 @@ numbers = [1, 2, 3, 4, 5]
 
 ```aivi
 // Named function
-greet = name => "Hello, {name}!" or greet = "Hello, _!"
+greet = name => "Hello, {name}!"
 
 // Multi-argument
 add = x y => x + y

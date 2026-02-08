@@ -30,8 +30,12 @@ Inside a predicate expression:
 * `_` is bound to the **current element**
 * bare field names are resolved as `_ . field`
 
+> [!TIP]
+> This creates a powerful deconstruction shortcut. `filter active` is interpreted as `filter ({ active } => active)`, meaning boolean fields can be used directly as filters without extra syntax.
+
 ```aivi
 price > 80        // _.price > 80
+active            // _.active
 ```
 
 ---
@@ -45,6 +49,10 @@ A => Bool
 ```
 
 a predicate expression may be supplied.
+
+> [!NOTE]
+> Predicates can also perform complex transformations by deconstructing multiple fields:
+> `map { name, id } => if id > 10 then name else "no name"`
 
 Desugaring:
 
@@ -67,7 +75,7 @@ Applies to:
 Predicates do **not** auto-lift over `Option` or `Result`.
 
 ```aivi
-filter (email == "x")      // ❌ if email : Option String
+filter (email == "x")      // ❌ if email : Option Text
 filter (email == Some "x") // ✅
 ```
 

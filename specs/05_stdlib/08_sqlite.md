@@ -17,7 +17,7 @@ Table A ≈ List (Row A)
 
 ## Module
 
-```aivi.std.sqlite
+```aivi
 module aivi.std.sqlite = {
   export domain Db
   export Table, Row, Query, Column
@@ -31,11 +31,13 @@ module aivi.std.sqlite = {
 
 ```aivi
 @table "users"
+Status = Active | Inactive
+
 User = {
   id: Int @primary @auto
   name: Text
   email: Text @unique
-  status: Active | Inactive
+  status: Status
 }
 
 db : Source Db { users: Table User, posts: Table Post }

@@ -65,6 +65,7 @@ function build_html() {
 MAIN_FILES=(
   "$SPEC_DIR/README.md"
   "$SPEC_DIR/01_introduction.md"
+  "$SPEC_DIR/02_syntax/00_grammar.md"
   "$SPEC_DIR/02_syntax/01_bindings.md"
   "$SPEC_DIR/02_syntax/02_functions.md"
   "$SPEC_DIR/02_syntax/03_types.md"

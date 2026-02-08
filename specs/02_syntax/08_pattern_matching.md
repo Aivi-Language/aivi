@@ -2,22 +2,27 @@
 
 ## 8.1 `?` branching
 
-
 ```aivi
-classify = v ?
+classify = v => v ?
   | 0 => "zero"
   | _ => "nonzero"
 ```
 
 This is a concise way to do case analysis, similar to `match` in Rust or `case` in Haskell/Elixir.
 
+Compiler checks:
+
+- Non-exhaustive matches are a compile-time error unless a catch-all arm (`_`) is present.
+- Unreachable arms (shadowed by earlier patterns) produce a warning.
+
 ---
 
 ## 8.2 Multi-clause functions
 
 ```aivi
-sum [] = 0
-sum [h, ...t] = h + sum t
+sum =
+  | [] => 0
+  | [h, ...t] => h + sum t
 ```
 
 ---
@@ -25,7 +30,7 @@ sum [h, ...t] = h + sum t
 ## 8.3 Record Patterns
 
 ```aivi
-greet = _ ?
+greet =
   | { role: Admin, name } => "Welcome back, Admin {name}!"
   | { role: Guest } => "Welcome, guest!"
   | { name } => "Hello, {name}!"
@@ -36,25 +41,26 @@ greet = _ ?
 ## 8.4 Nested Patterns
 
 ```aivi
-processResult Ok { data.users: [first, ...] } = "First user: {first.name}"
-processResult Ok { data.users: [] } = "No users found"
-processResult Err { code: 404 } = "Not found"
-processResult Err { code, message } = "Error {code}: {message}"
+processResult =
+  | Ok { data: { users: [first, ...] } } => "First user: {first.name}"
+  | Ok { data: { users: [] } } => "No users found"
+  | Err { code: 404 } => "Not found"
+  | Err { code, message } => "Error {code}: {message}"
 ```
 
 ---
 
 ## 8.5 Guards
 
-Patterns can have guards using `|`:
+Patterns can have guards using `when`:
 
 ```aivi
-classify n
-  | n < 0  = "negative"
-  | n == 0 = "zero"
-  | n < 10 = "small"
-  | n < 100 = "medium"
-  | _      = "large"
+classify =
+  | n when n < 0   => "negative"
+  | 0              => "zero"
+  | n when n < 10  => "small"
+  | n when n < 100 => "medium"
+  | _              => "large"
 ```
 
 ---
@@ -66,7 +72,7 @@ classify n
 ```aivi
 Option A = None | Some A
 
-getOrDefault = default => _ ?
+getOrDefault = default => v => v ?
   | None => default
   | Some value => value
 
@@ -78,7 +84,7 @@ userName = user.nickname |> getOrDefault "Anonymous"
 ```aivi
 Result E A = Err E | Ok A
 
-handleResult = _ ?
+handleResult =
   | Ok data => processData data
   | Err e => logError e
 
@@ -92,19 +98,21 @@ fetchUser id
 
 ```aivi
 // Safe head
-head [] = None
-head [x, ...] = Some x
+head =
+  | [] => None
+  | [x, ...] => Some x
 
 // Take first n
-take n xs
-  | n <= 0 = []
-  | xs == [] = []
-  | [x, ...xs] = [x, ...take (n - 1) xs]
+take = (n, xs) => (n, xs) ?
+  | (n, _) when n <= 0 => []
+  | (_, [])            => []
+  | (n, [x, ...xs])    => [x, ...take (n - 1, xs)]
 
 // Zip two lists
-zip ([], _) = []
-zip (_, []) = []
-zip ([x, ...xs], [y, ...ys]) = [(x, y), ...zip xs ys]
+zip =
+  | ([], _) => []
+  | (_, []) => []
+  | ([x, ...xs], [y, ...ys]) => [(x, y), ...zip (xs, ys)]
 ```
 
 ### Tree Traversal
@@ -112,11 +120,11 @@ zip ([x, ...xs], [y, ...ys]) = [(x, y), ...zip xs ys]
 ```aivi
 Tree A = Leaf A | Node (Tree A) (Tree A)
 
-depth = _ ?
+depth =
   | Leaf _ => 1
   | Node left right => 1 + max (depth left) (depth right)
 
-flatten = _ ?
+flatten =
   | Leaf x => [x]
   | Node left right => flatten left ++ flatten right
 ```
@@ -126,7 +134,7 @@ flatten = _ ?
 ```aivi
 Expr = Num Int | Add Expr Expr | Mul Expr Expr
 
-eval = _ ?
+eval =
   | Num n => n
   | Add a b => eval a + eval b
   | Mul a b => eval a * eval b
@@ -139,11 +147,12 @@ result = eval expr
 
 Pattern matching excels at simplifying complex conditional branches into readable declarations.
 
-// Extract deeply buried data with fallback
+```aivi
 headerLabel = response ?
   | { data.user.profile@{name} } => name
   | { data.guest: True }         => "Guest"
   | _                           => "Unknown"
+```
 
 ### Concise State Machines
 ```aivi
@@ -159,9 +168,9 @@ nextState = (state, event) => (state, event) ?
 ### Expressive Logic Branches
 ```aivi
 // Business rule mapping
-discount user
-  | user.age > 65 and user.tier == Gold = 0.3
-  | user.tier == Gold                  = 0.2
-  | user.tier == Silver                = 0.1
-  | _                                  = 0.0
+discount = user => user ?
+  | _ when user.age > 65 and user.tier == Gold => 0.3
+  | _ when user.tier == Gold                  => 0.2
+  | _ when user.tier == Silver                => 0.1
+  | _                                         => 0.0
 ```

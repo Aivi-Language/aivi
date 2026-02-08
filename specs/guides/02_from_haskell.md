@@ -23,7 +23,7 @@ data User = User { id :: Int, name :: String }
 
 **AIVI:**
 ```aivi
-User = { id: Int, name: String }
+User = { id: Int, name: Text }
 // Just an alias, not a nominal type
 ```
 

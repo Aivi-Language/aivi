@@ -8,7 +8,7 @@ Effectful operations in AIVI are modeled using the `Effect E A` type, where:
 
 ### Semantics
 - **Atomic Progress**: Effects are either successfully completed, failed with `E`, or **cancelled**.
-- **Cancellation**: Cancellation is an asynchronous signal that stops the execution of an effect. When cancelled, the effect is guaranteed to run all registered cleanup (see [Resources](file:///home/mendrik/desk/mendrik/aivi/specs/02_syntax/15_resources.md)).
+- **Cancellation**: Cancellation is an asynchronous signal that stops the execution of an effect. When cancelled, the effect is guaranteed to run all registered cleanup (see [Resources](15_resources.md)).
 - **Transparent Errors**: Errors in `E` are part of the type signature, forcing explicit handling or propagation.
 
 ---
@@ -24,20 +24,23 @@ main = effect {
 
 This is syntax sugar for monadic binding (see Desugaring section). All effectful operations within these blocks are automatically sequenced.
 
+Compiler checks:
+
+- Expression statements of non-`Effect` type in an `effect { ... }` block produce a warning unless they are the final expression or are bound.
+- Discarded `Effect` results produce a warning unless explicitly bound (including binding to `_`).
+
 ---
 
 ## 9.3 Effects and patching
 
 ```aivi
-user = fetchUser 123
-
-authorized = user <= {
+authorize = user => user <= {
   roles: _ ++ ["Admin"]
   lastLogin: now
 }
 ```
 
-Automatic lifting handles `Result` and other effect functors seamlessly.
+Patches are pure values. Apply them where you have the record value available (often inside an `effect` block after decoding/loading).
 
 ---
 
@@ -85,7 +88,7 @@ Effect blocks can be combined with pipelines and pattern matching to create very
 // Fetch config, then fetch data, then log
 setup = effect {
   loadConfig "prod.json"
-    |> filter (.enabled)
+    |> filter enabled
     |> bind fetchRemoteData
     |> map logSuccess
 }
@@ -95,14 +98,14 @@ setup = effect {
 ```aivi
 // Attempt operation, providing a typed default on error
 getUser = id => effect {
-  api.fetchUser id ? {
-    Ok user => user
-    Err _   => GuestUser
-  }
+  res = api.fetchUser id
+  res ?
+    | Ok user => user
+    | Err _   => GuestUser
 }
 
 // Composition with Result domains
 validatedUser = getUser 123
-  |> filter (.age > 18)
+  |> filter (age > 18)
   |> map toAdmin
 ```

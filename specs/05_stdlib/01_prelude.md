@@ -6,7 +6,7 @@ The prelude is implicitly imported by all AIVI programs.
 module aivi.prelude = {
   // Core types
   export Int, Float, Bool, Text, Char
-  export List, Maybe, Result, Tuple
+  export List, Option, Result, Tuple
   
   // Standard domains
   export domain Calendar
@@ -27,7 +27,7 @@ module aivi.prelude = {
 
 ```aivi
 @no_prelude
-module my.custom/module = {
+module my.custom.module = {
   // Nothing imported automatically
   use aivi.std.core (Int, Bool)
 }

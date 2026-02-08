@@ -7,9 +7,9 @@ Modules are the primary unit of code organization, encapsulation, and reuse in A
 ```aivi
 module my.utility.math = {
   export add, subtract
-  export Pi
+  export pi
   
-  Pi = 3.14159
+  pi = 3.14159
   add = a b => a + b
   subtract = a b => a - b
   
@@ -41,7 +41,7 @@ use aivi.std.core
 ```
 
 ### Selective / Selective Hiding
-```aivi.std.calendar
+```aivi
 use aivi.std.calendar (Date, isLeapYear)
 use aivi.std.list hiding (map, filter)
 ```
@@ -51,6 +51,11 @@ use aivi.std.list hiding (map, filter)
 use aivi.std.calendar as Cal
 use vendor.legacy.math (v1_add as add)
 ```
+
+Compiler checks:
+
+- Importing a missing module or symbol is a compile-time error.
+- Unused imports produce a warning (suppressed if importing solely for a domain side-effect in v0.1).
 
 ---
 

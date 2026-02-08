@@ -11,7 +11,7 @@ Int
 Float
 Decimal
 BigInt
-String
+Text
 Bytes
 Duration
 Instant
@@ -44,13 +44,14 @@ Records are:
 * open by default
 
 ```aivi
-User = { id: Int, name: String, email: Option String }
+User = { id: Int, name: Text, email: Option Text }
 ```
 
 Functions specify **minimum required fields**, not exact shapes.
 
 ```aivi
-getName = u => u.name // better and more complex example please
+getName : { name: Text } -> Text
+getName = .name
 ```
 
 ---
@@ -59,7 +60,7 @@ getName = u => u.name // better and more complex example please
 
 ```aivi
 class Functor (F *) = {
-  map: F A, (A => B) => F B
+  map: F A -> (A -> B) -> F B
 }
 
 // Tokens explained:
@@ -72,8 +73,8 @@ class Functor (F *) = {
 ```aivi
 class Monad (M *) =
   Functor (M *) & { // The & operator denotes class inheritance/aggregation
-    pure: A => M A
-    flatMap: M A, (A => M B) => M B
+    pure: A -> M A
+    flatMap: M A -> (A -> M B) -> M B
   }
 ```
 

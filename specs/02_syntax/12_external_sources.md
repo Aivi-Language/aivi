@@ -41,7 +41,7 @@ users = file.csv "./users.csv"
 Typed REST/API integration.
 
 ```aivi
-type User = { id: Int, name: Text }
+User = { id: Int, name: Text }
 
 // Typed GET request (inferred type)
 users : Source Http (List User)
@@ -102,9 +102,11 @@ AIVI treats Large Language Models as typed probabilistic sources. This is a core
 
 ```aivi
 // Define expected output shape
-type Analysis = { 
-  sentiment: Positive | Negative | Neutral
-  summary: Text 
+Sentiment = Positive | Negative | Neutral
+
+Analysis = {
+  sentiment: Sentiment
+  summary: Text
 }
 
 // LLM completion with strict schema enforcement

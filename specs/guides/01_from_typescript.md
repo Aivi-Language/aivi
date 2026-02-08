@@ -30,8 +30,8 @@ interface User {
 ```aivi
 User = {
   id: Int
-  name: String
-  email: Option String
+  name: Text
+  email: Option Text
 }
 ```
 

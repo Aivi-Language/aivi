@@ -127,7 +127,17 @@ pre.aivi, code.aivi {
 .keyword { color: #ff79c6; font-weight: 600; }
 .type { color: #8be9fd; }
 .string { color: #f1fa8c; }
-.comment { color: #6272a4; font-style: italic; }
+.comment { 
+  display: block;
+  background: #282a36; /* Darker navy/gray for contrast against the gradient bg */
+  color: #bd93f9;      /* Purple for better readability */
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin: 8px 0;
+  border-left: 3px solid #6272a4;
+  font-style: normal;
+  letter-spacing: 0.02em;
+}
 .operator { color: #ff6b6b; }
 .number { color: #bd93f9; }
 .decorator { color: #50fa7b; }
@@ -170,6 +180,65 @@ blockquote {
 blockquote p {
   margin: 0;
 }
+
+/* Callouts / Alerts */
+.note, .tip, .important, .warning, .caution {
+  margin: 24px 0;
+  padding: 16px 24px;
+  border-radius: 6px;
+  border-left: 4px solid;
+  font-size: 10.5pt;
+  position: relative;
+}
+
+.note .title, .tip .title, .important .title, .warning .title, .caution .title {
+  font-weight: bold;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  font-size: 9pt;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+}
+
+.note .title p, .tip .title p, .important .title p, .warning .title p, .caution .title p {
+  margin: 0;
+}
+
+/* Note */
+.note {
+  background: #f0f4f8;
+  border-left-color: #533483;
+}
+.note .title { color: #533483; }
+
+/* Tip */
+.tip {
+  background: #f0fff4;
+  border-left-color: #2f855a;
+}
+.tip .title { color: #2f855a; }
+
+/* Important */
+.important {
+  background: #fffaf0;
+  border-left-color: #c05621;
+}
+.important .title { color: #c05621; }
+
+/* Warning */
+.warning {
+  background: #fff5f5;
+  border-left-color: #c53030;
+}
+.warning .title { color: #c53030; }
+
+/* Caution */
+.caution {
+  background: #fff5f5;
+  border-left-color: #e53e3e;
+}
+.caution .title { color: #e53e3e; }
 
 a {
   color: #0f3460;

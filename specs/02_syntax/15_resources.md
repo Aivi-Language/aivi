@@ -14,9 +14,9 @@ bracket : Effect ε A -> (A -> Effect ε Unit) -> (A -> Effect ε B) -> Effect �
 
 ```aivi
 effect { 
-  handle = bracket 
+  contents = bracket
     (file.open "data.txt") // Acquire
-    (f => f.close ())      // Release // todo: where does f come from? does it need a pipe?
+    (f => f.close ())      // Release
     (f => f.readAll ())    // Use
 }
 ```
@@ -26,8 +26,6 @@ effect {
 ## 15.2 The `defer` Keyword (LIFO Sugar)
 
 The `defer` keyword provides a more ergonomic way to release resources within an `effect` block. Deferred operations are executed in **Last-In, First-Out (LIFO)** order when the block exits.
-
-// todo: could this be implicit? like if a function returns an effect, it is automatically deferred?
 
 ```aivi
 copyFile = src dest => effect {

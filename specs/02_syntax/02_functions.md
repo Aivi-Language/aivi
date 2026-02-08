@@ -50,11 +50,11 @@ const = x _ => x
 
 // Flip arguments
 flip = f => x y => f y x
-```
 
 // Function composition is most common via the pipe operator:
 processName = name => name |> trim |> lowercase |> capitalize
 result = processName "  HELLO  "
+```
 
 
 ### Higher-Order Functions
@@ -97,8 +97,8 @@ users = [
 
 // Data processing pipeline
 activeNames = users
-  |> filter (.active)
-  |> map (.name)
+  |> filter active
+  |> map .name
   |> sort
   |> join ", "
 // "Alice, Carol"
@@ -106,7 +106,7 @@ activeNames = users
 // Mathematical series
 sigma = [1..100]
   |> filter (_ % 2 == 0)
-  |> map (pow _ 2)
+  |> map (pow _ 2) // or map _
   |> sum
 ```
 
@@ -122,7 +122,7 @@ canDelete = isAdmin or isOwner
 
 // Validation chains
 isEmail = contains "@"
-isLongEnough = len >> (_ > 8)
+isLongEnough = s => s |> len |> (_ > 8)
 isValidPassword = isEmail and isLongEnough
 
 // Usage
@@ -135,10 +135,16 @@ passwords |> filter isValidPassword
 // Single arg with _
 double = _ * 2
 isEven = _ % 2 == 0 
-getName = .name // Predicate shorthand for r => r.name
+getName = .name // Accessor shorthand for x => x.name
 
 // Equivalent explicit forms
 double = x => x * 2
 isEven = x => x % 2 == 0
 getName = user => user.name
+
+// Predicates can automatically deconstruct fields:
+// filter active is a shortcut for filter ({ active } => active)
+
+// Complexity can be handled inline via explicit record deconstruction:
+// map { name, id } => if id > 10 then name else "Anonymous"
 ```
