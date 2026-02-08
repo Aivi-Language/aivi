@@ -1,0 +1,83 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "AIVI",
+  "scopeName": "source.aivi",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#number" },
+    { "include": "#keyword" },
+    { "include": "#boolean" },
+    { "include": "#type" },
+    { "include": "#operator" }
+  ],
+  "repository": {
+    "comment": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.aivi",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "string": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.aivi",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.aivi",
+              "match": "\\\\([\\\\\"nrt]|u\\{[0-9a-fA-F]+\\})"
+            }
+          ]
+        }
+      ]
+    },
+    "number": {
+      "patterns": [
+        {
+          "name": "constant.numeric.aivi",
+          "match": "\\b\\d+(?:\\.\\d+)?\\b"
+        }
+      ]
+    },
+    "boolean": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.aivi",
+          "match": "\\b(True|False)\\b"
+        }
+      ]
+    },
+    "keyword": {
+      "patterns": [
+        {
+          "name": "keyword.control.aivi",
+          "match": "\\b(if|then|else|when|effect|generate|yield|defer|loop|recurse)\\b"
+        },
+        {
+          "name": "keyword.other.aivi",
+          "match": "\\b(module|export|use|as|hiding|domain|class|instance|async)\\b"
+        }
+      ]
+    },
+    "type": {
+      "patterns": [
+        {
+          "name": "entity.name.type.aivi",
+          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+        }
+      ]
+    },
+    "operator": {
+      "patterns": [
+        {
+          "name": "keyword.operator.aivi",
+          "match": "(&&|\\|\\||=>|<-|->|<<|>>|<=|\\|>|\\?|\\.{2}|==|!=|<=|>=|<|>|!|~|\\^|&|\\||\\+|-|\\*|/|%|=|:)"
+        }
+      ]
+    }
+  }
+}
