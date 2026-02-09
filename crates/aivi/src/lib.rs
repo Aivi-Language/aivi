@@ -7,6 +7,7 @@ mod resolver;
 mod surface;
 mod typecheck;
 mod wasm;
+mod runtime;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -21,6 +22,7 @@ pub use resolver::check_modules;
 pub use surface::{parse_modules, parse_modules_from_tokens, Module};
 pub use typecheck::check_types;
 pub use wasm::{compile_wasm, run_wasm};
+pub use runtime::run_native;
 
 #[derive(Debug)]
 pub enum AiviError {
@@ -30,6 +32,7 @@ pub enum AiviError {
     InvalidCommand(String),
     Codegen(String),
     Wasm(String),
+    Runtime(String),
 }
 
 impl std::fmt::Display for AiviError {
@@ -41,6 +44,7 @@ impl std::fmt::Display for AiviError {
             AiviError::InvalidCommand(command) => write!(f, "Invalid command: {command}"),
             AiviError::Codegen(message) => write!(f, "Codegen error: {message}"),
             AiviError::Wasm(message) => write!(f, "WASM error: {message}"),
+            AiviError::Runtime(message) => write!(f, "Runtime error: {message}"),
         }
     }
 }

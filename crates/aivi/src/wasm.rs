@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use wasm_encoder::{
     BlockType, CodeSection, ConstExpr, DataSection, EntityType, ExportKind, ExportSection,
     Function, FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, MemorySection,
-    MemoryType, Module, TypeSection, ValType,
+    MemoryType, Module, RefType, TypeSection, ValType,
 };
 
 use crate::hir::{HirBlockItem, HirExpr, HirPattern, HirProgram};
@@ -217,12 +217,14 @@ pub fn compile_wasm(program: HirProgram) -> Result<Vec<u8>, AiviError> {
         maximum: None,
         memory64: false,
         shared: false,
+        page_size_log2: None,
     });
 
     globals.global(
         GlobalType {
             val_type: ValType::I32,
             mutable: true,
+            shared: false,
         },
         &ConstExpr::i32_const(heap_base as i32),
     );
@@ -578,7 +580,7 @@ impl<'a> Compiler<'a> {
             self.emit(Instruction::Call(self.env.print_index));
             return Ok(());
         }
-        let Some(meta) = self.env.defs.get(&name) else {
+        let Some(meta) = self.env.defs.get(&name).copied() else {
             return Err(AiviError::Codegen(format!(
                 "unknown function {name} in {def}",
                 def = self.def_name
@@ -712,8 +714,9 @@ fn valtype_code(value: ValType) -> char {
         ValType::F32 => 'f',
         ValType::F64 => 'F',
         ValType::V128 => 'v',
-        ValType::FuncRef => 'r',
-        ValType::ExternRef => 'e',
+        ValType::Ref(RefType::FUNCREF) => 'r',
+        ValType::Ref(RefType::EXTERNREF) => 'e',
+        ValType::Ref(_) => 'r',
     }
 }
 
@@ -721,12 +724,13 @@ pub fn run_wasm(wasm: &[u8]) -> Result<(), AiviError> {
     let engine = wasmtime::Engine::default();
     let module = wasmtime::Module::from_binary(&engine, wasm)
         .map_err(|err| AiviError::Wasm(err.to_string()))?;
-    let mut linker: wasmtime::Linker<wasmtime_wasi::WasiCtx> = wasmtime::Linker::new(&engine);
-    wasmtime_wasi::add_to_linker(&mut linker, |ctx| ctx)
+    let mut linker: wasmtime::Linker<wasmtime_wasi::preview1::WasiP1Ctx> =
+        wasmtime::Linker::new(&engine);
+    wasmtime_wasi::preview1::add_to_linker_sync(&mut linker, |ctx| ctx)
         .map_err(|err| AiviError::Wasm(err.to_string()))?;
     let wasi = wasmtime_wasi::WasiCtxBuilder::new()
         .inherit_stdio()
-        .build();
+        .build_p1();
     let mut store = wasmtime::Store::new(&engine, wasi);
     let instance = linker
         .instantiate(&mut store, &module)

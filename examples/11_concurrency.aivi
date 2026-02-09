@@ -1,0 +1,14 @@
+module examples.runtime = {
+  export main
+
+  main : Effect Text Unit
+  main = effect {
+    _ <- concurrent.par (print "left\n") (print "right\n")
+    (tx, rx) <- channel.make Unit
+    _ <- channel.send tx "ping\n"
+    res <- channel.recv rx
+    res ?
+      | Ok msg => print msg
+      | Err Closed => print "closed\n"
+  }
+}

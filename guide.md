@@ -36,6 +36,9 @@ cargo run -p aivi -- run path/to/module.aivi --target wasm32-wasi
 
 # Example WASM run
 cargo run -p aivi -- run examples/10_wasm.aivi --target wasm32-wasi
+
+# Run using the native effect runtime (M6)
+cargo run -p aivi -- run examples/11_concurrency.aivi --target native
 ```
 
 ## Test
@@ -50,3 +53,5 @@ cargo test
 - The WASM backend is intentionally minimal: it supports basic literals, simple arithmetic,
   `if`, blocks with simple bindings, and `print` for `Text`. It currently expects a single
   module and a `main` definition. More features will land in later phases.
+- The native runtime is the current home for effects, resources, and concurrency. It is
+  intentionally minimal and does not yet cover the full surface language.

@@ -1,6 +1,7 @@
 use aivi::{
     check_modules, check_types, compile_wasm, desugar_target, format_target,
-    load_module_diagnostics, load_modules, parse_target, render_diagnostics, run_wasm, AiviError,
+    load_module_diagnostics, load_modules, parse_target, render_diagnostics, run_native, run_wasm,
+    AiviError,
 };
 use std::env;
 use std::path::PathBuf;
@@ -147,6 +148,12 @@ fn run() -> Result<(), AiviError> {
                         print_help();
                         return Ok(());
                     };
+                    if opts.wasm_target == "native" {
+                        let _modules = load_checked_modules(&opts.input)?;
+                        let program = desugar_target(&opts.input)?;
+                        run_native(program)?;
+                        return Ok(());
+                    }
                     if opts.wasm_target != "wasm32-wasi" {
                         return Err(AiviError::InvalidCommand(format!(
                             "unsupported target {}",
@@ -171,7 +178,7 @@ fn run() -> Result<(), AiviError> {
 
 fn print_help() {
     println!(
-        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  parse <path|dir/...>\n  check <path|dir/...>\n  fmt <path>\n  desugar <path|dir/...>\n  lsp\n  build <path|dir/...> [--target wasm32-wasi] [--out <file>]\n  run <path|dir/...> [--target wasm32-wasi]\n  -h, --help"
+        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  parse <path|dir/...>\n  check <path|dir/...>\n  fmt <path>\n  desugar <path|dir/...>\n  lsp\n  build <path|dir/...> [--target wasm32-wasi] [--out <file>]\n  run <path|dir/...> [--target wasm32-wasi|native]\n  -h, --help"
     );
 }
 

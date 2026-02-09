@@ -169,7 +169,7 @@ impl TypeChecker {
     fn register_builtin_types(&mut self) {
         for name in [
             "Unit", "Bool", "Int", "Float", "Text", "List", "Option", "Result", "Effect",
-            "Resource", "Generator", "Html", "DateTime", "FileHandle",
+            "Resource", "Generator", "Html", "DateTime", "FileHandle", "Send", "Recv", "Closed",
         ] {
             self.builtin_types.insert(name.to_string());
         }
@@ -230,6 +230,7 @@ impl TypeChecker {
                 ),
             },
         );
+        env.insert("Closed".to_string(), Scheme::mono(Type::con("Closed")));
 
         let a = self.fresh_var_id();
         let e = self.fresh_var_id();
@@ -340,6 +341,147 @@ impl TypeChecker {
             open: true,
         };
         env.insert("file".to_string(), Scheme::mono(file_record));
+
+        let a = self.fresh_var_id();
+        let send_ty = Type::con("Send").app(vec![Type::Var(a)]);
+        let recv_ty = Type::con("Recv").app(vec![Type::Var(a)]);
+        let channel_record = Type::Record {
+            fields: vec![
+                (
+                    "make".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Unit")),
+                        Box::new(Type::con("Effect").app(vec![
+                            Type::con("Closed"),
+                            Type::Tuple(vec![send_ty.clone(), recv_ty.clone()]),
+                        ])),
+                    ),
+                ),
+                (
+                    "send".to_string(),
+                    Type::Func(
+                        Box::new(send_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(a)),
+                            Box::new(Type::con("Effect").app(vec![
+                                Type::con("Closed"),
+                                Type::con("Unit"),
+                            ])),
+                        )),
+                    ),
+                ),
+                (
+                    "recv".to_string(),
+                    Type::Func(
+                        Box::new(recv_ty.clone()),
+                        Box::new(Type::con("Effect").app(vec![
+                            Type::con("Closed"),
+                            Type::con("Result").app(vec![Type::con("Closed"), Type::Var(a)]),
+                        ])),
+                    ),
+                ),
+                (
+                    "close".to_string(),
+                    Type::Func(
+                        Box::new(send_ty),
+                        Box::new(Type::con("Effect").app(vec![
+                            Type::con("Closed"),
+                            Type::con("Unit"),
+                        ])),
+                    ),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            open: true,
+        };
+        env.insert("channel".to_string(), Scheme::mono(channel_record));
+
+        let e = self.fresh_var_id();
+        let a = self.fresh_var_id();
+        let b = self.fresh_var_id();
+        let concurrent_record = Type::Record {
+            fields: vec![
+                (
+                    "scope".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                        Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                    ),
+                ),
+                (
+                    "par".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                        Box::new(Type::Func(
+                            Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(b)])),
+                            Box::new(Type::con("Effect").app(vec![
+                                Type::Var(e),
+                                Type::Tuple(vec![Type::Var(a), Type::Var(b)]),
+                            ])),
+                        )),
+                    ),
+                ),
+                (
+                    "race".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                        Box::new(Type::Func(
+                            Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                            Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                        )),
+                    ),
+                ),
+                (
+                    "spawnDetached".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                        Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::con("Unit")])),
+                    ),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            open: true,
+        };
+        env.insert("concurrent".to_string(), Scheme::mono(concurrent_record));
+
+        let clock_record = Type::Record {
+            fields: vec![(
+                "now".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(Type::con("Effect").app(vec![
+                        Type::con("Text"),
+                        Type::con("DateTime"),
+                    ])),
+                ),
+            )]
+            .into_iter()
+            .collect(),
+            open: true,
+        };
+        env.insert("clock".to_string(), Scheme::mono(clock_record));
+
+        let random_record = Type::Record {
+            fields: vec![(
+                "int".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Int")),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Int")),
+                        Box::new(Type::con("Effect").app(vec![
+                            Type::con("Text"),
+                            Type::con("Int"),
+                        ])),
+                    )),
+                ),
+            )]
+            .into_iter()
+            .collect(),
+            open: true,
+        };
+        env.insert("random".to_string(), Scheme::mono(random_record));
 
         self.builtins = env;
     }
