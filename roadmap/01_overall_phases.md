@@ -20,7 +20,7 @@ Acceptance criteria:
 - `cargo test` runs in CI.
 - `aivi parse examples/...` prints a stable AST (or CST) and exits 0.
 
-## M1 — Parser + CST + diagnostics (1–2 weeks)
+## M1 — Parser + CST + diagnostics
 
 Scope:
 - Lexing + parsing for most of `specs/02_syntax` that doesn’t require type info.
@@ -36,7 +36,7 @@ Acceptance criteria:
 - Parse all files in `examples/` and most `specs/` code blocks (even if some fail).
 - Stable diagnostics spans and messages.
 
-## M2 — Modules + name resolution (1–2 weeks)
+## M2 — Modules + name resolution
 
 Scope:
 - `module ... = { export ... }` forms and `use` imports (`specs/02_syntax/10_modules.md`).
@@ -49,7 +49,7 @@ Deliverables:
 Acceptance criteria:
 - “Unknown name”, “duplicate export”, “cyclic module” errors with good spans.
 
-## M3 — Kernel IR + desugaring pipeline (2–4 weeks)
+## M3 — Kernel IR + desugaring pipeline
 
 Scope:
 - A small Kernel that matches `specs/03_kernel/01_core_terms.md` through records/patterns/predicates.
@@ -62,7 +62,7 @@ Deliverables:
 Acceptance criteria:
 - Any supported surface feature lowers to Kernel consistently (round-trip tests).
 
-## M4 — Type system v1 (rank-1, no HKTs/classes yet) (3–6 weeks)
+## M4 — Type system v1 (rank-1, no HKTs/classes yet)
 
 Scope:
 - Enough types to make the language usable:
@@ -81,7 +81,7 @@ Deliverables:
 Acceptance criteria:
 - Small programs typecheck; errors are actionable; no “mystery type” output.
 
-## M5 — WASM/WASI execution (interpreter optional, compiler required) (4–8 weeks)
+## M5 — WASM/WASI execution (interpreter optional, compiler required)
 
 Scope:
 - Compile a typed Kernel program to WASM and run it under Wasmtime.
@@ -95,7 +95,7 @@ Deliverables:
 Acceptance criteria:
 - Deterministic outputs for golden tests; no UB; memory safe by construction.
 
-## M6 — Effects, Resources, Concurrency (6–12 weeks, staged)
+## M6 — Effects, Resources, Concurrency
 
 Scope:
 - Implement `Effect E A` semantics and runtime handlers.
