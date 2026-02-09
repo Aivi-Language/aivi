@@ -45,7 +45,7 @@ width    = 100%   // typed Style percentage delta
 height   = 100svh // typed Style viewport delta
 ```
 
-JSX literals are sugar for the `Html` domain (see `specs/05_stdlib/06_html.md` and `specs/02_syntax/13_jsx_literals.md`):
+JSX literals are sugar for the `Html` [domain](https://mendrik.github.io/aivi/02_syntax/06_domains) and [JSX literals](https://mendrik.github.io/aivi/02_syntax/13_jsx_literals):
 
 ```tsx
 use aivi.std.html
