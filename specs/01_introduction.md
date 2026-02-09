@@ -2,7 +2,6 @@
 
 > Note: **AIVI is a fictional language that may or may not materialize.** This document is a design/spec exploration, not a promise of an eventual implementation.
 
----
 
 ## 0. Overview
 
@@ -43,7 +42,6 @@ AIVI is a statically typed, purely functional language designed for **high-integ
 * **Uppercase** identifiers → types and constructors
 * **lowercase** identifiers → values and functions
 
----
 
 ## Normative Principles
 
@@ -73,6 +71,5 @@ In AIVI, the language doesn't try to know everything. Instead, it provides **Dom
 - **Syntactic Sugar**: Domains like `Html` can define how JSX-like literals desugar into functional trees, allowing specialized syntax for specialized problems.
 - **Extensibility**: Developers can define their own domains, creating a language that speaks the vocabulary of their specific business area (Finance, IoT, UI) without losing the safety of the AIVI core.
 
----
 
 This document defines **AIVI v0.1** as a language where **data shape, transformation, and meaning are explicit, uniform, and statically enforced**.

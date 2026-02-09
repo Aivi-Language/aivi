@@ -6,7 +6,6 @@
 τ ::= α | τ → τ | T τ₁ … τₙ
 ```
 
----
 
 ## 2.2 Universal quantification
 
@@ -16,7 +15,6 @@
 
 This corresponds to `*` in surface syntax.
 
----
 
 ## 2.3 Row types (records)
 

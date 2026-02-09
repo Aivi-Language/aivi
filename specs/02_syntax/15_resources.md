@@ -2,7 +2,6 @@
 
 AIVI provides a dedicated `Resource` type to manage lifecycles (setup and teardown) in a declarative way. This ensures that resources like files, sockets, and database connections are always reliably released, even in the event of errors or task cancellation.
 
----
 
 ## 15.1 Defining Resources
 
@@ -21,7 +20,6 @@ managedFile path = resource {
 
 This declarative approach hides the complexity of error handling and cancellation checks.
 
----
 
 ## 15.2 Using Resources
 
@@ -51,7 +49,6 @@ copy src dest = effect {
 }
 ```
 
----
 
 ## 15.3 Ad-hoc cleanup (inline `resource`)
 

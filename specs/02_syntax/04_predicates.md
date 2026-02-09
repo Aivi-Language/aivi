@@ -51,7 +51,6 @@ isActivePremium : Pred User
 isActivePremium = andPred isActive isPremium
 ```
 
----
 
 ## 4.2 Implicit binding rule
 
@@ -69,7 +68,6 @@ price > 80        // _.price > 80
 active            // _.active
 ```
 
----
 
 ## 4.3 Predicate lifting
 
@@ -130,7 +128,6 @@ admins = where (role == Admin) users
 activeUsers = where active users
 ```
 
----
 
 ## 4.4 No automatic lifting in predicates
 

@@ -8,7 +8,6 @@ Effect E A
 
 Opaque in the kernel.
 
----
 
 ## 8.2 Effect bind
 
@@ -16,7 +15,6 @@ Opaque in the kernel.
 bind : Effect E A → (A → Effect E B) → Effect E B
 ```
 
----
 
 ## 8.3 Effect sequencing
 

@@ -26,7 +26,6 @@ Numeric suffixes:
 * `42n` → `BigInt`
 * `3.14d` → `Decimal`
 
----
 
 ## 3.2 Algebraic Data Types
 
@@ -35,7 +34,6 @@ Option A = None | Some A
 Result E A = Err E | Ok A
 ```
 
----
 
 ## 3.3 Open Records (Row Polymorphism)
 
@@ -55,7 +53,6 @@ getName : { name: Text } -> Text
 getName = .name
 ```
 
----
 
 ## 3.4 Classes and HKTs
 

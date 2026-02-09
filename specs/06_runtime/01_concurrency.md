@@ -2,7 +2,6 @@
 
 AIVI implements a **Structural Concurrency** model by default, ensuring that the lifecycle of concurrent tasks is strictly bound to the lexical scope that created them.
 
----
 
 ## 20.1 Structural Concurrency
 
@@ -24,7 +23,6 @@ effect {
 }
 ```
 
----
 
 ## 20.2 Communication: Channels
 
@@ -57,7 +55,6 @@ effect {
 }
 ```
 
----
 
 ## 20.3 Non-deterministic Selection (select)
 

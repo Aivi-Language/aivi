@@ -16,7 +16,6 @@
 
 Nothing else is required.
 
----
 
 # The true kernel
 

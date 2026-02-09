@@ -29,7 +29,6 @@ Components:
 - Operator implementations — regular AIVI functions
 - Delta literals — syntactic sugar bound within the domain
 
----
 
 ## 11.2 Carrier Type Binding
 
@@ -56,7 +55,6 @@ myColor = #ff5500
 result = myColor + 10l
 ```
 
----
 
 ## 11.3 Delta Literals
 
@@ -71,7 +69,6 @@ Delta literals are **domain-scoped**, not global. They desugar to Delta construc
 
 When multiple domains define overlapping literals, resolution follows import order or requires qualification (see Open Questions).
 
----
 
 ## 11.4 Multi-Carrier Domains
 
@@ -87,7 +84,6 @@ domain Vector over (Vec2 | Vec3 | Vec4) = {
 }
 ```
 
----
 
 ## 11.5 Domain Functions
 

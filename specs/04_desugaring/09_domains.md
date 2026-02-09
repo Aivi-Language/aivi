@@ -10,7 +10,6 @@ Domains are not terms; they elaborate operator syntax to named functions.
 
 This is a static rewrite: `(operator, carrier-type)` ↦ implementation.
 
----
 
 ## 9.1 Delta Literal Resolution
 
@@ -37,7 +36,6 @@ date + 1m
   addMonth date (Month 1)
 ```
 
----
 
 ## 9.2 Ambiguity Errors
 
@@ -61,7 +59,6 @@ date + Calendar.1m
 position + Physics.1m
 ```
 
----
 
 ## 9.3 Operator Precedence
 
@@ -72,7 +69,6 @@ date + 1m * 2  // Parsed as: date + (1m * 2)
                // Error if (*) not defined for Delta
 ```
 
----
 
 ## 9.4 Desugaring Order
 

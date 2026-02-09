@@ -13,7 +13,6 @@ Source K A
 
 Sources are effectful. Loading a source performs I/O and returns a `Result Error A`. All source interactions must occur within an `effect` block.
 
----
 
 ## 12.2 File Sources
 
@@ -34,7 +33,6 @@ users : Source File (List User)
 users = file.csv "./users.csv"
 ```
 
----
 
 ## 12.3 HTTP Sources
 
@@ -56,7 +54,6 @@ req = http.request {
 }
 ```
 
----
 
 ## 12.4 Database Sources (Db)
 
@@ -72,7 +69,6 @@ activeUsers : Source Db (List User)
 activeUsers = db.query
 ```
 
----
 
 ## 12.5 Email Sources
 
@@ -94,7 +90,6 @@ sendWelcome = user => email.send {
 }
 ```
 
----
 
 ## 12.6 LLM Sources
 
@@ -118,7 +113,6 @@ analyze input = llm.complete {
 }
 ```
 
----
 
 ## 12.7 Image Sources
 
@@ -136,7 +130,6 @@ photo : Source File (Image ImageData)
 photo = file.image "./photo.jpg"
 ```
 
----
 
 ## 12.8 S3 / Cloud Storage Sources
 
@@ -152,11 +145,9 @@ logo : Source S3 Bytes
 logo = s3.get "my-assets" "branding/logo.png"
 ```
 
----
 > [!NOTE]
 > Browser sources are part of the AIVI long-term vision for end-to-end automation but are considered **Experimental** and may not be fully available in the initial WASM-targeted phase.
 
----
 
 ## 12.10 Compile-Time Sources (@static)
 

@@ -4,7 +4,6 @@ This chapter is a **draft concrete grammar** for the surface language described 
 
 This is *not* intended as a complete lexical specification; it focuses on the constructs used throughout the spec examples.
 
----
 
 ## 0.1 Lexical notes
 
@@ -24,7 +23,6 @@ as a separator. The parser should treat consecutive separators as one.
 
 In addition, many comma-delimited forms allow `,` as an alternative separator.
 
----
 
 ## 0.2 Top level
 
@@ -54,7 +52,6 @@ ImportList     := ImportItem { "," ImportItem } ;
 ImportItem     := (lowerIdent | UpperIdent) [ "as" (lowerIdent | UpperIdent) ] ;
 ```
 
----
 
 ## 0.3 Expressions
 
@@ -105,7 +102,6 @@ FieldSep       := Sep | "," ;
 - `.field` is shorthand for `x => x.field` (a unary accessor function).
 - `_` is *not* a value. It only appears in expressions as part of the placeholder-lambda sugar (see `specs/04_desugaring/02_functions.md`).
 
----
 
 ## 0.4 Patching
 
@@ -126,7 +122,6 @@ Select         := "[" ( "*" | Expr ) "]" ;
 - `PathSeg` is intentionally permissive in this draft: patch paths, traversal selectors, and prism-like focuses share syntax.
 - A compiler should reject ill-typed or ill-scoped path forms with a targeted error (e.g. “predicate selector expects a `Bool` predicate”).
 
----
 
 ## 0.5 Multi-clause unary functions
 
@@ -147,7 +142,6 @@ nextState =
   | (state, _)    => state
 ```
 
----
 
 ## 0.6 Types (minimal)
 
@@ -166,7 +160,6 @@ RecordType     := "{" { RecordTypeField } "}" ;
 RecordTypeField:= lowerIdent ":" Type [ FieldSep ] ;
 ```
 
----
 
 ## 0.7 Patterns
 
@@ -195,7 +188,6 @@ RecordPatKey   := lowerIdent { "." lowerIdent } ;
 - `v@p` binds the whole matched value to `v` while also matching `p`.
 - Record patterns permit dotted keys for deep destructuring (e.g. `{ data.user.profile@{ name } }`).
 
----
 
 ## 0.8 Diagnostics (where the compiler should nag)
 

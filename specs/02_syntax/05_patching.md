@@ -20,7 +20,6 @@ Compiler checks:
 * Predicate selectors (`items[price > 80]`) must type-check as `Bool`.
 * Removing fields (`-`) is only allowed when the resulting record type remains valid (e.g. not removing required fields of a closed record).
 
----
 
 ## 5.1 Path addressing
 
@@ -53,7 +52,6 @@ Circle.radius
 
 If the constructor does not match, the value is unchanged.
 
----
 
 ## 5.2 Instructions
 
@@ -64,7 +62,6 @@ If the constructor does not match, the value is unchanged.
 | `:= Function` | Replace with function **as data** |
 | `-` | Remove field (shrinks record type) |
 
----
 
 ## 5.3 Replace / insert
 
@@ -77,7 +74,6 @@ user2 = user <| {
 
 Intermediate records are created if missing.
 
----
 
 ## 5.4 Transform
 
@@ -88,7 +84,6 @@ user3 = user <| {
 }
 ```
 
----
 
 ## 5.5 Removal
 
@@ -101,7 +96,6 @@ user4 = user <| {
 
 Removal is structural and reflected in the resulting type.
 
----
 
 ## 5.7 Expressive Data Manipulation
 

@@ -2,7 +2,6 @@
 
 AIVI compiles exclusively to **WebAssembly** (WASM).
 
----
 
 ## Why WASM
 
@@ -14,7 +13,6 @@ AIVI compiles exclusively to **WebAssembly** (WASM).
 | **Component Model** | First-class module system matches AIVI modules |
 | **WASI** | Standardized system access without POSIX baggage |
 
----
 
 ## Target Features
 
@@ -39,7 +37,6 @@ System access through capability-based handles:
 - No ambient authority
 - Explicit effect tracking aligns with AIVI's `Effect` system
 
----
 
 ## Deployment Targets
 
@@ -50,7 +47,6 @@ System access through capability-based handles:
 | Server | Wasmtime, WasmEdge | Backend services |
 | Embedded | wasm3 | IoT, constrained devices |
 
----
 
 ## Native Performance
 
@@ -59,7 +55,6 @@ For performance-critical workloads:
 - **SIMD** available via explicit intrinsics
 - No separate native backend needed
 
----
 
 ## Non-Goals
 

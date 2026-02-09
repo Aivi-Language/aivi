@@ -6,7 +6,6 @@ They:
 * do not suspend execution stacks
 * model finite or infinite data
 
----
 
 ## 7.2 Generator type
 
@@ -14,7 +13,6 @@ They:
 Generator A
 ```
 
----
 
 ## 7.3 Generator expressions
 
@@ -48,7 +46,6 @@ generate {
 }
 ```
 
----
 
 ## 7.4 Guards and predicates
 
@@ -80,7 +77,6 @@ generate {
 
 Predicate rules are identical to `filter`.
 
----
 
 ## 7.6 Async Generators
 

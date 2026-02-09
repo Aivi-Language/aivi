@@ -1,6 +1,5 @@
 AIVI supports **JSX-like syntax** as domain sugar for the `Html` domain. Tags like `div`, `span`, etc., are regular functions defined within the `aivi.std.html` module. Any domain can define its own syntax sugar by providing a mapping from tree structures to domain-specific constructors.
 
----
 
 ## 13.1 Basic Syntax
 
@@ -18,7 +17,6 @@ header = div [ class "header" ] (
 )
 ```
 
----
 
 ## 13.2 Attributes
 
@@ -36,7 +34,6 @@ attrs = { class: "btn", disabled: True }
 button = <button {...attrs}>Click</button>
 ```
 
----
 
 ## 13.3 Expression Interpolation
 
@@ -48,7 +45,6 @@ greeting = name => <h1>Hello, {name}!</h1>
 userAge = user => <p>Age: {user.age ?? "Unknown"}</p>
 ```
 
----
 
 ## 13.4 Conditionals
 
@@ -61,7 +57,6 @@ badge = user => <div>
 
 The `<></>` is an empty fragment.
 
----
 ## 13.5 Lists and Iteration
 
 ```aivi
@@ -74,7 +69,6 @@ nav = links => <ul class="nav">
 
 Pipe expressions work naturally inside interpolation. AIVI favors functional pipelines (`|> map`) over object methods for consistency across all domains.
 
----
 
 ## 13.6 Components
 
@@ -97,7 +91,6 @@ page = <div>
 
 Components are just functions — no special syntax beyond JSX.
 
----
 
 ## 13.7 Fragments
 
@@ -121,7 +114,6 @@ items = fragment [
 ]
 ```
 
----
 
 ## 13.8 Self-Closing Tags
 
@@ -131,7 +123,6 @@ items = fragment [
 <br />
 ```
 
----
 
 ## 13.9 Desugaring Rules
 
@@ -145,7 +136,6 @@ items = fragment [
 | `<><A/><B/></>` | `fragment [A, B]` |
 | `<Comp x=y>` | `Comp { x: y }` |
 
----
 
 ## 13.10 Full Example
 

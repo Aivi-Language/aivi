@@ -4,7 +4,6 @@ A high-integrity functional language targeting WebAssembly.
 
 **Version:** 0.1 (Draft)
 
----
 
 ## Table of Contents
 
@@ -88,7 +87,6 @@ A high-integrity functional language targeting WebAssembly.
 - [TODO](TODO.md)
 - [Open Questions](OPEN_QUESTIONS.md)
 
----
 
 ## Building the Specification
 

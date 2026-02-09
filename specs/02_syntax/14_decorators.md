@@ -1,7 +1,6 @@
 # Decorators
 
 Decorators provide **compile-time metadata** attached to definitions.
----
 
 ## 14.1 Syntax
 
@@ -13,7 +12,6 @@ Decorators provide **compile-time metadata** attached to definitions.
 
 Decorators appear before the binding they annotate.
 
----
 
 ## 14.2 Standard Decorators
 
@@ -49,7 +47,6 @@ Decorators appear before the binding they annotate.
 | :--- | :--- | :--- |
 | `@no_prelude` | `@no_prelude module M = ...` | Skip implicit prelude import |
 
----
 
 ## 14.3 Field Decorators
 
@@ -68,7 +65,6 @@ User = {
 
 Multiple decorators stack left-to-right.
 
----
 
 ## 14.4 Custom Decorators
 
@@ -83,7 +79,6 @@ decorator cache = { ttl: Duration } => ...
 fetchUser = id => ...
 ```
 
----
 
 ## 14.5 Decorator Desugaring
 
@@ -95,7 +90,6 @@ Decorators desugar to compile-time metadata:
 | `@static x = file.read ...` | Compile-time evaluation |
 | `@mcp_tool f = ...` | Register in MCP manifest |
 
----
 
 ## 14.6 Usage Examples
 

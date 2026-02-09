@@ -2,7 +2,6 @@
 
 SQLite as a **domain-backed type system** — tables become types, rows become patchable records, and operations align with core language traversals.
 
----
 
 ## Conceptual Model: Tables as Arrays
 
@@ -13,7 +12,6 @@ In AIVI, a `Table A` is conceptually equivalent to a `List (Row A)`. This allows
 Table A ≈ List (Row A)
 ```
 
----
 
 ## Module
 
@@ -25,7 +23,6 @@ module aivi.std.sqlite = {
 }
 ```
 
----
 
 ## Type-Safe Schema
 
@@ -44,7 +41,6 @@ db : Source Db { users: Table User, posts: Table Post }
 db = sqlite.connect "./app.db"
 ```
 
----
 
 ## Domain Definition
 
@@ -64,7 +60,6 @@ domain Db over (Table A) = {
 }
 ```
 
----
 
 ## Operations
 
@@ -103,7 +98,6 @@ effect {
 }
 ```
 
----
 
 ## Insert and Delete via Traverse
 
@@ -133,7 +127,6 @@ effect {
 }
 ```
 
----
 
 ## Generated SQL
 

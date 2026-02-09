@@ -11,7 +11,6 @@ Effectful operations in AIVI are modeled using the `Effect E A` type, where:
 - **Cancellation**: Cancellation is an asynchronous signal that stops the execution of an effect. When cancelled, the effect is guaranteed to run all registered cleanup (see [Resources](15_resources.md)).
 - **Transparent Errors**: Errors in `E` are part of the type signature, forcing explicit handling or propagation.
 
----
 
 ## 9.2 `effect` blocks
 
@@ -72,7 +71,6 @@ main = effect {
 
 If you instead write `if … then effect { … } else effect { … }` *without* binding it, the result of the `if` is an `Effect …` value, not a sequence of steps in the surrounding block (unless it is the final expression of that surrounding `effect { … }`).
 
----
 
 ## 9.3 Effects and patching
 
@@ -85,7 +83,6 @@ authorize = user => user <| {
 
 Patches are pure values. Apply them where you have the record value available (often inside an `effect` block after decoding/loading).
 
----
 
 ## 9.4 Comparison and Translation
 

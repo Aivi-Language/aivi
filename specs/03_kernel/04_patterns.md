@@ -8,7 +8,6 @@ p ::= x
     | { l₁ = p₁, … }
 ```
 
----
 
 ## 4.2 Whole-value binding
 

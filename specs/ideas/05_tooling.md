@@ -15,7 +15,6 @@
 - **logos** + **chumsky** for lexing/parsing
 - Strong type system matches AIVI semantics
 
----
 
 ## Language Server (LSP)
 
@@ -49,7 +48,6 @@ module aivi.lsp = {
 
 The LSP runs as WASM module inside any editor supporting WASI.
 
----
 
 ## MCP Integration (Model Context Protocol)
 
@@ -88,7 +86,6 @@ aivi-mcp serve my-tools.aivi
 
 Spawns an MCP-compliant server exposing all `@mcp_tool` functions.
 
----
 
 ## Development Workflow
 
@@ -101,7 +98,6 @@ aivi mcp     // Start MCP server
 aivi repl    // Interactive REPL
 ```
 
----
 
 ## Self-Hosting Timeline
 

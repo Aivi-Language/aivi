@@ -6,7 +6,6 @@
 { l₁ = e₁, l₂ = e₂ }
 ```
 
----
 
 ## 3.2 Record projection
 
@@ -14,7 +13,6 @@
 e.l
 ```
 
----
 
 ## 3.3 Record update (primitive)
 

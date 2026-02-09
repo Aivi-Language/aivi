@@ -9,7 +9,6 @@
 add 5 10
 ```
 
----
 
 ## 2.2 Lambdas
 
@@ -25,7 +24,6 @@ Multi-argument lambdas must be explicit:
 add = x y => x + y
 ```
 
----
 
 ## 2.3 Pipes
 
@@ -35,7 +33,6 @@ Pipelines use `|>`.
 xs |> map inc |> filter (_ > 0)
 ```
 
----
 
 ## 2.4 Usage Examples
 

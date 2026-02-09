@@ -7,7 +7,6 @@
 | `f a b` | `⟦f⟧ ⟦a⟧ ⟦b⟧` (left-assoc) |
 | `(e)` | `⟦e⟧` |
 
----
 
 # Placeholder lambda `_`
 

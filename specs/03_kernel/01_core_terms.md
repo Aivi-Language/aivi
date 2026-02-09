@@ -6,7 +6,6 @@
 x
 ```
 
----
 
 ## 1.2 Lambda abstraction (single-argument)
 
@@ -16,7 +15,6 @@ x
 
 Multi-argument functions are **curried desugaring**.
 
----
 
 ## 1.3 Application
 
@@ -26,7 +24,6 @@ e₁ e₂
 
 Whitespace application is syntax only.
 
----
 
 ## 1.4 Let-binding
 
@@ -36,7 +33,6 @@ let x = e₁ in e₂
 
 All top-level and block bindings desugar to `let`.
 
----
 
 ## 1.5 Algebraic data constructors
 
@@ -46,7 +42,6 @@ C e₁ … eₙ
 
 Nullary constructors are values.
 
----
 
 ## 1.6 Case analysis (single eliminator)
 

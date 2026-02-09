@@ -15,7 +15,6 @@ Kernel has only `case`, so even total bindings can lower via `case`. (A compiler
 
 Pattern translation `⟦p⟧` uses the kernel pattern forms.
 
----
 
 # Whole-value binding `@`
 
@@ -25,7 +24,6 @@ Pattern translation `⟦p⟧` uses the kernel pattern forms.
 | `case e of \| v@{ name: n } -> b` | `case ⟦e⟧ of \| v @ { name = n } -> ⟦b⟧` |
 | binding: `v@p = e; body` | `case ⟦e⟧ of \| v @ ⟦p⟧ -> ⟦body⟧` |
 
----
 
 # Pattern matching `?`
 

@@ -80,7 +80,6 @@ Predicate `pred` uses the unified predicate desugaring table (Section 8).
 
 For constructors with direct payload (not record), `value` refers to the payload position.
 
----
 # Summary: smallest set of kernel primitives assumed
 
 * `λ`, application

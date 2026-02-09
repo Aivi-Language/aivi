@@ -13,7 +13,6 @@ A domain typically defines:
 2.  **Delta Types**: Representing changes or intervals (e.g., `Duration`).
 3.  **Interpretation Rules**: How literals and operators map to functions.
 
----
 
 ## 6.1 Delta literals
 
@@ -33,7 +32,6 @@ Properties:
 * deltas have no arithmetic
 * deltas are interpreted by domains
 
----
 
 ## 6.2 Domain-directed operators
 
@@ -122,7 +120,6 @@ isSet = flags n => (flags & (1 << n)) != 0
 mask = readMask1 | readMask2
 ```
 
----
 
 ### Standard library domains
 

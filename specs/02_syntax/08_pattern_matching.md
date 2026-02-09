@@ -15,7 +15,6 @@ Compiler checks:
 - Non-exhaustive matches are a compile-time error unless a catch-all arm (`_`) is present.
 - Unreachable arms (shadowed by earlier patterns) produce a warning.
 
----
 
 ## 8.2 Multi-clause functions
 
@@ -25,7 +24,6 @@ sum =
   | [h, ...t] => h + sum t
 ```
 
----
 
 ## 8.3 Record Patterns
 
@@ -36,7 +34,6 @@ greet =
   | { name } => "Hello, {name}!"
 ```
 
----
 
 ## 8.4 Nested Patterns
 
@@ -50,7 +47,6 @@ processResult =
   | Err { code, message } => "Error {code}: {message}"
 ```
 
----
 
 ## 8.5 Guards
 
@@ -65,7 +61,6 @@ classify =
   | _              => "large"
 ```
 
----
 
 ## 8.6 Usage Examples
 

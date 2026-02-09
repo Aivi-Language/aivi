@@ -18,7 +18,6 @@ module my.utility.math = {
 }
 ```
 
----
 
 ## 10.2 Module Pathing (Dot Separator)
 
@@ -29,7 +28,6 @@ Modules are identified by hierarchical paths using common **dot notation**. This
 
 Module resolution is static and determined at compile time based on the project manifest.
 
----
 
 ## 10.3 Importing and Scope
 
@@ -57,7 +55,6 @@ Compiler checks:
 - Importing a missing module or symbol is a compile-time error.
 - Unused imports produce a warning (suppressed if importing solely for a domain side-effect in v0.1).
 
----
 
 ## 10.4 Domain Exports
 
@@ -79,7 +76,6 @@ module geo.vector = {
 
 When another module calls `use geo.vector`, it gains the ability to use `+` on `Vec2` records.
 
----
 
 ## 10.5 First-Class Modules
 
@@ -107,7 +103,6 @@ module aivi.prelude = {
 }
 ```
 
----
 
 ## 10.6 The Prelude
 
@@ -122,7 +117,6 @@ module aivi.std.bootstrap = {
 }
 ```
 
----
 
 ## 10.7 Circular Dependencies
 

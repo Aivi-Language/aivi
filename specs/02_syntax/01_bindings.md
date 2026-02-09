@@ -16,7 +16,6 @@ pi = 3.14159
 add = x y => x + y
 ```
 
----
 
 ## 1.2 Shadowing
 
@@ -29,7 +28,6 @@ x = x + 1
 
 This introduces a new binding; no mutation exists. This is common in functional languages like OCaml and Rust (re-binding) but distinct from mutation.
 
----
 
 ## 1.3 Pattern Bindings
 
@@ -47,7 +45,6 @@ Structural patterns may appear in bindings.
 > [!NOTE]
 > Using `=` with a non-total pattern (like `[h, ...t] = []`) results in a compile-time error. For partial matches, use the `?` operator which converts a refutable pattern into an `Option` or branch.
 
----
 
 ## 1.4 Whole-value binding with `@`
 
@@ -77,7 +74,6 @@ Example:
 formatUser = u@{ id, name } => "{id}: {name}"
 ```
 
----
 
 ## 1.5 Usage Examples
 
