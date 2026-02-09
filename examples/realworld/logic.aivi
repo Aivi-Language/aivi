@@ -1,0 +1,91 @@
+module RealWorld.Logic = {
+  use RealWorld.Types (User, Article, Profile, NewArticle)
+  use RealWorld.Domains
+
+  // ------------------------------------------------------------------
+  // Predicates (Pure functions returning Bool)
+  // ------------------------------------------------------------------
+
+  isAuthor : User -> Article -> Bool
+  isAuthor user article = 
+    user.username == article.author.username
+
+  // Checks if the user has favorited the article
+  favoritedBy : User -> Article -> Bool
+  favoritedBy _ article = article.favorited 
+
+  // ------------------------------------------------------------------
+  // Advanced Pattern Matching Examples
+  // ------------------------------------------------------------------
+
+  // Detects admin privileges using deep pattern matching and guards
+  hasAdminPrivileges : User -> Bool
+  hasAdminPrivileges = 
+    | { email: "admin@realworld.io" } => True
+    | { bio: b } when Text.contains "admin" b => True
+    | { image: Some url } when Text.contains "admin-badge" url => True
+    | _ => False
+
+  // Validates a new article using tuple pattern matching on fields
+  validateArticle : NewArticle -> List Text
+  validateArticle article = 
+    (article.title, article.body) ?
+      | ("", _) => ["Title cannot be empty"]
+      | (_, "") => ["Body cannot be empty"]
+      | (t, b) when Text.length t < 5 => ["Title too short"]
+      | _ => []
+
+  // ------------------------------------------------------------------
+  // Article Logic
+  // ------------------------------------------------------------------
+
+  // Create a slug from a title
+  slugify : Text -> Text
+  slugify title = 
+    title 
+    |> Text.toLower 
+    |> Text.replace " " "-" 
+
+  // Add a tag using the custom Tagging domain
+  addTag : Text -> Article -> Article
+  addTag tag article = 
+    article <| { 
+      // Uses the (+) operator from RealWorld.Domains.Tagging
+      tagList: tagList + (Tag tag) 
+    }
+
+  removeTag : Text -> Article -> Article
+  removeTag tag article = 
+    article <| { 
+      tagList: tagList - (Tag tag) 
+    }
+
+  // Favorite an article using the Favorites domain
+  favorite : Article -> Article
+  favorite article = 
+    if article.favorited then article
+    else article <| { 
+      favorited: True
+      // Uses the (+) operator from RealWorld.Domains.Favorites
+      favoritesCount: favoritesCount + Up 
+    }
+
+  unfavorite : Article -> Article
+  unfavorite article = 
+    if !article.favorited then article
+    else article <| { 
+      favorited: False
+      favoritesCount: favoritesCount + Down 
+    }
+
+  // ------------------------------------------------------------------
+  // Profile Logic
+  // ------------------------------------------------------------------
+
+  follow : Profile -> Profile
+  follow profile = profile <| { following: True }
+
+  unfollow : Profile -> Profile
+  unfollow profile = profile <| { following: False }
+
+}

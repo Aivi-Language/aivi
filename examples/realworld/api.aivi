@@ -1,0 +1,52 @@
+module RealWorld.Api = {
+  use RealWorld.Types (User, Article, AppError, Login, Profile)
+  
+  // ------------------------------------------------------------------
+  // Mock Data & API
+  // ------------------------------------------------------------------
+
+  // Simulates a login request
+  login : Login -> Effect AppError User
+  login creds = effect {
+    // In a real app, this would query a database
+    if creds.email == "jake@jake.jake" && creds.password == "jakejake" then
+       Ok { 
+         email: creds.email
+         token: "jwt.token.sig"
+         username: "jake"
+         bio: "I work at statefarm"
+         image: Some "https://api.realworld.io/images/smiley-cyrus.jpeg"
+       }
+    else
+       Err Unauthorized
+  }
+
+  // ------------------------------------------------------------------
+  // Typesafe External Source
+  // ------------------------------------------------------------------
+  
+  // Define the source type. The compiler verifies "data.json" matches (List Article)
+  @source // hypothetical decorator to indicate source file
+  articlesSource : Source File (List Article)
+  articlesSource = file.json "./data.json"
+
+  // Fetch articles from the "server" (local file in this example)
+  getGlobalFeed : Effect AppError (List Article)
+  getGlobalFeed = effect {
+    // Load data from the source
+    result <- load articlesSource
+    
+    // Pattern match on the result (Source operations return Result)
+    result ?
+      | Ok articles => articles
+      | Err e       => 
+          // Log error (conceptual) and return empty list or propagate
+          // _ <- log "Failed to load articles: {e}"
+          []
+  }
+  
+  // Helper to get current time (Mock)
+  // In reality this would be `Time.now` returning an Instant
+  now : Instant
+  now = 2024-05-21T12:00:00Z 
+}

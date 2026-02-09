@@ -1,0 +1,70 @@
+// Data Models for the RealWorld (Conduit) App
+
+// The User as seen by the authenticated user
+User = {
+  email: Text
+  token: Text
+  username: Text
+  bio: Text
+  image: Option Text
+}
+
+// Profile as seen by others
+Profile = {
+  username: Text
+  bio: Text
+  image: Option Text
+  following: Bool
+}
+
+// Represents a single article
+Article = {
+  slug: Text
+  title: Text
+  description: Text
+  body: Text
+  tagList: List Text
+  createdAt: Instant
+  updatedAt: Instant
+  favorited: Bool
+  favoritesCount: Int
+  author: Profile
+}
+
+// Comments on articles
+Comment = {
+  id: Int
+  createdAt: Instant
+  updatedAt: Instant
+  body: Text
+  author: Profile
+}
+
+// New Article Payload
+NewArticle = {
+  title: Text
+  description: Text
+  body: Text
+  tagList: List Text
+}
+
+// Login Credentials
+Login = {
+  email: Text
+  password: Text
+}
+
+// Registration Payload
+Register = {
+  username: Text
+  email: Text
+  password: Text
+}
+
+// Application Errors
+AppError =
+  | Validation (List Text) // e.g. ["email taken", "password too short"]
+  | Unauthorized           // 401
+  | Forbidden              // 403
+  | NotFound               // 404
+  | DatabaseError Text     // 500
