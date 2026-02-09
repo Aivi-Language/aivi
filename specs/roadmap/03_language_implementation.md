@@ -61,42 +61,59 @@ Treat the Kernel as “the thing you can execute/compile”.
 
 - Hindley–Milner style inference (Algorithm W or constraints + unify).
 - Generalization at `let`.
+- Decide let-generalization policy (top-level only vs local `let` generalization).
 - Instance creation at use sites.
 
-### Stage 5c: records (closed → rows)
+### Stage 5c: minimal traits/typeclasses (early stdlib surface)
+
+- Minimal ad-hoc polymorphism for `Eq`, `Ord`, `Show` (or `ToText`).
+- Numeric traits (`Add`/`Sub`/`Mul` or a small `Num`).
+- Simple deriving for ADTs (no HKTs, no fancy derivation).
+
+### Stage 5d: records (closed → rows)
 
 Start with closed records (simpler), then extend:
 - Row polymorphism (open structural records).
 - Field presence/absence constraints.
 
-### Stage 5d: effects
+### Stage 5e: effects
 
 Start with explicit annotations:
 - `Effect E A` as a type constructor.
 - A rule that pure code cannot call effectful primitives without being in `Effect`.
 Then add inference/propagation later.
 
-### Stage 5e: classes + HKTs (long-term)
+### Stage 5f: classes + HKTs (long-term)
 
 This is substantial; gate it behind a milestone:
 - Dictionary-passing translation for classes.
 - Kind inference/checking for HKTs.
 
-## 6) Patterns: exhaustiveness and decision trees
+## 6) Diagnostics and error UX (parallel track; land early)
+
+Elm-like quality requires compiler features, not just types:
+- Structured diagnostics with codes, labels, and stable formatting.
+- Canonical type pretty-printer (single formatting style everywhere).
+- Typed holes (`_`) with “found/expected” and suggestions.
+- “Did you mean” name suggestions and better unknown-name errors.
+- Golden tests for diagnostics (stability across refactors).
+
+## 7) Patterns: exhaustiveness and decision trees
 
 Implement:
 - Pattern compilation to decision trees.
 - Exhaustiveness checking (initially: best-effort with clear “unknown” cases).
+- Small counterexamples when possible; otherwise a clear “unknown” report.
 - Redundancy detection (unreachable patterns).
 
-## 7) Predicates and patching
+## 8) Predicates and patching
 
 These features are central to AIVI’s identity; implement them as early as possible *once* the kernel + typing is stable.
 
 - Predicates (`specs/02_syntax/04_predicates.md` and kernel form).
 - Patches (`specs/02_syntax/05_patching.md`) as a typed “delta” language.
 
-## 8) Domains
+## 9) Domains
 
 Domains span parsing + typing + evaluation:
 - Domain definition syntax.
@@ -108,8 +125,7 @@ Pragmatic staging:
 2. Generalize to user-defined domains.
 3. Add JSX literal desugaring via the `Html` domain.
 
-## 9) External sources and resources
+## 10) External sources and resources
 
 - `specs/02_syntax/12_external_sources.md` and `specs/02_syntax/15_resources.md`.
 - Treat external sources as *typed inputs* that are resolved by the build system and materialize into the compiled artifact (or as WASI resources).
-

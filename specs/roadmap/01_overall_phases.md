@@ -28,6 +28,7 @@ Scope:
 
 Deliverables:
 - Syntax errors with spans, recovery, and multiple diagnostics per file.
+- Structured diagnostics pipeline (codes, labels, stable formatting for syntax errors).
 - Formatter prototype: a “pretty printer” for a subset (enough to format examples).
 - Minimal VS Code integration: syntax highlighting already exists; add “format document” that shells out to `aivi fmt` (optional until LSP).
 
@@ -67,10 +68,14 @@ Scope:
 - Enough types to make the language usable:
   - ADTs, functions, records (start closed), pattern matching.
   - `Option`, `Result`, `List`, `Text` as library types with compiler-known representation.
+  - Decide let-generalization policy (top-level only vs local `let` generalization).
+  - Minimal traits/typeclasses for `Eq`, `Ord`, `Show` (or `ToText`), plus numeric `Add`/`Sub`/`Mul` (or a small `Num`).
   - Effect typing as annotations (initially: check the *shape*, don’t implement full effect inference).
 
 Deliverables:
 - `aivi check` produces type errors with explanatory traces.
+- Typed holes (`_`) with “found/expected” and suggestions.
+- Canonical type pretty-printer for stable errors and diffs.
 - LSP: hover types, signature help, completion using local typing.
 
 Acceptance criteria:
@@ -95,6 +100,8 @@ Acceptance criteria:
 Scope:
 - Implement `Effect E A` semantics and runtime handlers.
 - Resource lifetimes and structured concurrency (`specs/06_runtime/01_concurrency.md`).
+ - Commit to cancellation propagation rules and a `bracket`/`with` resource pattern.
+ - Be explicit about determinism guarantees (or lack thereof).
 
 Deliverables:
 - Built-in effects: `Clock`, `File`, `Random` (start small).
@@ -152,4 +159,3 @@ Deliverables:
 
 Acceptance criteria:
 - The “advanced” features don’t compromise IDE responsiveness or error quality.
-

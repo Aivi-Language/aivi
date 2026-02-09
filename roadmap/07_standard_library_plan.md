@@ -12,7 +12,15 @@ References:
 - Small, orthogonal core.
 - Pure by default; effectful APIs live under explicit effect modules.
 - Stable “prelude” that makes common code concise.
+- Decide the core type system surface area early (polymorphism + minimal traits) and reflect it in stdlib.
+- Total-by-default APIs; partial operations return `Option`/`Result`, never trap.
 - Portable across WASI runtimes (avoid host-specific APIs as much as possible).
+
+## Type system surface area (decide early)
+
+- Let-generalization policy (top-level only vs local `let` generalization).
+- Minimal traits/typeclasses: `Eq`, `Ord`, `Show` (or `ToText`), plus numeric `Add`/`Sub`/`Mul` (or a small `Num`).
+- Simple deriving for ADTs (no HKTs, no fancy derivation) to keep stdlib ergonomic.
 
 ## Bootstrap strategy (recommended)
 
@@ -49,8 +57,8 @@ Once codegen + runtime are stable enough:
 - `aivi.std.core`
   - `Int`, `Float`, `Bool`, `Char`, `Text`
   - `List`, `Option`, `Result`, `Tuple`
-  - `Eq`, `Ord` (or class equivalents later)
-  - `map`, `fold`, `pipe` helpers
+  - `Eq`, `Ord`, `Show` (or `ToText`)
+  - Numeric traits: `Add`, `Sub`, `Mul` (or a small `Num`)
 - `aivi.std.math` (pure numeric utilities)
 - `aivi.std.collections`
   - `List` extensions
@@ -69,6 +77,20 @@ Based on existing sketches:
 - `aivi.std.html` (`specs/05_stdlib/06_html.md`)
 - `aivi.std.style` (`specs/05_stdlib/07_style.md`)
 
+### Core data split (recommended)
+
+Keep the always-imported surface small:
+- `aivi.std.core` exposes types + minimal constructors.
+- Richer APIs live in focused modules: `aivi.std.text`, `aivi.std.list`, `aivi.std.option`, `aivi.std.result`.
+- `aivi.prelude` re-exports only the essentials.
+
+### Effects model (decide early)
+
+Pick a concrete effects story and keep the surface API small and guided:
+- Algebraic effects + handlers, or an `IO`-like monad, or row-polymorphic effects.
+- Capabilities stay explicit in types (e.g., `Effect Console a`).
+- Provide a recommended top-level program shape even if the language is not strictly Elm.
+
 ### Effects (WASI-facing)
 
 Keep these explicit and capability-oriented:
@@ -84,6 +106,9 @@ From `specs/06_runtime/01_concurrency.md`:
 - `aivi.std.concurrent`
   - `scope`, `par`, `race`
   - `Send A`, `Recv A`, `channel.make`, `select`
+- Define cancellation propagation rules (especially for `race` and `scope`).
+- Provide a `bracket`/`with` pattern for resource safety.
+- Be explicit about determinism guarantees (or the lack of them).
 
 ## “Primitive types” vs “stdlib types”
 
@@ -91,6 +116,12 @@ Make this an explicit compiler contract (and document it):
 - Primitives in the compiler: `Int`, `Float`, `Bool`, `Char` (and possibly `Unit`).
 - Stdlib types with compiler-known representation initially:
   - `Text`, `List`, `Option`, `Result`, records, ADTs
+- Keep semantics in stdlib; intrinsics stay mechanical (codegen/pattern matching/interop only).
+
+## Total vs partial API policy
+
+- Any operation that can fail returns `Option` or `Result`.
+- Make total/partial decisions explicit for `Text` slicing/indexing, numeric conversions, parsing, and file ops.
 
 Over time, you can reduce the compiler’s “knowledge” if desired, but some set will remain for performance and interop.
 
@@ -113,4 +144,4 @@ Avoid leaking WASI specifics into user code:
 - define AIVI-level types (`Path`, `Instant`, `Duration`, `FileHandle`)
 - define effectful operations in terms of those types
 - implement them using: WASI Preview 2 + component model
-
+- keep `aivi.std.wasi.*` internal; public modules depend on narrow capability interfaces
