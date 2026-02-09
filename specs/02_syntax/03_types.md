@@ -29,11 +29,39 @@ Numeric suffixes:
 
 ## 3.2 Algebraic Data Types
 
+### `Bool`
+
+`Bool` has exactly two values:
+
+```aivi
+True : Bool
+False : Bool
+```
+
+`if ... then ... else ...` requires a `Bool` condition, and can be understood as desugaring to a `case` on `True`/`False`.
+
+### Creating values (“objects”)
+
+AIVI does not have “objects” in the OO sense. You create values using:
+
+- **Constructors** for algebraic data types (ADTs)
+- **Literals** for primitives and records
+- **Domain-owned literals/operators** for domain types (e.g. `2w + 3d` for `Duration`)
+
 ```aivi
 Option A = None | Some A
 Result E A = Err E | Ok A
 ```
 
+To create ADT values, apply constructors like ordinary functions:
+
+```aivi
+someCount = Some 123
+okText    = Ok "done"
+bad       = Err "nope"
+```
+
+Nullary constructors (like `None`, `True`, `False`) are values.
 
 ## 3.3 Open Records (Row Polymorphism)
 
@@ -44,6 +72,13 @@ Records are:
 
 ```aivi
 User = { id: Int, name: Text, email: Option Text }
+```
+
+To create a record value, use a record literal:
+
+```aivi
+alice : User
+alice = { id: 1, name: "Alice", email: None }
 ```
 
 Functions specify **minimum required fields**, not exact shapes.

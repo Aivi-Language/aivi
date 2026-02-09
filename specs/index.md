@@ -12,6 +12,10 @@ A high-integrity functional language targeting WebAssembly.
 
 1. [Introduction](01_introduction)
 
+### Roadmap
+
+- [Roadmap](roadmap/)
+
 ### Syntax
 
 2. [Concrete Syntax (EBNF draft)](02_syntax/00_grammar)

@@ -43,13 +43,28 @@ export default defineConfig({
     nav: [
       { text: "Spec", link: "/" },
       { text: "Syntax", link: "/02_syntax/00_grammar" },
-      { text: "Kernel", link: "/03_kernel/01_core_terms" }
+      { text: "Kernel", link: "/03_kernel/01_core_terms" },
+      { text: "Roadmap", link: "/roadmap/" }
     ],
     sidebar: [
       {
         text: "Specification",
         items: [
           { text: "Introduction", link: "/01_introduction" }
+        ]
+      },
+      {
+        text: "Roadmap",
+        collapsed: true,
+        items: [
+          { text: "Overview", link: "/roadmap/" },
+          { text: "Overall Phases", link: "/roadmap/01_overall_phases" },
+          { text: "Rust Workspace Layout", link: "/roadmap/02_rust_workspace_layout" },
+          { text: "Language Implementation", link: "/roadmap/03_language_implementation" },
+          { text: "Compile to WASM/WASI", link: "/roadmap/04_compiler_wasm_wasi" },
+          { text: "Language Server (LSP)", link: "/roadmap/05_language_server_lsp" },
+          { text: "MCP Integration", link: "/roadmap/06_mcp_integration" },
+          { text: "Standard Library Plan", link: "/roadmap/07_standard_library_plan" }
         ]
       },
       {
