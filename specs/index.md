@@ -73,22 +73,32 @@ A high-integrity functional language targeting WebAssembly.
 46. [HTML Domain](05_stdlib/06_html)
 47. [Style Domain](05_stdlib/07_style)
 48. [SQLite Domain](05_stdlib/08_sqlite)
+49. [Matrix Domain](05_stdlib/09_matrix)
+50. [Complex Domain](05_stdlib/10_complex)
+51. [Quaternion Domain](05_stdlib/11_quaternion)
+52. [Rational & BigInt Domains](05_stdlib/12_rational_bigint)
+53. [Probability & Distribution Domain](05_stdlib/13_probability)
+54. [FFT & Signal Domain](05_stdlib/14_signal)
+55. [Geometry Domain](05_stdlib/15_geometry)
+56. [Units Domain](05_stdlib/16_units)
+57. [Graph Domain](05_stdlib/17_graph)
+58. [Linear Algebra Domain](05_stdlib/18_linear_algebra)
 
 ### Runtime
 
-49. [Concurrency](06_runtime/01_concurrency)
+59. [Concurrency](06_runtime/01_concurrency)
 
 ### Ideas & Future Directions
 
-50. [WASM Target](ideas/01_wasm_target)
-51. [LiveView Frontend](ideas/02_liveview_frontend)
-52. [Meta-Domain](ideas/04_meta_domain)
-53. [Tooling](ideas/05_tooling)
+60. [WASM Target](ideas/01_wasm_target)
+61. [LiveView Frontend](ideas/02_liveview_frontend)
+62. [Meta-Domain](ideas/04_meta_domain)
+63. [Tooling](ideas/05_tooling)
 
 ### Guides
 
-55. [From TypeScript](guides/01_from_typescript)
-56. [From Haskell](guides/02_from_haskell)
+64. [From TypeScript](guides/01_from_typescript)
+65. [From Haskell](guides/02_from_haskell)
 
 ### Meta
 
