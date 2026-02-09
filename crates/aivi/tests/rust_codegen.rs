@@ -15,7 +15,7 @@ fn set_workspace_root() -> PathBuf {
 #[test]
 fn compile_rust_example_emits_main() {
     let _root = set_workspace_root();
-    let program = desugar_target("examples/10_wasm.aivi").expect("desugar");
+    let program = desugar_target("examples/11_concurrency.aivi").expect("desugar");
     let rust = compile_rust(program).expect("compile rust");
     assert!(rust.contains("fn main()"));
     assert!(rust.contains("PROGRAM_JSON"));

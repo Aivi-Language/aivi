@@ -227,7 +227,6 @@ pub enum Expr {
         items: Vec<BlockItem>,
         span: Span,
     },
-    Jsx(JsxNode),
     Raw {
         text: String,
         span: Span,
@@ -325,40 +324,6 @@ pub struct RecordPatternField {
     pub path: Vec<SpannedName>,
     pub pattern: Pattern,
     pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub enum JsxNode {
-    Element(JsxElement),
-    Fragment(JsxFragment),
-}
-
-#[derive(Debug, Clone)]
-pub struct JsxElement {
-    pub name: SpannedName,
-    pub attributes: Vec<JsxAttribute>,
-    pub children: Vec<JsxChild>,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct JsxFragment {
-    pub children: Vec<JsxChild>,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub struct JsxAttribute {
-    pub name: SpannedName,
-    pub value: Option<Expr>,
-    pub span: Span,
-}
-
-#[derive(Debug, Clone)]
-pub enum JsxChild {
-    Expr(Expr),
-    Text(String, Span),
-    Element(JsxNode),
 }
 
 pub fn parse_modules(path: &Path, content: &str) -> (Vec<Module>, Vec<FileDiagnostic>) {
@@ -1224,12 +1189,6 @@ impl Parser {
             return Some(self.parse_block(BlockKind::Resource));
         }
 
-        if self.peek_symbol("<") {
-            if let Some(node) = self.parse_jsx() {
-                return Some(Expr::Jsx(node));
-            }
-        }
-
         if let Some(number) = self.consume_number() {
             if let Some(dt) = self.try_parse_datetime(number.clone()) {
                 return Some(Expr::Literal(dt));
@@ -1521,134 +1480,6 @@ impl Parser {
         };
         let span = merge_span(path.first().unwrap().span.clone(), pattern_span(&pattern));
         Some(RecordPatternField { path, pattern, span })
-    }
-
-    fn parse_jsx(&mut self) -> Option<JsxNode> {
-        if !self.consume_symbol("<") {
-            return None;
-        }
-        if self.consume_symbol(">") {
-            let span = merge_span(self.previous_span(), self.previous_span());
-            let children = self.parse_jsx_children(None);
-            self.expect_symbol("<", "expected closing fragment");
-            self.expect_symbol("/", "expected closing fragment");
-            let _ = self.expect_symbol(">", "expected '>' after fragment close");
-            let span = merge_span(span, self.previous_span());
-            return Some(JsxNode::Fragment(JsxFragment { children, span }));
-        }
-        let name = self.consume_ident()?;
-        let mut attributes = Vec::new();
-        while !self.check_symbol(">") && self.pos < self.tokens.len() {
-            if let Some(attr_name) = self.consume_ident() {
-                let mut value = None;
-                if self.consume_symbol("=") {
-                    if self.consume_symbol("{") {
-                        value = self.parse_expr();
-                        self.expect_symbol("}", "expected '}' after JSX expression");
-                    } else if let Some(string) = self.consume_string() {
-                        value = Some(Expr::Literal(Literal::String {
-                            text: string.text,
-                            span: string.span,
-                        }));
-                    }
-                }
-                let span = attr_name.span.clone();
-                attributes.push(JsxAttribute {
-                    name: attr_name,
-                    value,
-                    span,
-                });
-                continue;
-            }
-            if self.check_symbol("/") && self.tokens.get(self.pos + 1).map(|t| t.text.as_str()) == Some(">") {
-                break;
-            }
-            self.pos += 1;
-        }
-        if self.check_symbol("/") && self.tokens.get(self.pos + 1).map(|t| t.text.as_str()) == Some(">") {
-            self.pos += 2;
-            let span = merge_span(name.span.clone(), self.previous_span());
-            return Some(JsxNode::Element(JsxElement {
-                name,
-                attributes,
-                children: Vec::new(),
-                span,
-            }));
-        }
-        self.expect_symbol(">", "expected '>' to close JSX start tag");
-        let children = self.parse_jsx_children(Some(name.name.clone()));
-        self.expect_symbol("<", "expected '</' after JSX children");
-        self.expect_symbol("/", "expected '</' after JSX children");
-        if let Some(tag) = self.consume_ident() {
-            if tag.name != name.name {
-                self.emit_diag("E1701", "mismatched JSX closing tag", tag.span.clone());
-            }
-        }
-        let end_span = self.expect_symbol(">", "expected '>' after JSX end tag");
-        let span = merge_span(name.span.clone(), end_span.unwrap_or(name.span.clone()));
-        Some(JsxNode::Element(JsxElement {
-            name,
-            attributes,
-            children,
-            span,
-        }))
-    }
-
-    fn parse_jsx_children(&mut self, closing: Option<String>) -> Vec<JsxChild> {
-        let mut children = Vec::new();
-        while self.pos < self.tokens.len() {
-            self.consume_newlines();
-            if self.check_symbol("<") && self.tokens.get(self.pos + 1).map(|t| t.text.as_str()) == Some("/") {
-                if closing.is_none() {
-                    break;
-                }
-                if let Some(expected) = closing.as_ref() {
-                    if let Some(tag) = self.tokens.get(self.pos + 2) {
-                        if tag.kind == TokenKind::Ident && tag.text == *expected {
-                            break;
-                        }
-                    }
-                }
-            }
-            if self.peek_symbol("<") {
-                if let Some(node) = self.parse_jsx() {
-                    children.push(JsxChild::Element(node));
-                    continue;
-                }
-            }
-            if self.consume_symbol("{") {
-                let expr = self.parse_expr().unwrap_or(Expr::Raw {
-                    text: String::new(),
-                    span: self.previous_span(),
-                });
-                self.expect_symbol("}", "expected '}' to close JSX expression");
-                children.push(JsxChild::Expr(expr));
-                continue;
-            }
-            if let Some(token) = self.consume_text_token() {
-                children.push(JsxChild::Text(token.text, token.span));
-                continue;
-            }
-            break;
-        }
-        children
-    }
-
-    fn consume_text_token(&mut self) -> Option<Token> {
-        let token = self.tokens.get(self.pos)?;
-        if matches!(token.kind, TokenKind::Ident | TokenKind::Number | TokenKind::String) {
-            self.pos += 1;
-            return Some(token.clone());
-        }
-        if token.kind == TokenKind::Symbol
-            && token.text != "<"
-            && token.text != "{"
-            && token.text != "}"
-        {
-            self.pos += 1;
-            return Some(token.clone());
-        }
-        None
     }
 
     fn parse_type_expr(&mut self) -> Option<TypeExpr> {
@@ -2041,7 +1872,6 @@ fn expr_span(expr: &Expr) -> Span {
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
         | Expr::Block { span, .. } => span.clone(),
-        Expr::Jsx(node) => jsx_span(node),
         Expr::Raw { span, .. } => span.clone(),
     }
 }
@@ -2091,13 +1921,6 @@ fn path_span(path: &[PathSegment]) -> Span {
             start: Position { line: 1, column: 1 },
             end: Position { line: 1, column: 1 },
         },
-    }
-}
-
-fn jsx_span(node: &JsxNode) -> Span {
-    match node {
-        JsxNode::Element(element) => element.span.clone(),
-        JsxNode::Fragment(fragment) => fragment.span.clone(),
     }
 }
 

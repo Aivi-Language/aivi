@@ -1,5 +1,0 @@
-module examples.wasm = {
-  export main
-
-  main = print "Hello from AIVI!"
-}

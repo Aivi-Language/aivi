@@ -98,12 +98,12 @@ A high-integrity functional language targeting WebAssembly.
 55. [Geometry Domain](05_stdlib/15_geometry)
 56. [Units Domain](05_stdlib/16_units)
 57. [Graph Domain](05_stdlib/17_graph)
-101. [Linear Algebra Domain](05_stdlib/18_linear_algebra)
-102. [HTTP Domain](05_stdlib/19_http)
-103. [File Domain](05_stdlib/20_file)
-104. [Console Domain](05_stdlib/21_console)
-105. [Crypto Domain](05_stdlib/22_crypto)
+58. [Linear Algebra Domain](05_stdlib/18_linear_algebra)
+59. [HTTP Domain](05_stdlib/19_http)
+60. [File Domain](05_stdlib/20_file)
+61. [Console Domain](05_stdlib/21_console)
+62. [Crypto Domain](05_stdlib/22_crypto)
 
 ### Runtime
 
-106. [Concurrency](06_runtime/01_concurrency)
+107. [Concurrency](06_runtime/01_concurrency)

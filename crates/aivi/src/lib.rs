@@ -23,7 +23,7 @@ pub use hir::{HirModule, HirProgram};
 pub use resolver::check_modules;
 pub use surface::{
     parse_modules, parse_modules_from_tokens, BlockItem, ClassDecl, Def, DomainDecl, DomainItem,
-    Expr, InstanceDecl, JsxAttribute, JsxChild, JsxElement, JsxFragment, JsxNode, ListItem,
+    Expr, InstanceDecl, ListItem,
     MatchArm, Module, ModuleItem, PathSegment, Pattern, RecordField, RecordPatternField,
     SpannedName, TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig, UseDecl,
 };
