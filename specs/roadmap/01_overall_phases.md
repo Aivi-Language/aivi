@@ -12,13 +12,13 @@ This plan is intentionally incremental: each milestone produces something shippa
 ## M0 — Repo + CI scaffolding
 
 Deliverables:
-- Rust workspace skeleton (`crates/*`) and a single `aivi` binary.
-- `aivi --help` with subcommands: `parse`, `check`, `fmt` (stub), `lsp` (stub), `build` (stub), `run` (stub).
-- “Hello world” golden test for parsing a single file.
+- [x] Rust workspace skeleton (`crates/*`) and a single `aivi` binary.
+- [x] `aivi --help` with subcommands: `parse`, `check`, `fmt` (stub), `lsp` (stub), `build` (stub), `run` (stub).
+- [x] “Hello world” golden test for parsing a single file.
 
 Acceptance criteria:
-- `cargo test` runs in CI.
-- `aivi parse examples/...` prints a stable AST (or CST) and exits 0.
+- [x] `cargo test` runs in CI.
+- [ ] `aivi parse examples/...` prints a stable AST (or CST) and exits 0.
 
 ## M1 — Parser + CST + diagnostics
 
@@ -27,14 +27,14 @@ Scope:
 - A CST that preserves trivia (comments/whitespace) for formatting and IDE.
 
 Deliverables:
-- Syntax errors with spans, recovery, and multiple diagnostics per file.
-- Structured diagnostics pipeline (codes, labels, stable formatting for syntax errors).
-- Formatter prototype: a “pretty printer” for a subset (enough to format examples).
-- Minimal VS Code integration: syntax highlighting already exists; add “format document” that shells out to `aivi fmt` (optional until LSP).
+- [x] Syntax errors with spans, recovery, and multiple diagnostics per file.
+- [x] Structured diagnostics pipeline (codes, labels, stable formatting for syntax errors).
+- [x] Formatter prototype: a “pretty printer” for a subset (enough to format examples).
+- [ ] Minimal VS Code integration: syntax highlighting already exists; add “format document” that shells out to `aivi fmt` (optional until LSP).
 
 Acceptance criteria:
-- Parse all files in `examples/` and most `specs/` code blocks (even if some fail).
-- Stable diagnostics spans and messages.
+- [ ] Parse all files in `examples/` and most `specs/` code blocks (even if some fail).
+- [ ] Stable diagnostics spans and messages.
 
 ## M2 — Modules + name resolution
 
@@ -43,11 +43,12 @@ Scope:
 - Symbol tables, module graph, and “go to definition”.
 
 Deliverables:
-- `aivi check` that resolves identifiers across a small workspace.
-- LSP: `textDocument/definition` for values/types/modules (even before types).
+- [x] `aivi check` that resolves identifiers across a small workspace.
+- [x] LSP: `textDocument/definition` within the current file (modules, exports, defs).
+- [ ] LSP: `textDocument/definition` across imports and modules.
 
 Acceptance criteria:
-- “Unknown name”, “duplicate export”, “cyclic module” errors with good spans.
+- [x] “Unknown name”, “duplicate export”, “cyclic module” errors with good spans.
 
 ## M3 — Kernel IR + desugaring pipeline
 
@@ -56,11 +57,11 @@ Scope:
 - Surface-to-kernel desugaring (`specs/04_desugaring/*`).
 
 Deliverables:
-- `aivi desugar` debug output.
-- Internal “HIR” (typed later) with stable IDs for IDE and incremental compilation.
+- [x] `aivi desugar` debug output.
+- [ ] Internal “HIR” (typed later) with stable IDs for IDE and incremental compilation.
 
 Acceptance criteria:
-- Any supported surface feature lowers to Kernel consistently (round-trip tests).
+- [ ] Any supported surface feature lowers to Kernel consistently (round-trip tests).
 
 ## M4 — Type system v1 (rank-1, no HKTs/classes yet)
 
@@ -73,13 +74,13 @@ Scope:
   - Effect typing as annotations (initially: check the *shape*, don’t implement full effect inference).
 
 Deliverables:
-- `aivi check` produces type errors with explanatory traces.
-- Typed holes (`_`) with “found/expected” and suggestions.
-- Canonical type pretty-printer for stable errors and diffs.
-- LSP: hover types, signature help, completion using local typing.
+- [ ] `aivi check` produces type errors with explanatory traces.
+- [ ] Typed holes (`_`) with “found/expected” and suggestions.
+- [ ] Canonical type pretty-printer for stable errors and diffs.
+- [ ] LSP: hover types, signature help, completion using local typing.
 
 Acceptance criteria:
-- Small programs typecheck; errors are actionable; no “mystery type” output.
+- [ ] Small programs typecheck; errors are actionable; no “mystery type” output.
 
 ## M5 — WASM/WASI execution (interpreter optional, compiler required)
 
@@ -88,12 +89,12 @@ Scope:
 - WASI integration for basic IO through `Effect` operations.
 
 Deliverables:
-- `aivi build --target wasm32-wasi` emits a `.wasm`.
-- `aivi run` runs the produced artifact.
-- Basic runtime support: heap allocation and a minimal string/list representation.
+- [x] `aivi build --target wasm32-wasi` emits a `.wasm`.
+- [x] `aivi run` runs the produced artifact.
+- [x] Basic runtime support: heap allocation and a minimal string/list representation.
 
 Acceptance criteria:
-- Deterministic outputs for golden tests; no UB; memory safe by construction.
+- [ ] Deterministic outputs for golden tests; no UB; memory safe by construction.
 
 ## M6 — Effects, Resources, Concurrency
 
@@ -104,11 +105,11 @@ Scope:
  - Be explicit about determinism guarantees (or lack thereof).
 
 Deliverables:
-- Built-in effects: `Clock`, `File`, `Random` (start small).
-- Deterministic cancellation semantics.
+- [x] Built-in effects: `Clock`, `File`, `Random` (start small).
+- [ ] Deterministic cancellation semantics.
 
 Acceptance criteria:
-- Concurrency tests for cancellation and channel select.
+- [ ] Concurrency tests for cancellation and channel select.
 
 ## M7 — Domains + patching + JSX/HTML (ongoing; prioritize for demos)
 
@@ -118,11 +119,11 @@ Scope:
 - JSX literals to `Html` domain (`specs/02_syntax/13_jsx_literals.md`).
 
 Deliverables:
-- A small “HTML domain” demo that produces a tree and prints/serializes it.
-- Domain-driven numeric deltas (calendar/duration/color) as in `specs/05_stdlib/*`.
+- [x] A small “HTML domain” demo that produces a tree and prints/serializes it.
+- [ ] Domain-driven numeric deltas (calendar/duration/color) as in `specs/05_stdlib/*`.
 
 Acceptance criteria:
-- Domain-specific operators are typechecked and can be extended in user code.
+- [x] Domain-specific operators are typechecked and can be extended in user code.
 
 ## M8 — LSP “daily driver” (parallel track)
 
@@ -130,10 +131,17 @@ Scope:
 - Make the language usable in an editor for real work.
 
 Deliverables:
-- Diagnostics, formatting, definition/references, rename, hover/types, semantic tokens, code actions.
+- [x] Diagnostics.
+- [ ] Formatting.
+- [x] Definition (in-file).
+- [ ] References.
+- [ ] Rename.
+- [ ] Hover/types.
+- [ ] Semantic tokens.
+- [ ] Code actions.
 
 Acceptance criteria:
-- Comfortable editing experience on the existing `specs/` and `examples/`.
+- [ ] Comfortable editing experience on the existing `specs/` and `examples/`.
 
 ## M9 — MCP (parallel track; enabled once execution works)
 
@@ -141,11 +149,11 @@ Scope:
 - A Rust MCP host that loads AIVI WASM modules and exposes decorated tools/resources.
 
 Deliverables:
-- `aivi mcp serve` exposing `@mcp_tool` and `@mcp_resource`.
-- JSON Schema generation from AIVI types.
+- [ ] `aivi mcp serve` exposing `@mcp_tool` and `@mcp_resource`.
+- [ ] JSON Schema generation from AIVI types.
 
 Acceptance criteria:
-- An MCP client can call tools, list resources, and get typed errors.
+- [ ] An MCP client can call tools, list resources, and get typed errors.
 
 ## M10 — Type system v2 (row polymorphism, classes, HKTs) (longer-term)
 
@@ -155,7 +163,7 @@ Scope:
 - HKTs.
 
 Deliverables:
-- A principled, testable typechecker with exhaustive coverage.
+- [ ] A principled, testable typechecker with exhaustive coverage.
 
 Acceptance criteria:
-- The “advanced” features don’t compromise IDE responsiveness or error quality.
+- [ ] The “advanced” features don’t compromise IDE responsiveness or error quality.
