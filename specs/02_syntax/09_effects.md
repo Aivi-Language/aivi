@@ -36,6 +36,44 @@ Compiler checks:
 - Expression statements of non-`Effect` type in an `effect { ... }` block produce a warning unless they are the final expression or are bound.
 - Discarded `Effect` results produce a warning unless explicitly bound (including binding to `_`).
 
+### `if` with nested blocks inside `effect`
+
+`if` is an expression, so you can branch inside an `effect { … }` block. When a branch uses `{ … }`, that inner `{ … }` is a normal block expression used to group multiple statements; it does **not** start a new `effect` block. It is still part of the surrounding `effect { … }`, so it may contain:
+
+- effect binds (`x <- eff`)
+- pure local bindings (`x = e`)
+- a final expression that becomes the branch result
+
+This pattern is common when a branch needs multiple effectful steps:
+
+```aivi
+main = effect {
+  u <- loadUser
+  if u.isAdmin then {
+    _ <- log "admin login"
+    token <- mintToken u
+    token
+  } else {
+    "guest"
+  }
+}
+```
+
+Desugaring-wise, the `if … then … else …` appears inside the continuation of a `bind`, and each branch desugars to its own sequence of `bind` calls.
+
+### Nested `effect { … }` expressions inside `if`
+
+An explicit `effect { … }` is itself an expression of type `Effect E A`. If you write `effect { … }` in an `if` branch, you usually want to run (bind) the chosen effect:
+
+```aivi
+main = effect {
+  token <- if shouldMint then effect { mintToken user } else effect { "guest" }
+  token
+}
+```
+
+If you instead write `if … then effect { … } else effect { … }` *without* binding it, the result of the `if` is an `Effect …` value, not a sequence of steps in the surrounding block (unless it is the final expression of that surrounding `effect { … }`).
+
 ---
 
 ## 9.3 Effects and patching

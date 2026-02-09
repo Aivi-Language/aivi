@@ -71,8 +71,7 @@ export default defineConfig({
           { text: "External Sources", link: "/02_syntax/12_external_sources" },
           { text: "JSX Literals", link: "/02_syntax/13_jsx_literals" },
           { text: "Decorators", link: "/02_syntax/14_decorators" },
-          { text: "Resources", link: "/02_syntax/15_resources" },
-          { text: "Collections", link: "/02_syntax/16_collections" }
+          { text: "Resources", link: "/02_syntax/15_resources" }
         ]
       },
       {
