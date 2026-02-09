@@ -84,9 +84,10 @@ Atom           := Literal
                | Block
                | EffectBlock ;
 
-EffectBlock    := "effect" Block ;
-Block          := "{" { Stmt } "}" ;
-Stmt           := Binding | Expr Sep ;
+Block          := "do" "{" { Stmt } "}" ;
+EffectBlock    := "effect" "{" { Stmt } "}" ;
+Stmt           := BindStmt | Binding | Expr Sep ;
+BindStmt       := Pattern "<-" Expr Sep ;
 
 TupleLit       := "(" Expr "," Expr { "," Expr } ")" ;
 ListLit        := "[" [ Expr { "," Expr } | Range ] "]" ;
@@ -99,10 +100,8 @@ FieldSep       := Sep | "," ;
 
 **Notes**
 
-- `{ ... }` is used for both `RecordLit` and `Block`. They are distinguished by their entries:
-  - `RecordLit` entries are `field: expr`.
-  - `Block` entries are `binding` (`pat = expr`) or bare expressions.
-  - Mixing `:` fields with `=` bindings in the same `{ ... }` should be a compile error with a clear hint.
+- `{ ... }` is reserved for record-shaped forms (`RecordLit`, `RecordType`, `RecordPat`, `PatchLit`, and module/domain bodies).
+- Multi-statement expression blocks use `do { ... }`, so the parser never needs to guess whether `{ ... }` is a record literal or a block.
 - `.field` is shorthand for `x => x.field` (a unary accessor function).
 - `_` is *not* a value. It only appears in expressions as part of the placeholder-lambda sugar (see `specs/04_desugaring/02_functions.md`).
 
@@ -200,7 +199,7 @@ RecordPatKey   := lowerIdent { "." lowerIdent } ;
 
 ## 0.8 Diagnostics (where the compiler should nag)
 
-- **`{ ... }` shape ambiguity**: if a braced form mixes `field: expr` with `pat = expr`, error with “record literal vs block” guidance.
+- **Likely-missed `do`**: if `{ ... }` contains `=` bindings or statement separators, error and suggest `do { ... }` (since `{ ... }` is record-shaped).
 - **Arms without a `?`**: `| p => e` is only valid after `?` *or* directly after `=` in the multi-clause unary function form.
 - **`_` placeholder**: `_ + 1` is only legal where a unary function is expected; otherwise error and suggest `x => x + 1`.
 - **Deep keys in record literals**: `a.b: 1` should be rejected in record literals (suggest patching with `<|` if the intent was a path).

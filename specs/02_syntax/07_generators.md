@@ -129,12 +129,12 @@ processed = generate {
 ```aivi
 // Infinite sequence of Fibonacci numbers
 fibs = generate {
-  loop (a, b) = (0, 1) => {
+  loop (a, b) = (0, 1) => do {
     yield a
     recurse (b, a + b)
   }
 }
 ```
 
-`loop (pat) = init => { ... }` introduces a local tail-recursive loop for generators.
+`loop (pat) = init => do { ... }` introduces a local tail-recursive loop for generators.
 Inside the loop body, `recurse next` continues with the next state.

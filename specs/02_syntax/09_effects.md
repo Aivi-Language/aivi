@@ -38,7 +38,7 @@ Compiler checks:
 
 ### `if` with nested blocks inside `effect`
 
-`if` is an expression, so you can branch inside an `effect { … }` block. When a branch uses `{ … }`, that inner `{ … }` is a normal block expression used to group multiple statements; it does **not** start a new `effect` block. It is still part of the surrounding `effect { … }`, so it may contain:
+`if` is an expression, so you can branch inside an `effect { … }` block. When a branch needs multiple statements, use a `do { … }` block to group them (since `{ … }` is reserved for record-shaped forms). The `do { … }` is still inside the surrounding `effect { … }`, so it may contain:
 
 - effect binds (`x <- eff`)
 - pure local bindings (`x = e`)
@@ -49,13 +49,11 @@ This pattern is common when a branch needs multiple effectful steps:
 ```aivi
 main = effect {
   u <- loadUser
-  if u.isAdmin then {
+  if u.isAdmin then do {
     _ <- log "admin login"
     token <- mintToken u
     token
-  } else {
-    "guest"
-  }
+  } else "guest"
 }
 ```
 
@@ -104,13 +102,11 @@ Example translation:
 // Sequence with effect block
 transfer fromAccount toAccount amount = effect {
   balance <- getBalance fromAccount
-  if balance >= amount then {
+  if balance >= amount then do {
     _ <- withdraw fromAccount amount
     _ <- deposit toAccount amount
     Ok Unit
-  } else {
-    Err InsufficientFunds
-  }
+  } else Err InsufficientFunds
 }
 
 // Equivalent functional composition

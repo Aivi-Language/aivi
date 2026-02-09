@@ -151,9 +151,9 @@ Pattern matching excels at simplifying complex conditional branches into readabl
 
 ```aivi
 headerLabel = response ?
-  | { data.user.profile@{name} } => name
+  | { data.user.profile.{name} } => name
   | { data.guest: True }         => "Guest"
-  | _                           => "Unknown"
+  | _                            => "Unknown"
 ```
 
 ### Concise State Machines
