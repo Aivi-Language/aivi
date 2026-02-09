@@ -57,6 +57,7 @@ export default defineConfig({
       {
         text: "Roadmap",
         collapsed: true,
+        items: [
           { text: "Roadmap", link: "/roadmap/README" }
         ]
       },
