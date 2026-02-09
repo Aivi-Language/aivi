@@ -40,7 +40,35 @@ FileStats = {
 }
 ```
 
-## Functions
+## Resource Operations
+
+For more control or large files, use the resource-based API.
+
+### `open`
+
+```aivi
+open : String -> Effect (Resource Handle)
+```
+
+Opens a file for reading. Returns a `Handle` resource that must be managed (e.g., with `resource` block).
+
+### `readAll`
+
+```aivi
+readAll : Handle -> Effect (Result String Error)
+```
+
+Reads the entire content of an open file handle.
+
+### `close`
+
+```aivi
+close : Handle -> Effect Unit
+```
+
+Closes the file handle. (Automatically called if using `resource` block).
+
+## Path Operations
 
 ### `read_text`
 

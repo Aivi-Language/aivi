@@ -23,6 +23,9 @@ For *handling* an effect error as a value, the standard library provides:
 
 - `attempt : Effect E A -> Effect E (Result E A)`
 
+### `load`
+
+In some examples, `load` is used as a helper to observe or lift a resource operation into an effect.
 
 ## 9.2 `effect` blocks
 

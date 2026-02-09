@@ -14,6 +14,17 @@ use std.Console
 log : String -> Effect Unit
 ```
 
+Prints a message to the standard output, followed by a newline.
+
+### `print`
+
+```aivi
+print : String -> Effect Unit
+```
+
+Prints a message to the standard output, **without** a trailing newline.
+```
+
 Prints a message to the standard output.
 
 ### `error`
