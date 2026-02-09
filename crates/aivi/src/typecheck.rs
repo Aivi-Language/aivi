@@ -811,6 +811,13 @@ impl TypeChecker {
                 None => self.fresh_var(),
             },
             Literal::String { .. } => Type::con("Text"),
+            Literal::Sigil { tag, .. } => match tag.as_str() {
+                "r" => Type::con("Regex"),
+                "u" => Type::con("Url"),
+                "d" => Type::con("Date"),
+                "t" | "dt" => Type::con("DateTime"),
+                _ => Type::con("Text"),
+            },
             Literal::Bool { .. } => Type::con("Bool"),
             Literal::DateTime { .. } => Type::con("DateTime"),
         }
@@ -1817,6 +1824,7 @@ fn literal_span(literal: &Literal) -> Span {
     match literal {
         Literal::Number { span, .. }
         | Literal::String { span, .. }
+        | Literal::Sigil { span, .. }
         | Literal::Bool { span, .. }
         | Literal::DateTime { span, .. } => span.clone(),
     }

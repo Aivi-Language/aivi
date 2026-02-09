@@ -299,6 +299,18 @@ impl Runtime {
                 self.force_value(value)
             }
             HirExpr::LitString { text, .. } => Ok(Value::Text(text.clone())),
+            HirExpr::LitSigil {
+                tag,
+                body,
+                flags,
+                ..
+            } => {
+                let mut map = HashMap::new();
+                map.insert("tag".to_string(), Value::Text(tag.clone()));
+                map.insert("body".to_string(), Value::Text(body.clone()));
+                map.insert("flags".to_string(), Value::Text(flags.clone()));
+                Ok(Value::Record(map))
+            }
             HirExpr::LitBool { value, .. } => Ok(Value::Bool(*value)),
             HirExpr::LitDateTime { text, .. } => Ok(Value::DateTime(text.clone())),
             HirExpr::Lambda { param, body, .. } => Ok(Value::Closure(Arc::new(ClosureValue {
@@ -923,6 +935,15 @@ fn match_pattern(
             (HirLiteral::Number(text), Value::Int(num)) => parse_number_literal(text) == Some(*num),
             (HirLiteral::Number(text), Value::Float(num)) => text.parse::<f64>().ok() == Some(*num),
             (HirLiteral::String(text), Value::Text(val)) => text == val,
+            (
+                HirLiteral::Sigil { tag, body, flags },
+                Value::Record(map),
+            ) => {
+                let tag_ok = matches!(map.get("tag"), Some(Value::Text(val)) if val == tag);
+                let body_ok = matches!(map.get("body"), Some(Value::Text(val)) if val == body);
+                let flags_ok = matches!(map.get("flags"), Some(Value::Text(val)) if val == flags);
+                tag_ok && body_ok && flags_ok
+            }
             (HirLiteral::Bool(flag), Value::Bool(val)) => *flag == *val,
             (HirLiteral::DateTime(text), Value::DateTime(val)) => text == val,
             _ => false,

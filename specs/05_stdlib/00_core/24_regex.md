@@ -9,6 +9,9 @@ import aivi.std.regex use { Regex }
 
 let email_pattern = ~r/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/
 let match = Regex.test(email_pattern, "user@example.com")
+
+// With flags (example: case-insensitive)
+let email_ci = ~r/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/i
 ```
 
 ## Why this exists

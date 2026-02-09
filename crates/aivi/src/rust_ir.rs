@@ -39,6 +39,12 @@ pub enum RustIrExpr {
 
     LitNumber { id: u32, text: String },
     LitString { id: u32, text: String },
+    LitSigil {
+        id: u32,
+        tag: String,
+        body: String,
+        flags: String,
+    },
     LitBool { id: u32, value: bool },
     LitDateTime { id: u32, text: String },
 
@@ -189,6 +195,17 @@ fn lower_expr(
         }
         KernelExpr::LitNumber { id, text } => RustIrExpr::LitNumber { id, text },
         KernelExpr::LitString { id, text } => RustIrExpr::LitString { id, text },
+        KernelExpr::LitSigil {
+            id,
+            tag,
+            body,
+            flags,
+        } => RustIrExpr::LitSigil {
+            id,
+            tag,
+            body,
+            flags,
+        },
         KernelExpr::LitBool { id, value } => RustIrExpr::LitBool { id, value },
         KernelExpr::LitDateTime { id, text } => RustIrExpr::LitDateTime { id, text },
         KernelExpr::Lambda { id, param, body } => {

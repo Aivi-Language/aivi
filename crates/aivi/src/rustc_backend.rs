@@ -274,6 +274,14 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
             }
         }
         RustIrExpr::LitString { text, .. } => format!("Ok(Value::Text({:?}.to_string()))", text),
+        RustIrExpr::LitSigil { tag, body, flags, .. } => {
+            let ind = "    ".repeat(indent);
+            let ind2 = "    ".repeat(indent + 1);
+            let ind3 = "    ".repeat(indent + 2);
+            format!(
+                "{{\n{ind2}let mut map = HashMap::new();\n{ind3}map.insert(\"tag\".to_string(), Value::Text({tag:?}.to_string()));\n{ind3}map.insert(\"body\".to_string(), Value::Text({body:?}.to_string()));\n{ind3}map.insert(\"flags\".to_string(), Value::Text({flags:?}.to_string()));\n{ind2}Ok(Value::Record(map))\n{ind}}}"
+            )
+        }
         RustIrExpr::LitBool { value, .. } => format!("Ok(Value::Bool({value}))"),
         RustIrExpr::LitDateTime { text, .. } => {
             format!("Ok(Value::DateTime({:?}.to_string()))", text)

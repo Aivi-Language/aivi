@@ -6,6 +6,7 @@ pub enum TokenKind {
     Ident,
     Number,
     String,
+    Sigil,
     Symbol,
     Newline,
 }
@@ -98,6 +99,31 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
                 }
                 col += index - start;
                 continue;
+            }
+
+            if ch == '~' {
+                if let Some((text, len, closed)) = lex_sigil(&chars, index) {
+                    tokens.push(CstToken {
+                        kind: "sigil".to_string(),
+                        text,
+                        span: span(line_no, col, len),
+                    });
+                    if !closed {
+                        let sigil_span = span(line_no, col, len);
+                        diagnostics.push(Diagnostic {
+                            code: "E1005".to_string(),
+                            message: "unterminated sigil literal".to_string(),
+                            span: sigil_span.clone(),
+                            labels: vec![DiagnosticLabel {
+                                message: "sigil literal started here".to_string(),
+                                span: span(line_no, col, 1),
+                            }],
+                        });
+                    }
+                    index += len;
+                    col += len;
+                    continue;
+                }
             }
 
             if is_ident_start(ch) {
@@ -225,10 +251,62 @@ fn match_symbol(chars: &[char], index: usize) -> Option<(String, usize)> {
     let ch = chars[index];
     let symbol = match ch {
         '{' | '}' | '(' | ')' | '[' | ']' | ',' | '.' | ':' | ';' | '=' | '+' | '-' | '*' | '/'
-        | '|' | '&' | '!' | '<' | '>' | '?' | '@' | '%' => Some(ch.to_string()),
+        | '|' | '&' | '!' | '<' | '>' | '?' | '@' | '%' | '~' => Some(ch.to_string()),
         _ => None,
     }?;
     Some((symbol, 1))
+}
+
+fn lex_sigil(chars: &[char], start: usize) -> Option<(String, usize, bool)> {
+    if chars.get(start) != Some(&'~') {
+        return None;
+    }
+    let mut index = start + 1;
+    let Some(&tag_start) = chars.get(index) else {
+        return None;
+    };
+    if !is_ident_start(tag_start) {
+        return None;
+    }
+    index += 1;
+    while index < chars.len() && is_ident_continue(chars[index]) {
+        index += 1;
+    }
+    let Some(&open) = chars.get(index) else {
+        return None;
+    };
+    let close = match open {
+        '/' => '/',
+        '"' => '"',
+        '(' => ')',
+        '[' => ']',
+        '{' => '}',
+        _ => return None,
+    };
+    index += 1;
+    let mut closed = false;
+    while index < chars.len() {
+        if chars[index] == '\\' && index + 1 < chars.len() {
+            index += 2;
+            continue;
+        }
+        if chars[index] == close {
+            index += 1;
+            closed = true;
+            break;
+        }
+        index += 1;
+    }
+
+    if closed {
+        while index < chars.len() && chars[index].is_ascii_alphabetic() {
+            index += 1;
+        }
+    }
+
+    let len = index - start;
+    let text: String = chars[start..index.min(chars.len())].iter().collect();
+    Some((text, len, closed))
 }
 
 fn check_braces(tokens: &[CstToken]) -> Vec<Diagnostic> {
@@ -314,6 +392,7 @@ pub fn filter_tokens(tokens: &[CstToken]) -> Vec<Token> {
             "ident" => TokenKind::Ident,
             "number" => TokenKind::Number,
             "string" => TokenKind::String,
+            "sigil" => TokenKind::Sigil,
             "symbol" => TokenKind::Symbol,
             _ => continue,
         };

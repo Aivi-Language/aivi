@@ -25,6 +25,12 @@ pub enum HirExpr {
     Var { id: u32, name: String },
     LitNumber { id: u32, text: String },
     LitString { id: u32, text: String },
+    LitSigil {
+        id: u32,
+        tag: String,
+        body: String,
+        flags: String,
+    },
     LitBool { id: u32, value: bool },
     LitDateTime { id: u32, text: String },
     Lambda { id: u32, param: String, body: Box<HirExpr> },
@@ -98,6 +104,11 @@ pub struct HirRecordPatternField {
 pub enum HirLiteral {
     Number(String),
     String(String),
+    Sigil {
+        tag: String,
+        body: String,
+        flags: String,
+    },
     Bool(bool),
     DateTime(String),
 }
@@ -215,6 +226,12 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
             crate::surface::Literal::String { text, .. } => HirExpr::LitString {
                 id: id_gen.next(),
                 text,
+            },
+            crate::surface::Literal::Sigil { tag, body, flags, .. } => HirExpr::LitSigil {
+                id: id_gen.next(),
+                tag,
+                body,
+                flags,
             },
             crate::surface::Literal::Bool { value, .. } => HirExpr::LitBool {
                 id: id_gen.next(),
@@ -490,6 +507,11 @@ fn lower_pattern(pattern: Pattern, id_gen: &mut IdGen) -> HirPattern {
             value: match literal {
                 crate::surface::Literal::Number { text, .. } => HirLiteral::Number(text),
                 crate::surface::Literal::String { text, .. } => HirLiteral::String(text),
+                crate::surface::Literal::Sigil { tag, body, flags, .. } => HirLiteral::Sigil {
+                    tag,
+                    body,
+                    flags,
+                },
                 crate::surface::Literal::Bool { value, .. } => HirLiteral::Bool(value),
                 crate::surface::Literal::DateTime { text, .. } => HirLiteral::DateTime(text),
             },

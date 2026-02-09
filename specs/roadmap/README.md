@@ -76,6 +76,7 @@ Scope: Domain definitions, operator overloading, and patching semantics.
 - [ ] Domain definitions and operator interpretation (`specs/02_syntax/11_domain_definition.md`).
 - [ ] Patching semantics (`specs/02_syntax/05_patching.md`).
 - [ ] Domain-specific numeric deltas (calendar/duration/color).
+- [x] Built-in sigils as domain literals (`~r`, `~u`, `~d`, `~dt`) wired through lexer/parser → HIR/Kernel and editor tooling.
 
 ## Phase M8: LSP "Daily Driver" (In Progress)
 

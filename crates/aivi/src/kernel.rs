@@ -28,6 +28,12 @@ pub enum KernelExpr {
     Var { id: u32, name: String },
     LitNumber { id: u32, text: String },
     LitString { id: u32, text: String },
+    LitSigil {
+        id: u32,
+        tag: String,
+        body: String,
+        flags: String,
+    },
     LitBool { id: u32, value: bool },
     LitDateTime { id: u32, text: String },
     Lambda { id: u32, param: String, body: Box<KernelExpr> },
@@ -110,6 +116,11 @@ pub struct KernelRecordPatternField {
 pub enum KernelLiteral {
     Number(String),
     String(String),
+    Sigil {
+        tag: String,
+        body: String,
+        flags: String,
+    },
     Bool(bool),
     DateTime(String),
 }
@@ -160,6 +171,17 @@ fn lower_expr(expr: HirExpr) -> KernelExpr {
         HirExpr::Var { id, name } => KernelExpr::Var { id, name },
         HirExpr::LitNumber { id, text } => KernelExpr::LitNumber { id, text },
         HirExpr::LitString { id, text } => KernelExpr::LitString { id, text },
+        HirExpr::LitSigil {
+            id,
+            tag,
+            body,
+            flags,
+        } => KernelExpr::LitSigil {
+            id,
+            tag,
+            body,
+            flags,
+        },
         HirExpr::LitBool { id, value } => KernelExpr::LitBool { id, value },
         HirExpr::LitDateTime { id, text } => KernelExpr::LitDateTime { id, text },
         HirExpr::Lambda { id, param, body } => KernelExpr::Lambda {
@@ -317,6 +339,7 @@ fn lower_literal(lit: HirLiteral) -> KernelLiteral {
     match lit {
         HirLiteral::Number(text) => KernelLiteral::Number(text),
         HirLiteral::String(text) => KernelLiteral::String(text),
+        HirLiteral::Sigil { tag, body, flags } => KernelLiteral::Sigil { tag, body, flags },
         HirLiteral::Bool(value) => KernelLiteral::Bool(value),
         HirLiteral::DateTime(text) => KernelLiteral::DateTime(text),
     }

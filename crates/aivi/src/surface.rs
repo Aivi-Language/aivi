@@ -155,6 +155,12 @@ pub enum Literal {
         text: String,
         span: Span,
     },
+    Sigil {
+        tag: String,
+        body: String,
+        flags: String,
+        span: Span,
+    },
     Bool {
         value: bool,
         span: Span,
@@ -1031,7 +1037,7 @@ impl Parser {
                     }
                     return true;
                 }
-                TokenKind::Number | TokenKind::String => return true,
+                TokenKind::Number | TokenKind::String | TokenKind::Sigil => return true,
                 TokenKind::Symbol => {
                     return matches!(token.text.as_str(), "(" | "[" | "{" | "." | "-")
                 }
@@ -1047,7 +1053,9 @@ impl Parser {
     fn is_pattern_start(&self) -> bool {
         if let Some(token) = self.tokens.get(self.pos) {
             match token.kind {
-                TokenKind::Ident | TokenKind::Number | TokenKind::String => return true,
+                TokenKind::Ident | TokenKind::Number | TokenKind::String | TokenKind::Sigil => {
+                    return true
+                }
                 TokenKind::Symbol => return matches!(token.text.as_str(), "(" | "[" | "{" | "-"),
                 TokenKind::Newline => return false,
             }
@@ -1201,6 +1209,34 @@ impl Parser {
             let span = string.span.clone();
             return Some(Expr::Literal(Literal::String {
                 text: string.text,
+                span,
+            }));
+        }
+
+        if let Some(sigil) = self.consume_sigil() {
+            let span = sigil.span.clone();
+            if let Some((tag, body, flags)) = parse_sigil_text(&sigil.text) {
+                if tag == "u" && !is_probably_url(&body) {
+                    self.emit_diag("E1510", "invalid url sigil", span.clone());
+                }
+                if (tag == "t" || tag == "dt") && !is_probably_datetime(&body) {
+                    self.emit_diag("E1511", "invalid datetime sigil", span.clone());
+                }
+                if tag == "d" && !is_probably_date(&body) {
+                    self.emit_diag("E1512", "invalid date sigil", span.clone());
+                }
+                return Some(Expr::Literal(Literal::Sigil {
+                    tag,
+                    body,
+                    flags,
+                    span,
+                }));
+            }
+            self.emit_diag("E1513", "invalid sigil literal", span.clone());
+            return Some(Expr::Literal(Literal::Sigil {
+                tag: "?".to_string(),
+                body: sigil.text,
+                flags: String::new(),
                 span,
             }));
         }
@@ -1451,6 +1487,22 @@ impl Parser {
                 span: string.span,
             }));
         }
+        if let Some(sigil) = self.consume_sigil() {
+            if let Some((tag, body, flags)) = parse_sigil_text(&sigil.text) {
+                return Some(Pattern::Literal(Literal::Sigil {
+                    tag,
+                    body,
+                    flags,
+                    span: sigil.span,
+                }));
+            }
+            return Some(Pattern::Literal(Literal::Sigil {
+                tag: "?".to_string(),
+                body: sigil.text,
+                flags: String::new(),
+                span: sigil.span,
+            }));
+        }
         None
     }
 
@@ -1665,6 +1717,15 @@ impl Parser {
     fn consume_string(&mut self) -> Option<Token> {
         let token = self.tokens.get(self.pos)?;
         if token.kind != TokenKind::String {
+            return None;
+        }
+        self.pos += 1;
+        Some(token.clone())
+    }
+
+    fn consume_sigil(&mut self) -> Option<Token> {
+        let token = self.tokens.get(self.pos)?;
+        if token.kind != TokenKind::Sigil {
             return None;
         }
         self.pos += 1;
@@ -1904,9 +1965,104 @@ fn literal_span(literal: &Literal) -> Span {
     match literal {
         Literal::Number { span, .. }
         | Literal::String { span, .. }
+        | Literal::Sigil { span, .. }
         | Literal::Bool { span, .. }
         | Literal::DateTime { span, .. } => span.clone(),
     }
+}
+
+fn parse_sigil_text(text: &str) -> Option<(String, String, String)> {
+    let mut iter = text.chars();
+    if iter.next()? != '~' {
+        return None;
+    }
+    let mut tag = String::new();
+    let mut open = None;
+    for ch in iter.by_ref() {
+        if ch.is_ascii_alphanumeric() || ch == '_' {
+            tag.push(ch);
+            continue;
+        }
+        open = Some(ch);
+        break;
+    }
+    let open = open?;
+    let close = match open {
+        '/' => '/',
+        '"' => '"',
+        '(' => ')',
+        '[' => ']',
+        '{' => '}',
+        _ => return None,
+    };
+    let mut body = String::new();
+    let mut escaped = false;
+    for ch in iter.by_ref() {
+        if escaped {
+            body.push(ch);
+            escaped = false;
+            continue;
+        }
+        if ch == '\\' {
+            body.push(ch);
+            escaped = true;
+            continue;
+        }
+        if ch == close {
+            break;
+        }
+        body.push(ch);
+    }
+    let flags: String = iter.take_while(|c| c.is_ascii_alphabetic()).collect();
+    Some((tag, body, flags))
+}
+
+fn is_probably_url(text: &str) -> bool {
+    let text = text.trim();
+    let Some((scheme, rest)) = text.split_once("://") else {
+        return false;
+    };
+    if scheme.is_empty()
+        || !scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+    {
+        return false;
+    }
+    !rest.is_empty() && !rest.starts_with('/')
+}
+
+fn is_probably_date(text: &str) -> bool {
+    let text = text.trim();
+    let parts: Vec<&str> = text.split('-').collect();
+    if parts.len() != 3 {
+        return false;
+    }
+    parts[0].len() == 4
+        && parts[1].len() == 2
+        && parts[2].len() == 2
+        && parts.iter().all(|p| p.chars().all(|c| c.is_ascii_digit()))
+}
+
+fn is_probably_datetime(text: &str) -> bool {
+    let text = text.trim();
+    let Some((date, time)) = text.split_once('T') else {
+        return false;
+    };
+    if !is_probably_date(date) {
+        return false;
+    }
+    let Some(time) = time.strip_suffix('Z') else {
+        return false;
+    };
+    let parts: Vec<&str> = time.split(':').collect();
+    if parts.len() != 3 {
+        return false;
+    }
+    parts[0].len() == 2
+        && parts[1].len() == 2
+        && parts[2].len() == 2
+        && parts.iter().all(|p| p.chars().all(|c| c.is_ascii_digit()))
 }
 
 fn path_span(path: &[PathSegment]) -> Span {

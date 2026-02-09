@@ -1,1 +1,4 @@
-hello world
+main = effect {
+  _ <- print "Hello, world!"
+  pure Unit
+}

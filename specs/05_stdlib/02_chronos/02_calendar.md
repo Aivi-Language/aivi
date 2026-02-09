@@ -22,6 +22,9 @@ import aivi.std.chronos.calendar use { Date, DateTime }
 
 let now = DateTime.now()
 
+let birthday = ~d(1990-12-31)
+let timestamp = ~dt(2025-02-08T12:34:56Z)
+
 // "Human" math: Add 7 days, regardless of seconds
 let next_week = now + 7`days`
 ```

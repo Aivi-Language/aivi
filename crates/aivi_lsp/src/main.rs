@@ -43,6 +43,7 @@ impl Backend {
         "def", "let", "if", "else", "match", "case", "when", "true", "false", "in",
         "where",
     ];
+    const SIGILS: [&'static str; 4] = ["~r//", "~u()", "~d()", "~dt()"];
 
     fn span_to_range(span: Span) -> Range {
         let start_line = span.start.line.saturating_sub(1) as u32;
@@ -896,6 +897,13 @@ impl Backend {
             items.push(CompletionItem {
                 label: keyword.to_string(),
                 kind: Some(CompletionItemKind::KEYWORD),
+                ..CompletionItem::default()
+            });
+        }
+        for sigil in Self::SIGILS {
+            items.push(CompletionItem {
+                label: sigil.to_string(),
+                kind: Some(CompletionItemKind::SNIPPET),
                 ..CompletionItem::default()
             });
         }
