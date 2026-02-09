@@ -110,7 +110,7 @@ PatchLit       := "{" { PatchEntry } "}" ;
 PatchEntry     := Path ":" PatchInstr [ FieldSep ] ;
 PatchInstr     := "-" | ":=" Expr | Expr ;
 
-Path           := PathSeg { "." PathSeg } ;
+Path           := PathSeg { [ "." ] PathSeg } ;
 PathSeg        := lowerIdent
                | UpperIdent "." lowerIdent
                | Select ;

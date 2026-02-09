@@ -1,0 +1,85 @@
+/**
+ * Fast, contrast-neutral image sharpening for small images (16–128 pixels).
+ * Uses a 2-level wavelet / Laplacian pyramid decomposition.
+ */
+
+// Domain for coordinate-aware image operations
+domain Image over RawImage = {
+    // Carrier type definition
+    type RawImage = {
+        data: Float[]
+        width: Int
+        height: Int
+    }
+
+    // Safe sampling with edge clamping
+    at : RawImage -> (Int, Int) -> Float
+    at { data, width, height } (x, y) = 
+        cx = clamp 0 (width - 1) x
+        cy = clamp 0 (height - 1) y
+        data[cy * width + cx]
+}
+
+// Rational Sigmoid for soft limiting (prevents haloing)
+softLimit = x limit => 
+    absX = if x < 0 then -x else x
+    x / (1.0 + absX / limit)
+
+// Separable 3x3 box blur (Optimized)
+blur = img => 
+    { width, height } = img
+
+    // Horizontal pass
+    hBlur = generate {
+        y <- [0..height-1]
+        x <- [0..width-1]
+        
+        l = img at (x - 1, y)
+        c = img at (x, y)
+        r = img at (x + 1, y)
+        
+        yield (l + 2.0 * c + r) * 0.25
+    } |> toList
+
+    temp = { img <| { data: hBlur } }
+
+    // Vertical pass
+    vBlur = generate {
+        y <- [0..height-1]
+        x <- [0..width-1]
+        
+        t = temp at (x, y - 1)
+        c = temp at (x, y)
+        b = temp at (x, y + 1)
+        
+        yield (t + 2.0 * c + b) * 0.25
+    } |> toList
+
+    img <| { data: vBlur }
+
+/**
+ * Main sharpening function.
+ * strength: Gain for detail amplification (vaguely 1.0 - 2.0)
+ * clampMax: Hard limit for detail to prevent haloing (0.0 - 1.0)
+ */
+applyWaveletSharpen = img strength clampMax => 
+    blurred = blur img
+    gain = strength * 2.0
+
+    // Detail extraction and recombination
+    sharpenedData = generate {
+        i <- [0..len img.data - 1]
+        
+        srcVal = img.data[i]
+        blurVal = blurred.data[i]
+        
+        // Laplacian detail (high-pass)
+        detail = srcVal - blurVal
+        
+        // Boost with soft limiting
+        boosted = softLimit (detail * gain) clampMax
+        
+        yield clamp 0.0 1.0 (srcVal + boosted)
+    } |> toList
+
+    img <| { data: sharpenedData }

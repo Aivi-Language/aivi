@@ -1,0 +1,100 @@
+use aivi.std.color
+
+type PaletteEntry = { 
+    color: Rgb
+    count: Int 
+}
+
+/** 
+ * Extracts unique non-transparent colors with frequency counts.
+ */
+extractPalette = img =>
+    // Generate sequence of non-transparent colors
+    colors = generate {
+        i <- [0..(len img.data / 4) - 1]
+        idx = i * 4
+        a = img.data[idx + 3]
+        
+        a > 0 -> yield { 
+            r: img.data[idx]
+            g: img.data[idx + 1]
+            b: img.data[idx + 2] 
+        }
+    }
+
+    // Count frequencies using a fold
+    // (In a real VM, this would use a hash map; here we model the logic)
+    colors |> fold [] (acc col => 
+        match acc |> find (e => e.color == col) with
+        | Some entry => acc |> map (e => if e.color == col then { e | count: _ + 1 } else e)
+        | None       => acc + [{ color: col, count: 1 }]
+    )
+
+/** Squared Euclidean distance between colors. */
+colorDistSq = c1 c2 =>
+    dr = c1.r - c2.r
+    dg = c1.g - c2.g
+    db = c1.b - c2.b
+    dr * dr + dg * dg + db * db
+
+/** Merges indistinguishable colors within a distance threshold. */
+optimizePalette = palette threshold =>
+    tSq = threshold * threshold
+    
+    // Recursive grouping
+    loop (remaining, optimized) = (palette, []) =>
+        match remaining with
+        | [] => optimized
+        | [base, ...rest] =>
+            { group, next } = rest |> partition (c => colorDistSq base.color c.color <= tSq)
+            
+            // Average the group
+            all = [base, ...group]
+            n = len all
+            avg = {
+                r: (all |> map .color.r |> sum) / n |> round
+                g: (all |> map .color.g |> sum) / n |> round
+                b: (all |> map .color.b |> sum) / n |> round
+            }
+            
+            recurse (next, optimized + [{ color: avg, count: all |> map .count |> sum }])
+
+/** Reduces palette to at most the target count by increasing threshold. */
+reducePaletteToCount = palette targetCount =>
+    if len palette <= targetCount then palette
+    else
+        loop (curr, threshold, trials) = (palette, 2.0, 0) =>
+            next = optimizePalette curr threshold
+            
+            if len next <= targetCount || threshold > 500 then 
+                next |> take targetCount
+            else
+                // Adaptive threshold increase
+                newThreshold = if len next == len curr && trials > 5 
+                    then threshold + 25 
+                    else threshold + 5
+                
+                newTrials = if len next == len curr then trials + 1 else 0
+                recurse (next, newThreshold, newTrials)
+
+/** 
+ * Reduces palette by partitioning into spatial HSL bands.
+ * Hue bands: 12 slices (30deg each)
+ * Lightness bands: 4 slices (0.25 each)
+ */
+optimizePaletteBanded = palette maxPerBand =>
+    if maxPerBand == 0 then palette
+    else
+        // Group into bands
+        bands = palette |> groupBy (entry => 
+            hsl = toHsl entry.color
+            hBand = (hsl.h / 30.0) |> floor
+            lBand = (hsl.l / 0.25) |> floor
+            "{hBand}-{lBand}"
+        )
+
+        // Process each band
+        bands 
+            |> values 
+            |> map (group => group |> sortBy .count |> reverse |> take maxPerBand)
+            |> flatten
