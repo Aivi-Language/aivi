@@ -6,3 +6,4 @@ specs/.vitepress/dist/
 
 # Legacy pandoc build output
 specs/build/
+target
