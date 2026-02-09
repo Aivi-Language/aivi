@@ -28,6 +28,12 @@ cargo run -p aivi -- check examples/...
 # Desugar to a kernel-friendly HIR (JSON)
 cargo run -p aivi -- desugar examples/...
 
+# Format a single file
+cargo run -p aivi -- fmt examples/hello.aivi
+
+# Start the language server (requires aivi-lsp in PATH)
+cargo run -p aivi -- lsp
+
 # Build a WASM artifact (expects a main definition)
 cargo run -p aivi -- build path/to/module.aivi --target wasm32-wasi --out target/aivi.wasm
 

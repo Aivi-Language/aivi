@@ -14,7 +14,23 @@ A high-integrity functional language targeting WebAssembly.
 
 ### Roadmap
 
-- [Roadmap](roadmap/)
+- [Roadmap Overview](roadmap/)
+- [Overall Phases](roadmap/01_overall_phases)
+- [Rust Workspace Layout](roadmap/02_rust_workspace_layout)
+- [Language Implementation](roadmap/03_language_implementation)
+- [Compile to WASM/WASI](roadmap/04_compiler_wasm_wasi)
+- [Language Server (LSP)](roadmap/05_language_server_lsp)
+- [MCP Integration](roadmap/06_mcp_integration)
+- [Standard Library Plan](roadmap/07_standard_library_plan)
+- [M8 LSP Overview](roadmap/m8_lsp/00_overview)
+- [M8 LSP Architecture](roadmap/m8_lsp/01_architecture)
+- [M8 LSP Features](roadmap/m8_lsp/02_features)
+- [M8 LSP Workplan](roadmap/m8_lsp/03_workplan)
+- [M9 MCP Overview](roadmap/m9_mcp/00_overview)
+- [M9 MCP Host Architecture](roadmap/m9_mcp/01_host_architecture)
+- [M9 MCP Schema Mapping](roadmap/m9_mcp/02_schema_mapping)
+- [M9 MCP CLI + Ops](roadmap/m9_mcp/03_cli_ops)
+- [M9 MCP Test Plan](roadmap/m9_mcp/04_test_plan)
 
 ### Syntax
 
@@ -92,15 +108,19 @@ A high-integrity functional language targeting WebAssembly.
 
 60. [WASM Target](ideas/01_wasm_target)
 61. [LiveView Frontend](ideas/02_liveview_frontend)
-62. [Meta-Domain](ideas/04_meta_domain)
-63. [Tooling](ideas/05_tooling)
+62. [HTML Domains](ideas/03_html_domains)
+63. [Meta-Domain](ideas/04_meta_domain)
+64. [Tooling](ideas/05_tooling)
+65. [Cargo Package Manager](ideas/06_cargo_package_manager)
+66. [Rustc Native Pipeline](ideas/07_rustc_native_pipeline)
 
 ### Guides
 
-64. [From TypeScript](guides/01_from_typescript)
-65. [From Haskell](guides/02_from_haskell)
+67. [From TypeScript](guides/01_from_typescript)
+68. [From Haskell](guides/02_from_haskell)
 
 ### Meta
 
+- [Spec README](README)
 - [TODO](TODO)
 - [Open Questions](OPEN_QUESTIONS)
