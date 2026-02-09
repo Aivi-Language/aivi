@@ -121,6 +121,8 @@ class Monad (M *) =
   }
 ```
 
+`A & B` in type position denotes **record/type composition** (an intersection-like merge). It is primarily used for class inheritance and trait aggregation in v0.1.
+
 Instances:
 
 ```aivi

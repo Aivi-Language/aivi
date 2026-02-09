@@ -26,7 +26,6 @@ module RealWorld.Api = {
   // ------------------------------------------------------------------
   
   // Define the source type. The compiler verifies "data.json" matches (List Article)
-  @source // hypothetical decorator to indicate source file
   articlesSource : Source File (List Article)
   articlesSource = file.json "./data.json"
 

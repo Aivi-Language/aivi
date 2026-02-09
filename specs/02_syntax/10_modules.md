@@ -141,7 +141,7 @@ module my.app.api = {
 ```aivi
 // Enhance an existing domain with local helpers
 module my.geo.utils = {
-  export domain geo.vector.Vector
+  export domain Vector
   export distanceToOrigin, isZero
   
   use geo.vector (domain Vector, Vec2)

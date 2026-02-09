@@ -51,13 +51,13 @@ module RealWorld.Logic = {
   addTag tag article = 
     article <| { 
       // Uses the (+) operator from RealWorld.Domains.Tagging
-      tagList: tagList + (Tag tag) 
+      tagList: _ + (Tag tag) 
     }
 
   removeTag : Text -> Article -> Article
   removeTag tag article = 
     article <| { 
-      tagList: tagList - (Tag tag) 
+      tagList: _ - (Tag tag) 
     }
 
   // Favorite an article using the Favorites domain
@@ -67,7 +67,7 @@ module RealWorld.Logic = {
     else article <| { 
       favorited: True
       // Uses the (+) operator from RealWorld.Domains.Favorites
-      favoritesCount: favoritesCount + Up 
+      favoritesCount: _ + Up 
     }
 
   unfavorite : Article -> Article
@@ -75,7 +75,7 @@ module RealWorld.Logic = {
     if !article.favorited then article
     else article <| { 
       favorited: False
-      favoritesCount: favoritesCount + Down 
+      favoritesCount: _ + Down 
     }
 
   // ------------------------------------------------------------------

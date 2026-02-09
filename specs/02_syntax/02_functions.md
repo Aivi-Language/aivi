@@ -116,9 +116,9 @@ Functions can be combined to form new functions without naming their arguments, 
 
 ```aivi
 // Boolean logic composition
-isAdmin = role == Admin
-isOwner = id == ownerId
-canDelete = isAdmin || isOwner
+isAdmin = user => user.role == Admin
+isOwner = user => user.id == ownerId
+canDelete = user => isAdmin user || isOwner user
 
 // Validation chains
 isEmail = contains "@"
@@ -143,7 +143,7 @@ isEven = x => x % 2 == 0
 getName = user => user.name
 
 // Predicates can automatically deconstruct fields:
-// filter active is a shortcut for filter ({ active } => active)
+// filter active is a shortcut for filter (_.active)
 
 // Complexity can be handled inline via explicit record deconstruction:
 // map { name, id } => if id > 10 then name else "Anonymous"

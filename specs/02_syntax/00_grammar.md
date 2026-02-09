@@ -113,7 +113,7 @@ UseSpec        := "as" UpperIdent
                | "(" ImportList ")"
                | "hiding" "(" ImportList ")" ;
 ImportList     := ImportItem { "," ImportItem } ;
-ImportItem     := (lowerIdent | UpperIdent) [ "as" (lowerIdent | UpperIdent) ] ;
+ImportItem     := (lowerIdent | UpperIdent | ("domain" UpperIdent)) [ "as" (lowerIdent | UpperIdent) ] ;
 
 DomainDef      := "domain" UpperIdent "over" Type "=" "{" { DomainItem } "}" Sep ;
 DomainItem     := TypeAlias | TypeDef | ValueSig | ValueBinding | OpDef | DeltaLitBinding ;
@@ -123,8 +123,10 @@ Operator       := "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | "<=" | ">" |
                | "&" | "|" | "^" | "~" | "<<" | ">>" ;
 DeltaLitBinding:= SuffixedNumberLit "=" Expr Sep ;
 
-ClassDef       := "class" UpperIdent ClassHead "=" "{" { ValueSig | ValueBinding } "}" Sep ;
-ClassHead      := "(" UpperIdent "*" { "*" } ")" { TypeAtom } ;
+ClassDef       := "class" UpperIdent ClassParams "=" Type Sep ;
+ClassParams    := ClassParam { ClassParam } ;
+ClassParam     := UpperIdent
+               | "(" UpperIdent "*" { "*" } ")" ;
 
 InstanceDef    := "instance" [ UpperIdent ":" ] UpperIdent InstanceHead "=" RecordLit Sep ;
 InstanceHead   := "(" Type ")" ;
