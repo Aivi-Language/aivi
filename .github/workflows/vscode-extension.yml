@@ -1,0 +1,38 @@
+name: VS Code Extension
+
+on:
+  push:
+    paths:
+      - "vscode/**"
+      - ".github/workflows/vscode-extension.yml"
+  pull_request:
+    paths:
+      - "vscode/**"
+      - ".github/workflows/vscode-extension.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode/aivi-vscode
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: vscode/aivi-vscode/package.json
+      - name: Install
+        run: npm install
+      - name: Build
+        run: npm run build
+      - name: Package
+        run: npx --yes vsce package --out aivi-vscode.vsix
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivi-vscode.vsix
+          path: vscode/aivi-vscode/aivi-vscode.vsix
+

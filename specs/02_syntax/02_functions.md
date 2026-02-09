@@ -9,6 +9,7 @@
 add 5 10
 ```
 
+---
 
 ## 2.2 Lambdas
 
@@ -24,6 +25,7 @@ Multi-argument lambdas must be explicit:
 add = x y => x + y
 ```
 
+---
 
 ## 2.3 Pipes
 
@@ -33,6 +35,7 @@ Pipelines use `|>`.
 xs |> map inc |> filter (_ > 0)
 ```
 
+---
 
 ## 2.4 Usage Examples
 
@@ -47,11 +50,11 @@ const = x _ => x
 
 // Flip arguments
 flip = f => x y => f y x
+```
 
 // Function composition is most common via the pipe operator:
 processName = name => name |> trim |> lowercase |> capitalize
 result = processName "  HELLO  "
-```
 
 
 ### Higher-Order Functions
@@ -95,7 +98,7 @@ users = [
 // Data processing pipeline
 activeNames = users
   |> filter active
-  |> map .name
+  |> map name
   |> sort
   |> join ", "
 // "Alice, Carol"
@@ -112,20 +115,15 @@ sigma = [1..100]
 Functions can be combined to form new functions without naming their arguments, leading to very concise code.
 
 ```aivi
-// Boolean predicate composition
-isAdmin : User => Bool
-isAdmin = role == Admin
-
-isOwner : User => Bool
-isOwner = id == ownerId
-
-canDelete : User => Bool
-canDelete = u => isAdmin u || isOwner u
+// Boolean logic composition
+isAdmin = .role == Admin
+isOwner = .id == ownerId
+canDelete = isAdmin or isOwner 
 
 // Validation chains
 isEmail = contains "@"
-isLongEnough = s => s |> len |> (_ > 8)
-isValidPassword = s => isEmail s && isLongEnough s
+isLongEnough = len >> (_ > 8)
+isValidPassword = isEmail and isLongEnough
 
 // Usage
 passwords |> filter isValidPassword
@@ -137,15 +135,15 @@ passwords |> filter isValidPassword
 // Single arg with _
 double = _ * 2
 isEven = _ % 2 == 0 
-getName = .name // Accessor shorthand for x => x.name
+getName = .name // Predicate shorthand for r => r.name
 
 // Equivalent explicit forms
 double = x => x * 2
 isEven = x => x % 2 == 0
 getName = user => user.name
 
-// Boolean fields can be used directly as predicates:
-// filter active is a shortcut for filter (x => x.active)
+// Predicates can automatically deconstruct fields:
+// filter active is a shortcut for filter ({ active } => active)
 
 // Complexity can be handled inline via explicit record deconstruction:
 // map { name, id } => if id > 10 then name else "Anonymous"

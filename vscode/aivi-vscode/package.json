@@ -1,0 +1,94 @@
+{
+  "name": "aivi-vscode",
+  "displayName": "AIVI Language Support",
+  "description": "Syntax highlighting and formatting for the AIVI language (from the AIVI specs).",
+  "version": "0.1.0",
+  "publisher": "aivi",
+  "packageManager": "pnpm@9.15.4",
+  "repository": {
+    "type": "git",
+    "url": "https://example.invalid/aivi"
+  },
+  "license": "MIT",
+  "engines": {
+    "vscode": "1.109.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Formatters"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:aivi"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "aivi",
+        "aliases": [
+          "AIVI",
+          "aivi"
+        ],
+        "extensions": [
+          ".aivi"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "ebnf",
+        "aliases": [
+          "EBNF",
+          "ebnf"
+        ],
+        "extensions": [
+          ".ebnf"
+        ],
+        "configuration": "./ebnf-language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "aivi",
+        "scopeName": "source.aivi",
+        "path": "./syntaxes/aivi.tmLanguage.json"
+      },
+      {
+        "language": "ebnf",
+        "scopeName": "source.ebnf",
+        "path": "./syntaxes/ebnf.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "AIVI",
+      "properties": {
+        "aivi.format.indentSize": {
+          "type": "number",
+          "default": 2,
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Indentation size used by the built-in AIVI formatter."
+        },
+        "aivi.format.maxBlankLines": {
+          "type": "number",
+          "default": 1,
+          "minimum": 0,
+          "maximum": 5,
+          "description": "Maximum number of consecutive blank lines produced by the formatter."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsgo -p .",
+    "watch": "tsgo -watch -p .",
+    "package": "vsce package",
+    "vscode:prepublish": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "25.2.2",
+    "@types/vscode": "1.109.0",
+    "@vscode/vsce": "3.7.1",
+    "@typescript/native-preview": "latest"
+  }
+}
+y

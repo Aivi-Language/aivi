@@ -1,0 +1,66 @@
+{
+  "name": "EBNF",
+  "scopeName": "source.ebnf",
+  "patterns": [
+    {
+      "name": "comment.line.double-slash.ebnf",
+      "match": "//.*$"
+    },
+    {
+      "name": "comment.block.ebnf",
+      "begin": "/\\*",
+      "end": "\\*/"
+    },
+    {
+      "name": "string.quoted.single.ebnf",
+      "begin": "'",
+      "end": "'",
+      "patterns": [
+        {
+          "name": "constant.character.escape.ebnf",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "string.quoted.double.ebnf",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.ebnf",
+          "match": "\\\\."
+        }
+      ]
+    },
+    {
+      "name": "keyword.operator.definition.ebnf",
+      "match": "::="
+    },
+    {
+      "name": "keyword.operator.choice.ebnf",
+      "match": "\\|"
+    },
+    {
+      "name": "keyword.operator.quantifier.ebnf",
+      "match": "[?*+]"
+    },
+    {
+      "name": "punctuation.section.group.begin.ebnf",
+      "match": "[\\[\\(\\{]"
+    },
+    {
+      "name": "punctuation.section.group.end.ebnf",
+      "match": "[\\]\\)\\}]"
+    },
+    {
+      "name": "constant.numeric.ebnf",
+      "match": "\\b\\d+\\b"
+    },
+    {
+      "name": "entity.name.nonterminal.ebnf",
+      "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+    }
+  ]
+}
+

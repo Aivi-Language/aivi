@@ -2,7 +2,6 @@
 
 > Note: **AIVI is a fictional language that may or may not materialize.** This document is a design/spec exploration, not a promise of an eventual implementation.
 
-
 ## 0. Overview
 
 AIVI is a statically typed, purely functional language designed for **high-integrity data pipelines** and **domain-driven design**.
