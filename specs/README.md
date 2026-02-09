@@ -93,10 +93,4 @@ Build static site:
 npm run docs:build
 ```
 
-### Legacy (pandoc)
 
-```bash
-./build.sh
-```
-
-Requires: `pandoc`, `python3`
