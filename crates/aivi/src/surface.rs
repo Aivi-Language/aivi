@@ -376,12 +376,22 @@ impl Parser {
         let mut modules = Vec::new();
         while self.pos < self.tokens.len() {
             let annotations = self.consume_annotations();
-            if self.match_keyword("module") {
+            if self.peek_keyword("module") {
+                self.pos += 1;
                 if let Some(module) = self.parse_module(annotations) {
                     modules.push(module);
                 } else {
                     self.recover_to_module();
                 }
+            } else if !annotations.is_empty() {
+                for annotation in annotations {
+                    self.emit_diag(
+                        "E1502",
+                        "decorators are only allowed before `module` declarations in this parser",
+                        annotation.span.clone(),
+                    );
+                }
+                self.recover_to_module();
             } else {
                 self.pos += 1;
             }
@@ -395,14 +405,29 @@ impl Parser {
             if !self.consume_symbol("@") {
                 break;
             }
-            if let Some(name) = self.consume_ident() {
-                annotations.push(name);
+            let Some(name) = self.consume_ident() else {
+                self.emit_diag(
+                    "E1503",
+                    "expected decorator name after `@`",
+                    self.previous_span(),
+                );
+                break;
+            };
+            if let Some(next) = self.tokens.get(self.pos) {
+                if next.span.start.line == name.span.end.line {
+                    self.emit_diag(
+                        "E1504",
+                        "decorators must be written on their own line (decorator arguments are not supported here)",
+                        merge_span(name.span.clone(), next.span.clone()),
+                    );
+                }
             }
+            annotations.push(name);
         }
         annotations
     }
 
-    fn parse_module(&mut self, mut annotations: Vec<SpannedName>) -> Option<Module> {
+    fn parse_module(&mut self, annotations: Vec<SpannedName>) -> Option<Module> {
         let module_kw = self.previous_span();
         let name = self.parse_dotted_name()?;
         self.expect_symbol("=", "expected '=' after module name");
@@ -413,7 +438,19 @@ impl Parser {
         while !self.check_symbol("}") && self.pos < self.tokens.len() {
             self.consume_newlines();
             if self.peek_symbol("@") {
-                annotations.extend(self.consume_annotations());
+                let decorator_span = self.peek_span().unwrap_or_else(|| self.previous_span());
+                self.consume_symbol("@");
+                let decorator_name = self
+                    .consume_ident()
+                    .map(|name| name.name)
+                    .unwrap_or_else(|| "?".to_string());
+                self.emit_diag(
+                    "E1505",
+                    &format!(
+                        "decorators inside module bodies are not supported yet (found `@{decorator_name}`)"
+                    ),
+                    decorator_span,
+                );
                 continue;
             }
             if self.match_keyword("export") {
@@ -454,6 +491,15 @@ impl Parser {
         }
         let end_span = self.expect_symbol("}", "expected '}' to close module body");
         let span = merge_span(module_kw.clone(), end_span.unwrap_or(module_kw));
+        for annotation in &annotations {
+            if annotation.name != "no_prelude" {
+                self.emit_diag(
+                    "E1506",
+                    &format!("unknown module decorator `@{}`", annotation.name),
+                    annotation.span.clone(),
+                );
+            }
+        }
         Some(Module {
             name,
             exports,

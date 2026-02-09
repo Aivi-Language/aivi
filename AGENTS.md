@@ -80,6 +80,17 @@ When writing or generating AIVI code (e.g., in `examples/` or tests), adhere to 
 *   **Structured**: Always spawn tasks within a scope (`concurrent.scope`).
 *   **Communication**: Use channels (`Send`/`Recv`) for data exchange, not shared memory.
 
+### 3.4 Decorators
+
+This file applies to all of `specs/`.
+
+- Decorators are reserved for **compiler/tooling pragmas** only (compile-time metadata).
+- Do **not** add new integration-specific decorators (examples of forbidden patterns: `@sql`, `@schema`, `@table`, `@model`).
+- Prefer **typed values** and **type-driven decoding/validation** at boundaries (e.g. `Source` configuration records, decoders derived from types).
+- Only the decorators enumerated in `specs/02_syntax/14_decorators.md` are allowed in v0.1; unknown decorators should be considered a spec violation.
+
+
+
 ## 4. Rust Implementation Guidelines
 
 When working on the compiler (`crates/`):

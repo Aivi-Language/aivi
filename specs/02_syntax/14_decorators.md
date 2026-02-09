@@ -2,6 +2,15 @@
 
 Decorators provide **compile-time metadata** attached to definitions.
 
+## Policy (Constraints)
+
+Decorators are intentionally narrow:
+
+- Decorators MUST NOT be used to model domain semantics (e.g. database schemas/ORM, SQL, HTTP, validation rules).
+- Integration behavior belongs in **typed values** (e.g. `Source` configurations) and **types** (decoders), not hidden in decorators.
+- Only the standard decorators listed here are allowed in v0.1. Unknown decorators are a compile error.
+- User-defined decorators are not supported in v0.1.
+
 ## 14.1 Syntax
 
 ```aivi
@@ -23,17 +32,6 @@ Decorators appear before the binding they annotate.
 | `@inline` | `@inline f = ...` | Always inline function |
 | `@deprecated` | `@deprecated msg` | Emit warning on use |
 
-### Database (SQLite Domain)
-
-| Decorator | Usage | Meaning |
-| :--- | :--- | :--- |
-| `@table` | `@table "users"` | Bind type to SQL table |
-| `@primary` | `id: Int @primary` | Primary key column |
-| `@auto` | `id: Int @auto` | Auto-increment |
-| `@unique` | `email: Text @unique` | Unique constraint |
-| `@default` | `createdAt: Instant @default now` | Default value |
-| `@migration` | `@migration "001_name"` | Database migration |
-
 ### Tooling (MCP)
 
 | Decorator | Usage | Meaning |
@@ -51,73 +49,17 @@ Decorators appear before the binding they annotate.
 | Decorator | Usage | Meaning |
 | :--- | :--- | :--- |
 | `@no_prelude` | `@no_prelude module M = ...` | Skip implicit prelude import |
-
-### Sources
-| Decorator | Usage | Meaning |
-| :--- | :--- | :--- |
-| `@sql` | `@sql "SELECT..."` | Bind to SQL query |
-| `@schema` | `@schema "id:Int..."` | Define schema for text/csv |
-| `@model` | `@model "gpt-4"` | Bind to LLM model |
-
-
-## 14.3 Field Decorators
-
-Decorators on record fields:
-
-```aivi
-@table "users"
-User = {
-  id: Int @primary @auto
-  name: Text
-  email: Text @unique
-  role: Role @default Guest
-  deletedAt: Option Instant
-}
-```
-
-Multiple decorators stack left-to-right.
-
-
-## 14.4 Custom Decorators
-
-Decorators are extensible (future):
-
-```aivi
-decorator validate = { schema: JsonSchema } => ...
-decorator cache = { ttl: Duration } => ...
-
-@validate { schema: userSchema }
-@cache { ttl: 5min }
-fetchUser = id => ...
-```
-
-
-## 14.5 Decorator Desugaring
+## 14.3 Decorator Desugaring
 
 Decorators desugar to compile-time metadata:
 
 | Surface | Desugared |
 | :--- | :--- |
-| `@table "users" User = {...}` | `User` + `TableMeta User "users"` |
 | `@static x = file.read ...` | Compile-time evaluation |
 | `@mcp_tool f = ...` | Register in MCP manifest |
 
 
-## 14.6 Usage Examples
-
-### Database Table
-
-```aivi
-@table "posts"
-Post = {
-  id: Int @primary @auto
-  title: Text
-  body: Text
-  authorId: Int
-  published: Bool @default False
-  createdAt: Instant @default now
-}
-```
+## 14.4 Usage Examples
 
 ### Compile-Time Embedding
 

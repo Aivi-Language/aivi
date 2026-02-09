@@ -42,8 +42,9 @@ readme = file.read "./README.md"
 // Stream bytes from a large file
 blob = file.stream "./large.bin"
 
-// Read structured CSV with schema
-@schema "id:Int,name:Text,email:Text"
+// Read structured CSV (the expected type drives decoding)
+User = { id: Int, name: Text, email: Text }
+users : Source File (List User)
 users = file.csv "./users.csv"
 ```
 
@@ -76,9 +77,11 @@ Integration with relational and document stores. Uses carrier-specific domains f
 // SQLite connection
 db = sqlite.open "./local.db"
 
-// Typed query source
-@sql "SELECT id, name FROM users WHERE active = 1"
-activeUsers = db.query
+User = { id: Int, name: Text }
+
+// Typed query source (the expected type drives decoding)
+activeUsers : Source Db (List User)
+activeUsers = db.query "SELECT id, name FROM users WHERE active = 1"
 ```
 
 
@@ -116,8 +119,8 @@ Analysis = {
 }
 
 // LLM completion with strict schema enforcement
-@model "gpt-4o"
 analyze input = llm.complete {
+  model: "gpt-4o"
   prompt: "Analyze this feedback: {input}"
   schema: Analysis
 }
