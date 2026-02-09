@@ -1,17 +1,30 @@
-# Standard Library: Rational & BigInt Domains
+# Rational & BigInt Domains
 
-## Module
+This domain provides **Arbitrary-Precision Integers** (`BigInt`) and **Exact Rational Numbers** (`Rational`).
+
+## What are they?
+
+- **BigInt**: Standard integers (`Int`) are limited to 64 bits (max ~9 quintillion). `BigInt` grows automatically to fit *any* integer number, limited only by your computer's RAM. They are essential for cryptography, combinatorics, and counting things that exceed standard limits.
+- **Rational**: Computers usually store fractions as floating-point decimals (`0.1`), which are imprecise approximations. `Rational` numbers store exact fractions (like `1/3`), ensuring that `1/3 + 1/3 + 1/3` equals exactly `1`, not `0.999999`.
+
+## Why this exists
+
+Floating-point math has inherent precision errors (e.g., `0.1 + 0.2 != 0.3` in standard binary math). For financial calculations, scientific proofs, or algorithms requiring exactness, standard floats are dangerous. These types guarantee precision.
+
+## Overview
 
 ```aivi
-module aivi.std.rational = {
-  export domain BigInt
-  export domain Rational
-  export BigInt, Rational
-  export fromInt, normalize, gcd, toFloat
-}
+import aivi.std.math.number use { BigInt, Ratio }
+
+// Calculate with atoms in the universe
+let huge = 10_000_000_000_000_000_000_000n
+
+// Exact fraction arithmetic
+let part = 1/3 + 1/6 
+// -> Result is exactly 1/2, not 0.4999...
 ```
 
-## Types
+## Features
 
 ```aivi
 BigInt = { sign: Int, limbs: List Int }

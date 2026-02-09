@@ -1,18 +1,36 @@
-# Standard Library: Matrix Domain
+# Matrix Domain
 
-## Module
+The `Matrix` domain provides grids of numbers (`Mat3`, `Mat4`) used primarily for **Transformations**.
+
+## What is a Matrix?
+
+In computer graphics, a Matrix is like a "instruction set" for moving points around in space. A single 4x4 Matrix can describe a complex combination of:
+*   Translation (Moving)
+*   Rotation (Spinning)
+*   Scaling (Growing/Shrinking)
+
+By multiplying a vector by a matrix, you apply all these changes at once. By multiplying two matrices together, you combine their effects.
+
+## Why this exists
+
+Manually calculating the new position of a 3D point after it's been rotated 30 degrees, moved 5 units, and scaled by 2x is incredibly complex algebra. Matrices simplify this to `Point * Matrix`. They are the engine of every 3D renderer.
+
+## Overview
 
 ```aivi
-module aivi.std.matrix = {
-  export domain Matrix
-  export Mat2, Mat3, Mat4
-  export identity2, identity3, identity4
-  export transpose2, transpose3, transpose4
-  export multiply2, multiply3, multiply4
-}
+import aivi.std.math.matrix use { Mat4 }
+
+// A generic "identity" matrix (does nothing)
+let m = Mat4.identity()
+
+// Create a instruction to move 10 units X
+let translation = Mat4.translate(10.0, 0.0, 0.0)
+
+// Combine them
+let m_prime = m * translation
 ```
 
-## Types
+## Features
 
 ```aivi
 Mat2 = { m00: Float, m01: Float, m10: Float, m11: Float }

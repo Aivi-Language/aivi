@@ -1,16 +1,35 @@
-# Standard Library: Graph Domain
+# Graph Domain
 
-## Module
+Data structures for modelling **Relationships** and **Networks**.
+
+## What is a Graph?
+
+In computer science, a "Graph" isn't a chart. It's a collection of things (**Nodes**) connected by lines (**Edges**).
+*   **Social Networks**: People are Nodes, Friendships are Edges.
+*   **Maps**: Cities are Nodes, Roads are Edges.
+*   **The Web**: Pages are Nodes, Hyperlinks are Edges.
+
+## Why this exists
+
+Implementing Graph algorithms (like finding the shortest path between two cities) is complex and error-prone to rewrite from scratch. This domain provides a standard way to define these networks and optimized algorithms (BFS, Dijkstra) to explore them.
+
+## Overview
 
 ```aivi
-module aivi.std.graph = {
-  export domain Graph
-  export NodeId, Edge, Graph
-  export addEdge, neighbors, shortestPath
-}
+import aivi.std.math.graph use { Graph, bfs }
+
+// Create a small network
+let g = Graph.fromEdges([
+  (1, 2),  // Node 1 connects to 2
+  (2, 3),  // Node 2 connects to 3
+  (1, 3)   // Node 1 connects to 3
+])
+
+// Find a path through the network
+let path = bfs(g, start: 1, end: 3)
 ```
 
-## Types
+## Features
 
 ```aivi
 NodeId = Int

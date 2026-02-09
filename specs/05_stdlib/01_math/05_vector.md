@@ -1,16 +1,34 @@
-# Standard Library: Vector Domain
+# Vector Domain
 
-## Module
+The `Vector` domain handles 2D and 3D vectors (`Vec2`, `Vec3`), the fundamental atoms of spatial math.
+
+## What is a Vector?
+
+A **Vector** represents a quantity that has both a magnitude (size) and a direction.
+*   **Position**: "At point (10, 50)"
+*   **Velocity**: "Moving North at 50 mph"
+*   **Force**: "Pushing down with 10 Newtons"
+
+In AIVI, vectors are first-class citizens. You can add them, scale them, and measure angles between them.
+
+## Why this exists
+
+Graphics, physics engines, and game logic run on vectors. While you *could* store `x`, `y`, and `z` variables separately, code becomes unreadable quickly. A native Vector domain allows for clean math (`v1 + v2`) and is often hardware-accelerated (SIMD) for speed.
+
+## Overview
 
 ```aivi
-module aivi.std.vector = {
-  export domain Vector
-  export Vec2, Vec3, Vec4
-  export magnitude, normalize, dot, cross
-}
+import aivi.std.math.vector use { Vec2, Vec3 }
+
+// Define using the `v2` tag
+let v1 = (1.0, 2.0)`v2`
+let v2 = (3.0, 4.0)`v2`
+
+// Add components parallelly
+let v3 = v1 + v2 // (4.0, 6.0)
 ```
 
-## Types
+## Features
 
 ```aivi
 Vec2 = { x: Float, y: Float }

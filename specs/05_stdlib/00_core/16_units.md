@@ -1,16 +1,33 @@
-# Standard Library: Units Domain
+# Units Domain
 
-## Module
+The `Units` domain adds **Dimensional Analysis** to your code.
+
+## What is this?
+
+A common number like `10` is ambiguous. Is it 10 meters? 10 seconds? 10 kilograms?
+In standard programming, we often confuse them, leading to bugs (e.g., the Mars Climate Orbiter crash caused by mixing metric and imperial units).
+
+This domain lets you attach "tags" to numbers. It understands that `Meters / Seconds = Speed`, but `Meters + Seconds` is impossible nonsense.
+
+## Why this exists
+
+To bake physics and logic rules into the type system. If you try to assign a Time value to a Distance variable, AIVI will stop you *before* the code even runs.
+
+## Overview
 
 ```aivi
-module aivi.std.units = {
-  export domain Units
-  export Unit, Quantity
-  export defineUnit, convert, sameUnit
-}
+import aivi.std.core.units use { Length, Time, Velocity }
+
+// Define values with units attached
+let distance = 100.0`m`
+let time = 9.58`s`
+
+// The compiler knows (Length / Time) results in Velocity
+let speed: Velocity = distance / time 
+// speed is now roughly 10.43 (m/s)
 ```
 
-## Types
+## Supported Dimensions
 
 ```aivi
 Unit = { name: Text, factor: Float }

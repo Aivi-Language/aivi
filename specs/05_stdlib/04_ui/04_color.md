@@ -1,17 +1,31 @@
-# Standard Library: Color Domain
+# Color Domain
 
-## Module
+Tools for representing, mixing, and manipulating **Colors**.
+
+## What is this?
+
+Colors on a screen are usually just Red, Green, and Blue (RGB) numbers. But humans don't think in RGB. We think in:
+*   **Hue**: "Is it red or blue?"
+*   **Saturation**: "Is it vibrant or grey?"
+*   **Lightness**: "Is it bright or dark?"
+
+The `Color` domain allows you to work with colors both as computer raw data (Hex, RGB) and as human percepts (HSL), and mathematically mix them.
+
+## Why this exists
+
+Design systems need logic like "Make the button color 10% darker on hover." Calculating "10% darker" on raw RGB values often makes colors look muddy. This domain handles the complex color-space math so you can just say `color - 10 lightness`.
+
+## Overview
 
 ```aivi
-module aivi.std.color = {
-  export domain Color
-  export Rgb, Hsl, Hex
-  export Lightness, Saturation, Hue
-  export toRgb, toHsl, toHex
-}
+import aivi.std.ui.color use { Color }
+
+let primary = #007bff
+// Mathematically correct lightening
+let lighter = primary + 10`lightness`
 ```
 
-## Types
+## Features
 
 ```aivi
 Rgb = { r: Int, g: Int, b: Int }  // 0-255

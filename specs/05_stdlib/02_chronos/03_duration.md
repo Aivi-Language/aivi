@@ -1,16 +1,32 @@
-# Standard Library: Duration Domain
+# Duration Domain
 
-## Module
+A type-safe way to represent **Spans of Time**.
+
+## What is this?
+
+In many systems, a timeout is just an integer like `500`. But is that 500 milliseconds? 500 seconds?
+`Duration` solves this ambiguity. It wraps the raw number in a type that knows its unit. `500` becomes `500ms` or `0.5s`.
+
+## Why this exists
+
+Ambiguous units cause outages. (e.g., A developer sets a timeout to `30`, thinking seconds, but the system reads it as 30 milliseconds, causing instant failure). This domain forces clarity: you must specify the unit, and the compiler ensures you don't compare Seconds to Apples.
+
+## Overview
 
 ```aivi
-module aivi.std.duration = {
-  export domain Duration
-  export Span, Millisecond, Second, Minute, Hour
-  export toMillis, fromMillis
+import aivi.std.chronos.duration use { Duration }
+
+// Clear, unambiguous literals
+let timeout = 500`ms`
+let delay = 2`seconds`
+
+// Type-safe comparison
+if delay > timeout {
+    // ...
 }
 ```
 
-## Types
+## Features
 
 ```aivi
 Span = { millis: Int }

@@ -1,16 +1,32 @@
-# Standard Library: Calendar Domain
+# Calendar Domain
 
-## Module
+Robust tools for handling **Dates** and **Human Time**.
+
+## What is this?
+
+Handling time is deceptively hard. Ideally, a day is 24 hours. In reality:
+*   Months have 28, 29, 30, or 31 days.
+*   Years have 365 or 366 days.
+*   Timezones shift clocks back and forth.
+
+The `Calendar` domain hides this chaos. It ensures that when you say "Next Month," it handles the math correctly, whether it's February or July.
+
+## Why this exists
+
+Writing `timestamp + 86400` to add a day works... until there's a leap second or daylight savings switch. Using a dedicated domain ensures your scheduling logic (e.g., "Meeting every Monday") is reliable and legible.
+
+## Overview
 
 ```aivi
-module aivi.std.calendar = {
-  export domain Calendar
-  export Date, Day, Month, Year, EndOfMonth
-  export isLeapYear, daysInMonth, endOfMonth
-}
+import aivi.std.chronos.calendar use { Date, DateTime }
+
+let now = DateTime.now()
+
+// "Human" math: Add 7 days, regardless of seconds
+let next_week = now + 7`days`
 ```
 
-## Types
+## Features
 
 ```aivi
 Date = { year: Int, month: Int, day: Int }

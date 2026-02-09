@@ -7,7 +7,7 @@ The `Regex` domain provides text pattern matching.
 ```aivi
 import aivi.std.regex use { Regex }
 
-let email_pattern = rex"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$"
+let email_pattern = ~r/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/
 let match = Regex.test(email_pattern, "user@example.com")
 ```
 
@@ -15,5 +15,5 @@ let match = Regex.test(email_pattern, "user@example.com")
 
 Text processing often requires pattern matching beyond simple substring searches. The `Regex` domain provides a safe, efficient way to find and extract data from text.
 
-- **Compile-time safety**: Using the `rex"..."` tagged literal ensures your regex is valid before the code runs.
+- **Compile-time safety**: Using the `~r/.../` sigil ensures your regex is valid before the code runs.
 - **Efficiency**: Compiles to optimized native matching engines.

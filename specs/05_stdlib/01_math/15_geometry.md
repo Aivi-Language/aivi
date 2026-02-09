@@ -1,16 +1,37 @@
-# Standard Library: Geometry Domain
+# Geometry Domain
 
-## Module
+Primitives for shapes (`Sphere`, `Ray`, `Rect`) and collision detection.
+
+## What is this?
+
+This domain deals with the "physical" side of math: shapes and where they are. It differs from the `Vector` domain (which handles raw direction/magnitude) by introducing **surfaces** and **volumes**.
+
+Common questions this domain answers:
+*   "Did the user click on this button?" (Point vs Rectangle overlap)
+*   "Did the laser hit the enemy?" (Ray vs Sphere intersection)
+*   "What is the center of this polygon?"
+
+## Why this exists
+
+Almost every visual application needs to check if two things touch. Providing standard definitions for shapes like `Ray` and `AABB` (Axis-Aligned Bounding Box) allows for highly optimized intersection code that powers games and UI hit-testing.
+
+## Overview
 
 ```aivi
-module aivi.std.geometry = {
-  export domain Geometry
-  export Point2, Point3, Line2, Segment2, Polygon
-  export distance, midpoint, area
+import aivi.std.math.geometry use { Ray, Sphere, intersect }
+
+// A ray firing forwards from origin
+let ray = Ray(origin: {x:0, y:0, z:0}, dir: {x:0, y:0, z:1})
+
+// A sphere 5 units away
+let sphere = Sphere(center: {x:0, y:0, z:5}, radius: 1.0)
+
+if intersect(ray, sphere) {
+    print("Hit!")
 }
 ```
 
-## Types
+## Features
 
 ```aivi
 Point2 = { x: Float, y: Float }

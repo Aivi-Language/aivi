@@ -11,7 +11,7 @@ use std.Http
 ### `get`
 
 ```aivi
-get : String -> Effect (Result Response Error)
+get : Url -> Effect (Result Response Error)
 ```
 
 Performs a GET request to the specified URL.
@@ -19,7 +19,7 @@ Performs a GET request to the specified URL.
 ### `post`
 
 ```aivi
-post : String -> String -> Effect (Result Response Error)
+post : Url -> String -> Effect (Result Response Error)
 ```
 
 Performs a POST request with the given body.
@@ -49,7 +49,7 @@ type Response = {
 ```aivi
 type Request = {
     method: String,
-    url: String,
+    url: Url,
     headers: Map String String,
     body: Option String
 }

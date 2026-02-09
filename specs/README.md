@@ -63,26 +63,41 @@ A high-integrity functional language targeting WebAssembly.
 
 ### Standard Library
 
-41. [Prelude](05_stdlib/01_prelude.md)
-42. [Calendar Domain](05_stdlib/02_calendar.md)
-43. [Duration Domain](05_stdlib/03_duration.md)
-44. [Color Domain](05_stdlib/04_color.md)
-45. [Vector Domain](05_stdlib/05_vector.md)
-46. [SQLite Domain](05_stdlib/08_sqlite.md)
-47. [Matrix Domain](05_stdlib/09_matrix.md)
-48. [Complex Domain](05_stdlib/10_complex.md)
-49. [Quaternion Domain](05_stdlib/11_quaternion.md)
-50. [Rational & BigInt Domains](05_stdlib/12_rational_bigint.md)
-51. [Probability & Distribution Domain](05_stdlib/13_probability.md)
-52. [FFT & Signal Domain](05_stdlib/14_signal.md)
-53. [Geometry Domain](05_stdlib/15_geometry.md)
-54. [Units Domain](05_stdlib/16_units.md)
-55. [Graph Domain](05_stdlib/17_graph.md)
-56. [Linear Algebra Domain](05_stdlib/18_linear_algebra.md)
-57. [HTTP Domain](05_stdlib/19_http.md)
-58. [File Domain](05_stdlib/20_file.md)
-59. [Console Domain](05_stdlib/21_console.md)
-60. [Crypto Domain](05_stdlib/22_crypto.md)
+### Standard Library
+
+#### Core & Utils
+41. [Prelude](05_stdlib/00_core/01_prelude.md)
+42. [Units](05_stdlib/00_core/16_units.md)
+43. [Regex](05_stdlib/00_core/24_regex.md)
+44. [Testing](05_stdlib/00_core/27_testing.md)
+45. [Collections](05_stdlib/00_core/28_collections.md)
+
+#### Math & Science
+46. [Vector](05_stdlib/01_math/05_vector.md)
+47. [Matrix](05_stdlib/01_math/09_matrix.md)
+48. [Complex](05_stdlib/01_math/10_complex.md)
+49. [Quaternion](05_stdlib/01_math/11_quaternion.md)
+50. [Rational & BigInt](05_stdlib/01_math/12_rational_bigint.md)
+51. [Probability](05_stdlib/01_math/13_probability.md)
+52. [FFT & Signal](05_stdlib/01_math/14_signal.md)
+53. [Geometry](05_stdlib/01_math/15_geometry.md)
+54. [Graph](05_stdlib/01_math/17_graph.md)
+55. [Linear Algebra](05_stdlib/01_math/18_linear_algebra.md)
+
+#### Chronos (Time)
+56. [Calendar](05_stdlib/02_chronos/02_calendar.md)
+57. [Duration](05_stdlib/02_chronos/03_duration.md)
+
+#### System & IO
+58. [File](05_stdlib/03_system/20_file.md)
+59. [Console](05_stdlib/03_system/21_console.md)
+60. [HTTP](05_stdlib/03_system/19_http.md)
+62. [Crypto](05_stdlib/03_system/22_crypto.md)
+63. [System](05_stdlib/03_system/25_system.md)
+64. [Log](05_stdlib/03_system/26_log.md)
+
+#### UI
+65. [Color](05_stdlib/04_ui/04_color.md)
 
 
 ## Building the Specification

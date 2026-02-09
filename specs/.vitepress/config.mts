@@ -122,32 +122,60 @@ export default defineConfig({
         text: "Standard Library",
         collapsed: true,
         items: [
-          { text: "Prelude", link: "/05_stdlib/01_prelude" },
-          { text: "Calendar", link: "/05_stdlib/02_calendar" },
-          { text: "Duration", link: "/05_stdlib/03_duration" },
-          { text: "Color", link: "/05_stdlib/04_color" },
-          { text: "Vector", link: "/05_stdlib/05_vector" },
-          { text: "SQLite", link: "/05_stdlib/08_sqlite" },
-          { text: "Matrix", link: "/05_stdlib/09_matrix" },
-          { text: "Complex", link: "/05_stdlib/10_complex" },
-          { text: "Quaternion", link: "/05_stdlib/11_quaternion" },
-          { text: "Rational & BigInt", link: "/05_stdlib/12_rational_bigint" },
-          { text: "Probability", link: "/05_stdlib/13_probability" },
-          { text: "FFT & Signal", link: "/05_stdlib/14_signal" },
-          { text: "Geometry", link: "/05_stdlib/15_geometry" },
-          { text: "Units", link: "/05_stdlib/16_units" },
-          { text: "Graph", link: "/05_stdlib/17_graph" },
-          { text: "Linear Algebra", link: "/05_stdlib/18_linear_algebra" },
-          { text: "HTTP", link: "/05_stdlib/19_http" },
-          { text: "File", link: "/05_stdlib/20_file" },
-          { text: "Console", link: "/05_stdlib/21_console" },
-          { text: "Crypto", link: "/05_stdlib/22_crypto" },
-          { text: "JSON", link: "/05_stdlib/23_json" },
-          { text: "Regex", link: "/05_stdlib/24_regex" },
-          { text: "System", link: "/05_stdlib/25_system" },
-          { text: "Log", link: "/05_stdlib/26_log" },
-          { text: "Test", link: "/05_stdlib/27_test" },
-          { text: "Collections", link: "/05_stdlib/28_collections" }
+          {
+            text: "Core & Utils",
+            collapsed: true,
+            items: [
+              { text: "Prelude", link: "/05_stdlib/00_core/01_prelude" },
+              { text: "Units", link: "/05_stdlib/00_core/16_units" },
+              { text: "Regex", link: "/05_stdlib/00_core/24_regex" },
+              { text: "Testing", link: "/05_stdlib/00_core/27_testing" },
+              { text: "Collections", link: "/05_stdlib/00_core/28_collections" }
+            ]
+          },
+          {
+            text: "Math & Science",
+            collapsed: true,
+            items: [
+              { text: "Vector", link: "/05_stdlib/01_math/05_vector" },
+              { text: "Matrix", link: "/05_stdlib/01_math/09_matrix" },
+              { text: "Complex", link: "/05_stdlib/01_math/10_complex" },
+              { text: "Quaternion", link: "/05_stdlib/01_math/11_quaternion" },
+              { text: "Rational & BigInt", link: "/05_stdlib/01_math/12_rational_bigint" },
+              { text: "Probability", link: "/05_stdlib/01_math/13_probability" },
+              { text: "FFT & Signal", link: "/05_stdlib/01_math/14_signal" },
+              { text: "Geometry", link: "/05_stdlib/01_math/15_geometry" },
+              { text: "Graph", link: "/05_stdlib/01_math/17_graph" },
+              { text: "Linear Algebra", link: "/05_stdlib/01_math/18_linear_algebra" }
+            ]
+          },
+          {
+            text: "Chronos (Time)",
+            collapsed: true,
+            items: [
+              { text: "Calendar", link: "/05_stdlib/02_chronos/02_calendar" },
+              { text: "Duration", link: "/05_stdlib/02_chronos/03_duration" }
+            ]
+          },
+          {
+            text: "System & IO",
+            collapsed: true,
+            items: [
+              { text: "File", link: "/05_stdlib/03_system/20_file" },
+              { text: "Console", link: "/05_stdlib/03_system/21_console" },
+              { text: "HTTP", link: "/05_stdlib/03_system/19_http" },
+              { text: "Crypto", link: "/05_stdlib/03_system/22_crypto" },
+              { text: "System", link: "/05_stdlib/03_system/25_system" },
+              { text: "Log", link: "/05_stdlib/03_system/26_log" }
+            ]
+          },
+          {
+            text: "UI",
+            collapsed: true,
+            items: [
+              { text: "Color", link: "/05_stdlib/04_ui/04_color" }
+            ]
+          }
         ]
       },
       {

@@ -1,16 +1,36 @@
-# Standard Library: Quaternion Domain
+# Quaternion Domain
 
-## Module
+The `Quaternion` domain provides tools for handling **3D rotations** robustly.
+
+## What is a Quaternion?
+
+In 3D graphics and games, we usually think of rotations as angles (X, Y, Z). However, using angles often leads to mathematical problems like "Gimbal Lock," where rotation axes align and freedom of movement is lost.
+
+A **Quaternion** is a four-dimensional number system that solves this. While harder to visualize (it involves a scalar and a 3D vector), it is the industry standard for:
+1.  Smoothly interpolating between two rotations (SLERP).
+2.  Avoiding Gimbal Lock completely.
+3.  Computationally efficient rotation composition.
+
+## Why this exists
+
+Creating a 3D fly-camera or animating a character's joints requires smooth, glitch-free rotation. Quaternions make this mathematically stable compared to Euler angles or Matrix rotations.
+
+## Overview
 
 ```aivi
-module aivi.std.quaternion = {
-  export domain Quaternion
-  export Quaternion
-  export fromAxisAngle, conjugate, magnitude, normalize
-}
+import aivi.std.math.quaternion use { Quat }
+
+// Rotate 90 degrees around the Y (up) axis
+let q1 = Quat.fromEuler(0.0, 90.0, 0.0)
+
+// The "identity" quaternion means "no rotation"
+let q2 = Quat.identity()
+
+// Smoothly transition halfway between "no rotation" and "90 degrees"
+let interpolated = Quat.slerp(q1, q2, 0.5)
 ```
 
-## Types
+## Features
 
 ```aivi
 Quaternion = { w: Float, x: Float, y: Float, z: Float }

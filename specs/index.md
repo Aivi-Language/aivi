@@ -66,26 +66,41 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 
 ### Standard Library
 
-41. [Prelude](05_stdlib/01_prelude)
-42. [Calendar Domain](05_stdlib/02_calendar)
-43. [Duration Domain](05_stdlib/03_duration)
-44. [Color Domain](05_stdlib/04_color)
-45. [Vector Domain](05_stdlib/05_vector)
-46. [SQLite Domain](05_stdlib/08_sqlite)
-47. [Matrix Domain](05_stdlib/09_matrix)
-48. [Complex Domain](05_stdlib/10_complex)
-49. [Quaternion Domain](05_stdlib/11_quaternion)
-50. [Rational & BigInt Domains](05_stdlib/12_rational_bigint)
-51. [Probability & Distribution Domain](05_stdlib/13_probability)
-52. [FFT & Signal Domain](05_stdlib/14_signal)
-53. [Geometry Domain](05_stdlib/15_geometry)
-54. [Units Domain](05_stdlib/16_units)
-55. [Graph Domain](05_stdlib/17_graph)
-56. [Linear Algebra Domain](05_stdlib/18_linear_algebra)
-57. [HTTP Domain](05_stdlib/19_http)
-58. [File Domain](05_stdlib/20_file)
-59. [Console Domain](05_stdlib/21_console)
-60. [Crypto Domain](05_stdlib/22_crypto)
+### Standard Library
+
+#### Core & Utils
+41. [Prelude](05_stdlib/00_core/01_prelude)
+42. [Units Domain](05_stdlib/00_core/16_units)
+43. [Regex Domain](05_stdlib/00_core/24_regex)
+44. [Testing Domain](05_stdlib/00_core/27_testing)
+45. [Collections Domain](05_stdlib/00_core/28_collections)
+
+#### Math & Science
+46. [Vector Domain](05_stdlib/01_math/05_vector)
+47. [Matrix Domain](05_stdlib/01_math/09_matrix)
+48. [Complex Domain](05_stdlib/01_math/10_complex)
+49. [Quaternion Domain](05_stdlib/01_math/11_quaternion)
+50. [Rational & BigInt](05_stdlib/01_math/12_rational_bigint)
+51. [Probability](05_stdlib/01_math/13_probability)
+52. [FFT & Signal](05_stdlib/01_math/14_signal)
+53. [Geometry Domain](05_stdlib/01_math/15_geometry)
+54. [Graph Domain](05_stdlib/01_math/17_graph)
+55. [Linear Algebra](05_stdlib/01_math/18_linear_algebra)
+
+#### Chronos (Time)
+56. [Calendar Domain](05_stdlib/02_chronos/02_calendar)
+57. [Duration Domain](05_stdlib/02_chronos/03_duration)
+
+#### System & IO
+58. [File Domain](05_stdlib/03_system/20_file)
+59. [Console Domain](05_stdlib/03_system/21_console)
+60. [HTTP Domain](05_stdlib/03_system/19_http)
+62. [Crypto Domain](05_stdlib/03_system/22_crypto)
+63. [System Domain](05_stdlib/03_system/25_system)
+64. [Log Domain](05_stdlib/03_system/26_log)
+
+#### UI
+65. [Color Domain](05_stdlib/04_ui/04_color)
 
 ### Execution & Concurrency
 

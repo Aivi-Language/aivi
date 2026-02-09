@@ -1,16 +1,30 @@
-# Standard Library: Linear Algebra Domain
+# Linear Algebra Domain
 
-## Module
+Advanced solvers for **Systems of Equations**.
+
+## What is this?
+
+While the `Vector` and `Matrix` domains handle 3D graphics, this domain is for "hard" science and engineering.
+It allows you to solve problems like: "If 3x + 2y = 10 and x - y = 5, what are x and y?"
+
+In engineering, these systems can have thousands of variables (e.g., simulating heat flow across a metal plate).
+
+## Why this exists
+
+Writing a solver for `Ax = b` (Gaussian elimination or LU decomposition) is difficult to make numerically stable. This domain wraps optimized, industrial-grade linear algebra routines (like LAPACK) so you can solve complex systems safely.
+
+## Overview
 
 ```aivi
-module aivi.std.linear_algebra = {
-  export domain LinearAlgebra
-  export Vec, Mat
-  export dot, matMul, solve2x2
-}
+import aivi.std.math.linalg use { solve, eigen }
+
+// Matrix A and Vector b
+// Solve for x in: Ax = b
+// (Finds the inputs that produce the known output)
+let x = solve(A, b)
 ```
 
-## Types
+## Features
 
 ```aivi
 Vec = { size: Int, data: List Float }
