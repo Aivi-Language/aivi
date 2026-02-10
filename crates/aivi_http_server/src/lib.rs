@@ -4,14 +4,17 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
-use hyper::server::conn::AddrStream;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response, StatusCode};
+use http_body_util::{BodyExt, Full};
+use hyper::body::{Bytes, Incoming};
+use hyper::service::service_fn;
+use hyper::{Request, Response, StatusCode};
+use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::server::conn::auto;
+use tokio::net::TcpListener;
 use tokio::runtime::{Handle, Runtime};
 use tokio::sync::{oneshot, Mutex as TokioMutex};
-use tokio_tungstenite::WebSocketStream;
+use hyper_tungstenite::HyperWebsocketStream;
 
 pub struct AiviRequest {
     pub method: String,
@@ -81,11 +84,11 @@ impl ServerHandle {
 #[derive(Clone)]
 pub struct WebSocketHandle {
     runtime: Handle,
-    socket: Arc<TokioMutex<WebSocketStream<hyper::upgrade::Upgraded>>>,
+    socket: Arc<TokioMutex<HyperWebsocketStream>>,
 }
 
 impl WebSocketHandle {
-    fn new(runtime: Handle, socket: WebSocketStream<hyper::upgrade::Upgraded>) -> Self {
+    fn new(runtime: Handle, socket: HyperWebsocketStream) -> Self {
         Self {
             runtime,
             socket: Arc::new(TokioMutex::new(socket)),
@@ -121,7 +124,7 @@ impl WebSocketHandle {
         handle.block_on(async move {
             let mut socket = socket.lock().await;
             socket
-                .send(tokio_tungstenite::tungstenite::Message::Close(None))
+                .send(hyper_tungstenite::tungstenite::Message::Close(None))
                 .await
                 .map_err(|err| AiviHttpError { message: err.to_string() })
         })
@@ -145,25 +148,40 @@ pub fn start_server(addr: SocketAddr, handler: Handler) -> Result<ServerHandle, 
     let join_handle = thread::spawn(move || {
         let handler = handler.clone();
         let runtime_handle = runtime_clone.handle().clone();
-        let make_service = make_service_fn(move |conn: &AddrStream| {
-            let handler = handler.clone();
-            let runtime_handle = runtime_handle.clone();
-            let remote_addr = conn.remote_addr();
-            async move {
-                Ok::<_, hyper::Error>(service_fn(move |req| {
-                    let handler = handler.clone();
-                    let runtime_handle = runtime_handle.clone();
-                    let remote_addr = remote_addr;
-                    async move { handle_request(req, remote_addr, handler, runtime_handle).await }
-                }))
-            }
-        });
+        let server_future = async move {
+            let listener = match TcpListener::bind(addr).await {
+                Ok(value) => value,
+                Err(_) => return,
+            };
+            let mut shutdown_rx = shutdown_rx;
 
-        let server = hyper::Server::bind(&addr).serve(make_service);
-        let graceful = server.with_graceful_shutdown(async move {
-            let _ = shutdown_rx.await;
-        });
-        let _ = runtime_clone.block_on(graceful);
+            loop {
+                tokio::select! {
+                    _ = &mut shutdown_rx => break,
+                    accept = listener.accept() => {
+                        let (stream, remote_addr) = match accept {
+                            Ok(value) => value,
+                            Err(_) => continue,
+                        };
+                        let handler = handler.clone();
+                        let runtime_handle = runtime_handle.clone();
+                        let service = service_fn(move |req| {
+                            let handler = handler.clone();
+                            let runtime_handle = runtime_handle.clone();
+                            async move { handle_request(req, remote_addr, handler, runtime_handle).await }
+                        });
+                        tokio::spawn(async move {
+                            let mut builder = auto::Builder::new(TokioExecutor::new());
+                            builder.http1().keep_alive(true);
+                            let conn = builder.serve_connection_with_upgrades(TokioIo::new(stream), service);
+                            let _ = conn.await;
+                        });
+                    }
+                }
+            }
+        };
+
+        let _ = runtime_clone.block_on(server_future);
     });
 
     Ok(ServerHandle {
@@ -174,24 +192,24 @@ pub fn start_server(addr: SocketAddr, handler: Handler) -> Result<ServerHandle, 
 }
 
 async fn handle_request(
-    req: Request<Body>,
+    req: Request<Incoming>,
     remote_addr: SocketAddr,
     handler: Handler,
     runtime_handle: Handle,
-) -> Result<Response<Body>, hyper::Error> {
+) -> Result<Response<Full<Bytes>>, hyper::Error> {
     let is_upgrade = hyper_tungstenite::is_upgrade_request(&req);
     let (parts, body) = req.into_parts();
 
-    let body_bytes = if is_upgrade {
-        Bytes::new()
+    let (body_bytes, upgrade_body) = if is_upgrade {
+        (Bytes::new(), Some(body))
     } else {
-        hyper::body::to_bytes(body).await?
+        (body.collect().await?.to_bytes(), None)
     };
 
     let request = match build_request(&parts, body_bytes, Some(remote_addr.to_string())) {
         Ok(value) => value,
         Err(err) => {
-            let mut response = Response::new(Body::from(err.message));
+            let mut response = Response::new(Full::from(Bytes::from(err.message)));
             *response.status_mut() = StatusCode::BAD_REQUEST;
             return Ok(response);
         }
@@ -199,7 +217,7 @@ async fn handle_request(
     let reply = match handler(request).await {
         Ok(value) => value,
         Err(err) => {
-            let mut response = Response::new(Body::from(err.message));
+            let mut response = Response::new(Full::from(Bytes::from(err.message)));
             *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
             return Ok(response);
         }
@@ -209,19 +227,27 @@ async fn handle_request(
         ServerReply::Http(response) => match convert_response(response) {
             Ok(response) => Ok(response),
             Err(err) => {
-                let mut response = Response::new(Body::from(err.message));
+                let mut response = Response::new(Full::from(Bytes::from(err.message)));
                 *response.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
                 Ok(response)
             }
         },
         ServerReply::Ws(ws_handler) => {
             if !is_upgrade {
-                let mut response = Response::new(Body::from("upgrade required"));
+                let mut response = Response::new(Full::from(Bytes::from("upgrade required")));
                 *response.status_mut() = StatusCode::BAD_REQUEST;
                 return Ok(response);
             }
-            let req = Request::from_parts(parts, Body::empty());
-            match hyper_tungstenite::upgrade(req, None) {
+            let body = match upgrade_body {
+                Some(value) => value,
+                None => {
+                    let mut response = Response::new(Full::from(Bytes::from("upgrade required")));
+                    *response.status_mut() = StatusCode::BAD_REQUEST;
+                    return Ok(response);
+                }
+            };
+            let mut req = Request::from_parts(parts, body);
+            match hyper_tungstenite::upgrade(&mut req, None) {
                 Ok((response, websocket)) => {
                     let runtime_handle = runtime_handle.clone();
                     tokio::spawn(async move {
@@ -236,7 +262,7 @@ async fn handle_request(
                     Ok(response)
                 }
                 Err(_) => {
-                    let mut response = Response::new(Body::from("upgrade failed"));
+                    let mut response = Response::new(Full::from(Bytes::from("upgrade failed")));
                     *response.status_mut() = StatusCode::BAD_REQUEST;
                     Ok(response)
                 }
@@ -279,7 +305,7 @@ fn headers_to_vec(
     Ok(out)
 }
 
-fn convert_response(response: AiviResponse) -> Result<Response<Body>, AiviHttpError> {
+fn convert_response(response: AiviResponse) -> Result<Response<Full<Bytes>>, AiviHttpError> {
     let status = StatusCode::from_u16(response.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
     let mut builder = Response::builder().status(status);
     {
@@ -299,29 +325,29 @@ fn convert_response(response: AiviResponse) -> Result<Response<Body>, AiviHttpEr
         }
     }
     builder
-        .body(Body::from(response.body))
+        .body(Full::from(Bytes::from(response.body)))
         .map_err(|_| AiviHttpError {
             message: "invalid response body".to_string(),
         })
 }
 
-fn map_ws_message(msg: tokio_tungstenite::tungstenite::Message) -> AiviWsMessage {
+fn map_ws_message(msg: hyper_tungstenite::tungstenite::Message) -> AiviWsMessage {
     match msg {
-        tokio_tungstenite::tungstenite::Message::Text(text) => AiviWsMessage::TextMsg(text),
-        tokio_tungstenite::tungstenite::Message::Binary(data) => AiviWsMessage::BinaryMsg(data),
-        tokio_tungstenite::tungstenite::Message::Ping(_) => AiviWsMessage::Ping,
-        tokio_tungstenite::tungstenite::Message::Pong(_) => AiviWsMessage::Pong,
-        tokio_tungstenite::tungstenite::Message::Close(_) => AiviWsMessage::Close,
+        hyper_tungstenite::tungstenite::Message::Text(text) => AiviWsMessage::TextMsg(text),
+        hyper_tungstenite::tungstenite::Message::Binary(data) => AiviWsMessage::BinaryMsg(data),
+        hyper_tungstenite::tungstenite::Message::Ping(_) => AiviWsMessage::Ping,
+        hyper_tungstenite::tungstenite::Message::Pong(_) => AiviWsMessage::Pong,
+        hyper_tungstenite::tungstenite::Message::Close(_) => AiviWsMessage::Close,
         _ => AiviWsMessage::Close,
     }
 }
 
-fn to_ws_message(msg: AiviWsMessage) -> tokio_tungstenite::tungstenite::Message {
+fn to_ws_message(msg: AiviWsMessage) -> hyper_tungstenite::tungstenite::Message {
     match msg {
-        AiviWsMessage::TextMsg(text) => tokio_tungstenite::tungstenite::Message::Text(text),
-        AiviWsMessage::BinaryMsg(data) => tokio_tungstenite::tungstenite::Message::Binary(data),
-        AiviWsMessage::Ping => tokio_tungstenite::tungstenite::Message::Ping(Vec::new()),
-        AiviWsMessage::Pong => tokio_tungstenite::tungstenite::Message::Pong(Vec::new()),
-        AiviWsMessage::Close => tokio_tungstenite::tungstenite::Message::Close(None),
+        AiviWsMessage::TextMsg(text) => hyper_tungstenite::tungstenite::Message::Text(text),
+        AiviWsMessage::BinaryMsg(data) => hyper_tungstenite::tungstenite::Message::Binary(data),
+        AiviWsMessage::Ping => hyper_tungstenite::tungstenite::Message::Ping(Vec::new()),
+        AiviWsMessage::Pong => hyper_tungstenite::tungstenite::Message::Pong(Vec::new()),
+        AiviWsMessage::Close => hyper_tungstenite::tungstenite::Message::Close(None),
     }
 }
