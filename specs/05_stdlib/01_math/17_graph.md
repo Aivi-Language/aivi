@@ -45,16 +45,11 @@ domain Graph over Graph = {
 
 ## Helper Functions
 
-```aivi
-addEdge : Graph -> Edge -> Graph
-addEdge g e = { nodes: unique (g.nodes ++ [e.from, e.to]), edges: g.edges ++ [e] }
-
-neighbors : Graph -> NodeId -> List NodeId
-neighbors g n = map (.to) (filter (\e -> e.from == n) g.edges)
-
-shortestPath : Graph -> NodeId -> NodeId -> List NodeId
-shortestPath g start goal = dijkstra g start goal
-```
+| Function | Explanation |
+| --- | --- |
+| **addEdge** graph edge<br><pre><code>`Graph -> Edge -> Graph`</code></pre> | Returns a new graph with the edge added and nodes updated. |
+| **neighbors** graph node<br><pre><code>`Graph -> NodeId -> List NodeId`</code></pre> | Returns the outgoing neighbors of `node`. |
+| **shortestPath** graph start goal<br><pre><code>`Graph -> NodeId -> NodeId -> List NodeId`</code></pre> | Returns the node path computed by Dijkstra. |
 
 ## Usage Examples
 

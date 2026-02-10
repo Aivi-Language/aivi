@@ -42,19 +42,12 @@ domain Signal over Signal = {
 
 ## Helper Functions
 
-```aivi
-fft : Signal -> Spectrum
-fft s = { bins: fftRaw s.samples, rate: s.rate }
-
-ifft : Spectrum -> Signal
-ifft s = { samples: ifftRaw s.bins, rate: s.rate }
-
-windowHann : Signal -> Signal
-windowHann s = { samples: applyHann s.samples, rate: s.rate }
-
-normalize : Signal -> Signal
-normalize s = s * (1.0 / maxAbs s.samples)
-```
+| Function | Explanation |
+| --- | --- |
+| **fft** signal<br><pre><code>`Signal -> Spectrum`</code></pre> | Transforms a signal into a frequency-domain spectrum. |
+| **ifft** spectrum<br><pre><code>`Spectrum -> Signal`</code></pre> | Reconstructs a time-domain signal from its spectrum. |
+| **windowHann** signal<br><pre><code>`Signal -> Signal`</code></pre> | Applies a Hann window to reduce spectral leakage. |
+| **normalize** signal<br><pre><code>`Signal -> Signal`</code></pre> | Scales samples so the max absolute value is `1.0`. |
 
 ## Usage Examples
 

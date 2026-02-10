@@ -8,29 +8,11 @@ use aivi.net.https
 
 ## Functions
 
-### `get`
-
-```aivi
-get : Url -> Effect (Result Response Error)
-```
-
-Performs a secure GET request to the specified URL.
-
-### `post`
-
-```aivi
-post : Url -> Text -> Effect (Result Response Error)
-```
-
-Performs a secure POST request with the given body.
-
-### `fetch`
-
-```aivi
-fetch : Request -> Effect (Result Response Error)
-```
-
-Performs a custom HTTPS request.
+| Function | Explanation |
+| --- | --- |
+| **get** url<br><pre><code>`Url -> Effect (Result Response Error)`</code></pre> | Performs a secure GET request and returns a `Response` or `Error`. |
+| **post** url body<br><pre><code>`Url -> Text -> Effect (Result Response Error)`</code></pre> | Performs a secure POST request with a text body. |
+| **fetch** request<br><pre><code>`Request -> Effect (Result Response Error)`</code></pre> | Performs a secure request with custom method, headers, and body. |
 
 ## Types
 

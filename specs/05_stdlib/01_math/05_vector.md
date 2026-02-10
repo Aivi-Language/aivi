@@ -7,7 +7,7 @@ A **Vector** is just a number with a direction. It's the difference between sayi
 *   **Velocity**: "Where am I going?" (Movement)
 *   **Force**: "What's pushing me?" (Physics)
 
-Graphics, physicsows for clean math (`v1 + v2`) and is often hardware-accelerated (SIMD) for speed.
+Graphics and physics use vectors for clean math (`v1 + v2`) and benefit from hardware acceleration (SIMD).
 
 ## Overview
 
@@ -67,23 +67,12 @@ domain Vector over Vec3 = {
 
 ## Helper Functions
 
-```aivi
-magnitude : Vec2 -> Float
-magnitude { x, y } = sqrt (x * x + y * y)
-
-normalize : Vec2 -> Vec2
-normalize v = v / magnitude v
-
-dot : Vec2 -> Vec2 -> Float
-dot v1 v2 = v1.x * v2.x + v1.y * v2.y
-
-cross : Vec3 -> Vec3 -> Vec3
-cross v1 v2 = {
-  x: v1.y * v2.z - v1.z * v2.y
-  y: v1.z * v2.x - v1.x * v2.z
-  z: v1.x * v2.y - v1.y * v2.x
-}
-```
+| Function | Explanation |
+| --- | --- |
+| **magnitude** v<br><pre><code>`Vec2 -> Float`</code></pre> | Returns the Euclidean length of `v`. |
+| **normalize** v<br><pre><code>`Vec2 -> Vec2`</code></pre> | Returns a unit vector in the direction of `v`. |
+| **dot** a b<br><pre><code>`Vec2 -> Vec2 -> Float`</code></pre> | Returns the dot product of `a` and `b`. |
+| **cross** a b<br><pre><code>`Vec3 -> Vec3 -> Vec3`</code></pre> | Returns the 3D cross product orthogonal to `a` and `b`. |
 
 ## Usage Examples
 

@@ -28,46 +28,45 @@ type TextError = InvalidEncoding Encoding
 
 ### Length and inspection
 
-```aivi
-length : Text -> Int
-isEmpty : Text -> Bool
-```
+| Function | Explanation |
+| --- | --- |
+| **length** text<br><pre><code>`Text -> Int`</code></pre> | Returns the number of Unicode scalar values in `text`. |
+| **isEmpty** text<br><pre><code>`Text -> Bool`</code></pre> | Returns `true` when `text` has zero length. |
 
 ### Character predicates
 
-```aivi
-isDigit : Char -> Bool
-isAlpha : Char -> Bool
-isAlnum : Char -> Bool
-isSpace : Char -> Bool
-isUpper : Char -> Bool
-isLower : Char -> Bool
-```
+| Function | Explanation |
+| --- | --- |
+| **isDigit** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is a Unicode digit. |
+| **isAlpha** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is a Unicode letter. |
+| **isAlnum** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is a Unicode letter or digit. |
+| **isSpace** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is a Unicode whitespace. |
+| **isUpper** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is uppercase. |
+| **isLower** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is lowercase. |
 
 ### Search and comparison
 
-```aivi
-contains : Text -> Text -> Bool
-startsWith : Text -> Text -> Bool
-endsWith : Text -> Text -> Bool
-indexOf : Text -> Text -> Option Int
-lastIndexOf : Text -> Text -> Option Int
-count : Text -> Text -> Int
-compare : Text -> Text -> Int
-```
+| Function | Explanation |
+| --- | --- |
+| **contains** haystack needle<br><pre><code>`Text -> Text -> Bool`</code></pre> | Returns whether `needle` occurs in `haystack`. |
+| **startsWith** text prefix<br><pre><code>`Text -> Text -> Bool`</code></pre> | Returns whether `text` starts with `prefix`. |
+| **endsWith** text suffix<br><pre><code>`Text -> Text -> Bool`</code></pre> | Returns whether `text` ends with `suffix`. |
+| **indexOf** haystack needle<br><pre><code>`Text -> Text -> Option Int`</code></pre> | Returns the first index of `needle`, or `None` when not found. |
+| **lastIndexOf** haystack needle<br><pre><code>`Text -> Text -> Option Int`</code></pre> | Returns the last index of `needle`, or `None` when not found. |
+| **count** haystack needle<br><pre><code>`Text -> Text -> Int`</code></pre> | Returns the number of non-overlapping occurrences. |
+| **compare** a b<br><pre><code>`Text -> Text -> Int`</code></pre> | Returns `-1`, `0`, or `1` in Unicode codepoint order (not locale-aware). |
 
 Notes:
-- `compare` returns `-1`, `0`, or `1` for ordering and is Unicode codepoint order (not locale-aware).
 - `indexOf` and `lastIndexOf` return `None` when not found.
 
 ### Slicing and splitting
 
-```aivi
-slice : Int -> Int -> Text -> Text
-split : Text -> Text -> List Text
-splitLines : Text -> List Text
-chunk : Int -> Text -> List Text
-```
+| Function | Explanation |
+| --- | --- |
+| **slice** start end text<br><pre><code>`Int -> Int -> Text -> Text`</code></pre> | Returns the substring from `start` (inclusive) to `end` (exclusive). |
+| **split** sep text<br><pre><code>`Text -> Text -> List Text`</code></pre> | Splits `text` on `sep`. |
+| **splitLines** text<br><pre><code>`Text -> List Text`</code></pre> | Splits on line endings. |
+| **chunk** size text<br><pre><code>`Int -> Text -> List Text`</code></pre> | Splits into codepoint chunks of length `size`. |
 
 Notes:
 - `slice start end text` is half-open (`start` inclusive, `end` exclusive) and clamps out-of-range indices.
@@ -75,27 +74,27 @@ Notes:
 
 ### Trimming and padding
 
-```aivi
-trim : Text -> Text
-trimStart : Text -> Text
-trimEnd : Text -> Text
-padStart : Int -> Text -> Text -> Text
-padEnd : Int -> Text -> Text -> Text
-```
+| Function | Explanation |
+| --- | --- |
+| **trim** text<br><pre><code>`Text -> Text`</code></pre> | Removes Unicode whitespace from both ends. |
+| **trimStart** text<br><pre><code>`Text -> Text`</code></pre> | Removes Unicode whitespace from the start. |
+| **trimEnd** text<br><pre><code>`Text -> Text`</code></pre> | Removes Unicode whitespace from the end. |
+| **padStart** width fill text<br><pre><code>`Int -> Text -> Text -> Text`</code></pre> | Pads on the left to reach `width` using repeated `fill`. |
+| **padEnd** width fill text<br><pre><code>`Int -> Text -> Text -> Text`</code></pre> | Pads on the right to reach `width` using repeated `fill`. |
 
 Notes:
 - `padStart width fill text` repeats `fill` as needed and truncates extra.
 
 ### Modification
 
-```aivi
-replace : Text -> Text -> Text -> Text
-replaceAll : Text -> Text -> Text -> Text
-remove : Text -> Text -> Text
-repeat : Int -> Text -> Text
-reverse : Text -> Text
-concat : List Text -> Text
-```
+| Function | Explanation |
+| --- | --- |
+| **replace** text needle replacement<br><pre><code>`Text -> Text -> Text -> Text`</code></pre> | Replaces the first occurrence of `needle`. |
+| **replaceAll** text needle replacement<br><pre><code>`Text -> Text -> Text -> Text`</code></pre> | Replaces all occurrences of `needle`. |
+| **remove** text needle<br><pre><code>`Text -> Text -> Text`</code></pre> | Removes all occurrences of `needle`. |
+| **repeat** count text<br><pre><code>`Int -> Text -> Text`</code></pre> | Repeats `text` `count` times. |
+| **reverse** text<br><pre><code>`Text -> Text`</code></pre> | Reverses grapheme clusters. |
+| **concat** parts<br><pre><code>`List Text -> Text`</code></pre> | Concatenates all parts into one `Text`. |
 
 Notes:
 - `replace` changes the first occurrence only.
@@ -104,32 +103,32 @@ Notes:
 
 ### Case and normalization
 
-```aivi
-toLower : Text -> Text
-toUpper : Text -> Text
-capitalize : Text -> Text
-titleCase : Text -> Text
-caseFold : Text -> Text
-normalizeNFC : Text -> Text
-normalizeNFD : Text -> Text
-normalizeNFKC : Text -> Text
-normalizeNFKD : Text -> Text
-```
+| Function | Explanation |
+| --- | --- |
+| **toLower** text<br><pre><code>`Text -> Text`</code></pre> | Converts to lowercase using Unicode rules. |
+| **toUpper** text<br><pre><code>`Text -> Text`</code></pre> | Converts to uppercase using Unicode rules. |
+| **capitalize** text<br><pre><code>`Text -> Text`</code></pre> | Uppercases the first grapheme and lowercases the rest. |
+| **titleCase** text<br><pre><code>`Text -> Text`</code></pre> | Converts to title case using Unicode rules. |
+| **caseFold** text<br><pre><code>`Text -> Text`</code></pre> | Produces a case-folded form for case-insensitive comparisons. |
+| **normalizeNFC** text<br><pre><code>`Text -> Text`</code></pre> | Normalizes to NFC. |
+| **normalizeNFD** text<br><pre><code>`Text -> Text`</code></pre> | Normalizes to NFD. |
+| **normalizeNFKC** text<br><pre><code>`Text -> Text`</code></pre> | Normalizes to NFKC. |
+| **normalizeNFKD** text<br><pre><code>`Text -> Text`</code></pre> | Normalizes to NFKD. |
 
 ### Encoding / decoding
 
-```aivi
-toBytes : Encoding -> Text -> Bytes
-fromBytes : Encoding -> Bytes -> Result TextError Text
-```
+| Function | Explanation |
+| --- | --- |
+| **toBytes** encoding text<br><pre><code>`Encoding -> Text -> Bytes`</code></pre> | Encodes `text` into `Bytes` using `encoding`. |
+| **fromBytes** encoding bytes<br><pre><code>`Encoding -> Bytes -> Result TextError Text`</code></pre> | Decodes `bytes` and returns `TextError` on invalid input. |
 
 ### Formatting and conversion
 
-```aivi
-toText : Show a => a -> Text
-parseInt : Text -> Option Int
-parseFloat : Text -> Option Float
-```
+| Function | Explanation |
+| --- | --- |
+| **toText** value<br><pre><code>`Show a => a -> Text`</code></pre> | Formats any `Show` instance into `Text`. |
+| **parseInt** text<br><pre><code>`Text -> Option Int`</code></pre> | Parses a decimal integer, returning `None` on failure. |
+| **parseFloat** text<br><pre><code>`Text -> Option Float`</code></pre> | Parses a decimal float, returning `None` on failure. |
 
 ## Usage Examples
 

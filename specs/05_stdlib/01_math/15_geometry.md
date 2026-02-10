@@ -58,16 +58,11 @@ domain Geometry over Point3 = {
 
 ## Helper Functions
 
-```aivi
-distance : Point2 -> Point2 -> Float
-distance a b = sqrt ((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y))
-
-midpoint : Segment2 -> Point2
-midpoint s = { x: (s.start.x + s.end.x) / 2.0, y: (s.start.y + s.end.y) / 2.0 }
-
-area : Polygon -> Float
-area poly = polygonArea poly.vertices
-```
+| Function | Explanation |
+| --- | --- |
+| **distance** a b<br><pre><code>`Point2 -> Point2 -> Float`</code></pre> | Returns the Euclidean distance between two 2D points. |
+| **midpoint** segment<br><pre><code>`Segment2 -> Point2`</code></pre> | Returns the center point of a line segment. |
+| **area** polygon<br><pre><code>`Polygon -> Float`</code></pre> | Returns the signed area (positive for counter-clockwise winding). |
 
 ## Usage Examples
 

@@ -42,66 +42,58 @@ For more control or large files, use the resource-based API.
 
 ### `open`
 
-```aivi
-open : String -> Effect (Resource Handle)
-```
 
-Opens a file for reading. Returns a `Handle` resource that must be managed (e.g., with `resource` block).
+| Function | Explanation |
+| --- | --- |
+| **open** path<br><pre><code>`String -> Effect (Resource Handle)`</code></pre> | Opens a file for reading and returns a managed `Handle` resource. |
 
 ### `readAll`
 
-```aivi
-readAll : Handle -> Effect (Result String Error)
-```
 
-Reads the entire content of an open file handle.
+| Function | Explanation |
+| --- | --- |
+| **readAll** handle<br><pre><code>`Handle -> Effect (Result String Error)`</code></pre> | Reads the entire contents of an open handle as a string. |
 
 ### `close`
 
-```aivi
-close : Handle -> Effect Unit
-```
 
-Closes the file handle. (Automatically called if using `resource` block).
+| Function | Explanation |
+| --- | --- |
+| **close** handle<br><pre><code>`Handle -> Effect Unit`</code></pre> | Closes the file handle (automatic with `resource` blocks). |
 
 ## Path Operations
 
 ### `readText`
 
-```aivi
-readText : String -> Effect (Result String Error)
-```
 
-Reads the entire content of a file as a string.
+| Function | Explanation |
+| --- | --- |
+| **readText** path<br><pre><code>`String -> Effect (Result String Error)`</code></pre> | Reads the entire contents of `path` as a string. |
 
 ### `writeText`
 
-```aivi
-writeText : String -> String -> Effect (Result Unit Error)
-```
 
-Writes a string to a file, overwriting it if it exists.
+| Function | Explanation |
+| --- | --- |
+| **writeText** path contents<br><pre><code>`String -> String -> Effect (Result Unit Error)`</code></pre> | Writes `contents` to `path`, overwriting if it exists. |
 
 ### `exists`
 
-```aivi
-exists : String -> Effect Bool
-```
 
-Checks if a file or directory exists at the given path.
+| Function | Explanation |
+| --- | --- |
+| **exists** path<br><pre><code>`String -> Effect Bool`</code></pre> | Returns whether a file or directory exists at `path`. |
 
 ### `stat`
 
-```aivi
-stat : String -> Effect (Result FileStats Error)
-```
 
-Retrieves metadata about a file or directory. Fails if path does not exist.
+| Function | Explanation |
+| --- | --- |
+| **stat** path<br><pre><code>`String -> Effect (Result FileStats Error)`</code></pre> | Retrieves metadata about a file or directory at `path`. |
 
 ### `delete`
 
-```aivi
-delete : String -> Effect (Result Unit Error)
-```
 
-Deletes a file.
+| Function | Explanation |
+| --- | --- |
+| **delete** path<br><pre><code>`String -> Effect (Result Unit Error)`</code></pre> | Removes the file at `path`. |

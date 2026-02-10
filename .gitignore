@@ -3,7 +3,6 @@ node_modules
 .ai/
 
 specs/.vitepress/cache/
-specs/.vitepress/dist/
 
 # Legacy pandoc build output
 build

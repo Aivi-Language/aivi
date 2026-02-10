@@ -14,26 +14,8 @@ type StreamError = { message: Text }
 
 ## Functions
 
-### `fromSocket`
-
-```aivi
-fromSocket : Connection -> Stream (List Int)
-```
-
-Creates a byte stream from a socket connection.
-
-### `toSocket`
-
-```aivi
-toSocket : Connection -> Stream (List Int) -> Effect StreamError Unit
-```
-
-Writes a byte stream to a socket connection.
-
-### `chunks`
-
-```aivi
-chunks : Int -> Stream (List Int) -> Stream (List Int)
-```
-
-Rechunks a stream into fixed-size blocks.
+| Function | Explanation |
+| --- | --- |
+| **fromSocket** connection<br><pre><code>`Connection -> Stream (List Int)`</code></pre> | Creates a stream of byte chunks from the connection. |
+| **toSocket** connection stream<br><pre><code>`Connection -> Stream (List Int) -> Effect StreamError Unit`</code></pre> | Writes byte chunks from `stream` to the connection. |
+| **chunks** size stream<br><pre><code>`Int -> Stream (List Int) -> Stream (List Int)`</code></pre> | Rechunks a byte stream into fixed-size blocks of `size`. |

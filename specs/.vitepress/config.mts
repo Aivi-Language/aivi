@@ -30,7 +30,7 @@ function resolveBase(): string {
 const base = resolveBase()
 
 export default defineConfig({
-  title: "AIVI Language Specification",
+  title: "AIVI",
   description: "A high-integrity functional language with a Rust-first compilation pipeline.",
   base,
   head: [
@@ -43,15 +43,9 @@ export default defineConfig({
     sidebar: [
       {
         text: 'Core Specification',
-        collapsed: true,
+        collapsed: false,
         items: [
-          { text: 'Introduction', link: '/01_introduction' }
-        ]
-      },
-      {
-        text: 'Roadmap',
-        collapsed: true,
-        items: [
+          { text: 'Introduction', link: '/01_introduction' },
           { text: 'Roadmap', link: '/roadmap/' }
         ]
       },
@@ -76,6 +70,80 @@ export default defineConfig({
           { text: 'Concrete Syntax', link: '/02_syntax/00_grammar' },
         ]
       },
+      {
+        text: 'Standard Library',
+        collapsed: true,
+        items: [
+          {
+            text: 'Core & Utils',
+            collapsed: true,
+            items: [
+              { text: 'Prelude', link: '/05_stdlib/00_core/01_prelude' },
+              { text: 'Text', link: '/05_stdlib/00_core/02_text' },
+              { text: 'Units', link: '/05_stdlib/00_core/16_units' },
+              { text: 'Regex', link: '/05_stdlib/00_core/24_regex' },
+              { text: 'Testing', link: '/05_stdlib/00_core/27_testing' },
+              { text: 'Collections', link: '/05_stdlib/00_core/28_collections' },
+            ]
+          },
+          {
+            text: 'Math & Science',
+            collapsed: true,
+            items: [
+              { text: 'Math', link: '/05_stdlib/01_math/01_math' },
+              { text: 'Vector', link: '/05_stdlib/01_math/05_vector' },
+              { text: 'Matrix', link: '/05_stdlib/01_math/09_matrix' },
+              { text: 'Number (BigInt, Rational, Complex, Quaternion)', link: '/05_stdlib/01_math/10_number' },
+              { text: 'Probability', link: '/05_stdlib/01_math/13_probability' },
+              { text: 'FFT & Signal', link: '/05_stdlib/01_math/14_signal' },
+              { text: 'Geometry', link: '/05_stdlib/01_math/15_geometry' },
+              { text: 'Graph', link: '/05_stdlib/01_math/17_graph' },
+              { text: 'Linear Algebra', link: '/05_stdlib/01_math/18_linear_algebra' },
+            ]
+          },
+          {
+            text: 'Chronos (Time)',
+            collapsed: true,
+            items: [
+              { text: 'Calendar', link: '/05_stdlib/02_chronos/02_calendar' },
+              { text: 'Duration', link: '/05_stdlib/02_chronos/03_duration' },
+            ]
+          },
+          {
+            text: 'System & IO',
+            collapsed: true,
+            items: [
+              { text: 'File', link: '/05_stdlib/03_system/20_file' },
+              { text: 'Console', link: '/05_stdlib/03_system/21_console' },
+              { text: 'Database', link: '/05_stdlib/03_system/23_database' },
+              { text: 'URL', link: '/05_stdlib/03_system/25_url' },
+              { text: 'Crypto', link: '/05_stdlib/03_system/22_crypto' },
+              { text: 'System', link: '/05_stdlib/03_system/25_system' },
+              { text: 'Log', link: '/05_stdlib/03_system/26_log' },
+            ]
+          },
+          {
+            text: 'Network',
+            collapsed: true,
+            items: [
+              { text: 'Network', link: '/05_stdlib/03_network/00_network' },
+              { text: 'HTTP Utils', link: '/05_stdlib/03_network/01_http' },
+              { text: 'HTTPS', link: '/05_stdlib/03_network/02_https' },
+              { text: 'HTTP Server', link: '/05_stdlib/03_network/03_http_server' },
+              { text: 'Sockets', link: '/05_stdlib/03_network/04_sockets' },
+              { text: 'Streams', link: '/05_stdlib/03_network/05_streams' },
+            ]
+          },
+          {
+            text: 'UI',
+            collapsed: true,
+            items: [
+              { text: 'Color', link: '/05_stdlib/04_ui/04_color' },
+            ]
+          }
+        ]
+      },
+
       {
         text: 'Kernel (Core Calculus)',
         collapsed: true,
@@ -108,79 +176,6 @@ export default defineConfig({
           { text: 'Classes', link: '/04_desugaring/08_classes' },
           { text: 'Domains and Operators', link: '/04_desugaring/09_domains' },
           { text: 'Patching', link: '/04_desugaring/10_patching' },
-        ]
-      },
-      {
-        text: 'Standard Library',
-        collapsed: true,
-        items: [
-          {
-            text: 'Core & Utils',
-            collapsed: true,
-            items: [
-                { text: 'Prelude', link: '/05_stdlib/00_core/01_prelude' },
-                { text: 'Text', link: '/05_stdlib/00_core/02_text' },
-                { text: 'Units', link: '/05_stdlib/00_core/16_units' },
-                { text: 'Regex', link: '/05_stdlib/00_core/24_regex' },
-                { text: 'Testing', link: '/05_stdlib/00_core/27_testing' },
-                { text: 'Collections', link: '/05_stdlib/00_core/28_collections' },
-            ]
-          },
-          {
-            text: 'Math & Science',
-            collapsed: true,
-            items: [
-                { text: 'Math', link: '/05_stdlib/01_math/01_math' },
-                { text: 'Vector', link: '/05_stdlib/01_math/05_vector' },
-                { text: 'Matrix', link: '/05_stdlib/01_math/09_matrix' },
-                { text: 'Number (BigInt, Rational, Complex, Quaternion)', link: '/05_stdlib/01_math/10_number' },
-                { text: 'Probability', link: '/05_stdlib/01_math/13_probability' },
-                { text: 'FFT & Signal', link: '/05_stdlib/01_math/14_signal' },
-                { text: 'Geometry', link: '/05_stdlib/01_math/15_geometry' },
-                { text: 'Graph', link: '/05_stdlib/01_math/17_graph' },
-                { text: 'Linear Algebra', link: '/05_stdlib/01_math/18_linear_algebra' },
-            ]
-          },
-          {
-            text: 'Chronos (Time)',
-            collapsed: true,
-            items: [
-                { text: 'Calendar', link: '/05_stdlib/02_chronos/02_calendar' },
-                { text: 'Duration', link: '/05_stdlib/02_chronos/03_duration' },
-            ]
-          },
-          {
-            text: 'System & IO',
-            collapsed: true,
-            items: [
-                { text: 'File', link: '/05_stdlib/03_system/20_file' },
-                { text: 'Console', link: '/05_stdlib/03_system/21_console' },
-                { text: 'Database', link: '/05_stdlib/03_system/23_database' },
-                { text: 'URL', link: '/05_stdlib/03_system/25_url' },
-                { text: 'Crypto', link: '/05_stdlib/03_system/22_crypto' },
-                { text: 'System', link: '/05_stdlib/03_system/25_system' },
-                { text: 'Log', link: '/05_stdlib/03_system/26_log' },
-            ]
-          },
-          {
-            text: 'Network',
-            collapsed: true,
-            items: [
-                { text: 'Network', link: '/05_stdlib/03_network/00_network' },
-                { text: 'HTTP Utils', link: '/05_stdlib/03_network/01_http' },
-                { text: 'HTTPS', link: '/05_stdlib/03_network/02_https' },
-                { text: 'HTTP Server', link: '/05_stdlib/03_network/03_http_server' },
-                { text: 'Sockets', link: '/05_stdlib/03_network/04_sockets' },
-                { text: 'Streams', link: '/05_stdlib/03_network/05_streams' },
-            ]
-          },
-          {
-            text: 'UI',
-            collapsed: true,
-            items: [
-                { text: 'Color', link: '/05_stdlib/04_ui/04_color' },
-            ]
-          }
         ]
       },
       {

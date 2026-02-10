@@ -52,13 +52,10 @@ domain Url over Url = {
 
 ## Helper Functions
 
-```aivi
-parse : String -> Result Url Error
-parse str = // ... implementation ...
-
-toString : Url -> String
-toString url = // ... reconstruct string ...
-```
+| Function | Explanation |
+| --- | --- |
+| **parse** text<br><pre><code>`String -> Result Url Error`</code></pre> | Converts a URL string into a structured `Url`. |
+| **toString** url<br><pre><code>`Url -> String`</code></pre> | Renders a `Url` back into its string form. |
 
 ## Usage Examples
 

@@ -55,39 +55,15 @@ domain Calendar over Date = {
 
 ## Helper Functions
 
-```aivi
-isLeapYear : Date -> Bool
-isLeapYear { year } = 
-  (year % 4 == 0) && ((year % 100 != 0) || (year % 400 == 0))
-
-daysInMonth : Date -> Int
-daysInMonth { year, month } =
-  month ?
-  | 2  => if isLeapYear { year } then 29 else 28
-  | 4  => 30
-  | 6  => 30
-  | 9  => 30
-  | 11 => 30
-  | _  => 31
-
-endOfMonth : Date -> Date
-endOfMonth date = date <| { day: daysInMonth date }
-
-addDays : Date -> Int -> Date
-addDays date n = // normalize day overflow/underflow
-
-addMonths : Date -> Int -> Date
-addMonths date n = // normalize month overflow, clamp days
-
-addYears : Date -> Int -> Date
-addYears { year, month, day } n = { year: year + n, month, day }
-
-negateDelta : Delta -> Delta
-negateDelta (Day n)   = Day (-n)
-negateDelta (Month n) = Month (-n)
-negateDelta (Year n)  = Year (-n)
-negateDelta End       = End  // idempotent
-```
+| Function | Explanation |
+| --- | --- |
+| **isLeapYear** date<br><pre><code>`Date -> Bool`</code></pre> | Returns whether `date.year` is a leap year. |
+| **daysInMonth** date<br><pre><code>`Date -> Int`</code></pre> | Returns the number of days in `date.month`. |
+| **endOfMonth** date<br><pre><code>`Date -> Date`</code></pre> | Returns the last day of the month for `date`. |
+| **addDays** date n<br><pre><code>`Date -> Int -> Date`</code></pre> | Applies a day delta with calendar normalization. |
+| **addMonths** date n<br><pre><code>`Date -> Int -> Date`</code></pre> | Applies a month delta with normalization and day clamping. |
+| **addYears** date n<br><pre><code>`Date -> Int -> Date`</code></pre> | Applies a year delta. |
+| **negateDelta** delta<br><pre><code>`Delta -> Delta`</code></pre> | Returns the inverse delta (except `End`, which is idempotent). |
 
 ## Usage Examples
 

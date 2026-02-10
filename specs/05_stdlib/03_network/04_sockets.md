@@ -15,50 +15,11 @@ type SocketError = { message: Text }
 
 ## TCP
 
-### `listen`
-
-```aivi
-listen : Address -> Resource Listener
-```
-
-Creates a TCP listener.
-
-### `accept`
-
-```aivi
-accept : Listener -> Effect SocketError Connection
-```
-
-Accepts an incoming connection.
-
-### `connect`
-
-```aivi
-connect : Address -> Effect SocketError Connection
-```
-
-Connects to a remote TCP endpoint.
-
-### `send`
-
-```aivi
-send : Connection -> List Int -> Effect SocketError Unit
-```
-
-Sends bytes to the remote endpoint.
-
-### `recv`
-
-```aivi
-recv : Connection -> Effect SocketError (List Int)
-```
-
-Receives bytes from the remote endpoint.
-
-### `close`
-
-```aivi
-close : Connection -> Effect SocketError Unit
-```
-
-Closes a connection.
+| Function | Explanation |
+| --- | --- |
+| **listen** address<br><pre><code>`Address -> Resource Listener`</code></pre> | Creates a TCP listener bound to `address`. |
+| **accept** listener<br><pre><code>`Listener -> Effect SocketError Connection`</code></pre> | Waits for and returns an incoming TCP connection. |
+| **connect** address<br><pre><code>`Address -> Effect SocketError Connection`</code></pre> | Opens a TCP connection to `address`. |
+| **send** connection bytes<br><pre><code>`Connection -> List Int -> Effect SocketError Unit`</code></pre> | Sends raw bytes to the remote endpoint. |
+| **recv** connection<br><pre><code>`Connection -> Effect SocketError (List Int)`</code></pre> | Receives raw bytes from the remote endpoint. |
+| **close** connection<br><pre><code>`Connection -> Effect SocketError Unit`</code></pre> | Closes the TCP connection. |

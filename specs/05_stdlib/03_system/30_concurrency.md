@@ -10,25 +10,10 @@ use aivi.concurrency as concurrent
 
 ## Functions
 
-### `par`
-
-```aivi
-par : Effect E A -> Effect E B -> Effect E (A, B)
-```
-
-Executes two effects concurrently and returns their results as a tuple. If either effect fails, the entire operation fails.
-
-```aivi
-(left, right) <- concurrent.par (print "left") (print "right")
-```
-
-### `scope`
-
-```aivi
-scope : (Scope -> Effect E A) -> Effect E A
-```
-
-Creates a structured concurrency scope. Spawning fibers within this scope ensures they are joined or cancelled when the scope exits. (Note: `par` is often a higher-level convenience over `scope`).
+| Function | Explanation |
+| --- | --- |
+| **par** left right<br><pre><code>`Effect E A -> Effect E B -> Effect E (A, B)`</code></pre> | Runs both effects concurrently and returns both results; fails if either fails. |
+| **scope** run<br><pre><code>`(Scope -> Effect E A) -> Effect E A`</code></pre> | Creates a structured concurrency scope and passes a `Scope` handle to `run`. |
 
 ## Channels
 
@@ -36,24 +21,18 @@ Channels provide a mechanism for synchronization and communication between concu
 
 ### `make`
 
-```aivi
-make : A -> Effect E (Sender A, Receiver A)
-```
-
-Creates a new channel for values of type `A`. Returns a pair of `Sender` and `Receiver`.
+| Function | Explanation |
+| --- | --- |
+| **make** sample<br><pre><code>`A -> Effect E (Sender A, Receiver A)`</code></pre> | Creates a new channel and returns `(Sender, Receiver)`. |
 
 ### `send`
 
-```aivi
-send : Sender A -> A -> Effect E Unit
-```
-
-Sends a value to the channel. This operation may block if the channel is full (if buffered) or until a receiver is ready (if unbuffered).
+| Function | Explanation |
+| --- | --- |
+| **send** sender value<br><pre><code>`Sender A -> A -> Effect E Unit`</code></pre> | Sends `value` to the channel; may block if buffered and full or no receiver is ready. |
 
 ### `recv`
 
-```aivi
-recv : Receiver A -> Effect E (Result A ChannelError)
-```
-
-Receives a value from the channel. Returns `Ok value` if successful, or `Err Closed` if the channel is closed.
+| Function | Explanation |
+| --- | --- |
+| **recv** receiver<br><pre><code>`Receiver A -> Effect E (Result A ChannelError)`</code></pre> | Waits for the next value; returns `Ok value` or `Err Closed`. |

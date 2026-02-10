@@ -8,42 +8,10 @@ use aivi.console
 
 ## Functions
 
-### `log`
-
-```aivi
-log : String -> Effect Unit
-```
-
-Prints a message to the standard output, followed by a newline.
-
-### `println`
-
-```aivi
-println : String -> Effect Unit
-```
-
-Alias for `log`.
-
-### `print`
-
-```aivi
-print : String -> Effect Unit
-```
-
-Prints a message to the standard output, **without** a trailing newline.
-
-### `error`
-
-```aivi
-error : String -> Effect Unit
-```
-
-Prints a message to the standard error.
-
-### `readLine`
-
-```aivi
-readLine : Unit -> Effect (Result String Error)
-```
-
-Reads a line from standard input.
+| Function | Explanation |
+| --- | --- |
+| **log** message<br><pre><code>`String -> Effect Unit`</code></pre> | Prints `message` to standard output with a trailing newline. |
+| **println** message<br><pre><code>`String -> Effect Unit`</code></pre> | Alias for `log`. |
+| **print** message<br><pre><code>`String -> Effect Unit`</code></pre> | Prints `message` without a trailing newline. |
+| **error** message<br><pre><code>`String -> Effect Unit`</code></pre> | Prints `message` to standard error. |
+| **readLine** :()<br><pre><code>`Unit -> Effect (Result String Error)`</code></pre> | Reads a line from standard input. |

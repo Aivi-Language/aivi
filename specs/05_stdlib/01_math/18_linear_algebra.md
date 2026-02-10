@@ -42,16 +42,11 @@ domain LinearAlgebra over Vec = {
 
 ## Helper Functions
 
-```aivi
-dot : Vec -> Vec -> Float
-dot a b = sum (zipWith (*) a.data b.data)
-
-matMul : Mat -> Mat -> Mat
-matMul a b = { rows: a.rows, cols: b.cols, data: matMulRaw a b }
-
-solve2x2 : Mat -> Vec -> Vec
-solve2x2 m v = solve2x2Raw m v
-```
+| Function | Explanation |
+| --- | --- |
+| **dot** a b<br><pre><code>`Vec -> Vec -> Float`</code></pre> | Returns the dot product of two vectors. |
+| **matMul** a b<br><pre><code>`Mat -> Mat -> Mat`</code></pre> | Multiplies matrices (rows of `a` by columns of `b`). |
+| **solve2x2** m v<br><pre><code>`Mat -> Vec -> Vec`</code></pre> | Solves the system `m * x = v`. |
 
 ## Usage Examples
 

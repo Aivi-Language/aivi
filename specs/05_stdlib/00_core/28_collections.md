@@ -76,23 +76,23 @@ The following functions are required for v1.0 implementations. Exact module layo
 
 ### Map
 
-```aivi
-Map.empty : Map k v
-Map.size : Map k v -> Int
-Map.has : k -> Map k v -> Bool
-Map.get : k -> Map k v -> Option v
-Map.insert : k -> v -> Map k v -> Map k v
-Map.update : k -> (v -> v) -> Map k v -> Map k v
-Map.remove : k -> Map k v -> Map k v
-Map.map : (v -> v2) -> Map k v -> Map k v2
-Map.mapWithKey : (k -> v -> v2) -> Map k v -> Map k v2
-Map.keys : Map k v -> List k
-Map.values : Map k v -> List v
-Map.entries : Map k v -> List (k, v)
-Map.fromList : List (k, v) -> Map k v
-Map.toList : Map k v -> List (k, v)
-Map.union : Map k v -> Map k v -> Map k v
-```
+| Function | Explanation |
+| --- | --- |
+| **Map.empty**<br><pre><code>`Map k v`</code></pre> | Creates an empty map. |
+| **Map.size** map<br><pre><code>`Map k v -> Int`</code></pre> | Returns the number of entries. |
+| **Map.has** key map<br><pre><code>`k -> Map k v -> Bool`</code></pre> | Returns whether `key` is present. |
+| **Map.get** key map<br><pre><code>`k -> Map k v -> Option v`</code></pre> | Returns `Some value` or `None`. |
+| **Map.insert** key value map<br><pre><code>`k -> v -> Map k v -> Map k v`</code></pre> | Returns a new map with the entry inserted. |
+| **Map.update** key f map<br><pre><code>`k -> (v -> v) -> Map k v -> Map k v`</code></pre> | Applies `f` when `key` exists; otherwise no-op. |
+| **Map.remove** key map<br><pre><code>`k -> Map k v -> Map k v`</code></pre> | Returns a new map without `key`. |
+| **Map.map** f map<br><pre><code>`(v -> v2) -> Map k v -> Map k v2`</code></pre> | Transforms all values with `f`. |
+| **Map.mapWithKey** f map<br><pre><code>`(k -> v -> v2) -> Map k v -> Map k v2`</code></pre> | Transforms values with access to keys. |
+| **Map.keys** map<br><pre><code>`Map k v -> List k`</code></pre> | Returns all keys as a list. |
+| **Map.values** map<br><pre><code>`Map k v -> List v`</code></pre> | Returns all values as a list. |
+| **Map.entries** map<br><pre><code>`Map k v -> List (k, v)`</code></pre> | Returns all entries as key/value pairs. |
+| **Map.fromList** entries<br><pre><code>`List (k, v) -> Map k v`</code></pre> | Builds a map from key/value pairs. |
+| **Map.toList** map<br><pre><code>`Map k v -> List (k, v)`</code></pre> | Converts a map into key/value pairs. |
+| **Map.union** left right<br><pre><code>`Map k v -> Map k v -> Map k v`</code></pre> | Merges maps with right-biased keys. |
 
 Notes:
 - `Map.union` is right-biased (keys from the right map override).
@@ -100,43 +100,42 @@ Notes:
 
 ### Set
 
-```aivi
-Set.empty : Set a
-Set.size : Set a -> Int
-Set.has : a -> Set a -> Bool
-Set.insert : a -> Set a -> Set a
-Set.remove : a -> Set a -> Set a
-Set.union : Set a -> Set a -> Set a
-Set.intersection : Set a -> Set a -> Set a
-Set.difference : Set a -> Set a -> Set a
-Set.fromList : List a -> Set a
-Set.toList : Set a -> List a
-```
+| Function | Explanation |
+| --- | --- |
+| **Set.empty**<br><pre><code>`Set a`</code></pre> | Creates an empty set. |
+| **Set.size** set<br><pre><code>`Set a -> Int`</code></pre> | Returns the number of elements. |
+| **Set.has** value set<br><pre><code>`a -> Set a -> Bool`</code></pre> | Returns whether `value` is present. |
+| **Set.insert** value set<br><pre><code>`a -> Set a -> Set a`</code></pre> | Returns a new set with `value` inserted. |
+| **Set.remove** value set<br><pre><code>`a -> Set a -> Set a`</code></pre> | Returns a new set without `value`. |
+| **Set.union** left right<br><pre><code>`Set a -> Set a -> Set a`</code></pre> | Returns the union of two sets. |
+| **Set.intersection** left right<br><pre><code>`Set a -> Set a -> Set a`</code></pre> | Returns elements common to both sets. |
+| **Set.difference** left right<br><pre><code>`Set a -> Set a -> Set a`</code></pre> | Returns elements in `left` not in `right`. |
+| **Set.fromList** values<br><pre><code>`List a -> Set a`</code></pre> | Builds a set from a list. |
+| **Set.toList** set<br><pre><code>`Set a -> List a`</code></pre> | Converts a set into a list. |
 
 ### Queue / Deque
 
-```aivi
-Queue.empty : Queue a
-Queue.enqueue : a -> Queue a -> Queue a
-Queue.dequeue : Queue a -> Option (a, Queue a)
-Queue.peek : Queue a -> Option a
-
-Deque.empty : Deque a
-Deque.pushFront : a -> Deque a -> Deque a
-Deque.pushBack : a -> Deque a -> Deque a
-Deque.popFront : Deque a -> Option (a, Deque a)
-Deque.popBack : Deque a -> Option (a, Deque a)
-Deque.peekFront : Deque a -> Option a
-Deque.peekBack : Deque a -> Option a
-```
+| Function | Explanation |
+| --- | --- |
+| **Queue.empty**<br><pre><code>`Queue a`</code></pre> | Creates an empty queue. |
+| **Queue.enqueue** value queue<br><pre><code>`a -> Queue a -> Queue a`</code></pre> | Adds `value` to the back. |
+| **Queue.dequeue** queue<br><pre><code>`Queue a -> Option (a, Queue a)`</code></pre> | Removes and returns the front value and remaining queue. |
+| **Queue.peek** queue<br><pre><code>`Queue a -> Option a`</code></pre> | Returns the front value without removing it. |
+| **Deque.empty**<br><pre><code>`Deque a`</code></pre> | Creates an empty deque. |
+| **Deque.pushFront** value deque<br><pre><code>`a -> Deque a -> Deque a`</code></pre> | Adds `value` to the front. |
+| **Deque.pushBack** value deque<br><pre><code>`a -> Deque a -> Deque a`</code></pre> | Adds `value` to the back. |
+| **Deque.popFront** deque<br><pre><code>`Deque a -> Option (a, Deque a)`</code></pre> | Removes and returns the front value and rest. |
+| **Deque.popBack** deque<br><pre><code>`Deque a -> Option (a, Deque a)`</code></pre> | Removes and returns the back value and rest. |
+| **Deque.peekFront** deque<br><pre><code>`Deque a -> Option a`</code></pre> | Returns the front value without removing it. |
+| **Deque.peekBack** deque<br><pre><code>`Deque a -> Option a`</code></pre> | Returns the back value without removing it. |
 
 ### Heap / PriorityQueue
 
-```aivi
-Heap.empty : Heap a
-Heap.push : a -> Heap a -> Heap a
-Heap.popMin : Heap a -> Option (a, Heap a)
-Heap.peekMin : Heap a -> Option a
-```
+| Function | Explanation |
+| --- | --- |
+| **Heap.empty**<br><pre><code>`Heap a`</code></pre> | Creates an empty heap. |
+| **Heap.push** value heap<br><pre><code>`a -> Heap a -> Heap a`</code></pre> | Inserts `value` into the heap. |
+| **Heap.popMin** heap<br><pre><code>`Heap a -> Option (a, Heap a)`</code></pre> | Removes and returns the smallest value and remaining heap. |
+| **Heap.peekMin** heap<br><pre><code>`Heap a -> Option a`</code></pre> | Returns the smallest value without removing it. |
 
 `Heap` ordering is determined by `Ord` for the element type.

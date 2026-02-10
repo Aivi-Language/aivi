@@ -46,42 +46,10 @@ type ServerReply
 
 ## Functions
 
-### `listen`
-
-```aivi
-listen : ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource Server
-```
-
-Starts a server and yields a `Server` resource. The resource will stop the server on cleanup.
-
-### `stop`
-
-```aivi
-stop : Server -> Effect HttpError Unit
-```
-
-Stops a running server.
-
-### `wsRecv`
-
-```aivi
-wsRecv : WebSocket -> Effect WsError WsMessage
-```
-
-Receives the next WebSocket message.
-
-### `wsSend`
-
-```aivi
-wsSend : WebSocket -> WsMessage -> Effect WsError Unit
-```
-
-Sends a WebSocket message.
-
-### `wsClose`
-
-```aivi
-wsClose : WebSocket -> Effect WsError Unit
-```
-
-Closes the WebSocket connection.
+| Function | Explanation |
+| --- | --- |
+| **listen** config handler<br><pre><code>`ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource Server`</code></pre> | Starts a server and yields a `Server` resource that stops on cleanup. |
+| **stop** server<br><pre><code>`Server -> Effect HttpError Unit`</code></pre> | Stops a running server instance. |
+| **wsRecv** socket<br><pre><code>`WebSocket -> Effect WsError WsMessage`</code></pre> | Receives the next WebSocket message. |
+| **wsSend** socket message<br><pre><code>`WebSocket -> WsMessage -> Effect WsError Unit`</code></pre> | Sends a WebSocket message. |
+| **wsClose** socket<br><pre><code>`WebSocket -> Effect WsError Unit`</code></pre> | Closes the WebSocket connection. |

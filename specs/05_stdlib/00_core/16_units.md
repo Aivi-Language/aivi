@@ -43,16 +43,11 @@ domain Units over Quantity = {
 
 ## Helper Functions
 
-```aivi
-defineUnit : Text -> Float -> Unit
-defineUnit name factor = { name: name, factor: factor }
-
-convert : Quantity -> Unit -> Quantity
-convert q target = { value: q.value * (q.unit.factor / target.factor), unit: target }
-
-sameUnit : Quantity -> Quantity -> Bool
-sameUnit a b = a.unit.name == b.unit.name
-```
+| Function | Explanation |
+| --- | --- |
+| **defineUnit** name factor<br><pre><code>`Text -> Float -> Unit`</code></pre> | Creates a unit with a scale factor relative to the base unit. |
+| **convert** quantity target<br><pre><code>`Quantity -> Unit -> Quantity`</code></pre> | Converts a quantity into the target unit. |
+| **sameUnit** a b<br><pre><code>`Quantity -> Quantity -> Bool`</code></pre> | Returns whether two quantities share the same unit name. |
 
 ## Usage Examples
 

@@ -45,37 +45,14 @@ domain Color over Rgb = {
 
 ## Helper Functions
 
-```aivi
-adjustLightness : Rgb -> Int -> Rgb
-adjustLightness col n = 
-  col
-    |> toHsl
-    |> (hsl => hsl <| { l: clamp 0 1 (hsl.l + n / 100) })
-    |> toRgb
-
-adjustSaturation : Rgb -> Int -> Rgb
-adjustSaturation col n =
-  col
-    |> toHsl
-    |> (hsl => hsl <| { s: clamp 0 1 (hsl.s + n / 100) })
-    |> toRgb
-
-adjustHue : Rgb -> Int -> Rgb
-adjustHue col n =
-  col
-    |> toHsl
-    |> (hsl => hsl <| { h: (hsl.h + n) % 360 })
-    |> toRgb
-
-toRgb : Hsl -> Rgb
-toRgb { h, s, l } = // HSL to RGB conversion
-
-toHsl : Rgb -> Hsl
-toHsl { r, g, b } = // RGB to HSL conversion
-
-toHex : Rgb -> Hex
-toHex { r, g, b } = // Format as "#rrggbb"
-```
+| Function | Explanation |
+| --- | --- |
+| **adjustLightness** color amount<br><pre><code>`Rgb -> Int -> Rgb`</code></pre> | Increases or decreases lightness by a percentage. |
+| **adjustSaturation** color amount<br><pre><code>`Rgb -> Int -> Rgb`</code></pre> | Increases or decreases saturation by a percentage. |
+| **adjustHue** color degrees<br><pre><code>`Rgb -> Int -> Rgb`</code></pre> | Rotates hue by degrees. |
+| **toRgb** hsl<br><pre><code>`Hsl -> Rgb`</code></pre> | Converts HSL to RGB. |
+| **toHsl** rgb<br><pre><code>`Rgb -> Hsl`</code></pre> | Converts RGB to HSL. |
+| **toHex** rgb<br><pre><code>`Rgb -> Hex`</code></pre> | Renders RGB as a hex string. |
 
 ## Usage Examples
 

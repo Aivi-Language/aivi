@@ -42,19 +42,12 @@ domain Probability over Probability = {
 
 ## Helper Functions
 
-```aivi
-clamp : Probability -> Probability
-clamp p = max 0.0 (min 1.0 p)
-
-bernoulli : Probability -> Distribution Bool
-bernoulli p = { pdf: \x -> if x then clamp p else clamp (1.0 - p) }
-
-uniform : Float -> Float -> Distribution Float
-uniform lo hi = { pdf: \x -> if x < lo || x > hi then 0.0 else 1.0 / (hi - lo) }
-
-expectation : Distribution Float -> Float -> Float
-expectation d x = x * d.pdf x
-```
+| Function | Explanation |
+| --- | --- |
+| **clamp** p<br><pre><code>`Probability -> Probability`</code></pre> | Bounds `p` into `[0.0, 1.0]`. |
+| **bernoulli** p<br><pre><code>`Probability -> Distribution Bool`</code></pre> | Creates a distribution over `Bool` with success probability `p`. |
+| **uniform** lo hi<br><pre><code>`Float -> Float -> Distribution Float`</code></pre> | Creates a uniform distribution over `[lo, hi]`. |
+| **expectation** dist x<br><pre><code>`Distribution Float -> Float -> Float`</code></pre> | Returns the contribution of `x` to the expected value. |
 
 ## Usage Examples
 

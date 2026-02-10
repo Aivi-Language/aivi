@@ -10,26 +10,8 @@ use aivi.crypto
 
 ## Functions
 
-### `sha256`
-
-```aivi
-sha256 : String -> String
-```
-
-Computes the SHA-256 hash of a string (hex encoded).
-
-### `randomUuid`
-
-```aivi
-randomUuid : Unit -> Effect String
-```
-
-Generates a random UUID v4.
-
-### `randomBytes`
-
-```aivi
-randomBytes : Int -> Effect Bytes
-```
-
-Generates `n` random bytes.
+| Function | Explanation |
+| --- | --- |
+| **sha256** text<br><pre><code>`String -> String`</code></pre> | Returns the SHA-256 hash of `text` encoded as hex. |
+| **randomUuid** :()<br><pre><code>`Unit -> Effect String`</code></pre> | Generates a random UUID v4. |
+| **randomBytes** n<br><pre><code>`Int -> Effect Bytes`</code></pre> | Generates `n` random bytes. |

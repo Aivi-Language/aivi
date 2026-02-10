@@ -40,10 +40,10 @@ domain BigInt over BigInt = {
 
 Helpers:
 
-```aivi
-fromInt : Int -> BigInt
-toInt : BigInt -> Int
-```
+| Function | Explanation |
+| --- | --- |
+| **fromInt** value<br><pre><code>`Int -> BigInt`</code></pre> | Converts a machine `Int` into `BigInt`. |
+| **toInt** value<br><pre><code>`BigInt -> Int`</code></pre> | Converts a `BigInt` to `Int` (may overflow in implementations). |
 
 Example:
 
@@ -77,11 +77,11 @@ domain Decimal over Decimal = {
 
 Helpers:
 
-```aivi
-fromFloat : Float -> Decimal
-toFloat : Decimal -> Float
-round : Decimal -> Int -> Decimal
-```
+| Function | Explanation |
+| --- | --- |
+| **fromFloat** value<br><pre><code>`Float -> Decimal`</code></pre> | Converts a `Float` into `Decimal` using base-10 rounding rules. |
+| **toFloat** value<br><pre><code>`Decimal -> Float`</code></pre> | Converts a `Decimal` into a `Float`. |
+| **round** value places<br><pre><code>`Decimal -> Int -> Decimal`</code></pre> | Rounds to `places` decimal digits. |
 
 Example:
 
@@ -113,11 +113,11 @@ domain Rational over Rational = {
 
 Helpers:
 
-```aivi
-normalize : Rational -> Rational
-numerator : Rational -> BigInt
-denominator : Rational -> BigInt
-```
+| Function | Explanation |
+| --- | --- |
+| **normalize** r<br><pre><code>`Rational -> Rational`</code></pre> | Reduces a fraction to lowest terms. |
+| **numerator** r<br><pre><code>`Rational -> BigInt`</code></pre> | Returns the numerator. |
+| **denominator** r<br><pre><code>`Rational -> BigInt`</code></pre> | Returns the denominator. |
 
 Example:
 
@@ -209,24 +209,12 @@ domain Quaternion over Quaternion = {
 }
 ```
 
-```aivi
-fromAxisAngle : { x: Float, y: Float, z: Float } -> Float -> Quaternion
-fromAxisAngle axis theta = {
-  w: cos (theta / 2.0),
-  x: axis.x * sin (theta / 2.0),
-  y: axis.y * sin (theta / 2.0),
-  z: axis.z * sin (theta / 2.0)
-}
-
-conjugate : Quaternion -> Quaternion
-conjugate q = { w: q.w, x: -q.x, y: -q.y, z: -q.z }
-
-magnitude : Quaternion -> Float
-magnitude q = sqrt (q.w * q.w + q.x * q.x + q.y * q.y + q.z * q.z)
-
-normalize : Quaternion -> Quaternion
-normalize q = q / magnitude q
-```
+| Function | Explanation |
+| --- | --- |
+| **fromAxisAngle** axis theta<br><pre><code>`{ x: Float, y: Float, z: Float } -> Float -> Quaternion`</code></pre> | Creates a rotation from axis/angle. |
+| **conjugate** q<br><pre><code>`Quaternion -> Quaternion`</code></pre> | Negates the vector part. |
+| **magnitude** q<br><pre><code>`Quaternion -> Float`</code></pre> | Returns the quaternion length. |
+| **normalize** q<br><pre><code>`Quaternion -> Quaternion`</code></pre> | Returns a unit-length quaternion. |
 
 ```aivi
 use aivi.number.quaternion
