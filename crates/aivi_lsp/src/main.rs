@@ -4,21 +4,26 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use aivi::{
-    parse_modules, BlockItem, ClassDecl, Def, DomainDecl, DomainItem, Expr, InstanceDecl, ListItem,
-    Literal, MatchArm, Module, ModuleItem, PathSegment, Pattern, RecordField, RecordPatternField,
-    Span, SpannedName, TypeAlias, TypeCtor, TypeDecl, TypeExpr, UseDecl,
+    infer_value_types, lex_cst, parse_modules, BlockItem, ClassDecl, CstToken, Def, DomainDecl,
+    DomainItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment,
+    Pattern, RecordField, RecordPatternField, Span, SpannedName, TypeAlias, TypeCtor, TypeDecl,
+    TypeExpr, UseDecl,
 };
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
+    CodeAction, CodeActionKind, CodeActionOrCommand, CodeActionParams, CodeActionProviderCapability,
     CompletionItem, CompletionItemKind, CompletionParams, CompletionResponse, DeclarationCapability,
     Diagnostic, DiagnosticSeverity, DocumentSymbol, DocumentSymbolParams, DocumentSymbolResponse,
     GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverContents, HoverParams,
     HoverProviderCapability, ImplementationProviderCapability, InitializeParams, InitializeResult,
-    InitializedParams, Location, MarkupContent, MarkupKind, OneOf, Position, Range,
-    ReferenceParams, ServerCapabilities, SignatureHelp, SignatureHelpOptions, SignatureHelpParams,
-    SignatureInformation, SymbolKind, TextDocumentPositionParams, TextDocumentSyncCapability,
-    TextDocumentSyncKind, Url,
+    InitializedParams, Location, MarkupContent, MarkupKind, NumberOrString, OneOf, Position, Range,
+    ReferenceParams, RenameParams, SemanticToken, SemanticTokenType, SemanticTokens,
+    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
+    SemanticTokensResult, SemanticTokensServerCapabilities, ServerCapabilities, SignatureHelp,
+    SignatureHelpOptions, SignatureHelpParams, SignatureInformation, SymbolKind,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url,
+    WorkspaceEdit,
 };
 use tower_lsp::lsp_types::request::{GotoDeclarationParams, GotoDeclarationResponse, GotoImplementationParams, GotoImplementationResponse};
 use tower_lsp::{Client, LanguageServer, LspService, Server};
@@ -62,6 +67,146 @@ impl Backend {
         "where",
     ];
     const SIGILS: [&'static str; 4] = ["~r//", "~u()", "~d()", "~dt()"];
+
+    const SEM_TOKEN_KEYWORD: u32 = 0;
+    const SEM_TOKEN_TYPE: u32 = 1;
+    const SEM_TOKEN_FUNCTION: u32 = 2;
+    const SEM_TOKEN_VARIABLE: u32 = 3;
+    const SEM_TOKEN_NUMBER: u32 = 4;
+    const SEM_TOKEN_STRING: u32 = 5;
+    const SEM_TOKEN_COMMENT: u32 = 6;
+    const SEM_TOKEN_OPERATOR: u32 = 7;
+    const SEM_TOKEN_DECORATOR: u32 = 8;
+
+    fn semantic_tokens_legend() -> SemanticTokensLegend {
+        SemanticTokensLegend {
+            token_types: vec![
+                SemanticTokenType::KEYWORD,
+                SemanticTokenType::TYPE,
+                SemanticTokenType::FUNCTION,
+                SemanticTokenType::VARIABLE,
+                SemanticTokenType::NUMBER,
+                SemanticTokenType::STRING,
+                SemanticTokenType::COMMENT,
+                SemanticTokenType::OPERATOR,
+                SemanticTokenType::DECORATOR,
+            ],
+            token_modifiers: Vec::new(),
+        }
+    }
+
+    fn is_operator_symbol(symbol: &str) -> bool {
+        matches!(
+            symbol,
+            "=" | "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||" | "!" | "?"
+                | "??" | "+" | "-" | "*" | "/" | "%" | "->" | "=>" | "|>" | "<|"
+                | "::" | ".." | "..." | ":" | "."
+        )
+    }
+
+    fn classify_semantic_token(
+        prev: Option<&CstToken>,
+        token: &CstToken,
+        next: Option<&CstToken>,
+    ) -> Option<u32> {
+        match token.kind.as_str() {
+            "comment" => Some(Self::SEM_TOKEN_COMMENT),
+            "string" => Some(Self::SEM_TOKEN_STRING),
+            "sigil" => Some(Self::SEM_TOKEN_STRING),
+            "number" => Some(Self::SEM_TOKEN_NUMBER),
+            "symbol" => {
+                if token.text == "@" {
+                    Some(Self::SEM_TOKEN_DECORATOR)
+                } else if Self::is_operator_symbol(&token.text) {
+                    Some(Self::SEM_TOKEN_OPERATOR)
+                } else {
+                    None
+                }
+            }
+            "ident" => {
+                if Self::KEYWORDS.contains(&token.text.as_str()) {
+                    return Some(Self::SEM_TOKEN_KEYWORD);
+                }
+                if prev.is_some_and(|prev| prev.kind == "symbol" && prev.text == "@") {
+                    return Some(Self::SEM_TOKEN_DECORATOR);
+                }
+                if matches!(next, Some(next) if next.kind == "symbol" && (next.text == ":" || next.text == "="))
+                {
+                    return Some(Self::SEM_TOKEN_FUNCTION);
+                }
+                if token.text.chars().next().is_some_and(|ch| ch.is_ascii_uppercase()) {
+                    Some(Self::SEM_TOKEN_TYPE)
+                } else {
+                    Some(Self::SEM_TOKEN_VARIABLE)
+                }
+            }
+            _ => None,
+        }
+    }
+
+    fn build_semantic_tokens(text: &str) -> SemanticTokens {
+        let (tokens, _) = lex_cst(text);
+        let significant: Vec<usize> = tokens
+            .iter()
+            .enumerate()
+            .filter(|(_, token)| token.kind != "whitespace")
+            .map(|(idx, _)| idx)
+            .collect();
+
+        let mut data = Vec::new();
+        let mut last_line = 0u32;
+        let mut last_start = 0u32;
+
+        for (position, token_index) in significant.iter().copied().enumerate() {
+            let token = &tokens[token_index];
+            let prev = position
+                .checked_sub(1)
+                .and_then(|prev| significant.get(prev))
+                .map(|idx| &tokens[*idx]);
+            let next = significant
+                .get(position + 1)
+                .map(|idx| &tokens[*idx]);
+
+            let Some(token_type) = Self::classify_semantic_token(prev, token, next) else {
+                continue;
+            };
+
+            let line = token.span.start.line.saturating_sub(1) as u32;
+            let start = token.span.start.column.saturating_sub(1) as u32;
+            let len = token
+                .span
+                .end
+                .column
+                .saturating_sub(token.span.start.column)
+                .saturating_add(1) as u32;
+            if len == 0 {
+                continue;
+            }
+
+            let delta_line = line.saturating_sub(last_line);
+            let delta_start = if delta_line == 0 {
+                start.saturating_sub(last_start)
+            } else {
+                start
+            };
+
+            data.push(SemanticToken {
+                delta_line,
+                delta_start,
+                length: len,
+                token_type,
+                token_modifiers_bitset: 0,
+            });
+
+            last_line = line;
+            last_start = start;
+        }
+
+        SemanticTokens {
+            result_id: None,
+            data,
+        }
+    }
 
     fn span_to_range(span: Span) -> Range {
         let start_line = span.start.line.saturating_sub(1) as u32;
@@ -184,8 +329,13 @@ impl Backend {
         let ident = Self::extract_identifier(text, position)?;
         let path = PathBuf::from(Self::path_from_uri(uri));
         let (modules, _) = parse_modules(&path, text);
-        for module in modules {
-            if let Some(contents) = Self::hover_contents_for_module(&module, &ident) {
+        let (_, inferred) = infer_value_types(&modules);
+        for module in modules.iter() {
+            let doc = Self::doc_for_ident(text, module, &ident);
+            let inferred = inferred.get(&module.name.name);
+            if let Some(contents) =
+                Self::hover_contents_for_module(module, &ident, inferred, doc.as_deref())
+            {
                 return Some(Hover {
                     contents: HoverContents::Markup(MarkupContent {
                         kind: MarkupKind::Markdown,
@@ -209,7 +359,42 @@ impl Backend {
         let (modules, _) = parse_modules(&path, text);
         let current_module = Self::module_at_position(&modules, position)?;
 
-        if let Some(contents) = Self::hover_contents_for_module(current_module, &ident) {
+        let workspace_module_list: Vec<Module> = workspace_modules
+            .values()
+            .map(|indexed| indexed.module.clone())
+            .collect();
+        let (_, inferred) = infer_value_types(&workspace_module_list);
+
+        if ident.contains('.') {
+            if let Some(indexed) = workspace_modules.get(&ident) {
+                let doc_text = indexed
+                    .uri
+                    .to_file_path()
+                    .ok()
+                    .and_then(|path| fs::read_to_string(path).ok());
+                let doc = doc_text
+                    .as_deref()
+                    .and_then(|text| Self::doc_for_ident(text, &indexed.module, &ident));
+                let inferred = inferred.get(&indexed.module.name.name);
+                if let Some(contents) =
+                    Self::hover_contents_for_module(&indexed.module, &ident, inferred, doc.as_deref())
+                {
+                    return Some(Hover {
+                        contents: HoverContents::Markup(MarkupContent {
+                            kind: MarkupKind::Markdown,
+                            value: contents,
+                        }),
+                        range: None,
+                    });
+                }
+            }
+        }
+
+        let doc = Self::doc_for_ident(text, current_module, &ident);
+        let inferred_current = inferred.get(&current_module.name.name);
+        if let Some(contents) =
+            Self::hover_contents_for_module(current_module, &ident, inferred_current, doc.as_deref())
+        {
             return Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
                     kind: MarkupKind::Markdown,
@@ -228,7 +413,18 @@ impl Backend {
             let Some(indexed) = workspace_modules.get(&use_decl.module.name) else {
                 continue;
             };
-            if let Some(contents) = Self::hover_contents_for_module(&indexed.module, &ident) {
+            let doc_text = indexed
+                .uri
+                .to_file_path()
+                .ok()
+                .and_then(|path| fs::read_to_string(path).ok());
+            let doc = doc_text
+                .as_deref()
+                .and_then(|text| Self::doc_for_ident(text, &indexed.module, &ident));
+            let inferred = inferred.get(&indexed.module.name.name);
+            if let Some(contents) =
+                Self::hover_contents_for_module(&indexed.module, &ident, inferred, doc.as_deref())
+            {
                 return Some(Hover {
                     contents: HoverContents::Markup(MarkupContent {
                         kind: MarkupKind::Markdown,
@@ -322,9 +518,139 @@ impl Backend {
         locations
     }
 
-    fn hover_contents_for_module(module: &Module, ident: &str) -> Option<String> {
+    fn build_rename_with_workspace(
+        text: &str,
+        uri: &Url,
+        position: Position,
+        new_name: &str,
+        workspace_modules: &HashMap<String, IndexedModule>,
+    ) -> Option<WorkspaceEdit> {
+        let _ident = Self::extract_identifier(text, position)?;
+
+        if new_name.is_empty() || new_name.contains('.') {
+            return None;
+        }
+        let mut chars = new_name.chars();
+        let Some(first) = chars.next() else {
+            return None;
+        };
+        if !(first.is_ascii_alphabetic() || first == '_') {
+            return None;
+        }
+        if !chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_') {
+            return None;
+        }
+
+        let locations =
+            Self::build_references_with_workspace(text, uri, position, true, workspace_modules);
+        if locations.is_empty() {
+            return None;
+        }
+
+        let mut changes: HashMap<Url, Vec<TextEdit>> = HashMap::new();
+        for location in locations {
+            changes.entry(location.uri).or_default().push(TextEdit {
+                range: location.range,
+                new_text: new_name.to_string(),
+            });
+        }
+
+        Some(WorkspaceEdit {
+            changes: Some(changes),
+            document_changes: None,
+            change_annotations: None,
+        })
+    }
+
+    fn doc_block_above(text: &str, line: usize) -> Option<String> {
+        let lines: Vec<&str> = text.lines().collect();
+        let Some(mut index) = line.checked_sub(2) else {
+            return None;
+        };
+        let mut docs = Vec::new();
+        loop {
+            let current = lines.get(index)?.trim_start();
+            if current.is_empty() {
+                break;
+            }
+            let Some(body) = current.strip_prefix("//") else {
+                break;
+            };
+            docs.push(body.strip_prefix(' ').unwrap_or(body).to_string());
+            if index == 0 {
+                break;
+            }
+            index -= 1;
+        }
+        docs.reverse();
+        (!docs.is_empty()).then_some(docs.join("\n"))
+    }
+
+    fn decl_line_for_ident(module: &Module, ident: &str) -> Option<usize> {
         if module.name.name == ident {
-            return Some(format!("module `{}`", module.name.name));
+            return Some(module.name.span.start.line);
+        }
+        for item in module.items.iter() {
+            match item {
+                ModuleItem::Def(def) if def.name.name == ident => {
+                    return Some(def.name.span.start.line);
+                }
+                ModuleItem::TypeSig(sig) if sig.name.name == ident => {
+                    return Some(sig.name.span.start.line);
+                }
+                ModuleItem::TypeDecl(decl) if decl.name.name == ident => {
+                    return Some(decl.name.span.start.line);
+                }
+                ModuleItem::TypeAlias(alias) if alias.name.name == ident => {
+                    return Some(alias.name.span.start.line);
+                }
+                ModuleItem::ClassDecl(class_decl) if class_decl.name.name == ident => {
+                    return Some(class_decl.name.span.start.line);
+                }
+                ModuleItem::InstanceDecl(instance_decl) if instance_decl.name.name == ident => {
+                    return Some(instance_decl.name.span.start.line);
+                }
+                ModuleItem::DomainDecl(domain_decl) if domain_decl.name.name == ident => {
+                    return Some(domain_decl.name.span.start.line);
+                }
+                ModuleItem::DomainDecl(domain_decl) => {
+                    for domain_item in domain_decl.items.iter() {
+                        match domain_item {
+                            DomainItem::TypeAlias(type_decl) if type_decl.name.name == ident => {
+                                return Some(type_decl.name.span.start.line);
+                            }
+                            DomainItem::TypeSig(sig) if sig.name.name == ident => {
+                                return Some(sig.name.span.start.line);
+                            }
+                            DomainItem::Def(def) | DomainItem::LiteralDef(def)
+                                if def.name.name == ident =>
+                            {
+                                return Some(def.name.span.start.line);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    fn doc_for_ident(text: &str, module: &Module, ident: &str) -> Option<String> {
+        let line = Self::decl_line_for_ident(module, ident)?;
+        Self::doc_block_above(text, line)
+    }
+
+    fn hover_contents_for_module(
+        module: &Module,
+        ident: &str,
+        inferred: Option<&HashMap<String, String>>,
+        doc: Option<&str>,
+    ) -> Option<String> {
+        let mut base = None;
+        if module.name.name == ident {
+            base = Some(format!("module `{}`", module.name.name));
         }
         let mut type_signatures = HashMap::new();
         for item in module.items.iter() {
@@ -335,39 +661,64 @@ impl Backend {
                 );
             }
         }
-        if let Some(sig) = type_signatures.get(ident) {
-            return Some(sig.clone());
-        }
-        for item in module.items.iter() {
-            if let Some(contents) = Self::hover_contents_for_item(item, ident, &type_signatures) {
-                return Some(contents);
+        if base.is_none() {
+            if let Some(sig) = type_signatures.get(ident) {
+                base = Some(sig.clone());
             }
         }
-        for domain in module
-            .items
-            .iter()
-            .filter_map(|item| match item {
-                ModuleItem::DomainDecl(domain) => Some(domain),
-                _ => None,
-            })
-        {
-            if let Some(contents) = Self::hover_contents_for_domain(domain, ident) {
-                return Some(contents);
+        if base.is_none() {
+            for item in module.items.iter() {
+                if let Some(contents) =
+                    Self::hover_contents_for_item(item, ident, &type_signatures, inferred)
+                {
+                    base = Some(contents);
+                    break;
+                }
             }
         }
-        None
+        if base.is_none() {
+            for domain in module
+                .items
+                .iter()
+                .filter_map(|item| match item {
+                    ModuleItem::DomainDecl(domain) => Some(domain),
+                    _ => None,
+                })
+            {
+                if let Some(contents) = Self::hover_contents_for_domain(domain, ident, inferred) {
+                    base = Some(contents);
+                    break;
+                }
+            }
+        }
+
+        let mut base = base?;
+        if let Some(doc) = doc {
+            let doc = doc.trim();
+            if !doc.is_empty() {
+                base.push_str("\n\n");
+                base.push_str(doc);
+            }
+        }
+        Some(base)
     }
 
     fn hover_contents_for_item(
         item: &ModuleItem,
         ident: &str,
         type_signatures: &HashMap<String, String>,
+        inferred: Option<&HashMap<String, String>>,
     ) -> Option<String> {
         match item {
             ModuleItem::Def(def) => {
                 if def.name.name == ident {
-                    let fallback = format!("`{}`", def.name.name);
-                    return Some(type_signatures.get(ident).cloned().unwrap_or(fallback));
+                    if let Some(sig) = type_signatures.get(ident) {
+                        return Some(sig.clone());
+                    }
+                    if let Some(ty) = inferred.and_then(|types| types.get(ident)) {
+                        return Some(format!("`{}` : `{}`", def.name.name, ty));
+                    }
+                    return Some(format!("`{}`", def.name.name));
                 }
             }
             ModuleItem::TypeSig(sig) => {
@@ -417,7 +768,23 @@ impl Backend {
         None
     }
 
-    fn hover_contents_for_domain(domain_decl: &DomainDecl, ident: &str) -> Option<String> {
+    fn hover_contents_for_domain(
+        domain_decl: &DomainDecl,
+        ident: &str,
+        inferred: Option<&HashMap<String, String>>,
+    ) -> Option<String> {
+        let mut type_signatures = HashMap::new();
+        for item in domain_decl.items.iter() {
+            if let DomainItem::TypeSig(sig) = item {
+                type_signatures.insert(
+                    sig.name.name.clone(),
+                    format!("`{}` : `{}`", sig.name.name, Self::type_expr_to_string(&sig.ty)),
+                );
+            }
+        }
+        if let Some(sig) = type_signatures.get(ident) {
+            return Some(sig.clone());
+        }
         for item in domain_decl.items.iter() {
             match item {
                 DomainItem::TypeAlias(type_decl) => {
@@ -425,8 +792,15 @@ impl Backend {
                         return Some(format!("`{}`", Self::format_type_decl(type_decl)));
                     }
                 }
+                DomainItem::TypeSig(_) => {}
                 DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
                     if def.name.name == ident {
+                        if let Some(sig) = type_signatures.get(ident) {
+                            return Some(sig.clone());
+                        }
+                        if let Some(ty) = inferred.and_then(|types| types.get(ident)) {
+                            return Some(format!("`{}` : `{}`", def.name.name, ty));
+                        }
                         return Some(format!("`{}`", def.name.name));
                     }
                 }
@@ -695,6 +1069,7 @@ impl Backend {
                 DomainItem::TypeAlias(decl) => {
                     Self::collect_type_decl_references(decl, ident, uri, include_declaration, locations);
                 }
+                DomainItem::TypeSig(_) => {}
                 DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
                     Self::collect_def_references(def, ident, uri, include_declaration, locations);
                 }
@@ -1163,6 +1538,7 @@ impl Backend {
                                     }
                                 }
                             }
+                            DomainItem::TypeSig(_) => {}
                             DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
                                 if def.name.name == ident {
                                     return Some(Self::span_to_range(def.name.span.clone()));
@@ -1404,7 +1780,7 @@ impl Backend {
                     DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
                         Self::find_call_info(&def.expr, position)
                     }
-                    DomainItem::TypeAlias(_) => None,
+                    DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => None,
                 }
             }),
             _ => None,
@@ -1553,7 +1929,7 @@ impl Backend {
             .map(|file_diag| Diagnostic {
                 range: Self::span_to_range(file_diag.diagnostic.span),
                 severity: Some(DiagnosticSeverity::ERROR),
-                code: None,
+                code: Some(NumberOrString::String(file_diag.diagnostic.code)),
                 code_description: None,
                 source: Some("aivi".to_string()),
                 message: file_diag.diagnostic.message,
@@ -1562,6 +1938,141 @@ impl Backend {
                 data: None,
             })
             .collect()
+    }
+
+    fn end_position(text: &str) -> Position {
+        let mut line = 0u32;
+        let mut column = 0u32;
+        for ch in text.chars() {
+            if ch == '\n' {
+                line += 1;
+                column = 0;
+            } else {
+                column += 1;
+            }
+        }
+        Position::new(line, column)
+    }
+
+    fn end_of_line_position(text: &str, line: u32) -> Position {
+        let parts: Vec<&str> = text.split('\n').collect();
+        let column = parts
+            .get(line as usize)
+            .map(|line| line.chars().count() as u32)
+            .unwrap_or(0);
+        Position::new(line, column)
+    }
+
+    fn closing_for(open: char) -> Option<char> {
+        match open {
+            '{' => Some('}'),
+            '(' => Some(')'),
+            '[' => Some(']'),
+            _ => None,
+        }
+    }
+
+    fn unclosed_open_delimiter(message: &str) -> Option<char> {
+        let start = message.find('\'')?;
+        let rest = &message[start + 1..];
+        let mut chars = rest.chars();
+        let open = chars.next()?;
+        let end = chars.next()?;
+        (end == '\'').then_some(open)
+    }
+
+    fn build_code_actions(
+        text: &str,
+        uri: &Url,
+        diagnostics: &[Diagnostic],
+    ) -> Vec<CodeActionOrCommand> {
+        let mut out = Vec::new();
+        for diagnostic in diagnostics {
+            let code = match diagnostic.code.as_ref() {
+                Some(NumberOrString::String(code)) => code.as_str(),
+                Some(NumberOrString::Number(_)) => continue,
+                None => continue,
+            };
+
+            match code {
+                "E1004" => {
+                    let Some(open) = Self::unclosed_open_delimiter(&diagnostic.message) else {
+                        continue;
+                    };
+                    let Some(close) = Self::closing_for(open) else {
+                        continue;
+                    };
+                    let position = Self::end_position(text);
+                    let range = Range::new(position, position);
+                    let edit = TextEdit {
+                        range,
+                        new_text: close.to_string(),
+                    };
+                    out.push(CodeActionOrCommand::CodeAction(CodeAction {
+                        title: format!("Insert missing '{close}'"),
+                        kind: Some(CodeActionKind::QUICKFIX),
+                        diagnostics: Some(vec![diagnostic.clone()]),
+                        edit: Some(WorkspaceEdit {
+                            changes: Some(HashMap::from([(uri.clone(), vec![edit])])),
+                            document_changes: None,
+                            change_annotations: None,
+                        }),
+                        command: None,
+                        is_preferred: Some(true),
+                        disabled: None,
+                        data: None,
+                    }));
+                }
+                "E1002" => {
+                    out.push(CodeActionOrCommand::CodeAction(CodeAction {
+                        title: "Remove unmatched closing delimiter".to_string(),
+                        kind: Some(CodeActionKind::QUICKFIX),
+                        diagnostics: Some(vec![diagnostic.clone()]),
+                        edit: Some(WorkspaceEdit {
+                            changes: Some(HashMap::from([(
+                                uri.clone(),
+                                vec![TextEdit {
+                                    range: diagnostic.range,
+                                    new_text: String::new(),
+                                }],
+                            )])),
+                            document_changes: None,
+                            change_annotations: None,
+                        }),
+                        command: None,
+                        is_preferred: Some(true),
+                        disabled: None,
+                        data: None,
+                    }));
+                }
+                "E1001" => {
+                    let position = Self::end_of_line_position(text, diagnostic.range.end.line);
+                    let range = Range::new(position, position);
+                    out.push(CodeActionOrCommand::CodeAction(CodeAction {
+                        title: "Insert missing closing quote".to_string(),
+                        kind: Some(CodeActionKind::QUICKFIX),
+                        diagnostics: Some(vec![diagnostic.clone()]),
+                        edit: Some(WorkspaceEdit {
+                            changes: Some(HashMap::from([(
+                                uri.clone(),
+                                vec![TextEdit {
+                                    range,
+                                    new_text: "\"".to_string(),
+                                }],
+                            )])),
+                            document_changes: None,
+                            change_annotations: None,
+                        }),
+                        command: None,
+                        is_preferred: Some(true),
+                        disabled: None,
+                        data: None,
+                    }));
+                }
+                _ => {}
+            }
+        }
+        out
     }
 
     fn build_document_symbols(text: &str, uri: &Url) -> Vec<DocumentSymbol> {
@@ -1694,6 +2205,19 @@ impl Backend {
                                 name: type_alias.name.name,
                                 detail: Some("domain type".to_string()),
                                 kind: SymbolKind::TYPE_PARAMETER,
+                                tags: None,
+                                deprecated: None,
+                                range,
+                                selection_range: range,
+                                children: None,
+                            });
+                        }
+                        DomainItem::TypeSig(sig) => {
+                            let range = Self::span_to_range(sig.span);
+                            children.push(DocumentSymbol {
+                                name: sig.name.name,
+                                detail: Some("domain sig".to_string()),
+                                kind: SymbolKind::FUNCTION,
                                 tags: None,
                                 deprecated: None,
                                 range,
@@ -1947,6 +2471,27 @@ module examples.compiler.app = {
     }
 
     #[test]
+    fn build_hover_includes_docs_and_inferred_types() {
+        let text = r#"@no_prelude
+module examples.docs = {
+  // Identity function.
+  id = x => x
+
+  run = id 1
+}
+"#;
+        let uri = sample_uri();
+        let position = position_for(text, "id 1");
+        let hover = Backend::build_hover(text, &uri, position).expect("hover found");
+        let HoverContents::Markup(markup) = hover.contents else {
+            panic!("expected markup hover");
+        };
+        assert!(markup.value.contains("`id`"));
+        assert!(markup.value.contains(":"));
+        assert!(markup.value.contains("Identity function."));
+    }
+
+    #[test]
     fn build_references_finds_symbol_mentions() {
         let text = sample_text();
         let uri = sample_uri();
@@ -2065,6 +2610,69 @@ module examples.compiler.app = {
     }
 
     #[test]
+    fn build_rename_edits_across_modules() {
+        let math_text = r#"@no_prelude
+module examples.compiler.math = {
+  export add
+  add : Number -> Number -> Number
+  add = x y => x + y
+}
+"#;
+        let app_text = r#"@no_prelude
+module examples.compiler.app = {
+  export run
+  use examples.compiler.math (add)
+  run = add 1 2
+}
+"#;
+
+        let math_uri = Url::parse("file:///math.aivi").expect("valid uri");
+        let app_uri = Url::parse("file:///app.aivi").expect("valid uri");
+
+        let mut workspace = HashMap::new();
+        let math_path = PathBuf::from("math.aivi");
+        let (math_modules, _) = parse_modules(&math_path, math_text);
+        for module in math_modules {
+            workspace.insert(
+                module.name.name.clone(),
+                IndexedModule {
+                    uri: math_uri.clone(),
+                    module,
+                },
+            );
+        }
+        let app_path = PathBuf::from("app.aivi");
+        let (app_modules, _) = parse_modules(&app_path, app_text);
+        for module in app_modules {
+            workspace.insert(
+                module.name.name.clone(),
+                IndexedModule {
+                    uri: app_uri.clone(),
+                    module,
+                },
+            );
+        }
+
+        let position = position_for(app_text, "add 1 2");
+        let edit = Backend::build_rename_with_workspace(
+            app_text,
+            &app_uri,
+            position,
+            "sum",
+            &workspace,
+        )
+        .expect("rename edit");
+
+        let changes = edit.changes.expect("changes");
+        assert!(changes.contains_key(&math_uri));
+        assert!(changes.contains_key(&app_uri));
+        assert!(changes
+            .values()
+            .flatten()
+            .all(|edit| edit.new_text == "sum"));
+    }
+
+    #[test]
     fn build_diagnostics_reports_error() {
         let text = "module broken = {";
         let uri = sample_uri();
@@ -2072,6 +2680,44 @@ module examples.compiler.app = {
         assert!(!diagnostics.is_empty());
         assert_eq!(diagnostics[0].severity, Some(DiagnosticSeverity::ERROR));
         assert_eq!(diagnostics[0].source.as_deref(), Some("aivi"));
+    }
+
+    #[test]
+    fn code_actions_offer_quick_fix_for_unclosed_delimiter() {
+        let text = "module broken = {";
+        let uri = sample_uri();
+        let diagnostics = Backend::build_diagnostics(text, &uri);
+        let actions = Backend::build_code_actions(text, &uri, &diagnostics);
+        let expected_pos = Backend::end_position(text);
+
+        let mut saw_fix = false;
+        for action in actions {
+            let CodeActionOrCommand::CodeAction(action) = action else {
+                continue;
+            };
+            if !action.title.contains("Insert missing") {
+                continue;
+            }
+            let Some(edit) = action.edit else {
+                continue;
+            };
+            let Some(changes) = edit.changes else {
+                continue;
+            };
+            let Some(edits) = changes.get(&uri) else {
+                continue;
+            };
+            if edits.iter().any(|edit| {
+                edit.new_text == "}"
+                    && edit.range.start == expected_pos
+                    && edit.range.end == expected_pos
+            }) {
+                saw_fix = true;
+                break;
+            }
+        }
+
+        assert!(saw_fix);
     }
 
     #[test]
@@ -2087,6 +2733,48 @@ module examples.compiler.app = {
         let child_names: Vec<&str> = children.iter().map(|child| child.name.as_str()).collect();
         assert!(child_names.contains(&"add"));
         assert!(child_names.contains(&"sub"));
+    }
+
+    #[test]
+    fn semantic_tokens_highlight_keywords_types_and_literals() {
+        let text = sample_text();
+        let tokens = Backend::build_semantic_tokens(text);
+        let lines: Vec<&str> = text.lines().collect();
+
+        let mut abs_line = 0u32;
+        let mut abs_start = 0u32;
+        let mut seen_module_keyword = false;
+        let mut seen_type_name = false;
+        let mut seen_number = false;
+        let mut seen_decorator = false;
+
+        for token in tokens.data.iter() {
+            abs_line += token.delta_line;
+            if token.delta_line == 0 {
+                abs_start += token.delta_start;
+            } else {
+                abs_start = token.delta_start;
+            }
+            let line = lines.get(abs_line as usize).copied().unwrap_or_default();
+            let text: String = line
+                .chars()
+                .skip(abs_start as usize)
+                .take(token.length as usize)
+                .collect();
+
+            match (token.token_type, text.as_str()) {
+                (Backend::SEM_TOKEN_KEYWORD, "module") => seen_module_keyword = true,
+                (Backend::SEM_TOKEN_TYPE, "Number") => seen_type_name = true,
+                (Backend::SEM_TOKEN_NUMBER, "1") => seen_number = true,
+                (Backend::SEM_TOKEN_DECORATOR, "@") => seen_decorator = true,
+                _ => {}
+            }
+        }
+
+        assert!(seen_module_keyword);
+        assert!(seen_type_name);
+        assert!(seen_number);
+        assert!(seen_decorator);
     }
 }
 
@@ -2124,6 +2812,16 @@ impl LanguageServer for Backend {
                     work_done_progress_options: Default::default(),
                 }),
                 references_provider: Some(OneOf::Left(true)),
+                rename_provider: Some(OneOf::Left(true)),
+                semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
+                    SemanticTokensOptions {
+                        legend: Self::semantic_tokens_legend(),
+                        full: Some(SemanticTokensFullOptions::Bool(true)),
+                        range: None,
+                        work_done_progress_options: Default::default(),
+                    },
+                )),
+                code_action_provider: Some(CodeActionProviderCapability::Simple(true)),
                 completion_provider: Some(tower_lsp::lsp_types::CompletionOptions {
                     resolve_provider: Some(false),
                     trigger_characters: None,
@@ -2284,6 +2982,41 @@ impl LanguageServer for Backend {
             None => Vec::new(),
         };
         Ok(Some(locations))
+    }
+
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let new_name = params.new_name;
+        let edit = match self.with_document_text(&uri, |content| content.to_string()).await {
+            Some(text) => {
+                let workspace = self.workspace_modules_for(&uri).await;
+                Self::build_rename_with_workspace(&text, &uri, position, &new_name, &workspace)
+            }
+            None => None,
+        };
+        Ok(edit)
+    }
+
+    async fn code_action(&self, params: CodeActionParams) -> Result<Option<Vec<CodeActionOrCommand>>> {
+        let uri = params.text_document.uri;
+        let diagnostics = params.context.diagnostics;
+        let actions = self
+            .with_document_text(&uri, |content| Self::build_code_actions(content, &uri, &diagnostics))
+            .await
+            .unwrap_or_default();
+        Ok(Some(actions))
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = params.text_document.uri;
+        let tokens = self
+            .with_document_text(&uri, |content| Self::build_semantic_tokens(content))
+            .await;
+        Ok(tokens.map(SemanticTokensResult::Tokens))
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {

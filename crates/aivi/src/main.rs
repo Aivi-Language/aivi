@@ -1,7 +1,8 @@
 use aivi::{
-    check_modules, check_types, compile_rust, desugar_target, format_target,
+    check_modules, check_types, collect_mcp_manifest, compile_rust, desugar_target, format_target,
     kernel_target, load_module_diagnostics, load_modules, parse_target, render_diagnostics,
-    run_native, rust_ir_target, write_scaffold, AiviError, CargoDepSpec, ProjectKind,
+    run_native, rust_ir_target, serve_mcp_stdio, write_scaffold, AiviError, CargoDepSpec,
+    ProjectKind,
 };
 use std::env;
 use std::path::{Path, PathBuf};
@@ -204,6 +205,7 @@ fn run() -> Result<(), AiviError> {
                 _ => Ok(()),
             }
         }
+        "mcp" => cmd_mcp(&rest),
         _ => {
             print_help();
             Err(AiviError::InvalidCommand(command))
@@ -213,8 +215,45 @@ fn run() -> Result<(), AiviError> {
 
 fn print_help() {
     println!(
-        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--require-aivi] [--no-fetch]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check <path|dir/...>\n  fmt <path>\n  desugar <path|dir/...>\n  kernel <path|dir/...>\n  rust-ir <path|dir/...>\n  lsp\n  build <path|dir/...> [--target rust|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--target native]\n\n  -h, --help"
+        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--require-aivi] [--no-fetch]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check <path|dir/...>\n  fmt <path>\n  desugar <path|dir/...>\n  kernel <path|dir/...>\n  rust-ir <path|dir/...>\n  lsp\n  build <path|dir/...> [--target rust|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--target native]\n  mcp serve <path|dir/...>\n\n  -h, --help"
     );
+}
+
+fn cmd_mcp(args: &[String]) -> Result<(), AiviError> {
+    let Some(subcommand) = args.first() else {
+        print_help();
+        return Ok(());
+    };
+    match subcommand.as_str() {
+        "serve" => {
+            let target = args.get(1).map(|s| s.as_str()).unwrap_or(".");
+            cmd_mcp_serve(target)
+        }
+        _ => Err(AiviError::InvalidCommand(format!("mcp {subcommand}"))),
+    }
+}
+
+fn cmd_mcp_serve(target: &str) -> Result<(), AiviError> {
+    let mut diagnostics = load_module_diagnostics(target)?;
+    let modules = load_modules(target)?;
+    diagnostics.extend(check_modules(&modules));
+    if diagnostics.is_empty() {
+        diagnostics.extend(check_types(&modules));
+    }
+    if !diagnostics.is_empty() {
+        for diag in diagnostics {
+            let rendered =
+                render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+            if !rendered.is_empty() {
+                eprintln!("{rendered}");
+            }
+        }
+        return Err(AiviError::Diagnostics);
+    }
+
+    let manifest = collect_mcp_manifest(&modules);
+    serve_mcp_stdio(&manifest)?;
+    Ok(())
 }
 
 struct BuildArgs {

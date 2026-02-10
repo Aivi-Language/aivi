@@ -153,7 +153,7 @@ fn check_defs(
                         DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
                             check_def(def, &scope, diagnostics, module, wildcard_import);
                         }
-                        DomainItem::TypeAlias(_) => {}
+                        DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                     }
                 }
             }
@@ -195,6 +195,7 @@ fn collect_value_defs(item: &ModuleItem, scope: &mut HashSet<String>) {
                             scope.insert(ctor.name.name.clone());
                         }
                     }
+                    DomainItem::TypeSig(_) => {}
                 }
             }
         }

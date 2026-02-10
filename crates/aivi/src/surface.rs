@@ -20,6 +20,7 @@ pub struct UseDecl {
 
 #[derive(Debug, Clone)]
 pub struct Def {
+    pub decorators: Vec<SpannedName>,
     pub name: SpannedName,
     pub params: Vec<Pattern>,
     pub expr: Expr,
@@ -28,6 +29,7 @@ pub struct Def {
 
 #[derive(Debug, Clone)]
 pub struct TypeSig {
+    pub decorators: Vec<SpannedName>,
     pub name: SpannedName,
     pub ty: TypeExpr,
     pub span: Span,
@@ -90,6 +92,7 @@ pub struct DomainDecl {
 #[derive(Debug, Clone)]
 pub enum DomainItem {
     TypeAlias(TypeDecl),
+    TypeSig(TypeSig),
     Def(Def),
     LiteralDef(Def),
 }
@@ -402,6 +405,7 @@ impl Parser {
     fn consume_annotations(&mut self) -> Vec<SpannedName> {
         let mut annotations = Vec::new();
         loop {
+            self.consume_newlines();
             if !self.consume_symbol("@") {
                 break;
             }
@@ -437,52 +441,73 @@ impl Parser {
         let mut items = Vec::new();
         while !self.check_symbol("}") && self.pos < self.tokens.len() {
             self.consume_newlines();
-            if self.peek_symbol("@") {
-                let decorator_span = self.peek_span().unwrap_or_else(|| self.previous_span());
-                self.consume_symbol("@");
-                let decorator_name = self
-                    .consume_ident()
-                    .map(|name| name.name)
-                    .unwrap_or_else(|| "?".to_string());
-                self.emit_diag(
-                    "E1505",
-                    &format!(
-                        "decorators inside module bodies are not supported yet (found `@{decorator_name}`)"
-                    ),
-                    decorator_span,
-                );
-                continue;
-            }
+            let decorators = self.consume_annotations();
+            self.validate_item_decorators(&decorators);
             if self.match_keyword("export") {
+                for decorator in decorators {
+                    self.emit_diag(
+                        "E1507",
+                        "decorators cannot be applied to `export` items",
+                        decorator.span,
+                    );
+                }
                 exports.extend(self.parse_export_list());
                 continue;
             }
             if self.match_keyword("use") {
+                for decorator in decorators {
+                    self.emit_diag(
+                        "E1507",
+                        "decorators cannot be applied to `use` imports",
+                        decorator.span,
+                    );
+                }
                 if let Some(use_decl) = self.parse_use_decl() {
                     uses.push(use_decl);
                 }
                 continue;
             }
             if self.match_keyword("class") {
+                for decorator in decorators {
+                    self.emit_diag(
+                        "E1507",
+                        "decorators are not supported on `class` declarations yet",
+                        decorator.span,
+                    );
+                }
                 if let Some(class_decl) = self.parse_class_decl() {
                     items.push(ModuleItem::ClassDecl(class_decl));
                 }
                 continue;
             }
             if self.match_keyword("instance") {
+                for decorator in decorators {
+                    self.emit_diag(
+                        "E1507",
+                        "decorators are not supported on `instance` declarations yet",
+                        decorator.span,
+                    );
+                }
                 if let Some(instance_decl) = self.parse_instance_decl() {
                     items.push(ModuleItem::InstanceDecl(instance_decl));
                 }
                 continue;
             }
             if self.match_keyword("domain") {
+                for decorator in decorators {
+                    self.emit_diag(
+                        "E1507",
+                        "decorators are not supported on `domain` declarations yet",
+                        decorator.span,
+                    );
+                }
                 if let Some(domain) = self.parse_domain_decl() {
                     items.push(ModuleItem::DomainDecl(domain));
                 }
                 continue;
             }
 
-            if let Some(item) = self.parse_type_or_def() {
+            if let Some(item) = self.parse_type_or_def(decorators) {
                 items.push(item);
                 continue;
             }
@@ -552,40 +577,69 @@ impl Parser {
         })
     }
 
-    fn parse_type_or_def(&mut self) -> Option<ModuleItem> {
+    fn validate_item_decorators(&mut self, decorators: &[SpannedName]) {
+        for decorator in decorators {
+            if !matches!(
+                decorator.name.as_str(),
+                "static" | "inline" | "deprecated" | "mcp_tool" | "mcp_resource" | "test"
+            ) {
+                self.emit_diag(
+                    "E1506",
+                    &format!("unknown decorator `@{}`", decorator.name),
+                    decorator.span.clone(),
+                );
+            }
+        }
+    }
+
+    fn parse_type_or_def(&mut self, decorators: Vec<SpannedName>) -> Option<ModuleItem> {
         let checkpoint = self.pos;
         if self.consume_name().is_some() {
             if self.check_symbol(":") {
                 self.pos = checkpoint;
-                return self.parse_type_sig().map(ModuleItem::TypeSig);
+                return self
+                    .parse_type_sig(decorators)
+                    .map(ModuleItem::TypeSig);
             }
             if self.check_symbol("=") || self.is_pattern_start() {
                 self.pos = checkpoint;
-                return self.parse_def_or_type();
+                return self.parse_def_or_type(decorators);
             }
             self.pos = checkpoint;
         }
         None
     }
 
-    fn parse_type_sig(&mut self) -> Option<TypeSig> {
+    fn parse_type_sig(&mut self, decorators: Vec<SpannedName>) -> Option<TypeSig> {
         let name = self.consume_name()?;
         let start = name.span.clone();
         self.expect_symbol(":", "expected ':' for type signature");
         let ty = self.parse_type_expr().unwrap_or(TypeExpr::Unknown { span: start.clone() });
         let span = merge_span(start, type_span(&ty));
-        Some(TypeSig { name, ty, span })
+        Some(TypeSig {
+            decorators,
+            name,
+            ty,
+            span,
+        })
     }
 
-    fn parse_def_or_type(&mut self) -> Option<ModuleItem> {
+    fn parse_def_or_type(&mut self, decorators: Vec<SpannedName>) -> Option<ModuleItem> {
         let checkpoint = self.pos;
         let name = self.consume_name()?;
         if name.name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            for decorator in decorators {
+                self.emit_diag(
+                    "E1507",
+                    "decorators are not supported on type declarations yet",
+                    decorator.span,
+                );
+            }
             self.pos = checkpoint;
             return self.parse_type_decl_or_alias();
         }
         self.pos = checkpoint;
-        self.parse_def().map(ModuleItem::Def)
+        self.parse_def(decorators).map(ModuleItem::Def)
     }
 
     fn parse_type_decl_or_alias(&mut self) -> Option<ModuleItem> {
@@ -601,7 +655,7 @@ impl Parser {
             if self.check_symbol("=>") {
                 self.pos = checkpoint;
                 self.diagnostics.truncate(diag_checkpoint);
-                return self.parse_def().map(ModuleItem::Def);
+                return self.parse_def(Vec::new()).map(ModuleItem::Def);
             }
             return Some(ModuleItem::TypeAlias(alias));
         }
@@ -752,6 +806,7 @@ impl Parser {
             });
             let span = merge_span(name.span.clone(), expr_span(&expr));
             return Some(Def {
+                decorators: Vec::new(),
                 name,
                 params: Vec::new(),
                 expr,
@@ -760,7 +815,7 @@ impl Parser {
         }
         if self.check_symbol("=") {
             self.pos = checkpoint;
-            return self.parse_def();
+            return self.parse_def(Vec::new());
         }
         self.pos = checkpoint;
         None
@@ -779,7 +834,16 @@ impl Parser {
             if self.check_symbol("}") {
                 break;
             }
+            let decorators = self.consume_annotations();
+            self.validate_item_decorators(&decorators);
             if self.match_keyword("type") {
+                for decorator in &decorators {
+                    self.emit_diag(
+                        "E1507",
+                        "decorators are not supported on domain type declarations yet",
+                        decorator.span.clone(),
+                    );
+                }
                 if let Some(type_decl) = self.parse_type_decl() {
                     items.push(DomainItem::TypeAlias(type_decl));
                     continue;
@@ -789,16 +853,18 @@ impl Parser {
             if self.consume_name().is_some() {
                 if self.check_symbol(":") {
                     self.pos = checkpoint;
-                    let _ = self.parse_type_sig();
+                    if let Some(sig) = self.parse_type_sig(decorators) {
+                        items.push(DomainItem::TypeSig(sig));
+                    }
                     continue;
                 }
                 self.pos = checkpoint;
             }
-            if let Some(def) = self.parse_def() {
+            if let Some(def) = self.parse_def(decorators.clone()) {
                 items.push(DomainItem::Def(def));
                 continue;
             }
-            if let Some(literal_def) = self.parse_literal_def() {
+            if let Some(literal_def) = self.parse_literal_def(decorators) {
                 items.push(DomainItem::LiteralDef(literal_def));
                 continue;
             }
@@ -814,7 +880,7 @@ impl Parser {
         })
     }
 
-    fn parse_literal_def(&mut self) -> Option<Def> {
+    fn parse_literal_def(&mut self, decorators: Vec<SpannedName>) -> Option<Def> {
         let start = self.pos;
         let number = self.consume_number()?;
         let suffix = self.consume_ident();
@@ -827,20 +893,171 @@ impl Parser {
             text: String::new(),
             span: number.span.clone(),
         });
+        let suffix = suffix.unwrap();
+
+        fn rewrite_literal_template(expr: Expr, needle: &str, param: &str) -> Expr {
+            match expr {
+                Expr::Literal(Literal::Number { text, span }) if text == needle => {
+                    Expr::Ident(SpannedName {
+                        name: param.to_string(),
+                        span,
+                    })
+                }
+                Expr::List { items, span } => Expr::List {
+                    items: items
+                        .into_iter()
+                        .map(|item| ListItem {
+                            expr: rewrite_literal_template(item.expr, needle, param),
+                            spread: item.spread,
+                            span: item.span,
+                        })
+                        .collect(),
+                    span,
+                },
+                Expr::Tuple { items, span } => Expr::Tuple {
+                    items: items
+                        .into_iter()
+                        .map(|item| rewrite_literal_template(item, needle, param))
+                        .collect(),
+                    span,
+                },
+                Expr::Record { fields, span } => Expr::Record {
+                    fields: fields
+                        .into_iter()
+                        .map(|field| RecordField {
+                            path: field.path,
+                            value: rewrite_literal_template(field.value, needle, param),
+                            span: field.span,
+                        })
+                        .collect(),
+                    span,
+                },
+                Expr::FieldAccess { base, field, span } => Expr::FieldAccess {
+                    base: Box::new(rewrite_literal_template(*base, needle, param)),
+                    field,
+                    span,
+                },
+                Expr::Index { base, index, span } => Expr::Index {
+                    base: Box::new(rewrite_literal_template(*base, needle, param)),
+                    index: Box::new(rewrite_literal_template(*index, needle, param)),
+                    span,
+                },
+                Expr::Call { func, args, span } => Expr::Call {
+                    func: Box::new(rewrite_literal_template(*func, needle, param)),
+                    args: args
+                        .into_iter()
+                        .map(|arg| rewrite_literal_template(arg, needle, param))
+                        .collect(),
+                    span,
+                },
+                Expr::Lambda { params, body, span } => Expr::Lambda {
+                    params,
+                    body: Box::new(rewrite_literal_template(*body, needle, param)),
+                    span,
+                },
+                Expr::Match {
+                    scrutinee,
+                    arms,
+                    span,
+                } => Expr::Match {
+                    scrutinee: scrutinee.map(|scrutinee| {
+                        Box::new(rewrite_literal_template(*scrutinee, needle, param))
+                    }),
+                    arms: arms
+                        .into_iter()
+                        .map(|arm| MatchArm {
+                            pattern: arm.pattern,
+                            guard: arm
+                                .guard
+                                .map(|guard| rewrite_literal_template(guard, needle, param)),
+                            body: rewrite_literal_template(arm.body, needle, param),
+                            span: arm.span,
+                        })
+                        .collect(),
+                    span,
+                },
+                Expr::If {
+                    cond,
+                    then_branch,
+                    else_branch,
+                    span,
+                } => Expr::If {
+                    cond: Box::new(rewrite_literal_template(*cond, needle, param)),
+                    then_branch: Box::new(rewrite_literal_template(*then_branch, needle, param)),
+                    else_branch: Box::new(rewrite_literal_template(*else_branch, needle, param)),
+                    span,
+                },
+                Expr::Binary {
+                    op,
+                    left,
+                    right,
+                    span,
+                } => Expr::Binary {
+                    op,
+                    left: Box::new(rewrite_literal_template(*left, needle, param)),
+                    right: Box::new(rewrite_literal_template(*right, needle, param)),
+                    span,
+                },
+                Expr::Block { kind, items, span } => Expr::Block {
+                    kind,
+                    items: items
+                        .into_iter()
+                        .map(|item| match item {
+                            BlockItem::Bind {
+                                pattern,
+                                expr,
+                                span,
+                            } => BlockItem::Bind {
+                                pattern,
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
+                            BlockItem::Filter { expr, span } => BlockItem::Filter {
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
+                            BlockItem::Yield { expr, span } => BlockItem::Yield {
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
+                            BlockItem::Recurse { expr, span } => BlockItem::Recurse {
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
+                            BlockItem::Expr { expr, span } => BlockItem::Expr {
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
+                        })
+                        .collect(),
+                    span,
+                },
+                other => other,
+            }
+        }
+
+        let param = format!("__lit_{}", suffix.name);
+        let expr = rewrite_literal_template(expr, &number.text, &param);
+
+        let name_span = merge_span(number.span.clone(), suffix.span.clone());
         let name = SpannedName {
-            name: format!("{}{}", number.text, suffix.unwrap().name),
-            span: merge_span(number.span.clone(), expr_span(&expr)),
+            name: format!("{}{}", number.text, suffix.name),
+            span: name_span.clone(),
         };
-        let span = merge_span(number.span.clone(), expr_span(&expr));
+        let span = merge_span(name_span, expr_span(&expr));
         Some(Def {
+            decorators,
             name,
-            params: Vec::new(),
+            params: vec![Pattern::Ident(SpannedName {
+                name: param,
+                span: number.span.clone(),
+            })],
             expr,
             span,
         })
     }
 
-    fn parse_def(&mut self) -> Option<Def> {
+    fn parse_def(&mut self, decorators: Vec<SpannedName>) -> Option<Def> {
         let name = self.consume_name()?;
         let mut params = Vec::new();
         while !self.check_symbol("=") && self.pos < self.tokens.len() {
@@ -858,6 +1075,7 @@ impl Parser {
         });
         let span = merge_span(name.span.clone(), expr_span(&expr));
         Some(Def {
+            decorators,
             name,
             params,
             expr,
@@ -1581,34 +1799,34 @@ impl Parser {
     }
 
     fn parse_type_expr(&mut self) -> Option<TypeExpr> {
-        let mut params = Vec::new();
-        while let Some(atom) = self.parse_type_atom() {
-            params.push(atom);
-            if self.check_symbol("->") {
-                break;
-            }
-        }
-        if params.is_empty() {
-            return None;
-        }
+        let lhs = self.parse_type_apply()?;
         if self.consume_symbol("->") {
             let result = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
-                span: type_span(params.last().unwrap()),
+                span: type_span(&lhs),
             });
-            let span = merge_span(type_span(&params[0]), type_span(&result));
+            let span = merge_span(type_span(&lhs), type_span(&result));
             return Some(TypeExpr::Func {
-                params,
+                params: vec![lhs],
                 result: Box::new(result),
                 span,
             });
         }
-        if params.len() == 1 {
-            return Some(params.remove(0));
+        Some(lhs)
+    }
+
+    fn parse_type_apply(&mut self) -> Option<TypeExpr> {
+        let base = self.parse_type_atom()?;
+        let mut args = Vec::new();
+        while let Some(arg) = self.parse_type_atom() {
+            args.push(arg);
         }
-        let span = merge_span(type_span(&params[0]), type_span(params.last().unwrap()));
+        if args.is_empty() {
+            return Some(base);
+        }
+        let span = merge_span(type_span(&base), type_span(args.last().unwrap()));
         Some(TypeExpr::Apply {
-            base: Box::new(params.remove(0)),
-            args: params,
+            base: Box::new(base),
+            args,
             span,
         })
     }

@@ -65,12 +65,43 @@ module test.m7 = {
   addDays d n = d <| { day: _ + n }
 
   addWeek : Date -> Date
-  addWeek d = d + 1w
+  addWeek d = d + 2w
 
   updated = addWeek { year: 2024, month: 9, day: 1 }
 }
 "#;
     check_ok(source);
+}
+
+#[test]
+fn typecheck_domain_operator_overload_without_deltas() {
+    let source = r#"
+module test.domain_ops = {
+  export move
+
+  Vec2 = { x: Int, y: Int }
+
+  domain Vector over Vec2 = {
+    (+) : Vec2 -> Vec2 -> Vec2
+    (+) a b = { x: a.x + b.x, y: a.y + b.y }
+  }
+
+  move : Vec2 -> Vec2 -> Vec2
+  move pos vel = pos + vel
+}
+"#;
+    check_ok(source);
+}
+
+#[test]
+fn typecheck_error_unknown_numeric_delta_literal() {
+    let source = r#"
+module test.delta_err = {
+  export value
+  value = 2w
+}
+"#;
+    check_err(source);
 }
 
 #[test]

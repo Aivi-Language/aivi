@@ -166,7 +166,7 @@ fn collect_defs(module: &Module) -> Vec<(String, Expr)> {
                         DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
                             defs.push((def.name.name.clone(), def_expr(def)));
                         }
-                        DomainItem::TypeAlias(_) => {}
+                        DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                     }
                 }
             }
@@ -219,10 +219,67 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
             name: name.name,
         },
         Expr::Literal(literal) => match literal {
-            crate::surface::Literal::Number { text, .. } => HirExpr::LitNumber {
-                id: id_gen.next(),
-                text,
-            },
+            crate::surface::Literal::Number { text, .. } => {
+                fn split_suffixed(text: &str) -> Option<(String, String)> {
+                    let mut chars = text.chars().peekable();
+                    let mut number = String::new();
+                    if matches!(chars.peek(), Some('-')) {
+                        number.push('-');
+                        chars.next();
+                    }
+                    let mut saw_digit = false;
+                    let mut saw_dot = false;
+                    while let Some(&ch) = chars.peek() {
+                        if ch.is_ascii_digit() {
+                            saw_digit = true;
+                            number.push(ch);
+                            chars.next();
+                            continue;
+                        }
+                        if ch == '.' && !saw_dot {
+                            saw_dot = true;
+                            number.push(ch);
+                            chars.next();
+                            continue;
+                        }
+                        break;
+                    }
+                    if !saw_digit {
+                        return None;
+                    }
+                    let suffix: String = chars.collect();
+                    if suffix.is_empty() {
+                        return None;
+                    }
+                    if !suffix
+                        .chars()
+                        .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+                    {
+                        return None;
+                    }
+                    Some((number, suffix))
+                }
+
+                if let Some((number, suffix)) = split_suffixed(&text) {
+                    let template_name = format!("1{suffix}");
+                    return HirExpr::App {
+                        id: id_gen.next(),
+                        func: Box::new(HirExpr::Var {
+                            id: id_gen.next(),
+                            name: template_name,
+                        }),
+                        arg: Box::new(HirExpr::LitNumber {
+                            id: id_gen.next(),
+                            text: number,
+                        }),
+                    };
+                }
+
+                HirExpr::LitNumber {
+                    id: id_gen.next(),
+                    text,
+                }
+            }
             crate::surface::Literal::String { text, .. } => HirExpr::LitString {
                 id: id_gen.next(),
                 text,

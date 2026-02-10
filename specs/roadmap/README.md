@@ -31,7 +31,7 @@ This roadmap tracks the incremental development of the AIVI language, compiler, 
 - [x] Symbol tables and module graph.
 - [x] `aivi check` resolving identifiers across workspace.
 - [x] LSP: `textDocument/definition` (in-file).
-- [ ] LSP: `textDocument/definition` across modules.
+- [x] LSP: `textDocument/definition` across modules.
 
 ## Phase M3: Kernel IR + Desugaring (Complete)
 
@@ -49,7 +49,7 @@ This roadmap tracks the incremental development of the AIVI language, compiler, 
 - [x] Minimal traits (`Eq`, `Ord`, `Show`, `Num`).
 - [x] `aivi check` with type error traces and typed holes (`_`).
 - [x] Canonical type pretty-printer.
-- [ ] LSP: Hover types, signature help.
+- [x] LSP: Hover types, signature help.
 
 ## Phase M5: Execution (Rust Transpilation & Native Runtime) (Complete)
 
@@ -65,17 +65,17 @@ This roadmap tracks the incremental development of the AIVI language, compiler, 
 Scope: Implement `Effect E A` semantics, structured concurrency, and resource management.
 
 - [x] Built-in effects: `Clock`, `File`, `Random` (partial).
-- [ ] `specs/06_runtime/01_concurrency.md` implementation (`scope`, `par`, `race`).
-- [ ] Cancellation propagation rules.
-- [ ] `bracket`/`with` resource pattern.
-- [ ] Deterministic cancellation semantics.
+- [x] `specs/06_runtime/01_concurrency.md` implementation (`scope`, `par`, `race`).
+- [x] Cancellation propagation rules.
+- [x] `bracket`/`with` resource pattern.
+- [x] Deterministic cancellation semantics.
 
 ## Phase M7: Domains + Patching (In Progress)
 
 Scope: Domain definitions, operator overloading, and patching semantics.
-- [ ] Domain definitions and operator interpretation (`specs/02_syntax/11_domain_definition.md`).
-- [ ] Patching semantics (`specs/02_syntax/05_patching.md`).
-- [ ] Domain-specific numeric deltas (calendar/duration/color).
+- [x] Domain definitions and operator interpretation (`specs/02_syntax/11_domain_definition.md`).
+- [x] Patching semantics (`specs/02_syntax/05_patching.md`).
+- [x] Domain-specific numeric deltas (calendar/duration/color).
 - [x] Built-in sigils as domain literals (`~r`, `~u`, `~d`, `~dt`) wired through lexer/parser → HIR/Kernel and editor tooling.
 
 ## Phase M8: LSP "Daily Driver" (In Progress)
@@ -85,18 +85,18 @@ Scope: Make editing AIVI comfortable for daily work.
 - [x] Diagnostics (syntax/type errors).
 - [x] Definition (in-file).
 - [x] Formatting (via `aivi fmt`).
-- [ ] References (find usages).
-- [ ] Rename refactoring.
-- [ ] Hover documentation & resolved types.
-- [ ] Semantic tokens.
-- [ ] Code actions (quick fixes).
+- [x] References (find usages).
+- [x] Rename refactoring.
+- [x] Hover documentation & resolved types.
+- [x] Semantic tokens.
+- [x] Code actions (quick fixes).
 
 ## Phase M9: MCP Integration (Planned)
 
 Scope: Expose AIVI modules as Model Context Protocol (MCP) tools/resources.
 
-- [ ] `aivi mcp serve` exposing `@mcp_tool` and `@mcp_resource`.
-- [ ] JSON Schema generation from AIVI types.
+- [x] `aivi mcp serve` exposing `@mcp_tool` and `@mcp_resource`.
+- [x] JSON Schema generation from AIVI types.
 - [ ] Capability gates for unauthorized effects.
 
 ## Phase M10: Type System v2 (Long Term)

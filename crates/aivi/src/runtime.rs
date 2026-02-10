@@ -120,9 +120,49 @@ struct RuntimeContext {
     globals: Env,
 }
 
+#[derive(Debug)]
+struct CancelToken {
+    local: AtomicBool,
+    parent: Option<Arc<CancelToken>>,
+}
+
+impl CancelToken {
+    fn root() -> Arc<Self> {
+        Arc::new(Self {
+            local: AtomicBool::new(false),
+            parent: None,
+        })
+    }
+
+    fn child(parent: Arc<CancelToken>) -> Arc<Self> {
+        Arc::new(Self {
+            local: AtomicBool::new(false),
+            parent: Some(parent),
+        })
+    }
+
+    fn cancel(&self) {
+        self.local.store(true, Ordering::SeqCst);
+    }
+
+    fn parent(&self) -> Option<Arc<CancelToken>> {
+        self.parent.clone()
+    }
+
+    fn is_cancelled(&self) -> bool {
+        if self.local.load(Ordering::SeqCst) {
+            return true;
+        }
+        self.parent
+            .as_ref()
+            .is_some_and(|parent| parent.is_cancelled())
+    }
+}
+
 struct Runtime {
     ctx: Arc<RuntimeContext>,
-    cancel: Arc<AtomicBool>,
+    cancel: Arc<CancelToken>,
+    cancel_mask: usize,
     rng_state: u64,
 }
 
@@ -178,7 +218,7 @@ pub fn run_native(program: HirProgram) -> Result<(), AiviError> {
     }
 
     let ctx = Arc::new(RuntimeContext { globals });
-    let cancel = Arc::new(AtomicBool::new(false));
+    let cancel = CancelToken::root();
     let mut runtime = Runtime::new(ctx, cancel);
 
     let main = runtime
@@ -220,7 +260,7 @@ pub fn run_native(program: HirProgram) -> Result<(), AiviError> {
 }
 
 impl Runtime {
-    fn new(ctx: Arc<RuntimeContext>, cancel: Arc<AtomicBool>) -> Self {
+    fn new(ctx: Arc<RuntimeContext>, cancel: Arc<CancelToken>) -> Self {
         let seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|dur| dur.as_nanos() as u64)
@@ -228,16 +268,27 @@ impl Runtime {
         Self {
             ctx,
             cancel,
+            cancel_mask: 0,
             rng_state: seed ^ 0x9E37_79B9_7F4A_7C15,
         }
     }
 
     fn check_cancelled(&self) -> Result<(), RuntimeError> {
-        if self.cancel.load(Ordering::SeqCst) {
+        if self.cancel_mask > 0 {
+            return Ok(());
+        }
+        if self.cancel.is_cancelled() {
             Err(RuntimeError::Cancelled)
         } else {
             Ok(())
         }
+    }
+
+    fn uncancelable<T>(&mut self, f: impl FnOnce(&mut Self) -> T) -> T {
+        self.cancel_mask = self.cancel_mask.saturating_add(1);
+        let result = f(self);
+        self.cancel_mask = self.cancel_mask.saturating_sub(1);
+        result
     }
 
     fn next_u64(&mut self) -> u64 {
@@ -883,10 +934,9 @@ impl Runtime {
 
     fn run_cleanups(&mut self, cleanups: Vec<Value>) -> Result<(), RuntimeError> {
         for cleanup in cleanups.into_iter().rev() {
-            match self.run_effect_value(cleanup) {
-                Ok(_) => {}
-                Err(RuntimeError::Cancelled) => return Err(RuntimeError::Cancelled),
-                Err(err) => return Err(err),
+            let result = self.uncancelable(|runtime| runtime.run_effect_value(cleanup));
+            if let Err(err) = result {
+                return Err(err);
             }
         }
         Ok(())
@@ -1609,10 +1659,12 @@ fn build_concurrent_record() -> Value {
             let effect = args.pop().unwrap();
             let ctx = runtime.ctx.clone();
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| {
-                    let cancel = Arc::new(AtomicBool::new(false));
-                    let mut child = Runtime::new(ctx.clone(), cancel);
-                    child.run_effect_value(effect.clone())
+                func: Arc::new(move |runtime| {
+                    let cancel = CancelToken::child(runtime.cancel.clone());
+                    let mut child = Runtime::new(ctx.clone(), cancel.clone());
+                    let result = child.run_effect_value(effect.clone());
+                    cancel.cancel();
+                    result
                 }),
             };
             Ok(Value::Effect(Arc::new(effect)))
@@ -1625,30 +1677,44 @@ fn build_concurrent_record() -> Value {
             let left = args.pop().unwrap();
             let ctx = runtime.ctx.clone();
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| {
-                    let left_cancel = Arc::new(AtomicBool::new(false));
-                    let right_cancel = Arc::new(AtomicBool::new(false));
+                func: Arc::new(move |runtime| {
+                    let left_cancel = CancelToken::child(runtime.cancel.clone());
+                    let right_cancel = CancelToken::child(runtime.cancel.clone());
                     let (tx, rx) = mpsc::channel();
                     spawn_effect(0, left.clone(), ctx.clone(), left_cancel.clone(), tx.clone());
                     spawn_effect(1, right.clone(), ctx.clone(), right_cancel.clone(), tx.clone());
 
                     let mut left_result = None;
                     let mut right_result = None;
+                    let mut cancelled = false;
                     while left_result.is_none() || right_result.is_none() {
-                        let (id, result) = rx
-                            .recv()
-                            .map_err(|_| RuntimeError::Message("worker stopped".to_string()))?;
+                        if runtime.check_cancelled().is_err() {
+                            cancelled = true;
+                            left_cancel.cancel();
+                            right_cancel.cancel();
+                        }
+                        let (id, result) = match rx.recv_timeout(Duration::from_millis(25)) {
+                            Ok(value) => value,
+                            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                                return Err(RuntimeError::Message("worker stopped".to_string()))
+                            }
+                        };
                         if id == 0 {
                             if result.is_err() {
-                                right_cancel.store(true, Ordering::SeqCst);
+                                right_cancel.cancel();
                             }
                             left_result = Some(result);
                         } else {
                             if result.is_err() {
-                                left_cancel.store(true, Ordering::SeqCst);
+                                left_cancel.cancel();
                             }
                             right_result = Some(result);
                         }
+                    }
+
+                    if cancelled {
+                        return Err(RuntimeError::Cancelled);
                     }
 
                     let left_result = left_result.unwrap();
@@ -1672,22 +1738,43 @@ fn build_concurrent_record() -> Value {
             let left = args.pop().unwrap();
             let ctx = runtime.ctx.clone();
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| {
-                    let left_cancel = Arc::new(AtomicBool::new(false));
-                    let right_cancel = Arc::new(AtomicBool::new(false));
+                func: Arc::new(move |runtime| {
+                    let left_cancel = CancelToken::child(runtime.cancel.clone());
+                    let right_cancel = CancelToken::child(runtime.cancel.clone());
                     let (tx, rx) = mpsc::channel();
                     spawn_effect(0, left.clone(), ctx.clone(), left_cancel.clone(), tx.clone());
                     spawn_effect(1, right.clone(), ctx.clone(), right_cancel.clone(), tx.clone());
 
-                    let (winner, result) = rx
-                        .recv()
-                        .map_err(|_| RuntimeError::Message("worker stopped".to_string()))?;
+                    let mut cancelled = false;
+                    let (winner, result) = loop {
+                        if runtime.check_cancelled().is_err() {
+                            cancelled = true;
+                            left_cancel.cancel();
+                            right_cancel.cancel();
+                        }
+                        match rx.recv_timeout(Duration::from_millis(25)) {
+                            Ok(value) => break value,
+                            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                                return Err(RuntimeError::Message("worker stopped".to_string()))
+                            }
+                        }
+                    };
                     if winner == 0 {
-                        right_cancel.store(true, Ordering::SeqCst);
+                        right_cancel.cancel();
                     } else {
-                        left_cancel.store(true, Ordering::SeqCst);
+                        left_cancel.cancel();
                     }
-                    let _ = rx.recv();
+                    while rx.recv_timeout(Duration::from_millis(25)).is_err() {
+                        if runtime.check_cancelled().is_err() {
+                            cancelled = true;
+                            left_cancel.cancel();
+                            right_cancel.cancel();
+                        }
+                    }
+                    if cancelled {
+                        return Err(RuntimeError::Cancelled);
+                    }
                     result
                 }),
             };
@@ -1700,8 +1787,12 @@ fn build_concurrent_record() -> Value {
             let effect_value = args.pop().unwrap();
             let ctx = runtime.ctx.clone();
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| {
-                    let cancel = Arc::new(AtomicBool::new(false));
+                func: Arc::new(move |runtime| {
+                    let parent = runtime
+                        .cancel
+                        .parent()
+                        .unwrap_or_else(|| runtime.cancel.clone());
+                    let cancel = CancelToken::child(parent);
                     let (tx, _rx) = mpsc::channel();
                     spawn_effect(0, effect_value.clone(), ctx.clone(), cancel, tx);
                     Ok(Value::Unit)
@@ -1717,7 +1808,7 @@ fn spawn_effect(
     id: usize,
     effect: Value,
     ctx: Arc<RuntimeContext>,
-    cancel: Arc<AtomicBool>,
+    cancel: Arc<CancelToken>,
     sender: mpsc::Sender<(usize, Result<Value, RuntimeError>)>,
 ) {
     std::thread::spawn(move || {
@@ -1725,4 +1816,97 @@ fn spawn_effect(
         let result = runtime.run_effect_value(effect);
         let _ = sender.send((id, result));
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cleanups_run_even_when_cancelled() {
+        let globals = Env::new(None);
+        register_builtins(&globals);
+        let ctx = Arc::new(RuntimeContext { globals });
+        let cancel = CancelToken::root();
+        let mut runtime = Runtime::new(ctx, cancel.clone());
+
+        let ran = Arc::new(AtomicBool::new(false));
+        let ran_clone = ran.clone();
+        let cleanup = Value::Effect(Arc::new(EffectValue::Thunk {
+            func: Arc::new(move |_| {
+                ran_clone.store(true, Ordering::SeqCst);
+                Ok(Value::Unit)
+            }),
+        }));
+
+        cancel.cancel();
+        assert!(runtime.run_cleanups(vec![cleanup]).is_ok());
+        assert!(ran.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn concurrent_par_observes_parent_cancellation() {
+        let globals = Env::new(None);
+        register_builtins(&globals);
+        let ctx = Arc::new(RuntimeContext { globals });
+        let cancel = CancelToken::root();
+
+        let (started_left_tx, started_left_rx) = mpsc::channel();
+        let (started_right_tx, started_right_rx) = mpsc::channel();
+
+        let left = Value::Effect(Arc::new(EffectValue::Thunk {
+            func: Arc::new(move |runtime| {
+                let _ = started_left_tx.send(());
+                loop {
+                    runtime.check_cancelled()?;
+                    std::hint::spin_loop();
+                }
+            }),
+        }));
+        let right = Value::Effect(Arc::new(EffectValue::Thunk {
+            func: Arc::new(move |runtime| {
+                let _ = started_right_tx.send(());
+                loop {
+                    runtime.check_cancelled()?;
+                    std::hint::spin_loop();
+                }
+            }),
+        }));
+
+        let (result_tx, result_rx) = mpsc::channel();
+        let ctx_clone = ctx.clone();
+        let cancel_clone = cancel.clone();
+        std::thread::spawn(move || {
+            let mut runtime = Runtime::new(ctx_clone, cancel_clone);
+            let concurrent = build_concurrent_record();
+            let Value::Record(fields) = concurrent else {
+                panic!("expected concurrent record");
+            };
+            let par = fields.get("par").expect("par").clone();
+            let applied = match runtime.apply(par, left) {
+                Ok(value) => value,
+                Err(_) => panic!("apply left failed"),
+            };
+            let applied = match runtime.apply(applied, right) {
+                Ok(value) => value,
+                Err(_) => panic!("apply right failed"),
+            };
+            let result = runtime.run_effect_value(applied);
+            let _ = result_tx.send(result);
+        });
+
+        started_left_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("left started");
+        started_right_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("right started");
+
+        cancel.cancel();
+
+        let result = result_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("par returned");
+        assert!(matches!(result, Err(RuntimeError::Cancelled)));
+    }
 }

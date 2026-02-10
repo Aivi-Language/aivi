@@ -96,11 +96,48 @@ fn number_kind(text: &str) -> Option<NumberKind> {
     Some(if saw_dot { NumberKind::Float } else { NumberKind::Int })
 }
 
-fn is_suffixed_number(expr: &Expr) -> bool {
-    matches!(
-        expr,
-        Expr::Literal(Literal::Number { text, .. }) if number_kind(text).is_none()
-    )
+fn split_suffixed_number(text: &str) -> Option<(String, String, NumberKind)> {
+    let mut chars = text.chars().peekable();
+    let mut number = String::new();
+    if matches!(chars.peek(), Some('-')) {
+        number.push('-');
+        chars.next();
+    }
+    let mut saw_digit = false;
+    let mut saw_dot = false;
+    while let Some(&ch) = chars.peek() {
+        if ch.is_ascii_digit() {
+            saw_digit = true;
+            number.push(ch);
+            chars.next();
+            continue;
+        }
+        if ch == '.' && !saw_dot {
+            saw_dot = true;
+            number.push(ch);
+            chars.next();
+            continue;
+        }
+        break;
+    }
+    if !saw_digit {
+        return None;
+    }
+    let suffix: String = chars.collect();
+    if suffix.is_empty() {
+        return None;
+    }
+    if !suffix
+        .chars()
+        .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+    {
+        return None;
+    }
+    Some((
+        number,
+        suffix,
+        if saw_dot { NumberKind::Float } else { NumberKind::Int },
+    ))
 }
 
 struct TypeChecker {
@@ -113,12 +150,72 @@ struct TypeChecker {
     checked_defs: HashSet<String>,
 }
 
+fn ordered_modules<'a>(modules: &'a [Module]) -> Vec<&'a Module> {
+    let mut name_to_index = HashMap::new();
+    for (idx, module) in modules.iter().enumerate() {
+        name_to_index.entry(module.name.name.as_str()).or_insert(idx);
+    }
+
+    let mut indegree = vec![0usize; modules.len()];
+    let mut edges: Vec<Vec<usize>> = vec![Vec::new(); modules.len()];
+
+    for (idx, module) in modules.iter().enumerate() {
+        for use_decl in module.uses.iter() {
+            let Some(&dep_idx) = name_to_index.get(use_decl.module.name.as_str()) else {
+                continue;
+            };
+            if dep_idx == idx {
+                continue;
+            }
+            edges[dep_idx].push(idx);
+            indegree[idx] += 1;
+        }
+    }
+
+    let mut ready: Vec<usize> = indegree
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &deg)| (deg == 0).then_some(idx))
+        .collect();
+    ready.sort_by(|a, b| modules[*a].name.name.cmp(&modules[*b].name.name));
+
+    let mut out = Vec::new();
+    let mut processed = vec![false; modules.len()];
+    while let Some(idx) = ready.first().copied() {
+        ready.remove(0);
+        if processed[idx] {
+            continue;
+        }
+        processed[idx] = true;
+        out.push(&modules[idx]);
+        for &next in edges[idx].iter() {
+            indegree[next] = indegree[next].saturating_sub(1);
+            if indegree[next] == 0 && !processed[next] {
+                ready.push(next);
+                ready.sort_by(|a, b| modules[*a].name.name.cmp(&modules[*b].name.name));
+            }
+        }
+    }
+
+    let mut remaining: Vec<usize> = processed
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, done)| (!done).then_some(idx))
+        .collect();
+    remaining.sort_by(|a, b| modules[*a].name.name.cmp(&modules[*b].name.name));
+    for idx in remaining {
+        out.push(&modules[idx]);
+    }
+
+    out
+}
+
 pub fn check_types(modules: &[Module]) -> Vec<FileDiagnostic> {
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
     let mut module_exports: HashMap<String, HashMap<String, Scheme>> = HashMap::new();
 
-    for module in modules {
+    for module in ordered_modules(modules) {
         checker.reset_module_context(module);
         let mut env = checker.builtins.clone();
         checker.register_module_types(module);
@@ -140,6 +237,75 @@ pub fn check_types(modules: &[Module]) -> Vec<FileDiagnostic> {
     }
 
     diagnostics
+}
+
+pub fn infer_value_types(
+    modules: &[Module],
+) -> (
+    Vec<FileDiagnostic>,
+    HashMap<String, HashMap<String, String>>,
+) {
+    let mut checker = TypeChecker::new();
+    let mut diagnostics = Vec::new();
+    let mut module_exports: HashMap<String, HashMap<String, Scheme>> = HashMap::new();
+    let mut inferred: HashMap<String, HashMap<String, String>> = HashMap::new();
+
+    for module in ordered_modules(modules) {
+        checker.reset_module_context(module);
+        let mut env = checker.builtins.clone();
+        checker.register_module_types(module);
+        let sigs = checker.collect_type_sigs(module);
+        checker.register_module_constructors(module, &mut env);
+        checker.register_imports(module, &module_exports, &mut env);
+        checker.register_module_defs(module, &sigs, &mut env);
+
+        let mut module_diags = checker.check_module_defs(module, &sigs, &mut env);
+        diagnostics.append(&mut module_diags);
+
+        let mut local_names = HashSet::new();
+        for item in module.items.iter() {
+            match item {
+                ModuleItem::Def(def) => {
+                    local_names.insert(def.name.name.clone());
+                }
+                ModuleItem::TypeSig(sig) => {
+                    local_names.insert(sig.name.name.clone());
+                }
+                ModuleItem::DomainDecl(domain) => {
+                    for domain_item in domain.items.iter() {
+                        match domain_item {
+                            DomainItem::TypeSig(sig) => {
+                                local_names.insert(sig.name.name.clone());
+                            }
+                            DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
+                                local_names.insert(def.name.name.clone());
+                            }
+                            DomainItem::TypeAlias(_) => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut module_types = HashMap::new();
+        for name in local_names {
+            if let Some(scheme) = env.get(&name) {
+                module_types.insert(name, checker.type_to_string(&scheme.ty));
+            }
+        }
+        inferred.insert(module.name.name.clone(), module_types);
+
+        let mut exports = HashMap::new();
+        for export in &module.exports {
+            if let Some(scheme) = env.get(&export.name) {
+                exports.insert(export.name.clone(), scheme.clone());
+            }
+        }
+        module_exports.insert(module.name.name.clone(), exports);
+    }
+
+    (diagnostics, inferred)
 }
 
 impl TypeChecker {
@@ -508,6 +674,13 @@ impl TypeChecker {
                     let alias_info = self.alias_info(alias);
                     self.aliases.insert(alias.name.name.clone(), alias_info);
                 }
+                ModuleItem::DomainDecl(domain) => {
+                    for domain_item in &domain.items {
+                        if let DomainItem::TypeAlias(type_decl) = domain_item {
+                            self.type_constructors.insert(type_decl.name.name.clone());
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -531,6 +704,14 @@ impl TypeChecker {
             if let ModuleItem::TypeSig(sig) = item {
                 let scheme = self.scheme_from_sig(sig);
                 sigs.insert(sig.name.name.clone(), scheme);
+            }
+            if let ModuleItem::DomainDecl(domain) = item {
+                for domain_item in &domain.items {
+                    if let DomainItem::TypeSig(sig) = domain_item {
+                        let scheme = self.scheme_from_sig(sig);
+                        sigs.insert(sig.name.name.clone(), scheme);
+                    }
+                }
             }
         }
         sigs
@@ -646,7 +827,7 @@ impl TypeChecker {
                                     .unwrap_or_else(|| Scheme::mono(self.fresh_var()));
                                 env.insert(def.name.name.clone(), scheme);
                             }
-                            DomainItem::TypeAlias(_) => {}
+                            DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                         }
                     }
                 }
@@ -678,7 +859,7 @@ impl TypeChecker {
                             DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
                                 self.check_def(def, sigs, env, module, &mut diagnostics);
                             }
-                            DomainItem::TypeAlias(_) => {}
+                            DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                         }
                     }
                 }
@@ -697,37 +878,69 @@ impl TypeChecker {
         diagnostics: &mut Vec<FileDiagnostic>,
     ) {
         let name = def.name.name.clone();
-        let prior_scheme = env.get(&name).cloned();
-        let is_repeat = self.checked_defs.contains(&name);
-        let mut local_env = env.clone();
-        let placeholder = self.fresh_var();
-        local_env.insert(name.clone(), Scheme::mono(placeholder.clone()));
         let expr = desugar_holes(def.expr.clone());
-        let inferred = if def.params.is_empty() {
-            self.infer_expr(&expr, &mut local_env)
-        } else {
-            self.infer_lambda(&def.params, &expr, &mut local_env)
-        };
-        let inferred = match inferred {
-            Ok(ty) => ty,
-            Err(err) => {
-                diagnostics.push(self.error_to_diag(module, err));
-                return;
-            }
-        };
-        if let Err(err) = self.unify_with_span(placeholder, inferred.clone(), def.span.clone()) {
-            diagnostics.push(self.error_to_diag(module, err));
-            return;
-        }
-        let inferred = self.apply(inferred);
         if let Some(sig) = sigs.get(&name) {
+            let mut local_env = env.clone();
             let expected = self.instantiate(sig);
-            if let Err(err) = self.unify_with_span(inferred.clone(), expected.clone(), def.span.clone()) {
+            local_env.insert(name.clone(), Scheme::mono(expected.clone()));
+
+            let result: Result<(), TypeError> = (|| {
+                if def.params.is_empty() {
+                    let inferred = self.infer_expr(&expr, &mut local_env)?;
+                    self.unify_with_span(inferred, expected, def.span.clone())?;
+                    return Ok(());
+                }
+
+                let mut remaining = expected;
+                for param in &def.params {
+                    let remaining_applied = self.apply(remaining);
+                    let remaining_norm = self.expand_alias(remaining_applied);
+                    let Type::Func(expected_param, expected_rest) = remaining_norm else {
+                        return Err(TypeError {
+                            span: def.span.clone(),
+                            message: format!("expected function type for '{name}'"),
+                            expected: None,
+                            found: None,
+                        });
+                    };
+                    let pat_ty = self.infer_pattern(param, &mut local_env)?;
+                    self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
+                    remaining = *expected_rest;
+                }
+                let body_ty = self.infer_expr(&expr, &mut local_env)?;
+                self.unify_with_span(body_ty, remaining, expr_span(&expr))?;
+                Ok(())
+            })();
+
+            if let Err(err) = result {
                 diagnostics.push(self.error_to_diag(module, err));
                 return;
             }
             env.insert(name.clone(), sig.clone());
         } else {
+            let prior_scheme = env.get(&name).cloned();
+            let is_repeat = self.checked_defs.contains(&name);
+            let mut local_env = env.clone();
+            let placeholder = self.fresh_var();
+            local_env.insert(name.clone(), Scheme::mono(placeholder.clone()));
+            let inferred = if def.params.is_empty() {
+                self.infer_expr(&expr, &mut local_env)
+            } else {
+                self.infer_lambda(&def.params, &expr, &mut local_env)
+            };
+            let inferred = match inferred {
+                Ok(ty) => ty,
+                Err(err) => {
+                    diagnostics.push(self.error_to_diag(module, err));
+                    return;
+                }
+            };
+            if let Err(err) = self.unify_with_span(placeholder, inferred.clone(), def.span.clone()) {
+                diagnostics.push(self.error_to_diag(module, err));
+                return;
+            }
+            let inferred = self.apply(inferred);
+
             if is_repeat {
                 if let Some(sig) = prior_scheme {
                     let expected = self.instantiate(&sig);
@@ -750,7 +963,37 @@ impl TypeChecker {
     fn infer_expr(&mut self, expr: &Expr, env: &mut TypeEnv) -> Result<Type, TypeError> {
         match expr {
             Expr::Ident(name) => self.infer_ident(name, env),
-            Expr::Literal(literal) => Ok(self.literal_type(literal)),
+            Expr::Literal(literal) => match literal {
+                Literal::Number { text, span } => match number_kind(text) {
+                    Some(NumberKind::Float) => Ok(Type::con("Float")),
+                    Some(NumberKind::Int) => Ok(Type::con("Int")),
+                    None => {
+                        let Some((_number, suffix, kind)) = split_suffixed_number(text) else {
+                            return Ok(self.fresh_var());
+                        };
+                        let template_name = format!("1{suffix}");
+                        let scheme = env.get(&template_name).cloned().ok_or_else(|| TypeError {
+                            span: span.clone(),
+                            message: format!("unknown numeric literal '{text}'"),
+                            expected: None,
+                            found: None,
+                        })?;
+                        let template_ty = self.instantiate(&scheme);
+                        let result_ty = self.fresh_var();
+                        let arg_ty = match kind {
+                            NumberKind::Int => Type::con("Int"),
+                            NumberKind::Float => Type::con("Float"),
+                        };
+                        self.unify_with_span(
+                            template_ty,
+                            Type::Func(Box::new(arg_ty), Box::new(result_ty.clone())),
+                            span.clone(),
+                        )?;
+                        Ok(result_ty)
+                    }
+                },
+                _ => Ok(self.literal_type(literal)),
+            },
             Expr::List { items, .. } => self.infer_list(items, env),
             Expr::Tuple { items, .. } => self.infer_tuple(items, env),
             Expr::Record { fields, .. } => self.infer_record(fields, env),
@@ -979,27 +1222,6 @@ impl TypeChecker {
 
         let left_ty = self.infer_expr(left, env)?;
         let right_ty = self.infer_expr(right, env)?;
-        if matches!(op, "+" | "-" | "*" | "/" | "%" | "<" | ">" | "<=" | ">=")
-            && (is_suffixed_number(left) || is_suffixed_number(right))
-        {
-            let op_name = format!("({})", op);
-            if let Some(scheme) = env.get(&op_name) {
-                let op_ty = self.instantiate(scheme);
-                let result_ty = self.fresh_var();
-                self.unify_with_span(
-                    op_ty,
-                    Type::Func(
-                        Box::new(left_ty.clone()),
-                        Box::new(Type::Func(
-                            Box::new(right_ty.clone()),
-                            Box::new(result_ty.clone()),
-                        )),
-                    ),
-                    expr_span(left),
-                )?;
-                return Ok(result_ty);
-            }
-        }
         match op {
             "&&" | "||" => {
                 self.unify_with_span(left_ty, Type::con("Bool"), expr_span(left))?;
@@ -1011,11 +1233,72 @@ impl TypeChecker {
                 Ok(Type::con("Bool"))
             }
             "<" | ">" | "<=" | ">=" => {
+                let op_name = format!("({})", op);
+                let left_applied = self.apply(left_ty.clone());
+                let left_applied = self.expand_alias(left_applied);
+                let right_applied = self.apply(right_ty.clone());
+                let right_applied = self.expand_alias(right_applied);
+                let both_int = matches!(left_applied, Type::Con(ref name, _) if name == "Int")
+                    && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
+
+                if !both_int {
+                    if let Some(scheme) = env.get(&op_name) {
+                        let checkpoint_subst = self.subst.clone();
+                        let op_ty = self.instantiate(scheme);
+                        let result_ty = self.fresh_var();
+                        let expected = Type::Func(
+                            Box::new(left_ty.clone()),
+                            Box::new(Type::Func(
+                                Box::new(right_ty.clone()),
+                                Box::new(result_ty.clone()),
+                            )),
+                        );
+                        if self
+                            .unify_with_span(op_ty, expected, expr_span(left))
+                            .is_ok()
+                        {
+                            self.unify_with_span(result_ty, Type::con("Bool"), expr_span(left))?;
+                            return Ok(Type::con("Bool"));
+                        }
+                        self.subst = checkpoint_subst;
+                    }
+                }
+
                 self.unify_with_span(left_ty, Type::con("Int"), expr_span(left))?;
                 self.unify_with_span(right_ty, Type::con("Int"), expr_span(right))?;
                 Ok(Type::con("Bool"))
             }
             "+" | "-" | "*" | "/" | "%" => {
+                let op_name = format!("({})", op);
+                let left_applied = self.apply(left_ty.clone());
+                let left_applied = self.expand_alias(left_applied);
+                let right_applied = self.apply(right_ty.clone());
+                let right_applied = self.expand_alias(right_applied);
+                let both_int = matches!(left_applied, Type::Con(ref name, _) if name == "Int")
+                    && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
+
+                if !both_int {
+                    if let Some(scheme) = env.get(&op_name) {
+                        let checkpoint_subst = self.subst.clone();
+                        let op_ty = self.instantiate(scheme);
+                        let result_ty = self.fresh_var();
+                        let expected = Type::Func(
+                            Box::new(left_ty.clone()),
+                            Box::new(Type::Func(
+                                Box::new(right_ty.clone()),
+                                Box::new(result_ty.clone()),
+                            )),
+                        );
+                        if self
+                            .unify_with_span(op_ty, expected, expr_span(left))
+                            .is_ok()
+                        {
+                            return Ok(result_ty);
+                        }
+                        self.subst = checkpoint_subst;
+                    }
+                }
+
                 self.unify_with_span(left_ty, Type::con("Int"), expr_span(left))?;
                 self.unify_with_span(right_ty, Type::con("Int"), expr_span(right))?;
                 Ok(Type::con("Int"))
