@@ -37,11 +37,14 @@ jobs:
         working-directory: specs
 
       - name: Configure Pages
+        id: pages
         uses: actions/configure-pages@v5
 
       - name: Build Documentation
         run: pnpm run docs:build
         working-directory: specs
+        env:
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}
 
       - name: Upload Build Artifacts
         uses: actions/upload-pages-artifact@v3

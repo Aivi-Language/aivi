@@ -1,8 +1,25 @@
 import { defineConfig } from 'vitepress'
 
+function normalizeBase(base: string): string {
+  if (!base.startsWith('/')) base = `/${base}`
+  if (!base.endsWith('/')) base = `${base}/`
+  return base
+}
+
+function resolveBase(): string {
+  const explicit = process.env.BASE_PATH || process.env.BASE_URL
+  if (explicit) return normalizeBase(explicit)
+
+  const repo = process.env.GITHUB_REPOSITORY?.split('/')[1]
+  if (repo && !repo.endsWith('.github.io')) return normalizeBase(repo)
+
+  return '/'
+}
+
 export default defineConfig({
   title: "AIVI Language Specification",
   description: "A high-integrity functional language with a Rust-first compilation pipeline.",
+  base: resolveBase(),
   themeConfig: {
     search: {
       provider: 'local'
