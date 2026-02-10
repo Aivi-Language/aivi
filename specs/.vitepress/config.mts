@@ -1,4 +1,9 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vitepress'
+
+const ebnfGrammar = JSON.parse(
+  readFileSync(new URL('../../vscode/syntaxes/ebnf.tmLanguage.json', import.meta.url), 'utf-8')
+)
 
 function normalizeBase(base: string): string {
   if (!base.startsWith('/')) base = `/${base}`
@@ -130,6 +135,7 @@ export default defineConfig({
                 { text: 'File', link: '/05_stdlib/03_system/20_file' },
                 { text: 'Console', link: '/05_stdlib/03_system/21_console' },
                 { text: 'HTTP', link: '/05_stdlib/03_system/19_http' },
+                { text: 'Database', link: '/05_stdlib/03_system/23_database' },
                 { text: 'URL', link: '/05_stdlib/03_system/25_url' },
                 { text: 'Crypto', link: '/05_stdlib/03_system/22_crypto' },
                 { text: 'System', link: '/05_stdlib/03_system/25_system' },
@@ -154,6 +160,13 @@ export default defineConfig({
     ]
   },
   markdown: {
+    languages: [
+      {
+        id: 'ebnf',
+        scopeName: 'source.ebnf',
+        grammar: ebnfGrammar
+      }
+    ],
     languageAlias: {
       'aivi': 'rust'
     }

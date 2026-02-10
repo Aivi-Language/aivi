@@ -1561,7 +1561,7 @@ impl TypeChecker {
     ) -> Result<Type, TypeError> {
         let mut local_env = env.clone();
         let err_ty = self.fresh_var();
-        let result_ty = self.fresh_var();
+        let mut result_ty = Type::con("Unit");
         for (idx, item) in items.iter().enumerate() {
             match item {
                 BlockItem::Bind { pattern, expr, .. } => {
@@ -1580,8 +1580,10 @@ impl TypeChecker {
                 }
                 BlockItem::Expr { expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
-                    let expected = Type::con("Effect").app(vec![err_ty.clone(), result_ty.clone()]);
                     if idx + 1 == items.len() {
+                        result_ty = self.fresh_var();
+                        let expected =
+                            Type::con("Effect").app(vec![err_ty.clone(), result_ty.clone()]);
                         self.unify_with_span(expr_ty, expected, expr_span(expr))?;
                     } else {
                         let _ = self.bind_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;

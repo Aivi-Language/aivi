@@ -16,6 +16,8 @@ Kernel effect primitives:
 | `effect { x = e; body }` | `let x = ⟦e⟧ in ⟦effect { body }⟧` |
 | `effect { e; body }` | `bind ⟦e⟧ (λ_. ⟦effect { body }⟧)` (if `e : Effect`) |
 | `effect { e }` | `⟦e⟧` (the final expression must already be an `Effect`) |
+| `effect { }` | `pure Unit` |
+| `effect { s1; ...; sn }` (no final expression) | `⟦effect { s1; ...; sn; pure Unit }⟧` |
 
 If you want to return a pure value from an effect block, write `pure value` as the final expression.
 

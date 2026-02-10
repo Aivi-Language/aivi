@@ -83,12 +83,13 @@ Inside an `effect { ... }` block:
 - `x = e` is a pure local binding
 - `x <- res` acquires a `Resource` (see [Resources](15_resources.md))
 - Branching is done with ordinary expressions (`if`, `case`, `?`); `->` guards are generator-only.
-- The final expression must be an `Effect` (commonly `pure value` or an effect call like `print "..."`).
+- If a final expression is present, it must be an `Effect` (commonly `pure value` or an effect call like `print "..."`).
+- If there is no final expression, the block defaults to `pure Unit`.
 
 Compiler checks:
 
-- Expression statements of non-`Effect` type in an `effect { ... }` block produce a warning unless they are the final expression or are bound.
-- Discarded `Effect` results produce a warning unless explicitly bound (including binding to `_`).
+- Expression statements must be `Effect`-typed.
+- Discarding an `Effect` result is allowed with a bare expression statement; binding to `_` is optional.
 
 ### `if` with nested blocks inside `effect`
 
