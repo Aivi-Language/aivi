@@ -20,6 +20,10 @@ timeDomain = [1.0, 0.5, 0.25, 0.125]
 freqDomain = fft(timeDomain)
 ```
 
+## Performance and Implementation (Rust)
+
+FFT and DSP must be implemented using established, optimized crates. Prefer `rustfft` (and `realfft` where needed) for core transforms, and avoid custom FFT kernels.
+
 ## Features
 
 ```aivi

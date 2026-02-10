@@ -17,6 +17,10 @@ use aivi.std.math.linalg (solve, eigen)
 x = solve(A, b)
 ```
 
+## Performance and Implementation (Rust)
+
+Linear algebra is expected to be backed by established BLAS/LAPACK bindings. Prefer crates like `ndarray-linalg` or `nalgebra` with `blas-src`/`lapack-src` rather than custom solvers to ensure high performance and numerical stability.
+
 ## Features
 
 ```aivi

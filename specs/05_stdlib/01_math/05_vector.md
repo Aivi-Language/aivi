@@ -22,6 +22,10 @@ v2 = (3.0, 4.0)v2
 v3 = v1 + v2 // (4.0, 6.0)
 ```
 
+## Performance and Implementation (Rust)
+
+Vector domains must prioritize SIMD-friendly implementations. Prefer established Rust crates (for example, `glam`, `nalgebra`, or `cgmath`) rather than hand-rolled loops to ensure optimized math kernels and correct edge handling.
+
 ## Features
 
 ```aivi

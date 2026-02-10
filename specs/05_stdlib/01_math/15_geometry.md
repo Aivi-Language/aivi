@@ -25,6 +25,10 @@ if intersect(ray, sphere) {
 }
 ```
 
+## Performance and Implementation (Rust)
+
+Geometry operations must rely on established computational-geometry crates for speed and correctness. Prefer `geo` for 2D operations and `parry3d` (or equivalent) for 3D intersection and collision routines instead of bespoke geometry kernels.
+
 ## Features
 
 ```aivi

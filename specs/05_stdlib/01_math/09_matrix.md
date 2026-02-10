@@ -21,6 +21,10 @@ translation = Mat4.translate(10.0, 0.0, 0.0)
 m_prime = m * translation
 ```
 
+## Performance and Implementation (Rust)
+
+Matrix operations should be backed by established crates with SIMD and BLAS/LAPACK support where applicable. Prefer `nalgebra` or `ndarray` (with `blas-src`/`lapack-src` bindings) over bespoke implementations to keep math-heavy domains fast and numerically robust.
+
 ## Features
 
 ```aivi

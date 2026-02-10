@@ -18,6 +18,10 @@ use aivi.std.number.rational
 use aivi.std.number.complex
 ```
 
+## Performance and Implementation (Rust)
+
+Numeric domains must lean on established Rust crates to guarantee correctness and speed. Use `num-bigint` for `BigInt`, `num-rational` for `Rational`, and `num-complex` for `Complex` (or equivalent battle-tested libraries) rather than custom arithmetic.
+
 ## BigInt
 
 `BigInt` grows as needed, limited only by memory. Use it for large integers that overflow `Int`.
