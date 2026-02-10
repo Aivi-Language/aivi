@@ -11,6 +11,7 @@ mod runtime;
 mod rust_codegen;
 mod rust_ir;
 mod rustc_backend;
+mod stdlib;
 mod surface;
 pub mod syntax;
 mod typecheck;
@@ -45,6 +46,7 @@ pub use surface::{
     RecordField, RecordPatternField, SpannedName, TextPart, TypeAlias, TypeCtor, TypeDecl,
     TypeExpr, TypeSig, UseDecl,
 };
+pub use stdlib::embedded_stdlib_modules;
 pub use typecheck::{check_types, infer_value_types};
 
 #[derive(Debug)]
@@ -127,7 +129,9 @@ pub fn load_modules(target: &str) -> Result<Vec<Module>, AiviError> {
         let (mut file_modules, _) = parse_modules(&path, &content);
         modules.append(&mut file_modules);
     }
-    Ok(modules)
+    let mut stdlib_modules = stdlib::embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    Ok(stdlib_modules)
 }
 
 pub fn load_module_diagnostics(target: &str) -> Result<Vec<FileDiagnostic>, AiviError> {
@@ -149,7 +153,9 @@ pub fn desugar_target(target: &str) -> Result<HirProgram, AiviError> {
         let (mut parsed, _) = parse_modules(&path, &content);
         modules.append(&mut parsed);
     }
-    Ok(hir::desugar_modules(&modules))
+    let mut stdlib_modules = stdlib::embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    Ok(hir::desugar_modules(&stdlib_modules))
 }
 
 pub fn kernel_target(target: &str) -> Result<kernel::KernelProgram, AiviError> {

@@ -355,7 +355,8 @@ pub fn parse_modules(path: &Path, content: &str) -> (Vec<Module>, Vec<FileDiagno
     let (cst_tokens, lex_diags) = lex(content);
     let tokens = filter_tokens(&cst_tokens);
     let mut parser = Parser::new(tokens, path);
-    let modules = parser.parse_modules();
+    let mut modules = parser.parse_modules();
+    inject_prelude_imports(&mut modules);
     let mut diagnostics: Vec<FileDiagnostic> = lex_diags
         .into_iter()
         .map(|diag| FileDiagnostic {
@@ -373,8 +374,44 @@ pub fn parse_modules_from_tokens(
 ) -> (Vec<Module>, Vec<FileDiagnostic>) {
     let tokens = filter_tokens(tokens);
     let mut parser = Parser::new(tokens, path);
-    let modules = parser.parse_modules();
+    let mut modules = parser.parse_modules();
+    inject_prelude_imports(&mut modules);
     (modules, parser.diagnostics)
+}
+
+fn inject_prelude_imports(modules: &mut [Module]) {
+    for module in modules {
+        if module.name.name == "aivi.prelude" {
+            continue;
+        }
+        if module
+            .annotations
+            .iter()
+            .any(|annotation| annotation.name == "no_prelude")
+        {
+            continue;
+        }
+        if module
+            .uses
+            .iter()
+            .any(|use_decl| use_decl.module.name == "aivi.prelude")
+        {
+            continue;
+        }
+        let span = module.name.span.clone();
+        module.uses.insert(
+            0,
+            UseDecl {
+                module: SpannedName {
+                    name: "aivi.prelude".to_string(),
+                    span: span.clone(),
+                },
+                items: Vec::new(),
+                span,
+                wildcard: true,
+            },
+        );
+    }
 }
 
 struct Parser {
@@ -557,8 +594,20 @@ impl Parser {
 
     fn parse_export_list(&mut self) -> Vec<SpannedName> {
         let mut exports = Vec::new();
-        while let Some(name) = self.consume_ident() {
-            exports.push(name);
+        loop {
+            if self.match_keyword("domain") {
+                if let Some(name) = self.consume_ident() {
+                    exports.push(name);
+                } else {
+                    let span = self.peek_span().unwrap_or_else(|| self.previous_span());
+                    self.emit_diag("E1500", "expected domain name after 'domain'", span);
+                    break;
+                }
+            } else if let Some(name) = self.consume_ident() {
+                exports.push(name);
+            } else {
+                break;
+            }
             if !self.consume_symbol(",") {
                 break;
             }

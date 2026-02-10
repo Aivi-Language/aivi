@@ -120,20 +120,57 @@ fn check_defs(
     diagnostics: &mut Vec<FileDiagnostic>,
 ) {
     let mut scope: HashSet<String> = HashSet::new();
-    let mut wildcard_import = false;
+    let mut allow_unknown = false;
 
     for item in module.items.iter() {
         collect_value_defs(item, &mut scope);
     }
     for use_decl in &module.uses {
         if use_decl.wildcard {
-            wildcard_import = true;
+            if let Some(target) = module_map.get(&use_decl.module.name) {
+                let exported: HashSet<&str> = target
+                    .exports
+                    .iter()
+                    .map(|name| name.name.as_str())
+                    .collect();
+                for export in &target.exports {
+                    scope.insert(export.name.clone());
+                }
+                for item in &target.items {
+                    if let ModuleItem::ClassDecl(class_decl) = item {
+                        if !exported.contains(class_decl.name.name.as_str()) {
+                            continue;
+                        }
+                        for member in &class_decl.members {
+                            scope.insert(member.name.name.clone());
+                        }
+                    }
+                }
+            } else if use_decl.module.name.starts_with("aivi.") {
+                allow_unknown = true;
+            }
             continue;
         }
         if let Some(target) = module_map.get(&use_decl.module.name) {
+            let exported: HashSet<&str> = target
+                .exports
+                .iter()
+                .map(|name| name.name.as_str())
+                .collect();
             for item in &use_decl.items {
                 if target.exports.iter().any(|export| export.name == item.name) {
                     scope.insert(item.name.clone());
+                    if exported.contains(item.name.as_str()) {
+                        for module_item in &target.items {
+                            if let ModuleItem::ClassDecl(class_decl) = module_item {
+                                if class_decl.name.name == item.name {
+                                    for member in &class_decl.members {
+                                        scope.insert(member.name.name.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -142,18 +179,18 @@ fn check_defs(
     for item in &module.items {
         match item {
             ModuleItem::Def(def) => {
-                check_def(def, &scope, diagnostics, module, wildcard_import);
+                check_def(def, &scope, diagnostics, module, allow_unknown);
             }
             ModuleItem::InstanceDecl(instance) => {
                 for def in &instance.defs {
-                    check_def(def, &scope, diagnostics, module, wildcard_import);
+                    check_def(def, &scope, diagnostics, module, allow_unknown);
                 }
             }
             ModuleItem::DomainDecl(domain) => {
                 for domain_item in &domain.items {
                     match domain_item {
                         DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                            check_def(def, &scope, diagnostics, module, wildcard_import);
+                            check_def(def, &scope, diagnostics, module, allow_unknown);
                         }
                         DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                     }
@@ -210,7 +247,7 @@ fn check_def(
     scope: &HashSet<String>,
     diagnostics: &mut Vec<FileDiagnostic>,
     module: &Module,
-    wildcard_import: bool,
+    allow_unknown: bool,
 ) {
     let mut local_scope = scope.clone();
     collect_pattern_bindings(&def.params, &mut local_scope);
@@ -219,7 +256,7 @@ fn check_def(
         &mut local_scope,
         diagnostics,
         module,
-        wildcard_import,
+        allow_unknown,
     );
 }
 
@@ -228,7 +265,7 @@ fn check_expr(
     scope: &mut HashSet<String>,
     diagnostics: &mut Vec<FileDiagnostic>,
     module: &Module,
-    wildcard_import: bool,
+    allow_unknown: bool,
 ) {
     match expr {
         Expr::TextInterpolate { parts, .. } => {
@@ -248,7 +285,7 @@ fn check_expr(
             if is_builtin_name(&name.name) {
                 return;
             }
-            if wildcard_import {
+            if allow_unknown {
                 return;
             }
             if !scope.contains(&name.name) {

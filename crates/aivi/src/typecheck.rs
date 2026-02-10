@@ -39,6 +39,97 @@ struct InstanceDeclInfo {
     params: Vec<TypeExpr>,
 }
 
+fn collect_local_class_env(
+    module: &Module,
+) -> (HashMap<String, ClassDeclInfo>, Vec<InstanceDeclInfo>) {
+    let mut classes = HashMap::new();
+    let mut instances = Vec::new();
+    for item in &module.items {
+        match item {
+            ModuleItem::ClassDecl(class_decl) => {
+                let mut members = HashMap::new();
+                for member in &class_decl.members {
+                    members.insert(member.name.name.clone(), member.ty.clone());
+                }
+                classes.insert(
+                    class_decl.name.name.clone(),
+                    ClassDeclInfo {
+                        params: class_decl.params.clone(),
+                        members,
+                    },
+                );
+            }
+            ModuleItem::InstanceDecl(instance_decl) => {
+                instances.push(InstanceDeclInfo {
+                    class_name: instance_decl.name.name.clone(),
+                    params: instance_decl.params.clone(),
+                });
+            }
+            _ => {}
+        }
+    }
+    (classes, instances)
+}
+
+fn collect_imported_class_env(
+    module: &Module,
+    module_class_exports: &HashMap<String, HashMap<String, ClassDeclInfo>>,
+    module_instance_exports: &HashMap<String, Vec<InstanceDeclInfo>>,
+) -> (HashMap<String, ClassDeclInfo>, Vec<InstanceDeclInfo>) {
+    let mut classes = HashMap::new();
+    let mut instances = Vec::new();
+    for use_decl in &module.uses {
+        let Some(class_exports) = module_class_exports.get(&use_decl.module.name) else {
+            continue;
+        };
+        if use_decl.wildcard {
+            for (name, info) in class_exports {
+                classes.insert(name.clone(), info.clone());
+            }
+            if let Some(instance_exports) = module_instance_exports.get(&use_decl.module.name) {
+                instances.extend(instance_exports.iter().cloned());
+            }
+            continue;
+        }
+        let mut imported_classes = HashSet::new();
+        for item in &use_decl.items {
+            if let Some(info) = class_exports.get(&item.name) {
+                classes.insert(item.name.clone(), info.clone());
+                imported_classes.insert(item.name.clone());
+            }
+        }
+        if let Some(instance_exports) = module_instance_exports.get(&use_decl.module.name) {
+            for instance in instance_exports {
+                if imported_classes.contains(&instance.class_name) {
+                    instances.push(instance.clone());
+                }
+            }
+        }
+    }
+    (classes, instances)
+}
+
+fn collect_exported_class_env(
+    module: &Module,
+    classes: &HashMap<String, ClassDeclInfo>,
+    instances: &[InstanceDeclInfo],
+) -> (HashMap<String, ClassDeclInfo>, Vec<InstanceDeclInfo>) {
+    let mut class_exports = HashMap::new();
+    let mut exported_class_names = HashSet::new();
+    for export in &module.exports {
+        if let Some(info) = classes.get(&export.name) {
+            class_exports.insert(export.name.clone(), info.clone());
+            exported_class_names.insert(export.name.clone());
+        }
+    }
+    let instance_exports = instances
+        .iter()
+        .filter(|instance| exported_class_names.contains(&instance.class_name))
+        .cloned()
+        .collect();
+    (class_exports, instance_exports)
+}
+
 fn ordered_modules(modules: &[Module]) -> Vec<&Module> {
     let mut name_to_index = HashMap::new();
     for (idx, module) in modules.iter().enumerate() {
@@ -105,15 +196,28 @@ pub fn check_types(modules: &[Module]) -> Vec<FileDiagnostic> {
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
     let mut module_exports: HashMap<String, HashMap<String, Scheme>> = HashMap::new();
+    let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
+    let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
 
     for module in ordered_modules(modules) {
         checker.reset_module_context(module);
         let mut env = checker.builtins.clone();
         checker.register_module_types(module);
-        checker.collect_classes_and_instances(module);
         let sigs = checker.collect_type_sigs(module);
         checker.register_module_constructors(module, &mut env);
         checker.register_imports(module, &module_exports, &mut env);
+        let (imported_classes, imported_instances) =
+            collect_imported_class_env(module, &module_class_exports, &module_instance_exports);
+        let (local_classes, local_instances) = collect_local_class_env(module);
+        let local_class_names: HashSet<String> = local_classes.keys().cloned().collect();
+        let mut classes = imported_classes;
+        classes.extend(local_classes);
+        let mut instances: Vec<InstanceDeclInfo> = imported_instances
+            .into_iter()
+            .filter(|instance| !local_class_names.contains(&instance.class_name))
+            .collect();
+        instances.extend(local_instances);
+        checker.set_class_env(classes, instances);
         checker.register_module_defs(module, &sigs, &mut env);
 
         let mut module_diags = checker.check_module_defs(module, &sigs, &mut env);
@@ -126,6 +230,10 @@ pub fn check_types(modules: &[Module]) -> Vec<FileDiagnostic> {
             }
         }
         module_exports.insert(module.name.name.clone(), exports);
+        let (class_exports, instance_exports) =
+            collect_exported_class_env(module, &checker.classes, &checker.instances);
+        module_class_exports.insert(module.name.name.clone(), class_exports);
+        module_instance_exports.insert(module.name.name.clone(), instance_exports);
     }
 
     diagnostics
@@ -140,16 +248,29 @@ pub fn infer_value_types(
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
     let mut module_exports: HashMap<String, HashMap<String, Scheme>> = HashMap::new();
+    let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
+    let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
     let mut inferred: HashMap<String, HashMap<String, String>> = HashMap::new();
 
     for module in ordered_modules(modules) {
         checker.reset_module_context(module);
         let mut env = checker.builtins.clone();
         checker.register_module_types(module);
-        checker.collect_classes_and_instances(module);
         let sigs = checker.collect_type_sigs(module);
         checker.register_module_constructors(module, &mut env);
         checker.register_imports(module, &module_exports, &mut env);
+        let (imported_classes, imported_instances) =
+            collect_imported_class_env(module, &module_class_exports, &module_instance_exports);
+        let (local_classes, local_instances) = collect_local_class_env(module);
+        let local_class_names: HashSet<String> = local_classes.keys().cloned().collect();
+        let mut classes = imported_classes;
+        classes.extend(local_classes);
+        let mut instances: Vec<InstanceDeclInfo> = imported_instances
+            .into_iter()
+            .filter(|instance| !local_class_names.contains(&instance.class_name))
+            .collect();
+        instances.extend(local_instances);
+        checker.set_class_env(classes, instances);
         checker.register_module_defs(module, &sigs, &mut env);
 
         let mut module_diags = checker.check_module_defs(module, &sigs, &mut env);
@@ -196,6 +317,10 @@ pub fn infer_value_types(
             }
         }
         module_exports.insert(module.name.name.clone(), exports);
+        let (class_exports, instance_exports) =
+            collect_exported_class_env(module, &checker.classes, &checker.instances);
+        module_class_exports.insert(module.name.name.clone(), class_exports);
+        module_instance_exports.insert(module.name.name.clone(), instance_exports);
     }
 
     (diagnostics, inferred)
@@ -230,33 +355,20 @@ impl TypeChecker {
         self.method_to_classes.clear();
     }
 
-    fn collect_classes_and_instances(&mut self, module: &Module) {
-        for item in &module.items {
-            match item {
-                ModuleItem::ClassDecl(class_decl) => {
-                    let mut members = HashMap::new();
-                    for member in &class_decl.members {
-                        members.insert(member.name.name.clone(), member.ty.clone());
-                        self.method_to_classes
-                            .entry(member.name.name.clone())
-                            .or_default()
-                            .push(class_decl.name.name.clone());
-                    }
-                    self.classes.insert(
-                        class_decl.name.name.clone(),
-                        ClassDeclInfo {
-                            params: class_decl.params.clone(),
-                            members,
-                        },
-                    );
-                }
-                ModuleItem::InstanceDecl(instance_decl) => {
-                    self.instances.push(InstanceDeclInfo {
-                        class_name: instance_decl.name.name.clone(),
-                        params: instance_decl.params.clone(),
-                    });
-                }
-                _ => {}
+    fn set_class_env(
+        &mut self,
+        classes: HashMap<String, ClassDeclInfo>,
+        instances: Vec<InstanceDeclInfo>,
+    ) {
+        self.classes = classes;
+        self.instances = instances;
+        self.method_to_classes.clear();
+        for (class_name, class_info) in &self.classes {
+            for member_name in class_info.members.keys() {
+                self.method_to_classes
+                    .entry(member_name.clone())
+                    .or_default()
+                    .push(class_name.clone());
             }
         }
     }

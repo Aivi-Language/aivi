@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use aivi::{
-    infer_value_types, parse_modules, BlockItem, ClassDecl, Def, DomainDecl, DomainItem, Expr,
-    InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment, Pattern,
-    RecordField, RecordPatternField, Span, SpannedName, TypeAlias, TypeCtor, TypeDecl, TypeExpr,
-    UseDecl,
+    embedded_stdlib_modules, infer_value_types, parse_modules, BlockItem, ClassDecl, Def,
+    DomainDecl, DomainItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem,
+    PathSegment, Pattern, RecordField, RecordPatternField, Span, SpannedName, TypeAlias, TypeCtor,
+    TypeDecl, TypeExpr, UseDecl,
 };
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
@@ -1376,6 +1376,13 @@ impl Backend {
 
         let mut merged = disk_modules;
         merged.extend(open_modules);
+        for module in embedded_stdlib_modules() {
+            let name = module.name.name.clone();
+            merged.entry(name.clone()).or_insert_with(|| IndexedModule {
+                uri: Self::stdlib_uri(&name),
+                module,
+            });
+        }
         merged
     }
 
@@ -1493,6 +1500,11 @@ impl Backend {
             .unwrap_or_else(|_| PathBuf::from(uri.to_string()))
             .display()
             .to_string()
+    }
+
+    fn stdlib_uri(name: &str) -> Url {
+        Url::parse(&format!("aivi://stdlib/{name}"))
+            .expect("stdlib uri should be valid")
     }
 
     fn call_info_in_item(item: &ModuleItem, position: Position) -> Option<CallInfo<'_>> {
