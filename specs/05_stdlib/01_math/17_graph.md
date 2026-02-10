@@ -25,9 +25,6 @@ g = Graph.fromEdges([
 path = bfs(g, start: 1, end: 3)
 ```
 
-## Performance and Implementation (Rust)
-
-Graph algorithms must use established crates to keep traversals and shortest-path routines fast and correct. Prefer `petgraph` (or equivalent) rather than custom BFS/Dijkstra implementations.
 
 ## Features
 

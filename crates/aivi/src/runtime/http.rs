@@ -146,7 +146,7 @@ pub(super) fn build_http_server_record() -> Value {
             Ok(Value::Effect(Arc::new(effect)))
         }),
     );
-    Value::Record(fields)
+    Value::Record(Arc::new(fields))
 }
 
 fn parse_server_config(value: Value) -> Result<SocketAddr, RuntimeError> {
@@ -183,7 +183,7 @@ fn request_to_value(req: AiviRequest) -> Value {
             },
         },
     );
-    Value::Record(fields)
+    Value::Record(Arc::new(fields))
 }
 
 fn server_reply_from_value(
@@ -254,7 +254,7 @@ fn response_from_value(value: Value) -> Result<AiviResponse, AiviHttpError> {
         }
     };
     let headers = match record.get("headers") {
-        Some(Value::List(items)) => headers_from_value(items)?,
+        Some(Value::List(items)) => headers_from_value(items.as_ref())?,
         _ => {
             return Err(AiviHttpError {
                 message: "Response.headers must be List".to_string(),
@@ -262,7 +262,7 @@ fn response_from_value(value: Value) -> Result<AiviResponse, AiviHttpError> {
         }
     };
     let body = match record.get("body") {
-        Some(Value::List(items)) => list_value_to_bytes(items)?,
+        Some(Value::List(items)) => list_value_to_bytes(items.as_ref())?,
         _ => {
             return Err(AiviHttpError {
                 message: "Response.body must be List Int".to_string(),
@@ -283,10 +283,10 @@ fn headers_to_value(headers: Vec<(String, String)>) -> Value {
             let mut fields = HashMap::new();
             fields.insert("name".to_string(), Value::Text(name));
             fields.insert("value".to_string(), Value::Text(value));
-            Value::Record(fields)
+            Value::Record(Arc::new(fields))
         })
         .collect();
-    Value::List(values)
+    Value::List(Arc::new(values))
 }
 
 fn headers_from_value(values: &[Value]) -> Result<Vec<(String, String)>, AiviHttpError> {
@@ -326,7 +326,7 @@ fn bytes_to_list_value(bytes: Vec<u8>) -> Value {
         .into_iter()
         .map(|value| Value::Int(value as i64))
         .collect();
-    Value::List(items)
+    Value::List(Arc::new(items))
 }
 
 fn list_value_to_bytes(values: &[Value]) -> Result<Vec<u8>, AiviHttpError> {
@@ -397,7 +397,7 @@ fn value_to_ws_message(value: Value) -> Result<AiviWsMessage, RuntimeError> {
                 ));
             }
             match args.pop().unwrap() {
-                Value::List(items) => list_value_to_bytes(&items)
+                Value::List(items) => list_value_to_bytes(items.as_ref())
                     .map(AiviWsMessage::BinaryMsg)
                     .map_err(|err| RuntimeError::Message(err.message)),
                 _ => Err(RuntimeError::Message(
@@ -421,7 +421,10 @@ fn value_to_ws_message(value: Value) -> Result<AiviWsMessage, RuntimeError> {
     }
 }
 
-fn expect_record(value: Value, message: &str) -> Result<HashMap<String, Value>, RuntimeError> {
+fn expect_record(
+    value: Value,
+    message: &str,
+) -> Result<Arc<HashMap<String, Value>>, RuntimeError> {
     match value {
         Value::Record(record) => Ok(record),
         _ => Err(RuntimeError::Message(message.to_string())),
@@ -431,13 +434,13 @@ fn expect_record(value: Value, message: &str) -> Result<HashMap<String, Value>, 
 fn http_error_value(message: String) -> Value {
     let mut fields = HashMap::new();
     fields.insert("message".to_string(), Value::Text(message));
-    Value::Record(fields)
+    Value::Record(Arc::new(fields))
 }
 
 fn ws_error_value(message: String) -> Value {
     let mut fields = HashMap::new();
     fields.insert("message".to_string(), Value::Text(message));
-    Value::Record(fields)
+    Value::Record(Arc::new(fields))
 }
 
 fn runtime_error_to_http_error(err: RuntimeError) -> AiviHttpError {
@@ -451,4 +454,3 @@ fn runtime_error_to_http_error(err: RuntimeError) -> AiviHttpError {
         RuntimeError::Message(message) => AiviHttpError { message },
     }
 }
-

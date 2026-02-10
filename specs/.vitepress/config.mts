@@ -186,7 +186,6 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: 'Concurrency', link: '/06_runtime/01_concurrency' },
-          { text: 'Rustc Native Pipeline', link: '/06_runtime/02_rustc_native_pipeline' },
         ]
       }
     ]

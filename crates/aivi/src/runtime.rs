@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use rudo_gc::GcMutex;
 
 use crate::hir::{
     HirBlockItem, HirExpr, HirListItem, HirLiteral, HirMatchArm, HirPathSegment, HirPattern,
@@ -95,7 +97,7 @@ pub fn run_native(program: HirProgram) -> Result<(), AiviError> {
             let thunk = ThunkValue {
                 expr: Arc::new(exprs.into_iter().next().unwrap()),
                 env: globals.clone(),
-                cached: Mutex::new(None),
+                cached: GcMutex::new(None),
                 in_progress: AtomicBool::new(false),
             };
             globals.set(name, Value::Thunk(Arc::new(thunk)));
@@ -105,7 +107,7 @@ pub fn run_native(program: HirProgram) -> Result<(), AiviError> {
                 let thunk = ThunkValue {
                     expr: Arc::new(expr),
                     env: globals.clone(),
-                    cached: Mutex::new(None),
+                    cached: GcMutex::new(None),
                     in_progress: AtomicBool::new(false),
                 };
                 clauses.push(Value::Thunk(Arc::new(thunk)));
@@ -204,10 +206,9 @@ impl Runtime {
     }
 
     fn eval_thunk(&mut self, thunk: Arc<ThunkValue>) -> Result<Value, RuntimeError> {
-        if let Ok(cached) = thunk.cached.lock() {
-            if let Some(value) = cached.clone() {
-                return Ok(value);
-            }
+        let cached = thunk.cached.lock();
+        if let Some(value) = cached.clone() {
+            return Ok(value);
         }
         if thunk.in_progress.swap(true, Ordering::SeqCst) {
             return Err(RuntimeError::Message(
@@ -215,9 +216,8 @@ impl Runtime {
             ));
         }
         let value = self.eval_expr(&thunk.expr, &thunk.env)?;
-        if let Ok(mut cached) = thunk.cached.lock() {
-            *cached = Some(value.clone());
-        }
+        let mut cached = thunk.cached.lock();
+        *cached = Some(value.clone());
         thunk.in_progress.store(false, Ordering::SeqCst);
         Ok(value)
     }
@@ -267,7 +267,7 @@ impl Runtime {
                 map.insert("tag".to_string(), Value::Text(tag.clone()));
                 map.insert("body".to_string(), Value::Text(body.clone()));
                 map.insert("flags".to_string(), Value::Text(flags.clone()));
-                Ok(Value::Record(map))
+                Ok(Value::Record(Arc::new(map)))
             }
             HirExpr::LitBool { value, .. } => Ok(Value::Bool(*value)),
             HirExpr::LitDateTime { text, .. } => Ok(Value::DateTime(text.clone())),
@@ -393,7 +393,7 @@ impl Runtime {
         let func = self.force_value(func)?;
         match func {
             Value::Closure(closure) => {
-                let new_env = Env::new(Some(Arc::new(closure.env.clone())));
+                let new_env = Env::new(Some(closure.env.clone()));
                 new_env.set(closure.param.clone(), arg);
                 self.eval_expr(&closure.body, &new_env)
             }
@@ -453,7 +453,7 @@ impl Runtime {
         items: &[HirBlockItem],
         env: &Env,
     ) -> Result<Value, RuntimeError> {
-        let local_env = Env::new(Some(Arc::new(env.clone())));
+        let local_env = Env::new(Some(env.clone()));
         let mut last_value = Value::Unit;
         for (index, item) in items.iter().enumerate() {
             let last = index + 1 == items.len();
@@ -496,7 +496,7 @@ impl Runtime {
         for arm in arms {
             if let Some(bindings) = collect_pattern_bindings(&arm.pattern, value) {
                 if let Some(guard) = &arm.guard {
-                    let guard_env = Env::new(Some(Arc::new(env.clone())));
+                    let guard_env = Env::new(Some(env.clone()));
                     for (name, value) in bindings.clone() {
                         guard_env.set(name, value);
                     }
@@ -505,7 +505,7 @@ impl Runtime {
                         continue;
                     }
                 }
-                let arm_env = Env::new(Some(Arc::new(env.clone())));
+                let arm_env = Env::new(Some(env.clone()));
                 for (name, value) in bindings {
                     arm_env.set(name, value);
                 }
@@ -521,7 +521,7 @@ impl Runtime {
             let value = self.eval_expr(&item.expr, env)?;
             if item.spread {
                 match value {
-                    Value::List(mut inner) => values.append(&mut inner),
+                    Value::List(inner) => values.extend(inner.iter().cloned()),
                     _ => {
                         return Err(RuntimeError::Message(
                             "list spread expects a list".to_string(),
@@ -532,7 +532,7 @@ impl Runtime {
                 values.push(value);
             }
         }
-        Ok(Value::List(values))
+        Ok(Value::List(Arc::new(values)))
     }
 
     fn eval_record(&mut self, fields: &[HirRecordField], env: &Env) -> Result<Value, RuntimeError> {
@@ -541,7 +541,7 @@ impl Runtime {
             let value = self.eval_expr(&field.value, env)?;
             insert_record_path(&mut map, &field.path, value)?;
         }
-        Ok(Value::Record(map))
+        Ok(Value::Record(Arc::new(map)))
     }
 
     fn eval_patch(
@@ -551,15 +551,16 @@ impl Runtime {
         env: &Env,
     ) -> Result<Value, RuntimeError> {
         let base_value = self.eval_expr(target, env)?;
-        let Value::Record(mut map) = base_value else {
+        let Value::Record(map) = base_value else {
             return Err(RuntimeError::Message(
                 "patch target must be a record".to_string(),
             ));
         };
+        let mut map = map.as_ref().clone();
         for field in fields {
             self.apply_patch_field(&mut map, &field.path, &field.value, env)?;
         }
-        Ok(Value::Record(map))
+        Ok(Value::Record(Arc::new(map)))
     }
 
     fn apply_patch_field(
@@ -580,10 +581,10 @@ impl Runtime {
                 HirPathSegment::Field(name) => {
                     let entry = current
                         .entry(name.clone())
-                        .or_insert_with(|| Value::Record(HashMap::new()));
+                        .or_insert_with(|| Value::Record(Arc::new(HashMap::new())));
                     match entry {
                         Value::Record(map) => {
-                            current = map;
+                            current = Arc::make_mut(map);
                         }
                         _ => {
                             return Err(RuntimeError::Message(format!(
@@ -663,7 +664,7 @@ impl Runtime {
         env: Env,
         items: &[HirBlockItem],
     ) -> Result<Value, RuntimeError> {
-        let local_env = Env::new(Some(Arc::new(env)));
+        let local_env = Env::new(Some(env));
         let mut cleanups: Vec<Value> = Vec::new();
         let mut result: Result<Value, RuntimeError> = Ok(Value::Unit);
 
@@ -768,7 +769,7 @@ impl Runtime {
         resource: Arc<ResourceValue>,
         env: &Env,
     ) -> Result<(Value, Value), RuntimeError> {
-        let local_env = Env::new(Some(Arc::new(env.clone())));
+        let local_env = Env::new(Some(env.clone()));
         let items = resource.items.as_ref();
         let mut yielded = None;
         let mut cleanup_start = None;
@@ -930,7 +931,7 @@ fn match_pattern(
                 }
                 if let Some(rest) = rest {
                     let tail = values[items.len()..].to_vec();
-                    match_pattern(rest, &Value::List(tail), bindings)
+                    match_pattern(rest, &Value::List(Arc::new(tail)), bindings)
                 } else {
                     values.len() == items.len()
                 }
@@ -963,7 +964,7 @@ fn record_get_path<'a>(record: &'a HashMap<String, Value>, path: &[String]) -> O
             return value;
         }
         match value {
-            Some(Value::Record(map)) => current = map,
+            Some(Value::Record(map)) => current = map.as_ref(),
             _ => return None,
         }
     }
@@ -990,10 +991,10 @@ fn insert_record_path(
                 }
                 let entry = current
                     .entry(name.clone())
-                    .or_insert_with(|| Value::Record(HashMap::new()));
+                    .or_insert_with(|| Value::Record(Arc::new(HashMap::new())));
                 match entry {
                     Value::Record(map) => {
-                        current = map;
+                        current = Arc::make_mut(map);
                     }
                     _ => {
                         return Err(RuntimeError::Message(format!(

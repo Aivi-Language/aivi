@@ -345,7 +345,7 @@ fn build_file_record() -> Value {
                         "is_directory".to_string(),
                         Value::Bool(metadata.is_dir()),
                     );
-                    Ok(Value::Record(stats))
+                    Ok(Value::Record(Arc::new(stats)))
                 }),
             };
             Ok(Value::Effect(Arc::new(effect)))
@@ -371,7 +371,7 @@ fn build_file_record() -> Value {
             Ok(Value::Effect(Arc::new(effect)))
         }),
     );
-    Value::Record(fields)
+    Value::Record(Arc::new(fields))
 }
 
 fn build_clock_record() -> Value {
@@ -391,7 +391,7 @@ fn build_clock_record() -> Value {
             Ok(Value::Effect(Arc::new(effect)))
         }),
     );
-    Value::Record(fields)
+    Value::Record(Arc::new(fields))
 }
 
 fn build_random_record() -> Value {
@@ -426,7 +426,7 @@ fn build_random_record() -> Value {
             Ok(Value::Effect(Arc::new(effect)))
         }),
     );
-    Value::Record(fields)
+    Value::Record(Arc::new(fields))
 }
 
 fn build_channel_record() -> Value {
@@ -561,7 +561,7 @@ fn build_channel_record() -> Value {
             Ok(Value::Effect(Arc::new(effect)))
         }),
     );
-    Value::Record(fields)
+    Value::Record(Arc::new(fields))
 }
 
 pub(super) fn build_concurrent_record() -> Value {
@@ -738,7 +738,7 @@ pub(super) fn build_concurrent_record() -> Value {
             Ok(Value::Effect(Arc::new(effect)))
         }),
     );
-    Value::Record(fields)
+    Value::Record(Arc::new(fields))
 }
 
 fn spawn_effect(

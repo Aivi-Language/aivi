@@ -1,35 +1,42 @@
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+
+use rudo_gc::{Gc, GcMutex, Trace};
 
 use super::values::Value;
 
-#[derive(Clone)]
+#[derive(Clone, Trace)]
 pub(super) struct Env {
-    pub(super) parent: Option<Arc<Env>>,
-    pub(super) values: Arc<Mutex<HashMap<String, Value>>>,
+    inner: Gc<EnvInner>,
+}
+
+#[derive(Trace)]
+struct EnvInner {
+    parent: Option<Env>,
+    values: GcMutex<HashMap<String, Value>>,
 }
 
 impl Env {
-    pub(super) fn new(parent: Option<Arc<Env>>) -> Self {
+    pub(super) fn new(parent: Option<Env>) -> Self {
         Self {
-            parent,
-            values: Arc::new(Mutex::new(HashMap::new())),
+            inner: Gc::new(EnvInner {
+                parent,
+                values: GcMutex::new(HashMap::new()),
+            }),
         }
     }
 
     pub(super) fn get(&self, name: &str) -> Option<Value> {
-        if let Ok(values) = self.values.lock() {
-            if let Some(value) = values.get(name) {
-                return Some(value.clone());
-            }
+        if let Some(value) = self.inner.values.lock().get(name) {
+            return Some(value.clone());
         }
-        self.parent.as_ref().and_then(|parent| parent.get(name))
+        self.inner
+            .parent
+            .as_ref()
+            .and_then(|parent| parent.get(name))
     }
 
     pub(super) fn set(&self, name: String, value: Value) {
-        if let Ok(mut values) = self.values.lock() {
-            values.insert(name, value);
-        }
+        self.inner.values.lock().insert(name, value);
     }
 }
 

@@ -22,9 +22,6 @@ distribution = Normal(0.0, 1.0)
 sample = distribution |> sample()
 ```
 
-## Performance and Implementation (Rust)
-
-Probability and distribution sampling must use established crates for performance and statistical correctness. Prefer `rand` + `rand_distr` for sampling and `statrs` for distribution math rather than bespoke implementations.
 
 ## Features
 

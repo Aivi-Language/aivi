@@ -1,6 +1,8 @@
 use std::sync::mpsc;
 use std::time::Duration;
 
+use rudo_gc::GcMutex;
+
 use super::*;
 
 #[test]
@@ -55,7 +57,7 @@ module test.interpolation = {
             let thunk = ThunkValue {
                 expr: Arc::new(exprs.into_iter().next().unwrap()),
                 env: globals.clone(),
-                cached: Mutex::new(None),
+                cached: GcMutex::new(None),
                 in_progress: AtomicBool::new(false),
             };
             globals.set(name, Value::Thunk(Arc::new(thunk)));
@@ -65,7 +67,7 @@ module test.interpolation = {
                 let thunk = ThunkValue {
                     expr: Arc::new(expr),
                     env: globals.clone(),
-                    cached: Mutex::new(None),
+                    cached: GcMutex::new(None),
                     in_progress: AtomicBool::new(false),
                 };
                 clauses.push(Value::Thunk(Arc::new(thunk)));

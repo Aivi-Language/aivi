@@ -7,7 +7,7 @@ A **Vector** is just a number with a direction. It's the difference between sayi
 *   **Velocity**: "Where am I going?" (Movement)
 *   **Force**: "What's pushing me?" (Physics)
 
-Graphics, physics engines, and game logic run on vectors. While you *could* store `x`, `y`, and `z` variables separately, code becomes unreadable quickly. A native Vector domain allows for clean math (`v1 + v2`) and is often hardware-accelerated (SIMD) for speed.
+Graphics, physicsows for clean math (`v1 + v2`) and is often hardware-accelerated (SIMD) for speed.
 
 ## Overview
 
@@ -22,9 +22,6 @@ v2 = (3.0, 4.0)v2
 v3 = v1 + v2 // (4.0, 6.0)
 ```
 
-## Performance and Implementation (Rust)
-
-Vector domains must prioritize SIMD-friendly implementations. Prefer established Rust crates (for example, `glam`, `nalgebra`, or `cgmath`) rather than hand-rolled loops to ensure optimized math kernels and correct edge handling.
 
 ## Features
 

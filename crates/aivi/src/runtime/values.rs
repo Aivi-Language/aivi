@@ -2,6 +2,8 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::{mpsc, Arc, Mutex};
 
+use rudo_gc::{GcMutex, Trace, Visitor};
+
 use crate::hir::{HirBlockItem, HirExpr};
 use aivi_http_server::{ServerHandle, WebSocketHandle};
 
@@ -20,9 +22,9 @@ pub(super) enum Value {
     Float(f64),
     Text(String),
     DateTime(String),
-    List(Vec<Value>),
+    List(Arc<Vec<Value>>),
     Tuple(Vec<Value>),
-    Record(HashMap<String, Value>),
+    Record(Arc<HashMap<String, Value>>),
     Constructor { name: String, args: Vec<Value> },
     Closure(Arc<ClosureValue>),
     Builtin(BuiltinValue),
@@ -72,7 +74,7 @@ pub(super) struct ResourceValue {
 pub(super) struct ThunkValue {
     pub(super) expr: Arc<HirExpr>,
     pub(super) env: Env,
-    pub(super) cached: Mutex<Option<Value>>,
+    pub(super) cached: GcMutex<Option<Value>>,
     pub(super) in_progress: AtomicBool,
 }
 
@@ -88,4 +90,64 @@ pub(super) struct ChannelSend {
 
 pub(super) struct ChannelRecv {
     pub(super) inner: Arc<ChannelInner>,
+}
+
+unsafe impl Trace for Value {
+    fn trace(&self, visitor: &mut impl Visitor) {
+        match self {
+            Value::List(items) => items.trace(visitor),
+            Value::Tuple(items) => items.trace(visitor),
+            Value::Record(fields) => fields.trace(visitor),
+            Value::Constructor { args, .. } => args.trace(visitor),
+            Value::Closure(closure) => closure.trace(visitor),
+            Value::Builtin(builtin) => builtin.trace(visitor),
+            Value::Effect(effect) => effect.trace(visitor),
+            Value::Resource(resource) => resource.trace(visitor),
+            Value::Thunk(thunk) => thunk.trace(visitor),
+            Value::MultiClause(clauses) => clauses.trace(visitor),
+            Value::Unit
+            | Value::Bool(_)
+            | Value::Int(_)
+            | Value::Float(_)
+            | Value::Text(_)
+            | Value::DateTime(_)
+            | Value::ChannelSend(_)
+            | Value::ChannelRecv(_)
+            | Value::FileHandle(_)
+            | Value::HttpServer(_)
+            | Value::WebSocket(_) => {}
+        }
+    }
+}
+
+unsafe impl Trace for BuiltinValue {
+    fn trace(&self, visitor: &mut impl Visitor) {
+        self.args.trace(visitor);
+    }
+}
+
+unsafe impl Trace for ClosureValue {
+    fn trace(&self, visitor: &mut impl Visitor) {
+        self.env.trace(visitor);
+    }
+}
+
+unsafe impl Trace for EffectValue {
+    fn trace(&self, visitor: &mut impl Visitor) {
+        match self {
+            EffectValue::Block { env, .. } => env.trace(visitor),
+            EffectValue::Thunk { .. } => {}
+        }
+    }
+}
+
+unsafe impl Trace for ResourceValue {
+    fn trace(&self, _visitor: &mut impl Visitor) {}
+}
+
+unsafe impl Trace for ThunkValue {
+    fn trace(&self, visitor: &mut impl Visitor) {
+        self.env.trace(visitor);
+        self.cached.trace(visitor);
+    }
 }
