@@ -1,0 +1,93 @@
+{
+  "$schema": "vscode://schemas/color-theme",
+  "name": "AIVI Dark Modern",
+  "type": "dark",
+  "colors": {
+    "editor.background": "#1E1E1E",
+    "editor.foreground": "#D4D4D4",
+    "editorLineNumber.foreground": "#858585",
+    "editorLineNumber.activeForeground": "#C6C6C6",
+    "editorCursor.foreground": "#AEAFAD",
+    "editor.selectionBackground": "#264F78",
+    "editor.inactiveSelectionBackground": "#3A3D41",
+    "editorWhitespace.foreground": "#404040",
+    "editorIndentGuide.background": "#404040",
+    "editorIndentGuide.activeBackground": "#707070",
+    "editor.lineHighlightBackground": "#2A2D2E",
+    "editorBracketMatch.background": "#515C6A40",
+    "editorBracketMatch.border": "#515C6A"
+  },
+  "tokenColors": [
+    {
+      "name": "AIVI Comments",
+      "scope": ["comment.line.double-slash.aivi", "comment.block.aivi"],
+      "settings": { "foreground": "#6A9955" }
+    },
+    {
+      "name": "AIVI Strings",
+      "scope": [
+        "string.quoted.double.aivi",
+        "string.quoted.single.aivi",
+        "string.quoted.other.backtick.aivi",
+        "string.quoted.other.sigil.aivi"
+      ],
+      "settings": { "foreground": "#CE9178" }
+    },
+    {
+      "name": "AIVI Sigil Tags",
+      "scope": ["entity.name.function.sigil.aivi"],
+      "settings": { "foreground": "#DCDCAA" }
+    },
+    {
+      "name": "AIVI Numbers",
+      "scope": ["constant.numeric.aivi"],
+      "settings": { "foreground": "#B5CEA8" }
+    },
+    {
+      "name": "AIVI Booleans",
+      "scope": ["constant.language.boolean.aivi"],
+      "settings": { "foreground": "#569CD6" }
+    },
+    {
+      "name": "AIVI Constructors",
+      "scope": ["support.constant.aivi"],
+      "settings": { "foreground": "#4FC1FF" }
+    },
+    {
+      "name": "AIVI Decorators",
+      "scope": ["meta.annotation.decorator.aivi"],
+      "settings": { "foreground": "#C586C0" }
+    },
+    {
+      "name": "AIVI Keywords",
+      "scope": ["keyword.control.aivi", "keyword.other.aivi"],
+      "settings": { "foreground": "#C586C0" }
+    },
+    {
+      "name": "AIVI Types",
+      "scope": ["entity.name.type.aivi"],
+      "settings": { "foreground": "#4EC9B0" }
+    },
+    {
+      "name": "AIVI Pipe Operators",
+      "scope": ["keyword.operator.pipe.aivi"],
+      "settings": { "foreground": "#569CD6", "fontStyle": "bold" }
+    },
+    {
+      "name": "AIVI Arrow Operators",
+      "scope": ["keyword.operator.arrow.aivi"],
+      "settings": { "foreground": "#C586C0", "fontStyle": "bold" }
+    },
+    {
+      "name": "AIVI Comparison Operators",
+      "scope": ["keyword.operator.comparison.aivi"],
+      "settings": { "foreground": "#D4D4D4" }
+    },
+    {
+      "name": "AIVI Operators",
+      "scope": ["keyword.operator.aivi"],
+      "settings": { "foreground": "#D4D4D4" }
+    }
+  ]
+}
+

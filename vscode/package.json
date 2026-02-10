@@ -2,7 +2,7 @@
   "name": "aivi-vscode",
   "displayName": "AIVI Language Support",
   "description": "Syntax highlighting and formatting for the AIVI language (from the AIVI specs).",
-  "version": "0.1.8",
+  "version": "0.1.12",
   "publisher": "aivi",
   "packageManager": "pnpm@9.15.4",
   "repository": {
@@ -11,7 +11,7 @@
   },
   "license": "MIT",
   "engines": {
-    "vscode": "1.107.0"
+    "vscode": "^1.107.0"
   },
   "categories": [
     "Programming Languages",
@@ -22,6 +22,7 @@
   "files": [
     "dist/extension.js",
     "syntaxes/**",
+    "themes/**",
     "language-configuration.json",
     "ebnf-language-configuration.json",
     "assets/**",
@@ -67,6 +68,13 @@
         "language": "ebnf",
         "scopeName": "source.ebnf",
         "path": "./syntaxes/ebnf.tmLanguage.json"
+      }
+    ],
+    "themes": [
+      {
+        "label": "AIVI Dark Modern",
+        "uiTheme": "vs-dark",
+        "path": "./themes/aivi-dark-modern-color-theme.json"
       }
     ],
     "configuration": {

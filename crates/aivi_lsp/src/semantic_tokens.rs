@@ -1,4 +1,4 @@
-use aivi::{lex_cst, CstToken};
+use aivi::{lex_cst, syntax, CstToken};
 use tower_lsp::lsp_types::{
     SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensLegend,
 };
@@ -6,10 +6,7 @@ use tower_lsp::lsp_types::{
 use super::Backend;
 
 impl Backend {
-    pub(super) const KEYWORDS: [&'static str; 19] = [
-        "module", "export", "use", "type", "alias", "class", "instance", "domain", "def", "let",
-        "if", "else", "match", "case", "when", "true", "false", "in", "where",
-    ];
+    pub(super) const KEYWORDS: &'static [&'static str] = syntax::KEYWORDS_ALL;
     pub(super) const SIGILS: [&'static str; 4] = ["~r//", "~u()", "~d()", "~dt()"];
 
     pub(super) const SEM_TOKEN_KEYWORD: u32 = 0;
@@ -58,6 +55,7 @@ impl Backend {
                 | "*"
                 | "/"
                 | "%"
+                | "<-"
                 | "->"
                 | "=>"
                 | "|>"

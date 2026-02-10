@@ -30,15 +30,40 @@
       "include": "#type"
     },
     {
+      "include": "#pipe"
+    },
+    {
+      "include": "#arrow"
+    },
+    {
+      "include": "#cmp"
+    },
+    {
       "include": "#operator"
     }
   ],
   "repository": {
+    "arrow": {
+      "patterns": [
+        {
+          "match": "(=>|<-|->)",
+          "name": "keyword.operator.arrow.aivi"
+        }
+      ]
+    },
     "boolean": {
       "patterns": [
         {
           "match": "\\b(True|False)\\b",
           "name": "constant.language.boolean.aivi"
+        }
+      ]
+    },
+    "cmp": {
+      "patterns": [
+        {
+          "match": "(==|!=|<=|>=|=|<|>)",
+          "name": "keyword.operator.comparison.aivi"
         }
       ]
     },
@@ -74,7 +99,7 @@
     "keyword": {
       "patterns": [
         {
-          "match": "\\b(do|effect|generate|resource|if|then|else|when|yield|loop|recurse)\\b",
+          "match": "\\b(do|effect|generate|resource|if|then|else|when|yield|loop|recurse|pure)\\b",
           "name": "keyword.control.aivi"
         },
         {
@@ -96,6 +121,14 @@
         {
           "match": "(\\.\\.\\.|!=|&&|\\+\\+|->|\\.\\.|::|:=|<-|<<|<=|<\\||==|=>|>=|>>|\\?\\?|\\|>|\\|\\||!|%|&|\\*|\\+|,|-|\\.|/|:|;|<|=|>|\\?|\\^|\\||~)",
           "name": "keyword.operator.aivi"
+        }
+      ]
+    },
+    "pipe": {
+      "patterns": [
+        {
+          "match": "(<\\||\\|>|\\|(?!\\|))",
+          "name": "keyword.operator.pipe.aivi"
         }
       ]
     },

@@ -99,9 +99,36 @@ fn aivi_tmlanguage() -> serde_json::Value {
         { "include": "#boolean" },
         { "include": "#constructor" },
         { "include": "#type" },
+        { "include": "#pipe" },
+        { "include": "#arrow" },
+        { "include": "#cmp" },
         { "include": "#operator" }
       ],
       "repository": {
+        "pipe": {
+          "patterns": [
+            {
+              "name": "keyword.operator.pipe.aivi",
+              "match": r"(<\||\|>|\|(?!\|))"
+            }
+          ]
+        },
+        "arrow": {
+          "patterns": [
+            {
+              "name": "keyword.operator.arrow.aivi",
+              "match": r"(=>|<-|->)"
+            }
+          ]
+        },
+        "cmp": {
+          "patterns": [
+            {
+              "name": "keyword.operator.comparison.aivi",
+              "match": r"(==|!=|<=|>=|=|<|>)"
+            }
+          ]
+        },
         "sigil": {
           "patterns": [
             {
