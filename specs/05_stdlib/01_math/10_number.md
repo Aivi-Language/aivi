@@ -6,7 +6,7 @@ The `aivi.std.number` family groups numeric domains that sit above `Int` and `Fl
 - `aivi.std.number.rational` for exact fractions
 - `aivi.std.number.complex` for complex arithmetic
 
-You can import either the facade module or the specific domain module depending on how much you want in scope.
+You can use either the facade module or the specific domain module depending on how much you want in scope.
 
 ```aivi
 // Facade (types + helpers)

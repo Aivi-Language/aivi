@@ -6,7 +6,7 @@ Instead of baking specific logic (like "days often have 24 hours but not always"
 
 ## Using Domains
 
-To use a domain, you `use` or `import` it. This brings its operators and literals into scope.
+To use a domain, you `use` it. This brings its operators and literals into scope.
 
 ```aivi
 // Bring Vector math into scope

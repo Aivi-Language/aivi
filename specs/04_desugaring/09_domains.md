@@ -17,7 +17,7 @@ Delta literals are **domain-scoped**. Resolution follows a two-step process:
 
 | Step | Action | Example |
 | :--- | :--- | :--- |
-| 1. Lexical lookup | Find delta binding in imported domains | `1m` → defined in Calendar, Physics |
+| 1. Lexical lookup | Find delta binding in used domains | `1m` → defined in Calendar, Physics |
 | 2. Carrier disambiguation | Select domain matching operand type | `date + 1m` → Calendar (date : Date) |
 
 ### Resolution Chain

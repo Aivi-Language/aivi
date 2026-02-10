@@ -36,6 +36,7 @@ pub struct AiviHttpError {
     pub message: String,
 }
 
+#[derive(Debug, Clone)]
 pub enum AiviWsMessage {
     TextMsg(String),
     BinaryMsg(Vec<u8>),

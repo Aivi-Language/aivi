@@ -271,7 +271,7 @@ fn check_expr(
         Expr::TextInterpolate { parts, .. } => {
             for part in parts {
                 if let TextPart::Expr { expr, .. } = part {
-                    check_expr(expr, scope, diagnostics, module, wildcard_import);
+                    check_expr(expr, scope, diagnostics, module, allow_unknown);
                 }
             }
         }
@@ -303,56 +303,56 @@ fn check_expr(
         Expr::Literal(_) => {}
         Expr::List { items, .. } => {
             for item in items {
-                check_expr(&item.expr, scope, diagnostics, module, wildcard_import);
+                check_expr(&item.expr, scope, diagnostics, module, allow_unknown);
             }
         }
         Expr::Tuple { items, .. } => {
             for item in items {
-                check_expr(item, scope, diagnostics, module, wildcard_import);
+                check_expr(item, scope, diagnostics, module, allow_unknown);
             }
         }
         Expr::Record { fields, .. } => {
             for field in fields {
-                check_expr(&field.value, scope, diagnostics, module, wildcard_import);
+                check_expr(&field.value, scope, diagnostics, module, allow_unknown);
             }
         }
         Expr::FieldAccess { base, .. } => {
-            check_expr(base, scope, diagnostics, module, wildcard_import);
+            check_expr(base, scope, diagnostics, module, allow_unknown);
         }
         Expr::FieldSection { .. } => {}
         Expr::Index { base, index, .. } => {
-            check_expr(base, scope, diagnostics, module, wildcard_import);
-            check_expr(index, scope, diagnostics, module, wildcard_import);
+            check_expr(base, scope, diagnostics, module, allow_unknown);
+            check_expr(index, scope, diagnostics, module, allow_unknown);
         }
         Expr::Call { func, args, .. } => {
-            check_expr(func, scope, diagnostics, module, wildcard_import);
+            check_expr(func, scope, diagnostics, module, allow_unknown);
             for arg in args {
-                check_expr(arg, scope, diagnostics, module, wildcard_import);
+                check_expr(arg, scope, diagnostics, module, allow_unknown);
             }
         }
         Expr::Lambda { params, body, .. } => {
             let mut inner_scope = scope.clone();
             collect_pattern_bindings(params, &mut inner_scope);
-            check_expr(body, &mut inner_scope, diagnostics, module, wildcard_import);
+            check_expr(body, &mut inner_scope, diagnostics, module, allow_unknown);
         }
         Expr::Match {
             scrutinee, arms, ..
         } => {
             if let Some(scrutinee) = scrutinee {
-                check_expr(scrutinee, scope, diagnostics, module, wildcard_import);
+                check_expr(scrutinee, scope, diagnostics, module, allow_unknown);
             }
             for arm in arms {
                 let mut arm_scope = scope.clone();
                 collect_pattern_binding(&arm.pattern, &mut arm_scope);
                 if let Some(guard) = &arm.guard {
-                    check_expr(guard, &mut arm_scope, diagnostics, module, wildcard_import);
+                    check_expr(guard, &mut arm_scope, diagnostics, module, allow_unknown);
                 }
                 check_expr(
                     &arm.body,
                     &mut arm_scope,
                     diagnostics,
                     module,
-                    wildcard_import,
+                    allow_unknown,
                 );
             }
         }
@@ -362,27 +362,27 @@ fn check_expr(
             else_branch,
             ..
         } => {
-            check_expr(cond, scope, diagnostics, module, wildcard_import);
-            check_expr(then_branch, scope, diagnostics, module, wildcard_import);
-            check_expr(else_branch, scope, diagnostics, module, wildcard_import);
+            check_expr(cond, scope, diagnostics, module, allow_unknown);
+            check_expr(then_branch, scope, diagnostics, module, allow_unknown);
+            check_expr(else_branch, scope, diagnostics, module, allow_unknown);
         }
         Expr::Binary { left, right, .. } => {
-            check_expr(left, scope, diagnostics, module, wildcard_import);
-            check_expr(right, scope, diagnostics, module, wildcard_import);
+            check_expr(left, scope, diagnostics, module, allow_unknown);
+            check_expr(right, scope, diagnostics, module, allow_unknown);
         }
         Expr::Block { items, .. } => {
             let mut block_scope = scope.clone();
             for item in items {
                 match item {
                     BlockItem::Bind { pattern, expr, .. } => {
-                        check_expr(expr, &mut block_scope, diagnostics, module, wildcard_import);
+                        check_expr(expr, &mut block_scope, diagnostics, module, allow_unknown);
                         collect_pattern_binding(pattern, &mut block_scope);
                     }
                     BlockItem::Filter { expr, .. }
                     | BlockItem::Yield { expr, .. }
                     | BlockItem::Recurse { expr, .. }
                     | BlockItem::Expr { expr, .. } => {
-                        check_expr(expr, &mut block_scope, diagnostics, module, wildcard_import);
+                        check_expr(expr, &mut block_scope, diagnostics, module, allow_unknown);
                     }
                 }
             }

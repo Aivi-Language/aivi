@@ -1,6 +1,6 @@
 # Standard Library: Prelude
 
-The **Prelude** is your default toolkit. It acts as the "standard library of the standard library," automatically importing the core types and domains you use in almost every program (like `Int`, `List`, `Text`, and `Result`). It ensures you don't have to write fifty import lines just to add two numbers or print "Hello World".
+The **Prelude** is your default toolkit. It acts as the "standard library of the standard library," automatically using the core types and domains you use in almost every program (like `Int`, `List`, `Text`, and `Result`). It ensures you don't have to write fifty `use` lines just to add two numbers or print "Hello World".
 
 ```aivi
 module aivi.prelude = {
@@ -28,7 +28,7 @@ module aivi.prelude = {
 ```aivi
 @no_prelude
 module my.custom.module = {
-  // Nothing imported automatically
+  // Nothing used automatically
   use aivi.std.core (Int, Bool)
 }
 ```
@@ -36,5 +36,5 @@ module my.custom.module = {
 ## Rationale
 
 - Common domains (dates, colors, vectors) are used universally
-- Delta literals should "just work" without explicit imports
+- Delta literals should "just work" without explicit `use`
 - Explicit opt-out preserves control for advanced use cases

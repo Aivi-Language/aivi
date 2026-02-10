@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
-use super::{Scheme, Type, TypeChecker, TypeEnv};
+use super::TypeChecker;
+use crate::typecheck::types::{Scheme, Type, TypeEnv};
 
 impl TypeChecker {
     pub(super) fn register_builtin_types(&mut self) {
