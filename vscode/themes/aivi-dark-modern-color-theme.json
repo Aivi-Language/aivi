@@ -39,7 +39,7 @@
         "punctuation.section.interpolation.begin.aivi",
         "punctuation.section.interpolation.end.aivi"
       ],
-      "settings": { "foreground": "#C586C0", "fontStyle": "bold" }
+      "settings": { "foreground": "#C586C0" }
     },
     {
       "name": "AIVI Sigil Tags",
@@ -74,7 +74,7 @@
     {
       "name": "AIVI Placeholders",
       "scope": ["variable.language.placeholder.aivi"],
-      "settings": { "foreground": "#D7BA7D", "fontStyle": "bold" }
+      "settings": { "foreground": "#D7BA7D" }
     },
     {
       "name": "AIVI Types",
@@ -84,12 +84,12 @@
     {
       "name": "AIVI Pipe Operators",
       "scope": ["keyword.operator.pipe.aivi"],
-      "settings": { "foreground": "#569CD6", "fontStyle": "bold" }
+      "settings": { "foreground": "#569CD6" }
     },
     {
       "name": "AIVI Match Operator",
       "scope": ["keyword.operator.match.aivi"],
-      "settings": { "foreground": "#C586C0", "fontStyle": "bold" }
+      "settings": { "foreground": "#C586C0" }
     },
     {
       "name": "AIVI Arrow Operators",
