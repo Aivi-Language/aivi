@@ -69,7 +69,42 @@ req = http.request {
 ```
 
 
-## 12.4 Database Sources (Db)
+## 12.4 Environment Sources (Env)
+
+Typed access to environment configuration. Values are decoded using the expected type and optional defaults.
+
+```aivi
+// Read a single environment variable as Text
+appEnv : Source Env Text
+appEnv = env.get "APP_ENV"
+
+// Decode a typed configuration record with defaults
+DbConfig = {
+  driver: Text
+  url: Text?
+  host: Text?
+  port: Int?
+  user: Text?
+  password: Text?
+  database: Text?
+}
+
+defaultDbConfig : DbConfig
+defaultDbConfig = {
+  driver: "sqlite"
+  url: Some "./local.db"
+  host: None
+  port: None
+  user: None
+  password: None
+  database: None
+}
+
+dbConfig : Source Env DbConfig
+dbConfig = env.decode defaultDbConfig
+```
+
+## 12.5 Database Sources (Db)
 
 Integration with relational and document stores. Uses carrier-specific domains for querying.
 
@@ -87,7 +122,7 @@ activeUsers = db.query "SELECT id, name FROM users WHERE active = 1"
 See the [Database Domain](../05_stdlib/03_system/23_database.md) for table operations, deltas, and migrations.
 
 
-## 12.5 Email Sources
+## 12.6 Email Sources
 
 Interacting with mail servers (IMAP/SMTP).
 
@@ -107,7 +142,7 @@ sendWelcome = user => email.send {
 ```
 
 
-## 12.6 LLM Sources
+## 12.7 LLM Sources
 
 AIVI treats Large Language Models as typed probabilistic sources. This is a core part of the AIVI vision for intelligent data pipelines.
 
@@ -129,7 +164,7 @@ analyze input = llm.complete {
 ```
 
 
-## 12.7 Image Sources
+## 12.8 Image Sources
 
 Images are typed by their metadata and pixel data format.
 
@@ -144,7 +179,7 @@ photo = file.image "./photo.jpg"
 ```
 
 
-## 12.8 S3 / Cloud Storage Sources
+## 12.9 S3 / Cloud Storage Sources
 
 Integration with object storage.
 

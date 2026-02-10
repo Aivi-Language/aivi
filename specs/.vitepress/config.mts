@@ -5,6 +5,12 @@ const ebnfGrammar = JSON.parse(
   readFileSync(new URL('../../vscode/syntaxes/ebnf.tmLanguage.json', import.meta.url), 'utf-8')
 )
 
+const ebnfLanguage = {
+  ...ebnfGrammar,
+  name: 'ebnf',
+  displayName: 'EBNF'
+}
+
 function normalizeBase(base: string): string {
   if (!base.startsWith('/')) base = `/${base}`
   if (!base.endsWith('/')) base = `${base}/`
@@ -32,18 +38,21 @@ export default defineConfig({
     sidebar: [
       {
         text: 'Core Specification',
+        collapsed: true,
         items: [
           { text: 'Introduction', link: '/01_introduction' }
         ]
       },
       {
         text: 'Roadmap',
+        collapsed: true,
         items: [
           { text: 'Roadmap', link: '/roadmap/' }
         ]
       },
       {
         text: 'Syntax',
+        collapsed: true,
         items: [
           { text: 'Concrete Syntax', link: '/02_syntax/00_grammar' },
           { text: 'Bindings and Scope', link: '/02_syntax/01_bindings' },
@@ -64,6 +73,7 @@ export default defineConfig({
       },
       {
         text: 'Kernel (Core Calculus)',
+        collapsed: true,
         items: [
           { text: 'Core Terms', link: '/03_kernel/01_core_terms' },
           { text: 'Types', link: '/03_kernel/02_types' },
@@ -81,6 +91,7 @@ export default defineConfig({
       },
       {
         text: 'Desugaring',
+        collapsed: true,
         items: [
           { text: 'Bindings', link: '/04_desugaring/01_bindings' },
           { text: 'Functions', link: '/04_desugaring/02_functions' },
@@ -96,9 +107,11 @@ export default defineConfig({
       },
       {
         text: 'Standard Library',
+        collapsed: true,
         items: [
           {
             text: 'Core & Utils',
+            collapsed: true,
             items: [
                 { text: 'Prelude', link: '/05_stdlib/00_core/01_prelude' },
                 { text: 'Units', link: '/05_stdlib/00_core/16_units' },
@@ -109,6 +122,7 @@ export default defineConfig({
           },
           {
             text: 'Math & Science',
+            collapsed: true,
             items: [
                 { text: 'Vector', link: '/05_stdlib/01_math/05_vector' },
                 { text: 'Matrix', link: '/05_stdlib/01_math/09_matrix' },
@@ -124,6 +138,7 @@ export default defineConfig({
           },
           {
             text: 'Chronos (Time)',
+            collapsed: true,
             items: [
                 { text: 'Calendar', link: '/05_stdlib/02_chronos/02_calendar' },
                 { text: 'Duration', link: '/05_stdlib/02_chronos/03_duration' },
@@ -131,6 +146,7 @@ export default defineConfig({
           },
           {
             text: 'System & IO',
+            collapsed: true,
             items: [
                 { text: 'File', link: '/05_stdlib/03_system/20_file' },
                 { text: 'Console', link: '/05_stdlib/03_system/21_console' },
@@ -144,6 +160,7 @@ export default defineConfig({
           },
           {
             text: 'UI',
+            collapsed: true,
             items: [
                 { text: 'Color', link: '/05_stdlib/04_ui/04_color' },
             ]
@@ -152,6 +169,7 @@ export default defineConfig({
       },
       {
         text: 'Execution & Concurrency',
+        collapsed: true,
         items: [
           { text: 'Concurrency', link: '/06_runtime/01_concurrency' },
           { text: 'Rustc Native Pipeline', link: '/06_runtime/02_rustc_native_pipeline' },
@@ -160,13 +178,7 @@ export default defineConfig({
     ]
   },
   markdown: {
-    languages: [
-      {
-        id: 'ebnf',
-        scopeName: 'source.ebnf',
-        grammar: ebnfGrammar
-      }
-    ],
+    languages: [ebnfLanguage],
     languageAlias: {
       'aivi': 'rust'
     }
