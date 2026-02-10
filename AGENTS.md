@@ -109,7 +109,16 @@ When working on the compiler (`crates/`):
 *   **Guidelines**: Follow `.junie/guidelines.md`.
 *   **AGENTS.md**: Update this file if workflows or structures change significantly.
 
-## 6. Safety Checklist
+## 6. Project Validation
+
+To validate the project end-to-end, run these from the repo root:
+
+1.  **All tests** (workspace): `cargo test --workspace`
+2.  **Build all crates**: `cargo build --workspace`
+3.  **Build VSCode extension**: `cd vscode && pnpm install && pnpm build`
+4.  **Build docs site**: `cd specs && pnpm install && pnpm docs:build`
+
+## 7. Safety Checklist
 
 Before submitting changes:
 - [ ] Did I check the specs?
