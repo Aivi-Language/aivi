@@ -3,7 +3,10 @@ use std::io::{BufRead, Write};
 
 use serde::Serialize;
 
-use crate::surface::{Def, DomainItem, Module, ModuleItem, Pattern, TypeExpr, TypeSig};
+use crate::surface::{
+    BlockItem, BlockKind, Def, DomainItem, Expr, ListItem, MatchArm, Module, ModuleItem, Pattern,
+    RecordField, TypeExpr, TypeSig,
+};
 use crate::AiviError;
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -18,6 +21,7 @@ pub struct McpTool {
     pub module: String,
     pub binding: String,
     pub input_schema: serde_json::Value,
+    pub effectful: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -25,6 +29,19 @@ pub struct McpResource {
     pub name: String,
     pub module: String,
     pub binding: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct McpPolicy {
+    pub allow_effectful_tools: bool,
+}
+
+impl Default for McpPolicy {
+    fn default() -> Self {
+        Self {
+            allow_effectful_tools: false,
+        }
+    }
 }
 
 fn has_decorator(decorators: &[crate::surface::SpannedName], name: &str) -> bool {
@@ -164,6 +181,70 @@ fn tool_input_schema(sig: Option<&TypeSig>, def: Option<&Def>) -> serde_json::Va
     ]))
 }
 
+fn type_is_effectful_return(ty: &TypeExpr) -> bool {
+    fn peel_result<'a>(ty: &'a TypeExpr) -> &'a TypeExpr {
+        match ty {
+            TypeExpr::Func { result, .. } => peel_result(result),
+            other => other,
+        }
+    }
+
+    fn is_effect_or_resource(ty: &TypeExpr) -> bool {
+        match ty {
+            TypeExpr::Name(name) => matches!(name.name.as_str(), "Effect" | "Resource"),
+            TypeExpr::Apply { base, .. } => matches!(
+                base.as_ref(),
+                TypeExpr::Name(name) if matches!(name.name.as_str(), "Effect" | "Resource")
+            ),
+            _ => false,
+        }
+    }
+
+    is_effect_or_resource(peel_result(ty))
+}
+
+fn expr_is_effectful(expr: &Expr) -> bool {
+    match expr {
+        Expr::Block { kind, items, .. } => {
+            if matches!(kind, BlockKind::Effect | BlockKind::Resource | BlockKind::Generate) {
+                return true;
+            }
+            items.iter().any(|item| match item {
+                BlockItem::Bind { expr, .. }
+                | BlockItem::Filter { expr, .. }
+                | BlockItem::Yield { expr, .. }
+                | BlockItem::Recurse { expr, .. }
+                | BlockItem::Expr { expr, .. } => expr_is_effectful(expr),
+            })
+        }
+        Expr::Call { func, args, .. } => expr_is_effectful(func) || args.iter().any(expr_is_effectful),
+        Expr::Lambda { body, .. } => expr_is_effectful(body),
+        Expr::Match { scrutinee, arms, .. } => {
+            scrutinee
+                .as_ref()
+                .map(|expr| expr_is_effectful(expr))
+                .unwrap_or(false)
+                || arms.iter().any(|arm| {
+                    arm.guard.as_ref().is_some_and(expr_is_effectful)
+                        || expr_is_effectful(&arm.body)
+                })
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => expr_is_effectful(cond) || expr_is_effectful(then_branch) || expr_is_effectful(else_branch),
+        Expr::Binary { left, right, .. } => expr_is_effectful(left) || expr_is_effectful(right),
+        Expr::List { items, .. } => items.iter().any(|item: &ListItem| expr_is_effectful(&item.expr)),
+        Expr::Tuple { items, .. } => items.iter().any(expr_is_effectful),
+        Expr::Record { fields, .. } => fields.iter().any(|field: &RecordField| expr_is_effectful(&field.value)),
+        Expr::FieldAccess { base, .. } => expr_is_effectful(base),
+        Expr::Index { base, index, .. } => expr_is_effectful(base) || expr_is_effectful(index),
+        Expr::FieldSection { .. } | Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } => false,
+    }
+}
+
 pub fn collect_mcp_manifest(modules: &[Module]) -> McpManifest {
     let mut tools: BTreeMap<String, McpTool> = BTreeMap::new();
     let mut resources: BTreeMap<String, McpResource> = BTreeMap::new();
@@ -229,6 +310,9 @@ pub fn collect_mcp_manifest(modules: &[Module]) -> McpManifest {
             let sig = sigs.get(&binding).copied();
             let def = defs.get(&binding).copied();
             tools.entry(name.clone()).or_insert_with(|| McpTool {
+                effectful: sig
+                    .map(|sig| type_is_effectful_return(&sig.ty))
+                    .unwrap_or_else(|| def.is_some_and(|def| expr_is_effectful(&def.expr))),
                 name,
                 module: module_name.clone(),
                 binding,
@@ -270,7 +354,11 @@ fn jsonrpc_result(id: serde_json::Value, result: serde_json::Value) -> serde_jso
     })
 }
 
-fn handle_request(manifest: &McpManifest, message: &serde_json::Value) -> Option<serde_json::Value> {
+fn handle_request(
+    manifest: &McpManifest,
+    policy: McpPolicy,
+    message: &serde_json::Value,
+) -> Option<serde_json::Value> {
     let method = message.get("method")?.as_str()?;
     let id = message.get("id")?.clone();
 
@@ -288,7 +376,7 @@ fn handle_request(manifest: &McpManifest, message: &serde_json::Value) -> Option
         "tools/list" => jsonrpc_result(
             id,
             serde_json::json!({
-                "tools": manifest.tools.iter().map(|tool| {
+                "tools": manifest.tools.iter().filter(|tool| policy.allow_effectful_tools || !tool.effectful).map(|tool| {
                     serde_json::json!({
                         "name": tool.name,
                         "description": null,
@@ -352,13 +440,17 @@ fn write_message(mut out: impl Write, message: &serde_json::Value) -> std::io::R
 }
 
 pub fn serve_mcp_stdio(manifest: &McpManifest) -> Result<(), AiviError> {
+    serve_mcp_stdio_with_policy(manifest, McpPolicy::default())
+}
+
+pub fn serve_mcp_stdio_with_policy(manifest: &McpManifest, policy: McpPolicy) -> Result<(), AiviError> {
     let stdin = std::io::stdin();
     let mut reader = std::io::BufReader::new(stdin.lock());
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
 
     while let Some(message) = read_message(&mut reader)? {
-        if let Some(response) = handle_request(manifest, &message) {
+        if let Some(response) = handle_request(manifest, policy, &message) {
             write_message(&mut out, &response)?;
         }
     }
@@ -462,6 +554,7 @@ mod tests {
                 module: "Example.Mod".to_string(),
                 binding: "search".to_string(),
                 input_schema: serde_json::json!({ "type": "object" }),
+                effectful: false,
             }],
             resources: Vec::new(),
         };
@@ -472,8 +565,52 @@ mod tests {
             "method": "tools/list",
             "params": {}
         });
-        let response = handle_request(&manifest, &request).expect("response");
+        let response = handle_request(&manifest, McpPolicy::default(), &request).expect("response");
         assert_eq!(response["id"], 1);
         assert_eq!(response["result"]["tools"][0]["name"], "Example.Mod.search");
+    }
+
+    #[test]
+    fn mcp_tools_list_filters_effectful_tools_by_default() {
+        let manifest = McpManifest {
+            tools: vec![
+                McpTool {
+                    name: "Example.Mod.pureTool".to_string(),
+                    module: "Example.Mod".to_string(),
+                    binding: "pureTool".to_string(),
+                    input_schema: serde_json::json!({ "type": "object" }),
+                    effectful: false,
+                },
+                McpTool {
+                    name: "Example.Mod.effectTool".to_string(),
+                    module: "Example.Mod".to_string(),
+                    binding: "effectTool".to_string(),
+                    input_schema: serde_json::json!({ "type": "object" }),
+                    effectful: true,
+                },
+            ],
+            resources: Vec::new(),
+        };
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/list",
+            "params": {}
+        });
+
+        let response = handle_request(&manifest, McpPolicy::default(), &request).expect("response");
+        assert_eq!(response["result"]["tools"].as_array().unwrap().len(), 1);
+        assert_eq!(response["result"]["tools"][0]["name"], "Example.Mod.pureTool");
+
+        let response = handle_request(
+            &manifest,
+            McpPolicy {
+                allow_effectful_tools: true,
+            },
+            &request,
+        )
+        .expect("response");
+        assert_eq!(response["result"]["tools"].as_array().unwrap().len(), 2);
     }
 }

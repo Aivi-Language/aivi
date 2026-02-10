@@ -70,7 +70,7 @@ Scope: Implement `Effect E A` semantics, structured concurrency, and resource ma
 - [x] `bracket`/`with` resource pattern.
 - [x] Deterministic cancellation semantics.
 
-## Phase M7: Domains + Patching (In Progress)
+## Phase M7: Domains + Patching (Complete)
 
 Scope: Domain definitions, operator overloading, and patching semantics.
 - [x] Domain definitions and operator interpretation (`specs/02_syntax/11_domain_definition.md`).
@@ -78,7 +78,7 @@ Scope: Domain definitions, operator overloading, and patching semantics.
 - [x] Domain-specific numeric deltas (calendar/duration/color).
 - [x] Built-in sigils as domain literals (`~r`, `~u`, `~d`, `~dt`) wired through lexer/parser → HIR/Kernel and editor tooling.
 
-## Phase M8: LSP "Daily Driver" (In Progress)
+## Phase M8: LSP "Daily Driver" (Complete)
 
 Scope: Make editing AIVI comfortable for daily work.
 
@@ -91,7 +91,7 @@ Scope: Make editing AIVI comfortable for daily work.
 - [x] Semantic tokens.
 - [x] Code actions (quick fixes).
 
-## Phase M9: MCP Integration (Planned)
+## Phase M9: MCP Integration (In Progress)
 
 Scope: Expose AIVI modules as Model Context Protocol (MCP) tools/resources.
 
