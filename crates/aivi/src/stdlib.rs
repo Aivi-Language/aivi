@@ -252,6 +252,47 @@ module aivi.std.number.complex = {
 }
 "#;
 
+const NETWORK_HTTP_SERVER_SOURCE: &str = r#"
+@no_prelude
+module aivi.std.network.http_server = {
+  export Header, Request, Response, ServerConfig
+  export HttpError, WsError, WsMessage, ServerReply
+  export Server, WebSocket
+  export listen, stop, ws_recv, ws_send, ws_close
+
+  use aivi.std.core
+
+  Header = { name: Text, value: Text }
+  Request = { method: Text, path: Text, headers: List Header, body: List Int, remote_addr: Option Text }
+  Response = { status: Int, headers: List Header, body: List Int }
+  ServerConfig = { address: Text }
+  HttpError = { message: Text }
+  WsError = { message: Text }
+
+  type WsMessage = TextMsg Text | BinaryMsg (List Int) | Ping | Pong | Close
+  type ServerReply = Http Response | Ws (WebSocket -> Effect WsError Unit)
+
+  listen : ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource Server
+  listen config handler = resource {
+    server <- httpServer.listen config handler
+    yield server
+    _ <- httpServer.stop server
+  }
+
+  stop : Server -> Effect HttpError Unit
+  stop server = httpServer.stop server
+
+  ws_recv : WebSocket -> Effect WsError WsMessage
+  ws_recv socket = httpServer.ws_recv socket
+
+  ws_send : WebSocket -> WsMessage -> Effect WsError Unit
+  ws_send socket msg = httpServer.ws_send socket msg
+
+  ws_close : WebSocket -> Effect WsError Unit
+  ws_close socket = httpServer.ws_close socket
+}
+"#;
+
 const PRELUDE_SOURCE: &str = r#"
 @no_prelude
 module aivi.prelude = {
@@ -322,6 +363,10 @@ pub fn embedded_stdlib_modules() -> Vec<Module> {
     modules.extend(parse_embedded("aivi.std.number.rational", RATIONAL_SOURCE));
     modules.extend(parse_embedded("aivi.std.number.complex", COMPLEX_SOURCE));
     modules.extend(parse_embedded("aivi.std.number", NUMBER_FACADE_SOURCE));
+    modules.extend(parse_embedded(
+        "aivi.std.network.http_server",
+        NETWORK_HTTP_SERVER_SOURCE,
+    ));
     modules.extend(parse_embedded("aivi.prelude", PRELUDE_SOURCE));
     modules
 }
@@ -340,6 +385,7 @@ pub fn embedded_stdlib_source(module_name: &str) -> Option<&'static str> {
         "aivi.std.number.rational" => Some(RATIONAL_SOURCE),
         "aivi.std.number.complex" => Some(COMPLEX_SOURCE),
         "aivi.prelude" => Some(PRELUDE_SOURCE),
+        "aivi.std.network.http_server" => Some(NETWORK_HTTP_SERVER_SOURCE),
         _ => None,
     }
 }

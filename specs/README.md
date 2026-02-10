@@ -85,18 +85,25 @@ A high-integrity functional language targeting WebAssembly.
 54. [Calendar](05_stdlib/02_chronos/02_calendar.md)
 55. [Duration](05_stdlib/02_chronos/03_duration.md)
 
+#### Network
+56. [Network Package](05_stdlib/03_network/00_network.md)
+57. [HTTP](05_stdlib/03_network/01_http.md)
+58. [HTTPS](05_stdlib/03_network/02_https.md)
+59. [HTTP Server](05_stdlib/03_network/03_http_server.md)
+60. [Sockets](05_stdlib/03_network/04_sockets.md)
+61. [Streams](05_stdlib/03_network/05_streams.md)
+
 #### System & IO
-56. [File](05_stdlib/03_system/20_file.md)
-57. [Console](05_stdlib/03_system/21_console.md)
-58. [HTTP](05_stdlib/03_system/19_http.md)
-59. [Database](05_stdlib/03_system/23_database.md)
-60. [URL](05_stdlib/03_system/25_url.md)
-61. [Crypto](05_stdlib/03_system/22_crypto.md)
-62. [System](05_stdlib/03_system/25_system.md)
-63. [Log](05_stdlib/03_system/26_log.md)
+62. [File](05_stdlib/03_system/20_file.md)
+63. [Console](05_stdlib/03_system/21_console.md)
+64. [Database](05_stdlib/03_system/23_database.md)
+65. [URL](05_stdlib/03_system/25_url.md)
+66. [Crypto](05_stdlib/03_system/22_crypto.md)
+67. [System](05_stdlib/03_system/25_system.md)
+68. [Log](05_stdlib/03_system/26_log.md)
 
 #### UI
-64. [Color](05_stdlib/04_ui/04_color.md)
+69. [Color](05_stdlib/04_ui/04_color.md)
 
 ### Execution & Concurrency
 

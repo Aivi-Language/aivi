@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aivi_http_server = { path = "../aivi_http_server" }
 serde = { version = "1.0.209", features = ["derive"] }
 serde_json = "1.0.127"
 sha2 = "0.10.8"
 toml = "0.8.20"
 toml_edit = "0.22.27"
+tokio = { version = "1.40.0", features = ["rt", "sync"] }
 
 [dev-dependencies]
 tempfile = "3.12.0"

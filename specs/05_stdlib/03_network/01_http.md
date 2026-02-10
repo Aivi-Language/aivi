@@ -3,7 +3,7 @@
 The `Http` domain connects your program to the world. Whether you're fetching data from an API, submitting a form, or scraping a website, this domain provides the standard tools (`get`, `post`, `fetch`) to speak the language of the web reliably.
 
 ```aivi
-use aivi.std.system.http
+use aivi.std.network.http
 ```
 
 ## Functions
@@ -19,7 +19,7 @@ Performs a GET request to the specified URL.
 ### `post`
 
 ```aivi
-post : Url -> String -> Effect (Result Response Error)
+post : Url -> Text -> Effect (Result Response Error)
 ```
 
 Performs a POST request with the given body.
@@ -39,8 +39,8 @@ Performs a custom HTTP request.
 ```aivi
 type Response = {
     status: Int,
-    headers: Map String String,
-    body: String
+    headers: List { name: Text, value: Text },
+    body: Text
 }
 ```
 
@@ -48,9 +48,9 @@ type Response = {
 
 ```aivi
 type Request = {
-    method: String,
+    method: Text,
     url: Url,
-    headers: Map String String,
-    body: Option String
+    headers: List { name: Text, value: Text },
+    body: Option Text
 }
 ```

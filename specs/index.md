@@ -91,18 +91,25 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 54. [Calendar Domain](05_stdlib/02_chronos/02_calendar)
 55. [Duration Domain](05_stdlib/02_chronos/03_duration)
 
+#### Network
+56. [Network Package](05_stdlib/03_network/00_network)
+57. [HTTP Domain](05_stdlib/03_network/01_http)
+58. [HTTPS Domain](05_stdlib/03_network/02_https)
+59. [HTTP Server Domain](05_stdlib/03_network/03_http_server)
+60. [Sockets Domain](05_stdlib/03_network/04_sockets)
+61. [Streams Domain](05_stdlib/03_network/05_streams)
+
 #### System & IO
-56. [File Domain](05_stdlib/03_system/20_file)
-57. [Console Domain](05_stdlib/03_system/21_console)
-58. [HTTP Domain](05_stdlib/03_system/19_http)
-59. [Database Domain](05_stdlib/03_system/23_database)
-60. [URL Domain](05_stdlib/03_system/25_url)
-61. [Crypto Domain](05_stdlib/03_system/22_crypto)
-62. [System Domain](05_stdlib/03_system/25_system)
-63. [Log Domain](05_stdlib/03_system/26_log)
+62. [File Domain](05_stdlib/03_system/20_file)
+63. [Console Domain](05_stdlib/03_system/21_console)
+64. [Database Domain](05_stdlib/03_system/23_database)
+65. [URL Domain](05_stdlib/03_system/25_url)
+66. [Crypto Domain](05_stdlib/03_system/22_crypto)
+67. [System Domain](05_stdlib/03_system/25_system)
+68. [Log Domain](05_stdlib/03_system/26_log)
 
 #### UI
-64. [Color Domain](05_stdlib/04_ui/04_color)
+69. [Color Domain](05_stdlib/04_ui/04_color)
 
 ### Execution & Concurrency
 

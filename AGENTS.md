@@ -105,6 +105,8 @@ When working on the compiler (`crates/`):
 *   **Rely on Battle-Tested Libraries**: When implementing standard library features, always prioritize established Rust crates.
 *   **Avoid Reinventing the Wheel**: Do not implement complex algorithms (like FFT, crypto, etc.) from scratch if a robust Rust solution exists.
     *   *Example*: Use `rustfft` instead of implementing your own FFT.
+*   Before implementing a new standard library feature, check that it has all the necessary primitives in the documentation. We want to keep it simple but not too limited.
+
 
 ## 5. Documentation Maintenance
 

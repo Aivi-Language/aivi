@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{mpsc, Arc, Mutex};
 
 use crate::hir::{HirBlockItem, HirExpr};
+use aivi_http_server::{ServerHandle, WebSocketHandle};
 
 use super::{Env, Runtime, RuntimeError};
 
@@ -31,6 +32,8 @@ pub(super) enum Value {
     ChannelSend(Arc<ChannelSend>),
     ChannelRecv(Arc<ChannelRecv>),
     FileHandle(Arc<Mutex<std::fs::File>>),
+    HttpServer(Arc<ServerHandle>),
+    WebSocket(Arc<WebSocketHandle>),
 }
 
 #[derive(Clone)]
