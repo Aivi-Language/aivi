@@ -30,7 +30,8 @@ pub struct AiviResponse {
     pub body: Vec<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, thiserror::Error)]
+#[error("{message}")]
 pub struct AiviHttpError {
     pub message: String,
 }

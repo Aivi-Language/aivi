@@ -49,41 +49,26 @@ pub use surface::{
 pub use stdlib::{embedded_stdlib_modules, embedded_stdlib_source};
 pub use typecheck::{check_types, infer_value_types};
 
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum AiviError {
-    Io(std::io::Error),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+    #[error("Invalid path: {0}")]
     InvalidPath(String),
+    #[error("Diagnostics emitted")]
     Diagnostics,
+    #[error("Invalid command: {0}")]
     InvalidCommand(String),
+    #[error("Codegen error: {0}")]
     Codegen(String),
+    #[error("WASM error: {0}")]
     Wasm(String),
+    #[error("Runtime error: {0}")]
     Runtime(String),
+    #[error("Config error: {0}")]
     Config(String),
+    #[error("Cargo error: {0}")]
     Cargo(String),
-}
-
-impl std::fmt::Display for AiviError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AiviError::Io(err) => write!(f, "IO error: {err}"),
-            AiviError::InvalidPath(path) => write!(f, "Invalid path: {path}"),
-            AiviError::Diagnostics => write!(f, "Diagnostics emitted"),
-            AiviError::InvalidCommand(command) => write!(f, "Invalid command: {command}"),
-            AiviError::Codegen(message) => write!(f, "Codegen error: {message}"),
-            AiviError::Wasm(message) => write!(f, "WASM error: {message}"),
-            AiviError::Runtime(message) => write!(f, "Runtime error: {message}"),
-            AiviError::Config(message) => write!(f, "Config error: {message}"),
-            AiviError::Cargo(message) => write!(f, "Cargo error: {message}"),
-        }
-    }
-}
-
-impl std::error::Error for AiviError {}
-
-impl From<std::io::Error> for AiviError {
-    fn from(err: std::io::Error) -> Self {
-        Self::Io(err)
-    }
 }
 
 pub fn parse_target(target: &str) -> Result<CstBundle, AiviError> {

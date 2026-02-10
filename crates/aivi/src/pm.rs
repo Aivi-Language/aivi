@@ -190,16 +190,9 @@ pub enum CargoDepSpec {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
 pub struct CargoDepSpecParseError(pub String);
-
-impl std::fmt::Display for CargoDepSpecParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
-impl std::error::Error for CargoDepSpecParseError {}
 
 impl CargoDepSpec {
     pub fn parse(spec: &str) -> Result<Self, CargoDepSpecParseError> {
