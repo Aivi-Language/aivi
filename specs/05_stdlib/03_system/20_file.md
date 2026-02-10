@@ -12,10 +12,10 @@ Direct file access is dangerous (locks, missing files, permissions). AIVI wraps 
 ## Overview
 
 ```aivi
-use aivi.file (read_text, stat)
+use aivi.file (readText, stat)
 
 // Safe reading
-content = read_text "config.json"
+content = readText "config.json"
 
 // Metadata inspection
 match stat "large_video.mp4" {
@@ -31,8 +31,8 @@ FileStats = {
   size: Int          // Size in bytes
   created: Int       // Unix timestamp (ms)
   modified: Int      // Unix timestamp (ms)
-  is_file: Bool
-  is_directory: Bool
+  isFile: Bool
+  isDirectory: Bool
 }
 ```
 
@@ -66,18 +66,18 @@ Closes the file handle. (Automatically called if using `resource` block).
 
 ## Path Operations
 
-### `read_text`
+### `readText`
 
 ```aivi
-read_text : String -> Effect (Result String Error)
+readText : String -> Effect (Result String Error)
 ```
 
 Reads the entire content of a file as a string.
 
-### `write_text`
+### `writeText`
 
 ```aivi
-write_text : String -> String -> Effect (Result Unit Error)
+writeText : String -> String -> Effect (Result Unit Error)
 ```
 
 Writes a string to a file, overwriting it if it exists.

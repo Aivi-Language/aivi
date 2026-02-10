@@ -16,7 +16,7 @@ type Request = {
   path: Text,
   headers: List Header,
   body: List Int,
-  remote_addr: Option Text
+  remoteAddr: Option Text
 }
 
 type Response = {
@@ -62,26 +62,26 @@ stop : Server -> Effect HttpError Unit
 
 Stops a running server.
 
-### `ws_recv`
+### `wsRecv`
 
 ```aivi
-ws_recv : WebSocket -> Effect WsError WsMessage
+wsRecv : WebSocket -> Effect WsError WsMessage
 ```
 
 Receives the next WebSocket message.
 
-### `ws_send`
+### `wsSend`
 
 ```aivi
-ws_send : WebSocket -> WsMessage -> Effect WsError Unit
+wsSend : WebSocket -> WsMessage -> Effect WsError Unit
 ```
 
 Sends a WebSocket message.
 
-### `ws_close`
+### `wsClose`
 
 ```aivi
-ws_close : WebSocket -> Effect WsError Unit
+wsClose : WebSocket -> Effect WsError Unit
 ```
 
 Closes the WebSocket connection.

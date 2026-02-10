@@ -5,7 +5,7 @@ The **Prelude** is your default toolkit. It acts as the "standard library of the
 ```aivi
 module aivi.prelude = {
   // Core types
-  export Int, Float, Bool, Text, Char
+  export Int, Float, Bool, Text, Char, Bytes
   export List, Option, Result, Tuple
   
   // Standard domains
@@ -16,6 +16,7 @@ module aivi.prelude = {
   
   // Re-exports
   use aivi
+  use aivi.text
   use aivi.calendar
   use aivi.duration
   use aivi.color

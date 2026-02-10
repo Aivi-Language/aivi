@@ -72,44 +72,46 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 
 #### Core & Utils
 41. [Prelude](05_stdlib/00_core/01_prelude)
-42. [Units Domain](05_stdlib/00_core/16_units)
-43. [Regex Domain](05_stdlib/00_core/24_regex)
-44. [Testing Domain](05_stdlib/00_core/27_testing)
-45. [Collections Domain](05_stdlib/00_core/28_collections)
+42. [Text Module](05_stdlib/00_core/02_text)
+43. [Units Domain](05_stdlib/00_core/16_units)
+44. [Regex Domain](05_stdlib/00_core/24_regex)
+45. [Testing Domain](05_stdlib/00_core/27_testing)
+46. [Collections Domain](05_stdlib/00_core/28_collections)
 
 #### Math & Science
-46. [Vector Domain](05_stdlib/01_math/05_vector)
-47. [Matrix Domain](05_stdlib/01_math/09_matrix)
-48. [Number Domains (BigInt, Rational, Complex, Quaternion)](05_stdlib/01_math/10_number)
-49. [Probability](05_stdlib/01_math/13_probability)
-50. [FFT & Signal](05_stdlib/01_math/14_signal)
-51. [Geometry Domain](05_stdlib/01_math/15_geometry)
-52. [Graph Domain](05_stdlib/01_math/17_graph)
-53. [Linear Algebra](05_stdlib/01_math/18_linear_algebra)
+47. [Math Module](05_stdlib/01_math/01_math)
+48. [Vector Domain](05_stdlib/01_math/05_vector)
+49. [Matrix Domain](05_stdlib/01_math/09_matrix)
+50. [Number Domains (BigInt, Rational, Complex, Quaternion)](05_stdlib/01_math/10_number)
+51. [Probability](05_stdlib/01_math/13_probability)
+52. [FFT & Signal](05_stdlib/01_math/14_signal)
+53. [Geometry Domain](05_stdlib/01_math/15_geometry)
+54. [Graph Domain](05_stdlib/01_math/17_graph)
+55. [Linear Algebra](05_stdlib/01_math/18_linear_algebra)
 
 #### Chronos (Time)
-54. [Calendar Domain](05_stdlib/02_chronos/02_calendar)
-55. [Duration Domain](05_stdlib/02_chronos/03_duration)
+56. [Calendar Domain](05_stdlib/02_chronos/02_calendar)
+57. [Duration Domain](05_stdlib/02_chronos/03_duration)
 
 #### Network
-56. [Network Package](05_stdlib/03_network/00_network)
-57. [HTTP Domain](05_stdlib/03_network/01_http)
-58. [HTTPS Domain](05_stdlib/03_network/02_https)
-59. [HTTP Server Domain](05_stdlib/03_network/03_http_server)
-60. [Sockets Domain](05_stdlib/03_network/04_sockets)
-61. [Streams Domain](05_stdlib/03_network/05_streams)
+58. [Network Package](05_stdlib/03_network/00_network)
+59. [HTTP Domain](05_stdlib/03_network/01_http)
+60. [HTTPS Domain](05_stdlib/03_network/02_https)
+61. [HTTP Server Domain](05_stdlib/03_network/03_http_server)
+62. [Sockets Domain](05_stdlib/03_network/04_sockets)
+63. [Streams Domain](05_stdlib/03_network/05_streams)
 
 #### System & IO
-62. [File Domain](05_stdlib/03_system/20_file)
-63. [Console Domain](05_stdlib/03_system/21_console)
-64. [Database Domain](05_stdlib/03_system/23_database)
-65. [URL Domain](05_stdlib/03_system/25_url)
-66. [Crypto Domain](05_stdlib/03_system/22_crypto)
-67. [System Domain](05_stdlib/03_system/25_system)
-68. [Log Domain](05_stdlib/03_system/26_log)
+64. [File Domain](05_stdlib/03_system/20_file)
+65. [Console Domain](05_stdlib/03_system/21_console)
+66. [Database Domain](05_stdlib/03_system/23_database)
+67. [URL Domain](05_stdlib/03_system/25_url)
+68. [Crypto Domain](05_stdlib/03_system/22_crypto)
+69. [System Domain](05_stdlib/03_system/25_system)
+70. [Log Domain](05_stdlib/03_system/26_log)
 
 #### UI
-69. [Color Domain](05_stdlib/04_ui/04_color)
+71. [Color Domain](05_stdlib/04_ui/04_color)
 
 ### Execution & Concurrency
 

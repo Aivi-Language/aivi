@@ -5,17 +5,17 @@ The `Testing` domain is built right into the language because reliability should
 ## Overview
 
 ```aivi
-use aivi.testing (assert, assert_eq)
+use aivi.testing (assert, assertEq)
 
 @test
-addition_works _ = {
-    assert_eq (1 + 1) 2
+additionWorks _ = {
+    assertEq (1 + 1) 2
 }
 ```
 
 ## Goals for v1.0
 
 - `test` keyword or block construct.
-- Assertions with rich diffs (`assert_eq`, etc.).
+- Assertions with rich diffs (`assertEq`, etc.).
 - Test discovery and execution via `aivi test`.
 - Property-based testing basics (generators) integration.

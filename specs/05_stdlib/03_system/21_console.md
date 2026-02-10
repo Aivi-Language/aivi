@@ -40,10 +40,10 @@ error : String -> Effect Unit
 
 Prints a message to the standard error.
 
-### `read_line`
+### `readLine`
 
 ```aivi
-read_line : Unit -> Effect (Result String Error)
+readLine : Unit -> Effect (Result String Error)
 ```
 
 Reads a line from standard input.

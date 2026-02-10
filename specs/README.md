@@ -66,44 +66,46 @@ A high-integrity functional language targeting WebAssembly.
 
 #### Core & Utils
 41. [Prelude](05_stdlib/00_core/01_prelude.md)
-42. [Units](05_stdlib/00_core/16_units.md)
-43. [Regex](05_stdlib/00_core/24_regex.md)
-44. [Testing](05_stdlib/00_core/27_testing.md)
-45. [Collections](05_stdlib/00_core/28_collections.md)
+42. [Text](05_stdlib/00_core/02_text.md)
+43. [Units](05_stdlib/00_core/16_units.md)
+44. [Regex](05_stdlib/00_core/24_regex.md)
+45. [Testing](05_stdlib/00_core/27_testing.md)
+46. [Collections](05_stdlib/00_core/28_collections.md)
 
 #### Math & Science
-46. [Vector](05_stdlib/01_math/05_vector.md)
-47. [Matrix](05_stdlib/01_math/09_matrix.md)
-48. [Number (BigInt, Rational, Complex, Quaternion)](05_stdlib/01_math/10_number.md)
-49. [Probability](05_stdlib/01_math/13_probability.md)
-50. [FFT & Signal](05_stdlib/01_math/14_signal.md)
-51. [Geometry](05_stdlib/01_math/15_geometry.md)
-52. [Graph](05_stdlib/01_math/17_graph.md)
-53. [Linear Algebra](05_stdlib/01_math/18_linear_algebra.md)
+47. [Math](05_stdlib/01_math/01_math.md)
+48. [Vector](05_stdlib/01_math/05_vector.md)
+49. [Matrix](05_stdlib/01_math/09_matrix.md)
+50. [Number (BigInt, Rational, Complex, Quaternion)](05_stdlib/01_math/10_number.md)
+51. [Probability](05_stdlib/01_math/13_probability.md)
+52. [FFT & Signal](05_stdlib/01_math/14_signal.md)
+53. [Geometry](05_stdlib/01_math/15_geometry.md)
+54. [Graph](05_stdlib/01_math/17_graph.md)
+55. [Linear Algebra](05_stdlib/01_math/18_linear_algebra.md)
 
 #### Chronos (Time)
-54. [Calendar](05_stdlib/02_chronos/02_calendar.md)
-55. [Duration](05_stdlib/02_chronos/03_duration.md)
+56. [Calendar](05_stdlib/02_chronos/02_calendar.md)
+57. [Duration](05_stdlib/02_chronos/03_duration.md)
 
 #### Network
-56. [Network Package](05_stdlib/03_network/00_network.md)
-57. [HTTP](05_stdlib/03_network/01_http.md)
-58. [HTTPS](05_stdlib/03_network/02_https.md)
-59. [HTTP Server](05_stdlib/03_network/03_http_server.md)
-60. [Sockets](05_stdlib/03_network/04_sockets.md)
-61. [Streams](05_stdlib/03_network/05_streams.md)
+58. [Network Package](05_stdlib/03_network/00_network.md)
+59. [HTTP](05_stdlib/03_network/01_http.md)
+60. [HTTPS](05_stdlib/03_network/02_https.md)
+61. [HTTP Server](05_stdlib/03_network/03_http_server.md)
+62. [Sockets](05_stdlib/03_network/04_sockets.md)
+63. [Streams](05_stdlib/03_network/05_streams.md)
 
 #### System & IO
-62. [File](05_stdlib/03_system/20_file.md)
-63. [Console](05_stdlib/03_system/21_console.md)
-64. [Database](05_stdlib/03_system/23_database.md)
-65. [URL](05_stdlib/03_system/25_url.md)
-66. [Crypto](05_stdlib/03_system/22_crypto.md)
-67. [System](05_stdlib/03_system/25_system.md)
-68. [Log](05_stdlib/03_system/26_log.md)
+64. [File](05_stdlib/03_system/20_file.md)
+65. [Console](05_stdlib/03_system/21_console.md)
+66. [Database](05_stdlib/03_system/23_database.md)
+67. [URL](05_stdlib/03_system/25_url.md)
+68. [Crypto](05_stdlib/03_system/22_crypto.md)
+69. [System](05_stdlib/03_system/25_system.md)
+70. [Log](05_stdlib/03_system/26_log.md)
 
 #### UI
-69. [Color](05_stdlib/04_ui/04_color.md)
+71. [Color](05_stdlib/04_ui/04_color.md)
 
 ### Execution & Concurrency
 
