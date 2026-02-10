@@ -3,7 +3,7 @@ use tower_lsp::lsp_types::{
     SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensLegend,
 };
 
-use super::Backend;
+use crate::backend::Backend;
 
 impl Backend {
     pub(super) const KEYWORDS: &'static [&'static str] = syntax::KEYWORDS_ALL;

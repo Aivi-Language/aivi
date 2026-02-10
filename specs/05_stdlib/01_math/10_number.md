@@ -20,14 +20,15 @@ use aivi.std.number.complex
 
 ## Performance and Implementation (Rust)
 
-Numeric domains must lean on established Rust crates to guarantee correctness and speed. Use `num-bigint` for `BigInt`, `num-rational` for `Rational`, and `num-complex` for `Complex` (or equivalent battle-tested libraries) rather than custom arithmetic.
+Numeric domains must lean on established Rust crates to guarantee correctness and speed. Use `num-bigint` for `BigInt`, `num-rational` for `Rational`, `rust_decimal` for `Decimal`, and `num-complex` for `Complex` (or equivalent battle-tested libraries) rather than custom arithmetic.
 
 ## BigInt
 
-`BigInt` grows as needed, limited only by memory. Use it for large integers that overflow `Int`.
+`BigInt` is an **opaque native type** for arbitrary-precision integers.
 
 ```aivi
-BigInt = { sign: Int, limbs: List Int }
+// Native type (backed by Rust BigInt or similar)
+type BigInt
 ```
 
 ```aivi
@@ -56,12 +57,52 @@ huge = 10_000_000_000_000_000_000_000n
 sum = huge + 1n
 ```
 
-## Rational
+## Decimal
 
-`Rational` stores exact fractions (`num/den`) and keeps results normalized.
+`Decimal` is an **opaque native type** for fixed-point arithmetic (base-10), suitable for financial calculations where `Float` precision errors are unacceptable.
 
 ```aivi
-Rational = { num: BigInt, den: BigInt }
+// Native type (backed by Rust Decimal or similar)
+type Decimal
+```
+
+```aivi
+domain Decimal over Decimal = {
+  (+) : Decimal -> Decimal -> Decimal
+  (-) : Decimal -> Decimal -> Decimal
+  (*) : Decimal -> Decimal -> Decimal
+  (/) : Decimal -> Decimal -> Decimal
+
+  // Literal suffix 'dec'
+  1.0dec = fromFloat 1.0
+}
+```
+
+Helpers:
+
+```aivi
+fromFloat : Float -> Decimal
+toFloat : Decimal -> Float
+round : Decimal -> Int -> Decimal
+```
+
+Example:
+
+```aivi
+use aivi.std.number.decimal
+
+price = 19.99dec
+tax = price * 0.2dec
+total = price + tax
+```
+
+## Rational
+
+`Rational` is an **opaque native type** for exact fractions (`num/den`).
+
+```aivi
+// Native type (backed by Rust Rational or similar)
+type Rational
 ```
 
 ```aivi
@@ -77,6 +118,8 @@ Helpers:
 
 ```aivi
 normalize : Rational -> Rational
+numerator : Rational -> BigInt
+denominator : Rational -> BigInt
 ```
 
 Example:
@@ -84,13 +127,14 @@ Example:
 ```aivi
 use aivi.std.number.rational
 
-half = normalize { num: fromInt 1, den: fromInt 2 }
+// exact 1/2
+half = normalize (fromInt 1 / fromInt 2) 
 sum = half + half
 ```
 
 ## Complex
 
-`Complex` represents values of the form `a + bi`.
+`Complex` represents values of the form `a + bi`. It is typically a struct of two floats, but domain operations are backed by optimized native implementations.
 
 ```aivi
 Complex = { re: Float, im: Float }

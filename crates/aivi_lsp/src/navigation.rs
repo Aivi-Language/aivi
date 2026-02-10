@@ -1,4 +1,15 @@
-use super::*;
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+
+use aivi::{infer_value_types, parse_modules, DomainItem, Module, ModuleItem, UseDecl};
+use tower_lsp::lsp_types::{
+    Hover, HoverContents, Location, MarkupContent, MarkupKind, Position, TextEdit, Url,
+    WorkspaceEdit,
+};
+
+use crate::backend::Backend;
+use crate::state::IndexedModule;
 
 impl Backend {
     pub(super) fn build_definition(text: &str, uri: &Url, position: Position) -> Option<Location> {
