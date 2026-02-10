@@ -101,6 +101,11 @@ When working on the compiler (`crates/`):
     *   *Snapshot Tests*: For parser/codegen output (use `insta` or similar if available).
     *   *Integration Tests*: Compile and run files from `examples/`.
 
+### 4.1 Standard Library & Dependencies
+*   **Rely on Battle-Tested Libraries**: When implementing standard library features, always prioritize established Rust crates.
+*   **Avoid Reinventing the Wheel**: Do not implement complex algorithms (like FFT, crypto, etc.) from scratch if a robust Rust solution exists.
+    *   *Example*: Use `rustfft` instead of implementing your own FFT.
+
 ## 5. Documentation Maintenance
 
 *   **Specs**: Update `specs/` *before* or *alongside* code changes.

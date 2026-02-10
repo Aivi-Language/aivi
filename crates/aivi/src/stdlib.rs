@@ -12,6 +12,107 @@ module aivi.std.core = {
 }
 "#;
 
+const UNITS_SOURCE: &str = r#"
+@no_prelude
+module aivi.std.core.units = {
+  export Unit, Quantity
+  export defineUnit, convert, sameUnit
+  export domain Units
+
+  use aivi.std.core
+
+  Unit = { name: Text, factor: Float }
+  Quantity = { value: Float, unit: Unit }
+
+  defineUnit : Text -> Float -> Unit
+  defineUnit name factor = { name: name, factor: factor }
+
+  convert : Quantity -> Unit -> Quantity
+  convert q target = {
+    value: q.value * (q.unit.factor / target.factor)
+    unit: target
+  }
+
+  sameUnit : Quantity -> Quantity -> Bool
+  sameUnit a b = a.unit.name == b.unit.name
+
+  domain Units over Quantity = {
+    (+) : Quantity -> Quantity -> Quantity
+    (+) a b = { value: a.value + b.value, unit: a.unit }
+
+    (-) : Quantity -> Quantity -> Quantity
+    (-) a b = { value: a.value - b.value, unit: a.unit }
+
+    (*) : Quantity -> Float -> Quantity
+    (*) q s = { value: q.value * s, unit: q.unit }
+
+    (/) : Quantity -> Float -> Quantity
+    (/) q s = { value: q.value / s, unit: q.unit }
+  }
+}
+"#;
+
+const UNITS_FACADE_SOURCE: &str = r#"
+@no_prelude
+module aivi.std.units = {
+  export Unit, Quantity
+  export defineUnit, convert, sameUnit
+  export domain Units
+
+  use aivi.std.core.units
+}
+"#;
+
+const REGEX_SOURCE: &str = r#"
+@no_prelude
+module aivi.std.core.regex = {
+  export Regex, compile, test
+
+  use aivi.std.core
+
+  Regex = Text
+
+  compile : Text -> Regex
+  compile pattern = pattern
+
+  test : Regex -> Text -> Bool
+  test pattern text = pattern == text
+}
+"#;
+
+const REGEX_FACADE_SOURCE: &str = r#"
+@no_prelude
+module aivi.std.regex = {
+  export Regex, compile, test
+
+  use aivi.std.core.regex
+}
+"#;
+
+const TESTING_SOURCE: &str = r#"
+@no_prelude
+module aivi.std.core.testing = {
+  export assert, assert_eq
+
+  use aivi.std.core
+
+  assert : Bool -> Effect Text Unit
+  assert ok = if ok then pure Unit else fail "assertion failed"
+
+  assert_eq : A -> A -> Effect Text Unit
+  assert_eq a b = if a == b then pure Unit else fail "assert_eq failed"
+}
+"#;
+
+const TESTING_FACADE_SOURCE: &str = r#"
+@no_prelude
+module aivi.std.testing = {
+  export assert, assert_eq
+
+  use aivi.std.core.testing
+}
+"#;
+
 const NUMBER_FACADE_SOURCE: &str = r#"
 @no_prelude
 module aivi.std.number = {
@@ -211,6 +312,12 @@ module aivi.prelude = {
 pub fn embedded_stdlib_modules() -> Vec<Module> {
     let mut modules = Vec::new();
     modules.extend(parse_embedded("aivi.std.core", CORE_SOURCE));
+    modules.extend(parse_embedded("aivi.std.core.units", UNITS_SOURCE));
+    modules.extend(parse_embedded("aivi.std.units", UNITS_FACADE_SOURCE));
+    modules.extend(parse_embedded("aivi.std.core.regex", REGEX_SOURCE));
+    modules.extend(parse_embedded("aivi.std.regex", REGEX_FACADE_SOURCE));
+    modules.extend(parse_embedded("aivi.std.core.testing", TESTING_SOURCE));
+    modules.extend(parse_embedded("aivi.std.testing", TESTING_FACADE_SOURCE));
     modules.extend(parse_embedded("aivi.std.number.bigint", BIGINT_SOURCE));
     modules.extend(parse_embedded("aivi.std.number.rational", RATIONAL_SOURCE));
     modules.extend(parse_embedded("aivi.std.number.complex", COMPLEX_SOURCE));
@@ -222,6 +329,12 @@ pub fn embedded_stdlib_modules() -> Vec<Module> {
 pub fn embedded_stdlib_source(module_name: &str) -> Option<&'static str> {
     match module_name {
         "aivi.std.core" => Some(CORE_SOURCE),
+        "aivi.std.core.units" => Some(UNITS_SOURCE),
+        "aivi.std.units" => Some(UNITS_FACADE_SOURCE),
+        "aivi.std.core.regex" => Some(REGEX_SOURCE),
+        "aivi.std.regex" => Some(REGEX_FACADE_SOURCE),
+        "aivi.std.core.testing" => Some(TESTING_SOURCE),
+        "aivi.std.testing" => Some(TESTING_FACADE_SOURCE),
         "aivi.std.number" => Some(NUMBER_FACADE_SOURCE),
         "aivi.std.number.bigint" => Some(BIGINT_SOURCE),
         "aivi.std.number.rational" => Some(RATIONAL_SOURCE),
