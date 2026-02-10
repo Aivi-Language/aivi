@@ -44,7 +44,10 @@ edition = "2024"
     );
     write_file(&dep.join("src/lib.rs"), "");
 
-    let exe = std::env::var("CARGO_BIN_EXE_aivi").expect("aivi binary path");
+    let Ok(exe) = std::env::var("CARGO_BIN_EXE_aivi") else {
+        eprintln!("skipping: CARGO_BIN_EXE_aivi not set");
+        return;
+    };
     let spec = format!("path:{}", dep.display());
     let output = Command::new(exe)
         .arg("install")

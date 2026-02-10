@@ -30,4 +30,4 @@ users = ~map{
 tags = ~set[...baseTags, "hot", "new"]
 ```
 
-The exact meaning of a sigil is domain-defined; see `specs/05_stdlib/00_core/28_collections.md` for `~map` and `~set`.
+The exact meaning of a sigil is domain-defined; see [Collections](../05_stdlib/00_core/28_collections.md) for `~map` and `~set`.

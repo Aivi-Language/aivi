@@ -137,7 +137,7 @@ fn concurrent_par_observes_parent_cancellation() {
     let cancel_clone = cancel.clone();
     std::thread::spawn(move || {
         let mut runtime = Runtime::new(ctx_clone, cancel_clone);
-        let concurrent = build_concurrent_record();
+        let concurrent = super::builtins::build_concurrent_record();
         let Value::Record(fields) = concurrent else {
             panic!("expected concurrent record");
         };

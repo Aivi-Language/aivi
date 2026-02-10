@@ -1,16 +1,15 @@
 use std::collections::HashMap;
-use std::io::{Read, Seek, Write};
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::http::build_http_server_record;
 use super::{
-    CancelToken, EffectValue, Env, Runtime,
+    format_value, CancelToken, EffectValue, Env, Runtime, RuntimeContext, RuntimeError, Value,
 };
-use super::values::{ChannelInner, ChannelRecv, ChannelSend};
-    RuntimeContext, RuntimeError, Value, format_value,
-    BuiltinImpl, BuiltinValue,
+use super::values::{
+    BuiltinImpl, BuiltinValue, ChannelInner, ChannelRecv, ChannelSend,
 };
 
 pub(super) fn register_builtins(env: &Env) {
@@ -565,7 +564,7 @@ fn build_channel_record() -> Value {
     Value::Record(fields)
 }
 
-fn build_concurrent_record() -> Value {
+pub(super) fn build_concurrent_record() -> Value {
     let mut fields = HashMap::new();
     fields.insert(
         "scope".to_string(),
@@ -755,4 +754,3 @@ fn spawn_effect(
         let _ = sender.send((id, result));
     });
 }
-

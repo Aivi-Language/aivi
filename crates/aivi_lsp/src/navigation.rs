@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-use aivi::{infer_value_types, parse_modules, DomainItem, Module, ModuleItem, UseDecl};
+use aivi::{infer_value_types, parse_modules, Module};
 use tower_lsp::lsp_types::{
     Hover, HoverContents, Location, MarkupContent, MarkupKind, Position, TextEdit, Url,
     WorkspaceEdit,

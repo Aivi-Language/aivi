@@ -151,13 +151,46 @@ module my.geo.utils = {
 }
 ```
 
-### Context-Specific Environments
+### Context-Specific Environments (Static Injection)
+
+This pattern allows you to **statically swap** entire module implementations for different build contexts (e.g., Test vs. Prod). This is not for runtime configuration (see below), but for compile-time substitution of logic.
+
 ```aivi
-// Swapping implementations for test vs prod
-module my.app.test_env = {
-  use my.app.api hiding (fetchDashboard)
-  fetchDashboard = _ => mockDashboardData
-  
-  export *
+// 1. Define the production module
+module my.app.api = {
+  export fetchDashboard
+  fetchDashboard = ... // Real HTTP call
+}
+
+// 2. Define the test module (same interface, different logic)
+module my.app.api.test = {
+  export fetchDashboard
+  fetchDashboard = _ => { id: 1, title: "Mock Dash" }
+}
+```
+
+To use the test environment, your test entry point (`tests/main.aivi`) simply imports the test module instead of the production one:
+
+```aivi
+// within tests/main.aivi
+use my.app.api.test (fetchDashboard) // injected mock
+```
+
+## 10.9 Runtime Configuration (Env Vars)
+
+For values that change between deployments (like API URLs or DB passwords) without changing code, use **Runtime Configuration** via the `Env` source.
+
+Do not use module swapping for this. Instead, inject the configuration as data.
+
+See [12.4 Environment Sources](12_external_sources.md#124-environment-sources-env) for details.
+
+```aivi
+// Instead of hardcoding, load from environment
+config : Source Env { apiUrl: Text }
+config = env.decode { apiUrl: "https://localhost:8080" }
+
+connect = effect {
+  cfg <- load config
+  // ... use cfg.apiUrl
 }
 ```

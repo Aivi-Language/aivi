@@ -27,7 +27,6 @@ pub fn format_text(content: &str) -> String {
         // Before printing token assignment
         if text == "}" {
             depth = (depth - 1).max(0);
-            newline_pending = true;
         }
 
         if newline_pending {
@@ -57,7 +56,13 @@ pub fn format_text(content: &str) -> String {
 
         if text == "{" {
             depth += 1;
-            newline_pending = true;
+            let mut j = i + 1;
+            while j < tokens.len() && tokens[j].kind == "whitespace" {
+                j += 1;
+            }
+            if j < tokens.len() && tokens[j].span.start.line > line {
+                newline_pending = true;
+            }
         }
         
         last_kind = kind;
@@ -73,8 +78,15 @@ pub fn format_text(content: &str) -> String {
 }
 
 fn should_add_space(last_kind: &str, last_text: &str, current_kind: &str, current_text: &str) -> bool {
-    if last_kind == "" || last_text == "{" || current_text == "}" || current_text == "," || current_text == ";" || current_text == "." {
+    if last_kind == "" || current_text == "," || current_text == ";" || current_text == "." {
         return false;
+    }
+
+    if last_text == "{" {
+        return current_text != "}";
+    }
+    if current_text == "}" {
+        return last_text != "{";
     }
     
     let last_is_keyword = is_keyword(last_text);

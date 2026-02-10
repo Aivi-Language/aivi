@@ -1363,6 +1363,19 @@ impl Parser {
                     items.push(BlockItem::Filter { expr, span });
                     continue;
                 }
+                if self.consume_symbol("=") {
+                    let expr = self.parse_expr().unwrap_or(Expr::Raw {
+                        text: String::new(),
+                        span: pattern_span(&pattern),
+                    });
+                    let span = merge_span(pattern_span(&pattern), expr_span(&expr));
+                    items.push(BlockItem::Bind {
+                        pattern,
+                        expr,
+                        span,
+                    });
+                    continue;
+                }
             }
             self.pos = checkpoint;
             if let Some(expr) = self.parse_expr() {

@@ -63,7 +63,11 @@ attemptExample = effect {
 
 ### `load`
 
-In some examples, `load` is used as a helper to observe or lift a resource operation into an effect.
+The standard library function `load` lifts a typed `Source` (see [External Sources](12_external_sources.md)) into an `Effect`.
+
+```aivi
+load : Source K A -> Effect (SourceError K) A
+```
 
 ## 9.2 `effect` blocks
 

@@ -22,7 +22,7 @@ def main = {
 
 #[test]
 fn test_fmt_records_multiline() {
-    let input = r#"
+    let _input = r#"
 def make_user = {
     { name = "John", age = 30, email = "john@example.com", is_admin = False, roles = ["admin", "editor"] }
 }

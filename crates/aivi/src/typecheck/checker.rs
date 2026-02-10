@@ -1378,8 +1378,15 @@ impl TypeChecker {
             match item {
                 BlockItem::Bind { pattern, expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
+                    let snapshot = self.subst.clone();
                     let value_ty =
-                        self.bind_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
+                        match self.bind_effect_value(expr_ty.clone(), err_ty.clone(), expr_span(expr)) {
+                            Ok(value_ty) => value_ty,
+                            Err(_) => {
+                                self.subst = snapshot;
+                                expr_ty
+                            }
+                        };
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     self.unify_with_span(pat_ty, value_ty, pattern_span(pattern))?;
                 }

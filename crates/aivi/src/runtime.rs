@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::hir::{
     HirBlockItem, HirExpr, HirListItem, HirLiteral, HirMatchArm, HirPathSegment, HirPattern,
@@ -17,9 +18,7 @@ mod tests;
 
 use self::builtins::register_builtins;
 use self::environment::{Env, RuntimeContext};
-use self::values::{
-    BuiltinImpl, BuiltinValue, ClosureValue, EffectValue, ResourceValue, ThunkValue, Value,
-};
+use self::values::{BuiltinValue, ClosureValue, EffectValue, ResourceValue, ThunkValue, Value};
 
 #[derive(Debug)]
 struct CancelToken {
@@ -704,9 +703,16 @@ impl Runtime {
                             }
                             Ok(Value::Unit)
                         }
-                        _ => Err(RuntimeError::Message(
-                            "effect bind expects Effect or Resource".to_string(),
-                        )),
+                        other => {
+                            let bindings =
+                                collect_pattern_bindings(pattern, &other).ok_or_else(|| {
+                                    RuntimeError::Message("pattern match failed".to_string())
+                                })?;
+                            for (name, value) in bindings {
+                                local_env.set(name, value);
+                            }
+                            Ok(Value::Unit)
+                        }
                     }
                 }
                 HirBlockItem::Expr { expr } => {

@@ -403,7 +403,7 @@ impl TypeChecker {
             .collect(),
             open: false,
         };
-        let response_ty = Type::Record {
+        let _response_ty = Type::Record {
             fields: vec![
                 ("status".to_string(), Type::con("Int")),
                 (
