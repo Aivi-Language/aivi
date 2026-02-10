@@ -16,8 +16,8 @@ importers:
         specifier: 25.2.2
         version: 25.2.2
       '@types/vscode':
-        specifier: 1.107.0
-        version: 1.107.0
+        specifier: 1.109.0
+        version: 1.109.0
       '@typescript/native-preview':
         specifier: latest
         version: 7.0.0-dev.20260209.1
@@ -182,8 +182,8 @@ packages:
   '@types/sarif@2.1.7':
     resolution: {integrity: sha512-kRz0VEkJqWLf1LLVN4pT1cg1Z9wAuvI6L97V3m2f5B76Tg8d413ddvLBPTEHAZJlnn4XSvu0FkZtViCQGVyrXQ==}
 
-  '@types/vscode@1.107.0':
-    resolution: {integrity: sha512-XS8YE1jlyTIowP64+HoN30OlC1H9xqSlq1eoLZUgFEC8oUTO6euYZxti1xRiLSfZocs4qytTzR6xCBYtioQTCg==}
+  '@types/vscode@1.109.0':
+    resolution: {integrity: sha512-0Pf95rnwEIwDbmXGC08r0B4TQhAbsHQ5UyTIgVgoieDe4cOnf92usuR5dEczb6bTKEp7ziZH4TV1TRGPPCExtw==}
 
   '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260209.1':
     resolution: {integrity: sha512-TyFP7dGMo/Xz37MI3QNfGl3J2i8AKurYwLLD+bG0EDLWnz213wwBwN6U9vMcyatBzfdxKEHHPgdNP0UYCVx3kQ==}
@@ -1451,7 +1451,7 @@ snapshots:
 
   '@types/sarif@2.1.7': {}
 
-  '@types/vscode@1.107.0': {}
+  '@types/vscode@1.109.0': {}
 
   '@typescript/native-preview-darwin-arm64@7.0.0-dev.20260209.1':
     optional: true

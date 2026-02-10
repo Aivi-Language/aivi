@@ -238,7 +238,7 @@ fn cmd_mcp(args: &[String]) -> Result<(), AiviError> {
                     }
                 }
             }
-            let target = target.as_deref().unwrap_or(".");
+            let target = target.as_deref().unwrap_or("./...");
             cmd_mcp_serve(target, allow_effects)
         }
         _ => Err(AiviError::InvalidCommand(format!("mcp {subcommand}"))),

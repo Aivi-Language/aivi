@@ -25,7 +25,7 @@ pub(crate) fn expand_target(target: &str) -> Result<Vec<PathBuf>, AiviError> {
             for entry in fs::read_dir(path)? {
                 let entry = entry?;
                 let entry_path = entry.path();
-                if entry_path.is_file() {
+                if entry_path.is_file() && is_aivi_source(&entry_path) {
                     paths.push(entry_path);
                 }
             }
@@ -38,6 +38,10 @@ pub(crate) fn expand_target(target: &str) -> Result<Vec<PathBuf>, AiviError> {
     }
 
     Ok(paths)
+}
+
+fn is_aivi_source(path: &Path) -> bool {
+    path.extension().and_then(|ext| ext.to_str()) == Some("aivi")
 }
 
 fn resolve_target_path(target: &str) -> Option<PathBuf> {
@@ -80,7 +84,7 @@ fn collect_files(dir: &Path, paths: &mut Vec<PathBuf>) -> Result<(), AiviError> 
             continue;
         }
 
-        if entry_path.extension().and_then(|ext| ext.to_str()) == Some("aivi") {
+        if is_aivi_source(&entry_path) {
             paths.push(entry_path);
         }
     }
