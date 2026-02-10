@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::diagnostics::{Diagnostic, FileDiagnostic};
-use crate::surface::{BlockItem, Def, DomainItem, Expr, Module, ModuleItem, Pattern};
+use crate::surface::{BlockItem, Def, DomainItem, Expr, Module, ModuleItem, Pattern, TextPart};
 
 pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
     let mut diagnostics = Vec::new();
@@ -231,6 +231,13 @@ fn check_expr(
     wildcard_import: bool,
 ) {
     match expr {
+        Expr::TextInterpolate { parts, .. } => {
+            for part in parts {
+                if let TextPart::Expr { expr, .. } = part {
+                    check_expr(expr, scope, diagnostics, module, wildcard_import);
+                }
+            }
+        }
         Expr::Ident(name) => {
             if name.name == "_" {
                 return;
