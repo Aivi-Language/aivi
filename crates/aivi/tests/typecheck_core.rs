@@ -129,3 +129,18 @@ module test.err = {
 "#;
     check_err(source);
 }
+
+#[test]
+fn typecheck_open_records_allow_extra_fields() {
+    let source = r#"
+module test.open = {
+  export value
+
+  getName : { name: Text } -> Text
+  getName user = user.name
+
+  value = getName { name: "Alice", id: 1 }
+}
+"#;
+    check_ok(source);
+}

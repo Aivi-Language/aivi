@@ -91,19 +91,19 @@ Scope: Make editing AIVI comfortable for daily work.
 - [x] Semantic tokens.
 - [x] Code actions (quick fixes).
 
-## Phase M9: MCP Integration (In Progress)
+## Phase M9: MCP Integration (Complete)
 
 Scope: Expose AIVI modules as Model Context Protocol (MCP) tools/resources.
 
 - [x] `aivi mcp serve` exposing `@mcp_tool` and `@mcp_resource`.
 - [x] JSON Schema generation from AIVI types.
-- [ ] Capability gates for unauthorized effects.
+- [x] Capability gates for unauthorized effects.
 
 ## Phase M10: Type System v2 (Long Term)
 
 Scope: Advanced typing features.
 
-- [ ] Row polymorphism (open records).
+- [x] Row polymorphism (open records).
 - [ ] Type classes (ad-hoc polymorphism).
 - [ ] Higher-Kinded Types (HKTs).
 

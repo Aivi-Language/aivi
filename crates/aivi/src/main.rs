@@ -1,8 +1,8 @@
 use aivi::{
     check_modules, check_types, collect_mcp_manifest, compile_rust, desugar_target, format_target,
     kernel_target, load_module_diagnostics, load_modules, parse_target, render_diagnostics,
-    run_native, rust_ir_target, serve_mcp_stdio, write_scaffold, AiviError, CargoDepSpec,
-    ProjectKind,
+    run_native, rust_ir_target, serve_mcp_stdio_with_policy, write_scaffold, AiviError,
+    CargoDepSpec, McpPolicy, ProjectKind,
 };
 use std::env;
 use std::path::{Path, PathBuf};
@@ -215,7 +215,7 @@ fn run() -> Result<(), AiviError> {
 
 fn print_help() {
     println!(
-        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--require-aivi] [--no-fetch]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check <path|dir/...>\n  fmt <path>\n  desugar <path|dir/...>\n  kernel <path|dir/...>\n  rust-ir <path|dir/...>\n  lsp\n  build <path|dir/...> [--target rust|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--target native]\n  mcp serve <path|dir/...>\n\n  -h, --help"
+        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--require-aivi] [--no-fetch]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check <path|dir/...>\n  fmt <path>\n  desugar <path|dir/...>\n  kernel <path|dir/...>\n  rust-ir <path|dir/...>\n  lsp\n  build <path|dir/...> [--target rust|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n\n  -h, --help"
     );
 }
 
@@ -226,14 +226,29 @@ fn cmd_mcp(args: &[String]) -> Result<(), AiviError> {
     };
     match subcommand.as_str() {
         "serve" => {
-            let target = args.get(1).map(|s| s.as_str()).unwrap_or(".");
-            cmd_mcp_serve(target)
+            let mut target = None;
+            let mut allow_effects = false;
+            for arg in args.iter().skip(1) {
+                match arg.as_str() {
+                    "--allow-effects" => allow_effects = true,
+                    value if !value.starts_with('-') && target.is_none() => {
+                        target = Some(value.to_string());
+                    }
+                    other => {
+                        return Err(AiviError::InvalidCommand(format!(
+                            "unexpected mcp serve argument {other}"
+                        )));
+                    }
+                }
+            }
+            let target = target.as_deref().unwrap_or(".");
+            cmd_mcp_serve(target, allow_effects)
         }
         _ => Err(AiviError::InvalidCommand(format!("mcp {subcommand}"))),
     }
 }
 
-fn cmd_mcp_serve(target: &str) -> Result<(), AiviError> {
+fn cmd_mcp_serve(target: &str, allow_effects: bool) -> Result<(), AiviError> {
     let mut diagnostics = load_module_diagnostics(target)?;
     let modules = load_modules(target)?;
     diagnostics.extend(check_modules(&modules));
@@ -252,7 +267,12 @@ fn cmd_mcp_serve(target: &str) -> Result<(), AiviError> {
     }
 
     let manifest = collect_mcp_manifest(&modules);
-    serve_mcp_stdio(&manifest)?;
+    serve_mcp_stdio_with_policy(
+        &manifest,
+        McpPolicy {
+            allow_effectful_tools: allow_effects,
+        },
+    )?;
     Ok(())
 }
 

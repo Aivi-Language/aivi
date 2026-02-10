@@ -1921,7 +1921,7 @@ impl TypeChecker {
                 }
                 Type::Record {
                     fields: field_map,
-                    open: false,
+                    open: true,
                 }
             }
             TypeExpr::Tuple { items, .. } => {

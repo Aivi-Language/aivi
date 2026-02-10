@@ -34,7 +34,10 @@ pub use rust_codegen::{compile_rust, compile_rust_lib};
 pub use kernel::{KernelProgram, lower_hir as lower_kernel};
 pub use rust_ir::{RustIrProgram, lower_kernel as lower_rust_ir};
 pub use rustc_backend::{build_with_rustc, emit_rustc_source};
-pub use mcp::{collect_mcp_manifest, serve_mcp_stdio, McpManifest, McpResource, McpTool};
+pub use mcp::{
+    collect_mcp_manifest, serve_mcp_stdio, serve_mcp_stdio_with_policy, McpManifest, McpPolicy,
+    McpResource, McpTool,
+};
 pub use pm::{
     collect_aivi_sources, edit_cargo_toml_dependencies, read_aivi_toml, write_scaffold, AiviToml,
     CargoDepSpec, CargoDepSpecParseError, CargoManifestEdits, ProjectKind,

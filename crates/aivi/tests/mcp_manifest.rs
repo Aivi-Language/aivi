@@ -70,3 +70,42 @@ module Example.Schema = {
     );
 }
 
+#[test]
+fn mcp_manifest_marks_effectful_tools() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("effects.aivi");
+    fs::write(
+        &path,
+        r#"@no_prelude
+module Example.Effects = {
+  @mcp_tool
+  pureTool : Int -> Int
+  pureTool x = x
+
+  @mcp_tool
+  effectTool : Int -> Effect Text Int
+  effectTool x = effect { pure x }
+}
+"#,
+    )
+    .expect("write module");
+
+    let target = path.to_string_lossy().to_string();
+    let modules = aivi::load_modules(&target).expect("modules");
+    let manifest = aivi::collect_mcp_manifest(&modules);
+
+    let pure = manifest
+        .tools
+        .iter()
+        .find(|tool| tool.name == "Example.Effects.pureTool")
+        .expect("pure tool");
+    assert!(!pure.effectful);
+
+    let effect = manifest
+        .tools
+        .iter()
+        .find(|tool| tool.name == "Example.Effects.effectTool")
+        .expect("effect tool");
+    assert!(effect.effectful);
+}
+

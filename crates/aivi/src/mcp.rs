@@ -4,7 +4,7 @@ use std::io::{BufRead, Write};
 use serde::Serialize;
 
 use crate::surface::{
-    BlockItem, BlockKind, Def, DomainItem, Expr, ListItem, MatchArm, Module, ModuleItem, Pattern,
+    BlockItem, BlockKind, Def, DomainItem, Expr, ListItem, Module, ModuleItem, Pattern,
     RecordField, TypeExpr, TypeSig,
 };
 use crate::AiviError;
