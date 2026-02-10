@@ -1,5 +1,6 @@
 use crate::cst::CstToken;
 use crate::diagnostics::{Diagnostic, DiagnosticLabel, Position, Span};
+use crate::syntax;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind {
@@ -209,52 +210,27 @@ fn is_ident_continue(ch: char) -> bool {
 
 fn match_symbol(chars: &[char], index: usize) -> Option<(String, usize)> {
     if index + 2 < chars.len() {
-        let triple = [chars[index], chars[index + 1], chars[index + 2]];
-        let symbol = match triple {
-            ['.', '.', '.'] => "...",
-            _ => "",
-        };
-        if !symbol.is_empty() {
-            return Some((symbol.to_string(), 3));
+        for (needle, symbol) in syntax::SYMBOLS_3 {
+            if chars[index] == needle[0] && chars[index + 1] == needle[1] && chars[index + 2] == needle[2] {
+                return Some(((*symbol).to_string(), 3));
+            }
         }
     }
 
-    let two = if index + 1 < chars.len() {
-        Some([chars[index], chars[index + 1]])
-    } else {
-        None
-    };
-
-    if let Some(pair) = two {
-        let symbol = match pair {
-            ['=', '>'] => "=>",
-            ['-', '>'] => "->",
-            ['<', '-'] => "<-",
-            ['<', '|'] => "<|",
-            ['|', '>'] => "|>",
-            ['=', '='] => "==",
-            ['!', '='] => "!=",
-            ['<', '='] => "<=",
-            ['>', '='] => ">=",
-            ['&', '&'] => "&&",
-            ['|', '|'] => "||",
-            [':', ':'] => "::",
-            ['?', '?'] => "??",
-            ['.', '.'] => "..",
-            _ => "",
-        };
-        if !symbol.is_empty() {
-            return Some((symbol.to_string(), 2));
+    if index + 1 < chars.len() {
+        for (needle, symbol) in syntax::SYMBOLS_2 {
+            if chars[index] == needle[0] && chars[index + 1] == needle[1] {
+                return Some(((*symbol).to_string(), 2));
+            }
         }
     }
 
     let ch = chars[index];
-    let symbol = match ch {
-        '{' | '}' | '(' | ')' | '[' | ']' | ',' | '.' | ':' | ';' | '=' | '+' | '-' | '*' | '/'
-        | '|' | '&' | '!' | '<' | '>' | '?' | '@' | '%' | '~' => Some(ch.to_string()),
-        _ => None,
-    }?;
-    Some((symbol, 1))
+    if syntax::SYMBOLS_1.contains(&ch) {
+        return Some((ch.to_string(), 1));
+    }
+
+    None
 }
 
 fn lex_sigil(chars: &[char], start: usize) -> Option<(String, usize, bool)> {

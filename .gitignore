@@ -1,5 +1,6 @@
 node_modules
 .idea/
+.ai/
 
 specs/.vitepress/cache/
 specs/.vitepress/dist/

@@ -1,197 +1,267 @@
 {
   "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
   "name": "AIVI",
-  "scopeName": "source.aivi",
   "patterns": [
-    { "include": "#comment" },
-    { "include": "#sigil" },
-    { "include": "#string" },
-    { "include": "#number" },
-    { "include": "#decorator" },
-    { "include": "#keyword" },
-    { "include": "#boolean" },
-    { "include": "#type" },
-    { "include": "#operator" }
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#sigil"
+    },
+    {
+      "include": "#string"
+    },
+    {
+      "include": "#number"
+    },
+    {
+      "include": "#decorator"
+    },
+    {
+      "include": "#keyword"
+    },
+    {
+      "include": "#boolean"
+    },
+    {
+      "include": "#constructor"
+    },
+    {
+      "include": "#type"
+    },
+    {
+      "include": "#operator"
+    }
   ],
   "repository": {
-    "sigil": {
+    "boolean": {
       "patterns": [
         {
-          "name": "string.quoted.other.sigil.aivi",
-          "begin": "(~[a-z][A-Za-z0-9_]*)(/)",
-          "beginCaptures": {
-            "1": { "name": "entity.name.function.sigil.aivi" },
-            "2": { "name": "punctuation.definition.string.begin.aivi" }
-          },
-          "end": "(?<!\\\\)/(?:[a-zA-Z]*)",
-          "endCaptures": {
-            "0": { "name": "punctuation.definition.string.end.aivi" }
-          },
-          "patterns": [
-            { "name": "constant.character.escape.aivi", "match": "\\\\." }
-          ]
-        },
-        {
-          "name": "string.quoted.other.sigil.aivi",
-          "begin": "(~[a-z][A-Za-z0-9_]*)(\\\")",
-          "beginCaptures": {
-            "1": { "name": "entity.name.function.sigil.aivi" },
-            "2": { "name": "punctuation.definition.string.begin.aivi" }
-          },
-          "end": "(?<!\\\\)\\\"(?:[a-zA-Z]*)",
-          "endCaptures": {
-            "0": { "name": "punctuation.definition.string.end.aivi" }
-          },
-          "patterns": [
-            { "name": "constant.character.escape.aivi", "match": "\\\\." }
-          ]
-        },
-        {
-          "name": "string.quoted.other.sigil.aivi",
-          "begin": "(~[a-z][A-Za-z0-9_]*)(\\()",
-          "beginCaptures": {
-            "1": { "name": "entity.name.function.sigil.aivi" },
-            "2": { "name": "punctuation.definition.string.begin.aivi" }
-          },
-          "end": "(?<!\\\\)\\)(?:[a-zA-Z]*)",
-          "endCaptures": {
-            "0": { "name": "punctuation.definition.string.end.aivi" }
-          },
-          "patterns": [
-            { "name": "constant.character.escape.aivi", "match": "\\\\." }
-          ]
-        },
-        {
-          "name": "string.quoted.other.sigil.aivi",
-          "begin": "(~[a-z][A-Za-z0-9_]*)(\\[)",
-          "beginCaptures": {
-            "1": { "name": "entity.name.function.sigil.aivi" },
-            "2": { "name": "punctuation.definition.string.begin.aivi" }
-          },
-          "end": "(?<!\\\\)\\](?:[a-zA-Z]*)",
-          "endCaptures": {
-            "0": { "name": "punctuation.definition.string.end.aivi" }
-          },
-          "patterns": [
-            { "name": "constant.character.escape.aivi", "match": "\\\\." }
-          ]
-        },
-        {
-          "name": "string.quoted.other.sigil.aivi",
-          "begin": "(~[a-z][A-Za-z0-9_]*)(\\{)",
-          "beginCaptures": {
-            "1": { "name": "entity.name.function.sigil.aivi" },
-            "2": { "name": "punctuation.definition.string.begin.aivi" }
-          },
-          "end": "(?<!\\\\)\\}(?:[a-zA-Z]*)",
-          "endCaptures": {
-            "0": { "name": "punctuation.definition.string.end.aivi" }
-          },
-          "patterns": [
-            { "name": "constant.character.escape.aivi", "match": "\\\\." }
-          ]
+          "match": "\\\\b(True|False)\\\\b",
+          "name": "constant.language.boolean.aivi"
         }
       ]
     },
     "comment": {
       "patterns": [
         {
-          "name": "comment.line.double-slash.aivi",
-          "match": "//.*$"
+          "match": "//.*$",
+          "name": "comment.line.double-slash.aivi"
         },
         {
-          "name": "comment.block.aivi",
-          "begin": "/\\*",
-          "end": "\\*/"
+          "begin": "/\\\\*",
+          "end": "\\\\*/",
+          "name": "comment.block.aivi"
         }
       ]
     },
-    "string": {
+    "constructor": {
       "patterns": [
         {
-          "name": "string.quoted.double.aivi",
-          "begin": "\"",
-          "end": "\"",
-          "patterns": [
-            {
-              "name": "constant.character.escape.aivi",
-              "match": "\\\\([\\\\\"nrt]|u\\{[0-9a-fA-F]+\\})"
-            }
-          ]
-        },
-        {
-          "name": "string.quoted.other.backtick.aivi",
-          "begin": "`",
-          "end": "`"
-        },
-        {
-          "name": "string.quoted.single.aivi",
-          "begin": "'",
-          "end": "'",
-          "patterns": [
-            {
-              "name": "constant.character.escape.aivi",
-              "match": "\\\\."
-            }
-          ]
-        }
-      ]
-    },
-    "number": {
-      "patterns": [
-        {
-          "name": "constant.numeric.aivi",
-          "match": "\\b\\d+(?:\\.\\d+)?\\b"
+          "match": "\\\\b(None|Some|Ok|Err)\\\\b",
+          "name": "support.constant.aivi"
         }
       ]
     },
     "decorator": {
       "patterns": [
         {
-          "name": "meta.annotation.decorator.aivi",
-          "match": "@[a-z][A-Za-z0-9_]*\\b"
-        }
-      ]
-    },
-    "boolean": {
-      "patterns": [
-        {
-          "name": "constant.language.boolean.aivi",
-          "match": "\\b(True|False)\\b"
+          "match": "@[a-z][A-Za-z0-9_]*\\\\b",
+          "name": "meta.annotation.decorator.aivi"
         }
       ]
     },
     "keyword": {
       "patterns": [
         {
-          "name": "keyword.control.aivi",
-          "match": "\\b(if|then|else|when|effect|generate|yield|defer|loop|recurse|do|let|in|pure|async)\\b"
+          "match": "\\\\b(do|effect|generate|resource|if|then|else|when|yield|loop|recurse)\\\\b",
+          "name": "keyword.control.aivi"
         },
         {
-          "name": "keyword.other.aivi",
-          "match": "\\b(module|export|use|as|hiding|domain|class|instance|type|over)\\b"
-        },
-        {
-          "name": "constant.language.null.aivi",
-          "match": "\\b(None|Empty|Unit)\\b"
+          "match": "\\\\b(module|export|use|as|hiding|domain|class|instance|type|over)\\\\b",
+          "name": "keyword.other.aivi"
         }
       ]
     },
-    "type": {
+    "number": {
       "patterns": [
         {
-          "name": "entity.name.type.aivi",
-          "match": "\\b[A-Z][A-Za-z0-9_]*\\b"
+          "match": "\\\\b\\\\d+(?:\\\\.\\\\d+)?\\\\b",
+          "name": "constant.numeric.aivi"
         }
       ]
     },
     "operator": {
       "patterns": [
         {
-          "name": "keyword.operator.aivi",
-          "match": "(::=|&&|\\|\\||=>|<-|->|<\\||\\|>|\\.{2}|:=|==|!=|>=|<=|<<|>>|\\?|\\+|-|\\*|/|%|=|:|\\.|,|;|<|>|!|~|\\^|&|\\||→|⇒|▷|⇐|←|≠|≥|≤|∧|∨|…)"
+          "match": "(\\.\\.\\.|!=|&&|\\+\\+|->|\\.\\.|::|:=|<-|<<|<=|<\\||==|=>|>=|>>|\\?\\?|\\|>|\\|\\||!|%|&|\\*|\\+|,|-|\\.|/|:|;|<|=|>|\\?|\\^|\\||~)",
+          "name": "keyword.operator.aivi"
+        }
+      ]
+    },
+    "sigil": {
+      "patterns": [
+        {
+          "begin": "(~[a-z][A-Za-z0-9_]*)(/)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.sigil.aivi"
+            },
+            "2": {
+              "name": "punctuation.definition.string.begin.aivi"
+            }
+          },
+          "end": "(?<!\\\\)/(?:[a-zA-Z]*)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.aivi"
+            }
+          },
+          "name": "string.quoted.other.sigil.aivi",
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape.aivi"
+            }
+          ]
+        },
+        {
+          "begin": "(~[a-z][A-Za-z0-9_]*)(\\\")",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.sigil.aivi"
+            },
+            "2": {
+              "name": "punctuation.definition.string.begin.aivi"
+            }
+          },
+          "end": "(?<!\\\\)\\\"(?:[a-zA-Z]*)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.aivi"
+            }
+          },
+          "name": "string.quoted.other.sigil.aivi",
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape.aivi"
+            }
+          ]
+        },
+        {
+          "begin": "(~[a-z][A-Za-z0-9_]*)(\\()",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.sigil.aivi"
+            },
+            "2": {
+              "name": "punctuation.definition.string.begin.aivi"
+            }
+          },
+          "end": "(?<!\\\\)\\)(?:[a-zA-Z]*)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.aivi"
+            }
+          },
+          "name": "string.quoted.other.sigil.aivi",
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape.aivi"
+            }
+          ]
+        },
+        {
+          "begin": "(~[a-z][A-Za-z0-9_]*)(\\[)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.sigil.aivi"
+            },
+            "2": {
+              "name": "punctuation.definition.string.begin.aivi"
+            }
+          },
+          "end": "(?<!\\\\)\\](?:[a-zA-Z]*)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.aivi"
+            }
+          },
+          "name": "string.quoted.other.sigil.aivi",
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape.aivi"
+            }
+          ]
+        },
+        {
+          "begin": "(~[a-z][A-Za-z0-9_]*)(\\{)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.sigil.aivi"
+            },
+            "2": {
+              "name": "punctuation.definition.string.begin.aivi"
+            }
+          },
+          "end": "(?<!\\\\)\\}(?:[a-zA-Z]*)",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.aivi"
+            }
+          },
+          "name": "string.quoted.other.sigil.aivi",
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape.aivi"
+            }
+          ]
+        }
+      ]
+    },
+    "string": {
+      "patterns": [
+        {
+          "begin": "\"",
+          "end": "\"",
+          "name": "string.quoted.double.aivi",
+          "patterns": [
+            {
+              "match": "\\\\([\\\\\\\\\\\"nrt]|u\\\\{[0-9a-fA-F]+\\\\})",
+              "name": "constant.character.escape.aivi"
+            }
+          ]
+        },
+        {
+          "begin": "`",
+          "end": "`",
+          "name": "string.quoted.other.backtick.aivi"
+        },
+        {
+          "begin": "'",
+          "end": "'",
+          "name": "string.quoted.single.aivi",
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape.aivi"
+            }
+          ]
+        }
+      ]
+    },
+    "type": {
+      "patterns": [
+        {
+          "match": "\\\\b[A-Z][A-Za-z0-9_]*\\\\b",
+          "name": "entity.name.type.aivi"
         }
       ]
     }
-  }
+  },
+  "scopeName": "source.aivi"
 }

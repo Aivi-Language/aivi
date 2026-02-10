@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
+const fs = __importStar(require("node:fs"));
 const node_1 = require("vscode-languageclient/node");
 const LONG_OPS = [
     "::=",
@@ -439,8 +440,11 @@ function getFormatConfig() {
     };
 }
 function activate(context) {
+    const isWindows = process.platform === "win32";
+    const serverExe = isWindows ? "aivi-lsp.exe" : "aivi-lsp";
+    const bundledServerPath = context.asAbsolutePath(`bin/${serverExe}`);
     const serverOptions = {
-        command: "aivi-lsp",
+        command: fs.existsSync(bundledServerPath) ? bundledServerPath : "aivi-lsp",
         args: [],
     };
     const clientOptions = {

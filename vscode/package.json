@@ -2,7 +2,7 @@
   "name": "aivi-vscode",
   "displayName": "AIVI Language Support",
   "description": "Syntax highlighting and formatting for the AIVI language (from the AIVI specs).",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "publisher": "aivi",
   "packageManager": "pnpm@9.15.4",
   "repository": {
@@ -11,19 +11,21 @@
   },
   "license": "MIT",
   "engines": {
-    "vscode": "1.107.0"
+    "vscode": "1.109.0"
   },
   "categories": [
     "Programming Languages",
     "Formatters"
   ],
+  "icon": "assets/aivi-64.png",
   "main": "./dist/extension.js",
   "files": [
     "dist/extension.js",
     "syntaxes/**",
     "language-configuration.json",
     "ebnf-language-configuration.json",
-    "bin/aivi-lsp",
+    "assets/**",
+    "bin/**",
     "README.md"
   ],
   "activationEvents": [
@@ -87,10 +89,11 @@
     }
   },
   "scripts": {
-    "build": "tsgo -p .",
+    "compile": "tsgo -p .",
+    "build": "node scripts/build.js",
     "watch": "tsgo -watch -p .",
     "package": "vsce package --no-dependencies",
-    "vscode:prepublish": "pnpm run build"
+    "vscode:prepublish": "pnpm run compile"
   },
   "dependencies": {
     "vscode-languageclient": "9.0.1"

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as fs from "node:fs";
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -448,8 +449,11 @@ function getFormatConfig(): { indentSize: number; maxBlankLines: number } {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  const isWindows = process.platform === "win32";
+  const serverExe = isWindows ? "aivi-lsp.exe" : "aivi-lsp";
+  const bundledServerPath = context.asAbsolutePath(`bin/${serverExe}`);
   const serverOptions: ServerOptions = {
-    command: "aivi-lsp",
+    command: fs.existsSync(bundledServerPath) ? bundledServerPath : "aivi-lsp",
     args: [],
   };
 

@@ -12,6 +12,7 @@ mod rust_codegen;
 mod rust_ir;
 mod rustc_backend;
 mod surface;
+pub mod syntax;
 mod typecheck;
 mod workspace;
 
