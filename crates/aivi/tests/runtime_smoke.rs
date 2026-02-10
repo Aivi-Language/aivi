@@ -18,3 +18,10 @@ fn run_native_concurrency_example() {
     let program = desugar_target("examples/11_concurrency.aivi").expect("desugar");
     run_native(program).expect("run native");
 }
+
+#[test]
+fn run_native_effects_core_ops_example() {
+    let _root = set_workspace_root();
+    let program = desugar_target("examples/08_effects_core_ops.aivi").expect("desugar");
+    run_native(program).expect("run native");
+}

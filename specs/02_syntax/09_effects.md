@@ -23,6 +23,44 @@ For *handling* an effect error as a value, the standard library provides:
 
 - `attempt : Effect E A -> Effect E (Result E A)`
 
+### Examples (core operations)
+
+`pure` lifts a value into an effect:
+
+```aivi
+pureExample : Effect Text Int
+pureExample =
+  pure 42
+```
+
+`bind` sequences effects explicitly (the `effect { ... }` block desugars to `bind`):
+
+```aivi
+bindExample : Effect Text Int
+bindExample =
+  (pure 41 |> bind) (n => pure (n + 1))
+```
+
+`fail` aborts an effect with an error value:
+
+```aivi
+failExample : Effect Text Int
+failExample =
+  fail "boom"
+```
+
+`attempt` runs an effect and captures success/failure as a `Result`:
+
+```aivi
+attemptExample : Effect Text Text
+attemptExample = effect {
+  res <- attempt (fail "nope")
+  res ?
+    | Ok _  => pure "unexpected"
+    | Err e => pure e
+}
+```
+
 ### `load`
 
 In some examples, `load` is used as a helper to observe or lift a resource operation into an effect.
@@ -104,8 +142,8 @@ The `effect` block is the primary way to sequence impure operations. It translat
 
 | `effect` Syntax | Explicit Monadic Syntax |
 | :--- | :--- |
-| `val = effect { x <- f; g x }` | `val = f |> bind (x => g x)` |
-| `effect { f; g }` | `f |> bind (_ => g)` |
+| `val = effect { x <- f; g x }` | `val = (f |> bind) (x => g x)` |
+| `effect { f; g }` | `(f |> bind) (_ => g)` |
 
 Example translation:
 
@@ -122,10 +160,10 @@ transfer fromAccount toAccount amount = effect {
 
 // Equivalent functional composition
 transfer fromAccount toAccount amount =
-  getBalance fromAccount |> bind (balance =>
+  (getBalance fromAccount |> bind) (balance =>
     if balance >= amount then
-      withdraw fromAccount amount |> bind (_ =>
-        deposit toAccount amount |> bind (_ =>
+      (withdraw fromAccount amount |> bind) (_ =>
+        (deposit toAccount amount |> bind) (_ =>
           pure Unit))
     else
       fail InsufficientFunds

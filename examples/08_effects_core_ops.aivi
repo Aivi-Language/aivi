@@ -1,0 +1,17 @@
+module examples.runtime_effects_core_ops = {
+  export main
+
+  main : Effect Text Unit
+  main = effect {
+    n <- pure 41
+    m <- (pure n |> bind) (x => pure (x + 1))
+
+    res <- attempt (
+      if m == 42 then fail "boom" else pure m
+    )
+
+    res ?
+      | Ok _  => pure Unit
+      | Err _ => pure Unit
+  }
+}
