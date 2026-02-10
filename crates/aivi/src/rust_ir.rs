@@ -33,20 +33,41 @@ pub enum Builtin {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "kind")]
 pub enum RustIrExpr {
-    Local { id: u32, name: String },
-    Global { id: u32, name: String },
-    Builtin { id: u32, builtin: Builtin },
+    Local {
+        id: u32,
+        name: String,
+    },
+    Global {
+        id: u32,
+        name: String,
+    },
+    Builtin {
+        id: u32,
+        builtin: Builtin,
+    },
 
-    LitNumber { id: u32, text: String },
-    LitString { id: u32, text: String },
+    LitNumber {
+        id: u32,
+        text: String,
+    },
+    LitString {
+        id: u32,
+        text: String,
+    },
     LitSigil {
         id: u32,
         tag: String,
         body: String,
         flags: String,
     },
-    LitBool { id: u32, value: bool },
-    LitDateTime { id: u32, text: String },
+    LitBool {
+        id: u32,
+        value: bool,
+    },
+    LitDateTime {
+        id: u32,
+        text: String,
+    },
 
     Lambda {
         id: u32,
@@ -63,9 +84,18 @@ pub enum RustIrExpr {
         func: Box<RustIrExpr>,
         args: Vec<RustIrExpr>,
     },
-    List { id: u32, items: Vec<RustIrListItem> },
-    Tuple { id: u32, items: Vec<RustIrExpr> },
-    Record { id: u32, fields: Vec<RustIrRecordField> },
+    List {
+        id: u32,
+        items: Vec<RustIrListItem>,
+    },
+    Tuple {
+        id: u32,
+        items: Vec<RustIrExpr>,
+    },
+    Record {
+        id: u32,
+        fields: Vec<RustIrRecordField>,
+    },
     Patch {
         id: u32,
         target: Box<RustIrExpr>,
@@ -103,7 +133,10 @@ pub enum RustIrExpr {
         block_kind: RustIrBlockKind,
         items: Vec<RustIrBlockItem>,
     },
-    Raw { id: u32, text: String },
+    Raw {
+        id: u32,
+        text: String,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -146,8 +179,13 @@ pub enum RustIrBlockKind {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum RustIrBlockItem {
-    Bind { pattern: RustIrPattern, expr: RustIrExpr },
-    Expr { expr: RustIrExpr },
+    Bind {
+        pattern: RustIrPattern,
+        expr: RustIrExpr,
+    },
+    Expr {
+        expr: RustIrExpr,
+    },
 }
 
 pub fn lower_kernel(program: KernelProgram) -> Result<RustIrProgram, AiviError> {
@@ -173,7 +211,10 @@ fn lower_module(module: KernelModule) -> Result<RustIrModule, AiviError> {
 fn lower_def(def: KernelDef, globals: &[String]) -> Result<RustIrDef, AiviError> {
     let mut locals = Vec::new();
     let expr = lower_expr(def.expr, globals, &mut locals)?;
-    Ok(RustIrDef { name: def.name, expr })
+    Ok(RustIrDef {
+        name: def.name,
+        expr,
+    })
 }
 
 fn lower_expr(

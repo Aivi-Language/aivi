@@ -1,9 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::diagnostics::{Diagnostic, FileDiagnostic};
-use crate::surface::{
-    BlockItem, Def, DomainItem, Expr, Module, ModuleItem, Pattern,
-};
+use crate::surface::{BlockItem, Def, DomainItem, Expr, Module, ModuleItem, Pattern};
 
 pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
     let mut diagnostics = Vec::new();
@@ -92,7 +90,11 @@ fn check_uses(
             continue;
         }
         let target = target.unwrap();
-        let exports: HashSet<&str> = target.exports.iter().map(|name| name.name.as_str()).collect();
+        let exports: HashSet<&str> = target
+            .exports
+            .iter()
+            .map(|name| name.name.as_str())
+            .collect();
         for item in &use_decl.items {
             if !exports.contains(item.name.as_str()) {
                 diagnostics.push(file_diag(
@@ -212,7 +214,13 @@ fn check_def(
 ) {
     let mut local_scope = scope.clone();
     collect_pattern_bindings(&def.params, &mut local_scope);
-    check_expr(&def.expr, &mut local_scope, diagnostics, module, wildcard_import);
+    check_expr(
+        &def.expr,
+        &mut local_scope,
+        diagnostics,
+        module,
+        wildcard_import,
+    );
 }
 
 fn check_expr(
@@ -283,7 +291,9 @@ fn check_expr(
             collect_pattern_bindings(params, &mut inner_scope);
             check_expr(body, &mut inner_scope, diagnostics, module, wildcard_import);
         }
-        Expr::Match { scrutinee, arms, .. } => {
+        Expr::Match {
+            scrutinee, arms, ..
+        } => {
             if let Some(scrutinee) = scrutinee {
                 check_expr(scrutinee, scope, diagnostics, module, wildcard_import);
             }
@@ -293,7 +303,13 @@ fn check_expr(
                 if let Some(guard) = &arm.guard {
                     check_expr(guard, &mut arm_scope, diagnostics, module, wildcard_import);
                 }
-                check_expr(&arm.body, &mut arm_scope, diagnostics, module, wildcard_import);
+                check_expr(
+                    &arm.body,
+                    &mut arm_scope,
+                    diagnostics,
+                    module,
+                    wildcard_import,
+                );
             }
         }
         Expr::If {
@@ -382,7 +398,14 @@ fn detect_cycles(module_map: &HashMap<String, &Module>) -> HashSet<String> {
         if visited.contains(name) {
             continue;
         }
-        dfs(name, module_map, &mut visiting, &mut visited, &mut stack, &mut in_cycle);
+        dfs(
+            name,
+            module_map,
+            &mut visiting,
+            &mut visited,
+            &mut stack,
+            &mut in_cycle,
+        );
     }
 
     in_cycle
@@ -425,7 +448,10 @@ fn dfs(
 }
 
 fn is_constructor_name(name: &str) -> bool {
-    name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false)
+    name.chars()
+        .next()
+        .map(|c| c.is_uppercase())
+        .unwrap_or(false)
 }
 
 fn is_builtin_name(name: &str) -> bool {

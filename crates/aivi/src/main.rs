@@ -4,10 +4,10 @@ use aivi::{
     run_native, rust_ir_target, serve_mcp_stdio_with_policy, write_scaffold, AiviError,
     CargoDepSpec, McpPolicy, ProjectKind,
 };
+use sha2::{Digest, Sha256};
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
-use sha2::{Digest, Sha256};
 
 fn main() -> ExitCode {
     match run() {
@@ -44,7 +44,7 @@ fn run() -> Result<(), AiviError> {
             };
             let bundle = parse_target(target)?;
             let output = serde_json::to_string_pretty(&bundle)
-                .map_err(|err| AiviError::Io(std::io::Error::new(std::io::ErrorKind::Other, err)))?;
+                .map_err(|err| AiviError::Io(std::io::Error::other(err)))?;
             println!("{output}");
             let mut had_errors = false;
             for file in &bundle.files {
@@ -76,7 +76,8 @@ fn run() -> Result<(), AiviError> {
                 return Ok(());
             }
             for diag in diagnostics {
-                let rendered = render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+                let rendered =
+                    render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
                 if !rendered.is_empty() {
                     eprintln!("{rendered}");
                 }
@@ -110,7 +111,7 @@ fn run() -> Result<(), AiviError> {
             }
             let program = desugar_target(target)?;
             let output = serde_json::to_string_pretty(&program)
-                .map_err(|err| AiviError::Io(std::io::Error::new(std::io::ErrorKind::Other, err)))?;
+                .map_err(|err| AiviError::Io(std::io::Error::other(err)))?;
             println!("{output}");
             Ok(())
         }
@@ -121,7 +122,7 @@ fn run() -> Result<(), AiviError> {
             };
             let program = kernel_target(target)?;
             let output = serde_json::to_string_pretty(&program)
-                .map_err(|err| AiviError::Io(std::io::Error::new(std::io::ErrorKind::Other, err)))?;
+                .map_err(|err| AiviError::Io(std::io::Error::other(err)))?;
             println!("{output}");
             Ok(())
         }
@@ -132,79 +133,75 @@ fn run() -> Result<(), AiviError> {
             };
             let program = rust_ir_target(target)?;
             let output = serde_json::to_string_pretty(&program)
-                .map_err(|err| AiviError::Io(std::io::Error::new(std::io::ErrorKind::Other, err)))?;
+                .map_err(|err| AiviError::Io(std::io::Error::other(err)))?;
             println!("{output}");
             Ok(())
         }
-        "lsp" | "build" | "run" => {
-            match command.as_str() {
-                "lsp" => {
-                    let status = Command::new("aivi-lsp").args(&rest).status()?;
-                    if !status.success() {
-                        return Err(AiviError::Io(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            "aivi-lsp exited with an error",
+        "lsp" | "build" | "run" => match command.as_str() {
+            "lsp" => {
+                let status = Command::new("aivi-lsp").args(&rest).status()?;
+                if !status.success() {
+                    return Err(AiviError::Io(std::io::Error::other(
+                        "aivi-lsp exited with an error",
+                    )));
+                }
+                Ok(())
+            }
+            "build" => {
+                if should_use_project_pipeline(&rest) {
+                    cmd_project_build(&rest)
+                } else {
+                    let Some(opts) = parse_build_args(rest.into_iter(), true, "rust")? else {
+                        print_help();
+                        return Ok(());
+                    };
+                    if opts.target != "rust" && opts.target != "rustc" {
+                        return Err(AiviError::InvalidCommand(format!(
+                            "unsupported target {}",
+                            opts.target
                         )));
+                    }
+                    let _modules = load_checked_modules(&opts.input)?;
+                    let program = desugar_target(&opts.input)?;
+                    if opts.target == "rust" {
+                        let rust = compile_rust(program)?;
+                        let out_dir = opts
+                            .output
+                            .unwrap_or_else(|| PathBuf::from("target/aivi-gen"));
+                        write_rust_project(&out_dir, &rust)?;
+                        println!("{}", out_dir.display());
+                    } else {
+                        let out = opts
+                            .output
+                            .unwrap_or_else(|| PathBuf::from("target/aivi-rustc/aivi_out"));
+                        aivi::build_with_rustc(program, &out, &opts.forward)?;
+                        println!("{}", out.display());
                     }
                     Ok(())
                 }
-                "build" => {
-                    if should_use_project_pipeline(&rest) {
-                        cmd_project_build(&rest)
-                    } else {
-                        let Some(opts) = parse_build_args(rest.into_iter(), true, "rust")? else {
-                            print_help();
-                            return Ok(());
-                        };
-                        if opts.target != "rust" && opts.target != "rustc" {
-                            return Err(AiviError::InvalidCommand(format!(
-                                "unsupported target {}",
-                                opts.target
-                            )));
-                        }
-                        let _modules = load_checked_modules(&opts.input)?;
-                        let program = desugar_target(&opts.input)?;
-                        if opts.target == "rust" {
-                            let rust = compile_rust(program)?;
-                            let out_dir = opts
-                                .output
-                                .unwrap_or_else(|| PathBuf::from("target/aivi-gen"));
-                            write_rust_project(&out_dir, &rust)?;
-                            println!("{}", out_dir.display());
-                        } else {
-                            let out = opts
-                                .output
-                                .unwrap_or_else(|| PathBuf::from("target/aivi-rustc/aivi_out"));
-                            aivi::build_with_rustc(program, &out, &opts.forward)?;
-                            println!("{}", out.display());
-                        }
-                        Ok(())
-                    }
-                }
-                "run" => {
-                    if should_use_project_pipeline(&rest) {
-                        cmd_project_run(&rest)
-                    } else {
-                        let Some(opts) = parse_build_args(rest.into_iter(), false, "native")?
-                        else {
-                            print_help();
-                            return Ok(());
-                        };
-                        if opts.target != "native" {
-                            return Err(AiviError::InvalidCommand(format!(
-                                "unsupported target {}",
-                                opts.target
-                            )));
-                        }
-                        let _modules = load_checked_modules(&opts.input)?;
-                        let program = desugar_target(&opts.input)?;
-                        run_native(program)?;
-                        Ok(())
-                    }
-                }
-                _ => Ok(()),
             }
-        }
+            "run" => {
+                if should_use_project_pipeline(&rest) {
+                    cmd_project_run(&rest)
+                } else {
+                    let Some(opts) = parse_build_args(rest.into_iter(), false, "native")? else {
+                        print_help();
+                        return Ok(());
+                    };
+                    if opts.target != "native" {
+                        return Err(AiviError::InvalidCommand(format!(
+                            "unsupported target {}",
+                            opts.target
+                        )));
+                    }
+                    let _modules = load_checked_modules(&opts.input)?;
+                    let program = desugar_target(&opts.input)?;
+                    run_native(program)?;
+                    Ok(())
+                }
+            }
+            _ => Ok(()),
+        },
         "mcp" => cmd_mcp(&rest),
         _ => {
             print_help();
@@ -257,8 +254,7 @@ fn cmd_mcp_serve(target: &str, allow_effects: bool) -> Result<(), AiviError> {
     }
     if !diagnostics.is_empty() {
         for diag in diagnostics {
-            let rendered =
-                render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+            let rendered = render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
             if !rendered.is_empty() {
                 eprintln!("{rendered}");
             }
@@ -316,9 +312,7 @@ fn parse_build_args(
                 output = Some(PathBuf::from(value));
             }
             _ if arg.starts_with('-') => {
-                return Err(AiviError::InvalidCommand(format!(
-                    "unknown flag {arg}"
-                )));
+                return Err(AiviError::InvalidCommand(format!("unknown flag {arg}")));
             }
             _ => {
                 if input.is_some() {
@@ -441,15 +435,17 @@ fn cmd_clean(args: &[String]) -> Result<(), AiviError> {
             _ if arg.starts_with('-') => {
                 return Err(AiviError::InvalidCommand(format!("unknown flag {arg}")))
             }
-            _ => return Err(AiviError::InvalidCommand(format!("unexpected argument {arg}"))),
+            _ => {
+                return Err(AiviError::InvalidCommand(format!(
+                    "unexpected argument {arg}"
+                )))
+            }
         }
     }
 
     let root = env::current_dir()?;
     let gen_dir: String = if root.join("aivi.toml").exists() {
-        aivi::read_aivi_toml(&root.join("aivi.toml"))?
-            .build
-            .gen_dir
+        aivi::read_aivi_toml(&root.join("aivi.toml"))?.build.gen_dir
     } else {
         "target/aivi-gen".to_string()
     };
@@ -458,7 +454,10 @@ fn cmd_clean(args: &[String]) -> Result<(), AiviError> {
         std::fs::remove_dir_all(&gen_dir)?;
     }
     if all {
-        let status = Command::new("cargo").arg("clean").current_dir(&root).status()?;
+        let status = Command::new("cargo")
+            .arg("clean")
+            .current_dir(&root)
+            .status()?;
         if !status.success() {
             return Err(AiviError::Cargo("cargo clean failed".to_string()));
         }
@@ -491,8 +490,7 @@ fn cmd_install(args: &[String]) -> Result<(), AiviError> {
     let mut fetch = true;
     let mut spec = None;
 
-    let mut iter = args.iter().cloned();
-    while let Some(arg) = iter.next() {
+    for arg in args.iter().cloned() {
         match arg.as_str() {
             "--require-aivi" => require_aivi = true,
             "--no-fetch" => fetch = false,
@@ -511,7 +509,9 @@ fn cmd_install(args: &[String]) -> Result<(), AiviError> {
     }
 
     let Some(spec) = spec else {
-        return Err(AiviError::InvalidCommand("install expects <spec>".to_string()));
+        return Err(AiviError::InvalidCommand(
+            "install expects <spec>".to_string(),
+        ));
     };
 
     let root = env::current_dir()?;
@@ -521,7 +521,8 @@ fn cmd_install(args: &[String]) -> Result<(), AiviError> {
         ));
     }
 
-    let dep = CargoDepSpec::parse(&spec).map_err(|err| AiviError::InvalidCommand(err.to_string()))?;
+    let dep =
+        CargoDepSpec::parse(&spec).map_err(|err| AiviError::InvalidCommand(err.to_string()))?;
 
     let cargo_toml_path = root.join("Cargo.toml");
     let original = std::fs::read_to_string(&cargo_toml_path)?;
@@ -651,7 +652,7 @@ fn generate_project_rust(project_root: &Path, cfg: &aivi::AiviToml) -> Result<()
         ProjectKind::Lib => (src_out.join("lib.rs"), aivi::compile_rust_lib(program)?),
     };
     std::fs::write(&out_path, rust)?;
-    write_build_stamp(project_root, &cfg, &gen_dir, &entry_path)?;
+    write_build_stamp(project_root, cfg, &gen_dir, &entry_path)?;
     Ok(())
 }
 
@@ -692,7 +693,10 @@ fn write_build_stamp(
     });
 
     std::fs::create_dir_all(gen_dir)?;
-    std::fs::write(gen_dir.join("aivi.json"), serde_json::to_vec_pretty(&stamp).unwrap())?;
+    std::fs::write(
+        gen_dir.join("aivi.json"),
+        serde_json::to_vec_pretty(&stamp).unwrap(),
+    )?;
     Ok(())
 }
 

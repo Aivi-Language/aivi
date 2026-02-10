@@ -78,7 +78,10 @@ pub fn write_scaffold(
         if iter.next().is_some() && !force {
             return Err(AiviError::Io(std::io::Error::new(
                 std::io::ErrorKind::AlreadyExists,
-                format!("refusing to initialize non-empty directory {}", dir.display()),
+                format!(
+                    "refusing to initialize non-empty directory {}",
+                    dir.display()
+                ),
             )));
         }
     } else {
@@ -125,7 +128,10 @@ pub fn write_scaffold(
 
 fn aivi_path_dependency() -> String {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    format!("aivi = {{ path = {:?} }}", manifest_dir.display().to_string())
+    format!(
+        "aivi = {{ path = {:?} }}",
+        manifest_dir.display().to_string()
+    )
 }
 
 fn starter_bin_source() -> &'static str {
@@ -149,7 +155,9 @@ fn starter_lib_source() -> &'static str {
 
 fn validate_package_name(name: &str) -> Result<(), AiviError> {
     if name.is_empty() {
-        return Err(AiviError::InvalidCommand("name must not be empty".to_string()));
+        return Err(AiviError::InvalidCommand(
+            "name must not be empty".to_string(),
+        ));
     }
     if !name
         .chars()
@@ -167,9 +175,19 @@ fn validate_package_name(name: &str) -> Result<(), AiviError> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CargoDepSpec {
-    Registry { name: String, version_req: String },
-    Git { name: String, git: String, rev: Option<String> },
-    Path { name: String, path: String },
+    Registry {
+        name: String,
+        version_req: String,
+    },
+    Git {
+        name: String,
+        git: String,
+        rev: Option<String>,
+    },
+    Path {
+        name: String,
+        path: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -285,7 +303,9 @@ pub fn edit_cargo_toml_dependencies(
         .map_err(|err| AiviError::Cargo(format!("failed to parse Cargo.toml: {err}")))?;
 
     if !doc.as_table().contains_key("package") {
-        return Err(AiviError::Cargo("missing [package] in Cargo.toml".to_string()));
+        return Err(AiviError::Cargo(
+            "missing [package] in Cargo.toml".to_string(),
+        ));
     }
 
     if doc["dependencies"].is_none() {

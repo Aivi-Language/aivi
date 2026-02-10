@@ -60,7 +60,8 @@ fn render_diagnostic_with_source(
         diagnostic.code, path, start.line, start.column, diagnostic.message
     ));
     if let Some(source) = source {
-        if let Some(frame) = render_source_frame(source, &diagnostic.span, Some(&diagnostic.message))
+        if let Some(frame) =
+            render_source_frame(source, &diagnostic.span, Some(&diagnostic.message))
         {
             output.push_str(&frame);
         }

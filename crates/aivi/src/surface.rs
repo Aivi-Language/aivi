@@ -351,7 +351,10 @@ pub fn parse_modules(path: &Path, content: &str) -> (Vec<Module>, Vec<FileDiagno
     (modules, diagnostics)
 }
 
-pub fn parse_modules_from_tokens(path: &Path, tokens: &[CstToken]) -> (Vec<Module>, Vec<FileDiagnostic>) {
+pub fn parse_modules_from_tokens(
+    path: &Path,
+    tokens: &[CstToken],
+) -> (Vec<Module>, Vec<FileDiagnostic>) {
     let tokens = filter_tokens(tokens);
     let mut parser = Parser::new(tokens, path);
     let modules = parser.parse_modules();
@@ -538,12 +541,8 @@ impl Parser {
 
     fn parse_export_list(&mut self) -> Vec<SpannedName> {
         let mut exports = Vec::new();
-        loop {
-            if let Some(name) = self.consume_ident() {
-                exports.push(name);
-            } else {
-                break;
-            }
+        while let Some(name) = self.consume_ident() {
+            exports.push(name);
             if !self.consume_symbol(",") {
                 break;
             }
@@ -597,9 +596,7 @@ impl Parser {
         if self.consume_name().is_some() {
             if self.check_symbol(":") {
                 self.pos = checkpoint;
-                return self
-                    .parse_type_sig(decorators)
-                    .map(ModuleItem::TypeSig);
+                return self.parse_type_sig(decorators).map(ModuleItem::TypeSig);
             }
             if self.check_symbol("=") || self.is_pattern_start() {
                 self.pos = checkpoint;
@@ -614,7 +611,9 @@ impl Parser {
         let name = self.consume_name()?;
         let start = name.span.clone();
         self.expect_symbol(":", "expected ':' for type signature");
-        let ty = self.parse_type_expr().unwrap_or(TypeExpr::Unknown { span: start.clone() });
+        let ty = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
+            span: start.clone(),
+        });
         let span = merge_span(start, type_span(&ty));
         Some(TypeSig {
             decorators,
@@ -627,7 +626,13 @@ impl Parser {
     fn parse_def_or_type(&mut self, decorators: Vec<SpannedName>) -> Option<ModuleItem> {
         let checkpoint = self.pos;
         let name = self.consume_name()?;
-        if name.name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+        if name
+            .name
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        {
             for decorator in decorators {
                 self.emit_diag(
                     "E1507",
@@ -671,20 +676,20 @@ impl Parser {
         }
         self.expect_symbol("=", "expected '=' in type declaration");
         let mut ctors = Vec::new();
-        loop {
-            let ctor_name = match self.consume_ident() {
-                Some(value) => value,
-                None => break,
-            };
+        while let Some(ctor_name) = self.consume_ident() {
             let mut args = Vec::new();
-            while !self.check_symbol("|") && !self.check_symbol("}") && self.pos < self.tokens.len() {
+            while !self.check_symbol("|") && !self.check_symbol("}") && self.pos < self.tokens.len()
+            {
                 if let Some(ty) = self.parse_type_expr() {
                     args.push(ty);
                 } else {
                     break;
                 }
             }
-            let span = merge_span(ctor_name.span.clone(), args.last().map(type_span).unwrap_or(ctor_name.span.clone()));
+            let span = merge_span(
+                ctor_name.span.clone(),
+                args.last().map(type_span).unwrap_or(ctor_name.span.clone()),
+            );
             ctors.push(TypeCtor {
                 name: ctor_name,
                 args,
@@ -694,7 +699,13 @@ impl Parser {
                 break;
             }
         }
-        let span = merge_span(name.span.clone(), ctors.last().map(|ctor| ctor.span.clone()).unwrap_or(name.span.clone()));
+        let span = merge_span(
+            name.span.clone(),
+            ctors
+                .last()
+                .map(|ctor| ctor.span.clone())
+                .unwrap_or(name.span.clone()),
+        );
         Some(TypeDecl {
             name,
             params,
@@ -825,7 +836,9 @@ impl Parser {
         let start = self.previous_span();
         let name = self.consume_ident()?;
         self.expect_keyword("over", "expected 'over' in domain declaration");
-        let over = self.parse_type_expr().unwrap_or(TypeExpr::Unknown { span: name.span.clone() });
+        let over = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
+            span: name.span.clone(),
+        });
         self.expect_symbol("=", "expected '=' in domain declaration");
         self.expect_symbol("{", "expected '{' to start domain body");
         let mut items = Vec::new();
@@ -1093,7 +1106,9 @@ impl Parser {
                 if !self.consume_symbol("|") {
                     break;
                 }
-                let pattern = self.parse_pattern().unwrap_or(Pattern::Wildcard(start.clone()));
+                let pattern = self
+                    .parse_pattern()
+                    .unwrap_or(Pattern::Wildcard(start.clone()));
                 let guard = if self.match_keyword("when") {
                     self.parse_expr()
                 } else {
@@ -1155,7 +1170,9 @@ impl Parser {
                 if !self.consume_symbol("|") {
                     break;
                 }
-                let pattern = self.parse_pattern().unwrap_or(Pattern::Wildcard(expr_span(&expr)));
+                let pattern = self
+                    .parse_pattern()
+                    .unwrap_or(Pattern::Wildcard(expr_span(&expr)));
                 let guard = if self.match_keyword("when") {
                     self.parse_expr()
                 } else {
@@ -1176,7 +1193,9 @@ impl Parser {
             }
             let span = merge_span(
                 expr_span(&expr),
-                arms.last().map(|arm| arm.span.clone()).unwrap_or(expr_span(&expr)),
+                arms.last()
+                    .map(|arm| arm.span.clone())
+                    .unwrap_or(expr_span(&expr)),
             );
             return Some(Expr::Match {
                 scrutinee: Some(Box::new(expr)),
@@ -1189,11 +1208,7 @@ impl Parser {
 
     fn parse_binary(&mut self, min_prec: u8) -> Option<Expr> {
         let mut left = self.parse_application()?;
-        loop {
-            let op = match self.peek_symbol_text() {
-                Some(value) => value,
-                None => break,
-            };
+        while let Some(op) = self.peek_symbol_text() {
             let prec = binary_prec(&op);
             if prec < min_prec || prec == 0 {
                 break;
@@ -1369,11 +1384,7 @@ impl Parser {
                 let spread = self.consume_symbol("...");
                 if let Some(expr) = self.parse_expr() {
                     let span = expr_span(&expr);
-                    items.push(ListItem {
-                        expr,
-                        spread,
-                        span,
-                    });
+                    items.push(ListItem { expr, spread, span });
                 }
                 self.consume_newlines();
                 if self.consume_symbol(",") {
@@ -1420,7 +1431,10 @@ impl Parser {
                 }
                 let end = self.expect_symbol("}", "expected '}' to close record");
                 let span = merge_span(
-                    fields.first().map(|field| field.span.clone()).unwrap_or(self.previous_span()),
+                    fields
+                        .first()
+                        .map(|field| field.span.clone())
+                        .unwrap_or(self.previous_span()),
                     end.unwrap_or(self.previous_span()),
                 );
                 return Some(Expr::Record { fields, span });
@@ -1575,7 +1589,11 @@ impl Parser {
                         span: pattern_span(&pattern),
                     });
                     let span = merge_span(pattern_span(&pattern), expr_span(&expr));
-                    items.push(BlockItem::Bind { pattern, expr, span });
+                    items.push(BlockItem::Bind {
+                        pattern,
+                        expr,
+                        span,
+                    });
                     continue;
                 }
                 if self.consume_symbol("->") {
@@ -1623,7 +1641,10 @@ impl Parser {
                     span: self.previous_span(),
                 });
                 let end = self.expect_symbol("]", "expected ']' in record field path");
-                path.push(PathSegment::Index(expr, end.unwrap_or(self.previous_span())));
+                path.push(PathSegment::Index(
+                    expr,
+                    end.unwrap_or(self.previous_span()),
+                ));
                 continue;
             }
             break;
@@ -1656,7 +1677,13 @@ impl Parser {
             if ident.name == "_" {
                 return Some(Pattern::Wildcard(ident.span));
             }
-            if ident.name.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            if ident
+                .name
+                .chars()
+                .next()
+                .map(|c| c.is_uppercase())
+                .unwrap_or(false)
+            {
                 let mut args = Vec::new();
                 while let Some(pattern) = self.parse_pattern() {
                     args.push(pattern);
@@ -1694,7 +1721,10 @@ impl Parser {
                     }
                 }
                 let end = self.expect_symbol(")", "expected ')' to close tuple pattern");
-                let span = merge_span(pattern_span(&items[0]), end.unwrap_or(pattern_span(&items[0])));
+                let span = merge_span(
+                    pattern_span(&items[0]),
+                    end.unwrap_or(pattern_span(&items[0])),
+                );
                 return Some(Pattern::Tuple { items, span });
             }
             let end = self.expect_symbol(")", "expected ')' to close pattern");
@@ -1718,7 +1748,10 @@ impl Parser {
             }
             let end = self.expect_symbol("]", "expected ']' to close list pattern");
             let span = merge_span(
-                items.first().map(pattern_span).unwrap_or(self.previous_span()),
+                items
+                    .first()
+                    .map(pattern_span)
+                    .unwrap_or(self.previous_span()),
                 end.unwrap_or(self.previous_span()),
             );
             return Some(Pattern::List { items, rest, span });
@@ -1734,7 +1767,10 @@ impl Parser {
             }
             let end = self.expect_symbol("}", "expected '}' to close record pattern");
             let span = merge_span(
-                fields.first().map(|field| field.span.clone()).unwrap_or(self.previous_span()),
+                fields
+                    .first()
+                    .map(|field| field.span.clone())
+                    .unwrap_or(self.previous_span()),
                 end.unwrap_or(self.previous_span()),
             );
             return Some(Pattern::Record { fields, span });
@@ -1786,16 +1822,19 @@ impl Parser {
                 break;
             }
         }
-        let pattern = if self.consume_symbol("@") {
-            self.parse_pattern().unwrap_or(Pattern::Wildcard(self.previous_span()))
-        } else if self.consume_symbol(":") {
-            self.parse_pattern().unwrap_or(Pattern::Wildcard(self.previous_span()))
+        let pattern = if self.consume_symbol("@") || self.consume_symbol(":") {
+            self.parse_pattern()
+                .unwrap_or(Pattern::Wildcard(self.previous_span()))
         } else {
             let last = path.last().cloned().unwrap();
             Pattern::Ident(last)
         };
         let span = merge_span(path.first().unwrap().span.clone(), pattern_span(&pattern));
-        Some(RecordPatternField { path, pattern, span })
+        Some(RecordPatternField {
+            path,
+            pattern,
+            span,
+        })
     }
 
     fn parse_type_expr(&mut self) -> Option<TypeExpr> {
@@ -2015,7 +2054,8 @@ impl Parser {
         if !is_adjacent(number_span, &token.span) {
             return None;
         }
-        if token.kind == TokenKind::Ident || (token.kind == TokenKind::Symbol && token.text == "%") {
+        if token.kind == TokenKind::Ident || (token.kind == TokenKind::Symbol && token.text == "%")
+        {
             self.pos += 1;
             return Some(token.clone());
         }

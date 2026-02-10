@@ -21,4 +21,3 @@ serde = "1"
     let edits = edit_cargo_toml_dependencies(&edits.updated_manifest, &dep).expect("edit manifest");
     assert!(edits.updated_manifest.contains("serde = \"1.0\""));
 }
-

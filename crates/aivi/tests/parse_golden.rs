@@ -10,7 +10,7 @@ fn parse_hello_world_matches_golden() {
         .parent()
         .and_then(|path| path.parent())
         .expect("workspace root");
-    std::env::set_current_dir(&workspace_root).expect("set cwd");
+    std::env::set_current_dir(workspace_root).expect("set cwd");
 
     let bundle = parse_target("examples/hello.aivi").expect("parse hello");
     let actual = serde_json::to_string_pretty(&bundle).expect("serialize");

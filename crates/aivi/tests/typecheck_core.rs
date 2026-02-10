@@ -8,7 +8,10 @@ fn check_ok(source: &str) {
 
     let mut module_diags = check_modules(&modules);
     module_diags.extend(check_types(&modules));
-    assert!(module_diags.is_empty(), "type diagnostics: {module_diags:?}");
+    assert!(
+        module_diags.is_empty(),
+        "type diagnostics: {module_diags:?}"
+    );
 }
 
 fn check_err(source: &str) {

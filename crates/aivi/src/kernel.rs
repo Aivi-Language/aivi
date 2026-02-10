@@ -25,27 +25,79 @@ pub struct KernelDef {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "kind")]
 pub enum KernelExpr {
-    Var { id: u32, name: String },
-    LitNumber { id: u32, text: String },
-    LitString { id: u32, text: String },
+    Var {
+        id: u32,
+        name: String,
+    },
+    LitNumber {
+        id: u32,
+        text: String,
+    },
+    LitString {
+        id: u32,
+        text: String,
+    },
     LitSigil {
         id: u32,
         tag: String,
         body: String,
         flags: String,
     },
-    LitBool { id: u32, value: bool },
-    LitDateTime { id: u32, text: String },
-    Lambda { id: u32, param: String, body: Box<KernelExpr> },
-    App { id: u32, func: Box<KernelExpr>, arg: Box<KernelExpr> },
-    Call { id: u32, func: Box<KernelExpr>, args: Vec<KernelExpr> },
-    List { id: u32, items: Vec<KernelListItem> },
-    Tuple { id: u32, items: Vec<KernelExpr> },
-    Record { id: u32, fields: Vec<KernelRecordField> },
-    Patch { id: u32, target: Box<KernelExpr>, fields: Vec<KernelRecordField> },
-    FieldAccess { id: u32, base: Box<KernelExpr>, field: String },
-    Index { id: u32, base: Box<KernelExpr>, index: Box<KernelExpr> },
-    Match { id: u32, scrutinee: Box<KernelExpr>, arms: Vec<KernelMatchArm> },
+    LitBool {
+        id: u32,
+        value: bool,
+    },
+    LitDateTime {
+        id: u32,
+        text: String,
+    },
+    Lambda {
+        id: u32,
+        param: String,
+        body: Box<KernelExpr>,
+    },
+    App {
+        id: u32,
+        func: Box<KernelExpr>,
+        arg: Box<KernelExpr>,
+    },
+    Call {
+        id: u32,
+        func: Box<KernelExpr>,
+        args: Vec<KernelExpr>,
+    },
+    List {
+        id: u32,
+        items: Vec<KernelListItem>,
+    },
+    Tuple {
+        id: u32,
+        items: Vec<KernelExpr>,
+    },
+    Record {
+        id: u32,
+        fields: Vec<KernelRecordField>,
+    },
+    Patch {
+        id: u32,
+        target: Box<KernelExpr>,
+        fields: Vec<KernelRecordField>,
+    },
+    FieldAccess {
+        id: u32,
+        base: Box<KernelExpr>,
+        field: String,
+    },
+    Index {
+        id: u32,
+        base: Box<KernelExpr>,
+        index: Box<KernelExpr>,
+    },
+    Match {
+        id: u32,
+        scrutinee: Box<KernelExpr>,
+        arms: Vec<KernelMatchArm>,
+    },
     If {
         id: u32,
         cond: Box<KernelExpr>,
@@ -63,7 +115,10 @@ pub enum KernelExpr {
         block_kind: KernelBlockKind,
         items: Vec<KernelBlockItem>,
     },
-    Raw { id: u32, text: String },
+    Raw {
+        id: u32,
+        text: String,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -93,17 +148,35 @@ pub struct KernelMatchArm {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum KernelPattern {
-    Wildcard { id: u32 },
-    Var { id: u32, name: String },
-    Literal { id: u32, value: KernelLiteral },
-    Constructor { id: u32, name: String, args: Vec<KernelPattern> },
-    Tuple { id: u32, items: Vec<KernelPattern> },
+    Wildcard {
+        id: u32,
+    },
+    Var {
+        id: u32,
+        name: String,
+    },
+    Literal {
+        id: u32,
+        value: KernelLiteral,
+    },
+    Constructor {
+        id: u32,
+        name: String,
+        args: Vec<KernelPattern>,
+    },
+    Tuple {
+        id: u32,
+        items: Vec<KernelPattern>,
+    },
     List {
         id: u32,
         items: Vec<KernelPattern>,
         rest: Option<Box<KernelPattern>>,
     },
-    Record { id: u32, fields: Vec<KernelRecordPatternField> },
+    Record {
+        id: u32,
+        fields: Vec<KernelRecordPatternField>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -139,12 +212,19 @@ pub enum KernelBlockItem {
         pattern: KernelPattern,
         expr: KernelExpr,
     },
-    Filter { expr: KernelExpr },
-    Yield { expr: KernelExpr },
-    Recurse { expr: KernelExpr },
-    Expr { expr: KernelExpr },
+    Filter {
+        expr: KernelExpr,
+    },
+    Yield {
+        expr: KernelExpr,
+    },
+    Recurse {
+        expr: KernelExpr,
+    },
+    Expr {
+        expr: KernelExpr,
+    },
 }
-
 
 pub fn lower_hir(program: HirProgram) -> KernelProgram {
     KernelProgram {

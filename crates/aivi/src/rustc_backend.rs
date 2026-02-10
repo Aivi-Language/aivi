@@ -1,6 +1,6 @@
 use crate::rust_ir::{
-    Builtin, RustIrBlockItem, RustIrBlockKind, RustIrDef, RustIrExpr, RustIrModule, RustIrPathSegment,
-    RustIrProgram, RustIrRecordField,
+    Builtin, RustIrBlockItem, RustIrBlockKind, RustIrDef, RustIrExpr, RustIrModule,
+    RustIrPathSegment, RustIrProgram, RustIrRecordField,
 };
 use crate::{kernel, rust_ir, AiviError, HirProgram};
 use sha2::{Digest, Sha256};
@@ -129,7 +129,9 @@ fn emit_module(module: RustIrModule) -> Result<String, AiviError> {
     out.push_str("fn run_effect(effect: Value) -> Result<Value, String> {\n");
     out.push_str("    match effect {\n");
     out.push_str("        Value::Effect(f) => f(),\n");
-    out.push_str("        other => Err(format!(\"expected Effect, got {}\", format_value(&other))),\n");
+    out.push_str(
+        "        other => Err(format!(\"expected Effect, got {}\", format_value(&other))),\n",
+    );
     out.push_str("    }\n");
     out.push_str("}\n\n");
 
@@ -202,7 +204,9 @@ fn emit_module(module: RustIrModule) -> Result<String, AiviError> {
     out.push_str("                        _ => false,\n");
     out.push_str("                    };\n");
     out.push_str("                    if should_patch {\n");
-    out.push_str("                        out_items.push(patch_path(item, &path[1..], updater.clone())?);\n");
+    out.push_str(
+        "                        out_items.push(patch_path(item, &path[1..], updater.clone())?);\n",
+    );
     out.push_str("                    } else {\n");
     out.push_str("                        out_items.push(item);\n");
     out.push_str("                    }\n");
@@ -214,7 +218,9 @@ fn emit_module(module: RustIrModule) -> Result<String, AiviError> {
     out.push_str("    }\n");
     out.push_str("}\n\n");
 
-    out.push_str("fn patch(target: Value, fields: Vec<(Vec<PathSeg>, Value)>) -> Result<Value, String> {\n");
+    out.push_str(
+        "fn patch(target: Value, fields: Vec<(Vec<PathSeg>, Value)>) -> Result<Value, String> {\n",
+    );
     out.push_str("    let mut acc = target;\n");
     out.push_str("    for (path, updater) in fields {\n");
     out.push_str("        acc = patch_path(acc, &path, updater)?;\n");
@@ -249,7 +255,10 @@ fn emit_module(module: RustIrModule) -> Result<String, AiviError> {
 }
 
 fn emit_def_sig(def: &RustIrDef) -> String {
-    format!("fn {}() -> Result<Value, String> ", rust_global_fn_name(&def.name))
+    format!(
+        "fn {}() -> Result<Value, String> ",
+        rust_global_fn_name(&def.name)
+    )
 }
 
 fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
@@ -274,7 +283,9 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
             }
         }
         RustIrExpr::LitString { text, .. } => format!("Ok(Value::Text({:?}.to_string()))", text),
-        RustIrExpr::LitSigil { tag, body, flags, .. } => {
+        RustIrExpr::LitSigil {
+            tag, body, flags, ..
+        } => {
             let ind = "    ".repeat(indent);
             let ind2 = "    ".repeat(indent + 1);
             let ind3 = "    ".repeat(indent + 2);
@@ -299,9 +310,7 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
         RustIrExpr::App { func, arg, .. } => {
             let func_code = emit_expr(func, indent)?;
             let arg_code = emit_expr(arg, indent)?;
-            format!(
-                "({func_code}).and_then(|f| ({arg_code}).and_then(|a| apply(f, a)))"
-            )
+            format!("({func_code}).and_then(|f| ({arg_code}).and_then(|a| apply(f, a)))")
         }
         RustIrExpr::Call { func, args, .. } => {
             if let RustIrExpr::Builtin { builtin, .. } = func.as_ref() {
@@ -317,9 +326,7 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
                 .map(|a| format!("({a})?"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            format!(
-                "({func_code}).and_then(|f| call(f, vec![{args_code}]))"
-            )
+            format!("({func_code}).and_then(|f| call(f, vec![{args_code}]))")
         }
         RustIrExpr::List { items, .. } => {
             let mut parts = Vec::new();
@@ -358,9 +365,7 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
             format!("Ok(Value::Tuple(vec![{}]))", rendered.join(", "))
         }
         RustIrExpr::Record { fields, .. } => emit_record(fields, indent)?,
-        RustIrExpr::Patch {
-            target, fields, ..
-        } => {
+        RustIrExpr::Patch { target, fields, .. } => {
             let target_code = emit_expr(target, indent)?;
             let fields_code = emit_patch_fields(fields, indent)?;
             format!("({target_code}).and_then(|t| patch(t, {fields_code}))")
@@ -392,15 +397,15 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
                 "({cond_code}).and_then(|c| match c {{ Value::Bool(true) => {then_code}, Value::Bool(false) => {else_code}, other => Err(format!(\"expected Bool, got {{}}\", format_value(&other))), }})"
             )
         }
-        RustIrExpr::Binary { op, left, right, .. } => {
+        RustIrExpr::Binary {
+            op, left, right, ..
+        } => {
             let left_code = emit_expr(left, indent)?;
             let right_code = emit_expr(right, indent)?;
             emit_binary(op, left_code, right_code)
         }
         RustIrExpr::Block {
-            block_kind,
-            items,
-            ..
+            block_kind, items, ..
         } => emit_block(*block_kind, items, indent)?,
         RustIrExpr::Raw { text, .. } => {
             return Err(AiviError::Codegen(format!(
@@ -506,10 +511,7 @@ fn emit_path(path: &[RustIrPathSegment], indent: usize) -> Result<String, AiviEr
                 out.push_str(&format!("PathSeg::Field({:?}.to_string())", name));
             }
             RustIrPathSegment::IndexFieldBool(name) => {
-                out.push_str(&format!(
-                    "PathSeg::IndexFieldBool({:?}.to_string())",
-                    name
-                ));
+                out.push_str(&format!("PathSeg::IndexFieldBool({:?}.to_string())", name));
             }
             RustIrPathSegment::IndexValue(expr) => {
                 out.push_str("PathSeg::IndexValue(");
@@ -543,7 +545,11 @@ fn emit_binary(op: &str, left: String, right: String) -> String {
     }
 }
 
-fn emit_block(kind: RustIrBlockKind, items: &[RustIrBlockItem], indent: usize) -> Result<String, AiviError> {
+fn emit_block(
+    kind: RustIrBlockKind,
+    items: &[RustIrBlockItem],
+    indent: usize,
+) -> Result<String, AiviError> {
     match kind {
         RustIrBlockKind::Plain => emit_plain_block(items, indent),
         RustIrBlockKind::Effect => emit_effect_block(items, indent),
@@ -630,10 +636,7 @@ fn emit_effect_block(items: &[RustIrBlockItem], indent: usize) -> Result<String,
                 match pattern {
                     crate::rust_ir::RustIrPattern::Wildcard { .. } => {
                         s.push_str(&ind3);
-                        s.push_str(&format!(
-                            "let _ = run_effect(({} )?)?;\n",
-                            expr_code
-                        ));
+                        s.push_str(&format!("let _ = run_effect(({} )?)?;\n", expr_code));
                     }
                     crate::rust_ir::RustIrPattern::Var { name, .. } => {
                         s.push_str(&ind3);
@@ -706,8 +709,7 @@ fn sanitize_ident(name: &str) -> String {
 fn is_rust_keyword(ident: &str) -> bool {
     matches!(
         ident,
-        "as"
-            | "break"
+        "as" | "break"
             | "const"
             | "continue"
             | "crate"

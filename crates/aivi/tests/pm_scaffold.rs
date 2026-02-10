@@ -10,7 +10,10 @@ fn init_bin_writes_expected_files() {
     assert!(dir.join("Cargo.toml").exists());
     assert!(dir.join(".gitignore").exists());
     assert!(dir.join("src").join("main.aivi").exists());
-    assert!(!dir.join("target").exists(), "scaffold must not create build output");
+    assert!(
+        !dir.join("target").exists(),
+        "scaffold must not create build output"
+    );
 
     let cargo = std::fs::read_to_string(dir.join("Cargo.toml")).expect("read Cargo.toml");
     assert!(cargo.contains("path = \"target/aivi-gen/src/main.rs\""));

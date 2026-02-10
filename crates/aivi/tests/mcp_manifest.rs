@@ -29,7 +29,10 @@ module Example.Mod = {
 
     let modules = aivi::load_modules(&target).expect("modules");
     let manifest = aivi::collect_mcp_manifest(&modules);
-    assert!(manifest.tools.iter().any(|tool| tool.name == "Example.Mod.search"));
+    assert!(manifest
+        .tools
+        .iter()
+        .any(|tool| tool.name == "Example.Mod.search"));
     assert!(manifest
         .resources
         .iter()
@@ -108,4 +111,3 @@ module Example.Effects = {
         .expect("effect tool");
     assert!(effect.effectful);
 }
-

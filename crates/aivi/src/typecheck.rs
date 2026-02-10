@@ -6,140 +6,13 @@ use crate::surface::{
     RecordField, RecordPatternField, SpannedName, TypeAlias, TypeDecl, TypeExpr, TypeSig,
 };
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-struct TypeVarId(u32);
+mod builtins;
+mod types;
 
-#[derive(Clone, Debug)]
-enum Type {
-    Var(TypeVarId),
-    Con(String, Vec<Type>),
-    App(Box<Type>, Vec<Type>),
-    Func(Box<Type>, Box<Type>),
-    Tuple(Vec<Type>),
-    Record { fields: BTreeMap<String, Type>, open: bool },
-}
-
-#[derive(Clone, Debug)]
-struct Scheme {
-    vars: Vec<TypeVarId>,
-    ty: Type,
-}
-
-#[derive(Clone, Debug)]
-struct AliasInfo {
-    params: Vec<TypeVarId>,
-    body: Type,
-}
-
-#[derive(Clone, Debug, Default)]
-struct TypeEnv {
-    values: HashMap<String, Scheme>,
-}
-
-impl TypeEnv {
-    fn insert(&mut self, name: String, scheme: Scheme) {
-        self.values.insert(name, scheme);
-    }
-
-    fn get(&self, name: &str) -> Option<&Scheme> {
-        self.values.get(name)
-    }
-
-    fn free_vars(&self, checker: &mut TypeChecker) -> HashSet<TypeVarId> {
-        let mut vars = HashSet::new();
-        for scheme in self.values.values() {
-            vars.extend(checker.free_vars_scheme(scheme));
-        }
-        vars
-    }
-}
-
-#[derive(Debug)]
-struct TypeError {
-    span: Span,
-    message: String,
-    expected: Option<Type>,
-    found: Option<Type>,
-}
-
-#[derive(Copy, Clone, Debug)]
-enum NumberKind {
-    Int,
-    Float,
-}
-
-fn number_kind(text: &str) -> Option<NumberKind> {
-    let mut chars = text.chars().peekable();
-    if matches!(chars.peek(), Some('-')) {
-        chars.next();
-    }
-    let mut saw_digit = false;
-    let mut saw_dot = false;
-    while let Some(&ch) = chars.peek() {
-        if ch.is_ascii_digit() {
-            saw_digit = true;
-            chars.next();
-            continue;
-        }
-        if ch == '.' && !saw_dot {
-            saw_dot = true;
-            chars.next();
-            continue;
-        }
-        return None;
-    }
-    if !saw_digit {
-        return None;
-    }
-    if saw_dot && !text.chars().last().map(|c| c.is_ascii_digit()).unwrap_or(false) {
-        return None;
-    }
-    Some(if saw_dot { NumberKind::Float } else { NumberKind::Int })
-}
-
-fn split_suffixed_number(text: &str) -> Option<(String, String, NumberKind)> {
-    let mut chars = text.chars().peekable();
-    let mut number = String::new();
-    if matches!(chars.peek(), Some('-')) {
-        number.push('-');
-        chars.next();
-    }
-    let mut saw_digit = false;
-    let mut saw_dot = false;
-    while let Some(&ch) = chars.peek() {
-        if ch.is_ascii_digit() {
-            saw_digit = true;
-            number.push(ch);
-            chars.next();
-            continue;
-        }
-        if ch == '.' && !saw_dot {
-            saw_dot = true;
-            number.push(ch);
-            chars.next();
-            continue;
-        }
-        break;
-    }
-    if !saw_digit {
-        return None;
-    }
-    let suffix: String = chars.collect();
-    if suffix.is_empty() {
-        return None;
-    }
-    if !suffix
-        .chars()
-        .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
-    {
-        return None;
-    }
-    Some((
-        number,
-        suffix,
-        if saw_dot { NumberKind::Float } else { NumberKind::Int },
-    ))
-}
+use self::types::{
+    number_kind, split_suffixed_number, AliasInfo, NumberKind, Scheme, Type, TypeContext, TypeEnv,
+    TypeError, TypePrinter, TypeVarId,
+};
 
 struct TypeChecker {
     next_var: u32,
@@ -166,10 +39,12 @@ struct InstanceDeclInfo {
     params: Vec<TypeExpr>,
 }
 
-fn ordered_modules<'a>(modules: &'a [Module]) -> Vec<&'a Module> {
+fn ordered_modules(modules: &[Module]) -> Vec<&Module> {
     let mut name_to_index = HashMap::new();
     for (idx, module) in modules.iter().enumerate() {
-        name_to_index.entry(module.name.name.as_str()).or_insert(idx);
+        name_to_index
+            .entry(module.name.name.as_str())
+            .or_insert(idx);
     }
 
     let mut indegree = vec![0usize; modules.len()];
@@ -386,20 +261,38 @@ impl TypeChecker {
         }
     }
 
+    #[cfg(any())]
     fn register_builtin_types(&mut self) {
         for name in [
-            "Unit", "Bool", "Int", "Float", "Text", "List", "Option", "Result", "Effect",
-            "Resource", "Generator", "Html", "DateTime", "FileHandle", "Send", "Recv", "Closed",
+            "Unit",
+            "Bool",
+            "Int",
+            "Float",
+            "Text",
+            "List",
+            "Option",
+            "Result",
+            "Effect",
+            "Resource",
+            "Generator",
+            "Html",
+            "DateTime",
+            "FileHandle",
+            "Send",
+            "Recv",
+            "Closed",
         ] {
             self.builtin_types.insert(name.to_string());
         }
         self.type_constructors = self.builtin_types.clone();
     }
 
+    #[cfg(any())]
     fn builtin_type_constructors(&self) -> HashSet<String> {
         self.builtin_types.clone()
     }
 
+    #[cfg(any())]
     fn register_builtin_values(&mut self) {
         let mut env = TypeEnv::default();
         env.insert("Unit".to_string(), Scheme::mono(Type::con("Unit")));
@@ -519,40 +412,37 @@ impl TypeChecker {
                     "read".to_string(),
                     Type::Func(
                         Box::new(Type::con("Text")),
-                        Box::new(Type::con("Effect").app(vec![
-                            Type::con("Text"),
-                            Type::con("Text"),
-                        ])),
+                        Box::new(
+                            Type::con("Effect").app(vec![Type::con("Text"), Type::con("Text")]),
+                        ),
                     ),
                 ),
                 (
                     "open".to_string(),
                     Type::Func(
                         Box::new(Type::con("Text")),
-                        Box::new(Type::con("Effect").app(vec![
-                            Type::con("Text"),
-                            Type::con("FileHandle"),
-                        ])),
+                        Box::new(
+                            Type::con("Effect")
+                                .app(vec![Type::con("Text"), Type::con("FileHandle")]),
+                        ),
                     ),
                 ),
                 (
                     "close".to_string(),
                     Type::Func(
                         Box::new(Type::con("FileHandle")),
-                        Box::new(Type::con("Effect").app(vec![
-                            Type::con("Text"),
-                            Type::con("Unit"),
-                        ])),
+                        Box::new(
+                            Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")]),
+                        ),
                     ),
                 ),
                 (
                     "readAll".to_string(),
                     Type::Func(
                         Box::new(Type::con("FileHandle")),
-                        Box::new(Type::con("Effect").app(vec![
-                            Type::con("Text"),
-                            Type::con("Text"),
-                        ])),
+                        Box::new(
+                            Type::con("Effect").app(vec![Type::con("Text"), Type::con("Text")]),
+                        ),
                     ),
                 ),
             ]
@@ -583,10 +473,10 @@ impl TypeChecker {
                         Box::new(send_ty.clone()),
                         Box::new(Type::Func(
                             Box::new(Type::Var(a)),
-                            Box::new(Type::con("Effect").app(vec![
-                                Type::con("Closed"),
-                                Type::con("Unit"),
-                            ])),
+                            Box::new(
+                                Type::con("Effect")
+                                    .app(vec![Type::con("Closed"), Type::con("Unit")]),
+                            ),
                         )),
                     ),
                 ),
@@ -604,10 +494,9 @@ impl TypeChecker {
                     "close".to_string(),
                     Type::Func(
                         Box::new(send_ty),
-                        Box::new(Type::con("Effect").app(vec![
-                            Type::con("Closed"),
-                            Type::con("Unit"),
-                        ])),
+                        Box::new(
+                            Type::con("Effect").app(vec![Type::con("Closed"), Type::con("Unit")]),
+                        ),
                     ),
                 ),
             ]
@@ -671,10 +560,9 @@ impl TypeChecker {
                 "now".to_string(),
                 Type::Func(
                     Box::new(Type::con("Unit")),
-                    Box::new(Type::con("Effect").app(vec![
-                        Type::con("Text"),
-                        Type::con("DateTime"),
-                    ])),
+                    Box::new(
+                        Type::con("Effect").app(vec![Type::con("Text"), Type::con("DateTime")]),
+                    ),
                 ),
             )]
             .into_iter()
@@ -690,10 +578,9 @@ impl TypeChecker {
                     Box::new(Type::con("Int")),
                     Box::new(Type::Func(
                         Box::new(Type::con("Int")),
-                        Box::new(Type::con("Effect").app(vec![
-                            Type::con("Text"),
-                            Type::con("Int"),
-                        ])),
+                        Box::new(
+                            Type::con("Effect").app(vec![Type::con("Text"), Type::con("Int")]),
+                        ),
                     )),
                 ),
             )]
@@ -721,8 +608,7 @@ impl TypeChecker {
         for item in &module.items {
             match item {
                 ModuleItem::TypeDecl(type_decl) => {
-                    self.type_constructors
-                        .insert(type_decl.name.name.clone());
+                    self.type_constructors.insert(type_decl.name.name.clone());
                 }
                 ModuleItem::TypeAlias(alias) => {
                     self.type_constructors.insert(alias.name.name.clone());
@@ -808,8 +694,8 @@ impl TypeChecker {
             ctx.type_vars.insert(param.name.clone(), var);
             params.push(var);
         }
-        let result_type = Type::con(&type_decl.name.name)
-            .app(params.iter().map(|var| Type::Var(*var)).collect());
+        let result_type =
+            Type::con(&type_decl.name.name).app(params.iter().map(|var| Type::Var(*var)).collect());
 
         for ctor in &type_decl.constructors {
             let mut ctor_type = result_type.clone();
@@ -953,10 +839,7 @@ impl TypeChecker {
 
         let mut defs_by_name: HashMap<String, &Def> = HashMap::new();
         for def in &instance.defs {
-            if defs_by_name
-                .insert(def.name.name.clone(), def)
-                .is_some()
-            {
+            if defs_by_name.insert(def.name.name.clone(), def).is_some() {
                 diagnostics.push(self.error_to_diag(
                     module,
                     TypeError {
@@ -1101,7 +984,8 @@ impl TypeChecker {
                     return;
                 }
             };
-            if let Err(err) = self.unify_with_span(placeholder, inferred.clone(), def.span.clone()) {
+            if let Err(err) = self.unify_with_span(placeholder, inferred.clone(), def.span.clone())
+            {
                 diagnostics.push(self.error_to_diag(module, err));
                 return;
             }
@@ -1184,14 +1068,18 @@ impl TypeChecker {
             Expr::Index { base, index, .. } => self.infer_index(base, index, env),
             Expr::Call { func, args, .. } => self.infer_call(func, args, env),
             Expr::Lambda { params, body, .. } => self.infer_lambda(params, body, env),
-            Expr::Match { scrutinee, arms, .. } => self.infer_match(scrutinee, arms, env),
+            Expr::Match {
+                scrutinee, arms, ..
+            } => self.infer_match(scrutinee, arms, env),
             Expr::If {
                 cond,
                 then_branch,
                 else_branch,
                 ..
             } => self.infer_if(cond, then_branch, else_branch, env),
-            Expr::Binary { op, left, right, .. } => self.infer_binary(op, left, right, env),
+            Expr::Binary {
+                op, left, right, ..
+            } => self.infer_binary(op, left, right, env),
             Expr::Block { kind, items, .. } => self.infer_block(kind, items, env),
             Expr::Raw { .. } => Ok(self.fresh_var()),
         }
@@ -1232,7 +1120,11 @@ impl TypeChecker {
         }
     }
 
-    fn infer_list(&mut self, items: &[crate::surface::ListItem], env: &mut TypeEnv) -> Result<Type, TypeError> {
+    fn infer_list(
+        &mut self,
+        items: &[crate::surface::ListItem],
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
         let elem = self.fresh_var();
         for item in items {
             let item_ty = self.infer_expr(&item.expr, env)?;
@@ -1254,7 +1146,11 @@ impl TypeChecker {
         Ok(Type::Tuple(tys))
     }
 
-    fn infer_record(&mut self, fields: &[RecordField], env: &mut TypeEnv) -> Result<Type, TypeError> {
+    fn infer_record(
+        &mut self,
+        fields: &[RecordField],
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
         let mut record_ty = Type::Record {
             fields: BTreeMap::new(),
             open: true,
@@ -1274,19 +1170,37 @@ impl TypeChecker {
         env: &mut TypeEnv,
     ) -> Result<Type, TypeError> {
         let base_ty = self.infer_expr(base, env)?;
-        self.record_field_type(base_ty, &[PathSegment::Field(field.clone())], field.span.clone())
+        self.record_field_type(
+            base_ty,
+            &[PathSegment::Field(field.clone())],
+            field.span.clone(),
+        )
     }
 
-    fn infer_index(&mut self, base: &Expr, index: &Expr, env: &mut TypeEnv) -> Result<Type, TypeError> {
+    fn infer_index(
+        &mut self,
+        base: &Expr,
+        index: &Expr,
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
         let base_ty = self.infer_expr(base, env)?;
         let index_ty = self.infer_expr(index, env)?;
         self.unify_with_span(index_ty, Type::con("Int"), expr_span(index))?;
         let elem = self.fresh_var();
-        self.unify_with_span(base_ty, Type::con("List").app(vec![elem.clone()]), expr_span(base))?;
+        self.unify_with_span(
+            base_ty,
+            Type::con("List").app(vec![elem.clone()]),
+            expr_span(base),
+        )?;
         Ok(elem)
     }
 
-    fn infer_call(&mut self, func: &Expr, args: &[Expr], env: &mut TypeEnv) -> Result<Type, TypeError> {
+    fn infer_call(
+        &mut self,
+        func: &Expr,
+        args: &[Expr],
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
         if let Expr::Ident(name) = func {
             if env.get(&name.name).is_none() && self.method_to_classes.contains_key(&name.name) {
                 return self.infer_method_call(name, args, env);
@@ -1354,10 +1268,8 @@ impl TypeChecker {
 
                 let mut ctx = TypeContext::new(&self.type_constructors);
                 let mut ok = true;
-                for (class_param, inst_param) in class_info
-                    .params
-                    .iter()
-                    .zip(instance.params.iter())
+                for (class_param, inst_param) in
+                    class_info.params.iter().zip(instance.params.iter())
                 {
                     let class_ty = self.type_from_expr(class_param, &mut ctx);
                     let inst_ty = self.type_from_expr(inst_param, &mut ctx);
@@ -1602,7 +1514,11 @@ impl TypeChecker {
         }
     }
 
-    fn infer_plain_block(&mut self, items: &[BlockItem], env: &mut TypeEnv) -> Result<Type, TypeError> {
+    fn infer_plain_block(
+        &mut self,
+        items: &[BlockItem],
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
         let mut local_env = env.clone();
         let mut last_ty = Type::con("Unit");
         for item in items {
@@ -1623,7 +1539,11 @@ impl TypeChecker {
         Ok(last_ty)
     }
 
-    fn infer_effect_block(&mut self, items: &[BlockItem], env: &mut TypeEnv) -> Result<Type, TypeError> {
+    fn infer_effect_block(
+        &mut self,
+        items: &[BlockItem],
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
         let mut local_env = env.clone();
         let err_ty = self.fresh_var();
         let result_ty = self.fresh_var();
@@ -1631,7 +1551,8 @@ impl TypeChecker {
             match item {
                 BlockItem::Bind { pattern, expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
-                    let value_ty = self.bind_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
+                    let value_ty =
+                        self.bind_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     self.unify_with_span(pat_ty, value_ty, pattern_span(pattern))?;
                 }
@@ -1712,7 +1633,8 @@ impl TypeChecker {
             match item {
                 BlockItem::Bind { pattern, expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
-                    let value_ty = self.bind_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
+                    let value_ty =
+                        self.bind_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     self.unify_with_span(pat_ty, value_ty, pattern_span(pattern))?;
                 }
@@ -1740,16 +1662,16 @@ impl TypeChecker {
     ) -> Result<Type, TypeError> {
         for field in fields {
             let value_ty = self.infer_expr(&field.value, env)?;
-            let field_ty = self.record_field_type(target_ty.clone(), &field.path, field.span.clone())?;
+            let field_ty =
+                self.record_field_type(target_ty.clone(), &field.path, field.span.clone())?;
             let value_applied = self.apply(value_ty.clone());
             let field_applied = self.apply(field_ty.clone());
-            if matches!(field_applied, Type::Func(_, _)) {
-                if self
+            if matches!(field_applied, Type::Func(_, _))
+                && self
                     .unify_with_span(value_ty.clone(), field_ty.clone(), field.span.clone())
                     .is_ok()
-                {
-                    continue;
-                }
+            {
+                continue;
             }
             if matches!(value_applied, Type::Func(_, _)) {
                 let func_ty = Type::Func(Box::new(field_ty.clone()), Box::new(field_ty.clone()));
@@ -1835,11 +1757,19 @@ impl TypeChecker {
         Ok(record_ty)
     }
 
-    fn bind_effect_value(&mut self, expr_ty: Type, err_ty: Type, span: Span) -> Result<Type, TypeError> {
+    fn bind_effect_value(
+        &mut self,
+        expr_ty: Type,
+        err_ty: Type,
+        span: Span,
+    ) -> Result<Type, TypeError> {
         let value_ty = self.fresh_var();
         let effect_ty = Type::con("Effect").app(vec![err_ty.clone(), value_ty.clone()]);
         let resource_ty = Type::con("Resource").app(vec![err_ty, value_ty.clone()]);
-        if self.unify_with_span(expr_ty.clone(), effect_ty, span.clone()).is_ok() {
+        if self
+            .unify_with_span(expr_ty.clone(), effect_ty, span.clone())
+            .is_ok()
+        {
             return Ok(value_ty);
         }
         self.unify_with_span(expr_ty, resource_ty, span)?;
@@ -1850,7 +1780,10 @@ impl TypeChecker {
         let elem_ty = self.fresh_var();
         let list_ty = Type::con("List").app(vec![elem_ty.clone()]);
         let gen_ty = Type::con("Generator").app(vec![elem_ty.clone()]);
-        if self.unify_with_span(expr_ty.clone(), list_ty, span.clone()).is_ok() {
+        if self
+            .unify_with_span(expr_ty.clone(), list_ty, span.clone())
+            .is_ok()
+        {
             return Ok(elem_ty);
         }
         self.unify_with_span(expr_ty, gen_ty, span)?;
@@ -1902,7 +1835,13 @@ impl TypeChecker {
         let left_clone = left.clone();
         let right_clone = right.clone();
         match (left, right) {
-            (Type::Record { mut fields, open }, Type::Record { fields: other, open: other_open }) => {
+            (
+                Type::Record { mut fields, open },
+                Type::Record {
+                    fields: other,
+                    open: other_open,
+                },
+            ) => {
                 for (name, ty) in other {
                     if let Some(existing) = fields.get(&name).cloned() {
                         self.unify(existing, ty.clone(), span.clone())?;
@@ -1947,8 +1886,8 @@ impl TypeChecker {
                     return Err(TypeError {
                         span,
                         message: "type mismatch".to_string(),
-                        expected: Some(Type::Con(name_a, args_a)),
-                        found: Some(Type::Con(name_b, args_b)),
+                        expected: Some(Box::new(Type::Con(name_a, args_a))),
+                        found: Some(Box::new(Type::Con(name_b, args_b))),
                     });
                 }
                 for (a, b) in args_a.into_iter().zip(args_b.into_iter()) {
@@ -1961,8 +1900,8 @@ impl TypeChecker {
                     return Err(TypeError {
                         span,
                         message: "type mismatch".to_string(),
-                        expected: Some(Type::App(base_a, args_a)),
-                        found: Some(Type::App(base_b, args_b)),
+                        expected: Some(Box::new(Type::App(base_a, args_a))),
+                        found: Some(Box::new(Type::App(base_b, args_b))),
                     });
                 }
                 self.unify(*base_a, *base_b, span.clone())?;
@@ -1976,8 +1915,8 @@ impl TypeChecker {
                     return Err(TypeError {
                         span,
                         message: "type mismatch".to_string(),
-                        expected: Some(Type::App(base_a, args_a)),
-                        found: Some(Type::Con(name_b, args_b)),
+                        expected: Some(Box::new(Type::App(base_a, args_a))),
+                        found: Some(Box::new(Type::Con(name_b, args_b))),
                     });
                 }
                 self.unify(*base_a, Type::Con(name_b, Vec::new()), span.clone())?;
@@ -1991,8 +1930,8 @@ impl TypeChecker {
                     return Err(TypeError {
                         span,
                         message: "type mismatch".to_string(),
-                        expected: Some(Type::Con(name_a, args_a)),
-                        found: Some(Type::App(base_b, args_b)),
+                        expected: Some(Box::new(Type::Con(name_a, args_a))),
+                        found: Some(Box::new(Type::App(base_b, args_b))),
                     });
                 }
                 self.unify(Type::Con(name_a, Vec::new()), *base_b, span.clone())?;
@@ -2010,8 +1949,8 @@ impl TypeChecker {
                     return Err(TypeError {
                         span,
                         message: "tuple length mismatch".to_string(),
-                        expected: Some(Type::Tuple(items_a)),
-                        found: Some(Type::Tuple(items_b)),
+                        expected: Some(Box::new(Type::Tuple(items_a))),
+                        found: Some(Box::new(Type::Tuple(items_b))),
                     });
                 }
                 for (a, b) in items_a.into_iter().zip(items_b.into_iter()) {
@@ -2019,7 +1958,16 @@ impl TypeChecker {
                 }
                 Ok(())
             }
-            (Type::Record { fields: a, open: open_a }, Type::Record { fields: b, open: open_b }) => {
+            (
+                Type::Record {
+                    fields: a,
+                    open: open_a,
+                },
+                Type::Record {
+                    fields: b,
+                    open: open_b,
+                },
+            ) => {
                 let mut all_fields: HashSet<String> = a.keys().cloned().collect();
                 all_fields.extend(b.keys().cloned());
 
@@ -2033,8 +1981,14 @@ impl TypeChecker {
                                 return Err(TypeError {
                                     span: span.clone(),
                                     message: format!("missing field '{}'", field),
-                                    expected: Some(Type::Record { fields: a.clone(), open: open_a }),
-                                    found: Some(Type::Record { fields: b.clone(), open: open_b }),
+                                    expected: Some(Box::new(Type::Record {
+                                        fields: a.clone(),
+                                        open: open_a,
+                                    })),
+                                    found: Some(Box::new(Type::Record {
+                                        fields: b.clone(),
+                                        open: open_b,
+                                    })),
                                 });
                             }
                         }
@@ -2043,8 +1997,14 @@ impl TypeChecker {
                                 return Err(TypeError {
                                     span: span.clone(),
                                     message: format!("missing field '{}'", field),
-                                    expected: Some(Type::Record { fields: a.clone(), open: open_a }),
-                                    found: Some(Type::Record { fields: b.clone(), open: open_b }),
+                                    expected: Some(Box::new(Type::Record {
+                                        fields: a.clone(),
+                                        open: open_a,
+                                    })),
+                                    found: Some(Box::new(Type::Record {
+                                        fields: b.clone(),
+                                        open: open_b,
+                                    })),
                                 });
                             }
                         }
@@ -2056,8 +2016,8 @@ impl TypeChecker {
             (a, b) => Err(TypeError {
                 span,
                 message: "type mismatch".to_string(),
-                expected: Some(a),
-                found: Some(b),
+                expected: Some(Box::new(a)),
+                found: Some(Box::new(b)),
             }),
         }
     }
@@ -2072,8 +2032,8 @@ impl TypeChecker {
             return Err(TypeError {
                 span,
                 message: "occurs check failed".to_string(),
-                expected: Some(Type::Var(var)),
-                found: Some(ty),
+                expected: Some(Box::new(Type::Var(var))),
+                found: Some(Box::new(ty)),
             });
         }
         self.subst.insert(var, ty);
@@ -2084,7 +2044,9 @@ impl TypeChecker {
         match self.apply(ty.clone()) {
             Type::Var(id) => id == var,
             Type::Con(_, args) => args.iter().any(|arg| self.occurs(var, arg)),
-            Type::App(base, args) => self.occurs(var, &base) || args.iter().any(|arg| self.occurs(var, arg)),
+            Type::App(base, args) => {
+                self.occurs(var, &base) || args.iter().any(|arg| self.occurs(var, arg))
+            }
             Type::Func(a, b) => self.occurs(var, &a) || self.occurs(var, &b),
             Type::Tuple(items) => items.iter().any(|item| self.occurs(var, item)),
             Type::Record { fields, .. } => fields.values().any(|field| self.occurs(var, field)),
@@ -2096,7 +2058,7 @@ impl TypeChecker {
         for var in &scheme.vars {
             mapping.insert(*var, self.fresh_var());
         }
-        self.substitute(&scheme.ty, &mapping)
+        Self::substitute(&scheme.ty, &mapping)
     }
 
     fn generalize(&mut self, ty: Type, env: &TypeEnv) -> Scheme {
@@ -2125,7 +2087,9 @@ impl TypeChecker {
                 vars
             }
             Type::Tuple(items) => items.iter().flat_map(|item| self.free_vars(item)).collect(),
-            Type::Record { fields, .. } => fields.values().flat_map(|f| self.free_vars(f)).collect(),
+            Type::Record { fields, .. } => {
+                fields.values().flat_map(|f| self.free_vars(f)).collect()
+            }
         }
     }
 
@@ -2137,31 +2101,35 @@ impl TypeChecker {
         vars
     }
 
-    fn substitute(&mut self, ty: &Type, mapping: &HashMap<TypeVarId, Type>) -> Type {
+    fn substitute(ty: &Type, mapping: &HashMap<TypeVarId, Type>) -> Type {
         match ty {
             Type::Var(id) => mapping.get(id).cloned().unwrap_or(Type::Var(*id)),
             Type::Con(name, args) => Type::Con(
                 name.clone(),
-                args.iter().map(|arg| self.substitute(arg, mapping)).collect(),
+                args.iter()
+                    .map(|arg| Self::substitute(arg, mapping))
+                    .collect(),
             ),
             Type::App(base, args) => Type::App(
-                Box::new(self.substitute(base, mapping)),
-                args.iter().map(|arg| self.substitute(arg, mapping)).collect(),
+                Box::new(Self::substitute(base, mapping)),
+                args.iter()
+                    .map(|arg| Self::substitute(arg, mapping))
+                    .collect(),
             ),
             Type::Func(a, b) => Type::Func(
-                Box::new(self.substitute(a, mapping)),
-                Box::new(self.substitute(b, mapping)),
+                Box::new(Self::substitute(a, mapping)),
+                Box::new(Self::substitute(b, mapping)),
             ),
             Type::Tuple(items) => Type::Tuple(
                 items
                     .iter()
-                    .map(|item| self.substitute(item, mapping))
+                    .map(|item| Self::substitute(item, mapping))
                     .collect(),
             ),
             Type::Record { fields, open } => Type::Record {
                 fields: fields
                     .iter()
-                    .map(|(k, v)| (k.clone(), self.substitute(v, mapping)))
+                    .map(|(k, v)| (k.clone(), Self::substitute(v, mapping)))
                     .collect(),
                 open: *open,
             },
@@ -2186,10 +2154,10 @@ impl TypeChecker {
                 Box::new(self.apply(*base)),
                 args.into_iter().map(|arg| self.apply(arg)).collect(),
             ),
-            Type::Func(a, b) => {
-                Type::Func(Box::new(self.apply(*a)), Box::new(self.apply(*b)))
+            Type::Func(a, b) => Type::Func(Box::new(self.apply(*a)), Box::new(self.apply(*b))),
+            Type::Tuple(items) => {
+                Type::Tuple(items.into_iter().map(|item| self.apply(item)).collect())
             }
-            Type::Tuple(items) => Type::Tuple(items.into_iter().map(|item| self.apply(item)).collect()),
             Type::Record { fields, open } => Type::Record {
                 fields: fields
                     .into_iter()
@@ -2207,7 +2175,7 @@ impl TypeChecker {
                 for (param, arg) in alias.params.iter().zip(args.iter()) {
                     mapping.insert(*param, arg.clone());
                 }
-                return self.substitute(&alias.body, &mapping);
+                return Self::substitute(&alias.body, &mapping);
             }
         }
         ty
@@ -2228,7 +2196,10 @@ impl TypeChecker {
             }
             TypeExpr::Apply { base, args, .. } => {
                 let base_ty = self.type_from_expr(base, ctx);
-                let mut args_ty: Vec<Type> = args.iter().map(|arg| self.type_from_expr(arg, ctx)).collect();
+                let mut args_ty: Vec<Type> = args
+                    .iter()
+                    .map(|arg| self.type_from_expr(arg, ctx))
+                    .collect();
                 match base_ty {
                     Type::Con(name, mut existing) => {
                         existing.append(&mut args_ty);
@@ -2261,7 +2232,10 @@ impl TypeChecker {
                 }
             }
             TypeExpr::Tuple { items, .. } => {
-                let items_ty = items.iter().map(|item| self.type_from_expr(item, ctx)).collect();
+                let items_ty = items
+                    .iter()
+                    .map(|item| self.type_from_expr(item, ctx))
+                    .collect();
                 Type::Tuple(items_ty)
             }
             TypeExpr::Star { .. } | TypeExpr::Unknown { .. } => self.fresh_var(),
@@ -2279,22 +2253,27 @@ impl TypeChecker {
     }
 
     fn error_to_diag(&mut self, module: &Module, err: TypeError) -> FileDiagnostic {
-        let message = if let (Some(expected), Some(found)) = (err.expected, err.found) {
-            format!(
+        let TypeError {
+            span,
+            message,
+            expected,
+            found,
+        } = err;
+        let message = match (expected.as_deref(), found.as_deref()) {
+            (Some(expected), Some(found)) => format!(
                 "{} (expected {}, found {})",
-                err.message,
-                self.type_to_string(&expected),
-                self.type_to_string(&found)
-            )
-        } else {
-            err.message
+                message,
+                self.type_to_string(expected),
+                self.type_to_string(found)
+            ),
+            _ => message,
         };
         FileDiagnostic {
             path: module.path.clone(),
             diagnostic: Diagnostic {
                 code: "E3000".to_string(),
                 message,
-                span: err.span,
+                span,
                 labels: Vec::new(),
             },
         }
@@ -2303,119 +2282,6 @@ impl TypeChecker {
     fn type_to_string(&mut self, ty: &Type) -> String {
         let mut printer = TypePrinter::new();
         printer.print(&self.apply(ty.clone()))
-    }
-}
-
-impl Scheme {
-    fn mono(ty: Type) -> Scheme {
-        Scheme { vars: Vec::new(), ty }
-    }
-}
-
-impl Type {
-    fn con(name: &str) -> Type {
-        Type::Con(name.to_string(), Vec::new())
-    }
-
-    fn app(self, args: Vec<Type>) -> Type {
-        match self {
-            Type::Con(name, mut existing) => {
-                existing.extend(args);
-                Type::Con(name, existing)
-            }
-            Type::App(base, mut existing) => {
-                existing.extend(args);
-                Type::App(base, existing)
-            }
-            other => Type::App(Box::new(other), args),
-        }
-    }
-}
-
-struct TypeContext {
-    type_vars: HashMap<String, TypeVarId>,
-    type_constructors: HashSet<String>,
-}
-
-impl TypeContext {
-    fn new(type_constructors: &HashSet<String>) -> Self {
-        Self {
-            type_vars: HashMap::new(),
-            type_constructors: type_constructors.clone(),
-        }
-    }
-}
-
-struct TypePrinter {
-    names: HashMap<TypeVarId, String>,
-    next_id: u8,
-}
-
-impl TypePrinter {
-    fn new() -> Self {
-        Self {
-            names: HashMap::new(),
-            next_id: 0,
-        }
-    }
-
-    fn print(&mut self, ty: &Type) -> String {
-        match ty {
-            Type::Var(id) => self.name_for(*id),
-            Type::Con(name, args) => {
-                if args.is_empty() {
-                    name.clone()
-                } else {
-                    let args_str = args.iter().map(|arg| self.print(arg)).collect::<Vec<_>>();
-                    format!("{} {}", name, args_str.join(" "))
-                }
-            }
-            Type::App(base, args) => {
-                let base_str = match **base {
-                    Type::Func(_, _) | Type::Tuple(_) | Type::Record { .. } => format!("({})", self.print(base)),
-                    _ => self.print(base),
-                };
-                let args_str = args.iter().map(|arg| self.print(arg)).collect::<Vec<_>>();
-                format!("{} {}", base_str, args_str.join(" "))
-            }
-            Type::Func(a, b) => {
-                let left = match **a {
-                    Type::Func(_, _) => format!("({})", self.print(a)),
-                    _ => self.print(a),
-                };
-                format!("{} -> {}", left, self.print(b))
-            }
-            Type::Tuple(items) => {
-                let items_str = items.iter().map(|item| self.print(item)).collect::<Vec<_>>();
-                format!("({})", items_str.join(", "))
-            }
-            Type::Record { fields, open } => {
-                let mut parts = Vec::new();
-                for (name, ty) in fields {
-                    parts.push(format!("{}: {}", name, self.print(ty)));
-                }
-                if *open {
-                    parts.push("..".to_string());
-                }
-                format!("{{ {} }}", parts.join(", "))
-            }
-        }
-    }
-
-    fn name_for(&mut self, id: TypeVarId) -> String {
-        if let Some(name) = self.names.get(&id) {
-            return name.clone();
-        }
-        let letter = (b'a' + (self.next_id % 26)) as char;
-        let suffix = self.next_id / 26;
-        self.next_id += 1;
-        let name = if suffix == 0 {
-            format!("'{}", letter)
-        } else {
-            format!("'{}{}", letter, suffix)
-        };
-        self.names.insert(id, name.clone());
-        name
     }
 }
 
@@ -2533,7 +2399,11 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
             body: Box::new(desugar_holes_inner(*body, false)),
             span,
         },
-        Expr::Match { scrutinee, arms, span } => {
+        Expr::Match {
+            scrutinee,
+            arms,
+            span,
+        } => {
             let scrutinee = scrutinee.map(|expr| Box::new(desugar_holes_inner(*expr, false)));
             let arms = arms
                 .into_iter()
@@ -2560,7 +2430,12 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
             else_branch: Box::new(desugar_holes_inner(*else_branch, false)),
             span,
         },
-        Expr::Binary { op, left, right, span } => Expr::Binary {
+        Expr::Binary {
+            op,
+            left,
+            right,
+            span,
+        } => Expr::Binary {
             op,
             left: Box::new(desugar_holes_inner(*left, false)),
             right: Box::new(desugar_holes_inner(*right, false)),
@@ -2588,17 +2463,15 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
         Expr::Literal(literal) => Expr::Literal(literal),
         Expr::Raw { text, span } => Expr::Raw { text, span },
     };
-    if !is_root {
-        if matches!(&expr, Expr::Ident(name) if name.name == "_") {
-            return expr;
-        }
+    if !is_root && matches!(&expr, Expr::Ident(name) if name.name == "_") {
+        return expr;
     }
     if !contains_hole(&expr) {
         return expr;
     }
     let (rewritten, params) = replace_holes(expr);
     let mut acc = rewritten;
-    for (index, param) in params.into_iter().rev().enumerate() {
+    for param in params.into_iter().rev() {
         let span = expr_span(&acc);
         acc = Expr::Lambda {
             params: vec![Pattern::Ident(SpannedName {
@@ -2608,7 +2481,6 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
             body: Box::new(acc),
             span,
         };
-        let _ = index;
     }
     acc
 }
@@ -2620,20 +2492,21 @@ fn contains_hole(expr: &Expr) -> bool {
         Expr::List { items, .. } => items.iter().any(|item| contains_hole(&item.expr)),
         Expr::Tuple { items, .. } => items.iter().any(contains_hole),
         Expr::Record { fields, .. } => fields.iter().any(|field| {
-            field.path.iter().any(|segment| {
-                matches!(segment, PathSegment::Index(expr, _) if contains_hole(expr))
-            }) || contains_hole(&field.value)
+            field.path.iter().any(
+                |segment| matches!(segment, PathSegment::Index(expr, _) if contains_hole(expr)),
+            ) || contains_hole(&field.value)
         }),
         Expr::FieldAccess { base, .. } => contains_hole(base),
         Expr::FieldSection { .. } => true,
         Expr::Index { base, index, .. } => contains_hole(base) || contains_hole(index),
         Expr::Call { func, args, .. } => contains_hole(func) || args.iter().any(contains_hole),
         Expr::Lambda { body, .. } => contains_hole(body),
-        Expr::Match { scrutinee, arms, .. } => {
-            scrutinee.as_ref().map_or(false, |expr| contains_hole(expr))
+        Expr::Match {
+            scrutinee, arms, ..
+        } => {
+            scrutinee.as_deref().is_some_and(contains_hole)
                 || arms.iter().any(|arm| {
-                    arm.guard.as_ref().map_or(false, |expr| contains_hole(expr))
-                        || contains_hole(&arm.body)
+                    arm.guard.as_ref().is_some_and(contains_hole) || contains_hole(&arm.body)
                 })
         }
         Expr::If {
@@ -2730,32 +2603,51 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                 .collect(),
             span,
         },
-        Expr::Lambda { params: lambda_params, body, span } => Expr::Lambda {
+        Expr::Lambda {
+            params: lambda_params,
+            body,
+            span,
+        } => Expr::Lambda {
             params: lambda_params,
             body: Box::new(replace_holes_inner(*body, counter, params)),
             span,
         },
-        Expr::Match { scrutinee, arms, span } => Expr::Match {
-            scrutinee: scrutinee
-                .map(|expr| Box::new(replace_holes_inner(*expr, counter, params))),
+        Expr::Match {
+            scrutinee,
+            arms,
+            span,
+        } => Expr::Match {
+            scrutinee: scrutinee.map(|expr| Box::new(replace_holes_inner(*expr, counter, params))),
             arms: arms
                 .into_iter()
                 .map(|arm| crate::surface::MatchArm {
                     pattern: arm.pattern,
-                    guard: arm.guard.map(|guard| replace_holes_inner(guard, counter, params)),
+                    guard: arm
+                        .guard
+                        .map(|guard| replace_holes_inner(guard, counter, params)),
                     body: replace_holes_inner(arm.body, counter, params),
                     span: arm.span,
                 })
                 .collect(),
             span,
         },
-        Expr::If { cond, then_branch, else_branch, span } => Expr::If {
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+            span,
+        } => Expr::If {
             cond: Box::new(replace_holes_inner(*cond, counter, params)),
             then_branch: Box::new(replace_holes_inner(*then_branch, counter, params)),
             else_branch: Box::new(replace_holes_inner(*else_branch, counter, params)),
             span,
         },
-        Expr::Binary { op, left, right, span } => Expr::Binary {
+        Expr::Binary {
+            op,
+            left,
+            right,
+            span,
+        } => Expr::Binary {
             op,
             left: Box::new(replace_holes_inner(*left, counter, params)),
             right: Box::new(replace_holes_inner(*right, counter, params)),
@@ -2766,7 +2658,11 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             items: items
                 .into_iter()
                 .map(|item| match item {
-                    BlockItem::Bind { pattern, expr, span } => BlockItem::Bind {
+                    BlockItem::Bind {
+                        pattern,
+                        expr,
+                        span,
+                    } => BlockItem::Bind {
                         pattern,
                         expr: replace_holes_inner(expr, counter, params),
                         span,

@@ -262,9 +262,7 @@ fn lex_sigil(chars: &[char], start: usize) -> Option<(String, usize, bool)> {
         return None;
     }
     let mut index = start + 1;
-    let Some(&tag_start) = chars.get(index) else {
-        return None;
-    };
+    let &tag_start = chars.get(index)?;
     if !is_ident_start(tag_start) {
         return None;
     }
@@ -272,9 +270,7 @@ fn lex_sigil(chars: &[char], start: usize) -> Option<(String, usize, bool)> {
     while index < chars.len() && is_ident_continue(chars[index]) {
         index += 1;
     }
-    let Some(&open) = chars.get(index) else {
-        return None;
-    };
+    let &open = chars.get(index)?;
     let close = match open {
         '/' => '/',
         '"' => '"',
@@ -358,10 +354,7 @@ fn check_braces(tokens: &[CstToken]) -> Vec<Diagnostic> {
 }
 
 fn matches_pair(open: &str, close: &str) -> bool {
-    matches!(
-        (open, close),
-        ("{", "}") | ("(", ")") | ("[", "]")
-    )
+    matches!((open, close), ("{", "}") | ("(", ")") | ("[", "]"))
 }
 
 fn span(line: usize, column: usize, len: usize) -> Span {

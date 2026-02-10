@@ -31,17 +31,9 @@ pub struct McpResource {
     pub binding: String,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct McpPolicy {
     pub allow_effectful_tools: bool,
-}
-
-impl Default for McpPolicy {
-    fn default() -> Self {
-        Self {
-            allow_effectful_tools: false,
-        }
-    }
 }
 
 fn has_decorator(decorators: &[crate::surface::SpannedName], name: &str) -> bool {
@@ -95,7 +87,10 @@ fn schema_for_type(expr: &TypeExpr) -> serde_json::Value {
                 required.push(serde_json::Value::String(name.name.clone()));
             }
             serde_json::Value::Object(serde_json::Map::from_iter([
-                ("type".to_string(), serde_json::Value::String("object".to_string())),
+                (
+                    "type".to_string(),
+                    serde_json::Value::String("object".to_string()),
+                ),
                 ("properties".to_string(), serde_json::Value::Object(props)),
                 ("required".to_string(), serde_json::Value::Array(required)),
                 (
@@ -129,14 +124,11 @@ fn tool_input_schema(sig: Option<&TypeSig>, def: Option<&Def>) -> serde_json::Va
         return serde_json::json!({ "type": "object" });
     };
     fn flatten_params<'a>(ty: &'a TypeExpr, out: &mut Vec<&'a TypeExpr>) {
-        match ty {
-            TypeExpr::Func { params, result, .. } => {
-                for param in params {
-                    out.push(param);
-                }
-                flatten_params(result, out);
+        if let TypeExpr::Func { params, result, .. } = ty {
+            for param in params {
+                out.push(param);
             }
-            _ => {}
+            flatten_params(result, out);
         }
     }
 
@@ -166,12 +158,18 @@ fn tool_input_schema(sig: Option<&TypeSig>, def: Option<&Def>) -> serde_json::Va
     let mut props = serde_json::Map::new();
     let mut required = Vec::new();
     for (idx, ty) in param_types.iter().enumerate() {
-        let name = param_names.get(idx).cloned().unwrap_or_else(|| format!("arg{idx}"));
+        let name = param_names
+            .get(idx)
+            .cloned()
+            .unwrap_or_else(|| format!("arg{idx}"));
         props.insert(name.clone(), schema_for_type(ty));
         required.push(serde_json::Value::String(name));
     }
     serde_json::Value::Object(serde_json::Map::from_iter([
-        ("type".to_string(), serde_json::Value::String("object".to_string())),
+        (
+            "type".to_string(),
+            serde_json::Value::String("object".to_string()),
+        ),
         ("properties".to_string(), serde_json::Value::Object(props)),
         ("required".to_string(), serde_json::Value::Array(required)),
         (
@@ -182,7 +180,7 @@ fn tool_input_schema(sig: Option<&TypeSig>, def: Option<&Def>) -> serde_json::Va
 }
 
 fn type_is_effectful_return(ty: &TypeExpr) -> bool {
-    fn peel_result<'a>(ty: &'a TypeExpr) -> &'a TypeExpr {
+    fn peel_result(ty: &TypeExpr) -> &TypeExpr {
         match ty {
             TypeExpr::Func { result, .. } => peel_result(result),
             other => other,
@@ -206,7 +204,10 @@ fn type_is_effectful_return(ty: &TypeExpr) -> bool {
 fn expr_is_effectful(expr: &Expr) -> bool {
     match expr {
         Expr::Block { kind, items, .. } => {
-            if matches!(kind, BlockKind::Effect | BlockKind::Resource | BlockKind::Generate) {
+            if matches!(
+                kind,
+                BlockKind::Effect | BlockKind::Resource | BlockKind::Generate
+            ) {
                 return true;
             }
             items.iter().any(|item| match item {
@@ -217,9 +218,13 @@ fn expr_is_effectful(expr: &Expr) -> bool {
                 | BlockItem::Expr { expr, .. } => expr_is_effectful(expr),
             })
         }
-        Expr::Call { func, args, .. } => expr_is_effectful(func) || args.iter().any(expr_is_effectful),
+        Expr::Call { func, args, .. } => {
+            expr_is_effectful(func) || args.iter().any(expr_is_effectful)
+        }
         Expr::Lambda { body, .. } => expr_is_effectful(body),
-        Expr::Match { scrutinee, arms, .. } => {
+        Expr::Match {
+            scrutinee, arms, ..
+        } => {
             scrutinee
                 .as_ref()
                 .map(|expr| expr_is_effectful(expr))
@@ -234,11 +239,19 @@ fn expr_is_effectful(expr: &Expr) -> bool {
             then_branch,
             else_branch,
             ..
-        } => expr_is_effectful(cond) || expr_is_effectful(then_branch) || expr_is_effectful(else_branch),
+        } => {
+            expr_is_effectful(cond)
+                || expr_is_effectful(then_branch)
+                || expr_is_effectful(else_branch)
+        }
         Expr::Binary { left, right, .. } => expr_is_effectful(left) || expr_is_effectful(right),
-        Expr::List { items, .. } => items.iter().any(|item: &ListItem| expr_is_effectful(&item.expr)),
+        Expr::List { items, .. } => items
+            .iter()
+            .any(|item: &ListItem| expr_is_effectful(&item.expr)),
         Expr::Tuple { items, .. } => items.iter().any(expr_is_effectful),
-        Expr::Record { fields, .. } => fields.iter().any(|field: &RecordField| expr_is_effectful(&field.value)),
+        Expr::Record { fields, .. } => fields
+            .iter()
+            .any(|field: &RecordField| expr_is_effectful(&field.value)),
         Expr::FieldAccess { base, .. } => expr_is_effectful(base),
         Expr::Index { base, index, .. } => expr_is_effectful(base) || expr_is_effectful(index),
         Expr::FieldSection { .. } | Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } => false,
@@ -443,7 +456,10 @@ pub fn serve_mcp_stdio(manifest: &McpManifest) -> Result<(), AiviError> {
     serve_mcp_stdio_with_policy(manifest, McpPolicy::default())
 }
 
-pub fn serve_mcp_stdio_with_policy(manifest: &McpManifest, policy: McpPolicy) -> Result<(), AiviError> {
+pub fn serve_mcp_stdio_with_policy(
+    manifest: &McpManifest,
+    policy: McpPolicy,
+) -> Result<(), AiviError> {
     let stdin = std::io::stdin();
     let mut reader = std::io::BufReader::new(stdin.lock());
     let stdout = std::io::stdout();
@@ -601,7 +617,10 @@ mod tests {
 
         let response = handle_request(&manifest, McpPolicy::default(), &request).expect("response");
         assert_eq!(response["result"]["tools"].as_array().unwrap().len(), 1);
-        assert_eq!(response["result"]["tools"][0]["name"], "Example.Mod.pureTool");
+        assert_eq!(
+            response["result"]["tools"][0]["name"],
+            "Example.Mod.pureTool"
+        );
 
         let response = handle_request(
             &manifest,

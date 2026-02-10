@@ -8,7 +8,7 @@ fn set_workspace_root() -> PathBuf {
         .parent()
         .and_then(|path| path.parent())
         .expect("workspace root");
-    std::env::set_current_dir(&workspace_root).expect("set cwd");
+    std::env::set_current_dir(workspace_root).expect("set cwd");
     workspace_root.to_path_buf()
 }
 

@@ -22,40 +22,100 @@ pub struct HirDef {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "kind")]
 pub enum HirExpr {
-    Var { id: u32, name: String },
-    LitNumber { id: u32, text: String },
-    LitString { id: u32, text: String },
+    Var {
+        id: u32,
+        name: String,
+    },
+    LitNumber {
+        id: u32,
+        text: String,
+    },
+    LitString {
+        id: u32,
+        text: String,
+    },
     LitSigil {
         id: u32,
         tag: String,
         body: String,
         flags: String,
     },
-    LitBool { id: u32, value: bool },
-    LitDateTime { id: u32, text: String },
-    Lambda { id: u32, param: String, body: Box<HirExpr> },
-    App { id: u32, func: Box<HirExpr>, arg: Box<HirExpr> },
-    Call { id: u32, func: Box<HirExpr>, args: Vec<HirExpr> },
-    List { id: u32, items: Vec<HirListItem> },
-    Tuple { id: u32, items: Vec<HirExpr> },
-    Record { id: u32, fields: Vec<HirRecordField> },
-    Patch { id: u32, target: Box<HirExpr>, fields: Vec<HirRecordField> },
-    FieldAccess { id: u32, base: Box<HirExpr>, field: String },
-    Index { id: u32, base: Box<HirExpr>, index: Box<HirExpr> },
-    Match { id: u32, scrutinee: Box<HirExpr>, arms: Vec<HirMatchArm> },
+    LitBool {
+        id: u32,
+        value: bool,
+    },
+    LitDateTime {
+        id: u32,
+        text: String,
+    },
+    Lambda {
+        id: u32,
+        param: String,
+        body: Box<HirExpr>,
+    },
+    App {
+        id: u32,
+        func: Box<HirExpr>,
+        arg: Box<HirExpr>,
+    },
+    Call {
+        id: u32,
+        func: Box<HirExpr>,
+        args: Vec<HirExpr>,
+    },
+    List {
+        id: u32,
+        items: Vec<HirListItem>,
+    },
+    Tuple {
+        id: u32,
+        items: Vec<HirExpr>,
+    },
+    Record {
+        id: u32,
+        fields: Vec<HirRecordField>,
+    },
+    Patch {
+        id: u32,
+        target: Box<HirExpr>,
+        fields: Vec<HirRecordField>,
+    },
+    FieldAccess {
+        id: u32,
+        base: Box<HirExpr>,
+        field: String,
+    },
+    Index {
+        id: u32,
+        base: Box<HirExpr>,
+        index: Box<HirExpr>,
+    },
+    Match {
+        id: u32,
+        scrutinee: Box<HirExpr>,
+        arms: Vec<HirMatchArm>,
+    },
     If {
         id: u32,
         cond: Box<HirExpr>,
         then_branch: Box<HirExpr>,
         else_branch: Box<HirExpr>,
     },
-    Binary { id: u32, op: String, left: Box<HirExpr>, right: Box<HirExpr> },
+    Binary {
+        id: u32,
+        op: String,
+        left: Box<HirExpr>,
+        right: Box<HirExpr>,
+    },
     Block {
         id: u32,
         block_kind: HirBlockKind,
         items: Vec<HirBlockItem>,
     },
-    Raw { id: u32, text: String },
+    Raw {
+        id: u32,
+        text: String,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -85,13 +145,35 @@ pub struct HirMatchArm {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum HirPattern {
-    Wildcard { id: u32 },
-    Var { id: u32, name: String },
-    Literal { id: u32, value: HirLiteral },
-    Constructor { id: u32, name: String, args: Vec<HirPattern> },
-    Tuple { id: u32, items: Vec<HirPattern> },
-    List { id: u32, items: Vec<HirPattern>, rest: Option<Box<HirPattern>> },
-    Record { id: u32, fields: Vec<HirRecordPatternField> },
+    Wildcard {
+        id: u32,
+    },
+    Var {
+        id: u32,
+        name: String,
+    },
+    Literal {
+        id: u32,
+        value: HirLiteral,
+    },
+    Constructor {
+        id: u32,
+        name: String,
+        args: Vec<HirPattern>,
+    },
+    Tuple {
+        id: u32,
+        items: Vec<HirPattern>,
+    },
+    List {
+        id: u32,
+        items: Vec<HirPattern>,
+        rest: Option<Box<HirPattern>>,
+    },
+    Record {
+        id: u32,
+        fields: Vec<HirRecordPatternField>,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -130,7 +212,6 @@ pub enum HirBlockItem {
     Expr { expr: HirExpr },
 }
 
-
 pub fn desugar_modules(modules: &[Module]) -> HirProgram {
     let mut id_gen = IdGen::default();
     let mut hir_modules = Vec::new();
@@ -147,7 +228,9 @@ pub fn desugar_modules(modules: &[Module]) -> HirProgram {
             defs,
         });
     }
-    HirProgram { modules: hir_modules }
+    HirProgram {
+        modules: hir_modules,
+    }
 }
 
 fn collect_defs(module: &Module) -> Vec<(String, Expr)> {
@@ -190,11 +273,12 @@ fn def_expr(def: &Def) -> Expr {
 }
 
 fn lower_expr(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
-    if let Expr::Binary { op, left, right, .. } = &expr {
-        if op == "<|" {
-            if matches!(**right, Expr::Record { .. }) && !contains_hole(left) {
-                return lower_expr_inner(expr, id_gen);
-            }
+    if let Expr::Binary {
+        op, left, right, ..
+    } = &expr
+    {
+        if op == "<|" && matches!(**right, Expr::Record { .. }) && !contains_hole(left) {
+            return lower_expr_inner(expr, id_gen);
         }
     }
     if contains_hole(&expr) {
@@ -284,7 +368,9 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                 id: id_gen.next(),
                 text,
             },
-            crate::surface::Literal::Sigil { tag, body, flags, .. } => HirExpr::LitSigil {
+            crate::surface::Literal::Sigil {
+                tag, body, flags, ..
+            } => HirExpr::LitSigil {
                 id: id_gen.next(),
                 tag,
                 body,
@@ -367,10 +453,15 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
         Expr::Call { func, args, .. } => HirExpr::Call {
             id: id_gen.next(),
             func: Box::new(lower_expr(*func, id_gen)),
-            args: args.into_iter().map(|arg| lower_expr(arg, id_gen)).collect(),
+            args: args
+                .into_iter()
+                .map(|arg| lower_expr(arg, id_gen))
+                .collect(),
         },
         Expr::Lambda { params, body, .. } => lower_lambda(params, *body, id_gen),
-        Expr::Match { scrutinee, arms, .. } => {
+        Expr::Match {
+            scrutinee, arms, ..
+        } => {
             let scrutinee = if let Some(scrutinee) = scrutinee {
                 lower_expr(*scrutinee, id_gen)
             } else {
@@ -421,7 +512,9 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
             then_branch: Box::new(lower_expr(*then_branch, id_gen)),
             else_branch: Box::new(lower_expr(*else_branch, id_gen)),
         },
-        Expr::Binary { op, left, right, .. } => {
+        Expr::Binary {
+            op, left, right, ..
+        } => {
             if op == "|>" {
                 let left = lower_expr(*left, id_gen);
                 let right = lower_expr(*right, id_gen);
@@ -564,11 +657,9 @@ fn lower_pattern(pattern: Pattern, id_gen: &mut IdGen) -> HirPattern {
             value: match literal {
                 crate::surface::Literal::Number { text, .. } => HirLiteral::Number(text),
                 crate::surface::Literal::String { text, .. } => HirLiteral::String(text),
-                crate::surface::Literal::Sigil { tag, body, flags, .. } => HirLiteral::Sigil {
-                    tag,
-                    body,
-                    flags,
-                },
+                crate::surface::Literal::Sigil {
+                    tag, body, flags, ..
+                } => HirLiteral::Sigil { tag, body, flags },
                 crate::surface::Literal::Bool { value, .. } => HirLiteral::Bool(value),
                 crate::surface::Literal::DateTime { text, .. } => HirLiteral::DateTime(text),
             },
@@ -576,7 +667,10 @@ fn lower_pattern(pattern: Pattern, id_gen: &mut IdGen) -> HirPattern {
         Pattern::Constructor { name, args, .. } => HirPattern::Constructor {
             id: id_gen.next(),
             name: name.name,
-            args: args.into_iter().map(|arg| lower_pattern(arg, id_gen)).collect(),
+            args: args
+                .into_iter()
+                .map(|arg| lower_pattern(arg, id_gen))
+                .collect(),
         },
         Pattern::Tuple { items, .. } => HirPattern::Tuple {
             id: id_gen.next(),
@@ -627,9 +721,9 @@ fn contains_hole(expr: &Expr) -> bool {
         }
         Expr::Lambda { .. } => false,
         Expr::Match { scrutinee, arms, .. } => {
-            scrutinee.as_ref().map_or(false, |expr| contains_hole(expr))
+            scrutinee.as_deref().is_some_and(contains_hole)
                 || arms.iter().any(|arm| {
-                    arm.guard.as_ref().map_or(false, |expr| contains_hole(expr))
+                    arm.guard.as_ref().is_some_and(contains_hole)
                         || contains_hole(&arm.body)
                 })
         }
@@ -741,9 +835,12 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             body: Box::new(replace_holes_inner(*body, counter, params)),
             span,
         },
-        Expr::Match { scrutinee, arms, span } => Expr::Match {
-            scrutinee: scrutinee
-                .map(|expr| Box::new(replace_holes_inner(*expr, counter, params))),
+        Expr::Match {
+            scrutinee,
+            arms,
+            span,
+        } => Expr::Match {
+            scrutinee: scrutinee.map(|expr| Box::new(replace_holes_inner(*expr, counter, params))),
             arms: arms
                 .into_iter()
                 .map(|arm| crate::surface::MatchArm {
@@ -768,7 +865,12 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             else_branch: Box::new(replace_holes_inner(*else_branch, counter, params)),
             span,
         },
-        Expr::Binary { op, left, right, span } => Expr::Binary {
+        Expr::Binary {
+            op,
+            left,
+            right,
+            span,
+        } => Expr::Binary {
             op,
             left: Box::new(replace_holes_inner(*left, counter, params)),
             right: Box::new(replace_holes_inner(*right, counter, params)),
@@ -779,7 +881,11 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             items: items
                 .into_iter()
                 .map(|item| match item {
-                    BlockItem::Bind { pattern, expr, span } => BlockItem::Bind {
+                    BlockItem::Bind {
+                        pattern,
+                        expr,
+                        span,
+                    } => BlockItem::Bind {
                         pattern,
                         expr: replace_holes_inner(expr, counter, params),
                         span,

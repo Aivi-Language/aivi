@@ -1,124 +1,23 @@
 use std::collections::HashMap;
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use std::io::Write;
 
 use crate::hir::{
     HirBlockItem, HirExpr, HirListItem, HirLiteral, HirMatchArm, HirPathSegment, HirPattern,
-    HirRecordField, HirProgram,
+    HirProgram, HirRecordField,
 };
 use crate::AiviError;
 
-#[derive(Clone)]
-enum Value {
-    Unit,
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    Text(String),
-    DateTime(String),
-    List(Vec<Value>),
-    Tuple(Vec<Value>),
-    Record(HashMap<String, Value>),
-    Constructor { name: String, args: Vec<Value> },
-    Closure(Arc<ClosureValue>),
-    Builtin(BuiltinValue),
-    Effect(Arc<EffectValue>),
-    Resource(Arc<ResourceValue>),
-    Thunk(Arc<ThunkValue>),
-    MultiClause(Vec<Value>),
-    ChannelSend(Arc<ChannelSend>),
-    ChannelRecv(Arc<ChannelRecv>),
-    FileHandle(Arc<Mutex<std::fs::File>>),
-}
+mod environment;
+mod values;
 
-#[derive(Clone)]
-struct BuiltinValue {
-    imp: Arc<BuiltinImpl>,
-    args: Vec<Value>,
-}
-
-struct BuiltinImpl {
-    name: String,
-    arity: usize,
-    func: Arc<dyn Fn(Vec<Value>, &mut Runtime) -> Result<Value, RuntimeError> + Send + Sync>,
-}
-
-struct ClosureValue {
-    param: String,
-    body: Arc<HirExpr>,
-    env: Env,
-}
-
-enum EffectValue {
-    Block {
-        env: Env,
-        items: Arc<Vec<HirBlockItem>>,
-    },
-    Thunk {
-        func: Arc<dyn Fn(&mut Runtime) -> Result<Value, RuntimeError> + Send + Sync>,
-    },
-}
-
-struct ResourceValue {
-    items: Arc<Vec<HirBlockItem>>,
-}
-
-struct ThunkValue {
-    expr: Arc<HirExpr>,
-    env: Env,
-    cached: Mutex<Option<Value>>,
-    in_progress: AtomicBool,
-}
-
-struct ChannelInner {
-    sender: Mutex<Option<mpsc::Sender<Value>>>,
-    receiver: Mutex<mpsc::Receiver<Value>>,
-    closed: AtomicBool,
-}
-
-struct ChannelSend {
-    inner: Arc<ChannelInner>,
-}
-
-struct ChannelRecv {
-    inner: Arc<ChannelInner>,
-}
-
-#[derive(Clone)]
-struct Env {
-    parent: Option<Arc<Env>>,
-    values: Arc<Mutex<HashMap<String, Value>>>,
-}
-
-impl Env {
-    fn new(parent: Option<Arc<Env>>) -> Self {
-        Self {
-            parent,
-            values: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
-    fn get(&self, name: &str) -> Option<Value> {
-        if let Ok(values) = self.values.lock() {
-            if let Some(value) = values.get(name) {
-                return Some(value.clone());
-            }
-        }
-        self.parent.as_ref().and_then(|parent| parent.get(name))
-    }
-
-    fn set(&self, name: String, value: Value) {
-        if let Ok(mut values) = self.values.lock() {
-            values.insert(name, value);
-        }
-    }
-}
-
-struct RuntimeContext {
-    globals: Env,
-}
+use self::environment::{Env, RuntimeContext};
+use self::values::{
+    BuiltinImpl, BuiltinValue, ChannelInner, ChannelRecv, ChannelSend, ClosureValue, EffectValue,
+    ResourceValue, ThunkValue, Value,
+};
 
 #[derive(Debug)]
 struct CancelToken {
@@ -351,10 +250,7 @@ impl Runtime {
             }
             HirExpr::LitString { text, .. } => Ok(Value::Text(text.clone())),
             HirExpr::LitSigil {
-                tag,
-                body,
-                flags,
-                ..
+                tag, body, flags, ..
             } => {
                 let mut map = HashMap::new();
                 map.insert("tag".to_string(), Value::Text(tag.clone()));
@@ -395,9 +291,10 @@ impl Runtime {
             HirExpr::FieldAccess { base, field, .. } => {
                 let base_value = self.eval_expr(base, env)?;
                 match base_value {
-                    Value::Record(map) => map.get(field).cloned().ok_or_else(|| {
-                        RuntimeError::Message(format!("missing field {field}"))
-                    }),
+                    Value::Record(map) => map
+                        .get(field)
+                        .cloned()
+                        .ok_or_else(|| RuntimeError::Message(format!("missing field {field}"))),
                     _ => Err(RuntimeError::Message(format!(
                         "field access on non-record {field}"
                     ))),
@@ -408,31 +305,31 @@ impl Runtime {
                 let index_value = self.eval_expr(index, env)?;
                 let idx = match index_value {
                     Value::Int(value) => value,
-                    _ => {
-                        return Err(RuntimeError::Message(
-                            "index expects an Int".to_string(),
-                        ))
-                    }
+                    _ => return Err(RuntimeError::Message("index expects an Int".to_string())),
                 };
                 match base_value {
                     Value::List(items) => {
                         let idx = idx as usize;
-                        items.get(idx).cloned().ok_or_else(|| {
-                            RuntimeError::Message("index out of bounds".to_string())
-                        })
+                        items
+                            .get(idx)
+                            .cloned()
+                            .ok_or_else(|| RuntimeError::Message("index out of bounds".to_string()))
                     }
                     Value::Tuple(items) => {
                         let idx = idx as usize;
-                        items.get(idx).cloned().ok_or_else(|| {
-                            RuntimeError::Message("index out of bounds".to_string())
-                        })
+                        items
+                            .get(idx)
+                            .cloned()
+                            .ok_or_else(|| RuntimeError::Message("index out of bounds".to_string()))
                     }
                     _ => Err(RuntimeError::Message(
                         "index on unsupported value".to_string(),
                     )),
                 }
             }
-            HirExpr::Match { scrutinee, arms, .. } => {
+            HirExpr::Match {
+                scrutinee, arms, ..
+            } => {
                 let value = self.eval_expr(scrutinee, env)?;
                 self.eval_match(&value, arms, env)
             }
@@ -449,28 +346,28 @@ impl Runtime {
                     self.eval_expr(else_branch, env)
                 }
             }
-            HirExpr::Binary { op, left, right, .. } => {
+            HirExpr::Binary {
+                op, left, right, ..
+            } => {
                 let left_value = self.eval_expr(left, env)?;
                 let right_value = self.eval_expr(right, env)?;
                 self.eval_binary(op, left_value, right_value, env)
             }
             HirExpr::Block {
-                block_kind,
-                items,
-                ..
+                block_kind, items, ..
             } => match block_kind {
                 crate::hir::HirBlockKind::Plain => self.eval_plain_block(items, env),
-                crate::hir::HirBlockKind::Effect => Ok(Value::Effect(Arc::new(
-                    EffectValue::Block {
+                crate::hir::HirBlockKind::Effect => {
+                    Ok(Value::Effect(Arc::new(EffectValue::Block {
                         env: env.clone(),
                         items: Arc::new(items.clone()),
-                    },
-                ))),
-                crate::hir::HirBlockKind::Resource => Ok(Value::Resource(Arc::new(
-                    ResourceValue {
+                    })))
+                }
+                crate::hir::HirBlockKind::Resource => {
+                    Ok(Value::Resource(Arc::new(ResourceValue {
                         items: Arc::new(items.clone()),
-                    },
-                ))),
+                    })))
+                }
                 crate::hir::HirBlockKind::Generate => Err(RuntimeError::Message(
                     "generator blocks are not supported in native runtime yet".to_string(),
                 )),
@@ -537,9 +434,7 @@ impl Runtime {
         if match_failures > 0 && last_error.is_none() {
             return Err(RuntimeError::Message("non-exhaustive match".to_string()));
         }
-        Err(last_error.unwrap_or_else(|| {
-            RuntimeError::Message("no matching clause".to_string())
-        }))
+        Err(last_error.unwrap_or_else(|| RuntimeError::Message("no matching clause".to_string())))
     }
 
     fn eval_plain_block(
@@ -554,10 +449,8 @@ impl Runtime {
             match item {
                 HirBlockItem::Bind { pattern, expr } => {
                     let value = self.eval_expr(expr, &local_env)?;
-                    let bindings =
-                        collect_pattern_bindings(pattern, &value).ok_or_else(|| {
-                            RuntimeError::Message("pattern match failed".to_string())
-                        })?;
+                    let bindings = collect_pattern_bindings(pattern, &value)
+                        .ok_or_else(|| RuntimeError::Message("pattern match failed".to_string()))?;
                     for (name, value) in bindings {
                         local_env.set(name, value);
                     }
@@ -608,9 +501,7 @@ impl Runtime {
                 return self.eval_expr(&arm.body, &arm_env);
             }
         }
-        Err(RuntimeError::Message(
-            "non-exhaustive match".to_string(),
-        ))
+        Err(RuntimeError::Message("non-exhaustive match".to_string()))
     }
 
     fn eval_list(&mut self, items: &[HirListItem], env: &Env) -> Result<Value, RuntimeError> {
@@ -633,11 +524,7 @@ impl Runtime {
         Ok(Value::List(values))
     }
 
-    fn eval_record(
-        &mut self,
-        fields: &[HirRecordField],
-        env: &Env,
-    ) -> Result<Value, RuntimeError> {
+    fn eval_record(&mut self, fields: &[HirRecordField], env: &Env) -> Result<Value, RuntimeError> {
         let mut map = HashMap::new();
         for field in fields {
             let value = self.eval_expr(&field.value, env)?;
@@ -707,9 +594,7 @@ impl Runtime {
                 let existing = current.get(name).cloned();
                 let value = self.eval_expr(expr, env)?;
                 let new_value = match existing {
-                    Some(existing) if is_callable(&value) => {
-                        self.apply(value, existing)?
-                    }
+                    Some(existing) if is_callable(&value) => self.apply(value, existing)?,
                     Some(_) | None if is_callable(&value) => {
                         return Err(RuntimeError::Message(format!(
                             "patch transform expects existing field {name}"
@@ -794,17 +679,14 @@ impl Runtime {
                                 local_env.set(name, value);
                             }
                             cleanups.push(cleanup);
-                            if last {
-                                Ok(Value::Unit)
-                            } else {
-                                Ok(Value::Unit)
-                            }
+                            Ok(Value::Unit)
                         }
                         Value::Effect(_) => {
                             let value = self.run_effect_value(value)?;
-                            let bindings = collect_pattern_bindings(pattern, &value).ok_or_else(
-                                || RuntimeError::Message("pattern match failed".to_string()),
-                            )?;
+                            let bindings =
+                                collect_pattern_bindings(pattern, &value).ok_or_else(|| {
+                                    RuntimeError::Message("pattern match failed".to_string())
+                                })?;
                             for (name, value) in bindings {
                                 local_env.set(name, value);
                             }
@@ -874,18 +756,17 @@ impl Runtime {
         let mut cleanup_start = None;
 
         for (index, item) in items.iter().enumerate() {
-            if let Err(err) = self.check_cancelled() {
-                return Err(err);
-            }
+            self.check_cancelled()?;
             match item {
                 HirBlockItem::Bind { pattern, expr } => {
                     let value = self.eval_expr(expr, &local_env)?;
                     match value {
                         Value::Effect(_) => {
                             let value = self.run_effect_value(value)?;
-                            let bindings = collect_pattern_bindings(pattern, &value).ok_or_else(
-                                || RuntimeError::Message("pattern match failed".to_string()),
-                            )?;
+                            let bindings =
+                                collect_pattern_bindings(pattern, &value).ok_or_else(|| {
+                                    RuntimeError::Message("pattern match failed".to_string())
+                                })?;
                             for (name, value) in bindings {
                                 local_env.set(name, value);
                             }
@@ -917,9 +798,8 @@ impl Runtime {
             }
         }
 
-        let value = yielded.ok_or_else(|| {
-            RuntimeError::Message("resource block missing yield".to_string())
-        })?;
+        let value = yielded
+            .ok_or_else(|| RuntimeError::Message("resource block missing yield".to_string()))?;
         let cleanup_items = if let Some(start) = cleanup_start {
             items[start..].to_vec()
         } else {
@@ -934,10 +814,7 @@ impl Runtime {
 
     fn run_cleanups(&mut self, cleanups: Vec<Value>) -> Result<(), RuntimeError> {
         for cleanup in cleanups.into_iter().rev() {
-            let result = self.uncancelable(|runtime| runtime.run_effect_value(cleanup));
-            if let Err(err) = result {
-                return Err(err);
-            }
+            let _ = self.uncancelable(|runtime| runtime.run_effect_value(cleanup))?;
         }
         Ok(())
     }
@@ -958,10 +835,7 @@ impl BuiltinValue {
     }
 }
 
-fn collect_pattern_bindings(
-    pattern: &HirPattern,
-    value: &Value,
-) -> Option<HashMap<String, Value>> {
+fn collect_pattern_bindings(pattern: &HirPattern, value: &Value) -> Option<HashMap<String, Value>> {
     let mut bindings = HashMap::new();
     if match_pattern(pattern, value, &mut bindings) {
         Some(bindings)
@@ -985,10 +859,7 @@ fn match_pattern(
             (HirLiteral::Number(text), Value::Int(num)) => parse_number_literal(text) == Some(*num),
             (HirLiteral::Number(text), Value::Float(num)) => text.parse::<f64>().ok() == Some(*num),
             (HirLiteral::String(text), Value::Text(val)) => text == val,
-            (
-                HirLiteral::Sigil { tag, body, flags },
-                Value::Record(map),
-            ) => {
+            (HirLiteral::Sigil { tag, body, flags }, Value::Record(map)) => {
                 let tag_ok = matches!(map.get("tag"), Some(Value::Text(val)) if val == tag);
                 let body_ok = matches!(map.get("body"), Some(Value::Text(val)) if val == body);
                 let flags_ok = matches!(map.get("flags"), Some(Value::Text(val)) if val == flags);
@@ -1065,10 +936,7 @@ fn match_pattern(
     }
 }
 
-fn record_get_path<'a>(
-    record: &'a HashMap<String, Value>,
-    path: &[String],
-) -> Option<&'a Value> {
+fn record_get_path<'a>(record: &'a HashMap<String, Value>, path: &[String]) -> Option<&'a Value> {
     let mut current = record;
     let mut value = None;
     for (index, segment) in path.iter().enumerate() {
@@ -1163,10 +1031,7 @@ fn parse_number_literal(text: &str) -> Option<i64> {
     if text.contains('.') {
         return None;
     }
-    if text
-        .chars()
-        .any(|ch| !(ch.is_ascii_digit() || ch == '-'))
-    {
+    if text.chars().any(|ch| !(ch.is_ascii_digit() || ch == '-')) {
         return None;
     }
     text.parse::<i64>().ok()
@@ -1190,7 +1055,10 @@ fn is_constructor_name(name: &str) -> bool {
 }
 
 fn is_callable(value: &Value) -> bool {
-    matches!(value, Value::Closure(_) | Value::Builtin(_) | Value::MultiClause(_))
+    matches!(
+        value,
+        Value::Closure(_) | Value::Builtin(_) | Value::MultiClause(_)
+    )
 }
 
 fn is_match_failure_message(message: &str) -> bool {
@@ -1235,10 +1103,7 @@ fn format_value(value: &Value) -> String {
                 format!(
                     "{} {}",
                     name,
-                    args.iter()
-                        .map(format_value)
-                        .collect::<Vec<_>>()
-                        .join(" ")
+                    args.iter().map(format_value).collect::<Vec<_>>().join(" ")
                 )
             }
         }
@@ -1258,10 +1123,13 @@ fn register_builtins(env: &Env) {
     env.set("Unit".to_string(), Value::Unit);
     env.set("True".to_string(), Value::Bool(true));
     env.set("False".to_string(), Value::Bool(false));
-    env.set("None".to_string(), Value::Constructor {
-        name: "None".to_string(),
-        args: Vec::new(),
-    });
+    env.set(
+        "None".to_string(),
+        Value::Constructor {
+            name: "None".to_string(),
+            args: Vec::new(),
+        },
+    );
     env.set("Some".to_string(), builtin_constructor("Some", 1));
     env.set("Ok".to_string(), builtin_constructor("Ok", 1));
     env.set("Err".to_string(), builtin_constructor("Err", 1));
@@ -1273,74 +1141,94 @@ fn register_builtins(env: &Env) {
         },
     );
 
-    env.set("pure".to_string(), builtin("pure", 1, |mut args, _| {
-        let value = args.remove(0);
-        let effect = EffectValue::Thunk {
-            func: Arc::new(move |_| Ok(value.clone())),
-        };
-        Ok(Value::Effect(Arc::new(effect)))
-    }));
+    env.set(
+        "pure".to_string(),
+        builtin("pure", 1, |mut args, _| {
+            let value = args.remove(0);
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| Ok(value.clone())),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
 
-    env.set("fail".to_string(), builtin("fail", 1, |mut args, _| {
-        let value = args.remove(0);
-        let effect = EffectValue::Thunk {
-            func: Arc::new(move |_| Err(RuntimeError::Error(value.clone()))),
-        };
-        Ok(Value::Effect(Arc::new(effect)))
-    }));
+    env.set(
+        "fail".to_string(),
+        builtin("fail", 1, |mut args, _| {
+            let value = args.remove(0);
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| Err(RuntimeError::Error(value.clone()))),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
 
-    env.set("bind".to_string(), builtin("bind", 2, |mut args, _| {
-        let func = args.pop().unwrap();
-        let effect = args.pop().unwrap();
-        let effect = EffectValue::Thunk {
-            func: Arc::new(move |runtime| {
-                let value = runtime.run_effect_value(effect.clone())?;
-                let applied = runtime.apply(func.clone(), value)?;
-                runtime.run_effect_value(applied)
-            }),
-        };
-        Ok(Value::Effect(Arc::new(effect)))
-    }));
-
-    env.set("attempt".to_string(), builtin("attempt", 1, |mut args, _| {
-        let effect = args.remove(0);
-        let effect = EffectValue::Thunk {
-            func: Arc::new(move |runtime| match runtime.run_effect_value(effect.clone()) {
-                Ok(value) => Ok(Value::Constructor {
-                    name: "Ok".to_string(),
-                    args: vec![value],
+    env.set(
+        "bind".to_string(),
+        builtin("bind", 2, |mut args, _| {
+            let func = args.pop().unwrap();
+            let effect = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |runtime| {
+                    let value = runtime.run_effect_value(effect.clone())?;
+                    let applied = runtime.apply(func.clone(), value)?;
+                    runtime.run_effect_value(applied)
                 }),
-                Err(RuntimeError::Error(value)) => Ok(Value::Constructor {
-                    name: "Err".to_string(),
-                    args: vec![value],
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+
+    env.set(
+        "attempt".to_string(),
+        builtin("attempt", 1, |mut args, _| {
+            let effect = args.remove(0);
+            let effect = EffectValue::Thunk {
+                func: Arc::new(
+                    move |runtime| match runtime.run_effect_value(effect.clone()) {
+                        Ok(value) => Ok(Value::Constructor {
+                            name: "Ok".to_string(),
+                            args: vec![value],
+                        }),
+                        Err(RuntimeError::Error(value)) => Ok(Value::Constructor {
+                            name: "Err".to_string(),
+                            args: vec![value],
+                        }),
+                        Err(err) => Err(err),
+                    },
+                ),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+
+    env.set(
+        "print".to_string(),
+        builtin("print", 1, |mut args, _| {
+            let value = args.remove(0);
+            let text = format_value(&value);
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    print!("{text}");
+                    let mut out = std::io::stdout();
+                    let _ = out.flush();
+                    Ok(Value::Unit)
                 }),
-                Err(err) => Err(err),
-            }),
-        };
-        Ok(Value::Effect(Arc::new(effect)))
-    }));
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
 
-    env.set("print".to_string(), builtin("print", 1, |mut args, _| {
-        let value = args.remove(0);
-        let text = format_value(&value);
-        let effect = EffectValue::Thunk {
-            func: Arc::new(move |_| {
-                print!("{text}");
-                let mut out = std::io::stdout();
-                let _ = out.flush();
-                Ok(Value::Unit)
-            }),
-        };
-        Ok(Value::Effect(Arc::new(effect)))
-    }));
-
-    env.set("load".to_string(), builtin("load", 1, |mut args, _| {
-        let value = args.remove(0);
-        match value {
-            Value::Effect(_) => Ok(value),
-            _ => Err(RuntimeError::Message("load expects an Effect".to_string())),
-        }
-    }));
+    env.set(
+        "load".to_string(),
+        builtin("load", 1, |mut args, _| {
+            let value = args.remove(0);
+            match value {
+                Value::Effect(_) => Ok(value),
+                _ => Err(RuntimeError::Message("load expects an Effect".to_string())),
+            }
+        }),
+    );
 
     env.set("file".to_string(), build_file_record());
     env.set("clock".to_string(), build_clock_record());
@@ -1451,9 +1339,8 @@ fn build_file_record() -> Value {
                         .map_err(|_| RuntimeError::Message("file handle poisoned".to_string()))?;
                     let _ = std::io::Seek::seek(&mut *file, std::io::SeekFrom::Start(0));
                     let mut buffer = String::new();
-                    std::io::Read::read_to_string(&mut *file, &mut buffer).map_err(|err| {
-                        RuntimeError::Error(Value::Text(err.to_string()))
-                    })?;
+                    std::io::Read::read_to_string(&mut *file, &mut buffer)
+                        .map_err(|err| RuntimeError::Error(Value::Text(err.to_string())))?;
                     Ok(Value::Text(buffer))
                 }),
             };
@@ -1531,7 +1418,9 @@ fn build_channel_record() -> Value {
                         receiver: Mutex::new(receiver),
                         closed: AtomicBool::new(false),
                     });
-                    let send = Value::ChannelSend(Arc::new(ChannelSend { inner: inner.clone() }));
+                    let send = Value::ChannelSend(Arc::new(ChannelSend {
+                        inner: inner.clone(),
+                    }));
                     let recv = Value::ChannelRecv(Arc::new(ChannelRecv { inner }));
                     Ok(Value::Tuple(vec![send, recv]))
                 }),
@@ -1565,12 +1454,12 @@ fn build_channel_record() -> Value {
                         .lock()
                         .map_err(|_| RuntimeError::Message("channel poisoned".to_string()))?;
                     if let Some(sender) = sender_guard.as_ref() {
-                        sender
-                            .send(value.clone())
-                            .map_err(|_| RuntimeError::Error(Value::Constructor {
+                        sender.send(value.clone()).map_err(|_| {
+                            RuntimeError::Error(Value::Constructor {
                                 name: "Closed".to_string(),
                                 args: Vec::new(),
-                            }))?;
+                            })
+                        })?;
                         Ok(Value::Unit)
                     } else {
                         Err(RuntimeError::Error(Value::Constructor {
@@ -1681,8 +1570,20 @@ fn build_concurrent_record() -> Value {
                     let left_cancel = CancelToken::child(runtime.cancel.clone());
                     let right_cancel = CancelToken::child(runtime.cancel.clone());
                     let (tx, rx) = mpsc::channel();
-                    spawn_effect(0, left.clone(), ctx.clone(), left_cancel.clone(), tx.clone());
-                    spawn_effect(1, right.clone(), ctx.clone(), right_cancel.clone(), tx.clone());
+                    spawn_effect(
+                        0,
+                        left.clone(),
+                        ctx.clone(),
+                        left_cancel.clone(),
+                        tx.clone(),
+                    );
+                    spawn_effect(
+                        1,
+                        right.clone(),
+                        ctx.clone(),
+                        right_cancel.clone(),
+                        tx.clone(),
+                    );
 
                     let mut left_result = None;
                     let mut right_result = None;
@@ -1742,8 +1643,20 @@ fn build_concurrent_record() -> Value {
                     let left_cancel = CancelToken::child(runtime.cancel.clone());
                     let right_cancel = CancelToken::child(runtime.cancel.clone());
                     let (tx, rx) = mpsc::channel();
-                    spawn_effect(0, left.clone(), ctx.clone(), left_cancel.clone(), tx.clone());
-                    spawn_effect(1, right.clone(), ctx.clone(), right_cancel.clone(), tx.clone());
+                    spawn_effect(
+                        0,
+                        left.clone(),
+                        ctx.clone(),
+                        left_cancel.clone(),
+                        tx.clone(),
+                    );
+                    spawn_effect(
+                        1,
+                        right.clone(),
+                        ctx.clone(),
+                        right_cancel.clone(),
+                        tx.clone(),
+                    );
 
                     let mut cancelled = false;
                     let (winner, result) = loop {
