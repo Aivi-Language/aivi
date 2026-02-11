@@ -171,7 +171,7 @@ fn request_to_value(req: AiviRequest) -> Value {
     fields.insert("headers".to_string(), headers_to_value(req.headers));
     fields.insert("body".to_string(), bytes_to_list_value(req.body));
     fields.insert(
-        "remote_addr".to_string(),
+        "remoteAddr".to_string(),
         match req.remote_addr {
             Some(value) => Value::Constructor {
                 name: "Some".to_string(),

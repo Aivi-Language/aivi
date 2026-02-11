@@ -12,7 +12,7 @@ module aivi = {
 
   export text, regex, math, calendar, color
   export bigint, rational, decimal
-  export url, console, file, clock, random, channel, concurrent, httpServer
+  export url, console, file, clock, random, channel, concurrent, httpServer, http, https
 }
 "#;
 
@@ -982,12 +982,12 @@ module aivi.net.http_server = {
   export Header, Request, Response, ServerConfig
   export HttpError, WsError, WsMessage, ServerReply
   export Server, WebSocket
-  export listen, stop, ws_recv, ws_send, ws_close
+  export listen, stop, wsRecv, wsSend, wsClose
 
   use aivi
 
   Header = { name: Text, value: Text }
-  Request = { method: Text, path: Text, headers: List Header, body: List Int, remote_addr: Option Text }
+  Request = { method: Text, path: Text, headers: List Header, body: List Int, remoteAddr: Option Text }
   Response = { status: Int, headers: List Header, body: List Int }
   ServerConfig = { address: Text }
   HttpError = { message: Text }
@@ -1006,20 +1006,74 @@ module aivi.net.http_server = {
   stop : Server -> Effect HttpError Unit
   stop server = httpServer.stop server
 
-  ws_recv : WebSocket -> Effect WsError WsMessage
-  ws_recv socket = httpServer.ws_recv socket
+  wsRecv : WebSocket -> Effect WsError WsMessage
+  wsRecv socket = httpServer.ws_recv socket
 
-  ws_send : WebSocket -> WsMessage -> Effect WsError Unit
-  ws_send socket msg = httpServer.ws_send socket msg
+  wsSend : WebSocket -> WsMessage -> Effect WsError Unit
+  wsSend socket msg = httpServer.ws_send socket msg
 
-  ws_close : WebSocket -> Effect WsError Unit
-  ws_close socket = httpServer.ws_close socket
+  wsClose : WebSocket -> Effect WsError Unit
+  wsClose socket = httpServer.ws_close socket
+}
+"#;
+
+const NETWORK_HTTP_SOURCE: &str = r#"
+@no_prelude
+module aivi.net.http = {
+  export Header, Request, Response, Error
+  export get, post, fetch
+
+  use aivi
+  use aivi.url (Url)
+
+  Header = { name: Text, value: Text }
+  Request = { method: Text, url: Url, headers: List Header, body: Option Text }
+  Response = { status: Int, headers: List Header, body: Text }
+  Error = { message: Text }
+
+  get : Url -> Effect Error (Result Error Response)
+  get url = http.get url
+
+  post : Url -> Text -> Effect Error (Result Error Response)
+  post url body = http.post url body
+
+  fetch : Request -> Effect Error (Result Error Response)
+  fetch request = http.fetch request
+}
+"#;
+
+const NETWORK_HTTPS_SOURCE: &str = r#"
+@no_prelude
+module aivi.net.https = {
+  export Header, Request, Response, Error
+  export get, post, fetch
+
+  use aivi
+  use aivi.url (Url)
+
+  Header = { name: Text, value: Text }
+  Request = { method: Text, url: Url, headers: List Header, body: Option Text }
+  Response = { status: Int, headers: List Header, body: Text }
+  Error = { message: Text }
+
+  get : Url -> Effect Error (Result Error Response)
+  get url = https.get url
+
+  post : Url -> Text -> Effect Error (Result Error Response)
+  post url body = https.post url body
+
+  fetch : Request -> Effect Error (Result Error Response)
+  fetch request = https.fetch request
 }
 "#;
 
 const NETWORK_FACADE_SOURCE: &str = r#"
 @no_prelude
-module aivi.net = { }
+module aivi.net = {
+  export http, https, httpServer
+
+  use aivi
+}
 "#;
 
 pub fn embedded_stdlib_modules() -> Vec<Module> {
@@ -1043,6 +1097,8 @@ pub fn embedded_stdlib_modules() -> Vec<Module> {
     modules.extend(parse_embedded("aivi.number.decimal", DECIMAL_SOURCE));
     modules.extend(parse_embedded("aivi.number.complex", COMPLEX_SOURCE));
     modules.extend(parse_embedded("aivi.number", NUMBER_FACADE_SOURCE));
+    modules.extend(parse_embedded("aivi.net.http", NETWORK_HTTP_SOURCE));
+    modules.extend(parse_embedded("aivi.net.https", NETWORK_HTTPS_SOURCE));
     modules.extend(parse_embedded("aivi.net", NETWORK_FACADE_SOURCE));
     modules.extend(parse_embedded(
         "aivi.net.http_server",
@@ -1072,6 +1128,8 @@ pub fn embedded_stdlib_source(module_name: &str) -> Option<&'static str> {
         "aivi.number.decimal" => Some(DECIMAL_SOURCE),
         "aivi.number.complex" => Some(COMPLEX_SOURCE),
         "aivi.number" => Some(NUMBER_FACADE_SOURCE),
+        "aivi.net.http" => Some(NETWORK_HTTP_SOURCE),
+        "aivi.net.https" => Some(NETWORK_HTTPS_SOURCE),
         "aivi.net" => Some(NETWORK_FACADE_SOURCE),
         "aivi.net.http_server" => Some(NETWORK_HTTP_SERVER_SOURCE),
         _ => None,

@@ -532,6 +532,8 @@ fn is_builtin_name(name: &str) -> bool {
             | "rational"
             | "decimal"
             | "url"
+            | "http"
+            | "https"
             | "console"
             | "clock"
             | "random"

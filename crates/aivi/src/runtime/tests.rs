@@ -226,6 +226,55 @@ fn text_bytes_roundtrip() {
 }
 
 #[test]
+fn https_rejects_non_https_urls() {
+    let globals = Env::new(None);
+    register_builtins(&globals);
+    let ctx = Arc::new(RuntimeContext { globals });
+    let cancel = CancelToken::root();
+    let mut runtime = Runtime::new(ctx, cancel);
+
+    let https_record = runtime.ctx.globals.get("https").expect("https record");
+    let Value::Record(fields) = https_record else {
+        panic!("https record missing");
+    };
+    let get = fields.get("get").expect("get").clone();
+
+    let mut url_fields = HashMap::new();
+    url_fields.insert("protocol".to_string(), Value::Text("http".to_string()));
+    url_fields.insert("host".to_string(), Value::Text("example.com".to_string()));
+    url_fields.insert(
+        "port".to_string(),
+        Value::Constructor {
+            name: "None".to_string(),
+            args: Vec::new(),
+        },
+    );
+    url_fields.insert("path".to_string(), Value::Text("/".to_string()));
+    url_fields.insert("query".to_string(), Value::List(Arc::new(Vec::new())));
+    url_fields.insert(
+        "hash".to_string(),
+        Value::Constructor {
+            name: "None".to_string(),
+            args: Vec::new(),
+        },
+    );
+    let url = Value::Record(Arc::new(url_fields));
+
+    let applied = match runtime.apply(get, url) {
+        Ok(value) => value,
+        Err(_) => panic!("apply get failed"),
+    };
+    let result = runtime.run_effect_value(applied);
+
+    match result {
+        Err(RuntimeError::Message(message)) => {
+            assert!(message.contains("https"), "unexpected error: {message}");
+        }
+        _ => panic!("expected https error"),
+    }
+}
+
+#[test]
 fn regex_compile_and_match() {
     let globals = Env::new(None);
     register_builtins(&globals);

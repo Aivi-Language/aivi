@@ -5,6 +5,7 @@ module examples.hello = {
 
   main : Effect Text Unit
   main = effect {
-    print "Hello, world!"
+    _ <- print "Hello, world!"
+    pure Unit
   }
 }

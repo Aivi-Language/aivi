@@ -15,6 +15,7 @@ use rust_decimal::Decimal;
 use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 use url::Url;
+use ureq::Error as UreqError;
 
 use super::http::build_http_server_record;
 use super::{
@@ -165,6 +166,8 @@ pub(super) fn register_builtins(env: &Env) {
     env.set("rational".to_string(), build_rational_record());
     env.set("decimal".to_string(), build_decimal_record());
     env.set("url".to_string(), build_url_record());
+    env.set("http".to_string(), build_http_client_record(HttpClientMode::Http));
+    env.set("https".to_string(), build_http_client_record(HttpClientMode::Https));
     env.set("console".to_string(), build_console_record());
 }
 
@@ -828,6 +831,16 @@ fn expect_list(value: Value, ctx: &str) -> Result<Arc<Vec<Value>>, RuntimeError>
     match value {
         Value::List(items) => Ok(items),
         _ => Err(RuntimeError::Message(format!("{ctx} expects List"))),
+    }
+}
+
+fn expect_record(
+    value: Value,
+    ctx: &str,
+) -> Result<Arc<HashMap<String, Value>>, RuntimeError> {
+    match value {
+        Value::Record(fields) => Ok(fields),
+        _ => Err(RuntimeError::Message(format!("{ctx} expects record"))),
     }
 }
 
@@ -2771,6 +2784,223 @@ fn build_url_record() -> Value {
             Ok(Value::Text(url.to_string()))
         }),
     );
+    Value::Record(Arc::new(fields))
+}
+
+#[derive(Copy, Clone)]
+enum HttpClientMode {
+    Http,
+    Https,
+}
+
+fn build_http_client_record(mode: HttpClientMode) -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "get".to_string(),
+        builtin("http.get", 1, move |mut args, _| {
+            let url = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let url = url_from_value(url.clone(), "http.get")?;
+                    ensure_http_scheme(&url, mode, "http.get")?;
+                    http_request("GET", &url, Vec::new(), None)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
+        "post".to_string(),
+        builtin("http.post", 2, move |mut args, _| {
+            let body = args.pop().unwrap();
+            let url = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let url = url_from_value(url.clone(), "http.post")?;
+                    ensure_http_scheme(&url, mode, "http.post")?;
+                    let body = expect_text(body.clone(), "http.post")?;
+                    http_request("POST", &url, Vec::new(), Some(body))
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
+        "fetch".to_string(),
+        builtin("http.fetch", 1, move |mut args, _| {
+            let request = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let record = expect_record(request.clone(), "http.fetch expects Request")?;
+                    let method = match record.get("method") {
+                        Some(Value::Text(text)) => text.clone(),
+                        _ => {
+                            return Err(RuntimeError::Message(
+                                "http.fetch expects Request.method Text".to_string(),
+                            ))
+                        }
+                    };
+                    let url_value = record.get("url").cloned().ok_or_else(|| {
+                        RuntimeError::Message("http.fetch expects Request.url".to_string())
+                    })?;
+                    let url = url_from_value(url_value, "http.fetch")?;
+                    ensure_http_scheme(&url, mode, "http.fetch")?;
+                    let headers = match record.get("headers") {
+                        Some(value) => headers_from_value(value, "http.fetch")?,
+                        None => Vec::new(),
+                    };
+                    let body = match record.get("body") {
+                        Some(value) => text_option_from_value(value.clone(), "http.fetch")?,
+                        None => None,
+                    };
+                    http_request(&method, &url, headers, body)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    Value::Record(Arc::new(fields))
+}
+
+fn ensure_http_scheme(url: &Url, mode: HttpClientMode, ctx: &str) -> Result<(), RuntimeError> {
+    match mode {
+        HttpClientMode::Http => Ok(()),
+        HttpClientMode::Https => {
+            if url.scheme() == "https" {
+                Ok(())
+            } else {
+                Err(RuntimeError::Message(format!(
+                    "{ctx} expects an https URL"
+                )))
+            }
+        }
+    }
+}
+
+fn http_request(
+    method: &str,
+    url: &Url,
+    headers: Vec<(String, String)>,
+    body: Option<String>,
+) -> Result<Value, RuntimeError> {
+    let url_text = url.to_string();
+    let mut request = ureq::request(method, &url_text);
+    for (name, value) in headers {
+        request = request.set(&name, &value);
+    }
+    let response = match body {
+        Some(text) => request.send_string(&text),
+        None => request.call(),
+    };
+    match response {
+        Ok(resp) => Ok(make_ok(http_response_to_value(resp)?)),
+        Err(err) => Ok(make_err(http_error_record(http_error_message(err)?))),
+    }
+}
+
+fn http_error_message(err: UreqError) -> Result<String, RuntimeError> {
+    match err {
+        UreqError::Status(code, response) => {
+            let body = response
+                .into_string()
+                .unwrap_or_else(|_| String::new());
+            if body.is_empty() {
+                Ok(format!("http status {code}"))
+            } else {
+                Ok(format!("http status {code}: {body}"))
+            }
+        }
+        UreqError::Transport(err) => Ok(err.to_string()),
+    }
+}
+
+fn http_response_to_value(resp: ureq::Response) -> Result<Value, RuntimeError> {
+    let status = resp.status() as i64;
+    let headers = headers_to_value(
+        resp.headers_names()
+            .into_iter()
+            .filter_map(|name| {
+                resp.header(&name)
+                    .map(|value| (name.to_string(), value.to_string()))
+            })
+            .collect(),
+    );
+    let body = resp
+        .into_string()
+        .map_err(|err| RuntimeError::Error(Value::Text(err.to_string())))?;
+    let mut fields = HashMap::new();
+    fields.insert("status".to_string(), Value::Int(status));
+    fields.insert("headers".to_string(), headers);
+    fields.insert("body".to_string(), Value::Text(body));
+    Ok(Value::Record(Arc::new(fields)))
+}
+
+fn headers_from_value(value: &Value, ctx: &str) -> Result<Vec<(String, String)>, RuntimeError> {
+    let list = match value {
+        Value::List(items) => items,
+        _ => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Request.headers List"
+            )))
+        }
+    };
+    let mut headers = Vec::with_capacity(list.len());
+    for item in list.iter() {
+        let record = match item {
+            Value::Record(fields) => fields,
+            _ => {
+                return Err(RuntimeError::Message(format!(
+                    "{ctx} expects header records"
+                )))
+            }
+        };
+        let name = match record.get("name") {
+            Some(Value::Text(text)) => text.clone(),
+            _ => {
+                return Err(RuntimeError::Message(format!(
+                    "{ctx} expects header.name Text"
+                )))
+            }
+        };
+        let value = match record.get("value") {
+            Some(Value::Text(text)) => text.clone(),
+            _ => {
+                return Err(RuntimeError::Message(format!(
+                    "{ctx} expects header.value Text"
+                )))
+            }
+        };
+        headers.push((name, value));
+    }
+    Ok(headers)
+}
+
+fn headers_to_value(entries: Vec<(String, String)>) -> Value {
+    let mut list = Vec::with_capacity(entries.len());
+    for (name, value) in entries {
+        let mut fields = HashMap::new();
+        fields.insert("name".to_string(), Value::Text(name));
+        fields.insert("value".to_string(), Value::Text(value));
+        list.push(Value::Record(Arc::new(fields)));
+    }
+    Value::List(Arc::new(list))
+}
+
+fn text_option_from_value(value: Value, ctx: &str) -> Result<Option<String>, RuntimeError> {
+    match value {
+        Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
+            Ok(Some(expect_text(args[0].clone(), ctx)?))
+        }
+        Value::Constructor { name, args } if name == "None" && args.is_empty() => Ok(None),
+        _ => Err(RuntimeError::Message(format!(
+            "{ctx} expects Option Text"
+        ))),
+    }
+}
+
+fn http_error_record(message: String) -> Value {
+    let mut fields = HashMap::new();
+    fields.insert("message".to_string(), Value::Text(message));
     Value::Record(Arc::new(fields))
 }
 

@@ -1,0 +1,16 @@
+module examples.httpClient = {
+  export main
+
+  use aivi.console (println)
+  use aivi.net.https (get)
+
+  main : Effect Text Unit
+  main = effect {
+    result <- get ~u(https://example.com)
+    message = result ?
+      | Ok response => "Status {response.status}"
+      | Err err => "Error {err.message}"
+    _ <- println message
+    pure Unit
+  }
+}

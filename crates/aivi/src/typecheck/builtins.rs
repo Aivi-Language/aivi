@@ -962,6 +962,35 @@ impl TypeChecker {
         };
         env.insert("url".to_string(), Scheme::mono(url_record));
 
+        let request_ty = Type::con("Request");
+        let response_ty = Type::con("Response");
+        let error_ty = Type::con("Error");
+        let http_result_ty = Type::con("Result").app(vec![error_ty.clone(), response_ty.clone()]);
+        let http_effect_ty = Type::con("Effect").app(vec![error_ty.clone(), http_result_ty.clone()]);
+        let http_record = Type::Record {
+            fields: vec![
+                ("get".to_string(), Type::Func(Box::new(url_ty.clone()), Box::new(http_effect_ty.clone()))),
+                ("post".to_string(), Type::Func(Box::new(url_ty.clone()), Box::new(Type::Func(Box::new(text_ty.clone()), Box::new(http_effect_ty.clone()))))),
+                ("fetch".to_string(), Type::Func(Box::new(request_ty.clone()), Box::new(http_effect_ty.clone()))),
+            ]
+            .into_iter()
+            .collect(),
+            open: true,
+        };
+        env.insert("http".to_string(), Scheme::mono(http_record));
+
+        let https_record = Type::Record {
+            fields: vec![
+                ("get".to_string(), Type::Func(Box::new(url_ty.clone()), Box::new(http_effect_ty.clone()))),
+                ("post".to_string(), Type::Func(Box::new(url_ty.clone()), Box::new(Type::Func(Box::new(text_ty.clone()), Box::new(http_effect_ty.clone()))))),
+                ("fetch".to_string(), Type::Func(Box::new(request_ty.clone()), Box::new(http_effect_ty.clone()))),
+            ]
+            .into_iter()
+            .collect(),
+            open: true,
+        };
+        env.insert("https".to_string(), Scheme::mono(https_record));
+
         let console_record = Type::Record {
             fields: vec![
                 ("log".to_string(), Type::Func(Box::new(text_ty.clone()), Box::new(Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")])))),
