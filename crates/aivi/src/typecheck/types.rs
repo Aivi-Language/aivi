@@ -7,6 +7,24 @@ use super::TypeChecker;
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub(super) struct TypeVarId(pub(super) u32);
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum Kind {
+    Star,
+    Arrow(Box<Kind>, Box<Kind>),
+}
+
+impl std::fmt::Display for Kind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Kind::Star => write!(f, "*"),
+            Kind::Arrow(a, b) => match **a {
+                Kind::Arrow(_, _) => write!(f, "({}) -> {}", a, b),
+                _ => write!(f, "{} -> {}", a, b),
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub(super) enum Type {
     Var(TypeVarId),
@@ -181,11 +199,11 @@ impl Type {
 
 pub(super) struct TypeContext {
     pub(super) type_vars: HashMap<String, TypeVarId>,
-    pub(super) type_constructors: HashSet<String>,
+    pub(super) type_constructors: HashMap<String, Kind>,
 }
 
 impl TypeContext {
-    pub(super) fn new(type_constructors: &HashSet<String>) -> Self {
+    pub(super) fn new(type_constructors: &HashMap<String, Kind>) -> Self {
         Self {
             type_vars: HashMap::new(),
             type_constructors: type_constructors.clone(),

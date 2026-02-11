@@ -1,10 +1,11 @@
-use std::collections::HashSet;
-
 use super::TypeChecker;
-use crate::typecheck::types::{Scheme, Type, TypeEnv};
+use crate::typecheck::types::{Kind, Scheme, Type, TypeEnv};
 
 impl TypeChecker {
     pub(super) fn register_builtin_types(&mut self) {
+        let star = Kind::Star;
+        let arrow = |a, b| Kind::Arrow(Box::new(a), Box::new(b));
+
         for name in [
             "Unit",
             "Bool",
@@ -13,9 +14,6 @@ impl TypeChecker {
             "Text",
             "Char",
             "Bytes",
-            "List",
-            "Option",
-            "Result",
             "Patch",
             "Map",
             "Set",
@@ -28,8 +26,6 @@ impl TypeChecker {
             "Spectrum",
             "Graph",
             "Edge",
-            "Effect",
-            "Resource",
             "Generator",
             "Html",
             "DateTime",
@@ -52,12 +48,35 @@ impl TypeChecker {
             "ServerReply",
             "WsMessage",
         ] {
-            self.builtin_types.insert(name.to_string());
+            self.builtin_types.insert(name.to_string(), star.clone());
         }
+
+        // Higher kinded types
+        self.builtin_types.insert(
+            "List".to_string(),
+            arrow(star.clone(), star.clone()),
+        );
+        self.builtin_types.insert(
+            "Option".to_string(),
+            arrow(star.clone(), star.clone()),
+        );
+        self.builtin_types.insert(
+            "Resource".to_string(),
+            arrow(star.clone(), star.clone()),
+        );
+        self.builtin_types.insert(
+            "Result".to_string(),
+            arrow(star.clone(), arrow(star.clone(), star.clone())),
+        );
+        self.builtin_types.insert(
+            "Effect".to_string(),
+            arrow(star.clone(), arrow(star.clone(), star.clone())),
+        );
+
         self.type_constructors = self.builtin_types.clone();
     }
 
-    pub(super) fn builtin_type_constructors(&self) -> HashSet<String> {
+    pub(super) fn builtin_type_constructors(&self) -> std::collections::HashMap<String, Kind> {
         self.builtin_types.clone()
     }
 

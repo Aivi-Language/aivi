@@ -182,3 +182,11 @@ Instances:
 instance Monad (Option *) = { ... }
 instance E: Monad (Result E *) = { ... } // E: binds the error parameter for the Result monad instance
 ```
+
+> [!NOTE] Implementation Note: Kinds
+> In the v0.1 compiler, kind annotations like `(F *)` were hints. The type checker now (planned) enforces kinds explicitly.
+
+## 3.6 Implementation Details
+
+> [!NOTE] Rust Codegen
+> The current `rust_codegen` implementation relies on embedding the HIR and running it via the `aivi` interpreter runtime embedded in the binary. It does not yet produce native Rust code corresponding to AIVI logic.
