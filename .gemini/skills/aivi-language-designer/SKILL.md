@@ -92,4 +92,4 @@ For any proposal, deliver this structure:
 If the request is ambiguous, propose **2–3 plausible interpretations** and proceed with the most conservative one, clearly labeled, without blocking.
 
 ## Reference materials
-- `references/aivi-language-spec.md` is the current AIVI specification baseline. :contentReference[oaicite:7]{index=7}
+- `references/specs/**` is the current AIVI specification baseline. :contentReference[oaicite:7]{index=7}

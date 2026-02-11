@@ -135,4 +135,4 @@ Doc changes must:
 - match the concrete grammar and parser nags section
 
 ## Reference
-- `references/aivi-language-spec.md` is the baseline specification and stdlib reference. :contentReference[oaicite:17]{index=17}
+- `references/specs/**` is the baseline specification and stdlib reference. :contentReference[oaicite:17]{index=17}

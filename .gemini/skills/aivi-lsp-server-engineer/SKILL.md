@@ -131,4 +131,4 @@ Prioritize quick fixes for:
 - Maintain strict determinism (same inputs → same outputs), suitable for golden tests.
 
 ## Reference
-- `references/aivi-language-spec.md` is the baseline. :contentReference[oaicite:16]{index=16}
+- `references/specs/**` is the baseline. :contentReference[oaicite:16]{index=16}

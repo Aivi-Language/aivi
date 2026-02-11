@@ -152,4 +152,4 @@ For each input:
 - CI plan: fast tier on PR, heavy tier nightly
 
 ## Reference
-- `references/aivi-language-spec.md` is the baseline. 
+- `references/specs/**` is the baseline. 
