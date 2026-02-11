@@ -410,6 +410,16 @@ fn diagnostics_report_missing_record_comma() {
 }
 
 #[test]
+fn diagnostics_report_unclosed_brace() {
+    let text = "module demo = {";
+    let uri = sample_uri();
+    let diagnostics = Backend::build_diagnostics(text, &uri);
+    assert!(diagnostics.iter().any(|diag| {
+        matches!(diag.code.as_ref(), Some(NumberOrString::String(code)) if code == "E1004")
+    }));
+}
+
+#[test]
 fn code_actions_offer_quick_fix_for_unclosed_delimiter() {
     let text = "module broken = {";
     let uri = sample_uri();

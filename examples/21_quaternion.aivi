@@ -11,5 +11,4 @@ main = effect {
   unit = normalize spin
   len = magnitude unit
   _ <- print "quat len: {len}"
-
-  pure Unit
+}

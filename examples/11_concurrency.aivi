@@ -14,4 +14,4 @@ main = effect {
     | Ok text => pure text
     | Err Closed => pure "closed\n"
   _ <- print msg
-  pure Unit
+}

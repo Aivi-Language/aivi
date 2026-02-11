@@ -28,5 +28,4 @@ main = effect {
     ("env", text.toText envValue),
     ("rows", text.toText rows)
   ]
-
-  pure Unit
+}

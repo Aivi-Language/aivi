@@ -1447,6 +1447,7 @@ impl Parser {
                 });
                 entries.push((false, key, Some(value)));
             }
+            let had_newline = self.peek_newline();
             self.consume_newlines();
             if self.consume_symbol(",") {
                 self.consume_newlines();
@@ -1456,6 +1457,10 @@ impl Parser {
                 break;
             }
             if self.is_expr_start() {
+                if !had_newline {
+                    let span = self.peek_span().unwrap_or_else(|| self.previous_span());
+                    self.emit_diag("E1526", "expected ',' between map entries", span);
+                }
                 continue;
             }
             break;
@@ -1480,6 +1485,7 @@ impl Parser {
             } else if let Some(value) = self.parse_expr() {
                 entries.push((false, value));
             }
+            let had_newline = self.peek_newline();
             self.consume_newlines();
             if self.consume_symbol(",") {
                 self.consume_newlines();
@@ -1489,6 +1495,10 @@ impl Parser {
                 break;
             }
             if self.is_expr_start() {
+                if !had_newline {
+                    let span = self.peek_span().unwrap_or_else(|| self.previous_span());
+                    self.emit_diag("E1527", "expected ',' between set entries", span);
+                }
                 continue;
             }
             break;

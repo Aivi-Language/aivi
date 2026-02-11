@@ -14,5 +14,4 @@ main = effect {
 
   bytes <- randomBytes 16
   _ <- print "bytes: {bytes}"
-
-  pure Unit
+}

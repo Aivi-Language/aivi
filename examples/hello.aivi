@@ -6,5 +6,4 @@ use aivi.console (print)
 main : Effect Text Unit
 main = effect {
   _ <- print "Hello, world!"
-  pure Unit
 }

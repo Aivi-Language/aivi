@@ -8,41 +8,39 @@ program = effect {
   _ <- print "boot"
   cfg <- readConfig "config.json"
   _ <- print cfg
-  pure Unit
+}
 
-  readConfig : Text -> Effect Text Text
-  readConfig path = effect {
-    res <- attempt (load (file.read path))
-    res ?
-      | Ok txt => pure txt
-      | Err _  => fail "missing"
-  }
+readConfig : Text -> Effect Text Text
+readConfig path = effect {
+  res <- attempt (load (file.read path))
+  res ?
+    | Ok txt => pure txt
+    | Err _  => fail "missing"
+}
 
-  managedFile : Text -> Resource Text
-  managedFile path = resource {
-    handle <- file.open path
-    yield handle
-    _ <- file.close handle
-  }
+managedFile : Text -> Resource Text
+managedFile path = resource {
+  handle <- file.open path
+  yield handle
+  _ <- file.close handle
+}
 
-  withFile : Text -> Effect Text Unit
-  withFile path = effect {
-    f <- managedFile path
-    _ <- file.readAll f
-    pure Unit
-  }
+withFile : Text -> Effect Text Unit
+withFile path = effect {
+  f <- managedFile path
+  _ <- file.readAll f
+}
 
-  loadOrDefault : Text -> Text -> Effect Text Text
-  loadOrDefault path fallback = effect {
-    res <- attempt (load (file.read path))
-    res ?
-      | Ok txt => pure txt
-      | Err _  => pure fallback
-  }
+loadOrDefault : Text -> Text -> Effect Text Text
+loadOrDefault path fallback = effect {
+  res <- attempt (load (file.read path))
+  res ?
+    | Ok txt => pure txt
+    | Err _  => pure fallback
+}
 
-  program2 : Effect Text Unit
-  program2 = effect {
-    cfg <- loadOrDefault "config.json" "{ \"mode\": \"dev\" }"
-    _ <- print cfg
-    pure Unit
-  }
+program2 : Effect Text Unit
+program2 = effect {
+  cfg <- loadOrDefault "config.json" "{ \"mode\": \"dev\" }"
+  _ <- print cfg
+}

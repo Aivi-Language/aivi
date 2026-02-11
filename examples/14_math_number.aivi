@@ -20,5 +20,4 @@ main = effect {
 
   unit = sin (degrees 90.0)
   _ <- print "sin: {unit}"
-
-  pure Unit
+}

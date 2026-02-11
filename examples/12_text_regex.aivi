@@ -23,5 +23,4 @@ main = effect {
   decoded ?
     | Ok value => print value
     | Err _ => print "decode failed"
-
-  pure Unit
+}

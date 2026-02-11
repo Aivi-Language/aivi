@@ -16,4 +16,4 @@ sendAll conn stream = streams.toSocket conn stream
 main : Effect Text Unit
 main = effect {
   _ <- print "sockets/streams helpers ready; wire them to a live Connection."
-  pure Unit
+}

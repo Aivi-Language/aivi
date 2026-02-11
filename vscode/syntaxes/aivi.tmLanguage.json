@@ -211,7 +211,7 @@
     "sigil": {
       "patterns": [
         {
-          "begin": "(~[a-z][A-Za-z0-9_]*)(/)",
+          "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(/)",
           "beginCaptures": {
             "1": {
               "name": "entity.name.function.sigil.aivi"
@@ -235,7 +235,7 @@
           ]
         },
         {
-          "begin": "(~[a-z][A-Za-z0-9_]*)(\\\")",
+          "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\\")",
           "beginCaptures": {
             "1": {
               "name": "entity.name.function.sigil.aivi"
@@ -259,7 +259,7 @@
           ]
         },
         {
-          "begin": "(~[a-z][A-Za-z0-9_]*)(\\()",
+          "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\()",
           "beginCaptures": {
             "1": {
               "name": "entity.name.function.sigil.aivi"
@@ -283,7 +283,7 @@
           ]
         },
         {
-          "begin": "(~[a-z][A-Za-z0-9_]*)(\\[)",
+          "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\[)",
           "beginCaptures": {
             "1": {
               "name": "entity.name.function.sigil.aivi"
@@ -307,7 +307,7 @@
           ]
         },
         {
-          "begin": "(~[a-z][A-Za-z0-9_]*)(\\{)",
+          "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\{)",
           "beginCaptures": {
             "1": {
               "name": "entity.name.function.sigil.aivi"

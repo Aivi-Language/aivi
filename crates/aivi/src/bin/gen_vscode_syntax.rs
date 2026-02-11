@@ -218,7 +218,7 @@ fn aivi_tmlanguage() -> serde_json::Value {
           "patterns": [
             {
               "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~[a-z][A-Za-z0-9_]*)(/)",
+              "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(/)",
               "beginCaptures": {
                 "1": { "name": "entity.name.function.sigil.aivi" },
                 "2": { "name": "punctuation.definition.string.begin.aivi" }
@@ -233,7 +233,7 @@ fn aivi_tmlanguage() -> serde_json::Value {
             },
             {
               "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~[a-z][A-Za-z0-9_]*)(\\\")",
+              "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\\")",
               "beginCaptures": {
                 "1": { "name": "entity.name.function.sigil.aivi" },
                 "2": { "name": "punctuation.definition.string.begin.aivi" }
@@ -248,7 +248,7 @@ fn aivi_tmlanguage() -> serde_json::Value {
             },
             {
               "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~[a-z][A-Za-z0-9_]*)(\\()",
+              "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\()",
               "beginCaptures": {
                 "1": { "name": "entity.name.function.sigil.aivi" },
                 "2": { "name": "punctuation.definition.string.begin.aivi" }
@@ -263,7 +263,7 @@ fn aivi_tmlanguage() -> serde_json::Value {
             },
             {
               "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~[a-z][A-Za-z0-9_]*)(\\[)",
+              "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\[)",
               "beginCaptures": {
                 "1": { "name": "entity.name.function.sigil.aivi" },
                 "2": { "name": "punctuation.definition.string.begin.aivi" }
@@ -278,7 +278,7 @@ fn aivi_tmlanguage() -> serde_json::Value {
             },
             {
               "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~[a-z][A-Za-z0-9_]*)(\\{)",
+              "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\{)",
               "beginCaptures": {
                 "1": { "name": "entity.name.function.sigil.aivi" },
                 "2": { "name": "punctuation.definition.string.begin.aivi" }

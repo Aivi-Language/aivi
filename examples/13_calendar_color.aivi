@@ -24,5 +24,4 @@ main = effect {
   v2 = { x: 3.0, y: 4.0 }
   v3 = v1 + v2
   _ <- print "{v3.x},{v3.y}"
-
-  pure Unit
+}

@@ -20,7 +20,5 @@ main = effect {
 
   _ <- if m > 40 then effect {
     _ <- print "branch"
-    pure Unit
   } else pure Unit
-
-  pure Unit
+}
