@@ -10,7 +10,7 @@ records = [
   { id: 1, label: "alpha", meta: { score: 9.5, active: True } },
   { id: 2, label: "beta", meta: { score: 7.0, active: False } }
 ]
-
+ 
 nested = {
   title: "Report",
   stats: { count: 3, avg: 1.5 },
@@ -21,3 +21,4 @@ palette = [
   { name: "ink", rgb: (12, 15, 20) },
   { name: "sand", rgb: (242, 233, 210) }
 ]
+ 

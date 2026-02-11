@@ -257,7 +257,7 @@ impl Backend {
             }
         }
         if base.is_none() {
-            if let Some(sig) = type_signatures.get(ident) {
+            if let Some(sig) = type_signatures.get(ident).or_else(|| type_signatures.get(&format!("({})", ident))) {
                 base = Some(sig.clone());
             }
         }
@@ -415,6 +415,7 @@ impl Backend {
     pub(super) fn collect_module_references(
         module: &Module,
         ident: &str,
+        text: &str,
         uri: &Url,
         include_declaration: bool,
         locations: &mut Vec<Location>,
@@ -445,7 +446,7 @@ impl Backend {
             Self::collect_use_references(use_decl, ident, uri, locations);
         }
         for item in module.items.iter() {
-            Self::collect_item_references(item, ident, uri, include_declaration, locations);
+            Self::collect_item_references(item, ident, text, uri, include_declaration, locations);
         }
     }
 
@@ -474,16 +475,18 @@ impl Backend {
     fn collect_item_references(
         item: &ModuleItem,
         ident: &str,
+        text: &str,
         uri: &Url,
         include_declaration: bool,
         locations: &mut Vec<Location>,
     ) {
         match item {
             ModuleItem::Def(def) => {
-                Self::collect_def_references(def, ident, uri, include_declaration, locations);
+                Self::collect_def_references(def, ident, text, uri, include_declaration, locations);
             }
             ModuleItem::TypeSig(sig) => {
-                if include_declaration && sig.name.name == ident {
+                let matches = |name: &str| name == ident || name == format!("({})", ident);
+                if include_declaration && matches(&sig.name.name) {
                     locations.push(Location::new(
                         uri.clone(),
                         Self::span_to_range(sig.name.span.clone()),
@@ -522,6 +525,7 @@ impl Backend {
                 Self::collect_instance_references(
                     instance_decl,
                     ident,
+                    text,
                     uri,
                     include_declaration,
                     locations,
@@ -531,6 +535,7 @@ impl Backend {
                 Self::collect_domain_references(
                     domain_decl,
                     ident,
+                    text,
                     uri,
                     include_declaration,
                     locations,
@@ -542,20 +547,22 @@ impl Backend {
     fn collect_def_references(
         def: &Def,
         ident: &str,
+        text: &str,
         uri: &Url,
         include_declaration: bool,
         locations: &mut Vec<Location>,
     ) {
-        if include_declaration && def.name.name == ident {
+        let matches = |name: &str| name == ident || name == format!("({})", ident);
+        if include_declaration && matches(&def.name.name) {
             locations.push(Location::new(
                 uri.clone(),
                 Self::span_to_range(def.name.span.clone()),
             ));
         }
         for param in def.params.iter() {
-            Self::collect_pattern_references(param, ident, uri, locations);
+            Self::collect_pattern_references(param, ident, text, uri, locations);
         }
-        Self::collect_expr_references(&def.expr, ident, uri, locations);
+        Self::collect_expr_references(&def.expr, ident, text, uri, locations);
     }
 
     fn collect_type_decl_references(
@@ -624,8 +631,9 @@ impl Backend {
         for param in class_decl.params.iter() {
             Self::collect_type_expr_references(param, ident, uri, locations);
         }
+        let matches = |name: &str| name == ident || name == format!("({})", ident);
         for member in class_decl.members.iter() {
-            if include_declaration && member.name.name == ident {
+            if include_declaration && matches(&member.name.name) {
                 locations.push(Location::new(
                     uri.clone(),
                     Self::span_to_range(member.name.span.clone()),
@@ -638,6 +646,7 @@ impl Backend {
     fn collect_instance_references(
         instance_decl: &InstanceDecl,
         ident: &str,
+        text: &str,
         uri: &Url,
         include_declaration: bool,
         locations: &mut Vec<Location>,
@@ -652,13 +661,14 @@ impl Backend {
             Self::collect_type_expr_references(param, ident, uri, locations);
         }
         for def in instance_decl.defs.iter() {
-            Self::collect_def_references(def, ident, uri, include_declaration, locations);
+            Self::collect_def_references(def, ident, text, uri, include_declaration, locations);
         }
     }
 
     fn collect_domain_references(
         domain_decl: &DomainDecl,
         ident: &str,
+        text: &str,
         uri: &Url,
         include_declaration: bool,
         locations: &mut Vec<Location>,
@@ -683,7 +693,7 @@ impl Backend {
                 }
                 DomainItem::TypeSig(_) => {}
                 DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                    Self::collect_def_references(def, ident, uri, include_declaration, locations);
+                    Self::collect_def_references(def, ident, text, uri, include_declaration, locations);
                 }
             }
         }
@@ -757,6 +767,7 @@ impl Backend {
     fn collect_pattern_references(
         pattern: &Pattern,
         ident: &str,
+        text: &str,
         uri: &Url,
         locations: &mut Vec<Location>,
     ) {
@@ -777,25 +788,25 @@ impl Backend {
                     ));
                 }
                 for arg in args.iter() {
-                    Self::collect_pattern_references(arg, ident, uri, locations);
+                    Self::collect_pattern_references(arg, ident, text, uri, locations);
                 }
             }
             Pattern::Tuple { items, .. } => {
                 for item in items.iter() {
-                    Self::collect_pattern_references(item, ident, uri, locations);
+                    Self::collect_pattern_references(item, ident, text, uri, locations);
                 }
             }
             Pattern::List { items, rest, .. } => {
                 for item in items.iter() {
-                    Self::collect_pattern_references(item, ident, uri, locations);
+                    Self::collect_pattern_references(item, ident, text, uri, locations);
                 }
                 if let Some(rest) = rest {
-                    Self::collect_pattern_references(rest, ident, uri, locations);
+                    Self::collect_pattern_references(rest, ident, text, uri, locations);
                 }
             }
             Pattern::Record { fields, .. } => {
                 for field in fields.iter() {
-                    Self::collect_record_pattern_references(field, ident, uri, locations);
+                    Self::collect_record_pattern_references(field, ident, text, uri, locations);
                 }
             }
             Pattern::Wildcard(_) | Pattern::Literal(_) => {}
@@ -805,6 +816,7 @@ impl Backend {
     fn collect_record_pattern_references(
         field: &RecordPatternField,
         ident: &str,
+        text: &str,
         uri: &Url,
         locations: &mut Vec<Location>,
     ) {
@@ -816,20 +828,21 @@ impl Backend {
                 ));
             }
         }
-        Self::collect_pattern_references(&field.pattern, ident, uri, locations);
+        Self::collect_pattern_references(&field.pattern, ident, text, uri, locations);
     }
 
-    fn collect_expr_references(expr: &Expr, ident: &str, uri: &Url, locations: &mut Vec<Location>) {
+    fn collect_expr_references(expr: &Expr, ident: &str, text: &str, uri: &Url, locations: &mut Vec<Location>) {
         match expr {
             Expr::TextInterpolate { parts, .. } => {
                 for part in parts {
                     if let aivi::TextPart::Expr { expr, .. } = part {
-                        Self::collect_expr_references(expr, ident, uri, locations);
+                        Self::collect_expr_references(expr, ident, text, uri, locations);
                     }
                 }
             }
             Expr::Ident(name) => {
-                if name.name == ident {
+                let matches = |name: &str| name == ident || name == format!("({})", ident);
+                if matches(&name.name) {
                     locations.push(Location::new(
                         uri.clone(),
                         Self::span_to_range(name.span.clone()),
@@ -839,26 +852,26 @@ impl Backend {
             Expr::Literal(_) => {}
             Expr::List { items, .. } => {
                 for item in items.iter() {
-                    Self::collect_list_item_references(item, ident, uri, locations);
+                    Self::collect_list_item_references(item, ident, text, uri, locations);
                 }
             }
             Expr::Tuple { items, .. } => {
                 for item in items.iter() {
-                    Self::collect_expr_references(item, ident, uri, locations);
+                    Self::collect_expr_references(item, ident, text, uri, locations);
                 }
             }
             Expr::Record { fields, .. } => {
                 for field in fields.iter() {
-                    Self::collect_record_field_references(field, ident, uri, locations);
+                    Self::collect_record_field_references(field, ident, text, uri, locations);
                 }
             }
             Expr::PatchLit { fields, .. } => {
                 for field in fields.iter() {
-                    Self::collect_record_field_references(field, ident, uri, locations);
+                    Self::collect_record_field_references(field, ident, text, uri, locations);
                 }
             }
             Expr::FieldAccess { base, field, .. } => {
-                Self::collect_expr_references(base, ident, uri, locations);
+                Self::collect_expr_references(base, ident, text, uri, locations);
                 if field.name == ident {
                     locations.push(Location::new(
                         uri.clone(),
@@ -875,29 +888,29 @@ impl Backend {
                 }
             }
             Expr::Index { base, index, .. } => {
-                Self::collect_expr_references(base, ident, uri, locations);
-                Self::collect_expr_references(index, ident, uri, locations);
+                Self::collect_expr_references(base, ident, text, uri, locations);
+                Self::collect_expr_references(index, ident, text, uri, locations);
             }
             Expr::Call { func, args, .. } => {
-                Self::collect_expr_references(func, ident, uri, locations);
+                Self::collect_expr_references(func, ident, text, uri, locations);
                 for arg in args.iter() {
-                    Self::collect_expr_references(arg, ident, uri, locations);
+                    Self::collect_expr_references(arg, ident, text, uri, locations);
                 }
             }
             Expr::Lambda { params, body, .. } => {
                 for param in params.iter() {
-                    Self::collect_pattern_references(param, ident, uri, locations);
+                    Self::collect_pattern_references(param, ident, text, uri, locations);
                 }
-                Self::collect_expr_references(body, ident, uri, locations);
+                Self::collect_expr_references(body, ident, text, uri, locations);
             }
             Expr::Match {
                 scrutinee, arms, ..
             } => {
                 if let Some(scrutinee) = scrutinee {
-                    Self::collect_expr_references(scrutinee, ident, uri, locations);
+                    Self::collect_expr_references(scrutinee, ident, text, uri, locations);
                 }
                 for arm in arms.iter() {
-                    Self::collect_match_arm_references(arm, ident, uri, locations);
+                    Self::collect_match_arm_references(arm, ident, text, uri, locations);
                 }
             }
             Expr::If {
@@ -906,17 +919,60 @@ impl Backend {
                 else_branch,
                 ..
             } => {
-                Self::collect_expr_references(cond, ident, uri, locations);
-                Self::collect_expr_references(then_branch, ident, uri, locations);
-                Self::collect_expr_references(else_branch, ident, uri, locations);
+                Self::collect_expr_references(cond, ident, text, uri, locations);
+                Self::collect_expr_references(then_branch, ident, text, uri, locations);
+                Self::collect_expr_references(else_branch, ident, text, uri, locations);
             }
-            Expr::Binary { left, right, .. } => {
-                Self::collect_expr_references(left, ident, uri, locations);
-                Self::collect_expr_references(right, ident, uri, locations);
+            Expr::Binary { op, left, right, .. } => {
+                Self::collect_expr_references(left, ident, text, uri, locations);
+                
+                let matches_op = op == ident || format!("({})", op) == ident;
+                if matches_op {
+                    let left_end = Self::span_to_range(Self::expr_span(left).clone()).end;
+                    let right_start = Self::span_to_range(Self::expr_span(right).clone()).start;
+                    
+                    let left_offset = Self::offset_at(text, left_end);
+                    let right_offset = Self::offset_at(text, right_start);
+                    
+                    if left_offset < text.len() && right_offset <= text.len() && left_offset < right_offset {
+                        let range_text = &text[left_offset..right_offset];
+                        if let Some(idx) = range_text.find(op) {
+                            let mut line = left_end.line;
+                            let mut char_idx = left_end.character;
+                            
+                            let prefix = &range_text[..idx];
+                            for c in prefix.chars() {
+                                if c == '\n' {
+                                    line += 1;
+                                    char_idx = 0;
+                                } else {
+                                    char_idx += c.len_utf16() as u32;
+                                }
+                            }
+                            let start_pos = Position::new(line, char_idx);
+                            
+                            let mut end_line = line;
+                            let mut end_char = char_idx;
+                            for c in op.chars() {
+                                if c == '\n' {
+                                    end_line += 1;
+                                    end_char = 0;
+                                } else {
+                                    end_char += c.len_utf16() as u32;
+                                }
+                            }
+                            let end_pos = Position::new(end_line, end_char);
+                            
+                            locations.push(Location::new(uri.clone(), Range::new(start_pos, end_pos)));
+                        }
+                    }
+                }
+
+                Self::collect_expr_references(right, ident, text, uri, locations);
             }
             Expr::Block { items, .. } => {
                 for item in items.iter() {
-                    Self::collect_block_item_references(item, ident, uri, locations);
+                    Self::collect_block_item_references(item, ident, text, uri, locations);
                 }
             }
             Expr::Raw { .. } => {}
@@ -926,27 +982,30 @@ impl Backend {
     fn collect_list_item_references(
         item: &ListItem,
         ident: &str,
+        text: &str,
         uri: &Url,
         locations: &mut Vec<Location>,
     ) {
-        Self::collect_expr_references(&item.expr, ident, uri, locations);
+        Self::collect_expr_references(&item.expr, ident, text, uri, locations);
     }
 
     fn collect_record_field_references(
         field: &RecordField,
         ident: &str,
+        text: &str,
         uri: &Url,
         locations: &mut Vec<Location>,
     ) {
         for segment in field.path.iter() {
-            Self::collect_path_segment_references(segment, ident, uri, locations);
+            Self::collect_path_segment_references(segment, ident, text, uri, locations);
         }
-        Self::collect_expr_references(&field.value, ident, uri, locations);
+        Self::collect_expr_references(&field.value, ident, text, uri, locations);
     }
 
     fn collect_path_segment_references(
         segment: &PathSegment,
         ident: &str,
+        text: &str,
         uri: &Url,
         locations: &mut Vec<Location>,
     ) {
@@ -960,7 +1019,7 @@ impl Backend {
                 }
             }
             PathSegment::Index(expr, _) => {
-                Self::collect_expr_references(expr, ident, uri, locations);
+                Self::collect_expr_references(expr, ident, text, uri, locations);
             }
         }
     }
@@ -968,32 +1027,34 @@ impl Backend {
     fn collect_match_arm_references(
         arm: &MatchArm,
         ident: &str,
+        text: &str,
         uri: &Url,
         locations: &mut Vec<Location>,
     ) {
-        Self::collect_pattern_references(&arm.pattern, ident, uri, locations);
+        Self::collect_pattern_references(&arm.pattern, ident, text, uri, locations);
         if let Some(guard) = &arm.guard {
-            Self::collect_expr_references(guard, ident, uri, locations);
+            Self::collect_expr_references(guard, ident, text, uri, locations);
         }
-        Self::collect_expr_references(&arm.body, ident, uri, locations);
+        Self::collect_expr_references(&arm.body, ident, text, uri, locations);
     }
 
     fn collect_block_item_references(
         item: &BlockItem,
         ident: &str,
+        text: &str,
         uri: &Url,
         locations: &mut Vec<Location>,
     ) {
         match item {
             BlockItem::Bind { pattern, expr, .. } => {
-                Self::collect_pattern_references(pattern, ident, uri, locations);
-                Self::collect_expr_references(expr, ident, uri, locations);
+                Self::collect_pattern_references(pattern, ident, text, uri, locations);
+                Self::collect_expr_references(expr, ident, text, uri, locations);
             }
             BlockItem::Filter { expr, .. }
             | BlockItem::Yield { expr, .. }
             | BlockItem::Recurse { expr, .. }
             | BlockItem::Expr { expr, .. } => {
-                Self::collect_expr_references(expr, ident, uri, locations);
+                Self::collect_expr_references(expr, ident, text, uri, locations);
             }
         }
     }
@@ -1019,6 +1080,7 @@ impl Backend {
         format!("type {}{} = {}", alias.name.name, params, aliased)
     }
 
+    #[allow(unused)]
     fn format_class_decl(class_decl: &ClassDecl) -> String {
         let params = class_decl
             .params
@@ -1132,15 +1194,17 @@ impl Backend {
     }
 
     pub(super) fn module_member_definition_range(module: &Module, ident: &str) -> Option<Range> {
+        let matches = |name: &str| name == ident || name == format!("({})", ident);
+
         for item in module.items.iter() {
             match item {
                 ModuleItem::Def(def) => {
-                    if def.name.name == ident {
+                    if matches(&def.name.name) {
                         return Some(Self::span_to_range(def.name.span.clone()));
                     }
                 }
                 ModuleItem::TypeSig(sig) => {
-                    if sig.name.name == ident {
+                    if matches(&sig.name.name) {
                         return Some(Self::span_to_range(sig.name.span.clone()));
                     }
                 }
@@ -1164,7 +1228,7 @@ impl Backend {
                         return Some(Self::span_to_range(class_decl.name.span.clone()));
                     }
                     for member in class_decl.members.iter() {
-                        if member.name.name == ident {
+                        if matches(&member.name.name) {
                             return Some(Self::span_to_range(member.name.span.clone()));
                         }
                     }
@@ -1174,7 +1238,7 @@ impl Backend {
                         return Some(Self::span_to_range(instance_decl.name.span.clone()));
                     }
                     for def in instance_decl.defs.iter() {
-                        if def.name.name == ident {
+                        if matches(&def.name.name) {
                             return Some(Self::span_to_range(def.name.span.clone()));
                         }
                     }
@@ -1197,7 +1261,7 @@ impl Backend {
                             }
                             DomainItem::TypeSig(_) => {}
                             DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                                if def.name.name == ident {
+                                if matches(&def.name.name) {
                                     return Some(Self::span_to_range(def.name.span.clone()));
                                 }
                             }
@@ -1234,4 +1298,5 @@ impl Backend {
     pub(super) fn stdlib_uri(name: &str) -> Url {
         Url::parse(&format!("aivi://stdlib/{name}")).expect("stdlib uri should be valid")
     }
+
 }

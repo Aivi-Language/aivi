@@ -25,4 +25,5 @@ pub(super) struct BackendState {
 pub(super) struct IndexedModule {
     pub(super) uri: Url,
     pub(super) module: Module,
+    pub(super) text: Option<String>,
 }

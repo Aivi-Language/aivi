@@ -31,6 +31,12 @@ export function activate(context: vscode.ExtensionContext) {
       configurationSection: "aivi",
     },
     outputChannel: vscode.window.createOutputChannel("AIVI Language Server"),
+    middleware: {
+      provideDocumentFormattingEdits: (document, options, token, next) =>
+        next(document, options, token),
+      provideDocumentRangeFormattingEdits: (document, range, options, token, next) =>
+        next(document, range, options, token),
+    },
   };
 
   client = new LanguageClient("aivi", "Aivi Language Server", serverOptions, clientOptions);

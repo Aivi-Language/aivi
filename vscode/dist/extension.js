@@ -18037,7 +18037,11 @@ function activate(context) {
       fileEvents: vscode.workspace.createFileSystemWatcher("**/*.aivi"),
       configurationSection: "aivi"
     },
-    outputChannel: vscode.window.createOutputChannel("AIVI Language Server")
+    outputChannel: vscode.window.createOutputChannel("AIVI Language Server"),
+    middleware: {
+      provideDocumentFormattingEdits: (document, options, token, next) => next(document, options, token),
+      provideDocumentRangeFormattingEdits: (document, range, options, token, next) => next(document, range, options, token)
+    }
   };
   client = new import_node.LanguageClient("aivi", "Aivi Language Server", serverOptions, clientOptions);
   client.start();

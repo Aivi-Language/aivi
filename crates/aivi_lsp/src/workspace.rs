@@ -25,6 +25,7 @@ impl Backend {
                     .or_insert_with(|| IndexedModule {
                         uri: uri.clone(),
                         module,
+                        text: Some(text.clone()),
                     });
             }
         }
@@ -112,6 +113,7 @@ impl Backend {
             merged.entry(name.clone()).or_insert_with(|| IndexedModule {
                 uri: Self::stdlib_uri(&name),
                 module,
+                text: None,
             });
         }
         merged
@@ -137,6 +139,7 @@ impl Backend {
                 IndexedModule {
                     uri: uri.clone(),
                     module,
+                    text: Some(text.clone()),
                 },
             );
         }

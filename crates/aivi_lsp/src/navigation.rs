@@ -210,6 +210,7 @@ impl Backend {
             Self::collect_module_references(
                 &module,
                 &ident,
+                text,
                 uri,
                 include_declaration,
                 &mut locations,
@@ -265,13 +266,23 @@ impl Backend {
             }
 
             let include_decl_here = include_declaration && module_name == &origin_module;
-            Self::collect_module_references(
-                &indexed.module,
-                &ident,
-                &indexed.uri,
-                include_decl_here,
-                &mut locations,
-            );
+            
+            let module_text = if let Some(t) = &indexed.text {
+                Some(t.clone())
+            } else {
+                indexed.uri.to_file_path().ok().and_then(|path| fs::read_to_string(path).ok())
+            };
+            
+            if let Some(module_text) = module_text {
+                Self::collect_module_references(
+                    &indexed.module,
+                    &ident,
+                    &module_text,
+                    &indexed.uri,
+                    include_decl_here,
+                    &mut locations,
+                );
+            }
         }
 
         locations

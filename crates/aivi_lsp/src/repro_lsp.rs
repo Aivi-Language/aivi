@@ -51,7 +51,7 @@ add = x y => x + y
         } else {
             // Test passes if it fails to find hover (currently confirming the bug)
             // But we want a fail-fail test to become pass-pass.
-            // panic!("Hover failed to find anything for '+' operator");
+            panic!("Hover failed to find anything for '+' operator");
         }
     }
 
@@ -79,5 +79,24 @@ main = [1] ++ [2]
         };
         assert!(markup.value.contains("(++)"), "Hover should contain operator name '(++)'");
         assert!(markup.value.contains("List a"), "Hover should contain type signature");
+    }
+
+    #[test]
+    fn references_on_operator_works() {
+        let text = r#"@no_prelude
+module repro
+
+(++) : List a -> List a -> List a
+(++) = xs ys => fail "impl"
+
+main = [1] ++ [2]
+"#;
+        let uri = sample_uri();
+        let position = position_for(text, "++ [2]");
+        
+        let refs = Backend::build_references(text, &uri, position, true);
+        assert!(!refs.is_empty(), "Should find references for '++'");
+        // Should find definition and usage (2 refs)
+        assert_eq!(refs.len(), 2);
     }
 }

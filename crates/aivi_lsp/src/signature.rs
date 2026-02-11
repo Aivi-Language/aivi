@@ -273,7 +273,7 @@ impl Backend {
             || (position.line == range.end.line && position.character >= range.end.character)
     }
 
-    fn expr_span(expr: &Expr) -> &aivi::Span {
+    pub(super) fn expr_span(expr: &Expr) -> &aivi::Span {
         match expr {
             Expr::Ident(name) => &name.span,
             Expr::Literal(lit) => match lit {

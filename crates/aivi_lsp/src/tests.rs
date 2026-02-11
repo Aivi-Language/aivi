@@ -136,6 +136,7 @@ run = add 1 2"#;
             IndexedModule {
                 uri: math_uri.clone(),
                 module,
+                text: None,
             },
         );
     }
@@ -189,6 +190,7 @@ run = add 1 2"#;
             IndexedModule {
                 uri: math_uri.clone(),
                 module,
+                text: None,
             },
         );
     }
@@ -261,6 +263,7 @@ run = add 1 2"#;
             IndexedModule {
                 uri: math_uri.clone(),
                 module,
+                text: None,
             },
         );
     }
@@ -302,6 +305,7 @@ run = add 1 2"#;
             IndexedModule {
                 uri: math_uri.clone(),
                 module,
+                text: None,
             },
         );
     }
@@ -313,6 +317,7 @@ run = add 1 2"#;
             IndexedModule {
                 uri: app_uri.clone(),
                 module,
+                text: None,
             },
         );
     }
@@ -350,6 +355,7 @@ run = add 1 2"#;
             IndexedModule {
                 uri: math_uri.clone(),
                 module,
+                text: None,
             },
         );
     }
@@ -361,6 +367,7 @@ run = add 1 2"#;
             IndexedModule {
                 uri: app_uri.clone(),
                 module,
+                text: None,
             },
         );
     }

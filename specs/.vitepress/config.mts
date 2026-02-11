@@ -150,7 +150,7 @@ export default defineConfig({
             ]
           },
           {
-            text: 'Chronos (Time)',
+            text: 'Time',
             collapsed: true,
             items: [
               { text: 'Calendar', link: '/05_stdlib/02_chronos/02_calendar' },
