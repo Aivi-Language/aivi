@@ -452,6 +452,13 @@ export function activate(context: vscode.ExtensionContext) {
   const isWindows = process.platform === "win32";
   const serverExe = isWindows ? "aivi-lsp.exe" : "aivi-lsp";
   const bundledServerPath = context.asAbsolutePath(`bin/${serverExe}`);
+  if (!isWindows && fs.existsSync(bundledServerPath)) {
+    try {
+      fs.chmodSync(bundledServerPath, 0o755);
+    } catch (err) {
+      console.warn(`Failed to chmod aivi-lsp: ${String(err)}`);
+    }
+  }
   const serverOptions: ServerOptions = {
     command: fs.existsSync(bundledServerPath) ? bundledServerPath : "aivi-lsp",
     args: [],
@@ -462,6 +469,7 @@ export function activate(context: vscode.ExtensionContext) {
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher("**/*.aivi"),
     },
+    outputChannel: vscode.window.createOutputChannel("AIVI Language Server"),
   };
 
   client = new LanguageClient("aivi", "Aivi Language Server", serverOptions, clientOptions);

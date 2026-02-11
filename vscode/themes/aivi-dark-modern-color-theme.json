@@ -138,12 +138,13 @@
     "editor.lineHighlightBackground": "#2A2D2E",
     "editorBracketMatch.background": "#515C6A40",
     "editorBracketMatch.border": "#515C6A",
-    "editorBracketHighlight.foreground1": "#6E6E6E",
-    "editorBracketHighlight.foreground2": "#6E6E6E",
-    "editorBracketHighlight.foreground3": "#6E6E6E",
-    "editorBracketHighlight.foreground4": "#6E6E6E",
-    "editorBracketHighlight.foreground5": "#6E6E6E",
-    "editorBracketHighlight.foreground6": "#6E6E6E"
+    "editorBracketHighlight.foreground1": "#E5C07B",
+    "editorBracketHighlight.foreground2": "#C678DD",
+    "editorBracketHighlight.foreground3": "#61AFEF",
+    "editorBracketHighlight.foreground4": "#98C379",
+    "editorBracketHighlight.foreground5": "#E06C75",
+    "editorBracketHighlight.foreground6": "#D19A66",
+    "editorBracketHighlight.unexpectedBracket.foreground": "#F85149"
   },
   "semanticHighlighting": true,
   "semanticTokenColors": {

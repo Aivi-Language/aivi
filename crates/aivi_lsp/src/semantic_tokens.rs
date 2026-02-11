@@ -516,8 +516,10 @@ impl Backend {
             let expr_start = interp_open + 1;
             let expr_end = interp_close;
             if expr_end > expr_start {
-                let expr_text: String = chars[expr_start..expr_end].iter().collect();
+                let expr_text_raw: String = chars[expr_start..expr_end].iter().collect();
+                let (expr_text, expr_map) = Self::build_interpolated_expr_source(&expr_text_raw);
                 let (expr_tokens, _) = lex_cst(&expr_text);
+                let expr_dotted = Self::dotted_path_roles(&expr_tokens);
                 let significant: Vec<usize> = expr_tokens
                     .iter()
                     .enumerate()
@@ -533,21 +535,26 @@ impl Backend {
                         .map(|idx| &expr_tokens[*idx]);
                     let next = significant.get(position + 1).map(|idx| &expr_tokens[*idx]);
 
-                    let Some(token_type) =
-                        Self::classify_semantic_token(prev, expr_token, next)
+                    let token_type = expr_dotted
+                        .get(&token_index)
+                        .copied()
+                        .or_else(|| Self::classify_semantic_token(prev, expr_token, next));
+                    let Some(token_type) = token_type
                     else {
                         continue;
                     };
 
+                    let start_idx = expr_token.span.start.column.saturating_sub(1) as usize;
+                    let end_idx = expr_token.span.end.column.saturating_sub(1) as usize;
+                    if start_idx >= expr_map.len() || end_idx >= expr_map.len() {
+                        continue;
+                    }
+                    let raw_start = expr_map[start_idx];
+                    let raw_end = expr_map[end_idx];
                     let line = line0 + expr_token.span.start.line.saturating_sub(1) as u32;
-                    let start = col0
-                        + expr_start as u32
-                        + expr_token.span.start.column.saturating_sub(1) as u32;
-                    let len = expr_token
-                        .span
-                        .end
-                        .column
-                        .saturating_sub(expr_token.span.start.column)
+                    let start = col0 + expr_start as u32 + raw_start as u32;
+                    let len = raw_end
+                        .saturating_sub(raw_start)
                         .saturating_add(1) as u32;
                     let modifiers = if signature_lines.contains(&line) {
                         1u32 << Self::SEM_MOD_SIGNATURE
@@ -601,6 +608,29 @@ impl Backend {
         }
 
         any
+    }
+
+    fn build_interpolated_expr_source(text: &str) -> (String, Vec<usize>) {
+        let chars: Vec<char> = text.chars().collect();
+        let mut out = String::new();
+        let mut map = Vec::new();
+        let mut i = 0usize;
+        while i < chars.len() {
+            let ch = chars[i];
+            if ch == '\\' && i + 1 < chars.len() {
+                let next = chars[i + 1];
+                if matches!(next, '"' | '\\' | '{' | '}') {
+                    out.push(next);
+                    map.push(i + 1);
+                    i += 2;
+                    continue;
+                }
+            }
+            out.push(ch);
+            map.push(i);
+            i += 1;
+        }
+        (out, map)
     }
 
     pub(super) fn build_semantic_tokens(text: &str) -> SemanticTokens {
