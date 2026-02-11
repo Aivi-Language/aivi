@@ -6,13 +6,14 @@ const CORE_SOURCE: &str = r#"
 @no_prelude
 module aivi = {
   export Unit, Bool, Int, Float, Text, Char, Bytes, DateTime
-  export List, Option, Result, Tuple
+  export List, Option, Result, Tuple, Map, Set, Queue, Deque, Heap
   export None, Some, Ok, Err, True, False
   export pure, fail, attempt, load
 
   export text, regex, math, calendar, color
   export bigint, rational, decimal
-  export url, console, file, clock, random, channel, concurrent, httpServer, http, https
+  export url, console, file, clock, random, channel, concurrent, httpServer, http, https, collections
+  export linalg, signal, graph
 }
 "#;
 
@@ -185,6 +186,26 @@ module aivi.text = {
 
   parseFloat : Text -> Option Float
   parseFloat value = text.parseFloat value
+}
+"#;
+
+const COLLECTIONS_SOURCE: &str = r#"
+@no_prelude
+module aivi.collections = {
+  export Map, Set, Queue, Deque, Heap
+  export domain Collections
+
+  use aivi
+
+  domain Collections over Map k v = {
+    (++) : Map k v -> Map k v -> Map k v
+    (++) left right = Map.union left right
+  }
+
+  domain Collections over Set a = {
+    (++) : Set a -> Set a -> Set a
+    (++) left right = Set.union left right
+  }
 }
 "#;
 
@@ -502,6 +523,397 @@ module aivi.vector = {
     (/) : Vec3 -> Float -> Vec3
     (/) v s = { x: v.x / s, y: v.y / s, z: v.z / s }
   }
+}
+"#;
+
+const MATRIX_SOURCE: &str = r#"
+@no_prelude
+module aivi.matrix = {
+  export Mat2, Mat3, Mat4, Scalar
+  export identity2, identity3, identity4
+  export transpose2, transpose3, transpose4
+  export multiply2, multiply3, multiply4
+  export domain Matrix
+
+  use aivi
+
+  Mat2 = { m00: Float, m01: Float, m10: Float, m11: Float }
+  Mat3 = { m00: Float, m01: Float, m02: Float, m10: Float, m11: Float, m12: Float, m20: Float, m21: Float, m22: Float }
+  Mat4 = { m00: Float, m01: Float, m02: Float, m03: Float, m10: Float, m11: Float, m12: Float, m13: Float, m20: Float, m21: Float, m22: Float, m23: Float, m30: Float, m31: Float, m32: Float, m33: Float }
+  Scalar = Float
+
+  identity2 : Mat2
+  identity2 = { m00: 1.0, m01: 0.0, m10: 0.0, m11: 1.0 }
+
+  identity3 : Mat3
+  identity3 = { m00: 1.0, m01: 0.0, m02: 0.0, m10: 0.0, m11: 1.0, m12: 0.0, m20: 0.0, m21: 0.0, m22: 1.0 }
+
+  identity4 : Mat4
+  identity4 = {
+    m00: 1.0, m01: 0.0, m02: 0.0, m03: 0.0,
+    m10: 0.0, m11: 1.0, m12: 0.0, m13: 0.0,
+    m20: 0.0, m21: 0.0, m22: 1.0, m23: 0.0,
+    m30: 0.0, m31: 0.0, m32: 0.0, m33: 1.0
+  }
+
+  transpose2 : Mat2 -> Mat2
+  transpose2 m = { m00: m.m00, m01: m.m10, m10: m.m01, m11: m.m11 }
+
+  transpose3 : Mat3 -> Mat3
+  transpose3 m = {
+    m00: m.m00, m01: m.m10, m02: m.m20,
+    m10: m.m01, m11: m.m11, m12: m.m21,
+    m20: m.m02, m21: m.m12, m22: m.m22
+  }
+
+  transpose4 : Mat4 -> Mat4
+  transpose4 m = {
+    m00: m.m00, m01: m.m10, m02: m.m20, m03: m.m30,
+    m10: m.m01, m11: m.m11, m12: m.m21, m13: m.m31,
+    m20: m.m02, m21: m.m12, m22: m.m22, m23: m.m32,
+    m30: m.m03, m31: m.m13, m32: m.m23, m33: m.m33
+  }
+
+  multiply2 : Mat2 -> Mat2 -> Mat2
+  multiply2 a b = {
+    m00: a.m00 * b.m00 + a.m01 * b.m10, m01: a.m00 * b.m01 + a.m01 * b.m11,
+    m10: a.m10 * b.m00 + a.m11 * b.m10, m11: a.m10 * b.m01 + a.m11 * b.m11
+  }
+
+  multiply3 : Mat3 -> Mat3 -> Mat3
+  multiply3 a b = {
+    m00: a.m00 * b.m00 + a.m01 * b.m10 + a.m02 * b.m20,
+    m01: a.m00 * b.m01 + a.m01 * b.m11 + a.m02 * b.m21,
+    m02: a.m00 * b.m02 + a.m01 * b.m12 + a.m02 * b.m22,
+    m10: a.m10 * b.m00 + a.m11 * b.m10 + a.m12 * b.m20,
+    m11: a.m10 * b.m01 + a.m11 * b.m11 + a.m12 * b.m21,
+    m12: a.m10 * b.m02 + a.m11 * b.m12 + a.m12 * b.m22,
+    m20: a.m20 * b.m00 + a.m21 * b.m10 + a.m22 * b.m20,
+    m21: a.m20 * b.m01 + a.m21 * b.m11 + a.m22 * b.m21,
+    m22: a.m20 * b.m02 + a.m21 * b.m12 + a.m22 * b.m22
+  }
+
+  multiply4 : Mat4 -> Mat4 -> Mat4
+  multiply4 a b = {
+    m00: a.m00 * b.m00 + a.m01 * b.m10 + a.m02 * b.m20 + a.m03 * b.m30,
+    m01: a.m00 * b.m01 + a.m01 * b.m11 + a.m02 * b.m21 + a.m03 * b.m31,
+    m02: a.m00 * b.m02 + a.m01 * b.m12 + a.m02 * b.m22 + a.m03 * b.m32,
+    m03: a.m00 * b.m03 + a.m01 * b.m13 + a.m02 * b.m23 + a.m03 * b.m33,
+    m10: a.m10 * b.m00 + a.m11 * b.m10 + a.m12 * b.m20 + a.m13 * b.m30,
+    m11: a.m10 * b.m01 + a.m11 * b.m11 + a.m12 * b.m21 + a.m13 * b.m31,
+    m12: a.m10 * b.m02 + a.m11 * b.m12 + a.m12 * b.m22 + a.m13 * b.m32,
+    m13: a.m10 * b.m03 + a.m11 * b.m13 + a.m12 * b.m23 + a.m13 * b.m33,
+    m20: a.m20 * b.m00 + a.m21 * b.m10 + a.m22 * b.m20 + a.m23 * b.m30,
+    m21: a.m20 * b.m01 + a.m21 * b.m11 + a.m22 * b.m21 + a.m23 * b.m31,
+    m22: a.m20 * b.m02 + a.m21 * b.m12 + a.m22 * b.m22 + a.m23 * b.m32,
+    m23: a.m20 * b.m03 + a.m21 * b.m13 + a.m22 * b.m23 + a.m23 * b.m33,
+    m30: a.m30 * b.m00 + a.m31 * b.m10 + a.m32 * b.m20 + a.m33 * b.m30,
+    m31: a.m30 * b.m01 + a.m31 * b.m11 + a.m32 * b.m21 + a.m33 * b.m31,
+    m32: a.m30 * b.m02 + a.m31 * b.m12 + a.m32 * b.m22 + a.m33 * b.m32,
+    m33: a.m30 * b.m03 + a.m31 * b.m13 + a.m32 * b.m23 + a.m33 * b.m33
+  }
+
+  domain Matrix over Mat2 = {
+    (+) : Mat2 -> Mat2 -> Mat2
+    (+) a b = { m00: a.m00 + b.m00, m01: a.m01 + b.m01, m10: a.m10 + b.m10, m11: a.m11 + b.m11 }
+
+    (-) : Mat2 -> Mat2 -> Mat2
+    (-) a b = { m00: a.m00 - b.m00, m01: a.m01 - b.m01, m10: a.m10 - b.m10, m11: a.m11 - b.m11 }
+
+    (*) : Mat2 -> Scalar -> Mat2
+    (*) m s = { m00: m.m00 * s, m01: m.m01 * s, m10: m.m10 * s, m11: m.m11 * s }
+  }
+
+  domain Matrix over Mat3 = {
+    (+) : Mat3 -> Mat3 -> Mat3
+    (+) a b = {
+      m00: a.m00 + b.m00, m01: a.m01 + b.m01, m02: a.m02 + b.m02,
+      m10: a.m10 + b.m10, m11: a.m11 + b.m11, m12: a.m12 + b.m12,
+      m20: a.m20 + b.m20, m21: a.m21 + b.m21, m22: a.m22 + b.m22
+    }
+
+    (-) : Mat3 -> Mat3 -> Mat3
+    (-) a b = {
+      m00: a.m00 - b.m00, m01: a.m01 - b.m01, m02: a.m02 - b.m02,
+      m10: a.m10 - b.m10, m11: a.m11 - b.m11, m12: a.m12 - b.m12,
+      m20: a.m20 - b.m20, m21: a.m21 - b.m21, m22: a.m22 - b.m22
+    }
+
+    (*) : Mat3 -> Scalar -> Mat3
+    (*) m s = {
+      m00: m.m00 * s, m01: m.m01 * s, m02: m.m02 * s,
+      m10: m.m10 * s, m11: m.m11 * s, m12: m.m12 * s,
+      m20: m.m20 * s, m21: m.m21 * s, m22: m.m22 * s
+    }
+  }
+
+  domain Matrix over Mat4 = {
+    (+) : Mat4 -> Mat4 -> Mat4
+    (+) a b = {
+      m00: a.m00 + b.m00, m01: a.m01 + b.m01, m02: a.m02 + b.m02, m03: a.m03 + b.m03,
+      m10: a.m10 + b.m10, m11: a.m11 + b.m11, m12: a.m12 + b.m12, m13: a.m13 + b.m13,
+      m20: a.m20 + b.m20, m21: a.m21 + b.m21, m22: a.m22 + b.m22, m23: a.m23 + b.m23,
+      m30: a.m30 + b.m30, m31: a.m31 + b.m31, m32: a.m32 + b.m32, m33: a.m33 + b.m33
+    }
+
+    (-) : Mat4 -> Mat4 -> Mat4
+    (-) a b = {
+      m00: a.m00 - b.m00, m01: a.m01 - b.m01, m02: a.m02 - b.m02, m03: a.m03 - b.m03,
+      m10: a.m10 - b.m10, m11: a.m11 - b.m11, m12: a.m12 - b.m12, m13: a.m13 - b.m13,
+      m20: a.m20 - b.m20, m21: a.m21 - b.m21, m22: a.m22 - b.m22, m23: a.m23 - b.m23,
+      m30: a.m30 - b.m30, m31: a.m31 - b.m31, m32: a.m32 - b.m32, m33: a.m33 - b.m33
+    }
+
+    (*) : Mat4 -> Scalar -> Mat4
+    (*) m s = {
+      m00: m.m00 * s, m01: m.m01 * s, m02: m.m02 * s, m03: m.m03 * s,
+      m10: m.m10 * s, m11: m.m11 * s, m12: m.m12 * s, m13: m.m13 * s,
+      m20: m.m20 * s, m21: m.m21 * s, m22: m.m22 * s, m23: m.m23 * s,
+      m30: m.m30 * s, m31: m.m31 * s, m32: m.m32 * s, m33: m.m33 * s
+    }
+  }
+}
+"#;
+
+const LINEAR_ALGEBRA_SOURCE: &str = r#"
+@no_prelude
+module aivi.linear_algebra = {
+  export Vec, Mat
+  export dot, matMul, solve2x2
+  export domain LinearAlgebra
+
+  use aivi
+
+  Vec = { size: Int, data: List Float }
+  Mat = { rows: Int, cols: Int, data: List Float }
+
+  map : (A -> B) -> List A -> List B
+  map f items = items ?
+    | [] => []
+    | [x, ...xs] => [f x, ...map f xs]
+
+  zipWith : (A -> B -> C) -> List A -> List B -> List C
+  zipWith f left right = (left, right) ?
+    | ([], _) => []
+    | (_, []) => []
+    | ([x, ...xs], [y, ...ys]) => [f x y, ...zipWith f xs ys]
+
+  add : Float -> Float -> Float
+  add a b = a + b
+
+  sub : Float -> Float -> Float
+  sub a b = a - b
+
+  domain LinearAlgebra over Vec = {
+    (+) : Vec -> Vec -> Vec
+    (+) a b = { size: a.size, data: zipWith add a.data b.data }
+
+    (-) : Vec -> Vec -> Vec
+    (-) a b = { size: a.size, data: zipWith sub a.data b.data }
+
+    (*) : Vec -> Float -> Vec
+    (*) v s = { size: v.size, data: map (_ * s) v.data }
+  }
+
+  dot : Vec -> Vec -> Float
+  dot a b = linalg.dot a b
+
+  matMul : Mat -> Mat -> Mat
+  matMul a b = linalg.matMul a b
+
+  solve2x2 : Mat -> Vec -> Vec
+  solve2x2 m v = linalg.solve2x2 m v
+}
+"#;
+
+const LINALG_FACADE_SOURCE: &str = r#"
+@no_prelude
+module aivi.linalg = {
+  export Vec, Mat
+  export dot, matMul, solve2x2
+  export domain LinearAlgebra
+
+  use aivi.linear_algebra
+}
+"#;
+
+const PROBABILITY_SOURCE: &str = r#"
+@no_prelude
+module aivi.probability = {
+  export Probability, Distribution
+  export clamp, bernoulli, uniform, expectation
+  export domain Probability
+
+  use aivi
+
+  Probability = Float
+  Distribution A = { pdf: A -> Probability }
+
+  domain Probability over Probability = {
+    (+) : Probability -> Probability -> Probability
+    (+) a b = a + b
+
+    (-) : Probability -> Probability -> Probability
+    (-) a b = a - b
+
+    (*) : Probability -> Probability -> Probability
+    (*) a b = a * b
+  }
+
+  clamp : Probability -> Probability
+  clamp p = if p < 0.0 then 0.0 else if p > 1.0 then 1.0 else p
+
+  bernoulli : Probability -> Distribution Bool
+  bernoulli p = { pdf: b => if b then p else 1.0 - p }
+
+  uniform : Float -> Float -> Distribution Float
+  uniform lo hi = {
+    pdf: x => if x < lo then 0.0 else if x > hi then 0.0 else if lo == hi then 0.0 else 1.0 / (hi - lo)
+  }
+
+  expectation : Distribution Float -> Float -> Float
+  expectation dist x = (dist.pdf x) * x
+}
+"#;
+
+const SIGNAL_SOURCE: &str = r#"
+@no_prelude
+module aivi.signal = {
+  export Signal, Spectrum
+  export fft, ifft, windowHann, normalize
+  export domain Signal
+
+  use aivi
+  use aivi.number.complex (Complex)
+
+  Signal = { samples: List Float, rate: Float }
+  Spectrum = { bins: List Complex, rate: Float }
+
+  map : (A -> B) -> List A -> List B
+  map f items = items ?
+    | [] => []
+    | [x, ...xs] => [f x, ...map f xs]
+
+  zipWith : (A -> B -> C) -> List A -> List B -> List C
+  zipWith f left right = (left, right) ?
+    | ([], _) => []
+    | (_, []) => []
+    | ([x, ...xs], [y, ...ys]) => [f x y, ...zipWith f xs ys]
+
+  add : Float -> Float -> Float
+  add a b = a + b
+
+  domain Signal over Signal = {
+    (+) : Signal -> Signal -> Signal
+    (+) a b = { samples: zipWith add a.samples b.samples, rate: a.rate }
+
+    (*) : Signal -> Float -> Signal
+    (*) s k = { samples: map (_ * k) s.samples, rate: s.rate }
+  }
+
+  fft : Signal -> Spectrum
+  fft sig = signal.fft sig
+
+  ifft : Spectrum -> Signal
+  ifft spec = signal.ifft spec
+
+  windowHann : Signal -> Signal
+  windowHann sig = signal.windowHann sig
+
+  normalize : Signal -> Signal
+  normalize sig = signal.normalize sig
+}
+"#;
+
+const GEOMETRY_SOURCE: &str = r#"
+@no_prelude
+module aivi.geometry = {
+  export Point2, Point3, Line2, Segment2, Polygon
+  export distance, midpoint, area
+  export domain Geometry
+
+  use aivi
+  use aivi.math (sqrt, abs)
+
+  Point2 = { x: Float, y: Float }
+  Point3 = { x: Float, y: Float, z: Float }
+  Line2 = { origin: Point2, direction: Point2 }
+  Segment2 = { start: Point2, end: Point2 }
+  Polygon = { vertices: List Point2 }
+
+  domain Geometry over Point2 = {
+    (+) : Point2 -> Point2 -> Point2
+    (+) a b = { x: a.x + b.x, y: a.y + b.y }
+
+    (-) : Point2 -> Point2 -> Point2
+    (-) a b = { x: a.x - b.x, y: a.y - b.y }
+  }
+
+  domain Geometry over Point3 = {
+    (+) : Point3 -> Point3 -> Point3
+    (+) a b = { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }
+
+    (-) : Point3 -> Point3 -> Point3
+    (-) a b = { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }
+  }
+
+  distance : Point2 -> Point2 -> Float
+  distance a b = {
+    dx = a.x - b.x
+    dy = a.y - b.y
+    sqrt (dx * dx + dy * dy)
+  }
+
+  midpoint : Segment2 -> Point2
+  midpoint seg = { x: (seg.start.x + seg.end.x) / 2.0, y: (seg.start.y + seg.end.y) / 2.0 }
+
+  areaLoop : Point2 -> Point2 -> List Point2 -> Float -> Float
+  areaLoop first prev rest acc = rest ?
+    | [] => acc + (prev.x * first.y - first.x * prev.y)
+    | [p, ...ps] => areaLoop first p ps (acc + (prev.x * p.y - p.x * prev.y))
+
+  area : Polygon -> Float
+  area poly = poly.vertices ?
+    | [] => 0.0
+    | [first, ...rest] => abs (areaLoop first first rest 0.0) / 2.0
+}
+"#;
+
+const GRAPH_SOURCE: &str = r#"
+@no_prelude
+module aivi.graph = {
+  export NodeId, Edge, Graph
+  export addEdge, neighbors, shortestPath
+  export domain Graph
+
+  use aivi
+  use aivi.collections (Set)
+
+  NodeId = Int
+  Edge = { from: NodeId, to: NodeId, weight: Float }
+  Graph = { nodes: List NodeId, edges: List Edge }
+
+  append : List A -> List A -> List A
+  append left right = left ?
+    | [] => right
+    | [x, ...xs] => [x, ...append xs right]
+
+  unique : List NodeId -> List NodeId
+  unique items = Set.toList (Set.fromList items)
+
+  domain Graph over Graph = {
+    (+) : Graph -> Graph -> Graph
+    (+) a b = { nodes: unique (append a.nodes b.nodes), edges: append a.edges b.edges }
+  }
+
+  addEdge : Graph -> Edge -> Graph
+  addEdge g edge = graph.addEdge g edge
+
+  neighbors : Graph -> NodeId -> List NodeId
+  neighbors g node = graph.neighbors g node
+
+  shortestPath : Graph -> NodeId -> NodeId -> List NodeId
+  shortestPath g start goal = graph.shortestPath g start goal
 }
 "#;
 
@@ -1081,6 +1493,7 @@ pub fn embedded_stdlib_modules() -> Vec<Module> {
     modules.extend(parse_embedded("aivi", CORE_SOURCE));
     modules.extend(parse_embedded("aivi.prelude", PRELUDE_SOURCE));
     modules.extend(parse_embedded("aivi.text", TEXT_SOURCE));
+    modules.extend(parse_embedded("aivi.collections", COLLECTIONS_SOURCE));
     modules.extend(parse_embedded("aivi.regex", REGEX_SOURCE));
     modules.extend(parse_embedded("aivi.testing", TESTING_SOURCE));
     modules.extend(parse_embedded("aivi.units", UNITS_SOURCE));
@@ -1088,6 +1501,13 @@ pub fn embedded_stdlib_modules() -> Vec<Module> {
     modules.extend(parse_embedded("aivi.duration", DURATION_SOURCE));
     modules.extend(parse_embedded("aivi.color", COLOR_SOURCE));
     modules.extend(parse_embedded("aivi.vector", VECTOR_SOURCE));
+    modules.extend(parse_embedded("aivi.matrix", MATRIX_SOURCE));
+    modules.extend(parse_embedded("aivi.linear_algebra", LINEAR_ALGEBRA_SOURCE));
+    modules.extend(parse_embedded("aivi.linalg", LINALG_FACADE_SOURCE));
+    modules.extend(parse_embedded("aivi.probability", PROBABILITY_SOURCE));
+    modules.extend(parse_embedded("aivi.signal", SIGNAL_SOURCE));
+    modules.extend(parse_embedded("aivi.geometry", GEOMETRY_SOURCE));
+    modules.extend(parse_embedded("aivi.graph", GRAPH_SOURCE));
     modules.extend(parse_embedded("aivi.math", MATH_SOURCE));
     modules.extend(parse_embedded("aivi.url", URL_SOURCE));
     modules.extend(parse_embedded("aivi.console", CONSOLE_SOURCE));
@@ -1112,6 +1532,7 @@ pub fn embedded_stdlib_source(module_name: &str) -> Option<&'static str> {
         "aivi" => Some(CORE_SOURCE),
         "aivi.prelude" => Some(PRELUDE_SOURCE),
         "aivi.text" => Some(TEXT_SOURCE),
+        "aivi.collections" => Some(COLLECTIONS_SOURCE),
         "aivi.regex" => Some(REGEX_SOURCE),
         "aivi.testing" => Some(TESTING_SOURCE),
         "aivi.units" => Some(UNITS_SOURCE),
@@ -1119,6 +1540,13 @@ pub fn embedded_stdlib_source(module_name: &str) -> Option<&'static str> {
         "aivi.duration" => Some(DURATION_SOURCE),
         "aivi.color" => Some(COLOR_SOURCE),
         "aivi.vector" => Some(VECTOR_SOURCE),
+        "aivi.matrix" => Some(MATRIX_SOURCE),
+        "aivi.linear_algebra" => Some(LINEAR_ALGEBRA_SOURCE),
+        "aivi.linalg" => Some(LINALG_FACADE_SOURCE),
+        "aivi.probability" => Some(PROBABILITY_SOURCE),
+        "aivi.signal" => Some(SIGNAL_SOURCE),
+        "aivi.geometry" => Some(GEOMETRY_SOURCE),
+        "aivi.graph" => Some(GRAPH_SOURCE),
         "aivi.math" => Some(MATH_SOURCE),
         "aivi.url" => Some(URL_SOURCE),
         "aivi.console" => Some(CONSOLE_SOURCE),

@@ -4,6 +4,14 @@ use std::time::Duration;
 use rudo_gc::GcMutex;
 
 use super::*;
+use super::values::KeyValue;
+
+fn expect_ok<T>(result: Result<T, RuntimeError>, msg: &str) -> T {
+    match result {
+        Ok(value) => value,
+        Err(_) => panic!("{msg}"),
+    }
+}
 
 #[test]
 fn cleanups_run_even_when_cancelled() {
@@ -223,6 +231,177 @@ fn text_bytes_roundtrip() {
     assert_eq!(name, "Ok");
     assert_eq!(args.len(), 1);
     assert!(matches!(args[0], Value::Text(ref value) if value == "ping"));
+}
+
+#[test]
+fn collections_map_set_queue_heap() {
+    let globals = Env::new(None);
+    register_builtins(&globals);
+    let ctx = Arc::new(RuntimeContext { globals });
+    let cancel = CancelToken::root();
+    let mut runtime = Runtime::new(ctx, cancel);
+
+    let map_record = runtime.ctx.globals.get("Map").expect("Map record");
+    let Value::Record(map_fields) = map_record else {
+        panic!("Map record missing");
+    };
+    let from_list = map_fields.get("fromList").expect("fromList").clone();
+    let union = map_fields.get("union").expect("union").clone();
+
+    let list1 = Value::List(Arc::new(vec![
+        Value::Tuple(vec![Value::Int(1), Value::Text("one".to_string())]),
+        Value::Tuple(vec![Value::Int(2), Value::Text("two".to_string())]),
+    ]));
+    let map1 = expect_ok(runtime.apply(from_list.clone(), list1), "map1");
+    let list2 = Value::List(Arc::new(vec![Value::Tuple(vec![
+        Value::Int(2),
+        Value::Text("dos".to_string()),
+    ])]));
+    let map2 = expect_ok(runtime.apply(from_list, list2), "map2");
+    let union_left = expect_ok(runtime.apply(union, map1), "union left");
+    let unioned = expect_ok(runtime.apply(union_left, map2), "unioned");
+    let Value::Map(map) = unioned else {
+        panic!("expected map");
+    };
+    match map.get(&KeyValue::Int(2)) {
+        Some(Value::Text(value)) => assert_eq!(value, "dos"),
+        _ => panic!("expected map entry"),
+    }
+
+    let set_record = runtime.ctx.globals.get("Set").expect("Set record");
+    let Value::Record(set_fields) = set_record else {
+        panic!("Set record missing");
+    };
+    let from_list = set_fields.get("fromList").expect("fromList").clone();
+    let has = set_fields.get("has").expect("has").clone();
+    let set_list = Value::List(Arc::new(vec![Value::Int(1), Value::Int(2)]));
+    let set = expect_ok(runtime.apply(from_list, set_list), "set");
+    let has_key = expect_ok(runtime.apply(has, Value::Int(2)), "has key");
+    let has = expect_ok(runtime.apply(has_key, set), "has");
+    assert!(matches!(has, Value::Bool(true)));
+
+    let queue_record = runtime.ctx.globals.get("Queue").expect("Queue record");
+    let Value::Record(queue_fields) = queue_record else {
+        panic!("Queue record missing");
+    };
+    let enqueue = queue_fields.get("enqueue").expect("enqueue").clone();
+    let dequeue = queue_fields.get("dequeue").expect("dequeue").clone();
+    let empty = queue_fields.get("empty").expect("empty").clone();
+    let enqueue_first = expect_ok(
+        runtime.apply(enqueue.clone(), Value::Text("first".to_string())),
+        "enqueue arg1",
+    );
+    let queue = expect_ok(runtime.apply(enqueue_first, empty), "enqueue arg2");
+    let dequeued = expect_ok(runtime.apply(dequeue, queue), "dequeue");
+    match dequeued {
+        Value::Constructor { name, args } if name == "Some" => {
+            assert!(matches!(args.as_slice(), [Value::Tuple(values)] if matches!(values.as_slice(), [Value::Text(value), _] if value == "first")));
+        }
+        _ => panic!("expected Some from dequeue"),
+    }
+
+    let heap_record = runtime.ctx.globals.get("Heap").expect("Heap record");
+    let Value::Record(heap_fields) = heap_record else {
+        panic!("Heap record missing");
+    };
+    let push = heap_fields.get("push").expect("push").clone();
+    let pop_min = heap_fields.get("popMin").expect("popMin").clone();
+    let empty = heap_fields.get("empty").expect("empty").clone();
+    let push_three = expect_ok(runtime.apply(push.clone(), Value::Int(3)), "push arg1");
+    let heap = expect_ok(runtime.apply(push_three, empty), "push arg2");
+    let push_one = expect_ok(runtime.apply(push, Value::Int(1)), "push arg1");
+    let heap = expect_ok(runtime.apply(push_one, heap), "push arg2");
+    let popped = expect_ok(runtime.apply(pop_min, heap), "popMin");
+    match popped {
+        Value::Constructor { name, args } if name == "Some" => {
+            assert!(matches!(args.as_slice(), [Value::Tuple(values)] if matches!(values.as_slice(), [Value::Int(1), _])));
+        }
+        _ => panic!("expected Some from heap pop"),
+    }
+}
+
+#[test]
+fn linalg_dot_and_graph_shortest_path() {
+    let globals = Env::new(None);
+    register_builtins(&globals);
+    let ctx = Arc::new(RuntimeContext { globals });
+    let cancel = CancelToken::root();
+    let mut runtime = Runtime::new(ctx, cancel);
+
+    let linalg_record = runtime.ctx.globals.get("linalg").expect("linalg record");
+    let Value::Record(linalg_fields) = linalg_record else {
+        panic!("linalg record missing");
+    };
+    let dot = linalg_fields.get("dot").expect("dot").clone();
+
+    let vec_a = {
+        let mut fields = HashMap::new();
+        fields.insert("size".to_string(), Value::Int(3));
+        fields.insert(
+            "data".to_string(),
+            Value::List(Arc::new(vec![
+                Value::Float(1.0),
+                Value::Float(2.0),
+                Value::Float(3.0),
+            ])),
+        );
+        Value::Record(Arc::new(fields))
+    };
+    let vec_b = {
+        let mut fields = HashMap::new();
+        fields.insert("size".to_string(), Value::Int(3));
+        fields.insert(
+            "data".to_string(),
+            Value::List(Arc::new(vec![
+                Value::Float(2.0),
+                Value::Float(0.0),
+                Value::Float(1.0),
+            ])),
+        );
+        Value::Record(Arc::new(fields))
+    };
+    let dot_left = expect_ok(runtime.apply(dot, vec_a), "dot arg1");
+    let dot = expect_ok(runtime.apply(dot_left, vec_b), "dot");
+    assert!(matches!(dot, Value::Float(value) if (value - 5.0).abs() < 1e-9));
+
+    let graph_record = runtime.ctx.globals.get("graph").expect("graph record");
+    let Value::Record(graph_fields) = graph_record else {
+        panic!("graph record missing");
+    };
+    let shortest_path = graph_fields
+        .get("shortestPath")
+        .expect("shortestPath")
+        .clone();
+
+    let graph = {
+        let mut fields = HashMap::new();
+        fields.insert(
+            "nodes".to_string(),
+            Value::List(Arc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)])),
+        );
+        let edge = |from: i64, to: i64, weight: f64| {
+            let mut edge_fields = HashMap::new();
+            edge_fields.insert("from".to_string(), Value::Int(from));
+            edge_fields.insert("to".to_string(), Value::Int(to));
+            edge_fields.insert("weight".to_string(), Value::Float(weight));
+            Value::Record(Arc::new(edge_fields))
+        };
+        fields.insert(
+            "edges".to_string(),
+            Value::List(Arc::new(vec![edge(1, 2, 1.0), edge(2, 3, 1.0), edge(1, 3, 5.0)])),
+        );
+        Value::Record(Arc::new(fields))
+    };
+    let path_left = expect_ok(runtime.apply(shortest_path, graph), "path arg1");
+    let path_mid = expect_ok(runtime.apply(path_left, Value::Int(1)), "path arg2");
+    let path = expect_ok(runtime.apply(path_mid, Value::Int(3)), "path");
+    let Value::List(nodes) = path else {
+        panic!("expected list from shortestPath");
+    };
+    assert!(matches!(
+        nodes.as_slice(),
+        [Value::Int(1), Value::Int(2), Value::Int(3)]
+    ));
 }
 
 #[test]

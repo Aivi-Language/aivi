@@ -1097,7 +1097,9 @@ impl Parser {
                 TokenKind::Ident | TokenKind::Number | TokenKind::String | TokenKind::Sigil => {
                     return true
                 }
-                TokenKind::Symbol => return matches!(token.text.as_str(), "(" | "[" | "{" | "-"),
+                TokenKind::Symbol => {
+                    return matches!(token.text.as_str(), "(" | "[" | "{" | "-" | "~")
+                }
                 TokenKind::Newline => return false,
             }
         }
@@ -1111,6 +1113,9 @@ impl Parser {
                 let (text, span) = self.consume_number_suffix(number, Some(minus_span));
                 return Some(Expr::Literal(Literal::Number { text, span }));
             }
+        }
+        if let Some(expr) = self.parse_structured_sigil() {
+            return Some(expr);
         }
         if self.consume_symbol("(") {
             if self.consume_symbol(")") {
@@ -1289,6 +1294,221 @@ impl Parser {
         }
 
         None
+    }
+
+    fn parse_structured_sigil(&mut self) -> Option<Expr> {
+        if !self.peek_symbol("~") {
+            return None;
+        }
+        let checkpoint = self.pos;
+        let start_span = self.peek_span().unwrap_or_else(|| self.previous_span());
+        self.pos += 1;
+        if self.consume_ident_text("map").is_some() {
+            return self.parse_map_literal(start_span);
+        }
+        if self.consume_ident_text("set").is_some() {
+            return self.parse_set_literal(start_span);
+        }
+        self.pos = checkpoint;
+        None
+    }
+
+    fn parse_map_literal(&mut self, start_span: Span) -> Option<Expr> {
+        self.expect_symbol("{", "expected '{' to start map literal");
+        let mut entries: Vec<(bool, Expr, Option<Expr>)> = Vec::new();
+        self.consume_newlines();
+        while !self.check_symbol("}") && self.pos < self.tokens.len() {
+            if self.consume_symbol("...") {
+                if let Some(expr) = self.parse_expr() {
+                    entries.push((true, expr, None));
+                }
+            } else if let Some(key) = self.parse_expr() {
+                self.expect_symbol("=>", "expected '=>' in map literal");
+                let value = self.parse_expr().unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: expr_span(&key),
+                });
+                entries.push((false, key, Some(value)));
+            }
+            self.consume_newlines();
+            if self.consume_symbol(",") {
+                self.consume_newlines();
+                continue;
+            }
+            if self.check_symbol("}") {
+                break;
+            }
+            if self.is_expr_start() {
+                continue;
+            }
+            break;
+        }
+        let end = self.expect_symbol("}", "expected '}' to close map literal");
+        let span = merge_span(
+            start_span.clone(),
+            end.unwrap_or_else(|| start_span.clone()),
+        );
+        Some(self.build_map_literal_expr(entries, span))
+    }
+
+    fn parse_set_literal(&mut self, start_span: Span) -> Option<Expr> {
+        self.expect_symbol("[", "expected '[' to start set literal");
+        let mut entries: Vec<(bool, Expr)> = Vec::new();
+        self.consume_newlines();
+        while !self.check_symbol("]") && self.pos < self.tokens.len() {
+            if self.consume_symbol("...") {
+                if let Some(expr) = self.parse_expr() {
+                    entries.push((true, expr));
+                }
+            } else if let Some(value) = self.parse_expr() {
+                entries.push((false, value));
+            }
+            self.consume_newlines();
+            if self.consume_symbol(",") {
+                self.consume_newlines();
+                continue;
+            }
+            if self.check_symbol("]") {
+                break;
+            }
+            if self.is_expr_start() {
+                continue;
+            }
+            break;
+        }
+        let end = self.expect_symbol("]", "expected ']' to close set literal");
+        let span = merge_span(
+            start_span.clone(),
+            end.unwrap_or_else(|| start_span.clone()),
+        );
+        Some(self.build_set_literal_expr(entries, span))
+    }
+
+    fn build_map_literal_expr(
+        &self,
+        entries: Vec<(bool, Expr, Option<Expr>)>,
+        span: Span,
+    ) -> Expr {
+        let map_name = SpannedName {
+            name: "Map".to_string(),
+            span: span.clone(),
+        };
+        let empty = Expr::FieldAccess {
+            base: Box::new(Expr::Ident(map_name.clone())),
+            field: SpannedName {
+                name: "empty".to_string(),
+                span: span.clone(),
+            },
+            span: span.clone(),
+        };
+        let union_field = SpannedName {
+            name: "union".to_string(),
+            span: span.clone(),
+        };
+        let from_list_field = SpannedName {
+            name: "fromList".to_string(),
+            span: span.clone(),
+        };
+        let mut acc = empty;
+        for (is_spread, key, value) in entries {
+            let next = if is_spread {
+                key
+            } else {
+                let value = value.unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: span.clone(),
+                });
+                let tuple_span = merge_span(expr_span(&key), expr_span(&value));
+                let tuple = Expr::Tuple {
+                    items: vec![key, value],
+                    span: tuple_span.clone(),
+                };
+                let list = Expr::List {
+                    items: vec![ListItem {
+                        expr: tuple,
+                        spread: false,
+                        span: tuple_span,
+                    }],
+                    span: span.clone(),
+                };
+                Expr::Call {
+                    func: Box::new(Expr::FieldAccess {
+                        base: Box::new(Expr::Ident(map_name.clone())),
+                        field: from_list_field.clone(),
+                        span: span.clone(),
+                    }),
+                    args: vec![list],
+                    span: span.clone(),
+                }
+            };
+            acc = Expr::Call {
+                func: Box::new(Expr::FieldAccess {
+                    base: Box::new(Expr::Ident(map_name.clone())),
+                    field: union_field.clone(),
+                    span: span.clone(),
+                }),
+                args: vec![acc, next],
+                span: span.clone(),
+            };
+        }
+        acc
+    }
+
+    fn build_set_literal_expr(&self, entries: Vec<(bool, Expr)>, span: Span) -> Expr {
+        let set_name = SpannedName {
+            name: "Set".to_string(),
+            span: span.clone(),
+        };
+        let empty = Expr::FieldAccess {
+            base: Box::new(Expr::Ident(set_name.clone())),
+            field: SpannedName {
+                name: "empty".to_string(),
+                span: span.clone(),
+            },
+            span: span.clone(),
+        };
+        let union_field = SpannedName {
+            name: "union".to_string(),
+            span: span.clone(),
+        };
+        let from_list_field = SpannedName {
+            name: "fromList".to_string(),
+            span: span.clone(),
+        };
+        let mut acc = empty;
+        for (is_spread, value) in entries {
+            let next = if is_spread {
+                value
+            } else {
+                let list = Expr::List {
+                    items: vec![ListItem {
+                        expr: value,
+                        spread: false,
+                        span: span.clone(),
+                    }],
+                    span: span.clone(),
+                };
+                Expr::Call {
+                    func: Box::new(Expr::FieldAccess {
+                        base: Box::new(Expr::Ident(set_name.clone())),
+                        field: from_list_field.clone(),
+                        span: span.clone(),
+                    }),
+                    args: vec![list],
+                    span: span.clone(),
+                }
+            };
+            acc = Expr::Call {
+                func: Box::new(Expr::FieldAccess {
+                    base: Box::new(Expr::Ident(set_name.clone())),
+                    field: union_field.clone(),
+                    span: span.clone(),
+                }),
+                args: vec![acc, next],
+                span: span.clone(),
+            };
+        }
+        acc
     }
 
     fn parse_block(&mut self, kind: BlockKind) -> Expr {

@@ -1,0 +1,48 @@
+module examples.stdlib_collections = {
+  export main
+
+  use aivi.console (print)
+  use aivi (Map, Set, Queue, Deque, Heap)
+
+  main : Effect Text Unit
+  main = effect {
+    base = ~map{
+      "a" => 1
+      "b" => 2
+    }
+    more = ~map{
+      "b" => 3
+      "c" => 4
+    }
+    merged = Map.union base more
+    _ <- print "merged: {merged}"
+
+    tags = ~set["hot", "new", ...Set.fromList ["fresh"]]
+    _ <- print "tags: {tags}"
+
+    q1 = Queue.enqueue "first" Queue.empty
+    q2 = Queue.enqueue "second" q1
+    popped = Queue.dequeue q2
+    popped ?
+      | Some (value, _) => print "queue: {value}"
+      | None => print "queue empty"
+
+    d1 = Deque.pushFront 1 Deque.empty
+    d2 = Deque.pushBack 2 d1
+    d3 = Deque.pushBack 3 d2
+    front = Deque.popFront d3
+    front ?
+      | Some (value, _) => print "deque: {value}"
+      | None => print "deque empty"
+
+    h1 = Heap.push 3 Heap.empty
+    h2 = Heap.push 1 h1
+    h3 = Heap.push 2 h2
+    smallest = Heap.popMin h3
+    smallest ?
+      | Some (value, _) => print "heap: {value}"
+      | None => print "heap empty"
+
+    pure Unit
+  }
+}

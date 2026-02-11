@@ -1,15 +1,19 @@
-use std::collections::HashMap;
+use std::cmp::Reverse;
+use std::collections::{BinaryHeap, HashMap};
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::{Datelike, Duration as ChronoDuration, NaiveDate};
+use im::{HashMap as ImHashMap, HashSet as ImHashSet, Vector as ImVector};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::{ToPrimitive, Zero};
+use ordered_float::OrderedFloat;
 use palette::{FromColor, Hsl, RgbHue, Srgb};
 use regex::Regex;
+use rustfft::{FftPlanner, num_complex::Complex as FftComplex};
 use rust_decimal::prelude::FromPrimitive;
 use rust_decimal::Decimal;
 use unicode_normalization::UnicodeNormalization;
@@ -22,7 +26,7 @@ use super::{
     format_value, CancelToken, EffectValue, Env, Runtime, RuntimeContext, RuntimeError, Value,
 };
 use super::values::{
-    BuiltinImpl, BuiltinValue, ChannelInner, ChannelRecv, ChannelSend,
+    BuiltinImpl, BuiltinValue, ChannelInner, ChannelRecv, ChannelSend, KeyValue,
 };
 
 pub(super) fn register_builtins(env: &Env) {
@@ -162,12 +166,34 @@ pub(super) fn register_builtins(env: &Env) {
     env.set("math".to_string(), build_math_record());
     env.set("calendar".to_string(), build_calendar_record());
     env.set("color".to_string(), build_color_record());
+    env.set("linalg".to_string(), build_linalg_record());
+    env.set("signal".to_string(), build_signal_record());
+    env.set("graph".to_string(), build_graph_record());
     env.set("bigint".to_string(), build_bigint_record());
     env.set("rational".to_string(), build_rational_record());
     env.set("decimal".to_string(), build_decimal_record());
     env.set("url".to_string(), build_url_record());
     env.set("http".to_string(), build_http_client_record(HttpClientMode::Http));
     env.set("https".to_string(), build_http_client_record(HttpClientMode::Https));
+    let collections = build_collections_record();
+    if let Value::Record(fields) = &collections {
+        if let Some(map) = fields.get("map") {
+            env.set("Map".to_string(), map.clone());
+        }
+        if let Some(set) = fields.get("set") {
+            env.set("Set".to_string(), set.clone());
+        }
+        if let Some(queue) = fields.get("queue") {
+            env.set("Queue".to_string(), queue.clone());
+        }
+        if let Some(deque) = fields.get("deque") {
+            env.set("Deque".to_string(), deque.clone());
+        }
+        if let Some(heap) = fields.get("heap") {
+            env.set("Heap".to_string(), heap.clone());
+        }
+    }
+    env.set("collections".to_string(), collections);
     env.set("console".to_string(), build_console_record());
 }
 
@@ -844,6 +870,62 @@ fn expect_record(
     }
 }
 
+fn expect_map(
+    value: Value,
+    ctx: &str,
+) -> Result<Arc<ImHashMap<KeyValue, Value>>, RuntimeError> {
+    match value {
+        Value::Map(entries) => Ok(entries),
+        _ => Err(RuntimeError::Message(format!("{ctx} expects Map"))),
+    }
+}
+
+fn expect_set(
+    value: Value,
+    ctx: &str,
+) -> Result<Arc<ImHashSet<KeyValue>>, RuntimeError> {
+    match value {
+        Value::Set(entries) => Ok(entries),
+        _ => Err(RuntimeError::Message(format!("{ctx} expects Set"))),
+    }
+}
+
+fn expect_queue(
+    value: Value,
+    ctx: &str,
+) -> Result<Arc<ImVector<Value>>, RuntimeError> {
+    match value {
+        Value::Queue(items) => Ok(items),
+        _ => Err(RuntimeError::Message(format!("{ctx} expects Queue"))),
+    }
+}
+
+fn expect_deque(
+    value: Value,
+    ctx: &str,
+) -> Result<Arc<ImVector<Value>>, RuntimeError> {
+    match value {
+        Value::Deque(items) => Ok(items),
+        _ => Err(RuntimeError::Message(format!("{ctx} expects Deque"))),
+    }
+}
+
+fn expect_heap(
+    value: Value,
+    ctx: &str,
+) -> Result<Arc<BinaryHeap<Reverse<KeyValue>>>, RuntimeError> {
+    match value {
+        Value::Heap(items) => Ok(items),
+        _ => Err(RuntimeError::Message(format!("{ctx} expects Heap"))),
+    }
+}
+
+fn key_from_value(value: &Value, ctx: &str) -> Result<KeyValue, RuntimeError> {
+    KeyValue::try_from_value(value).ok_or_else(|| {
+        RuntimeError::Message(format!("{ctx} expects a hashable key"))
+    })
+}
+
 fn list_floats(values: &[Value], ctx: &str) -> Result<Vec<f64>, RuntimeError> {
     let mut out = Vec::with_capacity(values.len());
     for value in values {
@@ -864,6 +946,253 @@ fn list_ints(values: &[Value], ctx: &str) -> Result<Vec<i64>, RuntimeError> {
         }
     }
     Ok(out)
+}
+
+fn vec_from_value(value: Value, ctx: &str) -> Result<(i64, Vec<f64>), RuntimeError> {
+    let record = expect_record(value, ctx)?;
+    let size = match record.get("size") {
+        Some(value) => expect_int(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Vec.size"
+            )))
+        }
+    };
+    let data_list = match record.get("data") {
+        Some(value) => expect_list(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Vec.data"
+            )))
+        }
+    };
+    let data = list_floats(&data_list, ctx)?;
+    if size < 0 || data.len() != size as usize {
+        return Err(RuntimeError::Message(format!(
+            "{ctx} Vec.size does not match data length"
+        )));
+    }
+    Ok((size, data))
+}
+
+fn vec_to_value(size: i64, data: Vec<f64>) -> Value {
+    let mut fields = HashMap::new();
+    fields.insert("size".to_string(), Value::Int(size));
+    let list = data.into_iter().map(Value::Float).collect();
+    fields.insert("data".to_string(), Value::List(Arc::new(list)));
+    Value::Record(Arc::new(fields))
+}
+
+fn mat_from_value(value: Value, ctx: &str) -> Result<(i64, i64, Vec<f64>), RuntimeError> {
+    let record = expect_record(value, ctx)?;
+    let rows = match record.get("rows") {
+        Some(value) => expect_int(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Mat.rows"
+            )))
+        }
+    };
+    let cols = match record.get("cols") {
+        Some(value) => expect_int(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Mat.cols"
+            )))
+        }
+    };
+    let data_list = match record.get("data") {
+        Some(value) => expect_list(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Mat.data"
+            )))
+        }
+    };
+    let data = list_floats(&data_list, ctx)?;
+    if rows < 0 || cols < 0 || data.len() != (rows * cols) as usize {
+        return Err(RuntimeError::Message(format!(
+            "{ctx} Mat dimensions do not match data length"
+        )));
+    }
+    Ok((rows, cols, data))
+}
+
+fn mat_to_value(rows: i64, cols: i64, data: Vec<f64>) -> Value {
+    let mut fields = HashMap::new();
+    fields.insert("rows".to_string(), Value::Int(rows));
+    fields.insert("cols".to_string(), Value::Int(cols));
+    let list = data.into_iter().map(Value::Float).collect();
+    fields.insert("data".to_string(), Value::List(Arc::new(list)));
+    Value::Record(Arc::new(fields))
+}
+
+fn signal_from_value(value: Value, ctx: &str) -> Result<(Vec<f64>, f64), RuntimeError> {
+    let record = expect_record(value, ctx)?;
+    let rate = match record.get("rate") {
+        Some(value) => expect_float(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Signal.rate"
+            )))
+        }
+    };
+    let samples_list = match record.get("samples") {
+        Some(value) => expect_list(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Signal.samples"
+            )))
+        }
+    };
+    let samples = list_floats(&samples_list, ctx)?;
+    Ok((samples, rate))
+}
+
+fn spectrum_from_value(value: Value, ctx: &str) -> Result<(Vec<FftComplex<f64>>, f64), RuntimeError> {
+    let record = expect_record(value, ctx)?;
+    let rate = match record.get("rate") {
+        Some(value) => expect_float(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Spectrum.rate"
+            )))
+        }
+    };
+    let bins_list = match record.get("bins") {
+        Some(value) => expect_list(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Spectrum.bins"
+            )))
+        }
+    };
+    let mut bins = Vec::with_capacity(bins_list.len());
+    for item in bins_list.iter() {
+        let record = expect_record(item.clone(), ctx)?;
+        let re = match record.get("re") {
+            Some(value) => expect_float(value.clone(), ctx)?,
+            None => {
+                return Err(RuntimeError::Message(format!(
+                    "{ctx} expects Complex.re"
+                )))
+            }
+        };
+        let im = match record.get("im") {
+            Some(value) => expect_float(value.clone(), ctx)?,
+            None => {
+                return Err(RuntimeError::Message(format!(
+                    "{ctx} expects Complex.im"
+                )))
+            }
+        };
+        bins.push(FftComplex::new(re, im));
+    }
+    Ok((bins, rate))
+}
+
+fn signal_to_value(samples: Vec<f64>, rate: f64) -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "samples".to_string(),
+        Value::List(Arc::new(samples.into_iter().map(Value::Float).collect())),
+    );
+    fields.insert("rate".to_string(), Value::Float(rate));
+    Value::Record(Arc::new(fields))
+}
+
+fn spectrum_to_value(bins: Vec<FftComplex<f64>>, rate: f64) -> Value {
+    let mut fields = HashMap::new();
+    let list = bins
+        .into_iter()
+        .map(|value| {
+            let mut complex = HashMap::new();
+            complex.insert("re".to_string(), Value::Float(value.re));
+            complex.insert("im".to_string(), Value::Float(value.im));
+            Value::Record(Arc::new(complex))
+        })
+        .collect();
+    fields.insert("bins".to_string(), Value::List(Arc::new(list)));
+    fields.insert("rate".to_string(), Value::Float(rate));
+    Value::Record(Arc::new(fields))
+}
+
+fn edge_from_value(value: Value, ctx: &str) -> Result<(i64, i64, f64), RuntimeError> {
+    let record = expect_record(value, ctx)?;
+    let from = match record.get("from") {
+        Some(value) => expect_int(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Edge.from"
+            )))
+        }
+    };
+    let to = match record.get("to") {
+        Some(value) => expect_int(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Edge.to"
+            )))
+        }
+    };
+    let weight = match record.get("weight") {
+        Some(value) => expect_float(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Edge.weight"
+            )))
+        }
+    };
+    Ok((from, to, weight))
+}
+
+fn graph_from_value(
+    value: Value,
+    ctx: &str,
+) -> Result<(Vec<i64>, Vec<(i64, i64, f64)>), RuntimeError> {
+    let record = expect_record(value, ctx)?;
+    let nodes_list = match record.get("nodes") {
+        Some(value) => expect_list(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Graph.nodes"
+            )))
+        }
+    };
+    let edges_list = match record.get("edges") {
+        Some(value) => expect_list(value.clone(), ctx)?,
+        None => {
+            return Err(RuntimeError::Message(format!(
+                "{ctx} expects Graph.edges"
+            )))
+        }
+    };
+    let nodes = list_ints(&nodes_list, ctx)?;
+    let mut edges = Vec::with_capacity(edges_list.len());
+    for edge in edges_list.iter() {
+        edges.push(edge_from_value(edge.clone(), ctx)?);
+    }
+    Ok((nodes, edges))
+}
+
+fn graph_to_value(nodes: Vec<i64>, edges: Vec<(i64, i64, f64)>) -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "nodes".to_string(),
+        Value::List(Arc::new(nodes.into_iter().map(Value::Int).collect())),
+    );
+    let list = edges
+        .into_iter()
+        .map(|(from, to, weight)| {
+            let mut edge = HashMap::new();
+            edge.insert("from".to_string(), Value::Int(from));
+            edge.insert("to".to_string(), Value::Int(to));
+            edge.insert("weight".to_string(), Value::Float(weight));
+            Value::Record(Arc::new(edge))
+        })
+        .collect();
+    fields.insert("edges".to_string(), Value::List(Arc::new(list)));
+    Value::Record(Arc::new(fields))
 }
 
 fn expect_bytes(value: Value, ctx: &str) -> Result<Arc<Vec<u8>>, RuntimeError> {
@@ -3001,6 +3330,693 @@ fn text_option_from_value(value: Value, ctx: &str) -> Result<Option<String>, Run
 fn http_error_record(message: String) -> Value {
     let mut fields = HashMap::new();
     fields.insert("message".to_string(), Value::Text(message));
+    Value::Record(Arc::new(fields))
+}
+
+fn build_collections_record() -> Value {
+    let mut fields = HashMap::new();
+    fields.insert("map".to_string(), build_map_record());
+    fields.insert("set".to_string(), build_set_record());
+    fields.insert("queue".to_string(), build_queue_record());
+    fields.insert("deque".to_string(), build_deque_record());
+    fields.insert("heap".to_string(), build_heap_record());
+    Value::Record(Arc::new(fields))
+}
+
+fn build_map_record() -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "empty".to_string(),
+        Value::Map(Arc::new(ImHashMap::new())),
+    );
+    fields.insert(
+        "size".to_string(),
+        builtin("map.size", 1, |mut args, _| {
+            let map = expect_map(args.pop().unwrap(), "map.size")?;
+            Ok(Value::Int(map.len() as i64))
+        }),
+    );
+    fields.insert(
+        "has".to_string(),
+        builtin("map.has", 2, |mut args, _| {
+            let map = expect_map(args.pop().unwrap(), "map.has")?;
+            let key = key_from_value(&args.pop().unwrap(), "map.has")?;
+            Ok(Value::Bool(map.contains_key(&key)))
+        }),
+    );
+    fields.insert(
+        "get".to_string(),
+        builtin("map.get", 2, |mut args, _| {
+            let map = expect_map(args.pop().unwrap(), "map.get")?;
+            let key = key_from_value(&args.pop().unwrap(), "map.get")?;
+            Ok(match map.get(&key) {
+                Some(value) => make_some(value.clone()),
+                None => make_none(),
+            })
+        }),
+    );
+    fields.insert(
+        "insert".to_string(),
+        builtin("map.insert", 3, |mut args, _| {
+            let map = expect_map(args.pop().unwrap(), "map.insert")?;
+            let value = args.pop().unwrap();
+            let key = key_from_value(&args.pop().unwrap(), "map.insert")?;
+            let mut out = (*map).clone();
+            out.insert(key, value);
+            Ok(Value::Map(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "update".to_string(),
+        builtin("map.update", 3, |mut args, runtime| {
+            let map = expect_map(args.pop().unwrap(), "map.update")?;
+            let func = args.pop().unwrap();
+            let key = key_from_value(&args.pop().unwrap(), "map.update")?;
+            if let Some(current) = map.get(&key) {
+                let updated = runtime.apply(func, current.clone())?;
+                let mut out = (*map).clone();
+                out.insert(key, updated);
+                Ok(Value::Map(Arc::new(out)))
+            } else {
+                Ok(Value::Map(map))
+            }
+        }),
+    );
+    fields.insert(
+        "remove".to_string(),
+        builtin("map.remove", 2, |mut args, _| {
+            let map = expect_map(args.pop().unwrap(), "map.remove")?;
+            let key = key_from_value(&args.pop().unwrap(), "map.remove")?;
+            let mut out = (*map).clone();
+            out.remove(&key);
+            Ok(Value::Map(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "map".to_string(),
+        builtin("map.map", 2, |mut args, runtime| {
+            let map = expect_map(args.pop().unwrap(), "map.map")?;
+            let func = args.pop().unwrap();
+            let mut out = ImHashMap::new();
+            for (key, value) in map.iter() {
+                let updated = runtime.apply(func.clone(), value.clone())?;
+                out.insert(key.clone(), updated);
+            }
+            Ok(Value::Map(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "mapWithKey".to_string(),
+        builtin("map.mapWithKey", 2, |mut args, runtime| {
+            let map = expect_map(args.pop().unwrap(), "map.mapWithKey")?;
+            let func = args.pop().unwrap();
+            let mut out = ImHashMap::new();
+            for (key, value) in map.iter() {
+                let applied = runtime.apply(func.clone(), key.to_value())?;
+                let updated = runtime.apply(applied, value.clone())?;
+                out.insert(key.clone(), updated);
+            }
+            Ok(Value::Map(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "keys".to_string(),
+        builtin("map.keys", 1, |mut args, _| {
+            let map = expect_map(args.pop().unwrap(), "map.keys")?;
+            let items = map.iter().map(|(key, _)| key.to_value()).collect();
+            Ok(list_value(items))
+        }),
+    );
+    fields.insert(
+        "values".to_string(),
+        builtin("map.values", 1, |mut args, _| {
+            let map = expect_map(args.pop().unwrap(), "map.values")?;
+            let items = map.iter().map(|(_, value)| value.clone()).collect();
+            Ok(list_value(items))
+        }),
+    );
+    fields.insert(
+        "entries".to_string(),
+        builtin("map.entries", 1, |mut args, _| {
+            let map = expect_map(args.pop().unwrap(), "map.entries")?;
+            let items = map
+                .iter()
+                .map(|(key, value)| Value::Tuple(vec![key.to_value(), value.clone()]))
+                .collect();
+            Ok(list_value(items))
+        }),
+    );
+    fields.insert(
+        "fromList".to_string(),
+        builtin("map.fromList", 1, |mut args, _| {
+            let items = expect_list(args.pop().unwrap(), "map.fromList")?;
+            let mut out = ImHashMap::new();
+            for item in items.iter() {
+                match item {
+                    Value::Tuple(entries) if entries.len() == 2 => {
+                        let key = key_from_value(&entries[0], "map.fromList")?;
+                        out.insert(key, entries[1].clone());
+                    }
+                    _ => {
+                        return Err(RuntimeError::Message(
+                            "map.fromList expects List (k, v)".to_string(),
+                        ))
+                    }
+                }
+            }
+            Ok(Value::Map(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "toList".to_string(),
+        builtin("map.toList", 1, |mut args, _| {
+            let map = expect_map(args.pop().unwrap(), "map.toList")?;
+            let items = map
+                .iter()
+                .map(|(key, value)| Value::Tuple(vec![key.to_value(), value.clone()]))
+                .collect();
+            Ok(list_value(items))
+        }),
+    );
+    fields.insert(
+        "union".to_string(),
+        builtin("map.union", 2, |mut args, _| {
+            let right = expect_map(args.pop().unwrap(), "map.union")?;
+            let left = expect_map(args.pop().unwrap(), "map.union")?;
+            let mut out = (*left).clone();
+            for (key, value) in right.iter() {
+                out.insert(key.clone(), value.clone());
+            }
+            Ok(Value::Map(Arc::new(out)))
+        }),
+    );
+    Value::Record(Arc::new(fields))
+}
+
+fn build_set_record() -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "empty".to_string(),
+        Value::Set(Arc::new(ImHashSet::new())),
+    );
+    fields.insert(
+        "size".to_string(),
+        builtin("set.size", 1, |mut args, _| {
+            let set = expect_set(args.pop().unwrap(), "set.size")?;
+            Ok(Value::Int(set.len() as i64))
+        }),
+    );
+    fields.insert(
+        "has".to_string(),
+        builtin("set.has", 2, |mut args, _| {
+            let set = expect_set(args.pop().unwrap(), "set.has")?;
+            let key = key_from_value(&args.pop().unwrap(), "set.has")?;
+            Ok(Value::Bool(set.contains(&key)))
+        }),
+    );
+    fields.insert(
+        "insert".to_string(),
+        builtin("set.insert", 2, |mut args, _| {
+            let set = expect_set(args.pop().unwrap(), "set.insert")?;
+            let key = key_from_value(&args.pop().unwrap(), "set.insert")?;
+            let mut out = (*set).clone();
+            out.insert(key);
+            Ok(Value::Set(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "remove".to_string(),
+        builtin("set.remove", 2, |mut args, _| {
+            let set = expect_set(args.pop().unwrap(), "set.remove")?;
+            let key = key_from_value(&args.pop().unwrap(), "set.remove")?;
+            let mut out = (*set).clone();
+            out.remove(&key);
+            Ok(Value::Set(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "union".to_string(),
+        builtin("set.union", 2, |mut args, _| {
+            let right = expect_set(args.pop().unwrap(), "set.union")?;
+            let left = expect_set(args.pop().unwrap(), "set.union")?;
+            let out = (*left).clone().union((*right).clone());
+            Ok(Value::Set(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "intersection".to_string(),
+        builtin("set.intersection", 2, |mut args, _| {
+            let right = expect_set(args.pop().unwrap(), "set.intersection")?;
+            let left = expect_set(args.pop().unwrap(), "set.intersection")?;
+            let out = (*left).clone().intersection((*right).clone());
+            Ok(Value::Set(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "difference".to_string(),
+        builtin("set.difference", 2, |mut args, _| {
+            let right = expect_set(args.pop().unwrap(), "set.difference")?;
+            let left = expect_set(args.pop().unwrap(), "set.difference")?;
+            let out = (*left)
+                .clone()
+                .relative_complement((*right).clone());
+            Ok(Value::Set(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "fromList".to_string(),
+        builtin("set.fromList", 1, |mut args, _| {
+            let items = expect_list(args.pop().unwrap(), "set.fromList")?;
+            let mut out = ImHashSet::new();
+            for item in items.iter() {
+                let key = key_from_value(item, "set.fromList")?;
+                out.insert(key);
+            }
+            Ok(Value::Set(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "toList".to_string(),
+        builtin("set.toList", 1, |mut args, _| {
+            let set = expect_set(args.pop().unwrap(), "set.toList")?;
+            let items = set.iter().map(|key| key.to_value()).collect();
+            Ok(list_value(items))
+        }),
+    );
+    Value::Record(Arc::new(fields))
+}
+
+fn build_queue_record() -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "empty".to_string(),
+        Value::Queue(Arc::new(ImVector::new())),
+    );
+    fields.insert(
+        "enqueue".to_string(),
+        builtin("queue.enqueue", 2, |mut args, _| {
+            let queue = expect_queue(args.pop().unwrap(), "queue.enqueue")?;
+            let value = args.pop().unwrap();
+            let mut out = (*queue).clone();
+            out.push_back(value);
+            Ok(Value::Queue(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "dequeue".to_string(),
+        builtin("queue.dequeue", 1, |mut args, _| {
+            let queue = expect_queue(args.pop().unwrap(), "queue.dequeue")?;
+            let mut out = (*queue).clone();
+            match out.pop_front() {
+                Some(value) => Ok(make_some(Value::Tuple(vec![
+                    value,
+                    Value::Queue(Arc::new(out)),
+                ]))),
+                None => Ok(make_none()),
+            }
+        }),
+    );
+    fields.insert(
+        "peek".to_string(),
+        builtin("queue.peek", 1, |mut args, _| {
+            let queue = expect_queue(args.pop().unwrap(), "queue.peek")?;
+            match queue.front() {
+                Some(value) => Ok(make_some(value.clone())),
+                None => Ok(make_none()),
+            }
+        }),
+    );
+    Value::Record(Arc::new(fields))
+}
+
+fn build_deque_record() -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "empty".to_string(),
+        Value::Deque(Arc::new(ImVector::new())),
+    );
+    fields.insert(
+        "pushFront".to_string(),
+        builtin("deque.pushFront", 2, |mut args, _| {
+            let deque = expect_deque(args.pop().unwrap(), "deque.pushFront")?;
+            let value = args.pop().unwrap();
+            let mut out = (*deque).clone();
+            out.push_front(value);
+            Ok(Value::Deque(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "pushBack".to_string(),
+        builtin("deque.pushBack", 2, |mut args, _| {
+            let deque = expect_deque(args.pop().unwrap(), "deque.pushBack")?;
+            let value = args.pop().unwrap();
+            let mut out = (*deque).clone();
+            out.push_back(value);
+            Ok(Value::Deque(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "popFront".to_string(),
+        builtin("deque.popFront", 1, |mut args, _| {
+            let deque = expect_deque(args.pop().unwrap(), "deque.popFront")?;
+            let mut out = (*deque).clone();
+            match out.pop_front() {
+                Some(value) => Ok(make_some(Value::Tuple(vec![
+                    value,
+                    Value::Deque(Arc::new(out)),
+                ]))),
+                None => Ok(make_none()),
+            }
+        }),
+    );
+    fields.insert(
+        "popBack".to_string(),
+        builtin("deque.popBack", 1, |mut args, _| {
+            let deque = expect_deque(args.pop().unwrap(), "deque.popBack")?;
+            let mut out = (*deque).clone();
+            match out.pop_back() {
+                Some(value) => Ok(make_some(Value::Tuple(vec![
+                    value,
+                    Value::Deque(Arc::new(out)),
+                ]))),
+                None => Ok(make_none()),
+            }
+        }),
+    );
+    fields.insert(
+        "peekFront".to_string(),
+        builtin("deque.peekFront", 1, |mut args, _| {
+            let deque = expect_deque(args.pop().unwrap(), "deque.peekFront")?;
+            match deque.front() {
+                Some(value) => Ok(make_some(value.clone())),
+                None => Ok(make_none()),
+            }
+        }),
+    );
+    fields.insert(
+        "peekBack".to_string(),
+        builtin("deque.peekBack", 1, |mut args, _| {
+            let deque = expect_deque(args.pop().unwrap(), "deque.peekBack")?;
+            match deque.back() {
+                Some(value) => Ok(make_some(value.clone())),
+                None => Ok(make_none()),
+            }
+        }),
+    );
+    Value::Record(Arc::new(fields))
+}
+
+fn build_heap_record() -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "empty".to_string(),
+        Value::Heap(Arc::new(BinaryHeap::new())),
+    );
+    fields.insert(
+        "push".to_string(),
+        builtin("heap.push", 2, |mut args, _| {
+            let heap = expect_heap(args.pop().unwrap(), "heap.push")?;
+            let value = args.pop().unwrap();
+            let key = key_from_value(&value, "heap.push")?;
+            let mut out = (*heap).clone();
+            out.push(Reverse(key));
+            Ok(Value::Heap(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "popMin".to_string(),
+        builtin("heap.popMin", 1, |mut args, _| {
+            let heap = expect_heap(args.pop().unwrap(), "heap.popMin")?;
+            let mut out = (*heap).clone();
+            match out.pop() {
+                Some(Reverse(value)) => Ok(make_some(Value::Tuple(vec![
+                    value.to_value(),
+                    Value::Heap(Arc::new(out)),
+                ]))),
+                None => Ok(make_none()),
+            }
+        }),
+    );
+    fields.insert(
+        "peekMin".to_string(),
+        builtin("heap.peekMin", 1, |mut args, _| {
+            let heap = expect_heap(args.pop().unwrap(), "heap.peekMin")?;
+            match heap.peek() {
+                Some(Reverse(value)) => Ok(make_some(value.to_value())),
+                None => Ok(make_none()),
+            }
+        }),
+    );
+    Value::Record(Arc::new(fields))
+}
+
+fn build_linalg_record() -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "dot".to_string(),
+        builtin("linalg.dot", 2, |mut args, _| {
+            let (_, left) = vec_from_value(args.pop().unwrap(), "linalg.dot")?;
+            let (_, right) = vec_from_value(args.pop().unwrap(), "linalg.dot")?;
+            if left.len() != right.len() {
+                return Err(RuntimeError::Message(
+                    "linalg.dot expects vectors of equal size".to_string(),
+                ));
+            }
+            let sum: f64 = left.iter().zip(right.iter()).map(|(a, b)| a * b).sum();
+            Ok(Value::Float(sum))
+        }),
+    );
+    fields.insert(
+        "matMul".to_string(),
+        builtin("linalg.matMul", 2, |mut args, _| {
+            let (rows_b, cols_b, data_b) = mat_from_value(args.pop().unwrap(), "linalg.matMul")?;
+            let (rows_a, cols_a, data_a) = mat_from_value(args.pop().unwrap(), "linalg.matMul")?;
+            if cols_a != rows_b {
+                return Err(RuntimeError::Message(
+                    "linalg.matMul expects matching dimensions".to_string(),
+                ));
+            }
+            let mut out = vec![0.0; (rows_a * cols_b) as usize];
+            let rows_a_usize = rows_a as usize;
+            let cols_a_usize = cols_a as usize;
+            let cols_b_usize = cols_b as usize;
+            for r in 0..rows_a_usize {
+                for c in 0..cols_b_usize {
+                    let mut acc = 0.0;
+                    for k in 0..cols_a_usize {
+                        let a = data_a[r * cols_a_usize + k];
+                        let b = data_b[k * cols_b_usize + c];
+                        acc += a * b;
+                    }
+                    out[r * cols_b_usize + c] = acc;
+                }
+            }
+            Ok(mat_to_value(rows_a, cols_b, out))
+        }),
+    );
+    fields.insert(
+        "solve2x2".to_string(),
+        builtin("linalg.solve2x2", 2, |mut args, _| {
+            let (_, vec) = vec_from_value(args.pop().unwrap(), "linalg.solve2x2")?;
+            let (rows, cols, mat) = mat_from_value(args.pop().unwrap(), "linalg.solve2x2")?;
+            if rows != 2 || cols != 2 || vec.len() != 2 {
+                return Err(RuntimeError::Message(
+                    "linalg.solve2x2 expects 2x2 matrix and size-2 vector".to_string(),
+                ));
+            }
+            let a = mat[0];
+            let b = mat[1];
+            let c = mat[2];
+            let d = mat[3];
+            let det = a * d - b * c;
+            if det == 0.0 {
+                return Err(RuntimeError::Message(
+                    "linalg.solve2x2 determinant is zero".to_string(),
+                ));
+            }
+            let x = (d * vec[0] - b * vec[1]) / det;
+            let y = (-c * vec[0] + a * vec[1]) / det;
+            Ok(vec_to_value(2, vec![x, y]))
+        }),
+    );
+    Value::Record(Arc::new(fields))
+}
+
+fn build_signal_record() -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "fft".to_string(),
+        builtin("signal.fft", 1, |mut args, _| {
+            let (samples, rate) = signal_from_value(args.pop().unwrap(), "signal.fft")?;
+            if samples.is_empty() {
+                return Ok(spectrum_to_value(Vec::new(), rate));
+            }
+            let mut planner = FftPlanner::new();
+            let fft = planner.plan_fft_forward(samples.len());
+            let mut buffer: Vec<FftComplex<f64>> = samples
+                .into_iter()
+                .map(|value| FftComplex::new(value, 0.0))
+                .collect();
+            fft.process(&mut buffer);
+            Ok(spectrum_to_value(buffer, rate))
+        }),
+    );
+    fields.insert(
+        "ifft".to_string(),
+        builtin("signal.ifft", 1, |mut args, _| {
+            let (mut bins, rate) = spectrum_from_value(args.pop().unwrap(), "signal.ifft")?;
+            if bins.is_empty() {
+                return Ok(signal_to_value(Vec::new(), rate));
+            }
+            let mut planner = FftPlanner::new();
+            let fft = planner.plan_fft_inverse(bins.len());
+            fft.process(&mut bins);
+            let scale = bins.len() as f64;
+            let samples = bins
+                .into_iter()
+                .map(|value| value.re / scale)
+                .collect();
+            Ok(signal_to_value(samples, rate))
+        }),
+    );
+    fields.insert(
+        "windowHann".to_string(),
+        builtin("signal.windowHann", 1, |mut args, _| {
+            let (samples, rate) = signal_from_value(args.pop().unwrap(), "signal.windowHann")?;
+            let len = samples.len();
+            if len == 0 {
+                return Ok(signal_to_value(samples, rate));
+            }
+            let denom = (len - 1) as f64;
+            let mut out = Vec::with_capacity(len);
+            for (i, value) in samples.into_iter().enumerate() {
+                let phase = 2.0 * std::f64::consts::PI * (i as f64) / denom;
+                let w = 0.5 * (1.0 - phase.cos());
+                out.push(value * w);
+            }
+            Ok(signal_to_value(out, rate))
+        }),
+    );
+    fields.insert(
+        "normalize".to_string(),
+        builtin("signal.normalize", 1, |mut args, _| {
+            let (samples, rate) = signal_from_value(args.pop().unwrap(), "signal.normalize")?;
+            let mut max = 0.0;
+            for value in &samples {
+                let abs = value.abs();
+                if abs > max {
+                    max = abs;
+                }
+            }
+            if max == 0.0 {
+                return Ok(signal_to_value(samples, rate));
+            }
+            let out = samples.into_iter().map(|value| value / max).collect();
+            Ok(signal_to_value(out, rate))
+        }),
+    );
+    Value::Record(Arc::new(fields))
+}
+
+fn build_graph_record() -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "addEdge".to_string(),
+        builtin("graph.addEdge", 2, |mut args, _| {
+            let edge_value = args.pop().unwrap();
+            let graph_value = args.pop().unwrap();
+            let (from, to, weight) = edge_from_value(edge_value, "graph.addEdge")?;
+            let (mut nodes, mut edges) = graph_from_value(graph_value, "graph.addEdge")?;
+            if !nodes.contains(&from) {
+                nodes.push(from);
+            }
+            if !nodes.contains(&to) {
+                nodes.push(to);
+            }
+            edges.push((from, to, weight));
+            Ok(graph_to_value(nodes, edges))
+        }),
+    );
+    fields.insert(
+        "neighbors".to_string(),
+        builtin("graph.neighbors", 2, |mut args, _| {
+            let node = expect_int(args.pop().unwrap(), "graph.neighbors")?;
+            let (_, edges) = graph_from_value(args.pop().unwrap(), "graph.neighbors")?;
+            let neighbors: Vec<Value> = edges
+                .iter()
+                .filter_map(|(from, to, _)| {
+                    if *from == node {
+                        Some(Value::Int(*to))
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            Ok(Value::List(Arc::new(neighbors)))
+        }),
+    );
+    fields.insert(
+        "shortestPath".to_string(),
+        builtin("graph.shortestPath", 3, |mut args, _| {
+            let goal = expect_int(args.pop().unwrap(), "graph.shortestPath")?;
+            let start = expect_int(args.pop().unwrap(), "graph.shortestPath")?;
+            let (nodes, edges) = graph_from_value(args.pop().unwrap(), "graph.shortestPath")?;
+            if start == goal {
+                return Ok(Value::List(Arc::new(vec![Value::Int(start)])));
+            }
+            let mut adjacency: HashMap<i64, Vec<(i64, f64)>> = HashMap::new();
+            for (from, to, weight) in edges {
+                adjacency
+                    .entry(from)
+                    .or_default()
+                    .push((to, weight));
+            }
+            for node in nodes {
+                adjacency.entry(node).or_default();
+            }
+            let mut dist: HashMap<i64, f64> = HashMap::new();
+            let mut prev: HashMap<i64, i64> = HashMap::new();
+            let mut heap = BinaryHeap::new();
+            dist.insert(start, 0.0);
+            heap.push((Reverse(OrderedFloat(0.0)), start));
+            while let Some((Reverse(OrderedFloat(cost)), node)) = heap.pop() {
+                if cost > *dist.get(&node).unwrap_or(&f64::INFINITY) {
+                    continue;
+                }
+                if node == goal {
+                    break;
+                }
+                if let Some(neighbors) = adjacency.get(&node) {
+                    for (next, weight) in neighbors {
+                        let next_cost = cost + *weight;
+                        let current = dist.get(next).copied().unwrap_or(f64::INFINITY);
+                        if next_cost < current {
+                            dist.insert(*next, next_cost);
+                            prev.insert(*next, node);
+                            heap.push((Reverse(OrderedFloat(next_cost)), *next));
+                        }
+                    }
+                }
+            }
+            if !prev.contains_key(&goal) {
+                return Ok(Value::List(Arc::new(Vec::new())));
+            }
+            let mut path = Vec::new();
+            let mut current = goal;
+            path.push(Value::Int(current));
+            while current != start {
+                match prev.get(&current) {
+                    Some(node) => {
+                        current = *node;
+                        path.push(Value::Int(current));
+                    }
+                    None => return Ok(Value::List(Arc::new(Vec::new()))),
+                }
+            }
+            path.reverse();
+            Ok(Value::List(Arc::new(path)))
+        }),
+    );
     Value::Record(Arc::new(fields))
 }
 

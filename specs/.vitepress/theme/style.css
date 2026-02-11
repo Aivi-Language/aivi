@@ -1,0 +1,13 @@
+:root {
+  --vp-font-family-mono: 'Fira Code', monospace;
+}
+
+code, kbd, samp, pre {
+  font-family: var(--vp-font-family-mono) !important;
+  font-variant-ligatures: contextual;
+}
+
+.vp-code {
+  font-family: var(--vp-font-family-mono) !important;
+  font-variant-ligatures: contextual;
+}

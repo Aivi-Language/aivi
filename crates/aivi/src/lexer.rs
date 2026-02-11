@@ -247,6 +247,10 @@ fn lex_sigil(chars: &[char], start: usize) -> Option<(String, usize, bool)> {
         index += 1;
     }
     let &open = chars.get(index)?;
+    let tag: String = chars[start + 1..index].iter().collect();
+    if (tag == "map" && open == '{') || (tag == "set" && open == '[') {
+        return None;
+    }
     let close = match open {
         '/' => '/',
         '"' => '"',

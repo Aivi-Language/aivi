@@ -1104,6 +1104,37 @@ fn values_equal(left: &Value, right: &Value) -> bool {
         (Value::BigInt(a), Value::BigInt(b)) => a == b,
         (Value::Rational(a), Value::Rational(b)) => a == b,
         (Value::Decimal(a), Value::Decimal(b)) => a == b,
+        (Value::Map(a), Value::Map(b)) => {
+            a.len() == b.len()
+                && a.iter().all(|(key, value)| {
+                    b.get(key)
+                        .map(|other| values_equal(value, other))
+                        .unwrap_or(false)
+                })
+        }
+        (Value::Set(a), Value::Set(b)) => a.len() == b.len() && a.iter().all(|key| b.contains(key)),
+        (Value::Queue(a), Value::Queue(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b.iter())
+                    .all(|(left, right)| values_equal(left, right))
+        }
+        (Value::Deque(a), Value::Deque(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b.iter())
+                    .all(|(left, right)| values_equal(left, right))
+        }
+        (Value::Heap(a), Value::Heap(b)) => {
+            if a.len() != b.len() {
+                return false;
+            }
+            let mut left: Vec<_> = a.iter().cloned().collect();
+            let mut right: Vec<_> = b.iter().cloned().collect();
+            left.sort();
+            right.sort();
+            left == right
+        }
         (Value::Constructor { name: a, args: aa }, Value::Constructor { name: b, args: bb }) => {
             a == b && aa.iter().zip(bb.iter()).all(|(x, y)| values_equal(x, y))
         }
@@ -1168,6 +1199,11 @@ fn format_value(value: &Value) -> String {
         Value::BigInt(value) => value.to_string(),
         Value::Rational(value) => value.to_string(),
         Value::Decimal(value) => value.to_string(),
+        Value::Map(entries) => format!("<map:{}>", entries.len()),
+        Value::Set(entries) => format!("<set:{}>", entries.len()),
+        Value::Queue(items) => format!("<queue:{}>", items.len()),
+        Value::Deque(items) => format!("<deque:{}>", items.len()),
+        Value::Heap(items) => format!("<heap:{}>", items.len()),
         Value::List(items) => format!(
             "[{}]",
             items
