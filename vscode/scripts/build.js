@@ -86,7 +86,7 @@ function compileExtension() {
 
 function packageVsix() {
   run("pnpm install --node-linker=hoisted --public-hoist-pattern=*", { cwd: vscodeDir });
-  run("pnpm exec vsce package", { cwd: vscodeDir });
+  run("pnpm exec vsce package --no-dependencies", { cwd: vscodeDir });
 }
 
 function main() {

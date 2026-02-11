@@ -8,14 +8,14 @@ use tower_lsp::lsp_types::request::{
 };
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, CompletionParams, CompletionResponse,
-    DeclarationCapability, DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams,
-    GotoDefinitionResponse, Hover, HoverParams, HoverProviderCapability,
-    ImplementationProviderCapability, InitializeParams, InitializeResult, InitializedParams,
-    Location, OneOf, ReferenceParams, RenameParams, SemanticTokensFullOptions,
-    SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
-    SemanticTokensServerCapabilities, ServerCapabilities, SignatureHelp, SignatureHelpOptions,
-    SignatureHelpParams, TextDocumentPositionParams, TextDocumentSyncCapability,
-    TextDocumentSyncKind, WorkspaceEdit,
+    DeclarationCapability, DocumentFormattingParams, DocumentRangeFormattingParams,
+    DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse,
+    Hover, HoverParams, HoverProviderCapability, ImplementationProviderCapability,
+    InitializeParams, InitializeResult, InitializedParams, Location, OneOf, ReferenceParams,
+    RenameParams, SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensParams,
+    SemanticTokensResult, SemanticTokensServerCapabilities, ServerCapabilities, SignatureHelp,
+    SignatureHelpOptions, SignatureHelpParams, TextDocumentPositionParams,
+    TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, WorkspaceEdit,
 };
 use tower_lsp::{LanguageServer, LspService, Server};
 
@@ -78,6 +78,8 @@ impl LanguageServer for Backend {
                     trigger_characters: None,
                     ..tower_lsp::lsp_types::CompletionOptions::default()
                 }),
+                document_formatting_provider: Some(OneOf::Left(true)),
+                document_range_formatting_provider: Some(OneOf::Left(true)),
                 ..ServerCapabilities::default()
             },
             server_info: Some(tower_lsp::lsp_types::ServerInfo {
@@ -310,6 +312,34 @@ impl LanguageServer for Backend {
             .await
             .unwrap_or_default();
         Ok(Some(actions))
+    }
+
+    async fn formatting(
+        &self,
+        params: DocumentFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri;
+        let Some(source) = self
+            .with_document_text(&uri, |content| content.to_string())
+            .await
+        else {
+            return Ok(None);
+        };
+        Ok(Some(Backend::build_formatting_edits(&source)))
+    }
+
+    async fn range_formatting(
+        &self,
+        params: DocumentRangeFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri;
+        let Some(source) = self
+            .with_document_text(&uri, |content| content.to_string())
+            .await
+        else {
+            return Ok(None);
+        };
+        Ok(Some(Backend::build_formatting_edits(&source)))
     }
 
     async fn semantic_tokens_full(

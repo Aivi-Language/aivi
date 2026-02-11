@@ -102,7 +102,7 @@
     "compile": "node scripts/bundle.js",
     "build": "node scripts/build.js",
     "watch": "node scripts/bundle.js --watch",
-    "package": "pnpm install --node-linker=hoisted --public-hoist-pattern=* && vsce package",
+    "package": "pnpm install --node-linker=hoisted --public-hoist-pattern=* && vsce package --no-dependencies",
     "vscode:prepublish": "pnpm run compile"
   },
   "dependencies": {

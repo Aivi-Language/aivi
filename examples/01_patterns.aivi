@@ -1,52 +1,63 @@
 module examples.compiler.patterns
 export head, classify, deepName, unwrap, take, zip, depth, flatten, evalExpr
 
-Option A = None | Some A
-Result E A = Err E | Ok A
-Tree A = Leaf A | Node (Tree A) (Tree A)
-Expr = Num Int | Add Expr Expr | Mul Expr Expr
+Option A = None
+| Some A
+Result E A = Err E
+| Ok A
+Tree A = Leaf A
+| Node (Tree A)(Tree A)
+Expr = Num Int
+| Add Expr Expr
+| Mul Expr Expr
 
 head =
-  | []       => None
+  | [] => None
   | [x, ...] => Some x
 
 classify = n => n ?
-  | 0            => "zero"
+  | 0 => "zero"
   | n when n < 0 => "negative"
-  | _            => "positive"
+  | _ => "positive"
 
 deepName = response =>
-  response ?
-    | { data.user.profile@{ name } } => name
-    | _                              => "unknown"
+response ?
+  | {
+  data.user.profile
+  @ {
+    name
+  }
+}
+=> name
+  | _ => "unknown"
 
 unwrap =
-  | Ok x  => x
+  | Ok x => x
   | Err _ => 0
 
 take = (n, xs) => (n, xs) ?
   | (n, _) when n <= 0 => []
-  | (_, [])            => []
-  | (n, [x, ...rest])  => [x, ...take (n -1, rest)]
+  | (_, []) => []
+  | (n, [x, ...rest]) => [x, ...take (n - 1, rest)]
 
 zip = (xs, ys) => (xs, ys) ?
-  | ([], _)                  => []
-  | (_, [])                  => []
+  | ([], _) => []
+  | (_, []) => []
   | ([x, ...xs], [y, ...ys]) => [(x, y), ...zip (xs, ys)]
 
 append = xs ys => xs ?
-  | []        => ys
+  | [] => ys
   | [h, ...t] => [h, ...append t ys]
 
 depth =
-  | Leaf _          => 1
-  | Node left right => 1 + max (depth left) (depth right)
+  | Leaf _ => 1
+  | Node left right => 1 + max (depth left)(depth right)
 
 flatten =
-  | Leaf x          => [x]
-  | Node left right => append (flatten left) (flatten right)
+  | Leaf x => [x]
+  | Node left right => append (flatten left)(flatten right)
 
 evalExpr =
-  | Num n   => n
+  | Num n => n
   | Add a b => evalExpr a + evalExpr b
   | Mul a b => evalExpr a * evalExpr b

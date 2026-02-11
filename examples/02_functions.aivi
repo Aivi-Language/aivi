@@ -6,26 +6,26 @@ add = x y => x + y
 compose = f g => x => f (g x)
 
 pipeline = x => x |> inc |> (_ * 2)
-getName = .name
+getName =.name
 pairSum = (a, b) => a + b
 
 twice = f => x => f (f x)
 
 map = f xs => xs ?
-  | []        => []
+  | [] => []
   | [h, ...t] => [f h, ...map f t]
 
 filter = p xs => xs ?
-  | []                 => []
+  | [] => []
   | [h, ...t] when p h => [h, ...filter p t]
-  | [_, ...t]          => filter p t
+  | [_, ...t] => filter p t
 
 sum = xs => xs ?
-  | []        => 0
+  | [] => 0
   | [h, ...t] => h + sum t
 
 processed =
-  [1, 2, 3, 4, 5]
-    |> map (add 10)
-    |> filter (_ % 2 == 0)
-    |> sum
+[1, 2, 3, 4, 5]
+|> map (add 10)
+|> filter (_ % 2 == 0)
+|> sum

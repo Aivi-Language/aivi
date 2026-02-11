@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use aivi::{parse_modules, ModuleItem, Span};
+use aivi::{format_text, parse_modules, ModuleItem, Span};
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, DiagnosticSeverity, HoverContents, NumberOrString, Position, Url,
 };
@@ -397,6 +397,15 @@ fn diagnostics_report_missing_list_comma() {
     assert!(diagnostics.iter().any(|diag| {
         matches!(diag.code.as_ref(), Some(NumberOrString::String(code)) if code == "E1524")
     }));
+}
+
+#[test]
+fn formatting_edits_match_formatter_output() {
+    let text = "module demo\n\nmain = effect { _<-print \"hi\" }\n";
+    let edits = Backend::build_formatting_edits(text);
+    assert_eq!(edits.len(), 1);
+    assert_eq!(edits[0].range, Backend::full_document_range(text));
+    assert_eq!(edits[0].new_text, format_text(text));
 }
 
 #[test]

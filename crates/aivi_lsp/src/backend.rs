@@ -8,7 +8,7 @@ use aivi::{
     TypeAlias, TypeCtor, TypeDecl, TypeExpr, UseDecl,
 };
 use tokio::sync::Mutex;
-use tower_lsp::lsp_types::{Location, Position, Range, Url};
+use tower_lsp::lsp_types::{Location, Position, Range, TextEdit, Url};
 use tower_lsp::Client;
 
 use crate::state::BackendState;
@@ -19,6 +19,22 @@ pub(super) struct Backend {
 }
 
 impl Backend {
+    pub(super) fn build_formatting_edits(text: &str) -> Vec<TextEdit> {
+        let range = Self::full_document_range(text);
+        let formatted = aivi::format_text(text);
+        vec![TextEdit::new(range, formatted)]
+    }
+
+    pub(super) fn full_document_range(text: &str) -> Range {
+        let lines: Vec<&str> = text.split('\n').collect();
+        let last_line = lines.len().saturating_sub(1) as u32;
+        let last_col = lines
+            .last()
+            .map(|line| line.chars().count() as u32)
+            .unwrap_or(0);
+        Range::new(Position::new(0, 0), Position::new(last_line, last_col))
+    }
+
     pub(super) fn span_to_range(span: Span) -> Range {
         let start_line = span.start.line.saturating_sub(1) as u32;
         let start_char = span.start.column.saturating_sub(1) as u32;
