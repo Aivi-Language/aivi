@@ -175,17 +175,14 @@ impl Backend {
         roles
     }
 
-    fn is_record_label(prev: Option<&CstToken>, next: Option<&CstToken>) -> bool {
+    fn is_record_label(token: &CstToken, next: Option<&CstToken>) -> bool {
         let Some(next) = next else {
             return false;
         };
         if next.kind != "symbol" || next.text != ":" {
             return false;
         }
-        let Some(prev) = prev else {
-            return false;
-        };
-        prev.kind == "symbol" && (prev.text == "{" || prev.text == ",")
+        Self::is_lower_ident(token)
     }
 
     fn classify_semantic_token(
@@ -231,7 +228,7 @@ impl Backend {
                 if prev.is_some_and(|prev| prev.kind == "symbol" && prev.text == "@") {
                     return Some(Self::SEM_TOKEN_DECORATOR);
                 }
-                if Self::is_record_label(prev, next) {
+                if Self::is_record_label(token, next) {
                     return Some(Self::SEM_TOKEN_PROPERTY);
                 }
                 if matches!(

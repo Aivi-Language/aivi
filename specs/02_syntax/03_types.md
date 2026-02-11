@@ -35,6 +35,7 @@ Numeric suffixes:
 
 * `42n` → `BigInt`
 * `3.14dec` → `Decimal`
+* `2024-05-21T12:00:00Z` → `Instant`
 
 
 ## 3.2 Algebraic Data Types
