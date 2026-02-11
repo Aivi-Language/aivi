@@ -28,6 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
     documentSelector: [{ language: "aivi" }],
     synchronize: {
       fileEvents: vscode.workspace.createFileSystemWatcher("**/*.aivi"),
+      configurationSection: "aivi",
     },
     outputChannel: vscode.window.createOutputChannel("AIVI Language Server"),
   };

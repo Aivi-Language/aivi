@@ -1150,7 +1150,8 @@ impl Parser {
                             };
                         } else {
                             let end = self.expect_symbol("]", "expected ']' after index");
-                            let span = merge_span(expr_span(&expr), end.unwrap_or(expr_span(&expr)));
+                            let span =
+                                merge_span(expr_span(&expr), end.unwrap_or(expr_span(&expr)));
                             expr = Expr::Index {
                                 base: Box::new(expr),
                                 index: Box::new(first),
@@ -1333,11 +1334,7 @@ impl Parser {
                         if self.is_record_field_start() {
                             if !had_newline {
                                 let span = self.peek_span().unwrap_or_else(|| self.previous_span());
-                                self.emit_diag(
-                                    "E1525",
-                                    "expected ',' between record fields",
-                                    span,
-                                );
+                                self.emit_diag("E1525", "expected ',' between record fields", span);
                             }
                             continue;
                         }

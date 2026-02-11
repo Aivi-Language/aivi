@@ -32,17 +32,38 @@ palette = [
 ]
 "#;
     let formatted = format_text(input);
-    println!("--- Formatted Output ---\n{}\n------------------------", formatted);
-    
+    println!(
+        "--- Formatted Output ---\n{}\n------------------------",
+        formatted
+    );
+
     // Asserting that these things should NOT happen
-    assert!(!formatted.contains("- 7"), "Should not have space in negative numbers");
-    assert!(!formatted.contains("10 px"), "Should not have space in suffixes (px)");
-    assert!(!formatted.contains("100 %"), "Should not have space in suffixes (%)");
-    assert!(!formatted.contains("2024 - 05"), "Should not have space in dates");
-    assert!(!formatted.contains("}\n,"), "Should not have dangling commas on new lines");
-    
+    assert!(
+        !formatted.contains("- 7"),
+        "Should not have space in negative numbers"
+    );
+    assert!(
+        !formatted.contains("10 px"),
+        "Should not have space in suffixes (px)"
+    );
+    assert!(
+        !formatted.contains("100 %"),
+        "Should not have space in suffixes (%)"
+    );
+    assert!(
+        !formatted.contains("2024 - 05"),
+        "Should not have space in dates"
+    );
+    assert!(
+        !formatted.contains("}\n,"),
+        "Should not have dangling commas on new lines"
+    );
+
     // Check records have spaces inside { }
-    assert!(formatted.contains("{id: 1, label: \"alpha\", meta: {score: 9.5, active: True}}") || 
-            formatted.contains("{ id: 1, label: \"alpha\", meta: { score: 9.5, active: True } }"), 
-            "Should have spaces inside record braces if on one line");
+    assert!(
+        formatted.contains("{id: 1, label: \"alpha\", meta: {score: 9.5, active: True}}")
+            || formatted
+                .contains("{ id: 1, label: \"alpha\", meta: { score: 9.5, active: True } }"),
+        "Should have spaces inside record braces if on one line"
+    );
 }

@@ -1,7 +1,28 @@
 use crate::lexer::lex;
 use crate::syntax;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FormatOptions {
+    pub indent_size: usize,
+    pub max_blank_lines: usize,
+}
+
+impl Default for FormatOptions {
+    fn default() -> Self {
+        Self {
+            indent_size: 2,
+            max_blank_lines: 1,
+        }
+    }
+}
+
 pub fn format_text(content: &str) -> String {
+    format_text_with_options(content, FormatOptions::default())
+}
+
+pub fn format_text_with_options(content: &str, options: FormatOptions) -> String {
+    let indent_size = options.indent_size.clamp(1, 16);
+    let max_blank_lines = options.max_blank_lines.min(10);
     let (tokens, _) = lex(content);
 
     let raw_lines: Vec<&str> = content.split('\n').collect();
@@ -220,7 +241,21 @@ pub fn format_text(content: &str) -> String {
         if (prev_text == "-" || prev_text == "+") && curr_kind == "number" {
             let precursor = prevprev.map(|(_, t)| t).unwrap_or("");
             if precursor.is_empty()
-                || matches!(precursor, "(" | "[" | "{" | "," | ":" | "=" | "->" | "=>" | "<-" | "|>" | "<|" | "?" | "|")
+                || matches!(
+                    precursor,
+                    "(" | "["
+                        | "{"
+                        | ","
+                        | ":"
+                        | "="
+                        | "->"
+                        | "=>"
+                        | "<-"
+                        | "|>"
+                        | "<|"
+                        | "?"
+                        | "|"
+                )
                 || is_op(precursor)
             {
                 return false;
@@ -232,10 +267,22 @@ pub fn format_text(content: &str) -> String {
             return true;
         }
 
-        if prev_text == "=" || prev_text == "=>" || prev_text == "<-" || prev_text == "->" || prev_text == "|>" || prev_text == "<|" {
+        if prev_text == "="
+            || prev_text == "=>"
+            || prev_text == "<-"
+            || prev_text == "->"
+            || prev_text == "|>"
+            || prev_text == "<|"
+        {
             return true;
         }
-        if curr_text == "=" || curr_text == "=>" || curr_text == "<-" || curr_text == "->" || curr_text == "|>" || curr_text == "<|" {
+        if curr_text == "="
+            || curr_text == "=>"
+            || curr_text == "<-"
+            || curr_text == "->"
+            || curr_text == "|>"
+            || curr_text == "<|"
+        {
             return true;
         }
         if is_op(prev_text) || is_op(curr_text) {
@@ -251,10 +298,14 @@ pub fn format_text(content: &str) -> String {
         if prev_text == ")" && (is_word_kind(curr_kind) || curr_text == "(") {
             return true;
         }
-        if prev_text == "}" && (is_word_kind(curr_kind) || is_keyword(curr_text) || curr_text == "(") {
+        if prev_text == "}"
+            && (is_word_kind(curr_kind) || is_keyword(curr_text) || curr_text == "(")
+        {
             return true;
         }
-        if prev_text == "]" && (is_word_kind(curr_kind) || is_keyword(curr_text) || curr_text == "(") {
+        if prev_text == "]"
+            && (is_word_kind(curr_kind) || is_keyword(curr_text) || curr_text == "(")
+        {
             return true;
         }
 
@@ -279,7 +330,8 @@ pub fn format_text(content: &str) -> String {
 
             let curr = (t.kind.as_str(), t.text.as_str());
             let adjacent_in_input = prev_token.is_some_and(|p| {
-                p.span.start.line == t.span.start.line && p.span.end.column + 1 == t.span.start.column
+                p.span.start.line == t.span.start.line
+                    && p.span.end.column + 1 == t.span.start.column
             });
             if wants_space_between(prevprev, prev, curr, adjacent_in_input) && !out.is_empty() {
                 out.push(' ');
@@ -306,7 +358,7 @@ pub fn format_text(content: &str) -> String {
         (indent, len)
     }
 
-    // First pass: compute context per line (indentation is preserved from input).
+    // First pass: compute context per line and indentation level.
     let mut stack: Vec<OpenFrame> = Vec::new();
     let mut degraded = false;
     let mut prev_non_comment_text: Option<String> = None;
@@ -317,7 +369,24 @@ pub fn format_text(content: &str) -> String {
     for line_index in 0..raw_lines.len() {
         let mut line_tokens = tokens_by_line[line_index].clone();
         line_tokens.sort_by_key(|t| (t.span.start.column, t.span.end.column));
-        let (indent, indent_len) = leading_indent(raw_lines[line_index]);
+
+        let (input_indent, _) = leading_indent(raw_lines[line_index]);
+
+        let mut indent_level = stack.iter().filter(|f| f.sym == '{').count();
+        if !degraded {
+            if let Some(first_idx) = first_code_index(&line_tokens) {
+                if is_close_sym(line_tokens[first_idx].text.as_str()).is_some() {
+                    indent_level = indent_level.saturating_sub(1);
+                }
+            }
+        }
+
+        let indent = if degraded {
+            input_indent
+        } else {
+            " ".repeat(indent_level * indent_size)
+        };
+        let indent_len = indent.chars().count();
         let top_context = stack.last().map(|f| f.kind);
 
         lines.push(LineState {
@@ -341,7 +410,11 @@ pub fn format_text(content: &str) -> String {
             }
             let text = t.text.as_str();
             if let Some(open) = is_open_sym(text) {
-                let kind = match (open, prev_non_comment_text.as_deref(), prevprev_non_comment_text.as_deref()) {
+                let kind = match (
+                    open,
+                    prev_non_comment_text.as_deref(),
+                    prevprev_non_comment_text.as_deref(),
+                ) {
                     ('{', Some("effect"), _) => ContextKind::Effect,
                     ('{', Some("generate"), _) => ContextKind::Generate,
                     ('{', Some("resource"), _) => ContextKind::Resource,
@@ -432,7 +505,8 @@ pub fn format_text(content: &str) -> String {
                     if lines[j].tokens[first_idx_j].text != "|" {
                         break;
                     }
-                    let Some(arrow_idx) = find_top_level_token(&lines[j].tokens, "=>", first_idx_j + 1)
+                    let Some(arrow_idx) =
+                        find_top_level_token(&lines[j].tokens, "=>", first_idx_j + 1)
                     else {
                         break;
                     };
@@ -494,27 +568,34 @@ pub fn format_text(content: &str) -> String {
     }
 
     // Third pass: render.
-    let mut out = String::new();
+    let mut rendered_lines: Vec<String> = Vec::new();
+    let mut blank_run = 0usize;
     for (line_index, state) in lines.iter().enumerate() {
-        if line_index > 0 {
-            out.push('\n');
-        }
-
         if state.tokens.is_empty() {
+            blank_run += 1;
+            if blank_run > max_blank_lines {
+                continue;
+            }
+            rendered_lines.push(String::new());
             continue;
         }
 
+        blank_run = 0;
+
         let indent = state.indent.as_str();
+        let mut out = String::new();
 
         if state.degraded {
             out.push_str(&indent);
             out.push_str(&format_tokens_simple(&state.tokens));
+            rendered_lines.push(out);
             continue;
         }
 
         let Some(first_idx) = first_code_index(&state.tokens) else {
             out.push_str(&indent);
             out.push_str(&format_tokens_simple(&state.tokens));
+            rendered_lines.push(out);
             continue;
         };
 
@@ -534,6 +615,7 @@ pub fn format_text(content: &str) -> String {
                     out.push(' ');
                     out.push_str(&rhs);
                 }
+                rendered_lines.push(out);
                 continue;
             }
         }
@@ -556,6 +638,7 @@ pub fn format_text(content: &str) -> String {
                     out.push(' ');
                     out.push_str(&rhs);
                 }
+                rendered_lines.push(out);
                 continue;
             }
         }
@@ -577,6 +660,7 @@ pub fn format_text(content: &str) -> String {
                     out.push(' ');
                     out.push_str(&rhs);
                 }
+                rendered_lines.push(out);
                 continue;
             }
         }
@@ -602,10 +686,7 @@ pub fn format_text(content: &str) -> String {
                         let mut name_matches = true;
                         for k in 0..name_len {
                             let a = name_tokens.get(k).map(|t| t.text.as_str());
-                            let b = lines[j]
-                                .tokens
-                                .get(next_first + k)
-                                .map(|t| t.text.as_str());
+                            let b = lines[j].tokens.get(next_first + k).map(|t| t.text.as_str());
                             if a != b {
                                 name_matches = false;
                                 break;
@@ -620,6 +701,7 @@ pub fn format_text(content: &str) -> String {
                             out.push_str(&format_tokens_simple(name_tokens).trim().to_string());
                             out.push_str(" : ");
                             out.push_str(&format_tokens_simple(rest_tokens).trim().to_string());
+                            rendered_lines.push(out);
                             continue;
                         }
                     }
@@ -629,12 +711,10 @@ pub fn format_text(content: &str) -> String {
 
         out.push_str(&indent);
         out.push_str(&format_tokens_simple(&state.tokens));
+        rendered_lines.push(out);
     }
 
-    if !out.ends_with('\n') {
-        out.push('\n');
-    }
-    out
+    rendered_lines.join("\n")
 }
 
 fn is_op(text: &str) -> bool {
@@ -667,4 +747,39 @@ fn is_op(text: &str) -> bool {
             | "&&"
             | "||"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_respects_indent_size() {
+        let text = "module demo\n\nmain = effect {\n_<-print \"hi\"\n}\n";
+        let formatted = format_text_with_options(
+            text,
+            FormatOptions {
+                indent_size: 4,
+                max_blank_lines: 1,
+            },
+        );
+        let inner_line = formatted
+            .lines()
+            .nth(3)
+            .expect("expected formatted inner effect line");
+        assert!(inner_line.starts_with("    "));
+    }
+
+    #[test]
+    fn format_respects_max_blank_lines() {
+        let text = "module demo\n\n\n\nmain = 1\n";
+        let formatted = format_text_with_options(
+            text,
+            FormatOptions {
+                indent_size: 2,
+                max_blank_lines: 1,
+            },
+        );
+        assert_eq!(formatted, "module demo\n\nmain = 1");
+    }
 }

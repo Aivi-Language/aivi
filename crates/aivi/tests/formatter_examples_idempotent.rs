@@ -60,11 +60,15 @@ fn examples_are_formatter_idempotent() {
 
     let mut failures = Vec::new();
     for path in files {
-        let input = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let input =
+            fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
         let output = format_text(&input);
         if input != output {
-            let rel = path.strip_prefix(&root).unwrap_or(&path).display().to_string();
+            let rel = path
+                .strip_prefix(&root)
+                .unwrap_or(&path)
+                .display()
+                .to_string();
             let diff = first_diff(&input, &output);
             failures.push((rel, diff));
         }
@@ -87,4 +91,3 @@ fn examples_are_formatter_idempotent() {
     }
     panic!("formatter is not idempotent on examples:\n{report}");
 }
-

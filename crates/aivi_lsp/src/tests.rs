@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use aivi::{format_text, parse_modules, ModuleItem, Span};
+use aivi::{format_text, format_text_with_options, parse_modules, FormatOptions, ModuleItem, Span};
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, DiagnosticSeverity, HoverContents, NumberOrString, Position, Url,
 };
@@ -402,10 +402,27 @@ fn diagnostics_report_missing_list_comma() {
 #[test]
 fn formatting_edits_match_formatter_output() {
     let text = "module demo\n\nmain = effect { _<-print \"hi\" }\n";
-    let edits = Backend::build_formatting_edits(text);
+    let options = FormatOptions::default();
+    let edits = Backend::build_formatting_edits(text, options);
     assert_eq!(edits.len(), 1);
     assert_eq!(edits[0].range, Backend::full_document_range(text));
-    assert_eq!(edits[0].new_text, format_text(text));
+    assert_eq!(edits[0].new_text, format_text_with_options(text, options));
+}
+
+#[test]
+fn formatting_edits_respect_indent_size() {
+    let text = "module demo\n\nmain = effect {\n_<-print \"hi\"\n}\n";
+    let options = FormatOptions {
+        indent_size: 4,
+        max_blank_lines: 1,
+    };
+    let edits = Backend::build_formatting_edits(text, options);
+    let formatted = &edits[0].new_text;
+    let inner_line = formatted
+        .lines()
+        .nth(3)
+        .expect("expected formatted inner effect line");
+    assert!(inner_line.starts_with("    "));
 }
 
 #[test]

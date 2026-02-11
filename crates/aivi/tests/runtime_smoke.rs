@@ -44,8 +44,18 @@ fn run_native_crypto_example() {
 #[test]
 fn run_native_quaternion_example() {
     let _root = set_workspace_root();
+    eprintln!("[DEBUG_LOG] quaternion: desugar start");
+    let t0 = Instant::now();
     let program = desugar_target("examples/21_quaternion.aivi").expect("desugar");
+    eprintln!("[DEBUG_LOG] quaternion: desugar done in {:?}", t0.elapsed());
+
+    eprintln!("[DEBUG_LOG] quaternion: run_native start");
+    let t1 = Instant::now();
     run_native(program).expect("run native");
+    eprintln!(
+        "[DEBUG_LOG] quaternion: run_native done in {:?}",
+        t1.elapsed()
+    );
 }
 
 #[test]

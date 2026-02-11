@@ -24,7 +24,7 @@ pub use cst::{CstBundle, CstFile, CstToken};
 pub use diagnostics::{
     render_diagnostics, Diagnostic, DiagnosticLabel, FileDiagnostic, Position, Span,
 };
-pub use formatter::format_text;
+pub use formatter::{format_text, format_text_with_options, FormatOptions};
 pub use hir::{HirModule, HirProgram};
 pub use kernel::{lower_hir as lower_kernel, KernelProgram};
 pub use mcp::{

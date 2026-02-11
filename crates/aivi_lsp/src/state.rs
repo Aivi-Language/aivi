@@ -17,6 +17,8 @@ pub(super) struct BackendState {
     pub(super) open_module_index: HashMap<String, IndexedModule>,
     pub(super) disk_module_index: HashMap<String, IndexedModule>,
     pub(super) disk_index_root: Option<PathBuf>,
+    pub(super) format_options: aivi::FormatOptions,
+    pub(super) format_options_from_config: bool,
 }
 
 #[derive(Debug, Clone)]

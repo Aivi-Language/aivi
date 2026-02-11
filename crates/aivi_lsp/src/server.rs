@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use serde::Deserialize;
 use tokio::sync::Mutex;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::request::{
@@ -8,19 +9,32 @@ use tower_lsp::lsp_types::request::{
 };
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, CompletionParams, CompletionResponse,
-    DeclarationCapability, DocumentFormattingParams, DocumentRangeFormattingParams,
-    DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse,
-    Hover, HoverParams, HoverProviderCapability, ImplementationProviderCapability,
-    InitializeParams, InitializeResult, InitializedParams, Location, OneOf, ReferenceParams,
-    RenameParams, SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensParams,
-    SemanticTokensResult, SemanticTokensServerCapabilities, ServerCapabilities, SignatureHelp,
-    SignatureHelpOptions, SignatureHelpParams, TextDocumentPositionParams,
-    TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, WorkspaceEdit,
+    DeclarationCapability, DidChangeConfigurationParams, DocumentFormattingParams,
+    DocumentRangeFormattingParams, DocumentSymbolParams, DocumentSymbolResponse,
+    GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, HoverProviderCapability,
+    ImplementationProviderCapability, InitializeParams, InitializeResult, InitializedParams,
+    Location, OneOf, ReferenceParams, RenameParams, SemanticTokensFullOptions,
+    SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
+    SemanticTokensServerCapabilities, ServerCapabilities, SignatureHelp, SignatureHelpOptions,
+    SignatureHelpParams, TextDocumentPositionParams, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextEdit, WorkspaceEdit,
 };
 use tower_lsp::{LanguageServer, LspService, Server};
 
 use crate::backend::Backend;
 use crate::state::BackendState;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AiviFormatConfig {
+    indent_size: Option<usize>,
+    max_blank_lines: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct AiviConfig {
+    format: Option<AiviFormatConfig>,
+}
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
@@ -96,6 +110,33 @@ impl LanguageServer for Backend {
                 "aivi-lsp initialized",
             )
             .await;
+    }
+
+    async fn did_change_configuration(&self, params: DidChangeConfigurationParams) {
+        let config: AiviConfig = match serde_json::from_value(params.settings) {
+            Ok(cfg) => cfg,
+            Err(err) => {
+                self.client
+                    .log_message(
+                        tower_lsp::lsp_types::MessageType::WARNING,
+                        format!("Failed to parse configuration: {err}"),
+                    )
+                    .await;
+                return;
+            }
+        };
+
+        let mut state = self.state.lock().await;
+        state.format_options_from_config = true;
+
+        if let Some(format) = config.format {
+            if let Some(indent_size) = format.indent_size {
+                state.format_options.indent_size = indent_size;
+            }
+            if let Some(max_blank_lines) = format.max_blank_lines {
+                state.format_options.max_blank_lines = max_blank_lines;
+            }
+        }
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -314,10 +355,7 @@ impl LanguageServer for Backend {
         Ok(Some(actions))
     }
 
-    async fn formatting(
-        &self,
-        params: DocumentFormattingParams,
-    ) -> Result<Option<Vec<TextEdit>>> {
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let uri = params.text_document.uri;
         let Some(source) = self
             .with_document_text(&uri, |content| content.to_string())
@@ -325,7 +363,14 @@ impl LanguageServer for Backend {
         else {
             return Ok(None);
         };
-        Ok(Some(Backend::build_formatting_edits(&source)))
+        let (mut options, from_config) = {
+            let state = self.state.lock().await;
+            (state.format_options, state.format_options_from_config)
+        };
+        if !from_config {
+            options.indent_size = params.options.tab_size as usize;
+        }
+        Ok(Some(Backend::build_formatting_edits(&source, options)))
     }
 
     async fn range_formatting(
@@ -339,7 +384,14 @@ impl LanguageServer for Backend {
         else {
             return Ok(None);
         };
-        Ok(Some(Backend::build_formatting_edits(&source)))
+        let (mut options, from_config) = {
+            let state = self.state.lock().await;
+            (state.format_options, state.format_options_from_config)
+        };
+        if !from_config {
+            options.indent_size = params.options.tab_size as usize;
+        }
+        Ok(Some(Backend::build_formatting_edits(&source, options)))
     }
 
     async fn semantic_tokens_full(

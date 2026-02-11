@@ -19,9 +19,12 @@ pub(super) struct Backend {
 }
 
 impl Backend {
-    pub(super) fn build_formatting_edits(text: &str) -> Vec<TextEdit> {
+    pub(super) fn build_formatting_edits(
+        text: &str,
+        options: aivi::FormatOptions,
+    ) -> Vec<TextEdit> {
         let range = Self::full_document_range(text);
-        let formatted = aivi::format_text(text);
+        let formatted = aivi::format_text_with_options(text, options);
         vec![TextEdit::new(range, formatted)]
     }
 

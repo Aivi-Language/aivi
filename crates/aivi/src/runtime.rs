@@ -1122,6 +1122,26 @@ fn values_equal(left: &Value, right: &Value) -> bool {
                     .zip(b.iter())
                     .all(|(left, right)| values_equal(left, right))
         }
+        (Value::List(a), Value::List(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b.iter())
+                    .all(|(left, right)| values_equal(left, right))
+        }
+        (Value::Tuple(a), Value::Tuple(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .zip(b.iter())
+                    .all(|(left, right)| values_equal(left, right))
+        }
+        (Value::Record(a), Value::Record(b)) => {
+            a.len() == b.len()
+                && a.iter().all(|(key, value)| {
+                    b.get(key)
+                        .map(|other| values_equal(value, other))
+                        .unwrap_or(false)
+                })
+        }
         (Value::Heap(a), Value::Heap(b)) => {
             if a.len() != b.len() {
                 return false;
@@ -1133,7 +1153,9 @@ fn values_equal(left: &Value, right: &Value) -> bool {
             left == right
         }
         (Value::Constructor { name: a, args: aa }, Value::Constructor { name: b, args: bb }) => {
-            a == b && aa.iter().zip(bb.iter()).all(|(x, y)| values_equal(x, y))
+            a == b
+                && aa.len() == bb.len()
+                && aa.iter().zip(bb.iter()).all(|(x, y)| values_equal(x, y))
         }
         _ => false,
     }

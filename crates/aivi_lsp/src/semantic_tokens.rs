@@ -539,8 +539,7 @@ impl Backend {
                         .get(&token_index)
                         .copied()
                         .or_else(|| Self::classify_semantic_token(prev, expr_token, next));
-                    let Some(token_type) = token_type
-                    else {
+                    let Some(token_type) = token_type else {
                         continue;
                     };
 
@@ -553,9 +552,7 @@ impl Backend {
                     let raw_end = expr_map[end_idx];
                     let line = line0 + expr_token.span.start.line.saturating_sub(1) as u32;
                     let start = col0 + expr_start as u32 + raw_start as u32;
-                    let len = raw_end
-                        .saturating_sub(raw_start)
-                        .saturating_add(1) as u32;
+                    let len = raw_end.saturating_sub(raw_start).saturating_add(1) as u32;
                     let modifiers = if signature_lines.contains(&line) {
                         1u32 << Self::SEM_MOD_SIGNATURE
                     } else {
@@ -563,8 +560,7 @@ impl Backend {
                     };
 
                     Self::push_semantic_token(
-                        data, last_line, last_start, line, start, len, token_type,
-                        modifiers,
+                        data, last_line, last_start, line, start, len, token_type, modifiers,
                     );
                 }
             }
