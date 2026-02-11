@@ -1,6 +1,0 @@
-src/**
-scripts/**
-node_modules/**
-pnpm-lock.yaml
-tsconfig.json
-aivi-vscode-*.vsix

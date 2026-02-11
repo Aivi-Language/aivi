@@ -11,11 +11,11 @@ class Eq A = {
   Option A = None | Some A
 
   class Functor (F *) = {
-    map: F A -> (A -> B) -> F B
+    map: (A -> B) -> F A -> F B
   }
 
   instance Functor (Option *) = {
-    map: opt f => opt ?
+    map: f opt => opt ?
       | None   => None
       | Some x => Some (f x)
   }

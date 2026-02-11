@@ -75,7 +75,7 @@ class Category (F * *) =
 ### Functor
 ```aivi
 class Functor (F *) = {
-  map: F A -> (A -> B) -> F B
+  map: (A -> B) -> F A -> F B
 }
 ```
 
@@ -99,7 +99,7 @@ class Applicative (F *) =
 ```aivi
 class Chain (F *) = 
   Apply F & {
-    chain: F A -> (A -> F B) -> F B
+    chain: (A -> F B) -> F A -> F B
   }
 ```
 

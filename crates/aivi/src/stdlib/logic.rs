@@ -53,7 +53,7 @@ class Category (F * *) =
 // 4. Functional Mappings
 
 class Functor (F *) = {
-  map: F A -> (A -> B) -> F B
+  map: (A -> B) -> F A -> F B
 }
 
 class Apply (F *) =
@@ -68,7 +68,7 @@ class Applicative (F *) =
 
 class Chain (F *) =
   Apply F & {
-    chain: F A -> (A -> F B) -> F B
+    chain: (A -> F B) -> F A -> F B
   }
 
 class Monad (M *) =
@@ -102,7 +102,7 @@ class Profunctor (F * *) = {
 // Option
 
 instance Functor (Option *) = {
-  map: opt f =>
+  map: f opt =>
     opt ?
       | None   => None
       | Some x => Some (f x)
@@ -123,7 +123,7 @@ instance Applicative (Option *) =
 
 instance Chain (Option *) =
   Apply (Option *) & {
-    chain: opt f =>
+    chain: f opt =>
       opt ?
         | None   => None
         | Some x => f x
@@ -135,7 +135,7 @@ instance Monad (Option *) =
 // Result
 
 instance Functor (Result E *) = {
-  map: res f =>
+  map: f res =>
     res ?
       | Ok x  => Ok (f x)
       | Err e => Err e
@@ -157,7 +157,7 @@ instance Applicative (Result E *) =
 
 instance Chain (Result E *) =
   Apply (Result E *) & {
-    chain: res f =>
+    chain: f res =>
       res ?
         | Ok x  => f x
         | Err e => Err e
@@ -173,23 +173,23 @@ append = xs ys =>
     | []        => ys
     | [h, ...t] => [h, ...append t ys]
 
-mapList = xs f =>
+mapList = f xs =>
   xs ?
     | []        => []
     | [h, ...t] => [f h, ...mapList t f]
 
-concatMap = xs f =>
+concatMap = f xs =>
   xs ?
     | []        => []
-    | [h, ...t] => append (f h) (concatMap t f)
+    | [h, ...t] => append (f h) (concatMap f t)
 
 instance Functor (List *) = {
-  map: xs f => mapList xs f
+  map: f xs => mapList f xs
 }
 
 instance Apply (List *) =
   Functor (List *) & {
-    ap: fs xs => concatMap fs (f => mapList xs f)
+    ap: fs xs => concatMap (f => mapList f xs) fs
   }
 
 instance Applicative (List *) =
@@ -199,7 +199,7 @@ instance Applicative (List *) =
 
 instance Chain (List *) =
   Apply (List *) & {
-    chain: xs f => concatMap xs f
+    chain: f xs => concatMap f xs
   }
 
 instance Monad (List *) =

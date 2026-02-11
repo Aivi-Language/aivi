@@ -20,7 +20,7 @@ instance Eq A: Setoid (Option A) = {
 // Functor for Option
 
 instance Functor (Option *) = {
-  map: opt f =>
+  map: f opt =>
     opt ?
       | None   => None
       | Some x => Some (f x)
@@ -47,7 +47,7 @@ instance Applicative (Option *) =
 
 instance Chain (Option *) =
   Apply (Option *)& {
-    chain: opt f =>
+    chain: f opt =>
       opt ?
         | None   => None
         | Some x => f x
