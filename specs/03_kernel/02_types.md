@@ -25,3 +25,9 @@ This corresponds to `*` in surface syntax.
 * open records
 * structural typing
 * patching relies on this
+
+## 2.4 Row transforms (derived)
+
+`Pick`, `Omit`, `Optional`, `Required`, `Rename`, and `Defaulted` are surface-level type
+operators that transform record rows. They are derived and elaborate to plain record
+types in the kernel.

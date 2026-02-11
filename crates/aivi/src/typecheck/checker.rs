@@ -2031,6 +2031,11 @@ impl TypeChecker {
                 }
             }
             TypeExpr::Apply { base, args, .. } => {
+                if let TypeExpr::Name(base_name) = base.as_ref() {
+                    if let Some(row_type) = self.apply_row_op(&base_name.name, args, ctx) {
+                        return row_type;
+                    }
+                }
                 let base_ty = self.type_from_expr(base, ctx);
                 let mut args_ty: Vec<Type> = args
                     .iter()
@@ -2076,6 +2081,189 @@ impl TypeChecker {
             }
             TypeExpr::Star { .. } | TypeExpr::Unknown { .. } => self.fresh_var(),
         }
+    }
+
+    fn apply_row_op(
+        &mut self,
+        name: &str,
+        args: &[TypeExpr],
+        ctx: &mut TypeContext,
+    ) -> Option<Type> {
+        match name {
+            "Pick" => self.row_pick(args, ctx),
+            "Omit" => self.row_omit(args, ctx),
+            "Optional" => self.row_optional(args, ctx),
+            "Required" => self.row_required(args, ctx),
+            "Rename" => self.row_rename(args, ctx),
+            "Defaulted" => self.row_defaulted(args, ctx),
+            _ => None,
+        }
+    }
+
+    fn row_pick(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
+        if args.len() != 2 {
+            return None;
+        }
+        let fields = self.row_fields_from_expr(&args[0]);
+        let (source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        let mut out = BTreeMap::new();
+        for name in fields {
+            if let Some(ty) = source_fields.get(&name) {
+                out.insert(name, ty.clone());
+            }
+        }
+        Some(Type::Record { fields: out, open })
+    }
+
+    fn row_omit(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
+        if args.len() != 2 {
+            return None;
+        }
+        let fields = self.row_fields_from_expr(&args[0]);
+        let omit: HashSet<String> = fields.into_iter().collect();
+        let (source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        let mut out = BTreeMap::new();
+        for (name, ty) in source_fields {
+            if !omit.contains(&name) {
+                out.insert(name, ty);
+            }
+        }
+        Some(Type::Record { fields: out, open })
+    }
+
+    fn row_optional(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
+        if args.len() != 2 {
+            return None;
+        }
+        let fields = self.row_fields_from_expr(&args[0]);
+        let (mut source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        for name in fields {
+            if let Some(ty) = source_fields.get_mut(&name) {
+                *ty = self.wrap_option_type(ty.clone());
+            }
+        }
+        Some(Type::Record {
+            fields: source_fields,
+            open,
+        })
+    }
+
+    fn row_required(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
+        if args.len() != 2 {
+            return None;
+        }
+        let fields = self.row_fields_from_expr(&args[0]);
+        let (mut source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        for name in fields {
+            if let Some(ty) = source_fields.get_mut(&name) {
+                *ty = self.unwrap_option_type(ty.clone());
+            }
+        }
+        Some(Type::Record {
+            fields: source_fields,
+            open,
+        })
+    }
+
+    fn row_rename(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
+        if args.len() != 2 {
+            return None;
+        }
+        let rename_map = self.row_rename_map_from_expr(&args[0]);
+        let (source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        let mut out = BTreeMap::new();
+        for (name, ty) in source_fields {
+            let new_name = rename_map.get(&name).cloned().unwrap_or(name);
+            if out.contains_key(&new_name) {
+                continue;
+            }
+            out.insert(new_name, ty);
+        }
+        Some(Type::Record { fields: out, open })
+    }
+
+    fn row_defaulted(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
+        if args.len() != 2 {
+            return None;
+        }
+        let mut fields = self.row_fields_from_expr(&args[0]);
+        if fields.is_empty() {
+            fields = self.row_fields_from_record_expr(&args[0]);
+        }
+        let (mut source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        for name in fields {
+            if let Some(ty) = source_fields.get_mut(&name) {
+                *ty = self.wrap_option_type(ty.clone());
+            }
+        }
+        Some(Type::Record {
+            fields: source_fields,
+            open,
+        })
+    }
+
+    fn record_from_type_expr(
+        &mut self,
+        expr: &TypeExpr,
+        ctx: &mut TypeContext,
+    ) -> Option<(BTreeMap<String, Type>, bool)> {
+        let ty = self.type_from_expr(expr, ctx);
+        let ty = self.expand_alias(ty);
+        match ty {
+            Type::Record { fields, open } => Some((fields, open)),
+            _ => None,
+        }
+    }
+
+    fn row_fields_from_expr(&self, expr: &TypeExpr) -> Vec<String> {
+        match expr {
+            TypeExpr::Tuple { items, .. } => items
+                .iter()
+                .filter_map(|item| match item {
+                    TypeExpr::Name(name) => Some(name.name.clone()),
+                    _ => None,
+                })
+                .collect(),
+            TypeExpr::Name(name) => vec![name.name.clone()],
+            _ => Vec::new(),
+        }
+    }
+
+    fn row_fields_from_record_expr(&self, expr: &TypeExpr) -> Vec<String> {
+        match expr {
+            TypeExpr::Record { fields, .. } => fields.iter().map(|(name, _)| name.name.clone()).collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    fn row_rename_map_from_expr(&self, expr: &TypeExpr) -> BTreeMap<String, String> {
+        let mut map = BTreeMap::new();
+        if let TypeExpr::Record { fields, .. } = expr {
+            for (name, ty) in fields {
+                if let TypeExpr::Name(new_name) = ty {
+                    map.insert(name.name.clone(), new_name.name.clone());
+                }
+            }
+        }
+        map
+    }
+
+    fn wrap_option_type(&mut self, ty: Type) -> Type {
+        let ty_applied = self.expand_alias(ty.clone());
+        if matches!(ty_applied, Type::Con(ref name, _) if name == "Option") {
+            return ty;
+        }
+        Type::con("Option").app(vec![ty])
+    }
+
+    fn unwrap_option_type(&mut self, ty: Type) -> Type {
+        let ty_applied = self.expand_alias(ty.clone());
+        if let Type::Con(name, mut args) = ty_applied {
+            if name == "Option" && args.len() == 1 {
+                return args.remove(0);
+            }
+        }
+        ty
     }
 
     fn fresh_var(&mut self) -> Type {

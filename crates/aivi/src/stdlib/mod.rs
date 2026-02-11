@@ -5,6 +5,7 @@ use crate::surface::{parse_modules, Module};
 mod bigint;
 mod calendar;
 mod collections;
+mod console;
 mod color;
 mod complex;
 mod concurrency;

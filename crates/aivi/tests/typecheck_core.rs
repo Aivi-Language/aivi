@@ -169,6 +169,35 @@ module test.classes = {
 }
 
 #[test]
+fn typecheck_row_type_ops_and_patch_alias() {
+    let source = r#"
+module test.rows = {
+  export getName, getEmail, publicEmail, promote
+
+  User = { id: Int, email: Text, name: Text, isAdmin: Bool }
+
+  UserName = Pick (name) User
+  UserMaybe = User |> Optional (email)
+  UserReq = UserMaybe |> Required (email)
+  UserPublic = User |> Omit (isAdmin) |> Rename { email: email_address }
+
+  getName : UserName -> Text
+  getName u = u.name
+
+  getEmail : UserReq -> Text
+  getEmail u = u.email
+
+  publicEmail : UserPublic -> Text
+  publicEmail u = u.email_address
+
+  promote : Patch User
+  promote u = u <| { isAdmin: True }
+}
+"#;
+    check_ok(source);
+}
+
+#[test]
 fn typecheck_type_classes_missing_instance_errors() {
     let source = r#"
 module test.classes_err = {

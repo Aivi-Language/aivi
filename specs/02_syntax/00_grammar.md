@@ -302,7 +302,8 @@ nextState =
 ```ebnf
 Type           := TypeArrow ;
 TypeArrow      := TypeAnd [ "->" TypeArrow ] ;
-TypeAnd        := TypeApp { "&" TypeApp } ;
+TypeAnd        := TypePipe { "&" TypePipe } ;
+TypePipe       := TypeApp { "|>" TypeApp } ;
 TypeApp        := TypeAtom { TypeAtom } ;
 TypeAtom       := UpperIdent
                | lowerIdent

@@ -106,8 +106,45 @@ getName : { name: Text } -> Text
 getName = .name
 ```
 
+## 3.4 Record Row Transforms
 
-## 3.4 Classes and HKTs
+To avoid duplicating similar record shapes across layers, AIVI provides derived type operators
+that transform record rows. These are type-level only and elaborate to plain record types.
+
+Field lists are written as tuples of field labels, and rename maps use record-like syntax:
+
+```aivi
+Pick (id, name) User
+Omit (isAdmin) User
+Optional (email, name) User
+Required (email, name) User
+Rename { createdAt: created_at, updatedAt: updated_at } User
+Defaulted { createdAt: Instant, updatedAt: Instant } User
+```
+
+Semantics:
+
+- `Pick` keeps only the listed fields.
+- `Omit` removes the listed fields.
+- `Optional` wraps each listed field type in `Option` (if not already `Option`).
+- `Required` unwraps `Option` for each listed field (if not `Option`, the type is unchanged).
+- `Rename` renames fields; collisions are errors.
+- `Defaulted` is equivalent to `Optional` at the type level and is reserved for codec/default derivation.
+
+Type-level piping mirrors expression piping and applies the left type as the final argument:
+
+```aivi
+User |> Omit (isAdmin) |> Rename { createdAt: created_at }
+```
+
+desugars to:
+
+```aivi
+Rename { createdAt: created_at } (Omit (isAdmin) User)
+```
+
+
+## 3.5 Classes and HKTs
 
 ```aivi
 class Functor (F *) = {

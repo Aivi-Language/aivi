@@ -14,6 +14,9 @@ Patching is:
 * compositional
 * type-checked
 
+`Patch A` is a first-class type alias for `A -> A` and is the canonical type for patch values.
+Applying a patch is done with `<|`.
+
 Compiler checks:
 
 * Patch paths must resolve against the target type (unknown fields/constructors are errors).

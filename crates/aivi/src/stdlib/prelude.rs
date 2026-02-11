@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.prelude = {
   export Int, Float, Bool, Text, Char, Bytes
-  export List, Option, Result, Tuple
+  export List, Option, Result, Tuple, Patch
 
   export domain Calendar
   export domain Duration
@@ -17,5 +17,7 @@ module aivi.prelude = {
   use aivi.duration
   use aivi.color
   use aivi.vector
+
+  Patch A = A -> A
 }
 "#;

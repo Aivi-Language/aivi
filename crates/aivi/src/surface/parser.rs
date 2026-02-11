@@ -1826,7 +1826,7 @@ impl Parser {
     }
 
     fn parse_type_expr(&mut self) -> Option<TypeExpr> {
-        let lhs = self.parse_type_apply()?;
+        let lhs = self.parse_type_pipe()?;
         if self.consume_symbol("->") {
             let result = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
                 span: type_span(&lhs),
@@ -1839,6 +1839,32 @@ impl Parser {
             });
         }
         Some(lhs)
+    }
+
+    fn parse_type_pipe(&mut self) -> Option<TypeExpr> {
+        let mut lhs = self.parse_type_apply()?;
+        while self.consume_symbol("|>") {
+            let rhs = self.parse_type_apply().unwrap_or(TypeExpr::Unknown {
+                span: type_span(&lhs),
+            });
+            lhs = self.apply_type_pipe(lhs, rhs);
+        }
+        Some(lhs)
+    }
+
+    fn apply_type_pipe(&mut self, left: TypeExpr, right: TypeExpr) -> TypeExpr {
+        let span = merge_span(type_span(&left), type_span(&right));
+        match right {
+            TypeExpr::Apply { base, mut args, .. } => {
+                args.push(left);
+                TypeExpr::Apply { base, args, span }
+            }
+            other => TypeExpr::Apply {
+                base: Box::new(other),
+                args: vec![left],
+                span,
+            },
+        }
     }
 
     fn parse_type_apply(&mut self) -> Option<TypeExpr> {
