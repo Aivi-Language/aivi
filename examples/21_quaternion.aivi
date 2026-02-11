@@ -1,0 +1,17 @@
+module examples.stdlib_quaternion = {
+  export main
+
+  use aivi.console (print)
+  use aivi.number.quaternion
+
+  main : Effect Text Unit
+  main = effect {
+    axis = { x: 0.0, y: 1.0, z: 0.0 }
+    spin = fromAxisAngle axis 1.570796
+    unit = normalize spin
+    len = magnitude unit
+    _ <- print "quat len: {len}"
+
+    pure Unit
+  }
+}
