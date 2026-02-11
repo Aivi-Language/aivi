@@ -1,0 +1,216 @@
+use std::path::PathBuf;
+
+use crate::surface::{parse_modules, Module};
+
+mod bigint;
+mod calendar;
+mod collections;
+mod color;
+mod complex;
+mod concurrency;
+mod core;
+mod database;
+mod decimal;
+mod duration;
+mod file;
+mod geometry;
+mod graph;
+mod linear_algebra;
+mod linalg_facade;
+mod math;
+mod matrix;
+mod network_facade;
+mod network_http;
+mod network_http_server;
+mod network_https;
+mod network_sockets;
+mod network_streams;
+mod number_facade;
+mod prelude;
+mod probability;
+mod rational;
+mod regex;
+mod signal;
+mod system;
+mod testing;
+mod text;
+mod units;
+mod url;
+mod vector;
+
+struct EmbeddedModule {
+    name: &'static str,
+    source: &'static str,
+}
+
+const EMBEDDED_MODULES: &[EmbeddedModule] = &[
+    EmbeddedModule {
+        name: core::MODULE_NAME,
+        source: core::SOURCE,
+    },
+    EmbeddedModule {
+        name: prelude::MODULE_NAME,
+        source: prelude::SOURCE,
+    },
+    EmbeddedModule {
+        name: text::MODULE_NAME,
+        source: text::SOURCE,
+    },
+    EmbeddedModule {
+        name: collections::MODULE_NAME,
+        source: collections::SOURCE,
+    },
+    EmbeddedModule {
+        name: regex::MODULE_NAME,
+        source: regex::SOURCE,
+    },
+    EmbeddedModule {
+        name: testing::MODULE_NAME,
+        source: testing::SOURCE,
+    },
+    EmbeddedModule {
+        name: units::MODULE_NAME,
+        source: units::SOURCE,
+    },
+    EmbeddedModule {
+        name: calendar::MODULE_NAME,
+        source: calendar::SOURCE,
+    },
+    EmbeddedModule {
+        name: duration::MODULE_NAME,
+        source: duration::SOURCE,
+    },
+    EmbeddedModule {
+        name: color::MODULE_NAME,
+        source: color::SOURCE,
+    },
+    EmbeddedModule {
+        name: vector::MODULE_NAME,
+        source: vector::SOURCE,
+    },
+    EmbeddedModule {
+        name: matrix::MODULE_NAME,
+        source: matrix::SOURCE,
+    },
+    EmbeddedModule {
+        name: linear_algebra::MODULE_NAME,
+        source: linear_algebra::SOURCE,
+    },
+    EmbeddedModule {
+        name: linalg_facade::MODULE_NAME,
+        source: linalg_facade::SOURCE,
+    },
+    EmbeddedModule {
+        name: probability::MODULE_NAME,
+        source: probability::SOURCE,
+    },
+    EmbeddedModule {
+        name: signal::MODULE_NAME,
+        source: signal::SOURCE,
+    },
+    EmbeddedModule {
+        name: geometry::MODULE_NAME,
+        source: geometry::SOURCE,
+    },
+    EmbeddedModule {
+        name: graph::MODULE_NAME,
+        source: graph::SOURCE,
+    },
+    EmbeddedModule {
+        name: math::MODULE_NAME,
+        source: math::SOURCE,
+    },
+    EmbeddedModule {
+        name: url::MODULE_NAME,
+        source: url::SOURCE,
+    },
+    EmbeddedModule {
+        name: concurrency::MODULE_NAME,
+        source: concurrency::SOURCE,
+    },
+    EmbeddedModule {
+        name: console::MODULE_NAME,
+        source: console::SOURCE,
+    },
+    EmbeddedModule {
+        name: system::MODULE_NAME,
+        source: system::SOURCE,
+    },
+    EmbeddedModule {
+        name: database::MODULE_NAME,
+        source: database::SOURCE,
+    },
+    EmbeddedModule {
+        name: file::MODULE_NAME,
+        source: file::SOURCE,
+    },
+    EmbeddedModule {
+        name: bigint::MODULE_NAME,
+        source: bigint::SOURCE,
+    },
+    EmbeddedModule {
+        name: rational::MODULE_NAME,
+        source: rational::SOURCE,
+    },
+    EmbeddedModule {
+        name: decimal::MODULE_NAME,
+        source: decimal::SOURCE,
+    },
+    EmbeddedModule {
+        name: complex::MODULE_NAME,
+        source: complex::SOURCE,
+    },
+    EmbeddedModule {
+        name: number_facade::MODULE_NAME,
+        source: number_facade::SOURCE,
+    },
+    EmbeddedModule {
+        name: network_http::MODULE_NAME,
+        source: network_http::SOURCE,
+    },
+    EmbeddedModule {
+        name: network_https::MODULE_NAME,
+        source: network_https::SOURCE,
+    },
+    EmbeddedModule {
+        name: network_sockets::MODULE_NAME,
+        source: network_sockets::SOURCE,
+    },
+    EmbeddedModule {
+        name: network_streams::MODULE_NAME,
+        source: network_streams::SOURCE,
+    },
+    EmbeddedModule {
+        name: network_facade::MODULE_NAME,
+        source: network_facade::SOURCE,
+    },
+    EmbeddedModule {
+        name: network_http_server::MODULE_NAME,
+        source: network_http_server::SOURCE,
+    },
+];
+
+pub fn embedded_stdlib_modules() -> Vec<Module> {
+    let mut modules = Vec::new();
+    for module in EMBEDDED_MODULES {
+        modules.extend(parse_embedded(module.name, module.source));
+    }
+    modules
+}
+
+pub fn embedded_stdlib_source(module_name: &str) -> Option<&'static str> {
+    EMBEDDED_MODULES
+        .iter()
+        .find(|module| module.name == module_name)
+        .map(|module| module.source)
+}
+
+fn parse_embedded(name: &str, source: &str) -> Vec<Module> {
+    let path = PathBuf::from(format!("<embedded:{name}>"));
+    let (modules, diagnostics) = parse_modules(path.as_path(), source);
+    debug_assert!(
+        diagnostics.is_empty(),
+        "embedded stdlib module {name} failed to parse"
+    );
+    modules
+}

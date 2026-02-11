@@ -1,0 +1,26 @@
+pub const MODULE_NAME: &str = "aivi.net.http";
+
+pub const SOURCE: &str = r#"
+@no_prelude
+module aivi.net.http = {
+  export Header, Request, Response, Error
+  export get, post, fetch
+
+  use aivi
+  use aivi.url (Url)
+
+  Header = { name: Text, value: Text }
+  Request = { method: Text, url: Url, headers: List Header, body: Option Text }
+  Response = { status: Int, headers: List Header, body: Text }
+  Error = { message: Text }
+
+  get : Url -> Effect Error (Result Error Response)
+  get url = http.get url
+
+  post : Url -> Text -> Effect Error (Result Error Response)
+  post url body = http.post url body
+
+  fetch : Request -> Effect Error (Result Error Response)
+  fetch request = http.fetch request
+}
+"#;
