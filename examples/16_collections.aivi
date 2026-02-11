@@ -17,7 +17,7 @@ main = effect {
   merged = Map.union base more
   _ <- print "merged: {merged}"
 
-  tags = ~set["hot", "new", ...Set.fromList ["fresh"]]
+  tags = ~set["hot", "new", ...Set.fromList["fresh"]]
   _ <- print "tags: {tags}"
 
   q1 = Queue.enqueue "first" Queue.empty
@@ -25,7 +25,7 @@ main = effect {
   popped = Queue.dequeue q2
   popped ?
     | Some (value, _) => print "queue: {value}"
-    | None => print "queue empty"
+    | None            => print "queue empty"
 
   d1 = Deque.pushFront 1 Deque.empty
   d2 = Deque.pushBack 2 d1
@@ -33,7 +33,7 @@ main = effect {
   front = Deque.popFront d3
   front ?
     | Some (value, _) => print "deque: {value}"
-    | None => print "deque empty"
+    | None            => print "deque empty"
 
   h1 = Heap.push 3 Heap.empty
   h2 = Heap.push 1 h1
@@ -41,5 +41,5 @@ main = effect {
   smallest = Heap.popMin h3
   smallest ?
     | Some (value, _) => print "heap: {value}"
-    | None => print "heap empty"
+    | None            => print "heap empty"
 }

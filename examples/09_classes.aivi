@@ -16,17 +16,17 @@ class Eq A = {
 
   instance Functor (Option *) = {
     map: opt f => opt ?
-      | None => None
+      | None   => None
       | Some x => Some (f x)
   }
 
   instance Eq (Option Bool) = {
     eq: a b => (a, b) ?
-      | (None, None) => True
+      | (None, None)     => True
       | (Some x, Some y) => x == y
-      | _ => False
+      | _                => False
   }
 
   isNone = opt => opt ?
-    | None => True
+    | None   => True
     | Some _ => False

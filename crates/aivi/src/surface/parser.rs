@@ -929,7 +929,7 @@ impl Parser {
                     .parse_pattern()
                     .unwrap_or(Pattern::Wildcard(start.clone()));
                 let guard = if self.match_keyword("when") {
-                    self.parse_expr()
+                    self.parse_guard_expr()
                 } else {
                     None
                 };
@@ -993,7 +993,7 @@ impl Parser {
                     .parse_pattern()
                     .unwrap_or(Pattern::Wildcard(expr_span(&expr)));
                 let guard = if self.match_keyword("when") {
-                    self.parse_expr()
+                    self.parse_guard_expr()
                 } else {
                     None
                 };
@@ -1043,6 +1043,11 @@ impl Parser {
             };
         }
         Some(left)
+    }
+
+    fn parse_guard_expr(&mut self) -> Option<Expr> {
+        self.consume_newlines();
+        self.parse_binary(0)
     }
 
     fn parse_application(&mut self) -> Option<Expr> {
@@ -1095,17 +1100,63 @@ impl Parser {
                 if let Some(span) = self.peek_span() {
                     if is_adjacent(&expr_span(&expr), &span) {
                         self.consume_symbol("[");
-                        let index = self.parse_expr().unwrap_or(Expr::Raw {
+                        self.consume_newlines();
+                        let spread = self.consume_symbol("...");
+                        let first = self.parse_expr().unwrap_or(Expr::Raw {
                             text: String::new(),
                             span: expr_span(&expr),
                         });
-                        let end = self.expect_symbol("]", "expected ']' after index");
-                        let span = merge_span(expr_span(&expr), end.unwrap_or(expr_span(&expr)));
-                        expr = Expr::Index {
-                            base: Box::new(expr),
-                            index: Box::new(index),
-                            span,
-                        };
+                        let first_span = expr_span(&first);
+                        self.consume_newlines();
+
+                        // `base[index]` (single expr) vs `base[ a, b, c ]` (bracket-list call)
+                        if self.consume_symbol(",") {
+                            let mut items = vec![ListItem {
+                                expr: first,
+                                spread,
+                                span: first_span.clone(),
+                            }];
+                            self.consume_newlines();
+                            while !self.check_symbol("]") && self.pos < self.tokens.len() {
+                                let spread = self.consume_symbol("...");
+                                if let Some(item_expr) = self.parse_expr() {
+                                    let span = expr_span(&item_expr);
+                                    items.push(ListItem {
+                                        expr: item_expr,
+                                        spread,
+                                        span,
+                                    });
+                                }
+                                self.consume_newlines();
+                                if !self.consume_symbol(",") {
+                                    break;
+                                }
+                                self.consume_newlines();
+                            }
+                            let end = self.expect_symbol("]", "expected ']' to close bracket list");
+                            let list_span = merge_span(
+                                first_span.clone(),
+                                end.unwrap_or_else(|| first_span.clone()),
+                            );
+                            let list = Expr::List {
+                                items,
+                                span: list_span.clone(),
+                            };
+                            let span = merge_span(expr_span(&expr), list_span);
+                            expr = Expr::Call {
+                                func: Box::new(expr),
+                                args: vec![list],
+                                span,
+                            };
+                        } else {
+                            let end = self.expect_symbol("]", "expected ']' after index");
+                            let span = merge_span(expr_span(&expr), end.unwrap_or(expr_span(&expr)));
+                            expr = Expr::Index {
+                                base: Box::new(expr),
+                                index: Box::new(first),
+                                span,
+                            };
+                        }
                         continue;
                     }
                 }

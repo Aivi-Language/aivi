@@ -1,0 +1,77 @@
+module examples.logic.fantasyland
+export Option, isNone, main
+
+// Option type definition (ADT)
+
+Option A =
+  | None
+  | Some A
+
+// Equality for Option
+
+instance Eq A: Setoid (Option A) = {
+  equals: a b =>
+    (a, b) ?
+      | (None, None)     => True
+      | (Some x, Some y) => equals x y
+      | _                => False
+}
+
+// Functor for Option
+
+instance Functor (Option *) = {
+  map: opt f =>
+    opt ?
+      | None   => None
+      | Some x => Some (f x)
+}
+
+// Apply for Option
+
+instance Apply (Option *) =
+  Functor (Option *)& {
+    ap: fOpt opt =>
+      (fOpt, opt) ?
+        | (Some f, Some x) => Some (f x)
+        | _                => None
+  }
+
+// Applicative for Option
+
+instance Applicative (Option *) =
+  Apply (Option *)& {
+    of: Some
+  }
+
+// Chain for Option
+
+instance Chain (Option *) =
+  Apply (Option *)& {
+    chain: opt f =>
+      opt ?
+        | None   => None
+        | Some x => f x
+  }
+
+// Monad for Option
+
+instance Monad (Option *) =
+  Applicative (Option *)&Chain (Option *)
+
+// Usage example
+
+main = effect {
+  // Functor map
+  five = Some 4 |> map (_ + 1)
+
+  // Chain (flatMap)
+  total = five |> chain (x => Some (x * 2))
+
+  _ <- print total
+  pure Unit
+}
+
+isNone = opt =>
+  opt ?
+    | None   => True
+    | Some _ => False

@@ -8,7 +8,7 @@ use aivi.text
 
 User = { id: Int, name: Text, active: Bool }
 
-userTable = database.table "users" [
+userTable = database.table "users"[
   { name: "id", type: IntType, constraints: [NotNull], default: None },
   { name: "name", type: Varchar 64, constraints: [NotNull], default: None },
   { name: "active", type: BoolType, constraints: [NotNull], default: Some (DefaultBool False) }
@@ -24,7 +24,7 @@ main = effect {
 
   rows <- database.load table3
 
-  _ <- logger.info "users updated" [
+  _ <- logger.info "users updated"[
     ("env", text.toText envValue),
     ("rows", text.toText rows)
   ]

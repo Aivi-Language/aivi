@@ -9,6 +9,6 @@ main = effect {
   result <- get ~u(https://example.com)
   message = result ?
     | Ok response => "Status {response.status}"
-    | Err err => "Error {err.message}"
+    | Err err     => "Error {err.message}"
   _ <- println message
 }

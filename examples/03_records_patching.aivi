@@ -4,7 +4,7 @@ export User, user1, user2, user3, store2, store3, promote
 User = { name: Text, age: Int, tags: List Text }
 
 append = xs ys => xs ?
-  | [] => ys
+  | []        => ys
   | [h, ...t] => [h, ...append t ys]
 
 user1 : User
@@ -12,10 +12,10 @@ user1 = { name: "Ada", age: 36, tags: ["dev"] }
 
 user2 = user1 <| {
   age: _ + 1
-  tags: append _ ["vip"]
+  tags: append _["vip"]
 
   promote = user => user <| {
-    tags: append _ ["core"]
+    tags: append _["core"]
   }
 
   bumpName = name => "{name}+"
@@ -39,6 +39,6 @@ user2 = user1 <| {
   }
 
   store3 = store2 <| {
-    items[price > 15].price: _ - 2
+    items[price > 15].price: _ -2
     items[price > 15].active: True
   }

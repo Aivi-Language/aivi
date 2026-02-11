@@ -17,6 +17,7 @@ export domain Vector
 // Re-exports
 use aivi
 use aivi.text
+use aivi.logic
 use aivi.calendar
 use aivi.duration
 use aivi.color
