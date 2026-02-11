@@ -8,12 +8,19 @@ It provides **Fibers** (lightweight threads) and **Channels** for safe communica
 use aivi.concurrency as concurrent
 ```
 
+## Types
+
+```aivi
+type Scope = Unit
+type ChannelError = Closed
+```
+
 ## Functions
 
 | Function | Explanation |
 | --- | --- |
 | **par** left right<br><pre><code>`Effect E A -> Effect E B -> Effect E (A, B)`</code></pre> | Runs both effects concurrently and returns both results; fails if either fails. |
-| **scope** run<br><pre><code>`(Scope -> Effect E A) -> Effect E A`</code></pre> | Creates a structured concurrency scope and passes a `Scope` handle to `run`. |
+| **scope** run<br><pre><code>`(Scope -> Effect E A) -> Effect E A`</code></pre> | Creates a structured concurrency scope and runs `run` (current `Scope` is `Unit`). |
 
 ## Channels
 
@@ -36,3 +43,9 @@ Channels provide a mechanism for synchronization and communication between concu
 | Function | Explanation |
 | --- | --- |
 | **recv** receiver<br><pre><code>`Receiver A -> Effect E (Result A ChannelError)`</code></pre> | Waits for the next value; returns `Ok value` or `Err Closed`. |
+
+### `close`
+
+| Function | Explanation |
+| --- | --- |
+| **close** sender<br><pre><code>`Sender A -> Effect E Unit`</code></pre> | Closes the channel from the sender side; receivers observe `Err Closed`. |

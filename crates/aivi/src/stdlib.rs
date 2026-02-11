@@ -252,7 +252,7 @@ module aivi.regex = {
 const TESTING_SOURCE: &str = r#"
 @no_prelude
 module aivi.testing = {
-  export assert, assert_eq
+  export assert, assert_eq, assertEq
 
   use aivi
 
@@ -261,6 +261,9 @@ module aivi.testing = {
 
   assert_eq : A -> A -> Effect Text Unit
   assert_eq a b = if a == b then pure Unit else fail "assert_eq failed"
+
+  assertEq : A -> A -> Effect Text Unit
+  assertEq a b = assert_eq a b
 }
 "#;
 
@@ -1178,6 +1181,38 @@ module aivi.url = {
 }
 "#;
 
+const CONCURRENCY_SOURCE: &str = r#"
+@no_prelude
+module aivi.concurrency = {
+  export Scope, ChannelError
+  export par, scope
+  export make, send, recv, close
+
+  use aivi
+
+  type Scope = Unit
+  type ChannelError = Closed
+
+  par : Effect e a -> Effect e b -> Effect e (a, b)
+  par left right = concurrent.par left right
+
+  scope : (Scope -> Effect e a) -> Effect e a
+  scope run = concurrent.scope (run Unit)
+
+  make : A -> Effect e (Sender A, Receiver A)
+  make sample = channel.make sample
+
+  send : Sender A -> A -> Effect e Unit
+  send sender value = channel.send sender value
+
+  recv : Receiver A -> Effect e (Result A ChannelError)
+  recv receiver = channel.recv receiver
+
+  close : Sender A -> Effect e Unit
+  close sender = channel.close sender
+}
+"#;
+
 const CONSOLE_SOURCE: &str = r#"
 @no_prelude
 module aivi.console = {
@@ -1321,11 +1356,15 @@ module aivi.file = {
 
   FileStats = { size: Int, created: Int, modified: Int, isFile: Bool, isDirectory: Bool }
 
-  open : Text -> Effect Text FileHandle
-  open path = file.open path
+  open : Text -> Resource FileHandle
+  open path = resource {
+    handle <- file.open path
+    yield handle
+    _ <- file.close handle
+  }
 
-  readAll : FileHandle -> Effect Text Text
-  readAll handle = file.readAll handle
+  readAll : FileHandle -> Effect Text (Result Text Text)
+  readAll handle = attempt (file.readAll handle)
 
   close : FileHandle -> Effect Text Unit
   close handle = file.close handle
@@ -1618,6 +1657,7 @@ pub fn embedded_stdlib_modules() -> Vec<Module> {
     modules.extend(parse_embedded("aivi.graph", GRAPH_SOURCE));
     modules.extend(parse_embedded("aivi.math", MATH_SOURCE));
     modules.extend(parse_embedded("aivi.url", URL_SOURCE));
+    modules.extend(parse_embedded("aivi.concurrency", CONCURRENCY_SOURCE));
     modules.extend(parse_embedded("aivi.console", CONSOLE_SOURCE));
     modules.extend(parse_embedded("aivi.system", SYSTEM_SOURCE));
     modules.extend(parse_embedded("aivi.database", DATABASE_SOURCE));
@@ -1659,6 +1699,7 @@ pub fn embedded_stdlib_source(module_name: &str) -> Option<&'static str> {
         "aivi.graph" => Some(GRAPH_SOURCE),
         "aivi.math" => Some(MATH_SOURCE),
         "aivi.url" => Some(URL_SOURCE),
+        "aivi.concurrency" => Some(CONCURRENCY_SOURCE),
         "aivi.console" => Some(CONSOLE_SOURCE),
         "aivi.system" => Some(SYSTEM_SOURCE),
         "aivi.database" => Some(DATABASE_SOURCE),
