@@ -85,7 +85,7 @@ function compileExtension() {
 }
 
 function packageVsix() {
-  run("pnpm exec vsce package --no-dependencies", { cwd: vscodeDir });
+  run("pnpm exec vsce package", { cwd: vscodeDir });
 }
 
 function main() {

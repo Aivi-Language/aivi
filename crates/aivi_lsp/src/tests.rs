@@ -513,3 +513,69 @@ fn semantic_tokens_highlight_keywords_types_and_literals() {
     assert!(seen_number);
     assert!(seen_decorator);
 }
+
+#[test]
+fn semantic_tokens_highlight_paths_and_calls() {
+    let text = r#"use aivi.net.https (get)
+main = effect {
+  xs = [1, 2]
+  ys = xs |> map inc
+}
+nested = { title: "Report", stats: { count: 3, avg: 1.5 }, tags: ["a"] }
+Queue.isEmpty
+"#;
+    let tokens = Backend::build_semantic_tokens(text);
+    let lines: Vec<&str> = text.lines().collect();
+
+    let mut abs_line = 0u32;
+    let mut abs_start = 0u32;
+    let mut saw_path_head = false;
+    let mut saw_path_mid = false;
+    let mut saw_path_tail = false;
+    let mut saw_map_function = false;
+    let mut saw_tags_property = false;
+    let mut saw_queue_type = false;
+    let mut is_empty_token = None;
+
+    for token in tokens.data.iter() {
+        abs_line += token.delta_line;
+        if token.delta_line == 0 {
+            abs_start += token.delta_start;
+        } else {
+            abs_start = token.delta_start;
+        }
+        let line = lines.get(abs_line as usize).copied().unwrap_or_default();
+        let text: String = line
+            .chars()
+            .skip(abs_start as usize)
+            .take(token.length as usize)
+            .collect();
+
+        match (token.token_type, text.as_str()) {
+            (Backend::SEM_TOKEN_PATH_HEAD, "aivi") => saw_path_head = true,
+            (Backend::SEM_TOKEN_PATH_MID, "net") => saw_path_mid = true,
+            (Backend::SEM_TOKEN_PATH_TAIL, "https") => saw_path_tail = true,
+            (Backend::SEM_TOKEN_FUNCTION, "map") => saw_map_function = true,
+            (Backend::SEM_TOKEN_PROPERTY, "tags") => saw_tags_property = true,
+            (Backend::SEM_TOKEN_TYPE, "Queue") => saw_queue_type = true,
+            (_, "isEmpty") => is_empty_token = Some(token.token_type),
+            _ => {}
+        }
+    }
+
+    assert!(saw_path_head);
+    assert!(saw_path_mid);
+    assert!(saw_path_tail);
+    assert!(saw_map_function);
+    assert!(saw_tags_property);
+    assert!(saw_queue_type);
+    if let Some(token_type) = is_empty_token {
+        assert!(
+            token_type != Backend::SEM_TOKEN_PATH_HEAD
+                && token_type != Backend::SEM_TOKEN_PATH_MID
+                && token_type != Backend::SEM_TOKEN_PATH_TAIL
+        );
+    } else {
+        panic!("expected isEmpty token");
+    }
+}

@@ -127,7 +127,7 @@ impl Backend {
         let mut roles = HashMap::new();
         let mut index = 0;
         while index < tokens.len() {
-            if !Self::is_lower_ident(&tokens[index]) {
+            if tokens[index].kind != "ident" {
                 index += 1;
                 continue;
             }
@@ -144,7 +144,7 @@ impl Backend {
                 if dot.kind != "symbol" || dot.text != "." {
                     break;
                 }
-                if !Self::is_lower_ident(next) {
+                if next.kind != "ident" {
                     break;
                 }
                 if !Self::is_adjacent_span(&tokens[current].span, &dot.span)
@@ -156,18 +156,27 @@ impl Backend {
                 current = next_index;
             }
             if ident_indices.len() > 1 {
-                let last = ident_indices.len().saturating_sub(1);
-                for (pos, idx) in ident_indices.iter().enumerate() {
-                    let role = if pos == last {
-                        Self::SEM_TOKEN_PATH_TAIL
-                    } else if pos + 1 == last {
-                        Self::SEM_TOKEN_PATH_MID
-                    } else {
-                        Self::SEM_TOKEN_PATH_HEAD
-                    };
-                    roles.insert(*idx, role);
+                let has_type_segment = ident_indices.iter().any(|idx| {
+                    tokens[*idx]
+                        .text
+                        .chars()
+                        .next()
+                        .is_some_and(|ch| ch.is_ascii_uppercase())
+                });
+                if !has_type_segment {
+                    let last = ident_indices.len().saturating_sub(1);
+                    for (pos, idx) in ident_indices.iter().enumerate() {
+                        let role = if pos == last {
+                            Self::SEM_TOKEN_PATH_TAIL
+                        } else if pos + 1 == last {
+                            Self::SEM_TOKEN_PATH_MID
+                        } else {
+                            Self::SEM_TOKEN_PATH_HEAD
+                        };
+                        roles.insert(*idx, role);
+                    }
                 }
-                index = ident_indices[last].saturating_add(1);
+                index = ident_indices[ident_indices.len() - 1].saturating_add(1);
             } else {
                 index += 1;
             }
@@ -183,6 +192,59 @@ impl Backend {
             return false;
         }
         Self::is_lower_ident(token)
+    }
+
+    fn is_expression_token(token: &CstToken) -> bool {
+        match token.kind.as_str() {
+            "ident" => !Self::KEYWORDS.contains(&token.text.as_str()),
+            "number" | "string" | "sigil" => true,
+            "symbol" => matches!(token.text.as_str(), ")" | "]" | "}"),
+            _ => false,
+        }
+    }
+
+    fn is_expression_start(current: &CstToken, next: &CstToken) -> bool {
+        match next.kind.as_str() {
+            "ident" | "number" | "string" | "sigil" => true,
+            "symbol" => {
+                if matches!(next.text.as_str(), "(" | "[" | "{") {
+                    return true;
+                }
+                if next.text == "." && !Self::is_adjacent_span(&current.span, &next.span) {
+                    return true;
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
+    fn is_application_head(
+        prev: Option<&CstToken>,
+        token: &CstToken,
+        next: Option<&CstToken>,
+    ) -> bool {
+        if !Self::is_lower_ident(token) {
+            return false;
+        }
+        let Some(next) = next else {
+            return false;
+        };
+        if !Self::is_expression_start(token, next) {
+            return false;
+        }
+        if let Some(prev) = prev {
+            if Self::is_expression_token(prev) {
+                return false;
+            }
+            if prev.kind == "symbol"
+                && prev.text == "."
+                && Self::is_adjacent_span(&prev.span, &token.span)
+            {
+                return false;
+            }
+        }
+        true
     }
 
     fn classify_semantic_token(
@@ -235,6 +297,9 @@ impl Backend {
                     next,
                     Some(next) if next.kind == "symbol" && (next.text == ":" || next.text == "=")
                 ) {
+                    return Some(Self::SEM_TOKEN_FUNCTION);
+                }
+                if Self::is_application_head(prev, token, next) {
                     return Some(Self::SEM_TOKEN_FUNCTION);
                 }
                 if token
@@ -468,7 +533,8 @@ impl Backend {
                         .map(|idx| &expr_tokens[*idx]);
                     let next = significant.get(position + 1).map(|idx| &expr_tokens[*idx]);
 
-                    let Some(token_type) = Self::classify_semantic_token(prev, expr_token, next)
+                    let Some(token_type) =
+                        Self::classify_semantic_token(prev, expr_token, next)
                     else {
                         continue;
                     };
