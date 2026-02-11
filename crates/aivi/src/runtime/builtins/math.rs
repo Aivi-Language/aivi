@@ -1,259 +1,13 @@
-fn build_regex_record() -> Value {
-    let mut fields = HashMap::new();
-    fields.insert(
-        "compile".to_string(),
-        builtin("regex.compile", 1, |mut args, _| {
-            let pattern = expect_text(args.pop().unwrap(), "regex.compile")?;
-            match Regex::new(&pattern) {
-                Ok(regex) => Ok(make_ok(Value::Regex(Arc::new(regex)))),
-                Err(err) => Ok(make_err(Value::Constructor {
-                    name: "InvalidPattern".to_string(),
-                    args: vec![Value::Text(err.to_string())],
-                })),
-            }
-        }),
-    );
-    fields.insert(
-        "test".to_string(),
-        builtin("regex.test", 2, |mut args, _| {
-            let text = expect_text(args.pop().unwrap(), "regex.test")?;
-            let regex = expect_regex(args.pop().unwrap(), "regex.test")?;
-            Ok(Value::Bool(regex.is_match(&text)))
-        }),
-    );
-    fields.insert(
-        "match".to_string(),
-        builtin("regex.match", 2, |mut args, _| {
-            let text = expect_text(args.pop().unwrap(), "regex.match")?;
-            let regex = expect_regex(args.pop().unwrap(), "regex.match")?;
-            match regex.captures(&text) {
-                Some(captures) => {
-                    let full = captures.get(0).map(|m| m.as_str()).unwrap_or("");
-                    let mut groups = Vec::new();
-                    for idx in 1..captures.len() {
-                        if let Some(matched) = captures.get(idx) {
-                            groups.push(make_some(Value::Text(matched.as_str().to_string())));
-                        } else {
-                            groups.push(make_none());
-                        }
-                    }
-                    let mut record = HashMap::new();
-                    let (start, end) = captures.get(0).map(|m| (m.start(), m.end())).unwrap_or((0, 0));
-                    record.insert("full".to_string(), Value::Text(full.to_string()));
-                    record.insert("groups".to_string(), list_value(groups));
-                    record.insert("start".to_string(), Value::Int(start as i64));
-                    record.insert("end".to_string(), Value::Int(end as i64));
-                    Ok(make_some(Value::Record(Arc::new(record))))
-                }
-                None => Ok(make_none()),
-            }
-        }),
-    );
-    fields.insert(
-        "matches".to_string(),
-        builtin("regex.matches", 2, |mut args, _| {
-            let text = expect_text(args.pop().unwrap(), "regex.matches")?;
-            let regex = expect_regex(args.pop().unwrap(), "regex.matches")?;
-            let mut matches_out = Vec::new();
-            for captures in regex.captures_iter(&text) {
-                let full = captures.get(0).map(|m| m.as_str()).unwrap_or("");
-                let mut groups = Vec::new();
-                for idx in 1..captures.len() {
-                    if let Some(matched) = captures.get(idx) {
-                        groups.push(make_some(Value::Text(matched.as_str().to_string())));
-                    } else {
-                        groups.push(make_none());
-                    }
-                }
-                let (start, end) = captures.get(0).map(|m| (m.start(), m.end())).unwrap_or((0, 0));
-                let mut record = HashMap::new();
-                record.insert("full".to_string(), Value::Text(full.to_string()));
-                record.insert("groups".to_string(), list_value(groups));
-                record.insert("start".to_string(), Value::Int(start as i64));
-                record.insert("end".to_string(), Value::Int(end as i64));
-                matches_out.push(Value::Record(Arc::new(record)));
-            }
-            Ok(list_value(matches_out))
-        }),
-    );
-    fields.insert(
-        "find".to_string(),
-        builtin("regex.find", 2, |mut args, _| {
-            let text = expect_text(args.pop().unwrap(), "regex.find")?;
-            let regex = expect_regex(args.pop().unwrap(), "regex.find")?;
-            match regex.find(&text) {
-                Some(found) => Ok(make_some(Value::Tuple(vec![
-                    Value::Int(found.start() as i64),
-                    Value::Int(found.end() as i64),
-                ]))),
-                None => Ok(make_none()),
-            }
-        }),
-    );
-    fields.insert(
-        "findAll".to_string(),
-        builtin("regex.findAll", 2, |mut args, _| {
-            let text = expect_text(args.pop().unwrap(), "regex.findAll")?;
-            let regex = expect_regex(args.pop().unwrap(), "regex.findAll")?;
-            let mut out = Vec::new();
-            for found in regex.find_iter(&text) {
-                out.push(Value::Tuple(vec![
-                    Value::Int(found.start() as i64),
-                    Value::Int(found.end() as i64),
-                ]));
-            }
-            Ok(list_value(out))
-        }),
-    );
-    fields.insert(
-        "split".to_string(),
-        builtin("regex.split", 2, |mut args, _| {
-            let text = expect_text(args.pop().unwrap(), "regex.split")?;
-            let regex = expect_regex(args.pop().unwrap(), "regex.split")?;
-            let parts = regex
-                .split(&text)
-                .map(|part| Value::Text(part.to_string()))
-                .collect::<Vec<_>>();
-            Ok(list_value(parts))
-        }),
-    );
-    fields.insert(
-        "replace".to_string(),
-        builtin("regex.replace", 3, |mut args, _| {
-            let replacement = expect_text(args.pop().unwrap(), "regex.replace")?;
-            let text = expect_text(args.pop().unwrap(), "regex.replace")?;
-            let regex = expect_regex(args.pop().unwrap(), "regex.replace")?;
-            Ok(Value::Text(regex.replacen(&text, 1, replacement).to_string()))
-        }),
-    );
-    fields.insert(
-        "replaceAll".to_string(),
-        builtin("regex.replaceAll", 3, |mut args, _| {
-            let replacement = expect_text(args.pop().unwrap(), "regex.replaceAll")?;
-            let text = expect_text(args.pop().unwrap(), "regex.replaceAll")?;
-            let regex = expect_regex(args.pop().unwrap(), "regex.replaceAll")?;
-            Ok(Value::Text(regex.replace_all(&text, replacement).to_string()))
-        }),
-    );
-    Value::Record(Arc::new(fields))
-}
+use std::collections::HashMap;
+use std::sync::Arc;
 
-fn angle_from_value(value: Value, ctx: &str) -> Result<f64, RuntimeError> {
-    let Value::Record(fields) = value else {
-        return Err(RuntimeError::Message(format!("{ctx} expects Angle")));
-    };
-    let radians = fields
-        .get("radians")
-        .cloned()
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Angle.radians")))?;
-    expect_float(radians, ctx)
-}
+use num_bigint::BigInt;
 
-fn angle_value(radians: f64) -> Value {
-    let mut map = HashMap::new();
-    map.insert("radians".to_string(), Value::Float(radians));
-    Value::Record(Arc::new(map))
-}
 
-fn gcd_i64(mut a: i64, mut b: i64) -> i64 {
-    a = a.abs();
-    b = b.abs();
-    while b != 0 {
-        let r = a % b;
-        a = b;
-        b = r;
-    }
-    a
-}
+use super::util::{builtin, expect_float, expect_int, expect_list, list_floats, list_ints, make_none, make_some};
+use crate::runtime::{RuntimeError, Value};
 
-fn lcm_i64(a: i64, b: i64) -> i64 {
-    if a == 0 || b == 0 {
-        return 0;
-    }
-    (a / gcd_i64(a, b)) * b
-}
-
-fn mod_pow(mut base: i64, mut exp: i64, modulus: i64) -> i64 {
-    if modulus == 1 {
-        return 0;
-    }
-    let mut result: i64 = 1 % modulus;
-    base %= modulus;
-    while exp > 0 {
-        if exp % 2 == 1 {
-            result = (result * base) % modulus;
-        }
-        exp /= 2;
-        base = (base * base) % modulus;
-    }
-    result
-}
-
-fn factorial_bigint(n: i64) -> Option<BigInt> {
-    if n < 0 {
-        return None;
-    }
-    let mut acc = BigInt::from(1);
-    for i in 2..=n {
-        acc *= i;
-    }
-    Some(acc)
-}
-
-fn comb_bigint(n: i64, k: i64) -> Option<BigInt> {
-    if n < 0 || k < 0 || k > n {
-        return None;
-    }
-    let k = std::cmp::min(k, n - k);
-    let mut result = BigInt::from(1);
-    for i in 0..k {
-        result *= n - i;
-        result /= i + 1;
-    }
-    Some(result)
-}
-
-fn perm_bigint(n: i64, k: i64) -> Option<BigInt> {
-    if n < 0 || k < 0 || k > n {
-        return None;
-    }
-    let mut result = BigInt::from(1);
-    for i in 0..k {
-        result *= n - i;
-    }
-    Some(result)
-}
-
-fn next_after(from: f64, to: f64) -> f64 {
-    if from.is_nan() || to.is_nan() {
-        return f64::NAN;
-    }
-    if from == to {
-        return to;
-    }
-    if from == 0.0 {
-        let tiny = f64::from_bits(1);
-        return if to > 0.0 { tiny } else { -tiny };
-    }
-    let mut bits = from.to_bits();
-    if (from < to) == (from > 0.0) {
-        bits = bits.wrapping_add(1);
-    } else {
-        bits = bits.wrapping_sub(1);
-    }
-    f64::from_bits(bits)
-}
-
-fn frexp_value(value: f64) -> (f64, i64) {
-    if value == 0.0 || value.is_nan() || value.is_infinite() {
-        return (value, 0);
-    }
-    let exp = value.abs().log2().floor() as i64 + 1;
-    let mantissa = value / 2.0_f64.powi(exp as i32);
-    (mantissa, exp)
-}
-
-fn build_math_record() -> Value {
+pub(super) fn build_math_record() -> Value {
     let mut fields = HashMap::new();
     fields.insert("pi".to_string(), Value::Float(std::f64::consts::PI));
     fields.insert("tau".to_string(), Value::Float(std::f64::consts::TAU));
@@ -778,58 +532,117 @@ fn build_math_record() -> Value {
     Value::Record(Arc::new(fields))
 }
 
-fn date_from_value(value: Value, ctx: &str) -> Result<NaiveDate, RuntimeError> {
+fn angle_from_value(value: Value, ctx: &str) -> Result<f64, RuntimeError> {
     let Value::Record(fields) = value else {
-        return Err(RuntimeError::Message(format!("{ctx} expects Date")));
+        return Err(RuntimeError::Message(format!("{ctx} expects Angle")));
     };
-    let year = fields
-        .get("year")
+    let radians = fields
+        .get("radians")
         .cloned()
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Date.year")))?;
-    let month = fields
-        .get("month")
-        .cloned()
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Date.month")))?;
-    let day = fields
-        .get("day")
-        .cloned()
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Date.day")))?;
-    let year = expect_int(year, ctx)? as i32;
-    let month = expect_int(month, ctx)? as u32;
-    let day = expect_int(day, ctx)? as u32;
-    NaiveDate::from_ymd_opt(year, month, day)
-        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects valid Date")))
+        .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Angle.radians")))?;
+    expect_float(radians, ctx)
 }
 
-fn date_to_value(date: NaiveDate) -> Value {
+fn angle_value(radians: f64) -> Value {
     let mut map = HashMap::new();
-    map.insert("year".to_string(), Value::Int(date.year() as i64));
-    map.insert("month".to_string(), Value::Int(date.month() as i64));
-    map.insert("day".to_string(), Value::Int(date.day() as i64));
+    map.insert("radians".to_string(), Value::Float(radians));
     Value::Record(Arc::new(map))
 }
 
-fn days_in_month(year: i32, month: u32) -> u32 {
-    let (next_year, next_month) = if month == 12 {
-        (year + 1, 1)
+fn gcd_i64(mut a: i64, mut b: i64) -> i64 {
+    a = a.abs();
+    b = b.abs();
+    while b != 0 {
+        let r = a % b;
+        a = b;
+        b = r;
+    }
+    a
+}
+
+fn lcm_i64(a: i64, b: i64) -> i64 {
+    if a == 0 || b == 0 {
+        return 0;
+    }
+    (a / gcd_i64(a, b)) * b
+}
+
+fn mod_pow(mut base: i64, mut exp: i64, modulus: i64) -> i64 {
+    if modulus == 1 {
+        return 0;
+    }
+    let mut result: i64 = 1 % modulus;
+    base %= modulus;
+    while exp > 0 {
+        if exp % 2 == 1 {
+            result = (result * base) % modulus;
+        }
+        exp /= 2;
+        base = (base * base) % modulus;
+    }
+    result
+}
+
+fn factorial_bigint(n: i64) -> Option<BigInt> {
+    if n < 0 {
+        return None;
+    }
+    let mut acc = BigInt::from(1);
+    for i in 2..=n {
+        acc *= i;
+    }
+    Some(acc)
+}
+
+fn comb_bigint(n: i64, k: i64) -> Option<BigInt> {
+    if n < 0 || k < 0 || k > n {
+        return None;
+    }
+    let k = std::cmp::min(k, n - k);
+    let mut result = BigInt::from(1);
+    for i in 0..k {
+        result *= n - i;
+        result /= i + 1;
+    }
+    Some(result)
+}
+
+fn perm_bigint(n: i64, k: i64) -> Option<BigInt> {
+    if n < 0 || k < 0 || k > n {
+        return None;
+    }
+    let mut result = BigInt::from(1);
+    for i in 0..k {
+        result *= n - i;
+    }
+    Some(result)
+}
+
+fn next_after(from: f64, to: f64) -> f64 {
+    if from.is_nan() || to.is_nan() {
+        return f64::NAN;
+    }
+    if from == to {
+        return to;
+    }
+    if from == 0.0 {
+        let tiny = f64::from_bits(1);
+        return if to > 0.0 { tiny } else { -tiny };
+    }
+    let mut bits = from.to_bits();
+    if (from < to) == (from > 0.0) {
+        bits = bits.wrapping_add(1);
     } else {
-        (year, month + 1)
-    };
-    let first_next = NaiveDate::from_ymd_opt(next_year, next_month, 1)
-        .expect("valid next month date");
-    first_next.pred_opt().expect("previous day").day()
+        bits = bits.wrapping_sub(1);
+    }
+    f64::from_bits(bits)
 }
 
-fn add_months(date: NaiveDate, months: i64) -> NaiveDate {
-    let mut year = date.year() as i64;
-    let mut month = date.month() as i64;
-    let total = month - 1 + months;
-    year += total.div_euclid(12);
-    month = total.rem_euclid(12) + 1;
-    let year_i32 = year as i32;
-    let month_u32 = month as u32;
-    let max_day = days_in_month(year_i32, month_u32);
-    let day = date.day().min(max_day);
-    NaiveDate::from_ymd_opt(year_i32, month_u32, day).expect("valid date")
+fn frexp_value(value: f64) -> (f64, i64) {
+    if value == 0.0 || value.is_nan() || value.is_infinite() {
+        return (value, 0);
+    }
+    let exp = value.abs().log2().floor() as i64 + 1;
+    let mantissa = value / 2.0_f64.powi(exp as i32);
+    (mantissa, exp)
 }
-

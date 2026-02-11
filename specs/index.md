@@ -2,7 +2,13 @@
 title: AIVI Language Specification
 ---
 
-<p align="center">
+<p style="
+    background-color: #334;
+    border-radius: 20px;
+    width: fit-content;
+    padding: 1rem;
+    margin: 0 auto 3rem auto;
+">
     <img src="../assets/aivi-128.png" alt="AIVI Logo" width="128" height="128">
 </p>
 

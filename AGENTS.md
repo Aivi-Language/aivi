@@ -1,3 +1,7 @@
+---
+apply: always
+---
+
 # AIVI Agent Guide
 
 This document serves as the authoritative guide for AI agents working on the AIVI language project. It establishes the relationships between specifications, implementation crates, examples, and tooling, ensuring safe and consistent contributions.
@@ -60,7 +64,6 @@ When writing or generating AIVI code (e.g., in `examples/` or tests), adhere to 
 
 ### 3.1 Style & Syntax
 *   **Identifiers**: `lowerCamelCase` for values/functions, `UpperCamelCase` for types/modules.
-*   **Function Names**: Use `lowerCamelCase` only. Do not use underscores.
 *   **Immutability**: Bindings are immutable. Use recursion or generators instead of loops.
 *   **Pipelines**: Prefer `|>` for data transformations over nested calls.
     *   *Good*: `data |> filter valid |> map transform`
