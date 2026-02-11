@@ -18,10 +18,10 @@ class Setoid A = {
   equals: A -> A -> Bool
 }
 
-class Ord A =
-  Setoid A & {
-    lte: A -> A -> Bool
-  }
+class Ord A = {
+  equals: A -> A -> Bool
+  lte: A -> A -> Bool
+}
 
 // 2. Monoids and Semigroups
 
@@ -29,15 +29,16 @@ class Semigroup A = {
   concat: A -> A -> A
 }
 
-class Monoid A =
-  Semigroup A & {
-    empty: A
-  }
+class Monoid A = {
+  concat: A -> A -> A
+  empty: A
+}
 
-class Group A =
-  Monoid A & {
-    invert: A -> A
-  }
+class Group A = {
+  concat: A -> A -> A
+  empty: A
+  invert: A -> A
+}
 
 // 3. Categories
 
@@ -45,10 +46,10 @@ class Semigroupoid (F * *) = {
   compose: F B C -> F A B -> F A C
 }
 
-class Category (F * *) =
-  Semigroupoid F & {
-    id: F A A
-  }
+class Category (F * *) = {
+  compose: F B C -> F A B -> F A C
+  id: F A A
+}
 
 // 4. Functional Mappings
 
@@ -56,23 +57,29 @@ class Functor (F *) = {
   map: (A -> B) -> F A -> F B
 }
 
-class Apply (F *) =
-  Functor F & {
-    ap: F (A -> B) -> F A -> F B
-  }
+class Apply (F *) = {
+  map: (A -> B) -> F A -> F B
+  ap: F (A -> B) -> F A -> F B
+}
 
-class Applicative (F *) =
-  Apply F & {
-    of: A -> F A
-  }
+class Applicative (F *) = {
+  map: (A -> B) -> F A -> F B
+  ap: F (A -> B) -> F A -> F B
+  of: A -> F A
+}
 
-class Chain (F *) =
-  Apply F & {
-    chain: (A -> F B) -> F A -> F B
-  }
+class Chain (F *) = {
+  map: (A -> B) -> F A -> F B
+  ap: F (A -> B) -> F A -> F B
+  chain: (A -> F B) -> F A -> F B
+}
 
-class Monad (M *) =
-  Applicative M & Chain M
+class Monad (M *) = {
+  map: (A -> B) -> M A -> M B
+  ap: M (A -> B) -> M A -> M B
+  of: A -> M A
+  chain: (A -> M B) -> M A -> M B
+}
 
 // 5. Folds and Traversals
 
@@ -80,10 +87,11 @@ class Foldable (F *) = {
   reduce: (B -> A -> B) -> B -> F A -> B
 }
 
-class Traversable (T *) =
-  Functor T & Foldable T & {
-    traverse: (Applicative F) => (A -> F B) -> T A -> F (T B)
-  }
+class Traversable (T *) = {
+  map: (A -> B) -> T A -> T B
+  reduce: (B -> A -> B) -> B -> T A -> B
+  traverse: (Applicative F) => (A -> F B) -> T A -> F (T B)
+}
 
 // 6. Higher-Order Mappings
 
@@ -108,29 +116,67 @@ instance Functor (Option *) = {
       | Some x => Some (f x)
 }
 
-instance Apply (Option *) =
-  Functor (Option *) & {
-    ap: fOpt opt =>
-      (fOpt, opt) ?
-        | (Some f, Some x) => Some (f x)
-        | _                => None
-  }
+instance Apply (Option *) = {
+  map: f opt =>
+    opt ?
+      | None   => None
+      | Some x => Some (f x)
 
-instance Applicative (Option *) =
-  Apply (Option *) & {
-    of: Some
-  }
+  ap: fOpt opt =>
+    (fOpt, opt) ?
+      | (Some f, Some x) => Some (f x)
+      | _                => None
+}
 
-instance Chain (Option *) =
-  Apply (Option *) & {
-    chain: f opt =>
-      opt ?
-        | None   => None
-        | Some x => f x
-  }
+instance Applicative (Option *) = {
+  map: f opt =>
+    opt ?
+      | None   => None
+      | Some x => Some (f x)
 
-instance Monad (Option *) =
-  Applicative (Option *) & Chain (Option *)
+  ap: fOpt opt =>
+    (fOpt, opt) ?
+      | (Some f, Some x) => Some (f x)
+      | _                => None
+
+  of: Some
+}
+
+instance Chain (Option *) = {
+  map: f opt =>
+    opt ?
+      | None   => None
+      | Some x => Some (f x)
+
+  ap: fOpt opt =>
+    (fOpt, opt) ?
+      | (Some f, Some x) => Some (f x)
+      | _                => None
+
+  chain: f opt =>
+    opt ?
+      | None   => None
+      | Some x => f x
+}
+
+instance Monad (Option *) = {
+  map: f opt =>
+    opt ?
+      | None   => None
+      | Some x => Some (f x)
+
+  ap: fOpt opt =>
+    (fOpt, opt) ?
+      | (Some f, Some x) => Some (f x)
+      | _                => None
+
+  of: Some
+
+  chain: f opt =>
+    opt ?
+      | None   => None
+      | Some x => f x
+}
 
 // Result
 
@@ -141,30 +187,71 @@ instance Functor (Result E *) = {
       | Err e => Err e
 }
 
-instance Apply (Result E *) =
-  Functor (Result E *) & {
-    ap: fRes xRes =>
-      (fRes, xRes) ?
-        | (Ok f, Ok x)   => Ok (f x)
-        | (Err e, _)     => Err e
-        | (_, Err e)     => Err e
-  }
+instance Apply (Result E *) = {
+  map: f res =>
+    res ?
+      | Ok x  => Ok (f x)
+      | Err e => Err e
 
-instance Applicative (Result E *) =
-  Apply (Result E *) & {
-    of: Ok
-  }
+  ap: fRes xRes =>
+    (fRes, xRes) ?
+      | (Ok f, Ok x)   => Ok (f x)
+      | (Err e, _)     => Err e
+      | (_, Err e)     => Err e
+}
 
-instance Chain (Result E *) =
-  Apply (Result E *) & {
-    chain: f res =>
-      res ?
-        | Ok x  => f x
-        | Err e => Err e
-  }
+instance Applicative (Result E *) = {
+  map: f res =>
+    res ?
+      | Ok x  => Ok (f x)
+      | Err e => Err e
 
-instance Monad (Result E *) =
-  Applicative (Result E *) & Chain (Result E *)
+  ap: fRes xRes =>
+    (fRes, xRes) ?
+      | (Ok f, Ok x)   => Ok (f x)
+      | (Err e, _)     => Err e
+      | (_, Err e)     => Err e
+
+  of: Ok
+}
+
+instance Chain (Result E *) = {
+  map: f res =>
+    res ?
+      | Ok x  => Ok (f x)
+      | Err e => Err e
+
+  ap: fRes xRes =>
+    (fRes, xRes) ?
+      | (Ok f, Ok x)   => Ok (f x)
+      | (Err e, _)     => Err e
+      | (_, Err e)     => Err e
+
+  chain: f res =>
+    res ?
+      | Ok x  => f x
+      | Err e => Err e
+}
+
+instance Monad (Result E *) = {
+  map: f res =>
+    res ?
+      | Ok x  => Ok (f x)
+      | Err e => Err e
+
+  ap: fRes xRes =>
+    (fRes, xRes) ?
+      | (Ok f, Ok x)   => Ok (f x)
+      | (Err e, _)     => Err e
+      | (_, Err e)     => Err e
+
+  of: Ok
+
+  chain: f res =>
+    res ?
+      | Ok x  => f x
+      | Err e => Err e
+}
 
 // List
 
@@ -176,7 +263,7 @@ append = xs ys =>
 mapList = f xs =>
   xs ?
     | []        => []
-    | [h, ...t] => [f h, ...mapList t f]
+    | [h, ...t] => [f h, ...mapList f t]
 
 concatMap = f xs =>
   xs ?
@@ -187,21 +274,27 @@ instance Functor (List *) = {
   map: f xs => mapList f xs
 }
 
-instance Apply (List *) =
-  Functor (List *) & {
-    ap: fs xs => concatMap (f => mapList f xs) fs
-  }
+instance Apply (List *) = {
+  map: f xs => mapList f xs
+  ap: fs xs => concatMap (f => mapList f xs) fs
+}
 
-instance Applicative (List *) =
-  Apply (List *) & {
-    of: x => [x]
-  }
+instance Applicative (List *) = {
+  map: f xs => mapList f xs
+  ap: fs xs => concatMap (f => mapList f xs) fs
+  of: x => [x]
+}
 
-instance Chain (List *) =
-  Apply (List *) & {
-    chain: f xs => concatMap f xs
-  }
+instance Chain (List *) = {
+  map: f xs => mapList f xs
+  ap: fs xs => concatMap (f => mapList f xs) fs
+  chain: f xs => concatMap f xs
+}
 
-instance Monad (List *) =
-  Applicative (List *) & Chain (List *)
+instance Monad (List *) = {
+  map: f xs => mapList f xs
+  ap: fs xs => concatMap (f => mapList f xs) fs
+  of: x => [x]
+  chain: f xs => concatMap f xs
+}
 "#;

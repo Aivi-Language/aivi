@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::Instant;
 
 use aivi::{desugar_target, run_native};
 
@@ -50,6 +51,19 @@ fn run_native_quaternion_example() {
 #[test]
 fn run_native_fantasyland_law_tests() {
     let _root = set_workspace_root();
+    eprintln!("[DEBUG_LOG] fantasyland laws: desugar start");
+    let t0 = Instant::now();
     let program = desugar_target("examples/22_fantasyland_laws.aivi").expect("desugar");
+    eprintln!(
+        "[DEBUG_LOG] fantasyland laws: desugar done in {:?}",
+        t0.elapsed()
+    );
+
+    eprintln!("[DEBUG_LOG] fantasyland laws: run_native start");
+    let t1 = Instant::now();
     run_native(program).expect("run native");
+    eprintln!(
+        "[DEBUG_LOG] fantasyland laws: run_native done in {:?}",
+        t1.elapsed()
+    );
 }

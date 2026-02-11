@@ -29,7 +29,7 @@ instance Functor (Option *) = {
 // Apply for Option
 
 instance Apply (Option *) =
-  Functor (Option *)& {
+  Functor (Option *) & {
     ap: fOpt opt =>
       (fOpt, opt) ?
         | (Some f, Some x) => Some (f x)
@@ -39,14 +39,14 @@ instance Apply (Option *) =
 // Applicative for Option
 
 instance Applicative (Option *) =
-  Apply (Option *)& {
+  Apply (Option *) & {
     of: Some
   }
 
 // Chain for Option
 
 instance Chain (Option *) =
-  Apply (Option *)& {
+  Apply (Option *) & {
     chain: f opt =>
       opt ?
         | None   => None
@@ -56,7 +56,7 @@ instance Chain (Option *) =
 // Monad for Option
 
 instance Monad (Option *) =
-  Applicative (Option *)&Chain (Option *)
+  Applicative (Option *) & Chain (Option *)
 
 // Usage example
 

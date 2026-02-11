@@ -13,32 +13,35 @@ user1 = { name: "Ada", age: 36, tags: ["dev"] }
 user2 = user1 <| {
   age: _ + 1
   tags: append _["vip"]
+}
 
-  promote = user => user <| {
-    tags: append _["core"]
-  }
+promote = user => user <| {
+  tags: append _["core"]
+}
 
-  bumpName = name => "{name}+"
+bumpName = name => "{name}+"
 
-  user3 = user2 <| {
-    name: bumpName
-    age: _ + 2
-  }
- 
-  Item = { price: Int, active: Bool }
-  Store = { items: List Item }
+user3 = user2 <| {
+  name: bumpName
+  age: _ + 2
+}
 
-  store = { items: [
-    { price: 10, active: True }
-    { price: 20, active: False }
+Item = { price: Int, active: Bool }
+Store = { items: List Item }
+
+store = {
+  items: [
+    { price: 10, active: True },
+    { price: 20, active: False },
     { price: 30, active: True }
-  ] }
+  ]
+}
 
-  store2 = store <| {
-    items[active].price: _ + 5
-  }
+store2 = store <| {
+  items[active].price: _ + 5
+}
 
-  store3 = store2 <| {
-    items[price > 15].price: _ -2
-    items[price > 15].active: True
-  }
+store3 = store2 <| {
+  items[price > 15].price: _ - 2
+  items[price > 15].active: True
+}

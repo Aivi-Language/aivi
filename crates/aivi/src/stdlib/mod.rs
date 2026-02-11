@@ -226,7 +226,7 @@ fn parse_embedded(name: &str, source: &str) -> Vec<Module> {
     let (modules, diagnostics) = parse_modules(path.as_path(), source);
     debug_assert!(
         diagnostics.is_empty(),
-        "embedded stdlib module {name} failed to parse"
+        "embedded stdlib module {name} failed to parse: {diagnostics:#?}"
     );
     modules
 }

@@ -10,7 +10,7 @@ records = [
   { id: 1, label: "alpha", meta: { score: 9.5, active: True } },
   { id: 2, label: "beta", meta: { score: 7.0, active: False } }
 ]
- 
+
 nested = {
   title: "Report",
   stats: { count: 3, avg: 1.5 },
