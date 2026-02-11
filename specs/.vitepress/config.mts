@@ -232,6 +232,16 @@ export default defineConfig({
         items: [
           { text: 'Concurrency', link: '/06_runtime/01_concurrency' },
         ]
+      },
+      {
+        text: 'Tools & Ecosystem',
+        collapsed: true,
+        items: [
+          { text: 'CLI', link: '/07_tools/01_cli' },
+          { text: 'LSP Server', link: '/07_tools/02_lsp_server' },
+          { text: 'VSCode Extension', link: '/07_tools/03_vscode_extension' },
+          { text: 'Packaging', link: '/07_tools/04_packaging' },
+        ]
       }
     ]
   },
