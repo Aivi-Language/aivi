@@ -5,9 +5,9 @@ use aivi.console (print)
 
 program : Effect Text Unit
 program = effect {
-  _ <- print "boot"
+  _   <- print "boot"
   cfg <- readConfig "config.json"
-  _ <- print cfg
+  _   <- print cfg
 }
 
 readConfig : Text -> Effect Text Text
@@ -42,5 +42,5 @@ loadOrDefault path fallback = effect {
 program2 : Effect Text Unit
 program2 = effect {
   cfg <- loadOrDefault "config.json" "{ \"mode\": \"dev\" }"
-  _ <- print cfg
+  _   <- print cfg
 }

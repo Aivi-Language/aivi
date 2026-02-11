@@ -1,7 +1,5 @@
 module examples.compiler.literals
-
 export ints, floats, texts, suffixes, instant, tuple, records, nested, palette
-
 
 suffixes = [10px, 100%, 30s, 1min, 3.14dec, 42n]
 instant = 2024-05-21T12:00:00Z
@@ -9,7 +7,7 @@ instant = 2024-05-21T12:00:00Z
 tuple = (1, "ok", True)
 
 records = [
-  { id: 1, label: "alpha", meta: { score: 9.5, active: True } }
+  { id: 1, label: "alpha", meta: { score: 9.5, active: True } },
   { id: 2, label: "beta", meta: { score: 7.0, active: False } }
 ]
 

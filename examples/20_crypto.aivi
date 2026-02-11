@@ -10,8 +10,8 @@ main = effect {
   _ <- print "sha256: {hash}"
 
   uuid <- randomUuid
-  _ <- print "uuid: {uuid}"
+  _    <- print "uuid: {uuid}"
 
   bytes <- randomBytes 16
-  _ <- print "bytes: {bytes}"
+  _     <- print "bytes: {bytes}"
 }

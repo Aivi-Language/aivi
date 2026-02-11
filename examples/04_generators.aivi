@@ -5,36 +5,37 @@ gen = generate {
   yield 1
   yield 2
   yield 3
+}
 
-  evens = generate {
-    x <- [1..10]
-    x -> _ % 2 == 0
-    yield x
-  }
+evens = generate {
+  x <- [1..10]
+  x -> _ % 2 == 0
+  yield x
+}
 
-  grid = generate {
-    x <- [0..2]
-    y <- [0..3]
-    yield (x, y)
-  }
+grid = generate {
+  x <- [0..2]
+  y <- [0..3]
+  yield (x, y)
+}
 
-  pairs = generate {
-    x <- [1..5]
-    y <- [1..5]
-    y -> y > x
-    yield { left: x, right: y, sum: x + y }
-  }
+pairs = generate {
+  x <- [1..5]
+  y <- [1..5]
+  y -> y > x
+  yield { left: x, right: y, sum: x + y }
+}
 
-  squares = generate {
-    x <- [1..8]
-    sq = x * x
-    sq -> _ % 2 == 0
-    yield sq
-  }
+squares = generate {
+  x <- [1..8]
+  sq = x * x
+  sq -> _ % 2 == 0
+  yield sq
+}
 
-  fibs = generate {
-    loop (a, b) = (0, 1) => {
-      yield a
-      recurse (b, a + b)
-    }
+fibs = generate {
+  loop (a, b) = (0, 1) => {
+    yield a
+    recurse (b, a + b)
   }
+}
