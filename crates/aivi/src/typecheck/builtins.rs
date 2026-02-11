@@ -1296,7 +1296,7 @@ impl TypeChecker {
         let context_ty = Type::con("List").app(vec![context_pair_ty]);
         let log_effect_ty =
             Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]);
-        let log_record = Type::Record {
+        let logger_record = Type::Record {
             fields: vec![
                 (
                     "log".to_string(),
@@ -1348,7 +1348,7 @@ impl TypeChecker {
             .collect(),
             open: true,
         };
-        env.insert("log".to_string(), Scheme::mono(log_record));
+        env.insert("logger".to_string(), Scheme::mono(logger_record));
 
         let db_row = self.fresh_var_id();
         let db_error_ty = Type::con("DbError");

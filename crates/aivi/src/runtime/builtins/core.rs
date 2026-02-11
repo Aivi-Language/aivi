@@ -188,6 +188,6 @@ pub(crate) fn register_builtins(env: &Env) {
     }
     env.set("collections".to_string(), collections);
     env.set("console".to_string(), build_console_record());
-    env.set("log".to_string(), build_log_record());
+    env.set("logger".to_string(), build_log_record());
     env.set("database".to_string(), build_database_record());
 }

@@ -2,7 +2,7 @@ module examples.system_log_database = {
   export main
 
   use aivi (database)
-  use aivi (log)
+  use aivi (logger)
   use aivi.system (env)
   use aivi.text
 
@@ -24,7 +24,7 @@ module examples.system_log_database = {
 
     rows <- database.load table3
 
-    _ <- log.info "users updated" [
+    _ <- logger.info "users updated" [
       ("env", text.toText envValue),
       ("rows", text.toText rows)
     ]

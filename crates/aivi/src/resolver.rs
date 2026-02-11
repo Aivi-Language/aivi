@@ -538,7 +538,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "decimal"
             | "url"
             | "system"
-            | "log"
+            | "logger"
             | "database"
             | "http"
             | "https"
