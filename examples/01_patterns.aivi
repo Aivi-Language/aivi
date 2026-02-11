@@ -33,7 +33,7 @@ take = (n, xs) => (n, xs) ?
   | (n, _) when n <= 0 => []
   | (_, [])            => []
   | (n, [x, ...rest])  => [x, ...take (n -1, rest)]
-
+ 
 zip = (xs, ys) => (xs, ys) ?
   | ([], _)                  => []
   | (_, [])                  => []
@@ -53,7 +53,7 @@ flatten =
 
 evalExpr =
   | Num n   => n
-    | Add a b => evalExpr a + evalExpr b
+  | Add a b => evalExpr a + evalExpr b
   | Mul a b => evalExpr a * evalExpr b
 
     

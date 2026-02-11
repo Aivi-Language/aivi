@@ -207,9 +207,20 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
 ];
 
 pub fn embedded_stdlib_modules() -> Vec<Module> {
+    let trace = std::env::var("AIVI_TRACE_STDLIB").is_ok_and(|v| v == "1");
     let mut modules = Vec::new();
     for module in EMBEDDED_MODULES {
+        if trace {
+            eprintln!(
+                "[AIVI_TRACE_STDLIB] parsing {} ({} bytes)",
+                module.name,
+                module.source.len()
+            );
+        }
         modules.extend(parse_embedded(module.name, module.source));
+        if trace {
+            eprintln!("[AIVI_TRACE_STDLIB] parsed {}", module.name);
+        }
     }
     modules
 }

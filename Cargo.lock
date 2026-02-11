@@ -65,6 +65,8 @@ name = "aivi-lsp"
 version = "0.1.0"
 dependencies = [
  "aivi",
+ "serde",
+ "serde_json",
  "tokio",
  "tower-lsp",
 ]

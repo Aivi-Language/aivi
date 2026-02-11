@@ -226,14 +226,31 @@ pub enum HirBlockItem {
 }
 
 pub fn desugar_modules(modules: &[Module]) -> HirProgram {
+    let trace = std::env::var("AIVI_TRACE_DESUGAR").is_ok_and(|v| v == "1");
     let mut id_gen = IdGen::default();
     let mut hir_modules = Vec::new();
-    for module in modules {
+    for (module_index, module) in modules.iter().enumerate() {
+        if trace {
+            eprintln!(
+                "[AIVI_TRACE_DESUGAR] module {}/{}: {}",
+                module_index + 1,
+                modules.len(),
+                module.name.name
+            );
+        }
         let defs = collect_defs(module)
             .into_iter()
-            .map(|(name, expr)| HirDef {
-                name,
-                expr: lower_expr(expr, &mut id_gen),
+            .map(|(name, expr)| {
+                if trace {
+                    eprintln!(
+                        "[AIVI_TRACE_DESUGAR]   def {}.{}",
+                        module.name.name, name
+                    );
+                }
+                HirDef {
+                    name,
+                    expr: lower_expr(expr, &mut id_gen),
+                }
             })
             .collect();
         hir_modules.push(HirModule {

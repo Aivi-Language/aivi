@@ -18034,7 +18034,8 @@ function activate(context) {
   const clientOptions = {
     documentSelector: [{ language: "aivi" }],
     synchronize: {
-      fileEvents: vscode.workspace.createFileSystemWatcher("**/*.aivi")
+      fileEvents: vscode.workspace.createFileSystemWatcher("**/*.aivi"),
+      configurationSection: "aivi"
     },
     outputChannel: vscode.window.createOutputChannel("AIVI Language Server")
   };
