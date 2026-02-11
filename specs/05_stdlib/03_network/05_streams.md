@@ -9,6 +9,7 @@ use aivi.net.streams
 ## Types
 
 ```aivi
+type Stream A
 type StreamError = { message: Text }
 ```
 

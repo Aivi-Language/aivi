@@ -1241,6 +1241,9 @@ fn format_value(value: &Value) -> String {
         Value::ChannelSend(_) => "<send>".to_string(),
         Value::ChannelRecv(_) => "<recv>".to_string(),
         Value::FileHandle(_) => "<file>".to_string(),
+        Value::Listener(_) => "<listener>".to_string(),
+        Value::Connection(_) => "<connection>".to_string(),
+        Value::Stream(_) => "<stream>".to_string(),
         Value::HttpServer(_) => "<http-server>".to_string(),
         Value::WebSocket(_) => "<websocket>".to_string(),
     }

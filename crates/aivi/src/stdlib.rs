@@ -12,7 +12,7 @@ module aivi = {
 
   export text, regex, math, calendar, color
   export bigint, rational, decimal
-  export url, console, system, logger, database, file, clock, random, channel, concurrent, httpServer, http, https, collections
+  export url, console, system, logger, database, file, clock, random, channel, concurrent, httpServer, http, https, sockets, streams, collections
   export linalg, signal, graph
 }
 "#;
@@ -1576,6 +1576,62 @@ module aivi.net.http_server = {
 }
 "#;
 
+const NETWORK_SOCKETS_SOURCE: &str = r#"
+@no_prelude
+module aivi.net.sockets = {
+  export Address, SocketError, Listener, Connection
+  export listen, accept, connect, send, recv, close
+
+  use aivi
+
+  Address = { host: Text, port: Int }
+  SocketError = { message: Text }
+
+  listen : Address -> Resource Listener
+  listen address = resource {
+    listener <- sockets.listen address
+    yield listener
+    _ <- sockets.closeListener listener
+  }
+
+  accept : Listener -> Effect SocketError Connection
+  accept listener = sockets.accept listener
+
+  connect : Address -> Effect SocketError Connection
+  connect address = sockets.connect address
+
+  send : Connection -> List Int -> Effect SocketError Unit
+  send conn bytes = sockets.send conn bytes
+
+  recv : Connection -> Effect SocketError (List Int)
+  recv conn = sockets.recv conn
+
+  close : Connection -> Effect SocketError Unit
+  close conn = sockets.close conn
+}
+"#;
+
+const NETWORK_STREAMS_SOURCE: &str = r#"
+@no_prelude
+module aivi.net.streams = {
+  export Stream, StreamError
+  export fromSocket, toSocket, chunks
+
+  use aivi
+
+  StreamError = { message: Text }
+
+  fromSocket : Connection -> Stream (List Int)
+  fromSocket conn = streams.fromSocket conn
+
+  toSocket : Connection -> Stream (List Int) -> Effect StreamError Unit
+  toSocket conn stream = streams.toSocket conn stream
+
+  chunks : Int -> Stream (List Int) -> Stream (List Int)
+  chunks size stream = streams.chunks size stream
+}
+"#;
+
 const NETWORK_HTTP_SOURCE: &str = r#"
 @no_prelude
 module aivi.net.http = {
@@ -1629,7 +1685,7 @@ module aivi.net.https = {
 const NETWORK_FACADE_SOURCE: &str = r#"
 @no_prelude
 module aivi.net = {
-  export http, https, httpServer
+  export http, https, httpServer, sockets, streams
 
   use aivi
 }
@@ -1669,6 +1725,8 @@ pub fn embedded_stdlib_modules() -> Vec<Module> {
     modules.extend(parse_embedded("aivi.number", NUMBER_FACADE_SOURCE));
     modules.extend(parse_embedded("aivi.net.http", NETWORK_HTTP_SOURCE));
     modules.extend(parse_embedded("aivi.net.https", NETWORK_HTTPS_SOURCE));
+    modules.extend(parse_embedded("aivi.net.sockets", NETWORK_SOCKETS_SOURCE));
+    modules.extend(parse_embedded("aivi.net.streams", NETWORK_STREAMS_SOURCE));
     modules.extend(parse_embedded("aivi.net", NETWORK_FACADE_SOURCE));
     modules.extend(parse_embedded(
         "aivi.net.http_server",
@@ -1711,6 +1769,8 @@ pub fn embedded_stdlib_source(module_name: &str) -> Option<&'static str> {
         "aivi.number" => Some(NUMBER_FACADE_SOURCE),
         "aivi.net.http" => Some(NETWORK_HTTP_SOURCE),
         "aivi.net.https" => Some(NETWORK_HTTPS_SOURCE),
+        "aivi.net.sockets" => Some(NETWORK_SOCKETS_SOURCE),
+        "aivi.net.streams" => Some(NETWORK_STREAMS_SOURCE),
         "aivi.net" => Some(NETWORK_FACADE_SOURCE),
         "aivi.net.http_server" => Some(NETWORK_HTTP_SERVER_SOURCE),
         _ => None,

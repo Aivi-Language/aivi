@@ -10,6 +10,8 @@ mod calendar;
 mod color;
 mod number;
 mod url_http;
+mod sockets;
+mod streams;
 mod collections;
 mod linalg;
 mod signal;

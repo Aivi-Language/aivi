@@ -517,6 +517,9 @@ fn is_builtin_name(name: &str) -> bool {
             | "Bytes"
             | "List"
             | "Effect"
+            | "Stream"
+            | "Listener"
+            | "Connection"
             | "Some"
             | "None"
             | "Ok"
@@ -552,6 +555,8 @@ fn is_builtin_name(name: &str) -> bool {
             | "channel"
             | "concurrent"
             | "httpServer"
+            | "sockets"
+            | "streams"
     )
 }
 

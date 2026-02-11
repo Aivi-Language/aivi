@@ -38,6 +38,9 @@ impl TypeChecker {
             "Decimal",
             "FileHandle",
             "FileStats",
+            "Listener",
+            "Connection",
+            "Stream",
             "Send",
             "Recv",
             "Closed",
@@ -1001,6 +1004,150 @@ impl TypeChecker {
             open: true,
         };
         env.insert("https".to_string(), Scheme::mono(https_record));
+
+        let address_ty = Type::Record {
+            fields: vec![
+                ("host".to_string(), Type::con("Text")),
+                ("port".to_string(), Type::con("Int")),
+            ]
+            .into_iter()
+            .collect(),
+            open: true,
+        };
+        let socket_error_ty = Type::Record {
+            fields: vec![("message".to_string(), Type::con("Text"))]
+                .into_iter()
+                .collect(),
+            open: true,
+        };
+        let sockets_record = Type::Record {
+            fields: vec![
+                (
+                    "listen".to_string(),
+                    Type::Func(
+                        Box::new(address_ty.clone()),
+                        Box::new(
+                            Type::con("Effect")
+                                .app(vec![socket_error_ty.clone(), Type::con("Listener")]),
+                        ),
+                    ),
+                ),
+                (
+                    "accept".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Listener")),
+                        Box::new(
+                            Type::con("Effect")
+                                .app(vec![socket_error_ty.clone(), Type::con("Connection")]),
+                        ),
+                    ),
+                ),
+                (
+                    "connect".to_string(),
+                    Type::Func(
+                        Box::new(address_ty.clone()),
+                        Box::new(
+                            Type::con("Effect")
+                                .app(vec![socket_error_ty.clone(), Type::con("Connection")]),
+                        ),
+                    ),
+                ),
+                (
+                    "send".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Connection")),
+                        Box::new(Type::Func(
+                            Box::new(Type::con("List").app(vec![Type::con("Int")])),
+                            Box::new(
+                                Type::con("Effect")
+                                    .app(vec![socket_error_ty.clone(), Type::con("Unit")]),
+                            ),
+                        )),
+                    ),
+                ),
+                (
+                    "recv".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Connection")),
+                        Box::new(
+                            Type::con("Effect").app(vec![
+                                socket_error_ty.clone(),
+                                Type::con("List").app(vec![Type::con("Int")]),
+                            ]),
+                        ),
+                    ),
+                ),
+                (
+                    "close".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Connection")),
+                        Box::new(
+                            Type::con("Effect")
+                                .app(vec![socket_error_ty.clone(), Type::con("Unit")]),
+                        ),
+                    ),
+                ),
+                (
+                    "closeListener".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Listener")),
+                        Box::new(
+                            Type::con("Effect")
+                                .app(vec![socket_error_ty.clone(), Type::con("Unit")]),
+                        ),
+                    ),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            open: true,
+        };
+        env.insert("sockets".to_string(), Scheme::mono(sockets_record));
+
+        let stream_error_ty = Type::Record {
+            fields: vec![("message".to_string(), Type::con("Text"))]
+                .into_iter()
+                .collect(),
+            open: true,
+        };
+        let stream_bytes_ty = Type::con("Stream").app(vec![Type::con("List").app(vec![
+            Type::con("Int"),
+        ])]);
+        let streams_record = Type::Record {
+            fields: vec![
+                (
+                    "fromSocket".to_string(),
+                    Type::Func(Box::new(Type::con("Connection")), Box::new(stream_bytes_ty.clone())),
+                ),
+                (
+                    "toSocket".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Connection")),
+                        Box::new(Type::Func(
+                            Box::new(stream_bytes_ty.clone()),
+                            Box::new(
+                                Type::con("Effect")
+                                    .app(vec![stream_error_ty.clone(), Type::con("Unit")]),
+                            ),
+                        )),
+                    ),
+                ),
+                (
+                    "chunks".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Int")),
+                        Box::new(Type::Func(
+                            Box::new(stream_bytes_ty.clone()),
+                            Box::new(stream_bytes_ty.clone()),
+                        )),
+                    ),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            open: true,
+        };
+        env.insert("streams".to_string(), Scheme::mono(streams_record));
 
         let map_k = self.fresh_var_id();
         let map_v = self.fresh_var_id();

@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
+use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::AtomicBool;
 use std::sync::{mpsc, Arc, Mutex};
 
@@ -51,6 +52,9 @@ pub(super) enum Value {
     ChannelSend(Arc<ChannelSend>),
     ChannelRecv(Arc<ChannelRecv>),
     FileHandle(Arc<Mutex<std::fs::File>>),
+    Listener(Arc<TcpListener>),
+    Connection(Arc<Mutex<TcpStream>>),
+    Stream(Arc<StreamHandle>),
     HttpServer(Arc<ServerHandle>),
     WebSocket(Arc<WebSocketHandle>),
 }
@@ -106,6 +110,22 @@ pub(super) struct ChannelSend {
 
 pub(super) struct ChannelRecv {
     pub(super) inner: Arc<ChannelInner>,
+}
+
+pub(super) struct StreamHandle {
+    pub(super) state: Mutex<StreamState>,
+}
+
+pub(super) enum StreamState {
+    Socket {
+        stream: Arc<Mutex<TcpStream>>,
+        chunk_size: usize,
+    },
+    Chunks {
+        source: Arc<StreamHandle>,
+        size: usize,
+        buffer: Vec<u8>,
+    },
 }
 
 #[derive(Clone, Eq, PartialEq, Hash)]
@@ -240,6 +260,9 @@ unsafe impl Trace for Value {
             | Value::ChannelSend(_)
             | Value::ChannelRecv(_)
             | Value::FileHandle(_)
+            | Value::Listener(_)
+            | Value::Connection(_)
+            | Value::Stream(_)
             | Value::HttpServer(_)
             | Value::WebSocket(_) => {}
         }

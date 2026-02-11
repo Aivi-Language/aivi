@@ -1,0 +1,21 @@
+module examples.net_sockets_streams = {
+  export main, echoStream, sendAll
+
+  use aivi.console (print)
+  use aivi.net.sockets (Connection)
+  use aivi.net.streams (Stream, StreamError)
+  use aivi.net.sockets as sockets
+  use aivi.net.streams as streams
+
+  echoStream : Connection -> Stream (List Int)
+  echoStream conn = streams.chunks 1024 (streams.fromSocket conn)
+
+  sendAll : Connection -> Stream (List Int) -> Effect StreamError Unit
+  sendAll conn stream = streams.toSocket conn stream
+
+  main : Effect Text Unit
+  main = effect {
+    _ <- print "sockets/streams helpers ready; wire them to a live Connection."
+    pure Unit
+  }
+}

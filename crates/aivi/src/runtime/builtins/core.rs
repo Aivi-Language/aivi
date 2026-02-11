@@ -168,6 +168,8 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("url".to_string(), build_url_record());
     env.set("http".to_string(), build_http_client_record(HttpClientMode::Http));
     env.set("https".to_string(), build_http_client_record(HttpClientMode::Https));
+    env.set("sockets".to_string(), super::sockets::build_sockets_record());
+    env.set("streams".to_string(), super::streams::build_streams_record());
     let collections = build_collections_record();
     if let Value::Record(fields) = &collections {
         if let Some(map) = fields.get("map") {
