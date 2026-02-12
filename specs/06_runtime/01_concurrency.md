@@ -21,8 +21,7 @@ When a task must outlive its creator (e.g., a background daemon), it must be exp
 
 ```aivi
 effect {
-  _ <- concurrent.spawnDetached logger.run
-  pure Unit
+  concurrent.spawnDetached logger.run
 }
 ```
 
@@ -45,17 +44,13 @@ effect {
   (tx, rx) = channel.make ()
   
   // Sending
-  _ <- channel.send tx "hello"
+  channel.send tx "hello"
   
   // Receiving (returns Result for closed channels)
-  res <- channel.recv rx
-  msg = res ?
-    | Ok value     => value
-    | Err Closed   => "Channel closed"
+  msg <- channel.recv rx or "Channel closed"
   
   // Closing
-  _ <- channel.close tx
-  pure Unit
+  channel.close tx
 }
 ```
 

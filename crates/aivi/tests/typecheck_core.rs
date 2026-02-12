@@ -191,6 +191,39 @@ msg = res ?
 }
 
 #[test]
+fn typecheck_result_or_sugar() {
+    let source = r#"
+module test.or_result
+export value1, value2
+
+Result E A = Err E | Ok A
+
+value1 : Text
+value1 = (Ok "hi") or "boom"
+
+value2 : Text
+value2 =
+  (Err "nope") or
+    | Err _ => "boom""#;
+    check_ok(source);
+}
+
+#[test]
+fn typecheck_effect_or_sugar_in_bind() {
+    let source = r#"
+module test.or_effect
+export main
+
+main : Effect Text Unit
+main = effect {
+  n <- (fail "nope") or 1
+  _ = n
+  pure Unit
+}"#;
+    check_ok(source);
+}
+
+#[test]
 fn typecheck_error_unknown_name() {
     let source = r#"
 module test.err

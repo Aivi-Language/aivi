@@ -32,8 +32,7 @@ main = effect {
   
   // Use resource
   content <- file.readAll f
-  _       <- print content
-  pure Unit
+  print content
 } // f is automatically closed here
 ```
 
@@ -47,7 +46,5 @@ copy src dest = effect {
   output <- managedFile dest
   
   _ <- file.copyTo input output
-  pure Unit
 }
 ```
-

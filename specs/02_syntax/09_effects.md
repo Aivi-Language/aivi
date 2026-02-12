@@ -74,8 +74,7 @@ load : Source K A -> Effect (SourceError K) A
 ```aivi
 main = effect {
   cfg <- load (file.json "config.json")
-  _   <- print "loaded"
-  pure Unit
+  print "loaded"
 }
 ```
 
@@ -84,7 +83,7 @@ This is syntax sugar for monadic binding (see Desugaring section). All effectful
 Inside an `effect { ... }` block:
 
 - `x <- eff` binds the result of an `Effect` to `x`
-- `x = e` is a pure local binding
+- `x = e` is a pure local binding (does not run effects)
 - `x <- res` acquires a `Resource` (see [Resources](15_resources.md))
 - Branching is done with ordinary expressions (`if`, `case`, `?`); `->` guards are generator-only.
 - If a final expression is present, it must be an `Effect` (commonly `pure value` or an effect call like `print "..."`).
@@ -92,8 +91,98 @@ Inside an `effect { ... }` block:
 
 Compiler checks:
 
-- Expression statements must be `Effect`-typed.
-- Discarding an `Effect` result is allowed with a bare expression statement; binding to `_` is optional.
+- `x = e` requires `e` to be a pure expression (not `Effect` and not `Resource`).
+  If you want to run an effect, use `<-`:
+  `use '<-' to run effects; '=' binds pure values`.
+- Expression statements in statement position (not the final expression) must be `Effect E Unit`.
+  If an effect returns a non-`Unit` value, you must bind it explicitly (even if you bind to `_`).
+
+### Fallback with `or` (fallback-only)
+
+`or` is **not** a general matcher. It is fallback-only sugar for common "default on error" patterns.
+
+Two forms exist:
+
+1) **Effect fallback** (inside `effect {}` and only after `<-`):
+
+```aivi
+txt <- load (file.read path) or "(missing)"
+```
+
+This runs the effect; if it fails, it produces the fallback value instead.
+
+You can also match on the error value using arms (patterns match the **error**, not `Err`):
+
+```aivi
+txt <- load (file.read path) or
+  | NotFound _ => "(missing)"
+  | _          => "(other-error)"
+```
+
+2) **Result fallback** (expression form):
+
+```aivi
+msg = res or "boom"
+```
+
+Or with explicit `Err ...` arms:
+
+```aivi
+msg =
+  res or
+    | Err NotFound m => m
+    | Err _          => "boom"
+```
+
+Restrictions (v0.1):
+
+- Effect fallback arms match the error value (so write `NotFound m`, not `Err NotFound m`).
+- Result fallback arms must match only `Err ...` at the top level (no `Ok ...`, no `_`).
+  Include a final `Err _` catch-all arm.
+
+### `if ... else Unit` as a statement
+
+In `effect { ... }`, this common pattern is allowed without `_ <-`:
+
+```aivi
+effect {
+  if cond then print "branch" else Unit
+}
+```
+
+Conceptually, the `Unit` branch is lifted to `pure Unit` so both branches have an `Effect` type.
+
+### Concise vs explicit `effect` style
+
+These are equivalent:
+
+```aivi
+// Concise (recommended in effect blocks)
+main = effect {
+  res <- attempt (foo x)
+  verdict = res ?
+    | Ok _  => "ok"
+    | Err _ => "err"
+
+  print verdict
+
+  if cond then print "branch" else Unit
+}
+```
+
+```aivi
+// More explicit (same semantics)
+main = effect {
+  res <- attempt (foo x)
+  verdict = res ?
+    | Ok _  => "ok"
+    | Err _ => "err"
+
+  _ <- print verdict
+
+  _ <- if cond then print "branch" else pure Unit
+}
+```
 
 ### `if` with nested blocks inside `effect`
 
@@ -105,7 +194,7 @@ This pattern is common when a branch needs multiple effectful steps:
 main = effect {
   u     <- loadUser
   token <- if u.isAdmin then effect {
-    _     <- log "admin login"
+    log "admin login"
     token <- mintToken u
     pure token
   } else pure "guest"
@@ -157,9 +246,8 @@ Example translation:
 transfer fromAccount toAccount amount = effect {
   balance <- getBalance fromAccount
   if balance >= amount then effect {
-    _ <- withdraw fromAccount amount
-    _ <- deposit toAccount amount
-    pure Unit
+    withdraw fromAccount amount
+    deposit toAccount amount
   } else fail InsufficientFunds
 }
 
@@ -184,8 +272,7 @@ Effect blocks can be combined with pipelines and pattern matching to create very
 setup = effect {
   cfg  <- loadConfig "prod.json"
   data <- fetchRemoteData cfg
-  _    <- logSuccess data
-  pure Unit
+  logSuccess data
 }
 ```
 

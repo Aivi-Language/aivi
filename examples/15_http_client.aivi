@@ -10,5 +10,5 @@ main = effect {
   message = result ?
     | Ok response => "Status {response.status}"
     | Err err     => "Error {err.message}"
-  _ <- println message
+  println message
 }

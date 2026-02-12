@@ -1,0 +1,33 @@
+module examples.orArmsAndPatterns
+export main, messageFrom
+
+use aivi.console (println)
+
+Result E A = Err E | Ok A
+
+Error =
+  | NotFound Text
+  | Unauthorized
+  | Other
+
+messageFrom : Result Error Text -> Text
+messageFrom res =
+  res or
+    | Err NotFound m => m
+    | Err _          => "boom"
+
+main : Effect Text Unit
+main = effect {
+  res <- Err (NotFound "missing")
+  msg = messageFrom res
+
+  println msg
+
+  // Flattened constructor-chain pattern (equivalent to `Err (NotFound m)`).
+  detail = res ?
+    | Err NotFound m => m
+    | _              => "none"
+
+  println detail
+}
+

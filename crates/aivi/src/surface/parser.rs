@@ -108,6 +108,7 @@ struct Parser {
     pos: usize,
     diagnostics: Vec<FileDiagnostic>,
     path: String,
+    gensym: u32,
 }
 
 impl Parser {
@@ -117,6 +118,39 @@ impl Parser {
             pos: 0,
             diagnostics: Vec::new(),
             path: path.display().to_string(),
+            gensym: 0,
+        }
+    }
+
+    fn fresh_internal_name(&mut self, prefix: &str, span: Span) -> SpannedName {
+        let name = format!("__{prefix}{}", self.gensym);
+        self.gensym = self.gensym.wrapping_add(1);
+        SpannedName { name, span }
+    }
+
+    fn build_ctor_pattern(&self, name: &str, args: Vec<Pattern>, span: Span) -> Pattern {
+        Pattern::Constructor {
+            name: SpannedName {
+                name: name.to_string(),
+                span: span.clone(),
+            },
+            args,
+            span,
+        }
+    }
+
+    fn build_ident_expr(&self, name: &str, span: Span) -> Expr {
+        Expr::Ident(SpannedName {
+            name: name.to_string(),
+            span,
+        })
+    }
+
+    fn build_call_expr(&self, func: Expr, args: Vec<Expr>, span: Span) -> Expr {
+        Expr::Call {
+            func: Box::new(func),
+            args,
+            span,
         }
     }
 
@@ -1081,6 +1115,10 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> Option<Expr> {
+        self.parse_expr_with_result_or()
+    }
+
+    fn parse_expr_with_result_or(&mut self) -> Option<Expr> {
         self.consume_newlines();
         if self.check_symbol("|") {
             let start = self.peek_span().unwrap_or_else(|| self.previous_span());
@@ -1121,7 +1159,178 @@ impl Parser {
                 span,
             });
         }
+        let mut expr = self.parse_lambda_or_binary()?;
+        // Result fallback sugar:
+        //   res or "boom"
+        //   res or | Err NotFound m => m | Err _ => "boom"
+        //
+        // This form is result-only (arms must match `Err ...` at the top level).
+        loop {
+            let checkpoint = self.pos;
+            if !self.match_keyword("or") {
+                self.pos = checkpoint;
+                break;
+            }
+            expr = self.parse_result_or_suffix(expr)?;
+        }
+        Some(expr)
+    }
+
+    fn parse_expr_without_result_or(&mut self) -> Option<Expr> {
+        self.consume_newlines();
+        if self.check_symbol("|") {
+            // Multi-clause unary function. `or` isn't allowed in the function head.
+            // The bodies are parsed with the normal expression parser.
+            let start = self.peek_span().unwrap_or_else(|| self.previous_span());
+            let mut arms = Vec::new();
+            loop {
+                self.consume_newlines();
+                if !self.consume_symbol("|") {
+                    break;
+                }
+                let pattern = self
+                    .parse_pattern()
+                    .unwrap_or(Pattern::Wildcard(start.clone()));
+                let guard = if self.match_keyword("when") {
+                    self.parse_guard_expr()
+                } else {
+                    None
+                };
+                self.expect_symbol("=>", "expected '=>' in match arm");
+                let body = self.parse_expr().unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: start.clone(),
+                });
+                let span = merge_span(pattern_span(&pattern), expr_span(&body));
+                arms.push(MatchArm {
+                    pattern,
+                    guard,
+                    body,
+                    span,
+                });
+            }
+            let span = merge_span(
+                start.clone(),
+                arms.last().map(|arm| arm.span.clone()).unwrap_or(start),
+            );
+            return Some(Expr::Match {
+                scrutinee: None,
+                arms,
+                span,
+            });
+        }
         self.parse_lambda_or_binary()
+    }
+
+    fn parse_result_or_suffix(&mut self, base: Expr) -> Option<Expr> {
+        let or_span = self.previous_span();
+        self.consume_newlines();
+
+        // Parse either `or <expr>` or `or | ... => ... | ...`
+        let (arms, fallback_expr) = if self.consume_symbol("|") {
+            let mut arms = Vec::new();
+            loop {
+                let pattern = self
+                    .parse_pattern()
+                    .unwrap_or(Pattern::Wildcard(or_span.clone()));
+                let guard = if self.match_keyword("when") {
+                    self.parse_guard_expr()
+                } else {
+                    None
+                };
+                self.expect_symbol("=>", "expected '=>' in or arm");
+                let body = self.parse_expr().unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: or_span.clone(),
+                });
+                let span = merge_span(pattern_span(&pattern), expr_span(&body));
+                arms.push(MatchArm {
+                    pattern,
+                    guard,
+                    body,
+                    span,
+                });
+
+                self.consume_newlines();
+                if !self.consume_symbol("|") {
+                    break;
+                }
+            }
+            (Some(arms), None)
+        } else {
+            let rhs = self.parse_expr().unwrap_or(Expr::Raw {
+                text: String::new(),
+                span: or_span.clone(),
+            });
+            (None, Some(rhs))
+        };
+
+        // Validate result-or arms: fallback-only, no success arms, and no wildcard arms.
+        if let Some(arms) = &arms {
+            let mut has_catch_all_err = false;
+            for arm in arms {
+                match &arm.pattern {
+                    Pattern::Constructor { name, args, .. } if name.name == "Err" => {
+                        if args.len() == 1 && matches!(&args[0], Pattern::Wildcard(_)) {
+                            has_catch_all_err = true;
+                        }
+                    }
+                    _ => {
+                        self.emit_diag(
+                            "E1530",
+                            "`or` arms must match only `Err ...` (fallback-only)",
+                            pattern_span(&arm.pattern),
+                        );
+                    }
+                }
+            }
+            if !has_catch_all_err {
+                // Without `Err _`, the desugared match would be non-exhaustive.
+                self.emit_diag(
+                    "E1531",
+                    "`or` arms must include a final `| Err _ => ...` catch-all",
+                    or_span.clone(),
+                );
+            }
+        }
+
+        // Desugar:
+        //   res or rhs
+        //     => res ? | Ok x => x | Err _ => rhs
+        //
+        //   res or | Err p => rhs | Err _ => rhs2
+        //     => res ? | Ok x => x | Err p => rhs | Err _ => rhs2
+        let ok_value = self.fresh_internal_name("or_ok", expr_span(&base));
+        let ok_arm = MatchArm {
+            pattern: self.build_ctor_pattern(
+                "Ok",
+                vec![Pattern::Ident(ok_value.clone())],
+                ok_value.span.clone(),
+            ),
+            guard: None,
+            body: Expr::Ident(ok_value.clone()),
+            span: ok_value.span.clone(),
+        };
+
+        let mut out_arms = vec![ok_arm];
+        if let Some(rhs) = fallback_expr {
+            let err_pat = self.build_ctor_pattern("Err", vec![Pattern::Wildcard(or_span.clone())], or_span.clone());
+            out_arms.push(MatchArm {
+                pattern: err_pat,
+                guard: None,
+                body: rhs,
+                span: or_span.clone(),
+            });
+        } else if let Some(mut parsed_arms) = arms {
+            out_arms.append(&mut parsed_arms);
+        }
+
+        let span = merge_span(expr_span(&base), out_arms.last().map(|a| a.span.clone()).unwrap_or(or_span));
+        Some(Expr::Match {
+            scrutinee: Some(Box::new(base)),
+            arms: out_arms,
+            span,
+        })
     }
 
     fn parse_lambda_or_binary(&mut self) -> Option<Expr> {
@@ -1347,7 +1556,7 @@ impl Parser {
         if let Some(token) = self.tokens.get(self.pos) {
             match token.kind {
                 TokenKind::Ident => {
-                    if token.text == "then" || token.text == "else" {
+                    if token.text == "then" || token.text == "else" || token.text == "or" {
                         return false;
                     }
                     return true;
@@ -1917,10 +2126,40 @@ impl Parser {
             let checkpoint = self.pos;
             if let Some(pattern) = self.parse_pattern() {
                 if self.consume_symbol("<-") {
-                    let expr = self.parse_expr().unwrap_or(Expr::Raw {
+                    let expr = self.parse_expr_without_result_or().unwrap_or(Expr::Raw {
                         text: String::new(),
                         span: pattern_span(&pattern),
                     });
+                    let expr = if matches!(kind, BlockKind::Effect) && self.peek_keyword("or") {
+                        // Disambiguation:
+                        // - `x <- eff or | NotFound m => ...` is effect-fallback (patterns match E)
+                        // - `x <- (res or "boom")` is result-fallback (expression-level)
+                        // - `x <- res or | Err _ => ...` is treated as result-fallback for ergonomics
+                        let checkpoint = self.pos;
+                        self.pos += 1; // consume `or` for lookahead
+                        self.consume_newlines();
+                        let mut looks_like_result_or = false;
+                        if self.consume_symbol("|") {
+                            self.consume_newlines();
+                            if let Some(token) = self.tokens.get(self.pos) {
+                                looks_like_result_or =
+                                    token.kind == TokenKind::Ident && token.text == "Err";
+                            }
+                        }
+                        self.pos = checkpoint;
+
+                        let _ = self.match_keyword("or");
+                        if looks_like_result_or {
+                            self.parse_result_or_suffix(expr).unwrap_or(Expr::Raw {
+                                text: String::new(),
+                                span: self.previous_span(),
+                            })
+                        } else {
+                            self.parse_effect_or_suffix(expr)
+                        }
+                    } else {
+                        expr
+                    };
                     let span = merge_span(pattern_span(&pattern), expr_span(&expr));
                     items.push(BlockItem::Bind {
                         pattern,
@@ -1971,6 +2210,152 @@ impl Parser {
         let end = self.expect_symbol("}", "expected '}' to close block");
         let span = merge_span(start.clone(), end.unwrap_or(start));
         Expr::Block { kind, items, span }
+    }
+
+    fn parse_effect_or_suffix(&mut self, effect_expr: Expr) -> Expr {
+        let or_span = self.previous_span();
+        self.consume_newlines();
+
+        // Parse either `or <expr>` or `or | pat => expr | ...` where patterns match the error value.
+        let (patterns, fallback_expr) = if self.consume_symbol("|") {
+            let mut arms = Vec::new();
+            loop {
+                let mut pat = self
+                    .parse_pattern()
+                    .unwrap_or(Pattern::Wildcard(or_span.clone()));
+                // If someone wrote `Err ...` here, recover by stripping the outer `Err` and
+                // still treat it as an error-pattern arm.
+                if let Pattern::Constructor { name, args, .. } = &pat {
+                    if name.name == "Err" && args.len() == 1 {
+                        pat = args[0].clone();
+                        self.emit_diag(
+                            "E1532",
+                            "effect `or` arms match the error value; omit the leading `Err`",
+                            pattern_span(&pat),
+                        );
+                    }
+                }
+
+                self.expect_symbol("=>", "expected '=>' in effect or arm");
+                let body = self.parse_expr().unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: or_span.clone(),
+                });
+                arms.push((pat, body));
+
+                self.consume_newlines();
+                if !self.consume_symbol("|") {
+                    break;
+                }
+            }
+            (Some(arms), None)
+        } else {
+            let rhs = self.parse_expr().unwrap_or(Expr::Raw {
+                text: String::new(),
+                span: or_span.clone(),
+            });
+            (None, Some(rhs))
+        };
+
+        // Desugar to:
+        //   effect {
+        //     __res <- attempt effect_expr
+        //     __res ?
+        //       | Ok x => pure x
+        //       | Err <pat> => pure <body>
+        //       | Err e => fail e
+        //   }
+        //
+        // This keeps error-handling explicit in core terms (attempt/?/pure/fail).
+        let res_name = self.fresh_internal_name("or_res", or_span.clone());
+        let res_pat = Pattern::Ident(res_name.clone());
+        let attempt_call = self.build_call_expr(
+            self.build_ident_expr("attempt", or_span.clone()),
+            vec![effect_expr],
+            or_span.clone(),
+        );
+        let bind_item = BlockItem::Bind {
+            pattern: res_pat,
+            expr: attempt_call,
+            span: or_span.clone(),
+        };
+
+        let ok_value = self.fresh_internal_name("or_ok", or_span.clone());
+        let ok_arm = MatchArm {
+            pattern: self.build_ctor_pattern(
+                "Ok",
+                vec![Pattern::Ident(ok_value.clone())],
+                ok_value.span.clone(),
+            ),
+            guard: None,
+            body: self.build_call_expr(
+                self.build_ident_expr("pure", ok_value.span.clone()),
+                vec![Expr::Ident(ok_value.clone())],
+                ok_value.span.clone(),
+            ),
+            span: ok_value.span.clone(),
+        };
+
+        let mut match_arms = vec![ok_arm];
+        if let Some(rhs) = fallback_expr {
+            let err_pat =
+                self.build_ctor_pattern("Err", vec![Pattern::Wildcard(or_span.clone())], or_span.clone());
+            let rhs_span = expr_span(&rhs);
+            let body = self.build_call_expr(
+                self.build_ident_expr("pure", rhs_span.clone()),
+                vec![rhs],
+                rhs_span,
+            );
+            match_arms.push(MatchArm {
+                pattern: err_pat,
+                guard: None,
+                body,
+                span: or_span.clone(),
+            });
+        } else if let Some(arms) = patterns {
+            for (pat, body_expr) in arms {
+                let err_pat = self.build_ctor_pattern("Err", vec![pat], or_span.clone());
+                let body_span = expr_span(&body_expr);
+                let body = self.build_call_expr(
+                    self.build_ident_expr("pure", body_span.clone()),
+                    vec![body_expr],
+                    body_span,
+                );
+                match_arms.push(MatchArm {
+                    pattern: err_pat,
+                    guard: None,
+                    body,
+                    span: or_span.clone(),
+                });
+            }
+        }
+
+        let err_name = self.fresh_internal_name("or_err", or_span.clone());
+        let err_pat = self.build_ctor_pattern("Err", vec![Pattern::Ident(err_name.clone())], or_span.clone());
+        let err_body = self.build_call_expr(
+            self.build_ident_expr("fail", or_span.clone()),
+            vec![Expr::Ident(err_name)],
+            or_span.clone(),
+        );
+        match_arms.push(MatchArm {
+            pattern: err_pat,
+            guard: None,
+            body: err_body,
+            span: or_span.clone(),
+        });
+
+        let match_expr = Expr::Match {
+            scrutinee: Some(Box::new(Expr::Ident(res_name))),
+            arms: match_arms,
+            span: or_span.clone(),
+        };
+
+        let span = merge_span(or_span.clone(), or_span.clone());
+        Expr::Block {
+            kind: BlockKind::Effect,
+            items: vec![bind_item, BlockItem::Expr { expr: match_expr, span }],
+            span: or_span,
+        }
     }
 
     fn parse_record_field(&mut self) -> Option<RecordField> {

@@ -90,3 +90,18 @@ module Example
     let (_, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diag_codes(&diags).contains(&"E1512".to_string()));
 }
+
+#[test]
+fn rejects_result_or_success_arms() {
+    let src = r#"
+module Example
+
+Result E A = Err E | Ok A
+
+value = (Ok 1) or
+  | Ok x  => x
+  | Err _ => 0
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1530".to_string()));
+}

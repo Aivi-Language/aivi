@@ -26,7 +26,7 @@ This chapter is intentionally pragmatic: it aims to be complete enough to build 
 
 ```text
 as do domain effect else export generate hiding if
-instance module over recurse resource then type use yield loop
+instance module or over recurse resource then type use yield loop
 ```
 
 (`True`, `False`, `None`, `Some`, `Ok`, `Err` are ordinary constructors, not keywords.)
@@ -157,9 +157,13 @@ PatParam       := lowerIdent
                | ListPat
                | "(" PatParam ")" ;
 
-MatchExpr      := PipeExpr [ "?" MatchArms ] ;
+MatchExpr      := PipeExpr [ "?" MatchArms ] [ OrFallback ] ;
 MatchArms      := Sep? "|" Arm { Sep "|" Arm } ;
 Arm            := Pattern [ "when" Expr ] "=>" Expr ;
+
+OrFallback     := "or" ( Expr | OrArms ) ;
+OrArms         := Sep? "|" OrArm { Sep "|" OrArm } ;
+OrArm          := Pattern [ "when" Expr ] "=>" Expr ;
 
 PipeExpr       := CoalesceExpr { "|>" CoalesceExpr } ;
 
@@ -203,7 +207,7 @@ GenerateBlock  := "generate" "{" { GenStmt } "}" ;
 ResourceBlock  := "resource" "{" { ResStmt } "}" ;
 
 Stmt           := BindStmt | ValueBinding | Expr Sep ;
-BindStmt       := Pattern "<-" Expr Sep ;
+BindStmt       := Pattern "<-" Expr [ OrFallback ] Sep ;
 
 GenStmt        := BindStmt
                | GuardStmt

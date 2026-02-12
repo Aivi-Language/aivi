@@ -111,13 +111,11 @@ createUser newUser = effect {
 activateUsers : Effect DbError Unit
 activateUsers = effect {
   _ <- userTable + upd (!active) (u => u <| { active: True, loginCount: _ + 1 })
-  pure Unit
 }
 
 deleteOldPosts : Instant -> Effect DbError Unit
 deleteOldPosts cutoff = effect {
   _ <- postTable + del (_.createdAt < cutoff)
-  pure Unit
 }
 ```
 
@@ -167,8 +165,7 @@ Schema definitions are typed values. Mark them `@static` to allow compile-time v
 ```aivi
 migrate : Effect DbError Unit
 migrate = effect {
-  _ <- db.runMigrations [ userTable ]
-  pure Unit
+  db.runMigrations [ userTable ]
 }
 ```
 

@@ -23,10 +23,8 @@ To handle errors as values, use `attempt` (see [Effects](09_effects.md)):
 
 ```aivi
 effect {
-  res <- attempt (load (file.read "./README.md"))
-  res ?
-    | Ok txt => pure txt
-    | Err _  => pure "(missing)"
+  rsc <- file.read "./README.md"
+  load rsc or "(missing)"
 }
 ```
 

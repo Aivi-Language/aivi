@@ -61,6 +61,29 @@ processResult =
   | Err { code, message }           => "Error {code}: {message}"
 ```
 
+### Nested constructor patterns
+
+Constructor patterns may themselves take pattern arguments, so you can nest them:
+
+```aivi
+msg = res ?
+  | Err (NotFound m) => m
+  | Err _            => "no-msg"
+```
+
+### Flattened constructor-chain patterns
+
+For readability, nested constructor patterns can be written without parentheses in pattern position:
+
+```aivi
+// Parsed as: `Err (NotFound m)`
+msg = res ?
+  | Err NotFound m => m
+  | _              => "no-msg"
+```
+
+This "constructor chain" rule applies only in pattern context (after `|` and before `=>`).
+
 
 ## 8.5 Guards
 
