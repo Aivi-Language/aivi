@@ -1,0 +1,188 @@
+name: Release (binaries + VS Code extension)
+
+on:
+  push:
+    tags:
+      - "v*"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v0.1.0). Leave empty to use current ref."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  RUST_TOOLCHAIN: "1.90.0"
+  NODE_VERSION: "20"
+  PNPM_VERSION: "9.15.4"
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+    steps:
+      - id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "release" ]; then
+            tag="${{ github.event.release.tag_name }}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${{ github.ref_name }}"
+          fi
+
+          if [ -z "$tag" ]; then
+            echo "Unable to determine tag name." >&2
+            exit 1
+          fi
+
+          echo "tag_name=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.asset_suffix }})
+    needs: meta
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            asset_suffix: linux-x64
+            vsce_target: linux-x64
+          - os: windows-latest
+            asset_suffix: windows-x64
+            vsce_target: win32-x64
+          - os: macos-13
+            asset_suffix: macos-x64
+            vsce_target: darwin-x64
+          - os: macos-latest
+            asset_suffix: macos-arm64
+            vsce_target: darwin-arm64
+
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: vscode/pnpm-lock.yaml
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: vscode
+
+      - name: Build aivi (release)
+        run: cargo build -p aivi --release
+
+      - name: Package aivi binary
+        run: |
+          set -euo pipefail
+          tag="${{ needs.meta.outputs.tag_name }}"
+          suffix="${{ matrix.asset_suffix }}"
+
+          mkdir -p dist
+
+          exe="aivi"
+          if [ "${{ runner.os }}" = "Windows" ]; then exe="aivi.exe"; fi
+
+          cp "target/release/${exe}" "dist/${exe}"
+          chmod +x "dist/${exe}" 2>/dev/null || true
+
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            (cd dist && 7z a "aivi-${tag}-${suffix}.zip" "${exe}")
+          else
+            tar -C dist -czf "dist/aivi-${tag}-${suffix}.tar.gz" "${exe}"
+          fi
+
+          rm -f "dist/${exe}"
+
+      - name: Build LSP (release)
+        run: cargo build -p aivi-lsp --release
+
+      - name: Copy LSP into extension
+        run: |
+          set -euo pipefail
+          exe="aivi-lsp"
+          if [ "${{ runner.os }}" = "Windows" ]; then exe="aivi-lsp.exe"; fi
+          mkdir -p vscode/bin
+          cp "target/release/${exe}" "vscode/bin/${exe}"
+          chmod +x "vscode/bin/${exe}" 2>/dev/null || true
+
+      - name: Generate syntaxes
+        run: cargo run -p aivi --bin gen_vscode_syntax --release -- "vscode/syntaxes"
+
+      - name: Compile extension
+        run: pnpm run compile
+        working-directory: vscode
+
+      - name: Package VSIX
+        run: |
+          set -euo pipefail
+          tag="${{ needs.meta.outputs.tag_name }}"
+          suffix="${{ matrix.asset_suffix }}"
+          target="${{ matrix.vsce_target }}"
+
+          mkdir -p dist
+          cd vscode
+          pnpm exec vsce package --no-dependencies --target "$target" --out "../dist/aivi-vscode-${tag}-${suffix}.vsix"
+
+      - name: Upload assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets-${{ matrix.asset_suffix }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish Release Assets
+    needs: [meta, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release-dist
+
+      - name: Flatten asset directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          find release-dist -maxdepth 2 -type f -print0 | xargs -0 -I {} mv {} dist/
+          ls -la dist
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.meta.outputs.tag_name }}
+          files: dist/*
+          # Only auto-generate notes when creating a release from a tag push / manual dispatch.
+          generate_release_notes: ${{ github.event_name != 'release' }}
