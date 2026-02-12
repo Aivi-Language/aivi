@@ -128,6 +128,7 @@ export default defineConfig({
             items: [
               { text: 'Prelude', link: '/05_stdlib/00_core/01_prelude' },
               { text: 'Text', link: '/05_stdlib/00_core/02_text' },
+              { text: 'Logic', link: '/05_stdlib/00_core/03_logic' },
               { text: 'Units', link: '/05_stdlib/00_core/16_units' },
               { text: 'Regex', link: '/05_stdlib/00_core/24_regex' },
               { text: 'Testing', link: '/05_stdlib/00_core/27_testing' },
