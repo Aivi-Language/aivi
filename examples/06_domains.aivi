@@ -8,8 +8,8 @@ domain Calendar over Date = {
   | Week Int
 
   plus = d => delta => delta ?
-  | Day n  => addDays d n
-  | Week n => addDays d (n * 7)
+    | Day n  => addDays d n
+    | Week n => addDays d (n * 7)
 
   d1 = Day 1
   w1 = Week 1

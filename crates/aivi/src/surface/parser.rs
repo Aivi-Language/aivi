@@ -615,34 +615,55 @@ impl Parser {
         }
         self.consume_newlines();
         self.expect_symbol("=", "expected '=' in class declaration");
-        self.expect_symbol("{", "expected '{' to start class body");
-        let mut members = Vec::new();
-        while !self.check_symbol("}") && self.pos < self.tokens.len() {
-            let member_name = match self.consume_ident() {
-                Some(value) => value,
-                None => {
-                    self.pos += 1;
-                    continue;
+        self.consume_newlines();
+
+        // Spec form:
+        //   class Monad (M *) =
+        //     Functor (M *) & { pure: A -> M A }
+        //
+        // We parse the RHS as a type expression, then treat record-type operands as the class
+        // member set and non-record operands as superclasses.
+        let body = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
+            span: name.span.clone(),
+        });
+
+        fn flatten_and(ty: TypeExpr, out: &mut Vec<TypeExpr>) {
+            match ty {
+                TypeExpr::And { items, .. } => {
+                    for item in items {
+                        flatten_and(item, out);
+                    }
                 }
-            };
-            self.consume_newlines();
-            self.expect_symbol(":", "expected ':' in class member");
-            self.consume_newlines();
-            let ty = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
-                span: member_name.span.clone(),
-            });
-            let span = merge_span(member_name.span.clone(), type_span(&ty));
-            members.push(ClassMember {
-                name: member_name,
-                ty,
-                span,
-            });
+                other => out.push(other),
+            }
         }
-        let end = self.expect_symbol("}", "expected '}' to close class body");
-        let span = merge_span(start, end.unwrap_or(name.span.clone()));
+
+        let mut parts = Vec::new();
+        flatten_and(body.clone(), &mut parts);
+
+        let mut supers = Vec::new();
+        let mut members = Vec::new();
+        for part in parts {
+            match part {
+                TypeExpr::Record { fields, .. } => {
+                    for (field_name, field_ty) in fields {
+                        let span = merge_span(field_name.span.clone(), type_span(&field_ty));
+                        members.push(ClassMember {
+                            name: field_name,
+                            ty: field_ty,
+                            span,
+                        });
+                    }
+                }
+                other => supers.push(other),
+            }
+        }
+
+        let span = merge_span(start, type_span(&body));
         Some(ClassDecl {
             name,
             params,
+            supers,
             members,
             span,
         })
@@ -2073,7 +2094,7 @@ impl Parser {
     }
 
     fn parse_type_expr(&mut self) -> Option<TypeExpr> {
-        let lhs = self.parse_type_pipe()?;
+        let lhs = self.parse_type_and()?;
         if self.consume_symbol("->") {
             let result = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
                 span: type_span(&lhs),
@@ -2086,6 +2107,21 @@ impl Parser {
             });
         }
         Some(lhs)
+    }
+
+    fn parse_type_and(&mut self) -> Option<TypeExpr> {
+        let mut items = vec![self.parse_type_pipe()?];
+        while self.consume_symbol("&") {
+            let rhs = self.parse_type_pipe().unwrap_or(TypeExpr::Unknown {
+                span: type_span(items.last().unwrap()),
+            });
+            items.push(rhs);
+        }
+        if items.len() == 1 {
+            return Some(items.remove(0));
+        }
+        let span = merge_span(type_span(&items[0]), type_span(items.last().unwrap()));
+        Some(TypeExpr::And { items, span })
     }
 
     fn parse_type_pipe(&mut self) -> Option<TypeExpr> {
@@ -2893,7 +2929,8 @@ fn pattern_span(pattern: &Pattern) -> Span {
 fn type_span(ty: &TypeExpr) -> Span {
     match ty {
         TypeExpr::Name(name) => name.span.clone(),
-        TypeExpr::Apply { span, .. }
+        TypeExpr::And { span, .. }
+        | TypeExpr::Apply { span, .. }
         | TypeExpr::Func { span, .. }
         | TypeExpr::Record { span, .. }
         | TypeExpr::Tuple { span, .. }

@@ -14,17 +14,17 @@ module examples.compiler.stats = {
   use examples.compiler.math (add)
 
   sum = xs => xs ?
-  | []        => 0
-  | [h, ...t] => add h (sum t)
+    | []        => 0
+    | [h, ...t] => add h (sum t)
 
   sumCount = xs => xs ?
-  | []        => (0, 0)
-  | [h, ...t] => (sumCount t) ?
-  | (s, n)    => (h + s, n + 1)
+    | []        => (0, 0)
+    | [h, ...t] => (sumCount t) ?
+    | (s, n)    => (h + s, n + 1)
 
   mean = xs => (sumCount xs) ?
-  | (_, n) when n == 0 => 0
-  | (s, n)             => s / n
+    | (_, n) when n == 0 => 0
+    | (s, n)             => s / n
 }
 
 module examples.compiler.app = {

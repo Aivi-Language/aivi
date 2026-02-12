@@ -11,7 +11,7 @@ main = effect {
   _   <- channel.send tx "{prefix}\n"
   res <- channel.recv rx
   msg <- res ?
-  | Ok text    => pure text
-  | Err Closed => pure "closed\n"
+    | Ok text    => pure text
+    | Err Closed => pure "closed\n"
   _ <- print msg
 }

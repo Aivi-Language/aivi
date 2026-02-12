@@ -53,3 +53,21 @@ fn test_fmt_remove_extra_whitespace() {
     let expected = "x = 1\n";
     assert_eq!(format_text(input), expected);
 }
+
+#[test]
+fn test_fmt_pipe_blocks_indent_after_equals_and_question() {
+    let input = "head =\n| []       => None\n| [x, ...] => Some x\n";
+    let expected = "head =\n  | []       => None\n  | [x, ...] => Some x\n";
+    assert_eq!(format_text(input), expected);
+
+    let input = "isNone = opt => opt ?\n| None   => True\n| Some _ => False\n";
+    let expected = "isNone = opt => opt ?\n  | None   => True\n  | Some _ => False\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
+fn test_fmt_no_space_before_index_bracket() {
+    let input = "userTable = (database.table \"users\") [a]";
+    let expected = "userTable = (database.table \"users\")[a]\n";
+    assert_eq!(format_text(input), expected);
+}

@@ -12,17 +12,17 @@ pairSum = (a, b) => a + b
 twice = f => x => f (f x)
 
 map = f xs => xs ?
-| []        => []
-| [h, ...t] => [f h, ...map f t]
+  | []        => []
+  | [h, ...t] => [f h, ...map f t]
 
 filter = p xs => xs ?
-| []                 => []
-| [h, ...t] when p h => [h, ...filter p t]
-| [_, ...t]          => filter p t
+  | []                 => []
+  | [h, ...t] when p h => [h, ...filter p t]
+  | [_, ...t]          => filter p t
 
 sum = xs => xs ?
-| []        => 0
-| [h, ...t] => h + sum t
+  | []        => 0
+  | [h, ...t] => h + sum t
 
 processed =
 [1, 2, 3, 4, 5]

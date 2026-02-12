@@ -26,21 +26,21 @@ Option A = None
 
 instance Setoid (Option A) = {
   equals: a b => (a, b) ?
-  | (None, None)     => True
-  | (Some x, Some y) => equals x y
-  | _                => False
+    | (None, None)     => True
+    | (Some x, Some y) => equals x y
+    | _                => False
 }
 
 instance Functor (Option *) = {
   map: f opt => opt ?
-  | None   => None
-  | Some x => Some (f x)
+    | None   => None
+    | Some x => Some (f x)
 }
 
 instance Apply (Option *) = {
   ap: f_opt opt => (f_opt, opt) ?
-  | (Some f, Some x) => Some (f x)
-  | _                => None
+    | (Some f, Some x) => Some (f x)
+    | _                => None
 }
 
 instance Applicative (Option *) = {
@@ -49,10 +49,10 @@ instance Applicative (Option *) = {
 
 instance Chain (Option *) = {
   chain: f opt => opt ?
-  | None   => None
-  | Some x => f x
+    | None   => None
+    | Some x => f x
 }
 
 isNone = opt => opt ?
-| None   => True
-| Some _ => False
+  | None   => True
+  | Some _ => False

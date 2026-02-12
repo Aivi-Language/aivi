@@ -58,6 +58,7 @@ pub struct TypeCtor {
 pub struct ClassDecl {
     pub name: SpannedName,
     pub params: Vec<TypeExpr>,
+    pub supers: Vec<TypeExpr>,
     pub members: Vec<ClassMember>,
     pub span: Span,
 }
@@ -118,6 +119,10 @@ pub struct Module {
 #[derive(Debug, Clone)]
 pub enum TypeExpr {
     Name(SpannedName),
+    And {
+        items: Vec<TypeExpr>,
+        span: Span,
+    },
     Apply {
         base: Box<TypeExpr>,
         args: Vec<TypeExpr>,

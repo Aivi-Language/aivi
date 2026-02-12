@@ -13,14 +13,14 @@ main = effect {
 
   compiled = compile "[a-z]+"
   verdict = compiled ?
-  | Ok r  => if test r "caa" then "match" else "no"
-  | Err _ => "bad"
+    | Ok r  => if test r "caa" then "match" else "no"
+    | Err _ => "bad"
 
   _ <- print verdict
 
   bytes = toBytes Utf8 "ping"
   decoded = fromBytes Utf8 bytes
   decoded ?
-  | Ok value => print value
-  | Err _    => print "decode failed"
+    | Ok value => print value
+    | Err _    => print "decode failed"
 }

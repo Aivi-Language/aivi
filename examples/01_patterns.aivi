@@ -12,46 +12,46 @@ Expr = Num Int
 | Mul Expr Expr
 
 head =
-| []       => None
-| [x, ...] => Some x
+  | []       => None
+  | [x, ...] => Some x
 
 classify = n => n ?
-| 0            => "zero"
-| n when n < 0 => "negative"
-| _            => "positive"
+  | 0            => "zero"
+  | n when n < 0 => "negative"
+  | _            => "positive"
 
 deepName = response =>
 response ?
-| { data.user.profile@{ name } } => name
-| _                              => "unknown"
+  | { data.user.profile@{ name } } => name
+  | _                              => "unknown"
 
 unwrap =
-| Ok x  => x
-| Err _ => 0
+  | Ok x  => x
+  | Err _ => 0
 
 take = (n, xs) => (n, xs) ?
-| (n, _) when n <= 0 => []
-| (_, [])            => []
-| (n, [x, ...rest])  => [x, ...take (n -1, rest)]
+  | (n, _) when n <= 0 => []
+  | (_, [])            => []
+  | (n, [x, ...rest])  => [x, ...take (n -1, rest)]
 
 zip = (xs, ys) => (xs, ys) ?
-| ([], _)                  => []
-| (_, [])                  => []
-| ([x, ...xs], [y, ...ys]) => [(x, y), ...zip (xs, ys)]
+  | ([], _)                  => []
+  | (_, [])                  => []
+  | ([x, ...xs], [y, ...ys]) => [(x, y), ...zip (xs, ys)]
 
 append = xs ys => xs ?
-| []        => ys
-| [h, ...t] => [h, ...append t ys]
+  | []        => ys
+  | [h, ...t] => [h, ...append t ys]
 
 depth =
-| Leaf _          => 1
-| Node left right => 1 + max (depth left)(depth right)
+  | Leaf _          => 1
+  | Node left right => 1 + max (depth left)(depth right)
 
 flatten =
-| Leaf x          => [x]
-| Node left right => append (flatten left)(flatten right)
+  | Leaf x          => [x]
+  | Node left right => append (flatten left)(flatten right)
 
 evalExpr =
-| Num n   => n
-| Add a b => evalExpr a + evalExpr b
-| Mul a b => evalExpr a * evalExpr b
+  | Num n   => n
+  | Add a b => evalExpr a + evalExpr b
+  | Mul a b => evalExpr a * evalExpr b

@@ -259,6 +259,34 @@ fn schema_for_record_map(fields: &BTreeMap<String, TypeExpr>) -> serde_json::Val
 fn schema_for_type(expr: &TypeExpr) -> serde_json::Value {
     match expr {
         TypeExpr::Name(name) => schema_for_name(&name.name),
+        TypeExpr::And { items, .. } => {
+            let mut merged: BTreeMap<String, TypeExpr> = BTreeMap::new();
+            for item in items {
+                match item {
+                    TypeExpr::Record { fields, .. } => {
+                        for (name, ty) in fields {
+                            merged.entry(name.name.clone()).or_insert_with(|| ty.clone());
+                        }
+                    }
+                    TypeExpr::Apply { base, args, .. } => {
+                        let TypeExpr::Name(base) = base.as_ref() else {
+                            return schema_unknown();
+                        };
+                        if is_row_op(&base.name) {
+                            if let Some(fields) = row_op_record_map(&base.name, args) {
+                                for (name, ty) in fields {
+                                    merged.entry(name).or_insert(ty);
+                                }
+                                continue;
+                            }
+                        }
+                        return schema_unknown();
+                    }
+                    _ => return schema_unknown(),
+                }
+            }
+            schema_for_record_map(&merged)
+        }
         TypeExpr::Apply { base, args, .. } => {
             let TypeExpr::Name(base) = base.as_ref() else {
                 return schema_unknown();

@@ -759,6 +759,11 @@ impl Backend {
                     ));
                 }
             }
+            TypeExpr::And { items, .. } => {
+                for item in items.iter() {
+                    Self::collect_type_expr_references(item, ident, uri, locations);
+                }
+            }
             TypeExpr::Apply { base, args, .. } => {
                 Self::collect_type_expr_references(base, ident, uri, locations);
                 for arg in args.iter() {
@@ -1180,6 +1185,11 @@ impl Backend {
     pub(super) fn type_expr_to_string(expr: &TypeExpr) -> String {
         match expr {
             TypeExpr::Name(name) => name.name.clone(),
+            TypeExpr::And { items, .. } => items
+                .iter()
+                .map(Self::type_expr_to_string)
+                .collect::<Vec<_>>()
+                .join(" & "),
             TypeExpr::Apply { base, args, .. } => {
                 let base_str = match **base {
                     TypeExpr::Func { .. } => format!("({})", Self::type_expr_to_string(base)),

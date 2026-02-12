@@ -13,6 +13,7 @@ use self::types::Scheme;
 #[derive(Clone, Debug)]
 struct ClassDeclInfo {
     params: Vec<TypeExpr>,
+    supers: Vec<TypeExpr>,
     members: HashMap<String, TypeExpr>,
 }
 
@@ -38,6 +39,7 @@ fn collect_local_class_env(
                     class_decl.name.name.clone(),
                     ClassDeclInfo {
                         params: class_decl.params.clone(),
+                        supers: class_decl.supers.clone(),
                         members,
                     },
                 );
@@ -52,6 +54,70 @@ fn collect_local_class_env(
         }
     }
     (classes, instances)
+}
+
+fn class_name_from_type_expr(ty: &TypeExpr) -> Option<&str> {
+    match ty {
+        TypeExpr::Name(name) => Some(name.name.as_str()),
+        TypeExpr::Apply { base, .. } => match base.as_ref() {
+            TypeExpr::Name(name) => Some(name.name.as_str()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn expand_class_members(
+    name: &str,
+    classes: &HashMap<String, ClassDeclInfo>,
+    visiting: &mut HashSet<String>,
+    cache: &mut HashMap<String, HashMap<String, TypeExpr>>,
+) -> HashMap<String, TypeExpr> {
+    if let Some(members) = cache.get(name) {
+        return members.clone();
+    }
+    let Some(info) = classes.get(name) else {
+        return HashMap::new();
+    };
+    if !visiting.insert(name.to_string()) {
+        // Cycle: stop expanding to avoid infinite recursion.
+        return info.members.clone();
+    }
+
+    let mut merged = HashMap::new();
+    for sup in &info.supers {
+        let Some(super_name) = class_name_from_type_expr(sup) else {
+            continue;
+        };
+        if !classes.contains_key(super_name) {
+            continue;
+        };
+        let inherited = expand_class_members(super_name, classes, visiting, cache);
+        for (member, ty) in inherited {
+            merged.entry(member).or_insert(ty);
+        }
+    }
+    // Explicit members override inherited ones when names overlap.
+    for (member, ty) in &info.members {
+        merged.insert(member.clone(), ty.clone());
+    }
+
+    visiting.remove(name);
+    cache.insert(name.to_string(), merged.clone());
+    merged
+}
+
+fn expand_classes(mut classes: HashMap<String, ClassDeclInfo>) -> HashMap<String, ClassDeclInfo> {
+    let mut visiting = HashSet::new();
+    let mut cache: HashMap<String, HashMap<String, TypeExpr>> = HashMap::new();
+    let names: Vec<String> = classes.keys().cloned().collect();
+    for name in names {
+        let expanded = expand_class_members(&name, &classes, &mut visiting, &mut cache);
+        if let Some(info) = classes.get_mut(&name) {
+            info.members = expanded;
+        }
+    }
+    classes
 }
 
 fn collect_imported_class_env(
@@ -196,6 +262,7 @@ pub fn check_types(modules: &[Module]) -> Vec<FileDiagnostic> {
         let local_class_names: HashSet<String> = local_classes.keys().cloned().collect();
         let mut classes = imported_classes;
         classes.extend(local_classes);
+        let classes = expand_classes(classes);
         let mut instances: Vec<InstanceDeclInfo> = imported_instances
             .into_iter()
             .filter(|instance| !local_class_names.contains(&instance.class_name))
@@ -250,6 +317,7 @@ pub fn infer_value_types(
         let local_class_names: HashSet<String> = local_classes.keys().cloned().collect();
         let mut classes = imported_classes;
         classes.extend(local_classes);
+        let classes = expand_classes(classes);
         let mut instances: Vec<InstanceDeclInfo> = imported_instances
             .into_iter()
             .filter(|instance| !local_class_names.contains(&instance.class_name))

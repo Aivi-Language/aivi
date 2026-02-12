@@ -14,8 +14,8 @@ readConfig : Text -> Effect Text Text
 readConfig path = effect {
   res <- attempt (load (file.read path))
   res ?
-  | Ok (txt) => pure txt
-  | Err (_)  => fail "missing"
+    | Ok (txt) => pure txt
+    | Err (_)  => fail "missing"
 }
 
 managedFile : Text -> Resource Text
@@ -35,8 +35,8 @@ loadOrDefault : Text -> Text -> Effect Text Text
 loadOrDefault path fallback = effect {
   res <- attempt (load (file.read path))
   res ?
-  | Ok (txt) => pure txt
-  | Err (_)  => pure fallback
+    | Ok (txt) => pure txt
+    | Err (_)  => pure fallback
 }
 
 program2 : Effect Text Unit

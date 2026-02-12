@@ -4,8 +4,8 @@ export User, user1, user2, user3, store2, store3, promote
 User = { name: Text, age: Int, tags: List Text }
 
 append = xs ys => xs ?
-| []        => ys
-| [h, ...t] => [h, ...append t ys]
+  | []        => ys
+  | [h, ...t] => [h, ...append t ys]
 
 user1 : User
 user1 = { name: "Ada", age: 36, tags: ["dev"] }

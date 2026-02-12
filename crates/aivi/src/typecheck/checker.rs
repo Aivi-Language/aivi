@@ -2149,6 +2149,28 @@ impl TypeChecker {
                     Type::Var(var)
                 }
             }
+            TypeExpr::And { items, .. } => {
+                // v0.1: `A & B` is record/type composition. For now we only support composing records;
+                // other compositions fall back to an unconstrained fresh type variable.
+                let mut merged = BTreeMap::new();
+                let mut open = true;
+                for item in items {
+                    let item_ty = self.type_from_expr(item, ctx);
+                    let item_ty = self.expand_alias(item_ty);
+                    let Type::Record {
+                        fields: item_fields,
+                        open: item_open,
+                    } = item_ty
+                    else {
+                        return self.fresh_var();
+                    };
+                    open &= item_open;
+                    for (name, ty) in item_fields {
+                        merged.entry(name).or_insert(ty);
+                    }
+                }
+                Type::Record { fields: merged, open }
+            }
             TypeExpr::Apply { base, args, .. } => {
                 if let TypeExpr::Name(base_name) = base.as_ref() {
                     if let Some(row_type) = self.apply_row_op(&base_name.name, args, ctx) {
@@ -2252,6 +2274,11 @@ impl TypeChecker {
 
     fn validate_type_expr(&mut self, expr: &TypeExpr, errors: &mut Vec<TypeError>) {
         match expr {
+            TypeExpr::And { items, .. } => {
+                for item in items {
+                    self.validate_type_expr(item, errors);
+                }
+            }
             TypeExpr::Apply { base, args, .. } => {
                 if let TypeExpr::Name(base_name) = base.as_ref() {
                     if Self::is_row_op_name(&base_name.name) {

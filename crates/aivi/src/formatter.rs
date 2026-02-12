@@ -147,6 +147,11 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
             return false;
         }
 
+        // Indexing/call brackets: never insert a space before `[` after a closed group.
+        if curr_text == "[" && matches!(prev_text, ")" | "]" | "}") {
+            return false;
+        }
+
         if prev_text == "~" || prev_text == "@" || prev_text == "." || prev_text == "..." {
             return false;
         }
@@ -573,6 +578,9 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
     // Third pass: render.
     let mut rendered_lines: Vec<String> = Vec::new();
     let mut blank_run = 0usize;
+    let mut pipe_block_base_indent: Option<usize> = None;
+    let pipe_block_extra = " ".repeat(indent_size);
+    let mut prev_non_blank_last_token: Option<String> = None;
     for (line_index, state) in lines.iter().enumerate() {
         if state.tokens.is_empty() {
             blank_run += 1;
@@ -580,26 +588,66 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                 continue;
             }
             rendered_lines.push(String::new());
+            // Blank lines end any active `|` block to avoid surprising indentation carry-over.
+            pipe_block_base_indent = None;
             continue;
         }
 
         blank_run = 0;
 
-        let indent = state.indent.as_str();
+        let base_indent = state.indent.as_str();
         let mut out = String::new();
 
         if state.degraded {
-            out.push_str(indent);
+            out.push_str(base_indent);
             out.push_str(&format_tokens_simple(&state.tokens));
             rendered_lines.push(out);
+            pipe_block_base_indent = None;
+            prev_non_blank_last_token = state
+                .tokens
+                .iter()
+                .rev()
+                .find(|t| t.kind != "comment")
+                .map(|t| t.text.clone());
             continue;
         }
 
         let Some(first_idx) = first_code_index(&state.tokens) else {
-            out.push_str(indent);
+            out.push_str(base_indent);
             out.push_str(&format_tokens_simple(&state.tokens));
             rendered_lines.push(out);
+            pipe_block_base_indent = None;
+            prev_non_blank_last_token = state
+                .tokens
+                .iter()
+                .rev()
+                .find(|t| t.kind != "comment")
+                .map(|t| t.text.clone());
             continue;
+        };
+
+        // Multi-line `| ...` blocks (multi-clause functions, `?` matches, multi-line ADTs) indent one
+        // level after a `=` or `?` line, and keep that indentation for consecutive `|` lines.
+        let starts_with_pipe = state.tokens[first_idx].text == "|";
+        let should_indent_pipe = if starts_with_pipe {
+            if pipe_block_base_indent == Some(state.indent_len) {
+                true
+            } else {
+                matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?"))
+            }
+        } else {
+            false
+        };
+        if starts_with_pipe && should_indent_pipe {
+            pipe_block_base_indent = Some(state.indent_len);
+        } else if !starts_with_pipe {
+            pipe_block_base_indent = None;
+        }
+        let effective_indent = if starts_with_pipe && should_indent_pipe {
+            // Avoid allocations in the hot path unless we actually need extra indentation.
+            format!("{base_indent}{pipe_block_extra}")
+        } else {
+            base_indent.to_string()
         };
 
         if let Some(max_lhs) = state.effect_align_lhs {
@@ -610,7 +658,7 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                 let lhs = format_tokens_simple(lhs_tokens).trim().to_string();
                 let rhs = format_tokens_simple(rhs_tokens).trim().to_string();
                 let spaces = (max_lhs.saturating_sub(lhs.len())) + 1;
-                out.push_str(indent);
+                out.push_str(&effective_indent);
                 out.push_str(&lhs);
                 out.push_str(&" ".repeat(spaces));
                 out.push_str("<-");
@@ -619,6 +667,12 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                     out.push_str(&rhs);
                 }
                 rendered_lines.push(out);
+                prev_non_blank_last_token = state
+                    .tokens
+                    .iter()
+                    .rev()
+                    .find(|t| t.kind != "comment")
+                    .map(|t| t.text.clone());
                 continue;
             }
         }
@@ -632,7 +686,7 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                     let pat = format_tokens_simple(pat_tokens).trim().to_string();
                     let rhs = format_tokens_simple(rhs_tokens).trim().to_string();
                     let spaces = (max_pat.saturating_sub(pat.len())) + 1;
-                    out.push_str(indent);
+                    out.push_str(&effective_indent);
                     out.push_str("| ");
                     out.push_str(&pat);
                     out.push_str(&" ".repeat(spaces));
@@ -642,6 +696,12 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                         out.push_str(&rhs);
                     }
                     rendered_lines.push(out);
+                    prev_non_blank_last_token = state
+                        .tokens
+                        .iter()
+                        .rev()
+                        .find(|t| t.kind != "comment")
+                        .map(|t| t.text.clone());
                     continue;
                 }
             }
@@ -655,7 +715,7 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                 let key = format_tokens_simple(key_tokens).trim().to_string();
                 let rhs = format_tokens_simple(rhs_tokens).trim().to_string();
                 let spaces = (max_key.saturating_sub(key.len())) + 1;
-                out.push_str(indent);
+                out.push_str(&effective_indent);
                 out.push_str(&key);
                 out.push_str(&" ".repeat(spaces));
                 out.push_str("=>");
@@ -664,6 +724,12 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                     out.push_str(&rhs);
                 }
                 rendered_lines.push(out);
+                prev_non_blank_last_token = state
+                    .tokens
+                    .iter()
+                    .rev()
+                    .find(|t| t.kind != "comment")
+                    .map(|t| t.text.clone());
                 continue;
             }
         }
@@ -700,11 +766,17 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                             && find_top_level_token(&lines[j].tokens, "=", next_first + name_len)
                                 .is_some()
                         {
-                            out.push_str(indent);
+                            out.push_str(&effective_indent);
                             out.push_str(format_tokens_simple(name_tokens).trim());
                             out.push_str(" : ");
                             out.push_str(format_tokens_simple(rest_tokens).trim());
                             rendered_lines.push(out);
+                            prev_non_blank_last_token = state
+                                .tokens
+                                .iter()
+                                .rev()
+                                .find(|t| t.kind != "comment")
+                                .map(|t| t.text.clone());
                             continue;
                         }
                     }
@@ -712,9 +784,16 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
             }
         }
 
-        out.push_str(indent);
+        out.push_str(&effective_indent);
         out.push_str(&format_tokens_simple(&state.tokens));
         rendered_lines.push(out);
+
+        prev_non_blank_last_token = state
+            .tokens
+            .iter()
+            .rev()
+            .find(|t| t.kind != "comment")
+            .map(|t| t.text.clone());
     }
 
     // Strip leading blank lines to keep output stable when inputs start with a newline.
@@ -753,6 +832,7 @@ fn is_op(text: &str) -> bool {
             | "|>"
             | "?"
             | "|"
+            | "&"
             | "++"
             | "::"
             | ".."
