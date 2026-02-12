@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 
 use super::sockets::connection_from_value;
 use super::util::{builtin, expect_int};
-use crate::runtime::values::{StreamHandle, StreamState};
-use crate::runtime::{EffectValue, RuntimeError, Value};
+use crate::values::{StreamHandle, StreamState};
+use crate::{EffectValue, RuntimeError, Value};
 
 const DEFAULT_STREAM_CHUNK: usize = 4096;
 

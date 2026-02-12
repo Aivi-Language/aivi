@@ -13,7 +13,50 @@ use rust_decimal::Decimal;
 
 use aivi_http_server::{ServerHandle, WebSocketHandle};
 
-pub type RuntimeError = String;
+#[derive(Clone)]
+pub enum RuntimeError {
+    Error(Value),
+    Cancelled,
+    Message(String),
+}
+
+impl std::fmt::Debug for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuntimeError::Cancelled => f.debug_tuple("Cancelled").finish(),
+            RuntimeError::Message(message) => f.debug_tuple("Message").field(message).finish(),
+            RuntimeError::Error(value) => f
+                .debug_tuple("Error")
+                .field(&format_value(value))
+                .finish(),
+        }
+    }
+}
+
+impl std::fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuntimeError::Cancelled => write!(f, "execution cancelled"),
+            RuntimeError::Message(message) => write!(f, "{message}"),
+            RuntimeError::Error(value) => write!(f, "runtime error: {}", format_value(value)),
+        }
+    }
+}
+
+impl std::error::Error for RuntimeError {}
+
+impl From<String> for RuntimeError {
+    fn from(value: String) -> Self {
+        RuntimeError::Message(value)
+    }
+}
+
+impl From<&str> for RuntimeError {
+    fn from(value: &str) -> Self {
+        RuntimeError::Message(value.to_string())
+    }
+}
+
 pub type R = Result<Value, RuntimeError>;
 
 pub type BuiltinFunc = dyn Fn(Vec<Value>, &mut Runtime) -> R + Send + Sync;
@@ -243,6 +286,10 @@ impl CancelToken {
             .as_ref()
             .is_some_and(|parent| parent.is_cancelled())
     }
+
+    pub fn parent(&self) -> Option<Arc<CancelToken>> {
+        self.parent.clone()
+    }
 }
 
 pub struct Runtime {
@@ -276,7 +323,7 @@ impl Runtime {
             return Ok(());
         }
         if self.cancel.is_cancelled() {
-            return Err("execution cancelled".to_string());
+            return Err(RuntimeError::Cancelled);
         }
         Ok(())
     }
@@ -298,7 +345,10 @@ impl Runtime {
                 args.push(arg);
                 Ok(Value::Constructor { name, args })
             }
-            other => Err(format!("expected function, got {}", format_value(&other))),
+            other => Err(RuntimeError::Message(format!(
+                "expected function, got {}",
+                format_value(&other)
+            ))),
         }
     }
 
@@ -316,7 +366,10 @@ impl Runtime {
             Value::Effect(effect) => match effect.as_ref() {
                 EffectValue::Thunk { func } => func(self),
             },
-            other => Err(format!("expected Effect, got {}", format_value(&other))),
+            other => Err(RuntimeError::Message(format!(
+                "expected Effect, got {}",
+                format_value(&other)
+            ))),
         }
     }
 
@@ -326,7 +379,7 @@ impl Runtime {
     ) -> Result<(Value, Value), RuntimeError> {
         let mut guard = resource.acquire.lock().expect("resource acquire lock");
         let Some(acquire_fn) = guard.take() else {
-            return Err("resource already acquired".to_string());
+            return Err(RuntimeError::Message("resource already acquired".to_string()));
         };
         drop(guard);
         acquire_fn(self)
@@ -343,10 +396,10 @@ impl Runtime {
                     let mut list = match acc {
                         Value::List(items) => (*items).clone(),
                         other => {
-                            return Err(format!(
+                            return Err(RuntimeError::Message(format!(
                                 "generator_to_vec expects List accumulator, got {}",
                                 format_value(&other)
-                            ))
+                            )))
                         }
                     };
                     list.push(x);
@@ -360,10 +413,10 @@ impl Runtime {
         let result = self.apply(with_step, z)?;
         match result {
             Value::List(items) => Ok((*items).clone()),
-            other => Err(format!(
+            other => Err(RuntimeError::Message(format!(
                 "generator_to_vec expects generator to fold to List, got {}",
                 format_value(&other)
-            )),
+            ))),
         }
     }
 
@@ -377,10 +430,10 @@ impl Runtime {
             }));
         }
         if args.len() > builtin.imp.arity {
-            return Err(format!(
+            return Err(RuntimeError::Message(format!(
                 "builtin {} expects {} args",
                 builtin.imp.name, builtin.imp.arity
-            ));
+            )));
         }
         (builtin.imp.func)(args, self)
     }
@@ -388,11 +441,11 @@ impl Runtime {
     fn apply_multi_clause(&mut self, clauses: Vec<Value>, arg: Value) -> R {
         let mut results = Vec::new();
         let mut match_failures = 0usize;
-        let mut last_error: Option<String> = None;
+        let mut last_error: Option<RuntimeError> = None;
         for clause in clauses {
             match self.apply(clause.clone(), arg.clone()) {
                 Ok(value) => results.push(value),
-                Err(message) if is_match_failure_message(&message) => {
+                Err(err) if is_match_failure_error(&err) => {
                     match_failures += 1;
                 }
                 Err(err) => {
@@ -415,9 +468,11 @@ impl Runtime {
             return Ok(results.remove(0));
         }
         if match_failures > 0 && last_error.is_none() {
-            return Err("non-exhaustive match".to_string());
+            return Err(RuntimeError::Message("non-exhaustive match".to_string()));
         }
-        Err(last_error.unwrap_or_else(|| "no matching clause".to_string()))
+        Err(last_error.unwrap_or_else(|| {
+            RuntimeError::Message("no matching clause".to_string())
+        }))
     }
 
     pub fn rng_next_u64(&mut self) -> u64 {
@@ -429,6 +484,10 @@ impl Runtime {
         self.rng_state = x;
         x.wrapping_mul(0x2545F4914F6CDD1D)
     }
+
+    pub fn next_u64(&mut self) -> u64 {
+        self.rng_next_u64()
+    }
 }
 
 fn is_callable(value: &Value) -> bool {
@@ -438,8 +497,8 @@ fn is_callable(value: &Value) -> bool {
     )
 }
 
-fn is_match_failure_message(message: &str) -> bool {
-    message == "non-exhaustive match"
+fn is_match_failure_error(err: &RuntimeError) -> bool {
+    matches!(err, RuntimeError::Message(message) if message == "non-exhaustive match")
 }
 
 fn seed_rng_state() -> u64 {

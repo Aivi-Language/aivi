@@ -10,7 +10,7 @@ use rust_decimal::Decimal;
 use super::util::{
     builtin, expect_bigint, expect_decimal, expect_float, expect_int, expect_rational,
 };
-use crate::runtime::{RuntimeError, Value};
+use crate::{RuntimeError, Value};
 
 pub(super) fn build_bigint_record() -> Value {
     let mut fields = HashMap::new();

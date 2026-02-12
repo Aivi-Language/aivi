@@ -31,5 +31,6 @@ url = "2.5.2"
 ureq = "2.10.1"
 
 [dev-dependencies]
+aivi_native_runtime = { path = "../aivi_native_runtime" }
 tempfile = "3.12.0"
 walkdir = "2.5.0"

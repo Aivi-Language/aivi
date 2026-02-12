@@ -102,10 +102,10 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
                         args,
                     },
                 ),
-                other => Err(format!(
+                other => Err(RuntimeError::Message(format!(
                     "map expects List/Option/Result, got {}",
                     format_value(&other)
-                )),
+                ))),
             }
         }),
     );
@@ -123,10 +123,10 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
                         match value {
                             Value::List(inner) => out.extend(inner.iter().cloned()),
                             other => {
-                                return Err(format!(
+                                return Err(RuntimeError::Message(format!(
                                     "chain on List expects f : A -> List B, got {}",
                                     format_value(&other)
-                                ))
+                                )))
                             }
                         }
                     }
@@ -150,10 +150,10 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
                         args,
                     },
                 ),
-                other => Err(format!(
+                other => Err(RuntimeError::Message(format!(
                     "chain expects List/Option/Result, got {}",
                     format_value(&other)
-                )),
+                ))),
             }
         }),
     );
@@ -169,11 +169,11 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
                     if ok {
                         Ok(Value::Unit)
                     } else {
-                        Err(format!(
+                        Err(RuntimeError::Error(Value::Text(format!(
                             "assertEq failed: left={}, right={}",
                             format_value(&left),
                             format_value(&right)
-                        ))
+                        ))))
                     }
                 }),
             };
@@ -196,9 +196,8 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
         "fail".to_string(),
         builtin("fail", 1, |mut args, _| {
             let value = args.remove(0);
-            let message = format_value(&value);
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| Err(message.clone())),
+                func: Arc::new(move |_| Err(RuntimeError::Error(value.clone()))),
             };
             Ok(Value::Effect(Arc::new(effect)))
         }),
@@ -230,10 +229,11 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
                         name: "Ok".to_string(),
                         args: vec![value],
                     }),
-                    Err(err) => Ok(Value::Constructor {
+                    Err(RuntimeError::Error(value)) => Ok(Value::Constructor {
                         name: "Err".to_string(),
-                        args: vec![Value::Text(err)],
+                        args: vec![value],
                     }),
+                    Err(err) => Err(err),
                 }),
             };
             Ok(Value::Effect(Arc::new(effect)))
@@ -278,7 +278,7 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
             let value = args.remove(0);
             match value {
                 Value::Effect(_) => Ok(value),
-                _ => Err("load expects an Effect".to_string()),
+                _ => Err(RuntimeError::Message("load expects an Effect".to_string())),
             }
         }),
     );
@@ -333,4 +333,3 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
     env.insert("logger".to_string(), build_log_record());
     env.insert("database".to_string(), build_database_record());
 }
-

@@ -68,21 +68,30 @@ pub(super) fn list_value(items: Vec<Value>) -> Value {
 pub(super) fn expect_text(value: Value, ctx: &str) -> Result<String, RuntimeError> {
     match value {
         Value::Text(text) => Ok(text),
-        other => Err(format!("{ctx} expects Text, got {}", crate::format_value(&other))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx} expects Text, got {}",
+            crate::format_value(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_int(value: Value, ctx: &str) -> Result<i64, RuntimeError> {
     match value {
         Value::Int(value) => Ok(value),
-        other => Err(format!("{ctx} expects Int, got {}", crate::format_value(&other))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx} expects Int, got {}",
+            crate::format_value(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_float(value: Value, ctx: &str) -> Result<f64, RuntimeError> {
     match value {
         Value::Float(value) => Ok(value),
-        other => Err(format!("{ctx} expects Float, got {}", crate::format_value(&other))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx} expects Float, got {}",
+            crate::format_value(&other)
+        ))),
     }
 }
 
@@ -91,14 +100,17 @@ pub(super) fn expect_char(value: Value, ctx: &str) -> Result<char, RuntimeError>
     let mut chars = text.chars();
     match (chars.next(), chars.next()) {
         (Some(ch), None) => Ok(ch),
-        _ => Err(format!("{ctx} expects Char")),
+        _ => Err(RuntimeError::Message(format!("{ctx} expects Char"))),
     }
 }
 
 pub(super) fn expect_list(value: Value, ctx: &str) -> Result<Arc<Vec<Value>>, RuntimeError> {
     match value {
         Value::List(items) => Ok(items),
-        other => Err(format!("{ctx} expects List, got {}", crate::format_value(&other))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx} expects List, got {}",
+            crate::format_value(&other)
+        ))),
     }
 }
 
@@ -108,7 +120,10 @@ pub(super) fn expect_record(
 ) -> Result<Arc<std::collections::HashMap<String, Value>>, RuntimeError> {
     match value {
         Value::Record(fields) => Ok(fields),
-        other => Err(format!("{ctx} expects Record, got {}", crate::format_value(&other))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx} expects Record, got {}",
+            crate::format_value(&other)
+        ))),
     }
 }
 
@@ -118,10 +133,10 @@ pub(super) fn list_floats(values: &[Value], ctx: &str) -> Result<Vec<f64>, Runti
         match value {
             Value::Float(value) => out.push(*value),
             other => {
-                return Err(format!(
+                return Err(RuntimeError::Message(format!(
                     "{ctx} expects List Float, got {}",
                     crate::format_value(other)
-                ))
+                )))
             }
         }
     }
@@ -134,10 +149,10 @@ pub(super) fn list_ints(values: &[Value], ctx: &str) -> Result<Vec<i64>, Runtime
         match value {
             Value::Int(value) => out.push(*value),
             other => {
-                return Err(format!(
+                return Err(RuntimeError::Message(format!(
                     "{ctx} expects List Int, got {}",
                     crate::format_value(other)
-                ))
+                )))
             }
         }
     }
@@ -147,35 +162,49 @@ pub(super) fn list_ints(values: &[Value], ctx: &str) -> Result<Vec<i64>, Runtime
 pub(super) fn expect_bytes(value: Value, ctx: &str) -> Result<Arc<Vec<u8>>, RuntimeError> {
     match value {
         Value::Bytes(bytes) => Ok(bytes),
-        other => Err(format!("{ctx} expects Bytes, got {}", crate::format_value(&other))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx} expects Bytes, got {}",
+            crate::format_value(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_regex(value: Value, ctx: &str) -> Result<Arc<Regex>, RuntimeError> {
     match value {
         Value::Regex(regex) => Ok(regex),
-        other => Err(format!("{ctx} expects Regex, got {}", crate::format_value(&other))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx} expects Regex, got {}",
+            crate::format_value(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_bigint(value: Value, ctx: &str) -> Result<Arc<BigInt>, RuntimeError> {
     match value {
         Value::BigInt(value) => Ok(value),
-        other => Err(format!("{ctx} expects BigInt, got {}", crate::format_value(&other))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx} expects BigInt, got {}",
+            crate::format_value(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_rational(value: Value, ctx: &str) -> Result<Arc<BigRational>, RuntimeError> {
     match value {
         Value::Rational(value) => Ok(value),
-        other => Err(format!("{ctx} expects Rational, got {}", crate::format_value(&other))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx} expects Rational, got {}",
+            crate::format_value(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_decimal(value: Value, ctx: &str) -> Result<Decimal, RuntimeError> {
     match value {
         Value::Decimal(value) => Ok(value),
-        other => Err(format!("{ctx} expects Decimal, got {}", crate::format_value(&other))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx} expects Decimal, got {}",
+            crate::format_value(&other)
+        ))),
     }
 }
-

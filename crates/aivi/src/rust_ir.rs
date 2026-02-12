@@ -705,6 +705,7 @@ fn resolve_builtin(name: &str) -> Option<BuiltinName> {
             | "Ok"
             | "Err"
             | "Closed"
+            | "foldGen"
             | "pure"
             | "fail"
             | "attempt"

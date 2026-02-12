@@ -4,7 +4,7 @@ use std::sync::Arc;
 use chrono::{Datelike, Duration as ChronoDuration, NaiveDate};
 
 use super::util::{builtin, expect_int};
-use crate::runtime::{RuntimeError, Value};
+use crate::{RuntimeError, Value};
 
 pub(super) fn build_calendar_record() -> Value {
     let mut fields = HashMap::new();

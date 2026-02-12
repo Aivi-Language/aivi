@@ -4,7 +4,7 @@ use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 
 use super::util::{builtin, expect_int, expect_list, expect_record, list_value};
-use crate::runtime::{EffectValue, RuntimeError, Value};
+use crate::{EffectValue, RuntimeError, Value};
 
 const DEFAULT_RECV_CHUNK: usize = 4096;
 

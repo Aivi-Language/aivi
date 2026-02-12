@@ -4,7 +4,7 @@ use std::sync::Arc;
 use super::util::{
     builtin, builtin_constructor, expect_list, expect_record, expect_text, list_value,
 };
-use crate::runtime::{EffectValue, Runtime, RuntimeError, Value};
+use crate::{EffectValue, Runtime, RuntimeError, Value};
 
 fn table_parts(value: Value, ctx: &str) -> Result<(String, Value, Arc<Vec<Value>>), RuntimeError> {
     let fields = expect_record(value, ctx)?;
@@ -59,7 +59,7 @@ fn apply_delta(table: Value, delta: Value, runtime: &mut Runtime) -> Result<Valu
                         other => {
                             return Err(RuntimeError::Message(format!(
                                 "database.applyDelta Update predicate expects Bool, got {}",
-                                crate::runtime::format_value(&other)
+                                crate::format_value(&other)
                             )))
                         }
                     };
@@ -85,7 +85,7 @@ fn apply_delta(table: Value, delta: Value, runtime: &mut Runtime) -> Result<Valu
                         other => {
                             return Err(RuntimeError::Message(format!(
                                 "database.applyDelta Delete predicate expects Bool, got {}",
-                                crate::runtime::format_value(&other)
+                                crate::format_value(&other)
                             )))
                         }
                     };

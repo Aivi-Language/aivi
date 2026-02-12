@@ -4,7 +4,7 @@ use std::sync::Arc;
 use serde_json::Value as JsonValue;
 
 use super::util::{builtin, expect_text};
-use crate::runtime::{format_value, EffectValue, RuntimeError, Value};
+use crate::{format_value, EffectValue, RuntimeError, Value};
 
 fn level_name(value: Value, ctx: &str) -> Result<String, RuntimeError> {
     match value {

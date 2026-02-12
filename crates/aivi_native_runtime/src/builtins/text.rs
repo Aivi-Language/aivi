@@ -7,7 +7,7 @@ use super::util::{
     builtin, expect_bytes, expect_char, expect_int, expect_list, expect_text, list_value, make_err,
     make_none, make_ok, make_some,
 };
-use crate::runtime::{format_value, RuntimeError, Value};
+use crate::{format_value, RuntimeError, Value};
 
 pub(super) fn build_text_record() -> Value {
     let mut fields = std::collections::HashMap::new();

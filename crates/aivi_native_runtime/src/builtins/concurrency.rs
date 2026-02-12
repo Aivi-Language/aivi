@@ -3,8 +3,8 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use super::util::builtin;
-use crate::runtime::values::{ChannelInner, ChannelRecv, ChannelSend};
-use crate::runtime::{CancelToken, EffectValue, Runtime, RuntimeContext, RuntimeError, Value};
+use crate::values::{CancelToken, ChannelInner, ChannelRecv, ChannelSend, RuntimeContext};
+use crate::{EffectValue, Runtime, RuntimeError, Value};
 
 pub(super) fn build_channel_record() -> Value {
     let mut fields = std::collections::HashMap::new();
@@ -151,7 +151,7 @@ pub(crate) fn build_concurrent_record() -> Value {
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |runtime| {
                     let cancel = CancelToken::child(runtime.cancel.clone());
-                    let mut child = Runtime::new(ctx.clone(), cancel.clone());
+                    let mut child = Runtime::with_cancel(ctx.clone(), cancel.clone());
                     let result = child.run_effect_value(effect.clone());
                     cancel.cancel();
                     result
@@ -326,7 +326,7 @@ fn spawn_effect(
     sender: mpsc::Sender<(usize, Result<Value, RuntimeError>)>,
 ) {
     std::thread::spawn(move || {
-        let mut runtime = Runtime::new(ctx, cancel);
+        let mut runtime = Runtime::with_cancel(ctx, cancel);
         let result = runtime.run_effect_value(effect);
         let _ = sender.send((id, result));
     });

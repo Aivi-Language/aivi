@@ -52,7 +52,7 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
     out.push_str("use std::collections::HashMap;\n");
     out.push_str("use std::sync::{Arc, Mutex};\n\n");
     out.push_str(
-        "use aivi_native_runtime::{get_builtin, ok as aivi_ok, BuiltinImpl, BuiltinValue, EffectValue, ResourceValue, Runtime, R, Value};\n\n",
+        "use aivi_native_runtime::{get_builtin, ok as aivi_ok, BuiltinImpl, BuiltinValue, EffectValue, ResourceValue, Runtime, RuntimeError, R, Value};\n\n",
     );
     out.push_str("fn __builtin(name: &str) -> Value {\n");
     out.push_str("    get_builtin(name).unwrap_or_else(|| panic!(\"missing builtin {name}\"))\n");
@@ -88,13 +88,13 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
     out.push_str("                aivi_ok(Value::Record(Arc::new(map)))\n");
     out.push_str("            }\n");
     out.push_str(
-        "            other => Err(format!(\"expected Record for field patch, got {}\", aivi_native_runtime::format_value(&other))),\n",
+        "            other => Err(RuntimeError::Message(format!(\"expected Record for field patch, got {}\", aivi_native_runtime::format_value(&other)))),\n",
     );
     out.push_str("        },\n");
     out.push_str("        PathSeg::IndexValue(idx) => match (target, idx.clone()) {\n");
     out.push_str("            (Value::List(items), Value::Int(i)) => {\n");
     out.push_str("                let i = i as usize;\n");
-    out.push_str("                if i >= items.len() { return Err(\"index out of bounds\".to_string()); }\n");
+    out.push_str("                if i >= items.len() { return Err(RuntimeError::Message(\"index out of bounds\".to_string())); }\n");
     out.push_str("                let mut out = items.as_ref().clone();\n");
     out.push_str("                let old = out[i].clone();\n");
     out.push_str("                out[i] = patch_path(rt, old, &path[1..], updater)?;\n");
@@ -102,13 +102,13 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
     out.push_str("            }\n");
     out.push_str("            (Value::Tuple(mut items), Value::Int(i)) => {\n");
     out.push_str("                let i = i as usize;\n");
-    out.push_str("                if i >= items.len() { return Err(\"index out of bounds\".to_string()); }\n");
+    out.push_str("                if i >= items.len() { return Err(RuntimeError::Message(\"index out of bounds\".to_string())); }\n");
     out.push_str("                let old = items[i].clone();\n");
     out.push_str("                items[i] = patch_path(rt, old, &path[1..], updater)?;\n");
     out.push_str("                aivi_ok(Value::Tuple(items))\n");
     out.push_str("            }\n");
     out.push_str(
-        "            (other, _) => Err(format!(\"expected List/Tuple + Int for index patch, got {}\", aivi_native_runtime::format_value(&other))),\n",
+        "            (other, _) => Err(RuntimeError::Message(format!(\"expected List/Tuple + Int for index patch, got {}\", aivi_native_runtime::format_value(&other)))),\n",
     );
     out.push_str("        },\n");
     out.push_str("        PathSeg::IndexFieldBool(field) => match target {\n");
@@ -128,7 +128,7 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
     out.push_str("                aivi_ok(Value::List(Arc::new(out_items)))\n");
     out.push_str("            }\n");
     out.push_str(
-        "            other => Err(format!(\"expected List for traversal patch, got {}\", aivi_native_runtime::format_value(&other))),\n",
+        "            other => Err(RuntimeError::Message(format!(\"expected List for traversal patch, got {}\", aivi_native_runtime::format_value(&other)))),\n",
     );
     out.push_str("        },\n");
     out.push_str("    }\n");
@@ -199,7 +199,7 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
         let main_fn = rust_global_fn_name("main");
         out.push_str("fn main() {\n");
         out.push_str("    let mut rt = Runtime::new();\n");
-        out.push_str(&format!("    let result: Result<(), String> = (|| {{\n"));
+        out.push_str(&format!("    let result: Result<(), RuntimeError> = (|| {{\n"));
         out.push_str(&format!("        let v = {main_fn}(&mut rt)?;\n"));
         out.push_str("        let _ = rt.run_effect_value(v)?;\n");
         out.push_str("        Ok(())\n");
@@ -332,7 +332,7 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
                 let expr_code = emit_expr(&item.expr, indent)?;
                 if item.spread {
                     parts.push(format!(
-                        "{{ let v = ({expr_code})?; match v {{ Value::List(xs) => (*xs).clone(), other => return Err(format!(\"expected List for spread, got {{}}\", aivi_native_runtime::format_value(&other))), }} }}"
+                        "{{ let v = ({expr_code})?; match v {{ Value::List(xs) => (*xs).clone(), other => return Err(RuntimeError::Message(format!(\"expected List for spread, got {{}}\", aivi_native_runtime::format_value(&other)))), }} }}"
                     ));
                 } else {
                     parts.push(format!("vec![({expr_code})?]"));
@@ -375,7 +375,7 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
         RustIrExpr::FieldAccess { base, field, .. } => {
             let base_code = emit_expr(base, indent)?;
             format!(
-                "({base_code}).and_then(|b| match b {{ Value::Record(map) => map.get({:?}).cloned().ok_or_else(|| \"missing field\".to_string()), other => Err(format!(\"expected Record, got {{}}\", aivi_native_runtime::format_value(&other))), }})",
+                "({base_code}).and_then(|b| match b {{ Value::Record(map) => map.get({:?}).cloned().ok_or_else(|| RuntimeError::Message(\"missing field\".to_string())), other => Err(RuntimeError::Message(format!(\"expected Record, got {{}}\", aivi_native_runtime::format_value(&other)))), }})",
                 field
             )
         }
@@ -383,7 +383,7 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
             let base_code = emit_expr(base, indent)?;
             let index_code = emit_expr(index, indent)?;
             format!(
-                "({base_code}).and_then(|b| ({index_code}).and_then(|i| match (b, i) {{ (Value::List(items), Value::Int(idx)) => items.get(idx as usize).cloned().ok_or_else(|| \"index out of bounds\".to_string()), (Value::Tuple(items), Value::Int(idx)) => items.get(idx as usize).cloned().ok_or_else(|| \"index out of bounds\".to_string()), (other, _) => Err(format!(\"index on unsupported value {{}}\", aivi_native_runtime::format_value(&other))), }}))"
+                "({base_code}).and_then(|b| ({index_code}).and_then(|i| match (b, i) {{ (Value::List(items), Value::Int(idx)) => items.get(idx as usize).cloned().ok_or_else(|| RuntimeError::Message(\"index out of bounds\".to_string())), (Value::Tuple(items), Value::Int(idx)) => items.get(idx as usize).cloned().ok_or_else(|| RuntimeError::Message(\"index out of bounds\".to_string())), (other, _) => Err(RuntimeError::Message(format!(\"index on unsupported value {{}}\", aivi_native_runtime::format_value(&other)))), }}))"
             )
         }
         RustIrExpr::If {
@@ -396,7 +396,7 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
             let then_code = emit_expr(then_branch, indent)?;
             let else_code = emit_expr(else_branch, indent)?;
             format!(
-                "({cond_code}).and_then(|c| match c {{ Value::Bool(true) => {then_code}, Value::Bool(false) => {else_code}, other => Err(format!(\"expected Bool, got {{}}\", aivi_native_runtime::format_value(&other))), }})"
+                "({cond_code}).and_then(|c| match c {{ Value::Bool(true) => {then_code}, Value::Bool(false) => {else_code}, other => Err(RuntimeError::Message(format!(\"expected Bool, got {{}}\", aivi_native_runtime::format_value(&other)))), }})"
             )
         }
         RustIrExpr::Binary { op, left, right, .. } => {
@@ -420,7 +420,7 @@ fn emit_record(fields: &[RustIrRecordField], indent: usize) -> Result<String, Ai
         if field.spread {
             let value_code = emit_expr(&field.value, indent)?;
             stmts.push(format!(
-                "match ({value_code})? {{ Value::Record(m) => {{ map.extend(m.as_ref().clone()); }}, _ => return Err(\"record spread expects a record\".to_string()), }};"
+                "match ({value_code})? {{ Value::Record(m) => {{ map.extend(m.as_ref().clone()); }}, _ => return Err(RuntimeError::Message(\"record spread expects a record\".to_string())), }};"
             ));
             continue;
         }
@@ -572,7 +572,7 @@ fn emit_match(scrutinee: &RustIrExpr, arms: &[RustIrMatchArm], indent: usize) ->
     }
 
     s.push_str(&ind2);
-    s.push_str("Err(\"non-exhaustive match\".to_string())\n");
+    s.push_str("Err(RuntimeError::Message(\"non-exhaustive match\".to_string()))\n");
     s.push_str(&ind);
     s.push_str("})");
     Ok(s)
@@ -911,7 +911,7 @@ fn emit_block(
             s.push_str(&ind3);
             s.push_str("})();\n");
             s.push_str(&ind3);
-            s.push_str("let __cleanup_result: Result<(), String> = (|| {\n");
+            s.push_str("let __cleanup_result: Result<(), RuntimeError> = (|| {\n");
             s.push_str(&"    ".repeat(indent + 4));
             s.push_str("for cleanup in __cleanups.into_iter().rev() {\n");
             s.push_str(&"    ".repeat(indent + 5));
@@ -974,7 +974,7 @@ fn emit_pattern_bind_stmts(
     ));
     s.push_str(&ind);
     s.push_str(&format!(
-        "if !{ok_ident} {{ return Err({err_message:?}.to_string()); }}\n"
+        "if !{ok_ident} {{ return Err(RuntimeError::Message({err_message:?}.to_string())); }}\n"
     ));
 
     let mut vars = Vec::new();
@@ -1002,7 +1002,7 @@ fn emit_generate_block(items: &[RustIrBlockItem], indent: usize) -> Result<Strin
     s.push_str(&ind2);
     s.push_str("let mut __vals: Vec<Value> = Vec::new();\n");
     s.push_str(&ind2);
-    s.push_str("(|| -> Result<(), String> {\n");
+    s.push_str("(|| -> Result<(), RuntimeError> {\n");
     s.push_str(&emit_generate_materialize_items(
         items,
         "__vals",
@@ -1408,7 +1408,7 @@ fn emit_resource_acquire(
     }
 
     s.push_str(&ind);
-    s.push_str("Err(\"resource block missing yield\".to_string())\n");
+    s.push_str("Err(RuntimeError::Message(\"resource block missing yield\".to_string()))\n");
     Ok(s)
 }
 
@@ -1483,7 +1483,7 @@ fn emit_binary(op: &str, left_code: String, right_code: String) -> String {
         (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a <OP> b)),
         (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) <OP> b)),
         (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a <OP> (b as f64))),
-        (l, r) => Err(format!("unsupported operands for {OP}: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for {OP}: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
     }))"#;
             template
                 .replace("{LEFT}", &left_code)
@@ -1497,7 +1497,7 @@ fn emit_binary(op: &str, left_code: String, right_code: String) -> String {
         (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Bool(a <OP> b)),
         (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Bool((a as f64) <OP> b)),
         (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Bool(a <OP> (b as f64))),
-        (l, r) => Err(format!("unsupported operands for {OP}: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for {OP}: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
     }))"#;
             template
                 .replace("{LEFT}", &left_code)
@@ -1508,7 +1508,7 @@ fn emit_binary(op: &str, left_code: String, right_code: String) -> String {
         "&&" | "||" => {
             let template = r#"({LEFT}).and_then(|l| ({RIGHT}).and_then(|r| match (l, r) {
         (Value::Bool(a), Value::Bool(b)) => aivi_ok(Value::Bool(a <OP> b)),
-        (l, r) => Err(format!("unsupported operands for {OP}: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for {OP}: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
     }))"#;
             template
                 .replace("{LEFT}", &left_code)
@@ -1516,7 +1516,7 @@ fn emit_binary(op: &str, left_code: String, right_code: String) -> String {
                 .replace("<OP>", op)
                 .replace("{OP}", op)
         }
-        _ => "Err(\"unsupported binary operator\".to_string())".to_string(),
+        _ => "Err(RuntimeError::Message(\"unsupported binary operator\".to_string()))".to_string(),
     }
 }
 

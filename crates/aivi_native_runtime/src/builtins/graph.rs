@@ -5,7 +5,7 @@ use std::sync::Arc;
 use ordered_float::OrderedFloat;
 
 use super::util::{builtin, expect_float, expect_int, expect_list, expect_record, list_ints};
-use crate::runtime::{RuntimeError, Value};
+use crate::{RuntimeError, Value};
 
 pub(super) fn build_graph_record() -> Value {
     let mut fields = HashMap::new();

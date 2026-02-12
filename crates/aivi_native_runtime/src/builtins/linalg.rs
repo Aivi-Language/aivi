@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::util::{builtin, expect_int, expect_list, expect_record, list_floats};
-use crate::runtime::{RuntimeError, Value};
+use crate::{RuntimeError, Value};
 
 pub(super) fn build_linalg_record() -> Value {
     let mut fields = HashMap::new();

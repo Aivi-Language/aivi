@@ -4,7 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::util::{builtin, expect_record, expect_text, make_err, make_none, make_ok, make_some};
-use crate::runtime::{format_value, EffectValue, RuntimeError, Value};
+use crate::{format_value, EffectValue, RuntimeError, Value};
+
 pub(super) fn build_file_record() -> Value {
     let mut fields = HashMap::new();
     fields.insert(

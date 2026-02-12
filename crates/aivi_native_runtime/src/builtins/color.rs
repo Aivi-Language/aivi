@@ -4,7 +4,7 @@ use std::sync::Arc;
 use palette::{FromColor, Hsl, RgbHue, Srgb};
 
 use super::util::{builtin, expect_float, expect_int};
-use crate::runtime::{RuntimeError, Value};
+use crate::{RuntimeError, Value};
 
 pub(super) fn build_color_record() -> Value {
     let mut fields = HashMap::new();

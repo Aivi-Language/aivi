@@ -5,8 +5,8 @@ use std::sync::Arc;
 use im::{HashMap as ImHashMap, HashSet as ImHashSet, Vector as ImVector};
 
 use super::util::{builtin, expect_list, list_value, make_none, make_some};
-use crate::runtime::values::KeyValue;
-use crate::runtime::{RuntimeError, Value};
+use crate::values::KeyValue;
+use crate::{RuntimeError, Value};
 
 pub(super) fn build_collections_record() -> Value {
     let mut fields = std::collections::HashMap::new();

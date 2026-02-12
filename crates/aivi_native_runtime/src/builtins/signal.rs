@@ -4,7 +4,7 @@ use std::sync::Arc;
 use rustfft::{num_complex::Complex as FftComplex, FftPlanner};
 
 use super::util::{builtin, expect_float, expect_list, expect_record, list_floats};
-use crate::runtime::{RuntimeError, Value};
+use crate::{RuntimeError, Value};
 
 pub(super) fn build_signal_record() -> Value {
     let mut fields = HashMap::new();

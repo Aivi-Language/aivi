@@ -8,7 +8,8 @@ use super::util::{
     builtin, expect_int, expect_list, expect_record, expect_text, list_value, make_err, make_none,
     make_ok, make_some,
 };
-use crate::runtime::{EffectValue, RuntimeError, Value};
+use crate::{EffectValue, RuntimeError, Value};
+
 fn url_from_value(value: Value, ctx: &str) -> Result<Url, RuntimeError> {
     let Value::Record(fields) = value else {
         return Err(RuntimeError::Message(format!("{ctx} expects Url")));

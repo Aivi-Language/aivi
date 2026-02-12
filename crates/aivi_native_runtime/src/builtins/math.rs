@@ -6,7 +6,7 @@ use num_bigint::BigInt;
 use super::util::{
     builtin, expect_float, expect_int, expect_list, list_floats, list_ints, make_none, make_some,
 };
-use crate::runtime::{RuntimeError, Value};
+use crate::{RuntimeError, Value};
 
 pub(super) fn build_math_record() -> Value {
     let mut fields = HashMap::new();
