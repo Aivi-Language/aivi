@@ -79,7 +79,9 @@ fn native_codegen_examples_emit_rust_and_check_builtins() {
 
         for builtin in extract_builtin_names(&rust) {
             if get_builtin(&builtin).is_none() {
-                failures.push(format!("{rel_str}: missing builtin {builtin:?} in aivi_native_runtime"));
+                failures.push(format!(
+                    "{rel_str}: missing builtin {builtin:?} in aivi_native_runtime"
+                ));
             }
         }
 

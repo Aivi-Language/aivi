@@ -66,9 +66,9 @@ fn i18n_codegen_module_parses() {
     assert!(
         diags.is_empty(),
         "expected generated module to parse without diagnostics, got: {:?}",
-        diags.iter()
+        diags
+            .iter()
             .map(|d| (&d.diagnostic.code, &d.diagnostic.message))
             .collect::<Vec<_>>()
     );
 }
-

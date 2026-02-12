@@ -7,13 +7,13 @@ mod i18n_codegen;
 mod kernel;
 pub mod lexer;
 mod mcp;
+mod native_rust_backend;
 mod pm;
 mod resolver;
 mod runtime;
 mod rust_codegen;
 mod rust_ir;
 mod rustc_backend;
-mod native_rust_backend;
 mod stdlib;
 mod surface;
 pub mod syntax;
@@ -29,14 +29,19 @@ pub use diagnostics::{
 };
 pub use formatter::{format_text, format_text_with_options, FormatOptions};
 pub use hir::{HirModule, HirProgram};
+pub use i18n_codegen::{
+    generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
+};
 pub use kernel::{lower_hir as lower_kernel, KernelProgram};
 pub use mcp::{
     collect_mcp_manifest, serve_mcp_stdio, serve_mcp_stdio_with_policy, McpManifest, McpPolicy,
     McpResource, McpTool,
 };
+pub use native_rust_backend::{emit_native_rust_source, emit_native_rust_source_lib};
 pub use pm::{
-    collect_aivi_sources, edit_cargo_toml_dependencies, read_aivi_toml, write_scaffold, AiviToml,
-    CargoDepSpec, CargoDepSpecParseError, CargoManifestEdits, Codegen, ProjectKind,
+    collect_aivi_sources, edit_cargo_toml_dependencies, ensure_aivi_dependency, read_aivi_toml,
+    validate_publish_preflight, write_scaffold, AiviCargoMetadata, AiviToml, CargoDepSpec,
+    CargoDepSpecParseError, CargoManifestEdits, Codegen, ProjectKind,
 };
 pub use resolver::check_modules;
 pub use runtime::run_native;
@@ -45,7 +50,6 @@ pub use rust_codegen::{
 };
 pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
 pub use rustc_backend::{build_with_rustc, emit_rustc_source};
-pub use native_rust_backend::{emit_native_rust_source, emit_native_rust_source_lib};
 pub use stdlib::{embedded_stdlib_modules, embedded_stdlib_source};
 pub use surface::{
     parse_modules, parse_modules_from_tokens, BlockItem, ClassDecl, Decorator, Def, DomainDecl,
@@ -54,7 +58,6 @@ pub use surface::{
     TypeExpr, TypeSig, UseDecl,
 };
 pub use typecheck::{check_types, infer_value_types};
-pub use i18n_codegen::{generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AiviError {

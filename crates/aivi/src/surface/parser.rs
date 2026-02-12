@@ -1574,7 +1574,11 @@ impl Parser {
                 }
                 if tag == "k" {
                     if let Err(msg) = crate::i18n::validate_key_text(&body) {
-                        self.emit_diag("E1514", &format!("invalid i18n key sigil: {msg}"), span.clone());
+                        self.emit_diag(
+                            "E1514",
+                            &format!("invalid i18n key sigil: {msg}"),
+                            span.clone(),
+                        );
                     }
                 }
                 if tag == "m" {

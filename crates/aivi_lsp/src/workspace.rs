@@ -232,9 +232,10 @@ impl Backend {
                 existing
             } else {
                 let root_clone = root.clone();
-                let built = tokio::task::spawn_blocking(move || Self::build_disk_index(&root_clone))
-                    .await
-                    .ok();
+                let built =
+                    tokio::task::spawn_blocking(move || Self::build_disk_index(&root_clone))
+                        .await
+                        .ok();
                 if let Some(built) = built {
                     let mut state = self.state.lock().await;
                     state.disk_indexes.insert(root.clone(), built.clone());

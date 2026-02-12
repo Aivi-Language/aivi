@@ -68,7 +68,9 @@ aivi clean --all
 ## Add AIVI dependencies
 
 `aivi install` edits `[dependencies]` in `Cargo.toml`, validates the dependency has
-`[package.metadata.aivi]`, and (by default) runs `cargo fetch`.
+`[package.metadata.aivi]` (and `kind = "lib"`), and (by default) runs `cargo fetch`.
+If your project declares `language_version` in `aivi.toml`, installed AIVI dependencies
+must match it.
 
 ```bash
 cd my-app
@@ -86,6 +88,19 @@ aivi install aivi.number
 
 # Search crates.io for AIVI packages
 aivi search prelude
+```
+
+## Package & publish (Cargo-backed)
+
+`aivi package` and `aivi publish` are thin wrappers around Cargo with AIVI-specific
+preflight validation (checks `aivi.toml` and `[package.metadata.aivi]` consistency):
+
+```bash
+# Build the `.crate` archive locally
+aivi package
+
+# Dry-run a publish (no upload)
+aivi publish --dry-run
 ```
 
 ## Editor support (LSP)

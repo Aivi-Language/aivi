@@ -267,7 +267,9 @@ fn schema_for_type(expr: &TypeExpr) -> serde_json::Value {
                 match item {
                     TypeExpr::Record { fields, .. } => {
                         for (name, ty) in fields {
-                            merged.entry(name.name.clone()).or_insert_with(|| ty.clone());
+                            merged
+                                .entry(name.name.clone())
+                                .or_insert_with(|| ty.clone());
                         }
                     }
                     TypeExpr::Apply { base, args, .. } => {

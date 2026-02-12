@@ -44,8 +44,8 @@ pub(super) fn build_crypto_record() -> Value {
                     "crypto.randomBytes expects non-negative length".to_string(),
                 ));
             }
-            let count =
-                usize::try_from(count).map_err(|_| "crypto.randomBytes length overflow".to_string())?;
+            let count = usize::try_from(count)
+                .map_err(|_| "crypto.randomBytes length overflow".to_string())?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let mut buffer = vec![0u8; count];

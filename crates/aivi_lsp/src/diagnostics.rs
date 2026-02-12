@@ -3,9 +3,8 @@ use std::path::PathBuf;
 
 use aivi::{check_modules, check_types, parse_modules};
 use tower_lsp::lsp_types::{
-    CodeAction, CodeActionKind, CodeActionOrCommand, Diagnostic, DiagnosticSeverity,
-    DiagnosticRelatedInformation, Location, NumberOrString, Position, Range, TextEdit, Url,
-    WorkspaceEdit,
+    CodeAction, CodeActionKind, CodeActionOrCommand, Diagnostic, DiagnosticRelatedInformation,
+    DiagnosticSeverity, Location, NumberOrString, Position, Range, TextEdit, Url, WorkspaceEdit,
 };
 
 use crate::backend::Backend;

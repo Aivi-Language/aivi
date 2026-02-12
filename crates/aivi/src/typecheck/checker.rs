@@ -2184,7 +2184,10 @@ impl TypeChecker {
                         merged.entry(name).or_insert(ty);
                     }
                 }
-                Type::Record { fields: merged, open }
+                Type::Record {
+                    fields: merged,
+                    open,
+                }
             }
             TypeExpr::Apply { base, args, .. } => {
                 if let TypeExpr::Name(base_name) = base.as_ref() {

@@ -18,7 +18,11 @@ x = 1
 "#;
 
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diag_codes(&diags));
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
 
     let module = modules.first().expect("module");
     let def = module
@@ -86,4 +90,3 @@ module Example
     let (_, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diag_codes(&diags).contains(&"E1512".to_string()));
 }
-

@@ -94,12 +94,10 @@ pub(super) fn build_i18n_record() -> Value {
                 validate_key_text(key_raw)
                     .map_err(|msg| RuntimeError::Message(format!("line {n}: {msg}")))?;
 
-                let message_text = unescape_properties_value(value_raw.trim()).map_err(|msg| {
-                    RuntimeError::Message(format!("line {n}: {msg}"))
-                })?;
-                let parts = parse_message_template(&message_text).map_err(|msg| {
-                    RuntimeError::Message(format!("line {n}: {msg}"))
-                })?;
+                let message_text = unescape_properties_value(value_raw.trim())
+                    .map_err(|msg| RuntimeError::Message(format!("line {n}: {msg}")))?;
+                let parts = parse_message_template(&message_text)
+                    .map_err(|msg| RuntimeError::Message(format!("line {n}: {msg}")))?;
                 entries.insert(
                     KeyValue::Text(key_raw.to_string()),
                     message_value(message_text, &parts),
@@ -351,7 +349,9 @@ fn render_compiled_parts(
                     }
                 };
                 let expected_ty = match rec.get("ty") {
-                    Some(Value::Constructor { name, args }) if name == "Some" && args.len() == 1 => {
+                    Some(Value::Constructor { name, args })
+                        if name == "Some" && args.len() == 1 =>
+                    {
                         match &args[0] {
                             Value::Text(t) => Some(t.as_str()),
                             _ => None,
@@ -550,4 +550,3 @@ fn unescape_properties_value(value: &str) -> Result<String, String> {
     }
     Ok(out)
 }
-

@@ -1,9 +1,10 @@
 use aivi::{
     check_modules, check_types, collect_mcp_manifest, compile_rust, compile_rust_lib,
-    compile_rust_native, compile_rust_native_lib, desugar_target,
-    embedded_stdlib_source, format_target, kernel_target, load_module_diagnostics, load_modules,
+    compile_rust_native, compile_rust_native_lib, desugar_target, embedded_stdlib_source,
+    ensure_aivi_dependency, format_target, kernel_target, load_module_diagnostics, load_modules,
     parse_target, render_diagnostics, run_native, rust_ir_target, serve_mcp_stdio_with_policy,
-    write_scaffold, AiviError, CargoDepSpec, Codegen, McpPolicy, ProjectKind,
+    validate_publish_preflight, write_scaffold, AiviError, CargoDepSpec, Codegen, McpPolicy,
+    ProjectKind,
 };
 use sha2::{Digest, Sha256};
 use std::env;
@@ -44,6 +45,8 @@ fn run() -> Result<(), AiviError> {
         "clean" => cmd_clean(&rest),
         "install" => cmd_install(&rest),
         "search" => cmd_search(&rest),
+        "package" => cmd_package(&rest),
+        "publish" => cmd_publish(&rest),
         "parse" => {
             let Some(target) = rest.first() else {
                 print_help();
@@ -233,7 +236,7 @@ fn run() -> Result<(), AiviError> {
 
 fn print_help() {
     println!(
-        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--require-aivi] [--no-fetch]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check <path|dir/...>\n  fmt <path>\n  desugar <path|dir/...>\n  kernel <path|dir/...>\n  rust-ir <path|dir/...>\n  lsp\n  build <path|dir/...> [--target rust|rust-embed|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
+        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check <path|dir/...>\n  fmt <path>\n  desugar <path|dir/...>\n  kernel <path|dir/...>\n  rust-ir <path|dir/...>\n  lsp\n  build <path|dir/...> [--target rust|rust-embed|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
     );
 }
 
@@ -328,12 +331,9 @@ fn cmd_i18n_gen(args: &[String]) -> Result<(), AiviError> {
     };
 
     let properties_text = std::fs::read_to_string(&catalog_path)?;
-    let module_source = aivi::generate_i18n_module_from_properties(
-        &module_name,
-        &locale,
-        &properties_text,
-    )
-    .map_err(AiviError::InvalidCommand)?;
+    let module_source =
+        aivi::generate_i18n_module_from_properties(&module_name, &locale, &properties_text)
+            .map_err(AiviError::InvalidCommand)?;
 
     let out_path = PathBuf::from(out_path);
     if let Some(parent) = out_path.parent() {
@@ -698,7 +698,6 @@ fn cmd_install(args: &[String]) -> Result<(), AiviError> {
 
     for arg in args.iter().cloned() {
         match arg.as_str() {
-            "--require-aivi" => {}
             "--no-fetch" => fetch = false,
             _ if arg.starts_with('-') => {
                 return Err(AiviError::InvalidCommand(format!("unknown flag {arg}")))
@@ -726,13 +725,14 @@ fn cmd_install(args: &[String]) -> Result<(), AiviError> {
             "install expects a directory containing aivi.toml and Cargo.toml".to_string(),
         ));
     }
+    let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
 
     if install_stdlib_module(&root, &spec)? {
         return Ok(());
     }
 
-    let dep =
-        CargoDepSpec::parse(&spec).map_err(|err| AiviError::InvalidCommand(err.to_string()))?;
+    let dep = CargoDepSpec::parse_in(&root, &spec)
+        .map_err(|err| AiviError::InvalidCommand(err.to_string()))?;
 
     let cargo_toml_path = root.join("Cargo.toml");
     let original = std::fs::read_to_string(&cargo_toml_path)?;
@@ -759,7 +759,7 @@ fn cmd_install(args: &[String]) -> Result<(), AiviError> {
         }
     }
 
-    if let Err(err) = ensure_aivi_dependency(&root, &dep) {
+    if let Err(err) = ensure_aivi_dependency(&root, &dep, cfg.project.language_version.as_deref()) {
         restore_install_manifest(
             &cargo_toml_path,
             &original,
@@ -789,67 +789,107 @@ fn restore_install_manifest(
     }
 }
 
-fn ensure_aivi_dependency(root: &Path, dep: &CargoDepSpec) -> Result<(), AiviError> {
-    let output = Command::new("cargo")
-        .arg("metadata")
-        .arg("--format-version")
-        .arg("1")
-        .current_dir(root)
-        .output()?;
-    if !output.status.success() {
-        return Err(AiviError::Cargo(format!(
-            "cargo metadata failed: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )));
+fn cmd_package(args: &[String]) -> Result<(), AiviError> {
+    let mut allow_dirty = false;
+    let mut no_verify = false;
+    let mut cargo_args = Vec::new();
+
+    let mut saw_sep = false;
+    for arg in args.iter().cloned() {
+        if !saw_sep && arg == "--" {
+            saw_sep = true;
+            continue;
+        }
+        if saw_sep {
+            cargo_args.push(arg);
+            continue;
+        }
+        match arg.as_str() {
+            "--allow-dirty" => allow_dirty = true,
+            "--no-verify" => no_verify = true,
+            _ if arg.starts_with('-') => {
+                return Err(AiviError::InvalidCommand(format!("unknown flag {arg}")))
+            }
+            _ => {
+                return Err(AiviError::InvalidCommand(format!(
+                    "unexpected argument {arg}"
+                )))
+            }
+        }
     }
 
-    #[derive(serde::Deserialize)]
-    struct CargoMetadata {
-        packages: Vec<CargoMetadataPackage>,
+    let root = env::current_dir()?;
+    let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
+    validate_publish_preflight(&root, &cfg)?;
+
+    let mut cmd = Command::new("cargo");
+    cmd.arg("package");
+    if allow_dirty {
+        cmd.arg("--allow-dirty");
     }
-
-    #[derive(serde::Deserialize)]
-    struct CargoMetadataPackage {
-        name: String,
-        metadata: serde_json::Value,
+    if no_verify {
+        cmd.arg("--no-verify");
     }
-
-    let metadata: CargoMetadata = serde_json::from_slice(&output.stdout)
-        .map_err(|err| AiviError::Cargo(format!("failed to parse cargo metadata: {err}")))?;
-
-    let package = metadata
-        .packages
-        .iter()
-        .find(|pkg| pkg.name == dep.name())
-        .ok_or_else(|| {
-            AiviError::Cargo(format!(
-                "dependency {} not found in cargo metadata",
-                dep.name()
-            ))
-        })?;
-
-    if !is_aivi_metadata(&package.metadata) {
-        return Err(AiviError::Cargo(format!(
-            "dependency {} is not an AIVI package (missing [package.metadata.aivi])",
-            dep.name()
-        )));
+    cmd.args(cargo_args);
+    let status = cmd.current_dir(&root).status()?;
+    if !status.success() {
+        return Err(AiviError::Cargo("cargo package failed".to_string()));
     }
-
     Ok(())
 }
 
-fn is_aivi_metadata(metadata: &serde_json::Value) -> bool {
-    let Some(aivi) = metadata.get("aivi") else {
-        return false;
-    };
-    let Some(aivi) = aivi.as_object() else {
-        return false;
-    };
-    let language_version = aivi
-        .get("language_version")
-        .and_then(serde_json::Value::as_str);
-    let kind = aivi.get("kind").and_then(serde_json::Value::as_str);
-    language_version.is_some() && matches!(kind, Some("lib" | "bin"))
+fn cmd_publish(args: &[String]) -> Result<(), AiviError> {
+    let mut dry_run = false;
+    let mut allow_dirty = false;
+    let mut no_verify = false;
+    let mut cargo_args = Vec::new();
+
+    let mut saw_sep = false;
+    for arg in args.iter().cloned() {
+        if !saw_sep && arg == "--" {
+            saw_sep = true;
+            continue;
+        }
+        if saw_sep {
+            cargo_args.push(arg);
+            continue;
+        }
+        match arg.as_str() {
+            "--dry-run" => dry_run = true,
+            "--allow-dirty" => allow_dirty = true,
+            "--no-verify" => no_verify = true,
+            _ if arg.starts_with('-') => {
+                return Err(AiviError::InvalidCommand(format!("unknown flag {arg}")))
+            }
+            _ => {
+                return Err(AiviError::InvalidCommand(format!(
+                    "unexpected argument {arg}"
+                )))
+            }
+        }
+    }
+
+    let root = env::current_dir()?;
+    let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
+    validate_publish_preflight(&root, &cfg)?;
+
+    let mut cmd = Command::new("cargo");
+    cmd.arg("publish");
+    if dry_run {
+        cmd.arg("--dry-run");
+    }
+    if allow_dirty {
+        cmd.arg("--allow-dirty");
+    }
+    if no_verify {
+        cmd.arg("--no-verify");
+    }
+    cmd.args(cargo_args);
+    let status = cmd.current_dir(&root).status()?;
+    if !status.success() {
+        return Err(AiviError::Cargo("cargo publish failed".to_string()));
+    }
+    Ok(())
 }
 
 fn install_stdlib_module(root: &Path, spec: &str) -> Result<bool, AiviError> {

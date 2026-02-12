@@ -1,6 +1,6 @@
 use crate::hir::HirProgram;
-use crate::{emit_native_rust_source, emit_native_rust_source_lib, kernel, rust_ir};
 use crate::AiviError;
+use crate::{emit_native_rust_source, emit_native_rust_source_lib, kernel, rust_ir};
 
 /// Legacy backend: embed HIR as JSON and run via `aivi::run_native`.
 pub fn compile_rust(program: HirProgram) -> Result<String, AiviError> {

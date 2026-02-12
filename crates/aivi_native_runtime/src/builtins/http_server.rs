@@ -33,8 +33,7 @@ pub(super) fn build_http_server_record() -> Value {
                             let ctx_for_reply = ctx.clone();
                             let result = tokio::task::spawn_blocking(move || {
                                 let cancel = CancelToken::root();
-                                let mut runtime =
-                                    Runtime::with_cancel(ctx.clone(), cancel);
+                                let mut runtime = Runtime::with_cancel(ctx.clone(), cancel);
                                 let applied = runtime.apply(handler_value, req_value)?;
                                 runtime.run_effect_value(applied)
                             })
@@ -247,8 +246,8 @@ fn server_reply_from_value(
 }
 
 fn response_from_value(value: Value) -> Result<AiviResponse, AiviHttpError> {
-    let record = expect_record(value, "Response must be a record")
-        .map_err(runtime_error_to_http_error)?;
+    let record =
+        expect_record(value, "Response must be a record").map_err(runtime_error_to_http_error)?;
     let status = match record.get("status") {
         Some(Value::Int(value)) => *value,
         _ => {
@@ -297,7 +296,10 @@ fn headers_from_value(values: &[Value]) -> Result<Vec<(String, String)>, AiviHtt
                     Value::Text(text) => text.clone(),
                     other => {
                         return Err(AiviHttpError {
-                            message: format!("header key must be Text, got {}", format_value(other)),
+                            message: format!(
+                                "header key must be Text, got {}",
+                                format_value(other)
+                            ),
                         })
                     }
                 };
@@ -305,7 +307,10 @@ fn headers_from_value(values: &[Value]) -> Result<Vec<(String, String)>, AiviHtt
                     Value::Text(text) => text.clone(),
                     other => {
                         return Err(AiviHttpError {
-                            message: format!("header value must be Text, got {}", format_value(other)),
+                            message: format!(
+                                "header value must be Text, got {}",
+                                format_value(other)
+                            ),
                         })
                     }
                 };
@@ -313,7 +318,10 @@ fn headers_from_value(values: &[Value]) -> Result<Vec<(String, String)>, AiviHtt
             }
             other => {
                 return Err(AiviHttpError {
-                    message: format!("headers must be List (Text, Text), got {}", format_value(other)),
+                    message: format!(
+                        "headers must be List (Text, Text), got {}",
+                        format_value(other)
+                    ),
                 })
             }
         }
@@ -322,7 +330,9 @@ fn headers_from_value(values: &[Value]) -> Result<Vec<(String, String)>, AiviHtt
 }
 
 fn bytes_to_list_value(bytes: Vec<u8>) -> Value {
-    Value::List(Arc::new(bytes.into_iter().map(|b| Value::Int(b as i64)).collect()))
+    Value::List(Arc::new(
+        bytes.into_iter().map(|b| Value::Int(b as i64)).collect(),
+    ))
 }
 
 fn list_value_to_bytes(values: &[Value]) -> Result<Vec<u8>, AiviHttpError> {

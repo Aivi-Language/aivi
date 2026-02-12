@@ -25,10 +25,9 @@ impl std::fmt::Debug for RuntimeError {
         match self {
             RuntimeError::Cancelled => f.debug_tuple("Cancelled").finish(),
             RuntimeError::Message(message) => f.debug_tuple("Message").field(message).finish(),
-            RuntimeError::Error(value) => f
-                .debug_tuple("Error")
-                .field(&format_value(value))
-                .finish(),
+            RuntimeError::Error(value) => {
+                f.debug_tuple("Error").field(&format_value(value)).finish()
+            }
         }
     }
 }
@@ -122,9 +121,8 @@ pub enum EffectValue {
 }
 
 pub struct ResourceValue {
-    pub acquire: Mutex<
-        Option<Box<dyn FnOnce(&mut Runtime) -> Result<(Value, Value), RuntimeError> + Send>>,
-    >,
+    pub acquire:
+        Mutex<Option<Box<dyn FnOnce(&mut Runtime) -> Result<(Value, Value), RuntimeError> + Send>>>,
 }
 
 pub struct ThunkValue {
@@ -379,7 +377,9 @@ impl Runtime {
     ) -> Result<(Value, Value), RuntimeError> {
         let mut guard = resource.acquire.lock().expect("resource acquire lock");
         let Some(acquire_fn) = guard.take() else {
-            return Err(RuntimeError::Message("resource already acquired".to_string()));
+            return Err(RuntimeError::Message(
+                "resource already acquired".to_string(),
+            ));
         };
         drop(guard);
         acquire_fn(self)
@@ -470,9 +470,7 @@ impl Runtime {
         if match_failures > 0 && last_error.is_none() {
             return Err(RuntimeError::Message("non-exhaustive match".to_string()));
         }
-        Err(last_error.unwrap_or_else(|| {
-            RuntimeError::Message("no matching clause".to_string())
-        }))
+        Err(last_error.unwrap_or_else(|| RuntimeError::Message("no matching clause".to_string())))
     }
 
     pub fn rng_next_u64(&mut self) -> u64 {
@@ -601,11 +599,19 @@ pub fn format_value(value: &Value) -> String {
         Value::Deque(deque) => format!("<deque:{}>", deque.len()),
         Value::Heap(heap) => format!("<heap:{}>", heap.len()),
         Value::List(items) => {
-            let inner = items.iter().map(format_value).collect::<Vec<_>>().join(", ");
+            let inner = items
+                .iter()
+                .map(format_value)
+                .collect::<Vec<_>>()
+                .join(", ");
             format!("[{}]", inner)
         }
         Value::Tuple(items) => {
-            let inner = items.iter().map(format_value).collect::<Vec<_>>().join(", ");
+            let inner = items
+                .iter()
+                .map(format_value)
+                .collect::<Vec<_>>()
+                .join(", ");
             format!("({})", inner)
         }
         Value::Record(map) => {

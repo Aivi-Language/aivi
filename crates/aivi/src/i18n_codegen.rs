@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, HashSet};
 
-use crate::i18n::{escape_sigil_string_body, parse_locale_tag, parse_message_template, validate_key_text};
+use crate::i18n::{
+    escape_sigil_string_body, parse_locale_tag, parse_message_template, validate_key_text,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PropertiesEntry {
@@ -16,11 +18,11 @@ pub fn parse_properties_catalog(text: &str) -> Result<Vec<PropertiesEntry>, Stri
         if line.is_empty() || line.starts_with('#') {
             continue;
         }
-        let (k, v) = split_kv(line)
-            .ok_or_else(|| format!("line {line_no}: expected 'key = value'"))?;
+        let (k, v) =
+            split_kv(line).ok_or_else(|| format!("line {line_no}: expected 'key = value'"))?;
         let key = k.trim().to_string();
-        let message = unescape_properties_value(v.trim())
-            .map_err(|msg| format!("line {line_no}: {msg}"))?;
+        let message =
+            unescape_properties_value(v.trim()).map_err(|msg| format!("line {line_no}: {msg}"))?;
 
         validate_key_text(&key).map_err(|msg| format!("line {line_no}: {msg}"))?;
         parse_message_template(&message).map_err(|msg| format!("line {line_no}: {msg}"))?;
@@ -84,7 +86,9 @@ pub fn generate_i18n_module_from_properties(
     out.push_str("key : KeyId -> { tag: Text, body: Text, flags: Text }\n");
     out.push_str("key k = { tag: \"k\", body: keyText k, flags: \"\" }\n\n");
 
-    out.push_str("locale : { language: Text, region: Option Text, variants: List Text, tag: Text }\n");
+    out.push_str(
+        "locale : { language: Text, region: Option Text, variants: List Text, tag: Text }\n",
+    );
     out.push_str("locale = {\n");
     out.push_str(&format!("  language: \"{}\"\n", locale.language));
     out.push_str("  region: ");

@@ -185,9 +185,17 @@ pub struct RustIrMatchArm {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum RustIrPattern {
-    Wildcard { id: u32 },
-    Var { id: u32, name: String },
-    Literal { id: u32, value: RustIrLiteral },
+    Wildcard {
+        id: u32,
+    },
+    Var {
+        id: u32,
+        name: String,
+    },
+    Literal {
+        id: u32,
+        value: RustIrLiteral,
+    },
     Constructor {
         id: u32,
         name: String,
@@ -218,7 +226,11 @@ pub struct RustIrRecordPatternField {
 pub enum RustIrLiteral {
     Number(String),
     String(String),
-    Sigil { tag: String, body: String, flags: String },
+    Sigil {
+        tag: String,
+        body: String,
+        flags: String,
+    },
     Bool(bool),
     DateTime(String),
 }
@@ -521,7 +533,9 @@ fn lower_path_segment(
                 }));
             }
 
-            Ok(RustIrPathSegment::IndexValue(lower_expr(expr, globals, locals)?))
+            Ok(RustIrPathSegment::IndexValue(lower_expr(
+                expr, globals, locals,
+            )?))
         }
     }
 }
@@ -630,7 +644,9 @@ fn collect_unbound_vars_in_kernel_expr(
             collect_unbound_vars_in_kernel_expr(base, globals, locals, bound, out);
             collect_unbound_vars_in_kernel_expr(index, globals, locals, bound, out);
         }
-        KernelExpr::Match { scrutinee, arms, .. } => {
+        KernelExpr::Match {
+            scrutinee, arms, ..
+        } => {
             collect_unbound_vars_in_kernel_expr(scrutinee, globals, locals, bound, out);
             for arm in arms {
                 let mut binders = Vec::new();
@@ -645,7 +661,12 @@ fn collect_unbound_vars_in_kernel_expr(
                 }
             }
         }
-        KernelExpr::If { cond, then_branch, else_branch, .. } => {
+        KernelExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
             collect_unbound_vars_in_kernel_expr(cond, globals, locals, bound, out);
             collect_unbound_vars_in_kernel_expr(then_branch, globals, locals, bound, out);
             collect_unbound_vars_in_kernel_expr(else_branch, globals, locals, bound, out);
@@ -729,7 +750,11 @@ fn rewrite_implicit_field_vars(
                 if unbound.contains(&param) {
                     let mut unbound2 = unbound.clone();
                     unbound2.remove(&param);
-                    Box::new(rewrite_implicit_field_vars(*body, implicit_param, &unbound2))
+                    Box::new(rewrite_implicit_field_vars(
+                        *body,
+                        implicit_param,
+                        &unbound2,
+                    ))
                 } else {
                     Box::new(rewrite_implicit_field_vars(*body, implicit_param, unbound))
                 }
@@ -771,18 +796,17 @@ fn rewrite_implicit_field_vars(
                 .into_iter()
                 .map(|f| crate::kernel::KernelRecordField {
                     spread: f.spread,
-                    path: f.path
+                    path: f
+                        .path
                         .into_iter()
                         .map(|seg| match seg {
                             crate::kernel::KernelPathSegment::Field(name) => {
                                 crate::kernel::KernelPathSegment::Field(name)
                             }
                             crate::kernel::KernelPathSegment::Index(expr) => {
-                                crate::kernel::KernelPathSegment::Index(rewrite_implicit_field_vars(
-                                    expr,
-                                    implicit_param,
-                                    unbound,
-                                ))
+                                crate::kernel::KernelPathSegment::Index(
+                                    rewrite_implicit_field_vars(expr, implicit_param, unbound),
+                                )
                             }
                         })
                         .collect(),
@@ -792,23 +816,26 @@ fn rewrite_implicit_field_vars(
         },
         KernelExpr::Patch { id, target, fields } => KernelExpr::Patch {
             id,
-            target: Box::new(rewrite_implicit_field_vars(*target, implicit_param, unbound)),
+            target: Box::new(rewrite_implicit_field_vars(
+                *target,
+                implicit_param,
+                unbound,
+            )),
             fields: fields
                 .into_iter()
                 .map(|f| crate::kernel::KernelRecordField {
                     spread: f.spread,
-                    path: f.path
+                    path: f
+                        .path
                         .into_iter()
                         .map(|seg| match seg {
                             crate::kernel::KernelPathSegment::Field(name) => {
                                 crate::kernel::KernelPathSegment::Field(name)
                             }
                             crate::kernel::KernelPathSegment::Index(expr) => {
-                                crate::kernel::KernelPathSegment::Index(rewrite_implicit_field_vars(
-                                    expr,
-                                    implicit_param,
-                                    unbound,
-                                ))
+                                crate::kernel::KernelPathSegment::Index(
+                                    rewrite_implicit_field_vars(expr, implicit_param, unbound),
+                                )
                             }
                         })
                         .collect(),
@@ -826,52 +853,94 @@ fn rewrite_implicit_field_vars(
             base: Box::new(rewrite_implicit_field_vars(*base, implicit_param, unbound)),
             index: Box::new(rewrite_implicit_field_vars(*index, implicit_param, unbound)),
         },
-        KernelExpr::Match { id, scrutinee, arms } => KernelExpr::Match {
+        KernelExpr::Match {
             id,
-            scrutinee: Box::new(rewrite_implicit_field_vars(*scrutinee, implicit_param, unbound)),
+            scrutinee,
+            arms,
+        } => KernelExpr::Match {
+            id,
+            scrutinee: Box::new(rewrite_implicit_field_vars(
+                *scrutinee,
+                implicit_param,
+                unbound,
+            )),
             arms: arms
                 .into_iter()
                 .map(|arm| crate::kernel::KernelMatchArm {
                     pattern: arm.pattern,
-                    guard: arm.guard.map(|g| rewrite_implicit_field_vars(g, implicit_param, unbound)),
+                    guard: arm
+                        .guard
+                        .map(|g| rewrite_implicit_field_vars(g, implicit_param, unbound)),
                     body: rewrite_implicit_field_vars(arm.body, implicit_param, unbound),
                 })
                 .collect(),
         },
-        KernelExpr::If { id, cond, then_branch, else_branch } => KernelExpr::If {
+        KernelExpr::If {
+            id,
+            cond,
+            then_branch,
+            else_branch,
+        } => KernelExpr::If {
             id,
             cond: Box::new(rewrite_implicit_field_vars(*cond, implicit_param, unbound)),
-            then_branch: Box::new(rewrite_implicit_field_vars(*then_branch, implicit_param, unbound)),
-            else_branch: Box::new(rewrite_implicit_field_vars(*else_branch, implicit_param, unbound)),
+            then_branch: Box::new(rewrite_implicit_field_vars(
+                *then_branch,
+                implicit_param,
+                unbound,
+            )),
+            else_branch: Box::new(rewrite_implicit_field_vars(
+                *else_branch,
+                implicit_param,
+                unbound,
+            )),
         },
-        KernelExpr::Binary { id, op, left, right } => KernelExpr::Binary {
+        KernelExpr::Binary {
+            id,
+            op,
+            left,
+            right,
+        } => KernelExpr::Binary {
             id,
             op,
             left: Box::new(rewrite_implicit_field_vars(*left, implicit_param, unbound)),
             right: Box::new(rewrite_implicit_field_vars(*right, implicit_param, unbound)),
         },
-        KernelExpr::Block { id, block_kind, items } => KernelExpr::Block {
+        KernelExpr::Block {
+            id,
+            block_kind,
+            items,
+        } => KernelExpr::Block {
             id,
             block_kind,
             items: items
                 .into_iter()
                 .map(|item| match item {
-                    crate::kernel::KernelBlockItem::Bind { pattern, expr } => crate::kernel::KernelBlockItem::Bind {
-                        pattern,
-                        expr: rewrite_implicit_field_vars(expr, implicit_param, unbound),
-                    },
-                    crate::kernel::KernelBlockItem::Filter { expr } => crate::kernel::KernelBlockItem::Filter {
-                        expr: rewrite_implicit_field_vars(expr, implicit_param, unbound),
-                    },
-                    crate::kernel::KernelBlockItem::Yield { expr } => crate::kernel::KernelBlockItem::Yield {
-                        expr: rewrite_implicit_field_vars(expr, implicit_param, unbound),
-                    },
-                    crate::kernel::KernelBlockItem::Recurse { expr } => crate::kernel::KernelBlockItem::Recurse {
-                        expr: rewrite_implicit_field_vars(expr, implicit_param, unbound),
-                    },
-                    crate::kernel::KernelBlockItem::Expr { expr } => crate::kernel::KernelBlockItem::Expr {
-                        expr: rewrite_implicit_field_vars(expr, implicit_param, unbound),
-                    },
+                    crate::kernel::KernelBlockItem::Bind { pattern, expr } => {
+                        crate::kernel::KernelBlockItem::Bind {
+                            pattern,
+                            expr: rewrite_implicit_field_vars(expr, implicit_param, unbound),
+                        }
+                    }
+                    crate::kernel::KernelBlockItem::Filter { expr } => {
+                        crate::kernel::KernelBlockItem::Filter {
+                            expr: rewrite_implicit_field_vars(expr, implicit_param, unbound),
+                        }
+                    }
+                    crate::kernel::KernelBlockItem::Yield { expr } => {
+                        crate::kernel::KernelBlockItem::Yield {
+                            expr: rewrite_implicit_field_vars(expr, implicit_param, unbound),
+                        }
+                    }
+                    crate::kernel::KernelBlockItem::Recurse { expr } => {
+                        crate::kernel::KernelBlockItem::Recurse {
+                            expr: rewrite_implicit_field_vars(expr, implicit_param, unbound),
+                        }
+                    }
+                    crate::kernel::KernelBlockItem::Expr { expr } => {
+                        crate::kernel::KernelBlockItem::Expr {
+                            expr: rewrite_implicit_field_vars(expr, implicit_param, unbound),
+                        }
+                    }
                 })
                 .collect(),
         },
@@ -902,10 +971,7 @@ fn lower_block_item(
             for name in binders {
                 locals.push(name);
             }
-            Ok(RustIrBlockItem::Bind {
-                pattern: pat,
-                expr,
-            })
+            Ok(RustIrBlockItem::Bind { pattern: pat, expr })
         }
         KernelBlockItem::Filter { expr } => Ok(RustIrBlockItem::Filter {
             expr: lower_expr(expr, globals, locals)?,

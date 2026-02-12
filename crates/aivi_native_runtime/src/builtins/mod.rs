@@ -6,6 +6,7 @@ mod core;
 mod crypto;
 mod database;
 mod graph;
+mod http_server;
 mod i18n;
 mod linalg;
 mod log;
@@ -19,7 +20,6 @@ mod system;
 mod text;
 mod url_http;
 mod util;
-mod http_server;
 
 use std::collections::HashMap;
 use std::sync::OnceLock;

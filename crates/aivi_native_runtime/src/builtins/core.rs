@@ -12,8 +12,8 @@ use super::concurrency::{build_channel_record, build_concurrent_record};
 use super::crypto::build_crypto_record;
 use super::database::build_database_record;
 use super::graph::build_graph_record;
-use super::i18n::build_i18n_record;
 use super::http_server::build_http_server_record;
+use super::i18n::build_i18n_record;
 use super::linalg::build_linalg_record;
 use super::log::build_log_record;
 use super::math::build_math_record;
@@ -77,12 +77,12 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
                     }
                     Ok(Value::List(Arc::new(out)))
                 }
-                Value::Constructor { name, args } if name == "None" && args.is_empty() => Ok(
-                    Value::Constructor {
+                Value::Constructor { name, args } if name == "None" && args.is_empty() => {
+                    Ok(Value::Constructor {
                         name: "None".to_string(),
                         args: Vec::new(),
-                    },
-                ),
+                    })
+                }
                 Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
                     let mapped = runtime.apply(func, args[0].clone())?;
                     Ok(Value::Constructor {
@@ -97,12 +97,12 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
                         args: vec![mapped],
                     })
                 }
-                Value::Constructor { name, args } if name == "Err" && args.len() == 1 => Ok(
-                    Value::Constructor {
+                Value::Constructor { name, args } if name == "Err" && args.len() == 1 => {
+                    Ok(Value::Constructor {
                         name: "Err".to_string(),
                         args,
-                    },
-                ),
+                    })
+                }
                 other => Err(RuntimeError::Message(format!(
                     "map expects List/Option/Result, got {}",
                     format_value(&other)
@@ -133,24 +133,24 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
                     }
                     Ok(Value::List(Arc::new(out)))
                 }
-                Value::Constructor { name, args } if name == "None" && args.is_empty() => Ok(
-                    Value::Constructor {
+                Value::Constructor { name, args } if name == "None" && args.is_empty() => {
+                    Ok(Value::Constructor {
                         name: "None".to_string(),
                         args: Vec::new(),
-                    },
-                ),
+                    })
+                }
                 Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
                     runtime.apply(func, args[0].clone())
                 }
                 Value::Constructor { name, args } if name == "Ok" && args.len() == 1 => {
                     runtime.apply(func, args[0].clone())
                 }
-                Value::Constructor { name, args } if name == "Err" && args.len() == 1 => Ok(
-                    Value::Constructor {
+                Value::Constructor { name, args } if name == "Err" && args.len() == 1 => {
+                    Ok(Value::Constructor {
                         name: "Err".to_string(),
                         args,
-                    },
-                ),
+                    })
+                }
                 other => Err(RuntimeError::Message(format!(
                     "chain expects List/Option/Result, got {}",
                     format_value(&other)
@@ -225,17 +225,19 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
         builtin("attempt", 1, |mut args, _| {
             let effect = args.remove(0);
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |runtime| match runtime.run_effect_value(effect.clone()) {
-                    Ok(value) => Ok(Value::Constructor {
-                        name: "Ok".to_string(),
-                        args: vec![value],
-                    }),
-                    Err(RuntimeError::Error(value)) => Ok(Value::Constructor {
-                        name: "Err".to_string(),
-                        args: vec![value],
-                    }),
-                    Err(err) => Err(err),
-                }),
+                func: Arc::new(
+                    move |runtime| match runtime.run_effect_value(effect.clone()) {
+                        Ok(value) => Ok(Value::Constructor {
+                            name: "Ok".to_string(),
+                            args: vec![value],
+                        }),
+                        Err(RuntimeError::Error(value)) => Ok(Value::Constructor {
+                            name: "Err".to_string(),
+                            args: vec![value],
+                        }),
+                        Err(err) => Err(err),
+                    },
+                ),
             };
             Ok(Value::Effect(Arc::new(effect)))
         }),
@@ -303,7 +305,10 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
     env.insert("rational".to_string(), build_rational_record());
     env.insert("decimal".to_string(), build_decimal_record());
     env.insert("url".to_string(), build_url_record());
-    env.insert("http".to_string(), build_http_client_record(HttpClientMode::Http));
+    env.insert(
+        "http".to_string(),
+        build_http_client_record(HttpClientMode::Http),
+    );
     env.insert(
         "https".to_string(),
         build_http_client_record(HttpClientMode::Https),

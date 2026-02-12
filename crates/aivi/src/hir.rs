@@ -881,10 +881,7 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
             span,
         },
         Expr::Tuple { items, span } => Expr::Tuple {
-            items: items
-                .into_iter()
-                .map(desugar_placeholder_lambdas)
-                .collect(),
+            items: items.into_iter().map(desugar_placeholder_lambdas).collect(),
             span,
         },
         Expr::Record { fields, span } => Expr::Record {
@@ -944,29 +941,17 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
             field,
             span,
         },
-        Expr::Index {
-            base,
-            index,
-            span,
-        } => Expr::Index {
+        Expr::Index { base, index, span } => Expr::Index {
             base: Box::new(desugar_placeholder_lambdas(*base)),
             index: Box::new(desugar_placeholder_lambdas(*index)),
             span,
         },
-        Expr::Call {
-            func,
-            args,
-            span,
-        } => Expr::Call {
+        Expr::Call { func, args, span } => Expr::Call {
             func: Box::new(desugar_placeholder_lambdas(*func)),
             args: args.into_iter().map(desugar_placeholder_lambdas).collect(),
             span,
         },
-        Expr::Lambda {
-            params,
-            body,
-            span,
-        } => Expr::Lambda {
+        Expr::Lambda { params, body, span } => Expr::Lambda {
             params,
             body: Box::new(desugar_placeholder_lambdas(*body)),
             span,
@@ -1080,7 +1065,12 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
     Expr::Lambda {
         params: params
             .into_iter()
-            .map(|name| Pattern::Ident(crate::surface::SpannedName { name, span: span.clone() }))
+            .map(|name| {
+                Pattern::Ident(crate::surface::SpannedName {
+                    name,
+                    span: span.clone(),
+                })
+            })
             .collect(),
         body: Box::new(rewritten),
         span,

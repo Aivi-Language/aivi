@@ -22,7 +22,9 @@ mod values;
 
 use self::builtins::register_builtins;
 use self::environment::{Env, RuntimeContext};
-use self::values::{BuiltinImpl, BuiltinValue, ClosureValue, EffectValue, ResourceValue, ThunkValue, Value};
+use self::values::{
+    BuiltinImpl, BuiltinValue, ClosureValue, EffectValue, ResourceValue, ThunkValue, Value,
+};
 
 #[derive(Debug)]
 struct CancelToken {
@@ -431,9 +433,7 @@ impl Runtime {
                         items: Arc::new(items.clone()),
                     })))
                 }
-                crate::hir::HirBlockKind::Generate => {
-                    self.eval_generate_block(items, env)
-                }
+                crate::hir::HirBlockKind::Generate => self.eval_generate_block(items, env),
             },
             HirExpr::Raw { .. } => Err(RuntimeError::Message(
                 "raw expressions are not supported in native runtime yet".to_string(),
@@ -592,11 +592,16 @@ impl Runtime {
                     let source_items = self.generator_to_list(source)?;
                     // For each element from the source, bind it to the pattern
                     // and process the rest of the items in this scope.
-                    let rest = &items[items.iter().position(|i| std::ptr::eq(i, item)).unwrap() + 1..];
+                    let rest =
+                        &items[items.iter().position(|i| std::ptr::eq(i, item)).unwrap() + 1..];
                     for val in source_items {
                         let bind_env = Env::new(Some(local_env.clone()));
-                        let bindings = collect_pattern_bindings(pattern, &val)
-                            .ok_or_else(|| RuntimeError::Message("pattern match failed in generator bind".to_string()))?;
+                        let bindings =
+                            collect_pattern_bindings(pattern, &val).ok_or_else(|| {
+                                RuntimeError::Message(
+                                    "pattern match failed in generator bind".to_string(),
+                                )
+                            })?;
                         for (name, bound_val) in bindings {
                             bind_env.set(name, bound_val);
                         }
@@ -636,7 +641,11 @@ impl Runtime {
                     let acc = args.pop().unwrap();
                     let mut list = match acc {
                         Value::List(items) => (*items).clone(),
-                        _ => return Err(RuntimeError::Message("expected list accumulator".to_string())),
+                        _ => {
+                            return Err(RuntimeError::Message(
+                                "expected list accumulator".to_string(),
+                            ))
+                        }
                     };
                     list.push(x);
                     Ok(Value::List(Arc::new(list)))
@@ -649,7 +658,9 @@ impl Runtime {
         let result = self.apply(with_step, init)?;
         match result {
             Value::List(items) => Ok((*items).clone()),
-            _ => Err(RuntimeError::Message("generator fold did not produce a list".to_string())),
+            _ => Err(RuntimeError::Message(
+                "generator fold did not produce a list".to_string(),
+            )),
         }
     }
 

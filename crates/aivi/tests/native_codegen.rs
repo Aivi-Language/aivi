@@ -1,5 +1,5 @@
-use std::process::Command;
 use std::path::PathBuf;
+use std::process::Command;
 
 use aivi::{compile_rust_native, desugar_target};
 use tempfile::tempdir;

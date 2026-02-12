@@ -91,12 +91,12 @@ pub(crate) fn register_builtins(env: &Env) {
                         args: vec![mapped],
                     })
                 }
-                Value::Constructor { name, args } if name == "Err" && args.len() == 1 => Ok(
-                    Value::Constructor {
+                Value::Constructor { name, args } if name == "Err" && args.len() == 1 => {
+                    Ok(Value::Constructor {
                         name: "Err".to_string(),
                         args,
-                    },
-                ),
+                    })
+                }
                 other => Err(RuntimeError::Message(format!(
                     "map expects List/Option/Result, got {}",
                     format_value(&other)
@@ -127,24 +127,24 @@ pub(crate) fn register_builtins(env: &Env) {
                     }
                     Ok(Value::List(Arc::new(out)))
                 }
-                Value::Constructor { name, args } if name == "None" && args.is_empty() => Ok(
-                    Value::Constructor {
+                Value::Constructor { name, args } if name == "None" && args.is_empty() => {
+                    Ok(Value::Constructor {
                         name: "None".to_string(),
                         args: Vec::new(),
-                    },
-                ),
+                    })
+                }
                 Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
                     runtime.apply(func, args[0].clone())
                 }
                 Value::Constructor { name, args } if name == "Ok" && args.len() == 1 => {
                     runtime.apply(func, args[0].clone())
                 }
-                Value::Constructor { name, args } if name == "Err" && args.len() == 1 => Ok(
-                    Value::Constructor {
+                Value::Constructor { name, args } if name == "Err" && args.len() == 1 => {
+                    Ok(Value::Constructor {
                         name: "Err".to_string(),
                         args,
-                    },
-                ),
+                    })
+                }
                 other => Err(RuntimeError::Message(format!(
                     "chain expects List/Option/Result, got {}",
                     format_value(&other)

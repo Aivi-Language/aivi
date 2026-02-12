@@ -31,4 +31,3 @@ class Monad (M *) =
         "unexpected type diagnostics: {type_diags:#?}"
     );
 }
-

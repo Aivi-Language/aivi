@@ -74,6 +74,8 @@ The `aivi` CLI can scaffold and build Cargo-backed AIVI projects (generated Rust
 - `cd my-app && aivi build`
 - `cd my-app && aivi run`
 - `cd my-app && aivi install aivi-foo@^0.1`
+- `cd my-app && aivi package`
+- `cd my-app && aivi publish --dry-run`
 
 It also has compiler-introspection and a direct `rustc` path:
 

@@ -277,7 +277,9 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
     out.push_str("                        other => return Err(format!(\"expected Bool predicate, got {}\", format_value(&other))),\n");
     out.push_str("                    };\n");
     out.push_str("                    if keep {\n");
-    out.push_str("                        out_items.push(patch_path(item, &path[1..], updater.clone())?);\n");
+    out.push_str(
+        "                        out_items.push(patch_path(item, &path[1..], updater.clone())?);\n",
+    );
     out.push_str("                    } else {\n");
     out.push_str("                        out_items.push(item);\n");
     out.push_str("                    }\n");
@@ -537,7 +539,9 @@ fn emit_builtin_call(
     indent: usize,
 ) -> Result<String, AiviError> {
     match builtin {
-        "Unit" | "True" | "False" => Err(AiviError::Codegen(format!("{builtin:?} is not callable"))),
+        "Unit" | "True" | "False" => {
+            Err(AiviError::Codegen(format!("{builtin:?} is not callable")))
+        }
         "pure" => {
             if args.len() != 1 {
                 return Err(AiviError::Codegen("pure expects 1 arg".to_string()));

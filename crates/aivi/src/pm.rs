@@ -265,6 +265,30 @@ impl CargoDepSpec {
         })
     }
 
+    pub fn parse_in(root: &Path, spec: &str) -> Result<Self, CargoDepSpecParseError> {
+        if let Some(path) = spec.strip_prefix("path:") {
+            let path = path.trim();
+            if path.is_empty() {
+                return Err(CargoDepSpecParseError(
+                    "path: spec must include a path".to_string(),
+                ));
+            }
+            let package_name = read_package_name_for_path_dep(root, Path::new(path))
+                .ok()
+                .flatten()
+                .or_else(|| infer_name_from_path(Path::new(path)))
+                .ok_or_else(|| {
+                    CargoDepSpecParseError("failed to infer crate name from path".to_string())
+                })?;
+            return Ok(Self::Path {
+                name: package_name,
+                path: path.to_string(),
+            });
+        }
+
+        Self::parse(spec)
+    }
+
     pub fn name(&self) -> &str {
         match self {
             CargoDepSpec::Registry { name, .. } => name,
@@ -303,6 +327,35 @@ fn infer_name_from_git_url(url: &str) -> Option<String> {
 fn infer_name_from_path(path: &Path) -> Option<String> {
     let base = path.file_name().and_then(OsStr::to_str)?;
     (!base.is_empty()).then(|| base.to_string())
+}
+
+fn read_package_name_for_path_dep(
+    root: &Path,
+    path: &Path,
+) -> Result<Option<String>, CargoDepSpecParseError> {
+    let resolved = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        root.join(path)
+    };
+    let cargo_toml_path = if resolved.file_name() == Some(OsStr::new("Cargo.toml")) {
+        resolved
+    } else {
+        resolved.join("Cargo.toml")
+    };
+    let text = match std::fs::read_to_string(&cargo_toml_path) {
+        Ok(text) => text,
+        Err(_) => return Ok(None),
+    };
+    let doc = match text.parse::<DocumentMut>() {
+        Ok(doc) => doc,
+        Err(_) => return Ok(None),
+    };
+    Ok(doc
+        .get("package")
+        .and_then(|t| t.get("name"))
+        .and_then(|i| i.as_str())
+        .map(|s| s.to_string()))
 }
 
 pub struct CargoManifestEdits {
@@ -384,4 +437,212 @@ fn collect_aivi_sources_inner(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), 
         }
     }
     Ok(())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AiviCargoMetadata {
+    pub language_version: String,
+    pub kind: ProjectKind,
+    pub entry: Option<String>,
+}
+
+pub fn parse_aivi_cargo_metadata(value: &serde_json::Value) -> Option<AiviCargoMetadata> {
+    let aivi = value.get("aivi")?.as_object()?;
+    let language_version = aivi
+        .get("language_version")
+        .and_then(serde_json::Value::as_str)?
+        .to_string();
+    let kind = match aivi.get("kind").and_then(serde_json::Value::as_str)? {
+        "bin" => ProjectKind::Bin,
+        "lib" => ProjectKind::Lib,
+        _ => return None,
+    };
+    let entry = aivi
+        .get("entry")
+        .and_then(serde_json::Value::as_str)
+        .map(|s| s.to_string());
+    Some(AiviCargoMetadata {
+        language_version,
+        kind,
+        entry,
+    })
+}
+
+pub fn ensure_aivi_dependency(
+    root: &Path,
+    dep: &CargoDepSpec,
+    required_language_version: Option<&str>,
+) -> Result<(), AiviError> {
+    let output = std::process::Command::new("cargo")
+        .arg("metadata")
+        .arg("--format-version")
+        .arg("1")
+        .current_dir(root)
+        .output()?;
+    if !output.status.success() {
+        return Err(AiviError::Cargo(format!(
+            "cargo metadata failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+
+    #[derive(serde::Deserialize)]
+    struct CargoMetadata {
+        packages: Vec<CargoMetadataPackage>,
+    }
+
+    #[derive(serde::Deserialize)]
+    struct CargoMetadataPackage {
+        name: String,
+        manifest_path: String,
+        metadata: serde_json::Value,
+    }
+
+    let metadata: CargoMetadata = serde_json::from_slice(&output.stdout)
+        .map_err(|err| AiviError::Cargo(format!("failed to parse cargo metadata: {err}")))?;
+
+    let package = match dep {
+        CargoDepSpec::Path { path, .. } => {
+            let dep_dir = Path::new(path);
+            let resolved = if dep_dir.is_absolute() {
+                dep_dir.to_path_buf()
+            } else {
+                root.join(dep_dir)
+            };
+            let manifest = if resolved.file_name() == Some(OsStr::new("Cargo.toml")) {
+                resolved
+            } else {
+                resolved.join("Cargo.toml")
+            };
+            let expected = manifest.canonicalize().ok();
+            metadata.packages.iter().find(|pkg| {
+                if let Some(expected) = &expected {
+                    let got = Path::new(&pkg.manifest_path).canonicalize().ok();
+                    got.as_ref() == Some(expected)
+                } else {
+                    Path::new(&pkg.manifest_path).ends_with(&manifest)
+                }
+            })
+        }
+        CargoDepSpec::Registry { name, .. } | CargoDepSpec::Git { name, .. } => {
+            metadata.packages.iter().find(|pkg| pkg.name == *name)
+        }
+    }
+    .ok_or_else(|| {
+        AiviError::Cargo(format!(
+            "dependency {} not found in cargo metadata",
+            dep.name()
+        ))
+    })?;
+
+    let aivi = parse_aivi_cargo_metadata(&package.metadata).ok_or_else(|| {
+        AiviError::Cargo(format!(
+            "dependency {} is not an AIVI package (missing [package.metadata.aivi])",
+            dep.name()
+        ))
+    })?;
+
+    if aivi.kind != ProjectKind::Lib {
+        return Err(AiviError::Cargo(format!(
+            "dependency {} is an AIVI {} package; dependencies must be kind=\"lib\"",
+            dep.name(),
+            match aivi.kind {
+                ProjectKind::Bin => "bin",
+                ProjectKind::Lib => "lib",
+            }
+        )));
+    }
+
+    if let Some(required) = required_language_version {
+        if aivi.language_version != required {
+            return Err(AiviError::Cargo(format!(
+                "dependency {} requires AIVI language_version {}, but project uses {}",
+                dep.name(),
+                aivi.language_version,
+                required
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+pub fn validate_publish_preflight(project_root: &Path, cfg: &AiviToml) -> Result<(), AiviError> {
+    let aivi_toml_path = project_root.join("aivi.toml");
+    let cargo_toml_path = project_root.join("Cargo.toml");
+    if !aivi_toml_path.exists() || !cargo_toml_path.exists() {
+        return Err(AiviError::Config(
+            "publish expects a directory containing aivi.toml and Cargo.toml".to_string(),
+        ));
+    }
+
+    let cargo_text = std::fs::read_to_string(&cargo_toml_path)?;
+    let doc = cargo_text
+        .parse::<DocumentMut>()
+        .map_err(|err| AiviError::Cargo(format!("failed to parse Cargo.toml: {err}")))?;
+
+    let aivi = doc
+        .get("package")
+        .and_then(|p| p.get("metadata"))
+        .and_then(|m| m.get("aivi"))
+        .and_then(|t| t.as_table())
+        .ok_or_else(|| {
+            AiviError::Cargo(
+                "missing [package.metadata.aivi] in Cargo.toml (required for AIVI packages)"
+                    .to_string(),
+            )
+        })?;
+
+    let language_version = aivi
+        .get("language_version")
+        .and_then(|i| i.as_str())
+        .ok_or_else(|| {
+            AiviError::Cargo("missing [package.metadata.aivi].language_version".to_string())
+        })?;
+    let kind = aivi
+        .get("kind")
+        .and_then(|i| i.as_str())
+        .ok_or_else(|| AiviError::Cargo("missing [package.metadata.aivi].kind".to_string()))?;
+    let entry = aivi.get("entry").and_then(|i| i.as_str());
+
+    let expected_kind = match cfg.project.kind {
+        ProjectKind::Bin => "bin",
+        ProjectKind::Lib => "lib",
+    };
+    if kind != expected_kind {
+        return Err(AiviError::Cargo(format!(
+            "Cargo.toml [package.metadata.aivi].kind is {kind}, but aivi.toml project.kind is {expected_kind}"
+        )));
+    }
+
+    if let Some(required) = cfg.project.language_version.as_deref() {
+        if language_version != required {
+            return Err(AiviError::Cargo(format!(
+                "Cargo.toml [package.metadata.aivi].language_version is {language_version}, but aivi.toml project.language_version is {required}"
+            )));
+        }
+    }
+
+    let expected_entry = expected_cargo_entry_for_project(&cfg.project.entry);
+    let Some(entry) = entry else {
+        return Err(AiviError::Cargo(
+            "missing [package.metadata.aivi].entry".to_string(),
+        ));
+    };
+    if entry != expected_entry {
+        return Err(AiviError::Cargo(format!(
+            "Cargo.toml [package.metadata.aivi].entry is {entry}, expected {expected_entry}"
+        )));
+    }
+
+    Ok(())
+}
+
+fn expected_cargo_entry_for_project(entry: &str) -> String {
+    let entry_path = Path::new(entry);
+    if entry_path.components().count() == 1 {
+        format!("src/{entry}")
+    } else {
+        entry.to_string()
+    }
 }

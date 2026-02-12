@@ -9,17 +9,15 @@ use tower_lsp::lsp_types::request::{
 };
 use tower_lsp::lsp_types::{
     CodeActionOrCommand, CodeActionParams, CompletionParams, CompletionResponse,
-    DeclarationCapability, DidChangeConfigurationParams, DocumentFormattingParams,
-    DocumentRangeFormattingParams, DocumentSymbolParams, DocumentSymbolResponse,
-    DidChangeWatchedFilesParams, FileChangeType, GotoDefinitionParams, GotoDefinitionResponse,
-    Hover, HoverParams, HoverProviderCapability, ImplementationProviderCapability,
-    InitializeParams, InitializeResult, InitializedParams, Location, OneOf, ReferenceParams,
-    RenameParams, SemanticTokensFullOptions,
-    SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
+    DeclarationCapability, DidChangeConfigurationParams, DidChangeWatchedFilesParams,
+    DocumentFormattingParams, DocumentRangeFormattingParams, DocumentSymbolParams,
+    DocumentSymbolResponse, FileChangeType, GotoDefinitionParams, GotoDefinitionResponse, Hover,
+    HoverParams, HoverProviderCapability, ImplementationProviderCapability, InitializeParams,
+    InitializeResult, InitializedParams, Location, OneOf, ReferenceParams, RenameParams,
+    SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
     SemanticTokensServerCapabilities, ServerCapabilities, SignatureHelp, SignatureHelpOptions,
     SignatureHelpParams, TextDocumentPositionParams, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextEdit, WorkspaceEdit,
-    Url,
+    TextDocumentSyncKind, TextEdit, Url, WorkspaceEdit,
 };
 use tower_lsp::{LanguageServer, LspService, Server};
 

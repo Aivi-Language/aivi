@@ -30,15 +30,17 @@ aivi init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--forc
 Installs a dependency into the current project.
 
 ```bash
-aivi install <spec> [--require-aivi] [--no-fetch]
+aivi install <spec> [--no-fetch]
 ```
 
-- `<spec>`: The dependency specification. clear
+- `<spec>`: The dependency specification.
   - `name`: Installs the latest version from the registry.
   - `name@version`: Installs a specific version.
   - `git+https://github.com/user/repo`: Installs from a Git repository.
   - `path:../local-crate`: Installs from a local path.
-- `--require-aivi`: Ensures the installed dependency is a valid Aivi package.
+- Validation: installs are strict by default. The dependency must declare
+  `[package.metadata.aivi]` with `language_version` and `kind = "lib"`. If the
+  project declares `language_version` in `aivi.toml`, it must match.
 - `--no-fetch`: Updates `Cargo.toml` but skips running `cargo fetch`.
 
 #### `search`
@@ -48,6 +50,33 @@ Searches for Aivi packages in the registry.
 ```bash
 aivi search <query>
 ```
+
+#### `package`
+
+Packages the current project using Cargo (creates a `.crate` archive under `target/package`).
+
+```bash
+aivi package [--allow-dirty] [--no-verify] [-- <cargo args...>]
+```
+
+- Preflight validation: requires `aivi.toml` and `[package.metadata.aivi]` in `Cargo.toml`.
+- `--allow-dirty`: Forwards to `cargo package --allow-dirty`.
+- `--no-verify`: Forwards to `cargo package --no-verify`.
+- `<cargo args...>`: Additional arguments forwarded to `cargo package` after `--`.
+
+#### `publish`
+
+Publishes the current project to crates.io via Cargo.
+
+```bash
+aivi publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]
+```
+
+- Preflight validation: requires `aivi.toml` and `[package.metadata.aivi]` in `Cargo.toml`.
+- `--dry-run`: Forwards to `cargo publish --dry-run`.
+- `--allow-dirty`: Forwards to `cargo publish --allow-dirty`.
+- `--no-verify`: Forwards to `cargo publish --no-verify`.
+- `<cargo args...>`: Additional arguments forwarded to `cargo publish` after `--`.
 
 #### `clean`
 
