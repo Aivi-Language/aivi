@@ -266,6 +266,7 @@ pub struct ListItem {
 
 #[derive(Debug, Clone)]
 pub struct RecordField {
+    pub spread: bool,
     pub path: Vec<PathSegment>,
     pub value: Expr,
     pub span: Span,

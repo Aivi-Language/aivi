@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.graph";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.graph
-export NodeId, Edge, Graph
+export NodeId, Edge
 export addEdge, neighbors, shortestPath
 export domain Graph
 

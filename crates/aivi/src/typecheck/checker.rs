@@ -1069,8 +1069,13 @@ impl TypeChecker {
         };
         for field in fields {
             let value_ty = self.infer_expr(&field.value, env)?;
-            let field_ty = self.record_from_path(&field.path, value_ty);
-            record_ty = self.merge_records(record_ty, field_ty, field.span.clone())?;
+            if field.spread {
+                // `{ ...base, field: value }` composes record types.
+                record_ty = self.merge_records(record_ty, value_ty, field.span.clone())?;
+            } else {
+                let field_ty = self.record_from_path(&field.path, value_ty);
+                record_ty = self.merge_records(record_ty, field_ty, field.span.clone())?;
+            }
         }
         Ok(record_ty)
     }
@@ -1621,6 +1626,14 @@ impl TypeChecker {
             open: true,
         };
         for field in fields {
+            if field.spread {
+                return Err(TypeError {
+                    span: field.span.clone(),
+                    message: "patch literal does not support record spread".to_string(),
+                    expected: None,
+                    found: None,
+                });
+            }
             let value_ty = self.infer_expr(&field.value, env)?;
             let field_ty = self.fresh_var();
             let requirement = self.record_from_path(&field.path, field_ty.clone());
@@ -3012,6 +3025,7 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             fields: fields
                 .into_iter()
                 .map(|field| RecordField {
+                    spread: field.spread,
                     path: field
                         .path
                         .into_iter()
@@ -3032,6 +3046,7 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             fields: fields
                 .into_iter()
                 .map(|field| RecordField {
+                    spread: field.spread,
                     path: field
                         .path
                         .into_iter()

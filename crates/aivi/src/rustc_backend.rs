@@ -498,8 +498,15 @@ fn emit_builtin_call(
 }
 
 fn emit_record(fields: &[RustIrRecordField], indent: usize) -> Result<String, AiviError> {
-    let mut assigns = Vec::new();
+    let mut stmts = Vec::new();
     for field in fields {
+        if field.spread {
+            let value_code = emit_expr(&field.value, indent)?;
+            stmts.push(format!(
+                "match ({value_code})? {{ Value::Record(m) => {{ map.extend(m); }}, _ => return Err(\"record spread expects a record\".to_string()), }};"
+            ));
+            continue;
+        }
         if field.path.len() != 1 {
             return Err(AiviError::Codegen(
                 "nested record paths are not supported in record literals yet".to_string(),
@@ -508,7 +515,7 @@ fn emit_record(fields: &[RustIrRecordField], indent: usize) -> Result<String, Ai
         match &field.path[0] {
             RustIrPathSegment::Field(name) => {
                 let value_code = emit_expr(&field.value, indent)?;
-                assigns.push(format!(
+                stmts.push(format!(
                     "map.insert({:?}.to_string(), ({value_code})?);",
                     name
                 ));
@@ -522,8 +529,8 @@ fn emit_record(fields: &[RustIrRecordField], indent: usize) -> Result<String, Ai
     }
     let mut s = String::new();
     s.push_str("Ok({ let mut map = HashMap::new(); ");
-    for assign in assigns {
-        s.push_str(&assign);
+    for stmt in stmts {
+        s.push_str(&stmt);
         s.push(' ');
     }
     s.push_str("Value::Record(map) })");
@@ -534,6 +541,11 @@ fn emit_patch_fields(fields: &[RustIrRecordField], indent: usize) -> Result<Stri
     let mut out = String::new();
     out.push_str("vec![");
     for (i, field) in fields.iter().enumerate() {
+        if field.spread {
+            return Err(AiviError::Codegen(
+                "record spread is not supported in patch literals".to_string(),
+            ));
+        }
         if i != 0 {
             out.push_str(", ");
         }

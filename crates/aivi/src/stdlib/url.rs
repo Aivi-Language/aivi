@@ -4,7 +4,6 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.url
 export domain Url
-export Url
 export parse, toString
 
 use aivi

@@ -140,6 +140,7 @@ pub struct KernelListItem {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KernelRecordField {
+    pub spread: bool,
     pub path: Vec<KernelPathSegment>,
     pub value: KernelExpr,
 }
@@ -710,6 +711,7 @@ fn lower_list_item(item: HirListItem, id_gen: &mut IdGen) -> KernelListItem {
 
 fn lower_record_field(field: HirRecordField, id_gen: &mut IdGen) -> KernelRecordField {
     KernelRecordField {
+        spread: field.spread,
         path: field
             .path
             .into_iter()

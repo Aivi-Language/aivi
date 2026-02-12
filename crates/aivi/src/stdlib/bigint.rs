@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.number.bigint";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.number.bigint
-export BigInt, fromInt, toInt, absInt
+export fromInt, toInt, absInt
 export domain BigInt
 
 use aivi

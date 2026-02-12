@@ -707,6 +707,21 @@ impl Runtime {
         let mut map = HashMap::new();
         for field in fields {
             let value = self.eval_expr(&field.value, env)?;
+            if field.spread {
+                match value {
+                    Value::Record(inner) => {
+                        for (k, v) in inner.as_ref().iter() {
+                            map.insert(k.clone(), v.clone());
+                        }
+                    }
+                    _ => {
+                        return Err(RuntimeError::Message(
+                            "record spread expects a record".to_string(),
+                        ))
+                    }
+                }
+                continue;
+            }
             insert_record_path(&mut map, &field.path, value)?;
         }
         Ok(Value::Record(Arc::new(map)))
@@ -726,6 +741,11 @@ impl Runtime {
         };
         let mut map = map.as_ref().clone();
         for field in fields {
+            if field.spread {
+                return Err(RuntimeError::Message(
+                    "patch fields do not support record spread".to_string(),
+                ));
+            }
             self.apply_patch_field(&mut map, &field.path, &field.value, env)?;
         }
         Ok(Value::Record(Arc::new(map)))

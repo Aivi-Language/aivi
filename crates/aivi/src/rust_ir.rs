@@ -159,6 +159,7 @@ pub struct RustIrListItem {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RustIrRecordField {
+    pub spread: bool,
     pub path: Vec<RustIrPathSegment>,
     pub value: RustIrExpr,
 }
@@ -402,6 +403,7 @@ fn lower_record_field(
         out_path.push(lower_path_segment(seg, globals, locals)?);
     }
     Ok(RustIrRecordField {
+        spread: field.spread,
         path: out_path,
         value: lower_expr(field.value, globals, locals)?,
     })

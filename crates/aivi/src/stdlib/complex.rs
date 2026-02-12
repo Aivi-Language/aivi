@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.number.complex";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.number.complex
-export Complex, i
+export i
 export domain Complex
 
 use aivi

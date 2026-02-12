@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.signal";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.signal
-export Signal, Spectrum
+export Spectrum
 export fft, ifft, windowHann, normalize
 export domain Signal
 

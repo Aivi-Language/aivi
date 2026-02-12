@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.probability";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.probability
-export Probability, Distribution
+export Distribution
 export clamp, bernoulli, uniform, expectation
 export domain Probability
 

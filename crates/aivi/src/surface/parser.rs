@@ -837,6 +837,7 @@ impl Parser {
                     fields: fields
                         .into_iter()
                         .map(|field| RecordField {
+                            spread: field.spread,
                             path: field.path,
                             value: rewrite_literal_template(field.value, needle, param),
                             span: field.span,
@@ -848,6 +849,7 @@ impl Parser {
                     fields: fields
                         .into_iter()
                         .map(|field| RecordField {
+                            spread: field.spread,
                             path: field.path,
                             value: rewrite_literal_template(field.value, needle, param),
                             span: field.span,
@@ -1879,6 +1881,22 @@ impl Parser {
     }
 
     fn parse_record_field(&mut self) -> Option<RecordField> {
+        // Record spread: `{ ...base, field: value }`
+        if self.consume_symbol("...") {
+            let start_span = self.previous_span();
+            let value = self.parse_expr().unwrap_or(Expr::Raw {
+                text: String::new(),
+                span: start_span.clone(),
+            });
+            let span = merge_span(start_span, expr_span(&value));
+            return Some(RecordField {
+                spread: true,
+                path: Vec::new(),
+                value,
+                span,
+            });
+        }
+
         let start = self.pos;
         let mut path = Vec::new();
         if let Some(name) = self.consume_ident() {
@@ -1918,7 +1936,12 @@ impl Parser {
             span: self.previous_span(),
         });
         let span = merge_span(path_span(&path), expr_span(&value));
-        Some(RecordField { path, value, span })
+        Some(RecordField {
+            spread: false,
+            path,
+            value,
+            span,
+        })
     }
 
     fn parse_pattern(&mut self) -> Option<Pattern> {

@@ -21,8 +21,7 @@ class Chain (F *) = {
   chain: (A -> F B) -> F A -> F B
 }
 
-Option A = None
-| Some A
+Option A = None | Some A
 
 instance Setoid (Option A) = {
   equals: a b => (a, b) ?

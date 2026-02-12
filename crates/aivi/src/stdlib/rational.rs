@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.number.rational";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.number.rational
-export Rational, normalize, numerator, denominator
+export normalize, numerator, denominator
 export domain Rational
 
 use aivi

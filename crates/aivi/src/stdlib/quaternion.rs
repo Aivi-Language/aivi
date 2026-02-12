@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.number.quaternion";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.number.quaternion
-export Quaternion, fromAxisAngle, conjugate, magnitude, normalize
+export fromAxisAngle, conjugate, magnitude, normalize
 export domain Quaternion
 
 use aivi

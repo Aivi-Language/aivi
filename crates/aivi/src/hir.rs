@@ -139,6 +139,7 @@ pub struct HirListItem {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HirRecordField {
+    pub spread: bool,
     pub path: Vec<HirPathSegment>,
     pub value: HirExpr,
 }
@@ -454,6 +455,7 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
             fields: fields
                 .into_iter()
                 .map(|field| HirRecordField {
+                    spread: field.spread,
                     path: field
                         .path
                         .into_iter()
@@ -482,6 +484,7 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                 fields: fields
                     .into_iter()
                     .map(|field| HirRecordField {
+                        spread: field.spread,
                         path: field
                             .path
                             .into_iter()
@@ -613,6 +616,7 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                         fields: fields
                             .into_iter()
                             .map(|field| HirRecordField {
+                                spread: field.spread,
                                 path: field
                                     .path
                                     .into_iter()
@@ -887,6 +891,7 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
             fields: fields
                 .into_iter()
                 .map(|field| crate::surface::RecordField {
+                    spread: field.spread,
                     path: field
                         .path
                         .into_iter()
@@ -912,6 +917,7 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
             fields: fields
                 .into_iter()
                 .map(|field| crate::surface::RecordField {
+                    spread: field.spread,
                     path: field
                         .path
                         .into_iter()
@@ -1135,6 +1141,7 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             fields: fields
                 .into_iter()
                 .map(|field| crate::surface::RecordField {
+                    spread: field.spread,
                     path: field
                         .path
                         .into_iter()
@@ -1160,6 +1167,7 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             fields: fields
                 .into_iter()
                 .map(|field| crate::surface::RecordField {
+                    spread: field.spread,
                     path: field
                         .path
                         .into_iter()

@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.number.decimal";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.number.decimal
-export Decimal, fromFloat, toFloat, round
+export fromFloat, toFloat, round
 export domain Decimal
 
 use aivi
