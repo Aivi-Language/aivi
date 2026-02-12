@@ -19,7 +19,7 @@ class Setoid A = {
 ### Ord
 An `Ord` must be a `Setoid` and have a [total](https://en.wikipedia.org/wiki/Total_order) ordering.
 ```aivi
-class Ord A = {
+class Ord A = Setoid A & {
   lte: A -> A -> Bool
 }
 ```
@@ -37,7 +37,7 @@ class Semigroup A = {
 ### Monoid
 A `Monoid` must be a `Semigroup` and have an `empty` value.
 ```aivi
-class Monoid A = {
+class Monoid A = Semigroup A & {
   empty: A
 }
 ```
@@ -45,7 +45,7 @@ class Monoid A = {
 ### Group
 A `Group` must be a `Monoid` and have an `invert` operation.
 ```aivi
-class Group A = {
+class Group A = Monoid A & {
   invert: A -> A
 }
 ```
@@ -77,31 +77,28 @@ class Functor (F *) = {
 
 ### Apply
 ```aivi
-class Apply (F *) = {
+class Apply (F *) = Functor (F *) & {
   ap: F (A -> B) -> F A -> F B
 }
 ```
 
 ### Applicative
 ```aivi
-class Applicative (F *) = {
+class Applicative (F *) = Apply (F *) & {
   of: A -> F A
 }
 ```
 
 ### Chain
 ```aivi
-class Chain (F *) = 
-  {
-    chain: (A -> F B) -> F A -> F B
-  }
+class Chain (F *) = Apply (F *) & {
+  chain: (A -> F B) -> F A -> F B
+}
 ```
 
 ### Monad
 ```aivi
-class Monad (M *) = {
-  __monad: Unit
-}
+class Monad (M *) = Applicative (M *) & Chain (M *)
 ```
 
 ## 5. Folds and Traversals

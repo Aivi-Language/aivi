@@ -300,28 +300,20 @@ fn def_expr(def: &Def) -> Expr {
 }
 
 fn lower_expr(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
+    // Placeholder-lambda sugar: rewrite `_` occurrences into a lambda at the
+    // smallest expression scope that still contains `_`.
+    let expr = desugar_placeholder_lambdas(expr);
+
     if let Expr::Binary {
         op, left, right, ..
     } = &expr
     {
-        if op == "<|" && matches!(**right, Expr::Record { .. }) && !contains_hole(left) {
+        if op == "<|" && matches!(**right, Expr::Record { .. }) && !contains_placeholder(left) {
             return lower_expr_inner(expr, id_gen);
         }
     }
     if matches!(&expr, Expr::PatchLit { .. }) {
         return lower_expr_inner(expr, id_gen);
-    }
-    if contains_hole(&expr) {
-        let (rewritten, params) = replace_holes(expr);
-        let mut hir = lower_expr_inner(rewritten, id_gen);
-        for param in params.into_iter().rev() {
-            hir = HirExpr::Lambda {
-                id: id_gen.next(),
-                param,
-                body: Box::new(hir),
-            };
-        }
-        return hir;
     }
     lower_expr_inner(expr, id_gen)
 }
@@ -776,42 +768,43 @@ fn lower_pattern(pattern: Pattern, id_gen: &mut IdGen) -> HirPattern {
     }
 }
 
-fn contains_hole(expr: &Expr) -> bool {
+fn contains_placeholder(expr: &Expr) -> bool {
     match expr {
         Expr::Ident(name) => name.name == "_",
         Expr::Literal(_) => false,
         Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
             TextPart::Text { .. } => false,
-            TextPart::Expr { expr, .. } => contains_hole(expr),
+            TextPart::Expr { expr, .. } => contains_placeholder(expr),
         }),
-        Expr::List { items, .. } => items.iter().any(|item| contains_hole(&item.expr)),
-        Expr::Tuple { items, .. } => items.iter().any(contains_hole),
+        Expr::List { items, .. } => items.iter().any(|item| contains_placeholder(&item.expr)),
+        Expr::Tuple { items, .. } => items.iter().any(contains_placeholder),
         Expr::Record { fields, .. } => fields.iter().any(|field| {
             field
                 .path
                 .iter()
-                .any(|segment| matches!(segment, crate::surface::PathSegment::Index(expr, _) if contains_hole(expr)))
-                || contains_hole(&field.value)
+                .any(|segment| matches!(segment, crate::surface::PathSegment::Index(expr, _) if contains_placeholder(expr)))
+                || contains_placeholder(&field.value)
         }),
         Expr::PatchLit { fields, .. } => fields.iter().any(|field| {
             field
                 .path
                 .iter()
-                .any(|segment| matches!(segment, crate::surface::PathSegment::Index(expr, _) if contains_hole(expr)))
-                || contains_hole(&field.value)
+                .any(|segment| matches!(segment, crate::surface::PathSegment::Index(expr, _) if contains_placeholder(expr)))
+                || contains_placeholder(&field.value)
         }),
-        Expr::FieldAccess { base, .. } => contains_hole(base),
-        Expr::FieldSection { .. } => true,
-        Expr::Index { base, index, .. } => contains_hole(base) || contains_hole(index),
+        Expr::FieldAccess { base, .. } => contains_placeholder(base),
+        // Field sections (`.field`) are handled directly during lowering.
+        Expr::FieldSection { .. } => false,
+        Expr::Index { base, index, .. } => contains_placeholder(base) || contains_placeholder(index),
         Expr::Call { func, args, .. } => {
-            contains_hole(func) || args.iter().any(contains_hole)
+            contains_placeholder(func) || args.iter().any(contains_placeholder)
         }
-        Expr::Lambda { .. } => false,
+        Expr::Lambda { body, .. } => contains_placeholder(body),
         Expr::Match { scrutinee, arms, .. } => {
-            scrutinee.as_deref().is_some_and(contains_hole)
+            scrutinee.as_deref().is_some_and(contains_placeholder)
                 || arms.iter().any(|arm| {
-                    arm.guard.as_ref().is_some_and(contains_hole)
-                        || contains_hole(&arm.body)
+                    arm.guard.as_ref().is_some_and(contains_placeholder)
+                        || contains_placeholder(&arm.body)
                 })
         }
         Expr::If {
@@ -819,16 +812,250 @@ fn contains_hole(expr: &Expr) -> bool {
             then_branch,
             else_branch,
             ..
-        } => contains_hole(cond) || contains_hole(then_branch) || contains_hole(else_branch),
-        Expr::Binary { left, right, .. } => contains_hole(left) || contains_hole(right),
+        } => contains_placeholder(cond)
+            || contains_placeholder(then_branch)
+            || contains_placeholder(else_branch),
+        Expr::Binary { left, right, .. } => contains_placeholder(left) || contains_placeholder(right),
         Expr::Block { items, .. } => items.iter().any(|item| match item {
-            BlockItem::Bind { expr, .. } => contains_hole(expr),
+            BlockItem::Bind { expr, .. } => contains_placeholder(expr),
             BlockItem::Filter { expr, .. }
             | BlockItem::Yield { expr, .. }
             | BlockItem::Recurse { expr, .. }
-            | BlockItem::Expr { expr, .. } => contains_hole(expr),
+            | BlockItem::Expr { expr, .. } => contains_placeholder(expr),
         }),
         Expr::Raw { .. } => false,
+    }
+}
+
+fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
+    let expr = match expr {
+        Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => expr,
+        Expr::TextInterpolate { parts, span } => Expr::TextInterpolate {
+            parts: parts
+                .into_iter()
+                .map(|part| match part {
+                    TextPart::Text { .. } => part,
+                    TextPart::Expr { expr, span } => TextPart::Expr {
+                        expr: Box::new(desugar_placeholder_lambdas(*expr)),
+                        span,
+                    },
+                })
+                .collect(),
+            span,
+        },
+        Expr::List { items, span } => Expr::List {
+            items: items
+                .into_iter()
+                .map(|item| crate::surface::ListItem {
+                    expr: desugar_placeholder_lambdas(item.expr),
+                    spread: item.spread,
+                    span: item.span,
+                })
+                .collect(),
+            span,
+        },
+        Expr::Tuple { items, span } => Expr::Tuple {
+            items: items
+                .into_iter()
+                .map(desugar_placeholder_lambdas)
+                .collect(),
+            span,
+        },
+        Expr::Record { fields, span } => Expr::Record {
+            fields: fields
+                .into_iter()
+                .map(|field| crate::surface::RecordField {
+                    path: field
+                        .path
+                        .into_iter()
+                        .map(|segment| match segment {
+                            crate::surface::PathSegment::Field(name) => {
+                                crate::surface::PathSegment::Field(name)
+                            }
+                            crate::surface::PathSegment::Index(expr, span) => {
+                                crate::surface::PathSegment::Index(
+                                    desugar_placeholder_lambdas(expr),
+                                    span,
+                                )
+                            }
+                        })
+                        .collect(),
+                    value: desugar_placeholder_lambdas(field.value),
+                    span: field.span,
+                })
+                .collect(),
+            span,
+        },
+        Expr::PatchLit { fields, span } => Expr::PatchLit {
+            fields: fields
+                .into_iter()
+                .map(|field| crate::surface::RecordField {
+                    path: field
+                        .path
+                        .into_iter()
+                        .map(|segment| match segment {
+                            crate::surface::PathSegment::Field(name) => {
+                                crate::surface::PathSegment::Field(name)
+                            }
+                            crate::surface::PathSegment::Index(expr, span) => {
+                                crate::surface::PathSegment::Index(
+                                    desugar_placeholder_lambdas(expr),
+                                    span,
+                                )
+                            }
+                        })
+                        .collect(),
+                    value: desugar_placeholder_lambdas(field.value),
+                    span: field.span,
+                })
+                .collect(),
+            span,
+        },
+        Expr::FieldAccess { base, field, span } => Expr::FieldAccess {
+            base: Box::new(desugar_placeholder_lambdas(*base)),
+            field,
+            span,
+        },
+        Expr::Index {
+            base,
+            index,
+            span,
+        } => Expr::Index {
+            base: Box::new(desugar_placeholder_lambdas(*base)),
+            index: Box::new(desugar_placeholder_lambdas(*index)),
+            span,
+        },
+        Expr::Call {
+            func,
+            args,
+            span,
+        } => Expr::Call {
+            func: Box::new(desugar_placeholder_lambdas(*func)),
+            args: args.into_iter().map(desugar_placeholder_lambdas).collect(),
+            span,
+        },
+        Expr::Lambda {
+            params,
+            body,
+            span,
+        } => Expr::Lambda {
+            params,
+            body: Box::new(desugar_placeholder_lambdas(*body)),
+            span,
+        },
+        Expr::Match {
+            scrutinee,
+            arms,
+            span,
+        } => Expr::Match {
+            scrutinee: scrutinee.map(|expr| Box::new(desugar_placeholder_lambdas(*expr))),
+            arms: arms
+                .into_iter()
+                .map(|arm| crate::surface::MatchArm {
+                    pattern: arm.pattern,
+                    guard: arm.guard.map(desugar_placeholder_lambdas),
+                    body: desugar_placeholder_lambdas(arm.body),
+                    span: arm.span,
+                })
+                .collect(),
+            span,
+        },
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+            span,
+        } => Expr::If {
+            cond: Box::new(desugar_placeholder_lambdas(*cond)),
+            then_branch: Box::new(desugar_placeholder_lambdas(*then_branch)),
+            else_branch: Box::new(desugar_placeholder_lambdas(*else_branch)),
+            span,
+        },
+        Expr::Binary {
+            op,
+            left,
+            right,
+            span,
+        } => Expr::Binary {
+            op,
+            left: Box::new(desugar_placeholder_lambdas(*left)),
+            right: Box::new(desugar_placeholder_lambdas(*right)),
+            span,
+        },
+        Expr::Block { kind, items, span } => Expr::Block {
+            kind,
+            items: items
+                .into_iter()
+                .map(|item| match item {
+                    BlockItem::Bind {
+                        pattern,
+                        expr,
+                        span,
+                    } => BlockItem::Bind {
+                        pattern,
+                        expr: desugar_placeholder_lambdas(expr),
+                        span,
+                    },
+                    BlockItem::Filter { expr, span } => BlockItem::Filter {
+                        expr: desugar_placeholder_lambdas(expr),
+                        span,
+                    },
+                    BlockItem::Yield { expr, span } => BlockItem::Yield {
+                        expr: desugar_placeholder_lambdas(expr),
+                        span,
+                    },
+                    BlockItem::Recurse { expr, span } => BlockItem::Recurse {
+                        expr: desugar_placeholder_lambdas(expr),
+                        span,
+                    },
+                    BlockItem::Expr { expr, span } => BlockItem::Expr {
+                        expr: desugar_placeholder_lambdas(expr),
+                        span,
+                    },
+                })
+                .collect(),
+            span,
+        },
+    };
+
+    if !contains_placeholder(&expr) {
+        return expr;
+    }
+
+    let (rewritten, params) = replace_holes(expr);
+    let span = match &rewritten {
+        Expr::Ident(name) => name.span.clone(),
+        Expr::Literal(lit) => match lit {
+            crate::surface::Literal::Number { span, .. }
+            | crate::surface::Literal::String { span, .. }
+            | crate::surface::Literal::Sigil { span, .. }
+            | crate::surface::Literal::Bool { span, .. }
+            | crate::surface::Literal::DateTime { span, .. } => span.clone(),
+        },
+        Expr::TextInterpolate { span, .. }
+        | Expr::List { span, .. }
+        | Expr::Tuple { span, .. }
+        | Expr::Record { span, .. }
+        | Expr::PatchLit { span, .. }
+        | Expr::FieldAccess { span, .. }
+        | Expr::FieldSection { span, .. }
+        | Expr::Index { span, .. }
+        | Expr::Call { span, .. }
+        | Expr::Lambda { span, .. }
+        | Expr::Match { span, .. }
+        | Expr::If { span, .. }
+        | Expr::Binary { span, .. }
+        | Expr::Block { span, .. }
+        | Expr::Raw { span, .. } => span.clone(),
+    };
+
+    Expr::Lambda {
+        params: params
+            .into_iter()
+            .map(|name| Pattern::Ident(crate::surface::SpannedName { name, span: span.clone() }))
+            .collect(),
+        body: Box::new(rewritten),
+        span,
     }
 }
 
