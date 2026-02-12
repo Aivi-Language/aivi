@@ -361,6 +361,7 @@ impl Backend {
         lines
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn push_semantic_token(
         data: &mut Vec<SemanticToken>,
         last_line: &mut u32,
@@ -543,8 +544,8 @@ impl Backend {
                         continue;
                     };
 
-                    let start_idx = expr_token.span.start.column.saturating_sub(1) as usize;
-                    let end_idx = expr_token.span.end.column.saturating_sub(1) as usize;
+                    let start_idx = expr_token.span.start.column.saturating_sub(1);
+                    let end_idx = expr_token.span.end.column.saturating_sub(1);
                     if start_idx >= expr_map.len() || end_idx >= expr_map.len() {
                         continue;
                     }

@@ -102,7 +102,7 @@ fn rgb_from_value(value: Value, ctx: &str) -> Result<(f32, f32, f32), RuntimeErr
             .ok_or_else(|| RuntimeError::Message(format!("{ctx} expects Rgb.b")))?,
         ctx,
     )?;
-    let clamp = |v: i64| v.max(0).min(255) as f32 / 255.0;
+    let clamp = |v: i64| v.clamp(0, 255) as f32 / 255.0;
     Ok((clamp(r), clamp(g), clamp(b)))
 }
 

@@ -556,7 +556,7 @@ fn strip_ansi(value: &str) -> String {
     while let Some(ch) = chars.next() {
         if ch == '\u{1b}' && chars.peek() == Some(&'[') {
             chars.next();
-            while let Some(code) = chars.next() {
+            for code in chars.by_ref() {
                 if code == 'm' {
                     break;
                 }

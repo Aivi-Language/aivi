@@ -242,10 +242,7 @@ pub fn desugar_modules(modules: &[Module]) -> HirProgram {
             .into_iter()
             .map(|(name, expr)| {
                 if trace {
-                    eprintln!(
-                        "[AIVI_TRACE_DESUGAR]   def {}.{}",
-                        module.name.name, name
-                    );
+                    eprintln!("[AIVI_TRACE_DESUGAR]   def {}.{}", module.name.name, name);
                 }
                 HirDef {
                     name,

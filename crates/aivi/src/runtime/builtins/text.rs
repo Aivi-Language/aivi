@@ -451,7 +451,7 @@ fn decode_bytes(encoding: EncodingKind, bytes: &[u8]) -> Result<String, ()> {
         EncodingKind::Utf8 => String::from_utf8(bytes.to_vec()).map_err(|_| ()),
         EncodingKind::Latin1 => Ok(bytes.iter().map(|b| char::from(*b)).collect()),
         EncodingKind::Utf16 => {
-            if bytes.len() % 2 != 0 {
+            if !bytes.len().is_multiple_of(2) {
                 return Err(());
             }
             let units = bytes
@@ -461,7 +461,7 @@ fn decode_bytes(encoding: EncodingKind, bytes: &[u8]) -> Result<String, ()> {
             String::from_utf16(&units).map_err(|_| ())
         }
         EncodingKind::Utf32 => {
-            if bytes.len() % 4 != 0 {
+            if !bytes.len().is_multiple_of(4) {
                 return Err(());
             }
             let mut out = String::new();

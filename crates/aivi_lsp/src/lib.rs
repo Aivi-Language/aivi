@@ -10,8 +10,8 @@ mod state;
 mod workspace;
 
 #[cfg(test)]
-mod tests;
-#[cfg(test)]
 mod repro_lsp;
+#[cfg(test)]
+mod tests;
 
 pub use server::run;

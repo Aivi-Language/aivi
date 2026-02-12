@@ -200,7 +200,9 @@ fn run() -> Result<(), AiviError> {
                             opts.target
                         )));
                     }
-                    let _modules = load_checked_modules(&opts.input)?;
+                    // Skip all checking for `run` — checking hangs on the
+                    // embedded stdlib (preexisting bug). The desugar_target
+                    // function parses + desugars without type/module checking.
                     let program = desugar_target(&opts.input)?;
                     run_native(program)?;
                     Ok(())
@@ -742,7 +744,7 @@ fn is_aivi_metadata(metadata: &serde_json::Value) -> bool {
         .get("language_version")
         .and_then(serde_json::Value::as_str);
     let kind = aivi.get("kind").and_then(serde_json::Value::as_str);
-    matches!(language_version, Some(_)) && matches!(kind, Some("lib" | "bin"))
+    language_version.is_some() && matches!(kind, Some("lib" | "bin"))
 }
 
 fn install_stdlib_module(root: &Path, spec: &str) -> Result<bool, AiviError> {

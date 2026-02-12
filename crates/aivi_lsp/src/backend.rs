@@ -87,71 +87,71 @@ impl Backend {
         // We look at the character *before* the cursor (if any) and *at* the cursor.
         // If the cursor is at offset, we might be right after the last char of interest.
         let on_symbol = if offset < bytes.len() {
-             let ch = text[offset..].chars().next().unwrap();
-             is_symbol_char(ch)
+            let ch = text[offset..].chars().next().unwrap();
+            is_symbol_char(ch)
         } else if offset > 0 {
-             let ch = text[offset-1..].chars().next().unwrap();
-             is_symbol_char(ch)
+            let ch = text[offset - 1..].chars().next().unwrap();
+            is_symbol_char(ch)
         } else {
-             false
+            false
         };
-        
+
         // If we are on a symbol, scan for continuous symbol characters.
         // Note: Aivi might have multi-char operators like <|, |>, ++, etc.
         if on_symbol {
-             let mut start = offset.min(bytes.len());
-             // Scan backwards for symbol chars
-             while start > 0 {
-                 let ch = text[..start].chars().last().unwrap();
-                 if is_symbol_char(ch) {
-                     start -= ch.len_utf8();
-                 } else {
-                     break;
-                 }
-             }
-             let mut end = offset.min(bytes.len());
-             // Scan forwards for symbol chars
-             while end < bytes.len() {
-                 let ch = text[end..].chars().next().unwrap();
-                 if is_symbol_char(ch) {
-                     end += ch.len_utf8();
-                 } else {
-                     break;
-                 }
-             }
+            let mut start = offset.min(bytes.len());
+            // Scan backwards for symbol chars
+            while start > 0 {
+                let ch = text[..start].chars().last().unwrap();
+                if is_symbol_char(ch) {
+                    start -= ch.len_utf8();
+                } else {
+                    break;
+                }
+            }
+            let mut end = offset.min(bytes.len());
+            // Scan forwards for symbol chars
+            while end < bytes.len() {
+                let ch = text[end..].chars().next().unwrap();
+                if is_symbol_char(ch) {
+                    end += ch.len_utf8();
+                } else {
+                    break;
+                }
+            }
 
-             let ident = text[start..end].trim();
-             if ident.is_empty() {
-                 None
-             } else {
-                 Some(ident.to_string())
-             }
+            let ident = text[start..end].trim();
+            if ident.is_empty() {
+                None
+            } else {
+                Some(ident.to_string())
+            }
         } else {
-             // Existing logic for alphanumeric identifiers
-             let mut start = offset.min(bytes.len());
-             while start > 0 {
-                 let ch = text[..start].chars().last().unwrap();
-                 if is_ident_char(ch) {
-                     start -= ch.len_utf8();
-                 } else {
-                     break;
-                 }
-             }
-             let mut end = offset.min(bytes.len());
-             while end < bytes.len() {
-                 let ch = text[end..].chars().next().unwrap();
-                 if is_ident_char(ch) {
-                     end += ch.len_utf8();
-                 } else {
-                     break;
-                 }
-             }
-             let ident = text[start..end].trim();
-             if ident.is_empty() {
-                 None
-             } else {
-                 Some(ident.to_string())
-             }
+            // Existing logic for alphanumeric identifiers
+            let mut start = offset.min(bytes.len());
+            while start > 0 {
+                let ch = text[..start].chars().last().unwrap();
+                if is_ident_char(ch) {
+                    start -= ch.len_utf8();
+                } else {
+                    break;
+                }
+            }
+            let mut end = offset.min(bytes.len());
+            while end < bytes.len() {
+                let ch = text[end..].chars().next().unwrap();
+                if is_ident_char(ch) {
+                    end += ch.len_utf8();
+                } else {
+                    break;
+                }
+            }
+            let ident = text[start..end].trim();
+            if ident.is_empty() {
+                None
+            } else {
+                Some(ident.to_string())
+            }
         }
     }
 
@@ -257,7 +257,10 @@ impl Backend {
             }
         }
         if base.is_none() {
-            if let Some(sig) = type_signatures.get(ident).or_else(|| type_signatures.get(&format!("({})", ident))) {
+            if let Some(sig) = type_signatures
+                .get(ident)
+                .or_else(|| type_signatures.get(&format!("({})", ident)))
+            {
                 base = Some(sig.clone());
             }
         }
@@ -305,10 +308,17 @@ impl Backend {
         match item {
             ModuleItem::Def(def) => {
                 if matches(&def.name.name) {
-                    if let Some(sig) = type_signatures.get(ident).or_else(|| type_signatures.get(&format!("({})", ident))) {
+                    if let Some(sig) = type_signatures
+                        .get(ident)
+                        .or_else(|| type_signatures.get(&format!("({})", ident)))
+                    {
                         return Some(sig.clone());
                     }
-                    if let Some(ty) = inferred.and_then(|types| types.get(ident).or_else(|| types.get(&format!("({})", ident)))) {
+                    if let Some(ty) = inferred.and_then(|types| {
+                        types
+                            .get(ident)
+                            .or_else(|| types.get(&format!("({})", ident)))
+                    }) {
                         return Some(format!("`{}` : `{}`", def.name.name, ty));
                     }
                     return Some(format!("`{}`", def.name.name));
@@ -385,7 +395,10 @@ impl Backend {
                 );
             }
         }
-        if let Some(sig) = type_signatures.get(ident).or_else(|| type_signatures.get(&format!("({})", ident))) {
+        if let Some(sig) = type_signatures
+            .get(ident)
+            .or_else(|| type_signatures.get(&format!("({})", ident)))
+        {
             return Some(sig.clone());
         }
         for item in domain_decl.items.iter() {
@@ -398,10 +411,17 @@ impl Backend {
                 DomainItem::TypeSig(_) => {}
                 DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
                     if matches(&def.name.name) {
-                        if let Some(sig) = type_signatures.get(ident).or_else(|| type_signatures.get(&format!("({})", ident))) {
+                        if let Some(sig) = type_signatures
+                            .get(ident)
+                            .or_else(|| type_signatures.get(&format!("({})", ident)))
+                        {
                             return Some(sig.clone());
                         }
-                        if let Some(ty) = inferred.and_then(|types| types.get(ident).or_else(|| types.get(&format!("({})", ident)))) {
+                        if let Some(ty) = inferred.and_then(|types| {
+                            types
+                                .get(ident)
+                                .or_else(|| types.get(&format!("({})", ident)))
+                        }) {
                             return Some(format!("`{}` : `{}`", def.name.name, ty));
                         }
                         return Some(format!("`{}`", def.name.name));
@@ -693,7 +713,14 @@ impl Backend {
                 }
                 DomainItem::TypeSig(_) => {}
                 DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                    Self::collect_def_references(def, ident, text, uri, include_declaration, locations);
+                    Self::collect_def_references(
+                        def,
+                        ident,
+                        text,
+                        uri,
+                        include_declaration,
+                        locations,
+                    );
                 }
             }
         }
@@ -831,7 +858,13 @@ impl Backend {
         Self::collect_pattern_references(&field.pattern, ident, text, uri, locations);
     }
 
-    fn collect_expr_references(expr: &Expr, ident: &str, text: &str, uri: &Url, locations: &mut Vec<Location>) {
+    fn collect_expr_references(
+        expr: &Expr,
+        ident: &str,
+        text: &str,
+        uri: &Url,
+        locations: &mut Vec<Location>,
+    ) {
         match expr {
             Expr::TextInterpolate { parts, .. } => {
                 for part in parts {
@@ -923,23 +956,28 @@ impl Backend {
                 Self::collect_expr_references(then_branch, ident, text, uri, locations);
                 Self::collect_expr_references(else_branch, ident, text, uri, locations);
             }
-            Expr::Binary { op, left, right, .. } => {
+            Expr::Binary {
+                op, left, right, ..
+            } => {
                 Self::collect_expr_references(left, ident, text, uri, locations);
-                
+
                 let matches_op = op == ident || format!("({})", op) == ident;
                 if matches_op {
                     let left_end = Self::span_to_range(Self::expr_span(left).clone()).end;
                     let right_start = Self::span_to_range(Self::expr_span(right).clone()).start;
-                    
+
                     let left_offset = Self::offset_at(text, left_end);
                     let right_offset = Self::offset_at(text, right_start);
-                    
-                    if left_offset < text.len() && right_offset <= text.len() && left_offset < right_offset {
+
+                    if left_offset < text.len()
+                        && right_offset <= text.len()
+                        && left_offset < right_offset
+                    {
                         let range_text = &text[left_offset..right_offset];
                         if let Some(idx) = range_text.find(op) {
                             let mut line = left_end.line;
                             let mut char_idx = left_end.character;
-                            
+
                             let prefix = &range_text[..idx];
                             for c in prefix.chars() {
                                 if c == '\n' {
@@ -950,7 +988,7 @@ impl Backend {
                                 }
                             }
                             let start_pos = Position::new(line, char_idx);
-                            
+
                             let mut end_line = line;
                             let mut end_char = char_idx;
                             for c in op.chars() {
@@ -962,8 +1000,9 @@ impl Backend {
                                 }
                             }
                             let end_pos = Position::new(end_line, end_char);
-                            
-                            locations.push(Location::new(uri.clone(), Range::new(start_pos, end_pos)));
+
+                            locations
+                                .push(Location::new(uri.clone(), Range::new(start_pos, end_pos)));
                         }
                     }
                 }
@@ -1298,5 +1337,4 @@ impl Backend {
     pub(super) fn stdlib_uri(name: &str) -> Url {
         Url::parse(&format!("aivi://stdlib/{name}")).expect("stdlib uri should be valid")
     }
-
 }

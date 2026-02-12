@@ -24,7 +24,7 @@ mod values;
 
 use self::builtins::register_builtins;
 use self::environment::{Env, RuntimeContext};
-use self::values::{BuiltinValue, ClosureValue, EffectValue, ResourceValue, ThunkValue, Value};
+use self::values::{BuiltinImpl, BuiltinValue, ClosureValue, EffectValue, ResourceValue, ThunkValue, Value};
 
 #[derive(Debug)]
 struct CancelToken {
@@ -428,9 +428,9 @@ impl Runtime {
                         items: Arc::new(items.clone()),
                     })))
                 }
-                crate::hir::HirBlockKind::Generate => Err(RuntimeError::Message(
-                    "generator blocks are not supported in native runtime yet".to_string(),
-                )),
+                crate::hir::HirBlockKind::Generate => {
+                    self.eval_generate_block(items, env)
+                }
             },
             HirExpr::Raw { .. } => Err(RuntimeError::Message(
                 "raw expressions are not supported in native runtime yet".to_string(),
@@ -534,6 +534,119 @@ impl Runtime {
             }
         }
         Ok(last_value)
+    }
+
+    fn eval_generate_block(
+        &mut self,
+        items: &[HirBlockItem],
+        env: &Env,
+    ) -> Result<Value, RuntimeError> {
+        // Eagerly materialize the generator items into a Vec<Value>
+        let mut values = Vec::new();
+        self.materialize_generate(items, env, &mut values)?;
+
+        // Return a builtin function: \k -> \z -> foldl k z values
+        let values = Arc::new(values);
+        Ok(Value::Builtin(BuiltinValue {
+            imp: Arc::new(BuiltinImpl {
+                name: "<generator>".to_string(),
+                arity: 2,
+                func: Arc::new(move |mut args, runtime| {
+                    let z = args.pop().unwrap();
+                    let k = args.pop().unwrap();
+                    let mut acc = z;
+                    for val in values.iter() {
+                        // k(acc, x)
+                        let partial = runtime.apply(k.clone(), acc)?;
+                        acc = runtime.apply(partial, val.clone())?;
+                    }
+                    Ok(acc)
+                }),
+            }),
+            args: Vec::new(),
+        }))
+    }
+
+    fn materialize_generate(
+        &mut self,
+        items: &[HirBlockItem],
+        env: &Env,
+        out: &mut Vec<Value>,
+    ) -> Result<(), RuntimeError> {
+        let local_env = Env::new(Some(env.clone()));
+        for item in items {
+            match item {
+                HirBlockItem::Yield { expr } => {
+                    let value = self.eval_expr(expr, &local_env)?;
+                    out.push(value);
+                }
+                HirBlockItem::Bind { pattern, expr } => {
+                    let source = self.eval_expr(expr, &local_env)?;
+                    // The source should be a generator (a builtin that takes k and z).
+                    // We need to extract its elements. We do this by folding with a
+                    // list-accumulate step function.
+                    let source_items = self.generator_to_list(source)?;
+                    // For each element from the source, bind it to the pattern
+                    // and process the rest of the items in this scope.
+                    let rest = &items[items.iter().position(|i| std::ptr::eq(i, item)).unwrap() + 1..];
+                    for val in source_items {
+                        let bind_env = Env::new(Some(local_env.clone()));
+                        let bindings = collect_pattern_bindings(pattern, &val)
+                            .ok_or_else(|| RuntimeError::Message("pattern match failed in generator bind".to_string()))?;
+                        for (name, bound_val) in bindings {
+                            bind_env.set(name, bound_val);
+                        }
+                        self.materialize_generate(rest, &bind_env, out)?;
+                    }
+                    return Ok(());
+                }
+                HirBlockItem::Filter { expr } => {
+                    let cond = self.eval_expr(expr, &local_env)?;
+                    if !matches!(cond, Value::Bool(true)) {
+                        return Ok(());
+                    }
+                }
+                HirBlockItem::Expr { expr } => {
+                    // An expression in a generate block acts as a sub-generator to spread
+                    let sub = self.eval_expr(expr, &local_env)?;
+                    let sub_items = self.generator_to_list(sub)?;
+                    out.extend(sub_items);
+                }
+                HirBlockItem::Recurse { .. } => {
+                    // Unsupported for now
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn generator_to_list(&mut self, gen: Value) -> Result<Vec<Value>, RuntimeError> {
+        // A generator is a function (k -> z -> R).
+        // We fold it with a list-append step: k = \acc x -> acc ++ [x], z = []
+        let step = Value::Builtin(BuiltinValue {
+            imp: Arc::new(BuiltinImpl {
+                name: "<gen_to_list_step>".to_string(),
+                arity: 2,
+                func: Arc::new(|mut args, _runtime| {
+                    let x = args.pop().unwrap();
+                    let acc = args.pop().unwrap();
+                    let mut list = match acc {
+                        Value::List(items) => (*items).clone(),
+                        _ => return Err(RuntimeError::Message("expected list accumulator".to_string())),
+                    };
+                    list.push(x);
+                    Ok(Value::List(Arc::new(list)))
+                }),
+            }),
+            args: Vec::new(),
+        });
+        let init = Value::List(Arc::new(Vec::new()));
+        let with_step = self.apply(gen, step)?;
+        let result = self.apply(with_step, init)?;
+        match result {
+            Value::List(items) => Ok((*items).clone()),
+            _ => Err(RuntimeError::Message("generator fold did not produce a list".to_string())),
+        }
     }
 
     fn eval_match(

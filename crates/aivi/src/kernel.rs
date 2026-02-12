@@ -254,15 +254,13 @@ impl IdGen {
 }
 
 pub fn lower_hir(program: HirProgram) -> KernelProgram {
-    let max_id = find_max_id_program(&program);
-    let mut id_gen = IdGen::new(max_id + 1);
-    KernelProgram {
-        modules: program
-            .modules
-            .into_iter()
-            .map(|m| lower_module(m, &mut id_gen))
-            .collect(),
-    }
+    let mut id_gen = IdGen::new(find_max_id_program(&program) + 1);
+    let modules = program
+        .modules
+        .into_iter()
+        .map(|m| lower_module(m, &mut id_gen))
+        .collect();
+    KernelProgram { modules }
 }
 
 fn lower_module(module: HirModule, id_gen: &mut IdGen) -> KernelModule {
@@ -747,10 +745,7 @@ fn lower_pattern(pattern: HirPattern, id_gen: &mut IdGen) -> KernelPattern {
         HirPattern::Constructor { id, name, args } => KernelPattern::Constructor {
             id,
             name,
-            args: args
-                .into_iter()
-                .map(|p| lower_pattern(p, id_gen))
-                .collect(),
+            args: args.into_iter().map(|p| lower_pattern(p, id_gen)).collect(),
         },
         HirPattern::Tuple { id, items } => KernelPattern::Tuple {
             id,
@@ -855,9 +850,8 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
                 *max = *id;
             }
             for part in parts {
-                match part {
-                    crate::hir::HirTextPart::Expr { expr } => find_max_id_expr(expr, max),
-                    _ => {}
+                if let crate::hir::HirTextPart::Expr { expr } = part {
+                    find_max_id_expr(expr, max);
                 }
             }
         }
@@ -899,10 +893,7 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
                 find_max_id_expr(item, max);
             }
         }
-        HirExpr::Record { id, fields }
-        | HirExpr::Patch {
-            id, fields, ..
-        } => {
+        HirExpr::Record { id, fields } | HirExpr::Patch { id, fields, .. } => {
             if *id > *max {
                 *max = *id;
             }
@@ -962,10 +953,7 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
             find_max_id_expr(else_branch, max);
         }
         HirExpr::Binary {
-            id,
-            left,
-            right,
-            ..
+            id, left, right, ..
         } => {
             if *id > *max {
                 *max = *id;
@@ -997,7 +985,9 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
 
 fn find_max_id_pattern(pattern: &HirPattern, max: &mut u32) {
     match pattern {
-        HirPattern::Wildcard { id } | HirPattern::Var { id, .. } | HirPattern::Literal { id, .. } => {
+        HirPattern::Wildcard { id }
+        | HirPattern::Var { id, .. }
+        | HirPattern::Literal { id, .. } => {
             if *id > *max {
                 *max = *id;
             }

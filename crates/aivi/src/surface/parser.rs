@@ -199,6 +199,7 @@ impl Parser {
             if self.pos >= self.tokens.len() {
                 break;
             }
+            let loop_start = self.pos;
             if explicit_body && self.check_symbol("}") {
                 break;
             }
@@ -298,6 +299,11 @@ impl Parser {
             }
 
             self.recover_to_item();
+            // Guard: if nothing advanced pos this iteration, force advance
+            // to prevent infinite loops (e.g. stray `}` in implicit bodies).
+            if self.pos == loop_start {
+                self.pos += 1;
+            }
         }
         let end_span = if explicit_body {
             self.expect_symbol("}", "expected '}' to close module body")
@@ -2538,6 +2544,7 @@ impl Parser {
     }
 
     fn recover_to_item(&mut self) {
+        let start = self.pos;
         while self.pos < self.tokens.len() {
             if self.peek_symbol("}") {
                 break;
@@ -2550,6 +2557,10 @@ impl Parser {
             {
                 break;
             }
+            self.pos += 1;
+        }
+        // Always advance at least one token to prevent caller loops
+        if self.pos == start && self.pos < self.tokens.len() {
             self.pos += 1;
         }
     }

@@ -372,7 +372,10 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
 
         let (input_indent, _) = leading_indent(raw_lines[line_index]);
 
-        let mut indent_level = stack.iter().filter(|f| matches!(f.sym, '{' | '[' | '(')).count();
+        let mut indent_level = stack
+            .iter()
+            .filter(|f| matches!(f.sym, '{' | '[' | '('))
+            .count();
         if !degraded {
             if let Some(first_idx) = first_code_index(&line_tokens) {
                 if is_close_sym(line_tokens[first_idx].text.as_str()).is_some() {
@@ -476,8 +479,8 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                         j += 1;
                     }
                     if j - i >= 2 {
-                        for k in i..j {
-                            lines[k].effect_align_lhs = Some(max_lhs);
+                        for line in lines.iter_mut().take(j).skip(i) {
+                            line.effect_align_lhs = Some(max_lhs);
                         }
                     }
                     i = j;
@@ -516,8 +519,8 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                     j += 1;
                 }
                 if j - i >= 2 {
-                    for k in i..j {
-                        lines[k].arm_align_pat = Some(max_pat);
+                    for line in lines.iter_mut().take(j).skip(i) {
+                        line.arm_align_pat = Some(max_pat);
                     }
                 }
                 i = if j == i { i + 1 } else { j };
@@ -555,8 +558,8 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                     j += 1;
                 }
                 if j - i >= 2 {
-                    for k in i..j {
-                        lines[k].map_align_key = Some(max_key);
+                    for line in lines.iter_mut().take(j).skip(i) {
+                        line.map_align_key = Some(max_key);
                     }
                 }
                 i = j;
@@ -586,14 +589,14 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
         let mut out = String::new();
 
         if state.degraded {
-            out.push_str(&indent);
+            out.push_str(indent);
             out.push_str(&format_tokens_simple(&state.tokens));
             rendered_lines.push(out);
             continue;
         }
 
         let Some(first_idx) = first_code_index(&state.tokens) else {
-            out.push_str(&indent);
+            out.push_str(indent);
             out.push_str(&format_tokens_simple(&state.tokens));
             rendered_lines.push(out);
             continue;
@@ -607,7 +610,7 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                 let lhs = format_tokens_simple(lhs_tokens).trim().to_string();
                 let rhs = format_tokens_simple(rhs_tokens).trim().to_string();
                 let spaces = (max_lhs.saturating_sub(lhs.len())) + 1;
-                out.push_str(&indent);
+                out.push_str(indent);
                 out.push_str(&lhs);
                 out.push_str(&" ".repeat(spaces));
                 out.push_str("<-");
@@ -622,37 +625,37 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
 
         if let Some(max_pat) = state.arm_align_pat {
             let arrow_idx = find_top_level_token(&state.tokens, "=>", first_idx + 1);
-            if state.tokens[first_idx].text == "|" && arrow_idx.is_some() {
-                let arrow_idx = arrow_idx.unwrap();
-                let pat_tokens = &state.tokens[first_idx + 1..arrow_idx];
-                let rhs_tokens = &state.tokens[arrow_idx + 1..];
-                let pat = format_tokens_simple(pat_tokens).trim().to_string();
-                let rhs = format_tokens_simple(rhs_tokens).trim().to_string();
-                let spaces = (max_pat.saturating_sub(pat.len())) + 1;
-                out.push_str(&indent);
-                out.push_str("| ");
-                out.push_str(&pat);
-                out.push_str(&" ".repeat(spaces));
-                out.push_str("=>");
-                if !rhs.is_empty() {
-                    out.push(' ');
-                    out.push_str(&rhs);
+            if state.tokens[first_idx].text == "|" {
+                if let Some(arrow_idx) = arrow_idx {
+                    let pat_tokens = &state.tokens[first_idx + 1..arrow_idx];
+                    let rhs_tokens = &state.tokens[arrow_idx + 1..];
+                    let pat = format_tokens_simple(pat_tokens).trim().to_string();
+                    let rhs = format_tokens_simple(rhs_tokens).trim().to_string();
+                    let spaces = (max_pat.saturating_sub(pat.len())) + 1;
+                    out.push_str(indent);
+                    out.push_str("| ");
+                    out.push_str(&pat);
+                    out.push_str(&" ".repeat(spaces));
+                    out.push_str("=>");
+                    if !rhs.is_empty() {
+                        out.push(' ');
+                        out.push_str(&rhs);
+                    }
+                    rendered_lines.push(out);
+                    continue;
                 }
-                rendered_lines.push(out);
-                continue;
             }
         }
 
         if let Some(max_key) = state.map_align_key {
             let arrow_idx = find_top_level_token(&state.tokens, "=>", first_idx);
-            if arrow_idx.is_some() {
-                let arrow_idx = arrow_idx.unwrap();
+            if let Some(arrow_idx) = arrow_idx {
                 let key_tokens = &state.tokens[first_idx..arrow_idx];
                 let rhs_tokens = &state.tokens[arrow_idx + 1..];
                 let key = format_tokens_simple(key_tokens).trim().to_string();
                 let rhs = format_tokens_simple(rhs_tokens).trim().to_string();
                 let spaces = (max_key.saturating_sub(key.len())) + 1;
-                out.push_str(&indent);
+                out.push_str(indent);
                 out.push_str(&key);
                 out.push_str(&" ".repeat(spaces));
                 out.push_str("=>");
@@ -673,8 +676,8 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                 let name_len = name_tokens.len();
 
                 let mut next_line = None;
-                for j in (line_index + 1)..lines.len() {
-                    if lines[j].degraded || lines[j].tokens.is_empty() {
+                for (j, line) in lines.iter().enumerate().skip(line_index + 1) {
+                    if line.degraded || line.tokens.is_empty() {
                         continue;
                     }
                     next_line = Some(j);
@@ -697,10 +700,10 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
                             && find_top_level_token(&lines[j].tokens, "=", next_first + name_len)
                                 .is_some()
                         {
-                            out.push_str(&indent);
-                            out.push_str(&format_tokens_simple(name_tokens).trim().to_string());
+                            out.push_str(indent);
+                            out.push_str(format_tokens_simple(name_tokens).trim());
                             out.push_str(" : ");
-                            out.push_str(&format_tokens_simple(rest_tokens).trim().to_string());
+                            out.push_str(format_tokens_simple(rest_tokens).trim());
                             rendered_lines.push(out);
                             continue;
                         }
@@ -709,7 +712,7 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
             }
         }
 
-        out.push_str(&indent);
+        out.push_str(indent);
         out.push_str(&format_tokens_simple(&state.tokens));
         rendered_lines.push(out);
     }
@@ -789,6 +792,6 @@ mod tests {
                 max_blank_lines: 1,
             },
         );
-        assert_eq!(formatted, "module demo\n\nmain = 1");
+        assert_eq!(formatted, "module demo\n\nmain = 1\n");
     }
 }

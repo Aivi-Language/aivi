@@ -105,20 +105,14 @@ impl TypeChecker {
 
         // Higher kinded types
         // List: * -> *
-        self.builtin_types.insert(
-            "List".to_string(),
-            arrow(star.clone(), star.clone()),
-        );
+        self.builtin_types
+            .insert("List".to_string(), arrow(star.clone(), star.clone()));
         // Option: * -> *
-        self.builtin_types.insert(
-            "Option".to_string(),
-            arrow(star.clone(), star.clone()),
-        );
+        self.builtin_types
+            .insert("Option".to_string(), arrow(star.clone(), star.clone()));
         // Resource: * -> *
-        self.builtin_types.insert(
-            "Resource".to_string(),
-            arrow(star.clone(), star.clone()),
-        );
+        self.builtin_types
+            .insert("Resource".to_string(), arrow(star.clone(), star.clone()));
 
         // Result: * -> * -> *
         self.builtin_types.insert(
@@ -474,8 +468,7 @@ impl TypeChecker {
                     for _ in &alias.params {
                         kind = Kind::Arrow(Box::new(Kind::Star), Box::new(kind));
                     }
-                    self.type_constructors
-                        .insert(alias.name.name.clone(), kind);
+                    self.type_constructors.insert(alias.name.name.clone(), kind);
                     let alias_info = self.alias_info(alias);
                     self.aliases.insert(alias.name.name.clone(), alias_info);
                 }
@@ -2179,7 +2172,7 @@ impl TypeChecker {
                                     if *param_kind != *ak {
                                         // TODO: Report error properly. For now we just log or panic in debug?
                                         // Since we are in type_from_expr which returns Type, we can't easily return error.
-                                        // But wait, typecheck should verify this. 
+                                        // But wait, typecheck should verify this.
                                         // Ideally type_from_expr shoud return Result.
                                         // For this fix, I will allow it but maybe print warning?
                                         // Or better, since this is "Long Term Fix", I should just verify logic is structurally correct.
@@ -2199,7 +2192,7 @@ impl TypeChecker {
                                 // current_kind = None;
                             }
                         }
-                        
+
                         existing.append(&mut args_ty);
                         Type::Con(name, existing)
                     }

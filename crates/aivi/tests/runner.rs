@@ -17,7 +17,7 @@ fn set_workspace_root() -> PathBuf {
 fn run_aivi_sources() {
     let root = set_workspace_root();
     let tests_dir = root.join("crates/aivi/tests/aivi_sources");
-    
+
     if !tests_dir.exists() {
         eprintln!("No AIVI sources found at {}", tests_dir.display());
         return;
@@ -62,6 +62,6 @@ fn run_aivi_sources() {
 fn run_test(path: &Path) -> Result<(), String> {
     let path_str = path.to_string_lossy();
     let program = desugar_target(&path_str).map_err(|e| format!("Desugar failed: {}", e))?;
-    
+
     run_native(program).map_err(|e| format!("Runtime failed: {}", e))
 }

@@ -1,6 +1,6 @@
 # AIVI Language Specification (v0.1)
 
-> Note: **AIVI v0.1** is currently an interpreted language. See [Missing Features](../missing_features_v0.1.md) for current implementation status.
+> Note: **AIVI v0.1** is currently an interpreted language. See [Missing Features](./missing_features_v0.1.md) for current implementation status.
 
 ## 0. Overview
 

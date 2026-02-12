@@ -92,12 +92,16 @@ impl LanguageServer for Backend {
                     trigger_characters: None,
                     ..tower_lsp::lsp_types::CompletionOptions::default()
                 }),
-                document_formatting_provider: Some(OneOf::Right(tower_lsp::lsp_types::DocumentFormattingOptions {
-                    work_done_progress_options: Default::default(),
-                })),
-                document_range_formatting_provider: Some(OneOf::Right(tower_lsp::lsp_types::DocumentRangeFormattingOptions {
-                    work_done_progress_options: Default::default(),
-                })),
+                document_formatting_provider: Some(OneOf::Right(
+                    tower_lsp::lsp_types::DocumentFormattingOptions {
+                        work_done_progress_options: Default::default(),
+                    },
+                )),
+                document_range_formatting_provider: Some(OneOf::Right(
+                    tower_lsp::lsp_types::DocumentRangeFormattingOptions {
+                        work_done_progress_options: Default::default(),
+                    },
+                )),
                 ..ServerCapabilities::default()
             },
             server_info: Some(tower_lsp::lsp_types::ServerInfo {

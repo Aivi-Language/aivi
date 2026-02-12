@@ -321,7 +321,7 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
             out.push_str(&ind2);
             out.push_str("Ok(Value::Text(s))\n");
             out.push_str(&ind);
-            out.push_str("}");
+            out.push('}');
             out
         }
         RustIrExpr::LitSigil {

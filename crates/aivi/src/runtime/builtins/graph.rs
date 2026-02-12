@@ -121,6 +121,8 @@ fn edge_from_value(value: Value, ctx: &str) -> Result<(i64, i64, f64), RuntimeEr
     };
     Ok((from, to, weight))
 }
+
+#[allow(clippy::type_complexity)]
 fn graph_from_value(
     value: Value,
     ctx: &str,

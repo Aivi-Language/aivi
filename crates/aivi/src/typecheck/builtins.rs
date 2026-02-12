@@ -52,18 +52,12 @@ impl TypeChecker {
         }
 
         // Higher kinded types
-        self.builtin_types.insert(
-            "List".to_string(),
-            arrow(star.clone(), star.clone()),
-        );
-        self.builtin_types.insert(
-            "Option".to_string(),
-            arrow(star.clone(), star.clone()),
-        );
-        self.builtin_types.insert(
-            "Resource".to_string(),
-            arrow(star.clone(), star.clone()),
-        );
+        self.builtin_types
+            .insert("List".to_string(), arrow(star.clone(), star.clone()));
+        self.builtin_types
+            .insert("Option".to_string(), arrow(star.clone(), star.clone()));
+        self.builtin_types
+            .insert("Resource".to_string(), arrow(star.clone(), star.clone()));
         self.builtin_types.insert(
             "Result".to_string(),
             arrow(star.clone(), arrow(star.clone(), star.clone())),

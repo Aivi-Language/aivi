@@ -133,9 +133,9 @@ pub fn load_module_diagnostics(target: &str) -> Result<Vec<FileDiagnostic>, Aivi
 pub fn desugar_target(target: &str) -> Result<HirProgram, AiviError> {
     let paths = workspace::expand_target(target)?;
     let mut modules = Vec::new();
-    for path in paths {
-        let content = fs::read_to_string(&path)?;
-        let (mut parsed, _) = parse_modules(&path, &content);
+    for path in &paths {
+        let content = fs::read_to_string(path)?;
+        let (mut parsed, _) = parse_modules(path.as_path(), &content);
         modules.append(&mut parsed);
     }
     let mut stdlib_modules = stdlib::embedded_stdlib_modules();

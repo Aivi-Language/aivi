@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
+    use crate::backend::Backend;
     use std::collections::HashMap;
     use tower_lsp::lsp_types::{HoverContents, Position, Url};
-    use crate::backend::Backend;
 
     fn sample_uri() -> Url {
         Url::parse("file:///repro.aivi").expect("valid uri")
@@ -37,10 +37,10 @@ add = x y => x + y
         let uri = sample_uri();
         // Hover on '+'
         let position = position_for(text, "+ y");
-        
+
         // This is expected to FAIL currently because '+' is not extracted as an identifier
         let hover = Backend::build_hover(text, &uri, position);
-        
+
         if let Some(hover) = hover {
             let HoverContents::Markup(markup) = hover.contents else {
                 panic!("expected markup hover");
@@ -68,18 +68,27 @@ main = [1] ++ [2]
 "#;
         let uri = sample_uri();
         let position = position_for(text, "++ [2]");
-        
+
         let hover = Backend::build_hover(text, &uri, position);
-        
+
         // Assert that we found *something*
-        assert!(hover.is_some(), "Should find hover for defined operator '++'");
-        
+        assert!(
+            hover.is_some(),
+            "Should find hover for defined operator '++'"
+        );
+
         let hover = hover.unwrap();
         let HoverContents::Markup(markup) = hover.contents else {
             panic!("expected markup hover");
         };
-        assert!(markup.value.contains("(++)"), "Hover should contain operator name '(++)'");
-        assert!(markup.value.contains("List a"), "Hover should contain type signature");
+        assert!(
+            markup.value.contains("(++)"),
+            "Hover should contain operator name '(++)'"
+        );
+        assert!(
+            markup.value.contains("List a"),
+            "Hover should contain type signature"
+        );
     }
 
     #[test]
@@ -94,7 +103,7 @@ main = [1] ++ [2]
 "#;
         let uri = sample_uri();
         let position = position_for(text, "++ [2]");
-        
+
         let refs = Backend::build_references(text, &uri, position, true);
         assert!(!refs.is_empty(), "Should find references for '++'");
         // Should find definition and usage (2 refs)

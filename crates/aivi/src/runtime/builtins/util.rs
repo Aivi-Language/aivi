@@ -89,11 +89,9 @@ pub(super) fn expect_float(value: Value, ctx: &str) -> Result<f64, RuntimeError>
 pub(super) fn expect_char(value: Value, ctx: &str) -> Result<char, RuntimeError> {
     let text = expect_text(value, ctx)?;
     let mut chars = text.chars();
-    let first = chars.next();
-    if first.is_some() && chars.next().is_none() {
-        Ok(first.unwrap())
-    } else {
-        Err(RuntimeError::Message(format!("{ctx} expects Char")))
+    match (chars.next(), chars.next()) {
+        (Some(ch), None) => Ok(ch),
+        _ => Err(RuntimeError::Message(format!("{ctx} expects Char"))),
     }
 }
 

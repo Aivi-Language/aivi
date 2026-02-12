@@ -266,13 +266,17 @@ impl Backend {
             }
 
             let include_decl_here = include_declaration && module_name == &origin_module;
-            
+
             let module_text = if let Some(t) = &indexed.text {
                 Some(t.clone())
             } else {
-                indexed.uri.to_file_path().ok().and_then(|path| fs::read_to_string(path).ok())
+                indexed
+                    .uri
+                    .to_file_path()
+                    .ok()
+                    .and_then(|path| fs::read_to_string(path).ok())
             };
-            
+
             if let Some(module_text) = module_text {
                 Self::collect_module_references(
                     &indexed.module,
