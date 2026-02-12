@@ -1,7 +1,8 @@
 # AIVI (draft language spec)
 
 > [!NOTE]
-> **AIVI v0.1** is currently an interpreted language embedding a CST-to-Kernel pipeline.
+> **AIVI v0.1** is primarily an interpreted language embedding a CST-to-Kernel pipeline.
+> Experimental native Rust codegen exists, but coverage is smaller than the interpreter today.
 > See [Missing Features](specs/missing_features_v0.1.md) for current implementation status.
 
 AIVI is a high-integrity functional language aimed at WebAssembly. This repo contains the **v0.1 Rust implementation** (interpreter) and the language specification.
@@ -44,18 +45,20 @@ width    = 100%   // typed Style percentage delta
 height   = 100svh // typed Style viewport delta
 ```
 
-JSX literals are sugar for the `Html` [domain](https://mendrik.github.io/aivi/02_syntax/06_domains) and [JSX literals](https://mendrik.github.io/aivi/02_syntax/13_jsx_literals):
+Effect fallback with `or` (fallback-only sugar):
 
-```tsx
-use aivi.html
+```aivi
+main = effect {
+  txt <- load (file.read "missing.txt") or "(missing)"
+  print txt
+}
+```
 
-Header = title => <div class="header">
-  <h1>{title}</h1>
-</div>
+I18n key + message sigils (placeholder types are checked):
 
-Nav = links => <ul class="nav">
-  {links |> map (l => <li><a href={l.url}>{l.label}</a></li>)}
-</ul>
+```aivi
+welcomeKey = ~k"app.welcome"
+welcomeMsg = ~m"Hello, {name:Text}!"
 ```
 
 ## Feedback

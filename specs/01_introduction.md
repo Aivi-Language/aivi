@@ -1,6 +1,8 @@
 # AIVI Language Specification (v0.1)
 
-> Note: **AIVI v0.1** is currently an interpreted language. See [Missing Features](./missing_features_v0.1.md) for current implementation status.
+> Note: **AIVI v0.1** is primarily an interpreted language (CST -> Kernel -> interpreter runtime).
+> Experimental native Rust codegen exists, but coverage is smaller than the interpreter today.
+> See [Missing Features](./missing_features_v0.1.md) for current implementation status.
 
 ## 0. Overview
 

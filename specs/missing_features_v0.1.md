@@ -14,6 +14,7 @@ This document lists features, modules, and behaviors described in the **AIVI Lan
 | **Decorators** | `02_syntax/14_decorators` | **Implemented (Syntax)** | Parsed and validated; only standard decorators allowed. |
 | **User-defined Domains** | `02_syntax/06_domains` | **Implemented** | `DomainDecl` exists in CST/HIR. |
 | **Patching** | `02_syntax/05_patching` | **Implemented** | `Patch` alias exists; desugaring logic present. |
+| **`or` fallback** | `02_syntax/09_effects` | **Implemented** | Fallback-only sugar for `Effect` (after `<-` in `effect {}`) and `Result` (expression form). |
 
 ## 2. Type System
 
@@ -38,7 +39,7 @@ This document lists features, modules, and behaviors described in the **AIVI Lan
 
 | Component | Status | Notes |
 | :--- | :--- | :--- |
-| **Native Codegen** | **Experimental (Partial)** | `aivi build` can emit standalone Rust logic via `[build].codegen = "native"`. Current limitations include incomplete builtins/stdlib coverage and missing `match` support in the native backend. |
+| **Native Codegen** | **Experimental (Partial)** | `aivi build` can emit standalone Rust logic via `[build].codegen = "native"`. Current limitations include incomplete builtins/stdlib coverage plus gaps in native runtime feature coverage (e.g. some index paths and raw expressions). |
 | **Package Manager** | **Implemented (Minimal)** | Cargo-backed `search`/`install` plus `package`/`publish` wrappers. Dependency installs validate `[package.metadata.aivi]` and enforce `kind = "lib"`; publishing validates `aivi.toml` ↔ `Cargo.toml` metadata consistency. |
 | **LSP** | **Implemented** | `aivi_lsp` crate exists with diagnostics, formatting, and definition lookup. |
 

@@ -36,3 +36,7 @@ If the surface allows `print` etc as effectful calls, those are already `Effect`
   `x <- eff or rhs` desugars by inserting `attempt` and matching on `Result`:
 
   `attempt eff` produces `Effect E (Result E A)`, then `Ok a` becomes `pure a` and `Err e` becomes `pure rhs` (or falls through to `fail e` if no fallback arm matches).
+
+Implementation note (v0.1 parser):
+
+- In `effect { ... }`, a fallback written as `x <- eff or | Err ... => ...` is treated as **Result** fallback syntax to avoid confusion with effect-fallback arms (which match the raw error `E`).

@@ -137,6 +137,8 @@ msg =
 Restrictions (v0.1):
 
 - Effect fallback arms match the error value (so write `NotFound m`, not `Err NotFound m`).
+- In `effect { ... }`, `x <- eff or | Err ... => ...` is parsed as a **Result** fallback (for ergonomics).
+  If you mean effect-fallback, write error patterns directly (`NotFound ...`) rather than `Err ...`.
 - Result fallback arms must match only `Err ...` at the top level (no `Ok ...`, no `_`).
   Include a final `Err _` catch-all arm.
 
