@@ -308,6 +308,11 @@ pub enum BlockItem {
         expr: Expr,
         span: Span,
     },
+    Let {
+        pattern: Pattern,
+        expr: Expr,
+        span: Span,
+    },
     Filter {
         expr: Expr,
         span: Span,

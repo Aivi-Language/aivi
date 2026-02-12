@@ -301,6 +301,9 @@ fn def_expr(def: &Def) -> Expr {
 }
 
 fn lower_expr(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
+    // Effect-block surface sugars (pure `=` bindings and `if ... else Unit` in statement position).
+    let expr = crate::surface::desugar_effect_sugars(expr);
+
     // Placeholder-lambda sugar: rewrite `_` occurrences into a lambda at the
     // smallest expression scope that still contains `_`.
     let expr = desugar_placeholder_lambdas(expr);
@@ -642,14 +645,17 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                 right: Box::new(lower_expr(*right, id_gen)),
             }
         }
-        Expr::Block { kind, items, .. } => HirExpr::Block {
-            id: id_gen.next(),
-            block_kind: lower_block_kind(kind),
-            items: items
-                .into_iter()
-                .map(|item| lower_block_item(item, id_gen))
-                .collect(),
-        },
+        Expr::Block { kind, items, .. } => {
+            let block_kind = lower_block_kind(&kind);
+            HirExpr::Block {
+                id: id_gen.next(),
+                block_kind: block_kind.clone(),
+                items: items
+                    .into_iter()
+                    .map(|item| lower_block_item(item, &kind, &block_kind, id_gen))
+                    .collect(),
+            }
+        }
         Expr::Raw { text, .. } => HirExpr::Raw {
             id: id_gen.next(),
             text,
@@ -700,7 +706,7 @@ fn lower_lambda(params: Vec<Pattern>, body: Expr, id_gen: &mut IdGen) -> HirExpr
     acc
 }
 
-fn lower_block_kind(kind: BlockKind) -> HirBlockKind {
+fn lower_block_kind(kind: &BlockKind) -> HirBlockKind {
     match kind {
         BlockKind::Plain => HirBlockKind::Plain,
         BlockKind::Effect => HirBlockKind::Effect,
@@ -709,12 +715,40 @@ fn lower_block_kind(kind: BlockKind) -> HirBlockKind {
     }
 }
 
-fn lower_block_item(item: BlockItem, id_gen: &mut IdGen) -> HirBlockItem {
+fn lower_block_item(
+    item: BlockItem,
+    surface_kind: &BlockKind,
+    hir_kind: &HirBlockKind,
+    id_gen: &mut IdGen,
+) -> HirBlockItem {
     match item {
         BlockItem::Bind { pattern, expr, .. } => HirBlockItem::Bind {
             pattern: lower_pattern(pattern, id_gen),
             expr: lower_expr(expr, id_gen),
         },
+        BlockItem::Let { pattern, expr, .. } => {
+            let lowered_expr = lower_expr(expr, id_gen);
+            let expr = if matches!(surface_kind, BlockKind::Effect)
+                && matches!(hir_kind, HirBlockKind::Effect)
+            {
+                // `name = expr` inside `effect { ... }` is a pure let-binding and must not
+                // implicitly run effects even if `expr` produces an `Effect` value.
+                HirExpr::Call {
+                    id: id_gen.next(),
+                    func: Box::new(HirExpr::Var {
+                        id: id_gen.next(),
+                        name: "pure".to_string(),
+                    }),
+                    args: vec![lowered_expr],
+                }
+            } else {
+                lowered_expr
+            };
+            HirBlockItem::Bind {
+                pattern: lower_pattern(pattern, id_gen),
+                expr,
+            }
+        }
         BlockItem::Filter { expr, .. } => HirBlockItem::Filter {
             expr: lower_expr(expr, id_gen),
         },
@@ -835,6 +869,7 @@ fn contains_placeholder(expr: &Expr) -> bool {
         Expr::Binary { left, right, .. } => contains_placeholder(left) || contains_placeholder(right),
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             BlockItem::Bind { expr, .. } => contains_placeholder(expr),
+            BlockItem::Let { expr, .. } => contains_placeholder(expr),
             BlockItem::Filter { expr, .. }
             | BlockItem::Yield { expr, .. }
             | BlockItem::Recurse { expr, .. }
@@ -1005,6 +1040,15 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
                         expr,
                         span,
                     } => BlockItem::Bind {
+                        pattern,
+                        expr: desugar_placeholder_lambdas(expr),
+                        span,
+                    },
+                    BlockItem::Let {
+                        pattern,
+                        expr,
+                        span,
+                    } => BlockItem::Let {
                         pattern,
                         expr: desugar_placeholder_lambdas(expr),
                         span,
@@ -1258,6 +1302,15 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                         expr,
                         span,
                     } => BlockItem::Bind {
+                        pattern,
+                        expr: replace_holes_inner(expr, counter, params),
+                        span,
+                    },
+                    BlockItem::Let {
+                        pattern,
+                        expr,
+                        span,
+                    } => BlockItem::Let {
                         pattern,
                         expr: replace_holes_inner(expr, counter, params),
                         span,

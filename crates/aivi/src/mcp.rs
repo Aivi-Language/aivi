@@ -438,6 +438,7 @@ fn expr_is_effectful(expr: &Expr) -> bool {
             }
             items.iter().any(|item| match item {
                 BlockItem::Bind { expr, .. }
+                | BlockItem::Let { expr, .. }
                 | BlockItem::Filter { expr, .. }
                 | BlockItem::Yield { expr, .. }
                 | BlockItem::Recurse { expr, .. }

@@ -113,6 +113,84 @@ main = effect {
 }
 
 #[test]
+fn typecheck_effect_block_pure_let_and_unit_statements() {
+    let source = r#"
+module test.effect_sugar
+export main
+
+// Minimal local stand-ins
+Result E A = Err E | Ok A
+
+main : Effect Text Unit
+main = effect {
+  n <- 41
+  m <- n + 1
+
+  res <- attempt (if m == 42 then fail "boom" else pure m)
+
+  verdict = res ?
+    | Ok _  => "ok"
+    | Err _ => "err"
+
+  print verdict
+
+  if m > 40 then print "branch" else Unit
+}"#;
+    check_ok(source);
+}
+
+#[test]
+fn typecheck_effect_block_statement_requires_unit() {
+    let source = r#"
+module test.effect_stmt_unit
+export main, foo
+
+foo : Effect Text Int
+foo = pure 1
+
+main : Effect Text Unit
+main = effect {
+  println "start"
+  foo
+  pure Unit
+}"#;
+    check_err(source);
+}
+
+#[test]
+fn typecheck_effect_block_let_rejects_effect_expr() {
+    let source = r#"
+module test.effect_let_err
+export main
+
+main : Effect Text Unit
+main = effect {
+  x = print "nope"
+  pure Unit
+}"#;
+    check_err(source);
+}
+
+#[test]
+fn typecheck_flattened_constructor_chain_patterns() {
+    let source = r#"
+module test.pattern_chain
+export msg
+
+Result E A = Err E | Ok A
+Error = NotFound Text | Other
+
+res : Result Error Text
+res = Err (NotFound "hi")
+
+msg : Text
+msg = res ?
+  | Err NotFound m => m
+  | _              => "no-msg""#;
+    check_ok(source);
+}
+
+#[test]
 fn typecheck_error_unknown_name() {
     let source = r#"
 module test.err

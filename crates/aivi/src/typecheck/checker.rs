@@ -782,7 +782,7 @@ impl TypeChecker {
             }
             let expected = self.type_from_expr(member_sig, &mut ctx);
 
-            let expr = desugar_holes(def.expr.clone());
+            let expr = crate::surface::desugar_effect_sugars(desugar_holes(def.expr.clone()));
             let mut local_env = env.clone();
             local_env.insert(def.name.name.clone(), Scheme::mono(expected.clone()));
 
@@ -830,7 +830,7 @@ impl TypeChecker {
         diagnostics: &mut Vec<FileDiagnostic>,
     ) {
         let name = def.name.name.clone();
-        let expr = desugar_holes(def.expr.clone());
+        let expr = crate::surface::desugar_effect_sugars(desugar_holes(def.expr.clone()));
         if let Some(sig) = sigs.get(&name) {
             let mut local_env = env.clone();
             let expected = self.instantiate(sig);
@@ -1447,6 +1447,11 @@ impl TypeChecker {
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
                 }
+                BlockItem::Let { pattern, expr, .. } => {
+                    let expr_ty = self.infer_expr(expr, &mut local_env)?;
+                    let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
+                }
                 BlockItem::Filter { expr, .. }
                 | BlockItem::Yield { expr, .. }
                 | BlockItem::Recurse { expr, .. }
@@ -1456,6 +1461,18 @@ impl TypeChecker {
             }
         }
         Ok(last_ty)
+    }
+
+    fn require_effect_value(
+        &mut self,
+        expr_ty: Type,
+        err_ty: Type,
+        span: Span,
+    ) -> Result<Type, TypeError> {
+        let value_ty = self.fresh_var();
+        let effect_ty = Type::con("Effect").app(vec![err_ty, value_ty.clone()]);
+        self.unify_with_span(expr_ty, effect_ty, span)?;
+        Ok(value_ty)
     }
 
     fn infer_effect_block(
@@ -1485,6 +1502,30 @@ impl TypeChecker {
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     self.unify_with_span(pat_ty, value_ty, pattern_span(pattern))?;
                 }
+                BlockItem::Let { pattern, expr, .. } => {
+                    // `x = expr` inside `effect { ... }` is a pure let-binding and must not run
+                    // effects. Reject effect-typed expressions (including `Resource`).
+                    let expr_ty = self.infer_expr(expr, &mut local_env)?;
+                    let snapshot = self.subst.clone();
+                    let let_err_ty = self.fresh_var();
+                    if self
+                        .bind_effect_value(expr_ty.clone(), let_err_ty, expr_span(expr))
+                        .is_ok()
+                    {
+                        self.subst = snapshot;
+                        return Err(TypeError {
+                            span: expr_span(expr),
+                            message:
+                                "use `<-` to run effects; `=` binds pure values".to_string(),
+                            expected: None,
+                            found: None,
+                        });
+                    }
+                    self.subst = snapshot;
+
+                    let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
+                }
                 BlockItem::Filter { expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     self.unify_with_span(expr_ty, Type::con("Bool"), expr_span(expr))?;
@@ -1500,7 +1541,10 @@ impl TypeChecker {
                             Type::con("Effect").app(vec![err_ty.clone(), result_ty.clone()]);
                         self.unify_with_span(expr_ty, expected, expr_span(expr))?;
                     } else {
-                        let _ = self.bind_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
+                        // Expression statements only auto-run effects when they return `Unit`.
+                        // For non-`Unit` results, require an explicit `<-` bind.
+                        let value_ty = self.require_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
+                        self.unify_with_span(value_ty, Type::con("Unit"), expr_span(expr))?;
                     }
                 }
             }
@@ -1524,6 +1568,11 @@ impl TypeChecker {
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     self.unify_with_span(pat_ty, bind_elem.clone(), pattern_span(pattern))?;
                     current_elem = Some(bind_elem);
+                }
+                BlockItem::Let { pattern, expr, .. } => {
+                    let expr_ty = self.infer_expr(expr, &mut local_env)?;
+                    let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
                 }
                 BlockItem::Filter { expr, .. } => {
                     let mut guard_env = local_env.clone();
@@ -1568,6 +1617,11 @@ impl TypeChecker {
                         self.bind_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     self.unify_with_span(pat_ty, value_ty, pattern_span(pattern))?;
+                }
+                BlockItem::Let { pattern, expr, .. } => {
+                    let expr_ty = self.infer_expr(expr, &mut local_env)?;
+                    let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
                 }
                 BlockItem::Filter { expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
@@ -2887,6 +2941,7 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
                 .map(|mut item| {
                     match &mut item {
                         BlockItem::Bind { expr, .. }
+                        | BlockItem::Let { expr, .. }
                         | BlockItem::Yield { expr, .. }
                         | BlockItem::Recurse { expr, .. }
                         | BlockItem::Expr { expr, .. } => {
@@ -2967,6 +3022,7 @@ fn contains_hole(expr: &Expr) -> bool {
         Expr::Binary { left, right, .. } => contains_hole(left) || contains_hole(right),
         Expr::Block { items, .. } => items.iter().any(|item| match item {
             BlockItem::Bind { expr, .. } => contains_hole(expr),
+            BlockItem::Let { expr, .. } => contains_hole(expr),
             BlockItem::Filter { expr, .. }
             | BlockItem::Yield { expr, .. }
             | BlockItem::Recurse { expr, .. }
@@ -3147,6 +3203,15 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                         expr,
                         span,
                     } => BlockItem::Bind {
+                        pattern,
+                        expr: replace_holes_inner(expr, counter, params),
+                        span,
+                    },
+                    BlockItem::Let {
+                        pattern,
+                        expr,
+                        span,
+                    } => BlockItem::Let {
                         pattern,
                         expr: replace_holes_inner(expr, counter, params),
                         span,

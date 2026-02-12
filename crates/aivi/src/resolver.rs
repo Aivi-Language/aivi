@@ -383,6 +383,10 @@ fn check_expr(
                         check_expr(expr, &mut block_scope, diagnostics, module, allow_unknown);
                         collect_pattern_binding(pattern, &mut block_scope);
                     }
+                    BlockItem::Let { pattern, expr, .. } => {
+                        check_expr(expr, &mut block_scope, diagnostics, module, allow_unknown);
+                        collect_pattern_binding(pattern, &mut block_scope);
+                    }
                     BlockItem::Filter { expr, .. }
                     | BlockItem::Yield { expr, .. }
                     | BlockItem::Recurse { expr, .. }

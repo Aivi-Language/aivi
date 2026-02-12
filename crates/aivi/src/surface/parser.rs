@@ -995,6 +995,15 @@ impl Parser {
                                 expr: rewrite_literal_template(expr, needle, param),
                                 span,
                             },
+                            BlockItem::Let {
+                                pattern,
+                                expr,
+                                span,
+                            } => BlockItem::Let {
+                                pattern,
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
                             BlockItem::Filter { expr, span } => BlockItem::Filter {
                                 expr: rewrite_literal_template(expr, needle, param),
                                 span,
@@ -1935,11 +1944,19 @@ impl Parser {
                         span: pattern_span(&pattern),
                     });
                     let span = merge_span(pattern_span(&pattern), expr_span(&expr));
-                    items.push(BlockItem::Bind {
-                        pattern,
-                        expr,
-                        span,
-                    });
+                    if matches!(kind, BlockKind::Effect) {
+                        items.push(BlockItem::Let {
+                            pattern,
+                            expr,
+                            span,
+                        });
+                    } else {
+                        items.push(BlockItem::Bind {
+                            pattern,
+                            expr,
+                            span,
+                        });
+                    }
                     continue;
                 }
             }

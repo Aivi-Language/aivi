@@ -116,6 +116,7 @@ When working on the compiler (`crates/`):
 
 *   **Specs**: Update `specs/` *before* or *alongside* code changes.
 *   **Specs**: Update indices and make sure links are working.
+*   **AIVI Code Blocks**: Format all AIVI snippets in docs to match `aivi fmt` output (use `aivi fmt path` or `cargo run -p aivi -- fmt path`). In particular, keep formatter-style alignment for `<-` inside `effect { ... }` blocks and `=>` in pattern matching arms. Prefer fenced code blocks with the `aivi` language tag.
 *   **Roadmap**: Check `specs/roadmap/README.md` to align work with current phases.
 *   **Guidelines**: Follow `.junie/guidelines.md`.
 *   **AGENTS.md**: Update this file if workflows or structures change significantly.
@@ -136,6 +137,7 @@ Before submitting changes:
 - [ ] Did I check the specs?
 - [ ] Did I run existing tests?
 - [ ] Did I run `cargo fmt --all -- --check`?
+- [ ] Did I run `aivi fmt` for any AIVI doc snippets I touched?
 - [ ] Did I add a new test case?
 - [ ] Is the code consistent with AIVI style?
 - [ ] Did I avoid hallucinating features not in the roadmap?
