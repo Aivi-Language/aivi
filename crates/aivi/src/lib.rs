@@ -2,6 +2,8 @@ mod cst;
 mod diagnostics;
 mod formatter;
 mod hir;
+mod i18n;
+mod i18n_codegen;
 mod kernel;
 pub mod lexer;
 mod mcp;
@@ -52,6 +54,7 @@ pub use surface::{
     TypeExpr, TypeSig, UseDecl,
 };
 pub use typecheck::{check_types, infer_value_types};
+pub use i18n_codegen::{generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry};
 
 #[derive(Debug, thiserror::Error)]
 pub enum AiviError {

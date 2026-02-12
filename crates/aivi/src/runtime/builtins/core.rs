@@ -7,6 +7,7 @@ use super::color::build_color_record;
 use super::concurrency::build_concurrent_record;
 use super::crypto::build_crypto_record;
 use super::graph::build_graph_record;
+use super::i18n::build_i18n_record;
 use super::linalg::build_linalg_record;
 use super::math::build_math_record;
 use super::number::{build_bigint_record, build_decimal_record, build_rational_record};
@@ -340,4 +341,5 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("crypto".to_string(), build_crypto_record());
     env.set("logger".to_string(), build_log_record());
     env.set("database".to_string(), build_database_record());
+    env.set("i18n".to_string(), build_i18n_record());
 }

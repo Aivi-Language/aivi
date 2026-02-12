@@ -17,6 +17,7 @@ mod duration;
 mod file;
 mod geometry;
 mod graph;
+mod i18n;
 mod linalg_facade;
 mod linear_algebra;
 mod logic;
@@ -155,6 +156,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: file::MODULE_NAME,
         source: file::SOURCE,
+    },
+    EmbeddedModule {
+        name: i18n::MODULE_NAME,
+        source: i18n::SOURCE,
     },
     EmbeddedModule {
         name: bigint::MODULE_NAME,

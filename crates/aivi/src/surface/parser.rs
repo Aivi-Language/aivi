@@ -1572,6 +1572,20 @@ impl Parser {
                 if tag == "d" && !is_probably_date(&body) {
                     self.emit_diag("E1512", "invalid date sigil", span.clone());
                 }
+                if tag == "k" {
+                    if let Err(msg) = crate::i18n::validate_key_text(&body) {
+                        self.emit_diag("E1514", &format!("invalid i18n key sigil: {msg}"), span.clone());
+                    }
+                }
+                if tag == "m" {
+                    if let Err(msg) = crate::i18n::parse_message_template(&body) {
+                        self.emit_diag(
+                            "E1515",
+                            &format!("invalid i18n message sigil: {msg}"),
+                            span.clone(),
+                        );
+                    }
+                }
                 return Some(Expr::Literal(Literal::Sigil {
                     tag,
                     body,

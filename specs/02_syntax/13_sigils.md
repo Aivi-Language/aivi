@@ -11,6 +11,10 @@ endpoint = ~u(https://api.example.com)
 
 // Date
 birthday = ~d(1990-12-31)
+
+// I18n key and message templates
+welcomeKey = ~k"app.welcome"
+welcomeMsg = ~m"Hello, {name:Text}!"
 ```
 
 Domains define these sigils to validate and construct types at compile time.

@@ -1025,6 +1025,8 @@ impl TypeChecker {
                 "u" => Type::con("Url"),
                 "d" => Type::con("Date"),
                 "t" | "dt" => Type::con("DateTime"),
+                "k" => Type::con("Key"),
+                "m" => Type::con("Message"),
                 _ => Type::con("Text"),
             },
             Literal::Bool { .. } => Type::con("Bool"),

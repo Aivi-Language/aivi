@@ -68,3 +68,8 @@ fn run_native_fantasyland_law_tests() {
         t0.elapsed()
     );
 }
+
+#[test]
+fn run_native_i18n_example() {
+    run_native_via_cli("examples/23_i18n.aivi");
+}

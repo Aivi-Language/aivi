@@ -342,12 +342,15 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
             let ind2 = "    ".repeat(indent + 1);
             let mut rendered = String::new();
             rendered.push_str(&format!("{{\n{ind2}let f = ({func_code})?;\n"));
-            rendered.push_str(&format!("{ind2}let mut args: Vec<Value> = Vec::new();\n"));
+            // Avoid collisions with user variables named `args`.
+            rendered.push_str(&format!(
+                "{ind2}let mut __aivi_call_args: Vec<Value> = Vec::new();\n"
+            ));
             for arg in args {
                 let arg_code = emit_expr(arg, indent + 1)?;
-                rendered.push_str(&format!("{ind2}args.push(({arg_code})?);\n"));
+                rendered.push_str(&format!("{ind2}__aivi_call_args.push(({arg_code})?);\n"));
             }
-            rendered.push_str(&format!("{ind2}rt.call(f, args)\n{ind}}}"));
+            rendered.push_str(&format!("{ind2}rt.call(f, __aivi_call_args)\n{ind}}}"));
             rendered
         }
         RustIrExpr::List { items, .. } => {

@@ -223,6 +223,7 @@ fn run() -> Result<(), AiviError> {
             _ => Ok(()),
         },
         "mcp" => cmd_mcp(&rest),
+        "i18n" => cmd_i18n(&rest),
         _ => {
             print_help();
             Err(AiviError::InvalidCommand(command))
@@ -232,7 +233,7 @@ fn run() -> Result<(), AiviError> {
 
 fn print_help() {
     println!(
-        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--require-aivi] [--no-fetch]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check <path|dir/...>\n  fmt <path>\n  desugar <path|dir/...>\n  kernel <path|dir/...>\n  rust-ir <path|dir/...>\n  lsp\n  build <path|dir/...> [--target rust|rust-embed|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n\n  -h, --help"
+        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--require-aivi] [--no-fetch]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check <path|dir/...>\n  fmt <path>\n  desugar <path|dir/...>\n  kernel <path|dir/...>\n  rust-ir <path|dir/...>\n  lsp\n  build <path|dir/...> [--target rust|rust-embed|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
     );
 }
 
@@ -263,6 +264,84 @@ fn cmd_mcp(args: &[String]) -> Result<(), AiviError> {
         }
         _ => Err(AiviError::InvalidCommand(format!("mcp {subcommand}"))),
     }
+}
+
+fn cmd_i18n(args: &[String]) -> Result<(), AiviError> {
+    let Some(subcommand) = args.first() else {
+        print_help();
+        return Ok(());
+    };
+    match subcommand.as_str() {
+        "gen" => cmd_i18n_gen(&args[1..]),
+        other => Err(AiviError::InvalidCommand(format!("i18n {other}"))),
+    }
+}
+
+fn cmd_i18n_gen(args: &[String]) -> Result<(), AiviError> {
+    let mut catalog = None;
+    let mut locale = None;
+    let mut module_name = None;
+    let mut out_path = None;
+
+    let mut iter = args.iter().peekable();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--locale" => {
+                locale = iter.next().cloned();
+            }
+            "--module" => {
+                module_name = iter.next().cloned();
+            }
+            "--out" => {
+                out_path = iter.next().cloned();
+            }
+            value if !value.starts_with('-') && catalog.is_none() => {
+                catalog = Some(value.to_string());
+            }
+            other => {
+                return Err(AiviError::InvalidCommand(format!(
+                    "unexpected i18n gen argument {other}"
+                )));
+            }
+        }
+    }
+
+    let Some(catalog_path) = catalog else {
+        return Err(AiviError::InvalidCommand(
+            "i18n gen requires <catalog.properties>".to_string(),
+        ));
+    };
+    let Some(locale) = locale else {
+        return Err(AiviError::InvalidCommand(
+            "i18n gen requires --locale <tag>".to_string(),
+        ));
+    };
+    let Some(module_name) = module_name else {
+        return Err(AiviError::InvalidCommand(
+            "i18n gen requires --module <name>".to_string(),
+        ));
+    };
+    let Some(out_path) = out_path else {
+        return Err(AiviError::InvalidCommand(
+            "i18n gen requires --out <file>".to_string(),
+        ));
+    };
+
+    let properties_text = std::fs::read_to_string(&catalog_path)?;
+    let module_source = aivi::generate_i18n_module_from_properties(
+        &module_name,
+        &locale,
+        &properties_text,
+    )
+    .map_err(AiviError::InvalidCommand)?;
+
+    let out_path = PathBuf::from(out_path);
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(&out_path, module_source)?;
+    println!("{}", out_path.display());
+    Ok(())
 }
 
 fn cmd_mcp_serve(target: &str, allow_effects: bool) -> Result<(), AiviError> {

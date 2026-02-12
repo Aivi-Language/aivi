@@ -12,6 +12,7 @@ use super::concurrency::{build_channel_record, build_concurrent_record};
 use super::crypto::build_crypto_record;
 use super::database::build_database_record;
 use super::graph::build_graph_record;
+use super::i18n::build_i18n_record;
 use super::http_server::build_http_server_record;
 use super::linalg::build_linalg_record;
 use super::log::build_log_record;
@@ -332,4 +333,5 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
     env.insert("crypto".to_string(), build_crypto_record());
     env.insert("logger".to_string(), build_log_record());
     env.insert("database".to_string(), build_database_record());
+    env.insert("i18n".to_string(), build_i18n_record());
 }

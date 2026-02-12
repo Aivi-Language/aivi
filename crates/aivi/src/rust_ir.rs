@@ -1126,6 +1126,7 @@ fn resolve_builtin(name: &str) -> Option<BuiltinName> {
             | "crypto"
             | "logger"
             | "database"
+            | "i18n"
             | "Map"
             | "Set"
             | "Queue"

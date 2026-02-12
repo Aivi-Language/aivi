@@ -1,0 +1,23 @@
+module examples.i18n
+
+use aivi
+use aivi.i18n
+
+main : Effect Text Unit
+main = effect {
+  localeRes = parseLocale "en-US"
+  locale = localeRes ?
+    | Ok loc => loc
+    | Err _  => { language: "en", region: Some "US", variants: [], tag: "en-US" }
+
+  props = "app.welcome = Hello, \{name:Text\}!\napp.cartItems = You have \{count:Int\} items.\n"
+
+  bundleRes = bundleFromProperties locale props
+  bundle = bundleRes ?
+    | Ok b  => b
+    | Err e => { locale: locale, entries: Map.empty } // fail closed for example
+
+  _ <- print (t bundle (~k"app.welcome") { name: "Alice" })
+  _ <- print (t bundle (~k"app.cartItems") { count: 3 })
+  pure Unit
+}
