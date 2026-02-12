@@ -3,7 +3,7 @@ use std::io::Write;
 use std::sync::Arc;
 
 use crate::values::{values_equal, EffectValue};
-use crate::{format_value, Runtime, RuntimeError, Value};
+use crate::{format_value, RuntimeError, Value};
 
 use super::calendar::build_calendar_record;
 use super::collections::build_collections_record;

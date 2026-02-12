@@ -32,7 +32,7 @@ main = effect {
   
   // Use resource
   content <- file.readAll f
-  _ <- print content
+  _       <- print content
   pure Unit
 } // f is automatically closed here
 ```

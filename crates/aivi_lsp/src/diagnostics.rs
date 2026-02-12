@@ -11,6 +11,7 @@ use crate::backend::Backend;
 use crate::state::IndexedModule;
 
 impl Backend {
+    #[cfg(test)]
     pub(super) fn build_diagnostics(text: &str, uri: &Url) -> Vec<Diagnostic> {
         Self::build_diagnostics_with_workspace(text, uri, &HashMap::new())
     }

@@ -68,6 +68,7 @@ pub fn emit_rustc_source(program: RustIrProgram) -> Result<String, AiviError> {
     )
 }
 
+#[allow(dead_code)]
 pub fn emit_rustc_source_lib(program: RustIrProgram) -> Result<String, AiviError> {
     let mut modules = program.modules.into_iter();
     let Some(first) = modules.next() else {
@@ -87,6 +88,7 @@ pub fn emit_rustc_source_lib(program: RustIrProgram) -> Result<String, AiviError
 }
 
 #[derive(Clone, Copy)]
+#[allow(dead_code)]
 enum EmitKind {
     Bin,
     Lib,

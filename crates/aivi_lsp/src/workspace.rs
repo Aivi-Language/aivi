@@ -11,7 +11,6 @@ use crate::state::{DiskIndex, DocumentState, IndexedModule};
 impl Backend {
     pub(super) fn build_disk_index(root: &Path) -> DiskIndex {
         let mut index = DiskIndex {
-            root: root.to_path_buf(),
             modules_by_uri: HashMap::new(),
             module_index: HashMap::new(),
         };

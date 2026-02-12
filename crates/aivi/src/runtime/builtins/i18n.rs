@@ -269,15 +269,15 @@ fn render_parsed(
 }
 
 fn matches_type(expected: &str, value: &Value) -> bool {
-    match (expected, value) {
-        ("Text", Value::Text(_)) => true,
-        ("Int", Value::Int(_)) => true,
-        ("Float", Value::Float(_)) => true,
-        ("Bool", Value::Bool(_)) => true,
-        ("Decimal", Value::Decimal(_)) => true,
-        ("DateTime", Value::DateTime(_)) => true,
-        _ => false,
-    }
+    matches!(
+        (expected, value),
+        ("Text", Value::Text(_))
+            | ("Int", Value::Int(_))
+            | ("Float", Value::Float(_))
+            | ("Bool", Value::Bool(_))
+            | ("Decimal", Value::Decimal(_))
+            | ("DateTime", Value::DateTime(_))
+    )
 }
 
 fn value_type_name(value: &Value) -> &'static str {

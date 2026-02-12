@@ -1,5 +1,4 @@
 use aivi::lexer::{filter_tokens, lex};
-use std::path::Path;
 
 #[test]
 fn debug_full_pipeline() {

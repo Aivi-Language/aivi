@@ -60,6 +60,9 @@ pub type R = Result<Value, RuntimeError>;
 
 pub type BuiltinFunc = dyn Fn(Vec<Value>, &mut Runtime) -> R + Send + Sync;
 pub type ThunkFunc = dyn Fn(&mut Runtime) -> R + Send + Sync;
+pub type ClosureFunc = dyn Fn(Value, &mut Runtime) -> R + Send + Sync;
+pub type ResourceAcquireFunc =
+    dyn FnOnce(&mut Runtime) -> Result<(Value, Value), RuntimeError> + Send;
 
 #[derive(Clone)]
 pub enum Value {
@@ -113,7 +116,7 @@ pub struct BuiltinImpl {
 
 #[derive(Clone)]
 pub struct ClosureValue {
-    pub func: Arc<dyn Fn(Value, &mut Runtime) -> R + Send + Sync>,
+    pub func: Arc<ClosureFunc>,
 }
 
 pub enum EffectValue {
@@ -121,8 +124,7 @@ pub enum EffectValue {
 }
 
 pub struct ResourceValue {
-    pub acquire:
-        Mutex<Option<Box<dyn FnOnce(&mut Runtime) -> Result<(Value, Value), RuntimeError> + Send>>>,
+    pub acquire: Mutex<Option<Box<ResourceAcquireFunc>>>,
 }
 
 pub struct ThunkValue {
@@ -485,6 +487,12 @@ impl Runtime {
 
     pub fn next_u64(&mut self) -> u64 {
         self.rng_next_u64()
+    }
+}
+
+impl Default for Runtime {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

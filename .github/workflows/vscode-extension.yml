@@ -4,10 +4,12 @@ on:
   push:
     paths:
       - "vscode/**"
+      - "crates/aivi_lsp/**"
       - ".github/workflows/vscode-extension.yml"
   pull_request:
     paths:
       - "vscode/**"
+      - "crates/aivi_lsp/**"
       - ".github/workflows/vscode-extension.yml"
   workflow_dispatch:
 

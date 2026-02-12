@@ -140,11 +140,7 @@ fn native_codegen_examples_compile_with_rustc() {
         let path = entry.path();
         let rel = path.strip_prefix(&root).unwrap_or(path);
         let rel_str = rel.to_string_lossy();
-        let mod_name = rel_str
-            .replace(std::path::MAIN_SEPARATOR, "_")
-            .replace('/', "_")
-            .replace('\\', "_")
-            .replace('.', "_");
+        let mod_name = rel_str.replace([std::path::MAIN_SEPARATOR, '/', '\\', '.'], "_");
 
         eprintln!("[native_codegen] compile {rel_str}");
         let t0 = Instant::now();

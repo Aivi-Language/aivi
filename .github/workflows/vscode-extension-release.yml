@@ -1,0 +1,80 @@
+name: VS Code Extension Release
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "vscode/**"
+      - "crates/aivi_lsp/**"
+      - ".github/workflows/vscode-extension-release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Prevent infinite loops when this workflow pushes its own release commit.
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vscode
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: vscode/pnpm-lock.yaml
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build + package (bumps patch)
+        run: pnpm run build
+
+      - name: Commit version bump and regenerated assets
+        run: |
+          set -euo pipefail
+          cd ..
+          version="$(node -p "require('./vscode/package.json').version")"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A vscode
+          if git diff --cached --quiet; then
+            echo "No release changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(vscode): release ${version}"
+          git tag -a "vscode-v${version}" -m "vscode ${version}" || true
+          git push --follow-tags
+
+      - name: Publish to VS Code Marketplace
+        if: ${{ secrets.VSCE_PAT != '' }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: pnpm exec vsce publish --no-dependencies --pat "$VSCE_PAT"
+
+      - name: Upload VSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: aivi-vscode.vsix
+          path: vscode/*.vsix

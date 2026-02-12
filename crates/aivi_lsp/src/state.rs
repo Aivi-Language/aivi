@@ -11,7 +11,6 @@ pub(super) struct DocumentState {
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct DiskIndex {
-    pub(super) root: PathBuf,
     pub(super) modules_by_uri: HashMap<Url, Vec<String>>,
     pub(super) module_index: HashMap<String, IndexedModule>,
 }

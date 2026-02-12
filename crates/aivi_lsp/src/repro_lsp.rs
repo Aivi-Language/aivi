@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
     use crate::backend::Backend;
-    use std::collections::HashMap;
     use tower_lsp::lsp_types::{HoverContents, Position, Url};
 
     fn sample_uri() -> Url {
@@ -42,7 +41,7 @@ add = x y => x + y
         let hover = Backend::build_hover(text, &uri, position);
 
         if let Some(hover) = hover {
-            let HoverContents::Markup(markup) = hover.contents else {
+            let HoverContents::Markup(_markup) = hover.contents else {
                 panic!("expected markup hover");
             };
             // If it succeeds (after fix), it should show something about '+'

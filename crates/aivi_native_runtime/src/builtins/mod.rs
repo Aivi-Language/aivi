@@ -37,5 +37,3 @@ fn build_all() -> HashMap<String, Value> {
     core::register_builtins(&mut env);
     env
 }
-
-pub(crate) use util::builtin;

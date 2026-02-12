@@ -59,10 +59,7 @@ pub fn parse_locale_tag(tag: &str) -> Result<LocaleParts, String> {
     if raw.is_empty() {
         return Err("locale tag is empty".to_string());
     }
-    let subtags: Vec<&str> = raw
-        .split(|c| c == '-' || c == '_')
-        .filter(|s| !s.is_empty())
-        .collect();
+    let subtags: Vec<&str> = raw.split(['-', '_']).filter(|s| !s.is_empty()).collect();
     if subtags.is_empty() {
         return Err("locale tag is empty".to_string());
     }
@@ -144,7 +141,7 @@ pub fn parse_message_template(text: &str) -> Result<ParsedMessage, String> {
                 }
                 let mut inner = String::new();
                 let mut closed = false;
-                while let Some(next) = chars.next() {
+                for next in chars.by_ref() {
                     if next == '}' {
                         closed = true;
                         break;

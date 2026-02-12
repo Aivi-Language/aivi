@@ -386,7 +386,7 @@ fn emit_resource_block(items: &[RustIrBlockItem], indent: usize) -> Result<Strin
     s.push_str(&ind2);
     s.push_str("})))\n");
     s.push_str(&ind);
-    s.push_str("}");
+    s.push('}');
     Ok(s)
 }
 

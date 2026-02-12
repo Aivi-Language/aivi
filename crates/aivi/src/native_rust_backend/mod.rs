@@ -111,9 +111,7 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
         let main_fn = utils::rust_global_fn_name("main");
         out.push_str("fn main() {\n");
         out.push_str("    let mut rt = Runtime::new();\n");
-        out.push_str(&format!(
-            "    let result: Result<(), RuntimeError> = (|| {{\n"
-        ));
+        out.push_str("    let result: Result<(), RuntimeError> = (|| {\n");
         out.push_str(&format!("        let v = {main_fn}(&mut rt)?;\n"));
         out.push_str("        let _ = rt.run_effect_value(v)?;\n");
         out.push_str("        Ok(())\n");

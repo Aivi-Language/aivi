@@ -29,7 +29,7 @@ fn run_aivi_sources() {
     for entry in WalkDir::new(&tests_dir)
         .into_iter()
         .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map_or(false, |ext| ext == "aivi"))
+        .filter(|e| e.path().extension().is_some_and(|ext| ext == "aivi"))
     {
         let path = entry.path();
         let rel_path = path.strip_prefix(&root).unwrap_or(path);

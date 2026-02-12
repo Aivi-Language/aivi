@@ -74,7 +74,7 @@ load : Source K A -> Effect (SourceError K) A
 ```aivi
 main = effect {
   cfg <- load (file.json "config.json")
-  _ <- print "loaded"
+  _   <- print "loaded"
   pure Unit
 }
 ```
@@ -103,9 +103,9 @@ This pattern is common when a branch needs multiple effectful steps:
 
 ```aivi
 main = effect {
-  u <- loadUser
+  u     <- loadUser
   token <- if u.isAdmin then effect {
-    _ <- log "admin login"
+    _     <- log "admin login"
     token <- mintToken u
     pure token
   } else pure "guest"
@@ -182,9 +182,9 @@ Effect blocks can be combined with pipelines and pattern matching to create very
 ```aivi
 // Fetch config, then fetch data, then log
 setup = effect {
-  cfg <- loadConfig "prod.json"
+  cfg  <- loadConfig "prod.json"
   data <- fetchRemoteData cfg
-  _ <- logSuccess data
+  _    <- logSuccess data
   pure Unit
 }
 ```

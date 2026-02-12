@@ -128,10 +128,7 @@ fn parse_locale_tag(tag: &str) -> Result<LocaleParts, String> {
     if raw.is_empty() {
         return Err("locale tag is empty".to_string());
     }
-    let subtags: Vec<&str> = raw
-        .split(|c| c == '-' || c == '_')
-        .filter(|s| !s.is_empty())
-        .collect();
+    let subtags: Vec<&str> = raw.split(['-', '_']).filter(|s| !s.is_empty()).collect();
     if subtags.is_empty() {
         return Err("locale tag is empty".to_string());
     }
@@ -235,7 +232,7 @@ fn parse_message_template(text: &str) -> Result<Vec<MessagePart>, String> {
                 }
                 let mut inner = String::new();
                 let mut closed = false;
-                while let Some(next) = chars.next() {
+                for next in chars.by_ref() {
                     if next == '}' {
                         closed = true;
                         break;
@@ -410,15 +407,15 @@ fn render_parts(
 }
 
 fn matches_type(expected: &str, value: &Value) -> bool {
-    match (expected, value) {
-        ("Text", Value::Text(_)) => true,
-        ("Int", Value::Int(_)) => true,
-        ("Float", Value::Float(_)) => true,
-        ("Bool", Value::Bool(_)) => true,
-        ("Decimal", Value::Decimal(_)) => true,
-        ("DateTime", Value::DateTime(_)) => true,
-        _ => false,
-    }
+    matches!(
+        (expected, value),
+        ("Text", Value::Text(_))
+            | ("Int", Value::Int(_))
+            | ("Float", Value::Float(_))
+            | ("Bool", Value::Bool(_))
+            | ("Decimal", Value::Decimal(_))
+            | ("DateTime", Value::DateTime(_))
+    )
 }
 
 fn value_type_name(value: &Value) -> &'static str {

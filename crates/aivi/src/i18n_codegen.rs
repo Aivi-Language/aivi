@@ -137,7 +137,7 @@ pub fn generate_i18n_module_from_properties(
 fn key_to_ctor_base(key: &str) -> String {
     let mut out = String::new();
     for seg in key.split('.') {
-        for chunk in seg.split(|c| c == '-' || c == '_') {
+        for chunk in seg.split(['-', '_']) {
             if chunk.is_empty() {
                 continue;
             }
