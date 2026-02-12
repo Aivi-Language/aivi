@@ -5,6 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.number.decimal
 export fromFloat, toFloat, round
 export domain Decimal
+export 1dec
 
 use aivi
 
@@ -29,4 +30,7 @@ domain Decimal over Decimal = {
 
   (/) : Decimal -> Decimal -> Decimal
   (/) a b = decimal.div a b
-}"#;
+
+  1dec = fromFloat 1
+}
+"#;

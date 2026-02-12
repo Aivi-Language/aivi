@@ -1,23 +1,23 @@
 module examples.net_sockets_streams
 export main, echoServer
 
-use aivi.net (listen, accept, read, write)
+use aivi.net.sockets (SocketError, Connection, listen, accept, recv, send)
 
-main : Effect Text Unit
+main : Effect SocketError Unit
 main = effect {
   _ <- echoServer 8080
 }
 
-echoServer : Int -> Effect Text Unit
+echoServer : Int -> Effect SocketError Unit
 echoServer port = effect {
-  server <- listen port
+  server <- listen { host: "127.0.0.1", port: port }
   socket <- accept server
   handle socket
 }
 
-handle : Socket -> Effect Text Unit
+handle : Connection -> Effect SocketError Unit
 handle socket = effect {
-  msg <- read socket
-  _   <- write socket msg
+  msg <- recv socket
+  _   <- send socket msg
   handle socket
 }

@@ -1,8 +1,11 @@
 module repro_generators.main
 
-export def main: Effect Unit = effect {
+export main, printGen
+
+main : Effect Text Unit
+main = effect {
   _ <- print "--- Basic Yield ---"
-  let gen1 = generate {
+  gen1 = generate {
     yield 1
     yield 2
     yield 3
@@ -11,8 +14,8 @@ export def main: Effect Unit = effect {
 }
 
 printGen = g => effect {
-  let f1 = acc => x => [x, ...acc]
-  let asList = gen => gen f1[]
-  let list = asList g
+  f1 = acc => x => [x, ...acc]
+  asList = gen => gen f1 []
+  list = asList g
   _ <- print "{reverse list}"
 }

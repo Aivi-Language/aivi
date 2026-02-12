@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Instant;
 
-use aivi::{compile_rust_native, desugar_target};
+use aivi::{compile_rust_native_lib, desugar_target};
 use aivi_native_runtime::get_builtin;
 use tempfile::tempdir;
 use walkdir::WalkDir;
@@ -69,7 +69,7 @@ fn native_codegen_examples_emit_rust_and_check_builtins() {
             }
         };
 
-        let rust = match compile_rust_native(program) {
+        let rust = match compile_rust_native_lib(program) {
             Ok(rust) => rust,
             Err(err) => {
                 failures.push(format!("{rel_str}: native codegen failed: {err}"));
@@ -122,10 +122,12 @@ fn native_codegen_examples_compile_with_rustc() {
         panic!("write Cargo.toml failed: {err}");
     }
 
-    let bin_dir = dir.path().join("src").join("bin");
-    if let Err(err) = std::fs::create_dir_all(&bin_dir) {
-        panic!("create src/bin dir failed: {err}");
+    let src_dir = dir.path().join("src");
+    if let Err(err) = std::fs::create_dir_all(&src_dir) {
+        panic!("create src dir failed: {err}");
     }
+
+    let mut lib_rs = String::new();
 
     for entry in WalkDir::new(&examples_dir)
         .into_iter()
@@ -136,7 +138,7 @@ fn native_codegen_examples_compile_with_rustc() {
         let path = entry.path();
         let rel = path.strip_prefix(&root).unwrap_or(path);
         let rel_str = rel.to_string_lossy();
-        let bin_name = rel_str
+        let mod_name = rel_str
             .replace(std::path::MAIN_SEPARATOR, "_")
             .replace('/', "_")
             .replace('\\', "_")
@@ -153,7 +155,7 @@ fn native_codegen_examples_compile_with_rustc() {
             }
         };
 
-        let rust = match compile_rust_native(program) {
+        let rust = match compile_rust_native_lib(program) {
             Ok(rust) => rust,
             Err(err) => {
                 failures.push(format!("{rel_str}: native codegen failed: {err}"));
@@ -161,16 +163,23 @@ fn native_codegen_examples_compile_with_rustc() {
             }
         };
 
-        if let Err(err) = std::fs::write(bin_dir.join(format!("{bin_name}.rs")), rust) {
-            failures.push(format!("{rel_str}: write src/bin/{bin_name}.rs failed: {err}"));
-            continue;
+        lib_rs.push_str(&format!("pub mod {mod_name} {{\n"));
+        for line in rust.lines() {
+            lib_rs.push_str("    ");
+            lib_rs.push_str(line);
+            lib_rs.push('\n');
         }
+        lib_rs.push_str("}\n\n");
 
         compiled += 1;
         eprintln!(
             "[native_codegen] ok {rel_str} ({:?})",
             Instant::now().duration_since(t0)
         );
+    }
+
+    if let Err(err) = std::fs::write(src_dir.join("lib.rs"), lib_rs) {
+        failures.push(format!("write src/lib.rs failed: {err}"));
     }
 
     let output = match Command::new("cargo")

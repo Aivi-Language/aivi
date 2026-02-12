@@ -63,6 +63,7 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
     out.push_str("    Field(String),\n");
     out.push_str("    IndexValue(Value),\n");
     out.push_str("    IndexFieldBool(String),\n");
+    out.push_str("    IndexPredicate(Value),\n");
     out.push_str("}\n\n");
 
     out.push_str("fn patch_apply(rt: &mut Runtime, old: Value, updater: Value) -> R {\n");
@@ -129,6 +130,29 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
     out.push_str("            }\n");
     out.push_str(
         "            other => Err(RuntimeError::Message(format!(\"expected List for traversal patch, got {}\", aivi_native_runtime::format_value(&other)))),\n",
+    );
+    out.push_str("        },\n");
+    out.push_str("        PathSeg::IndexPredicate(pred) => match target {\n");
+    out.push_str("            Value::List(items) => {\n");
+    out.push_str("                let mut out_items = Vec::with_capacity(items.len());\n");
+    out.push_str("                for item in items.iter().cloned() {\n");
+    out.push_str("                    let keep = match rt.apply(pred.clone(), item.clone())? {\n");
+    out.push_str("                        Value::Bool(true) => true,\n");
+    out.push_str("                        Value::Bool(false) => false,\n");
+    out.push_str(
+        "                        other => return Err(RuntimeError::Message(format!(\"expected Bool predicate, got {}\", aivi_native_runtime::format_value(&other)))),\n",
+    );
+    out.push_str("                    };\n");
+    out.push_str("                    if keep {\n");
+    out.push_str("                        out_items.push(patch_path(rt, item, &path[1..], updater.clone())?);\n");
+    out.push_str("                    } else {\n");
+    out.push_str("                        out_items.push(item);\n");
+    out.push_str("                    }\n");
+    out.push_str("                }\n");
+    out.push_str("                aivi_ok(Value::List(Arc::new(out_items)))\n");
+    out.push_str("            }\n");
+    out.push_str(
+        "            other => Err(RuntimeError::Message(format!(\"expected List for predicate traversal patch, got {}\", aivi_native_runtime::format_value(&other)))),\n",
     );
     out.push_str("        },\n");
     out.push_str("    }\n");
@@ -497,6 +521,11 @@ fn emit_path(path: &[RustIrPathSegment], indent: usize) -> Result<String, AiviEr
             }
             RustIrPathSegment::IndexFieldBool(name) => {
                 out.push_str(&format!("PathSeg::IndexFieldBool({:?}.to_string())", name));
+            }
+            RustIrPathSegment::IndexPredicate(expr) => {
+                out.push_str("PathSeg::IndexPredicate(");
+                out.push_str(&format!("({})?", emit_expr(expr, indent)?));
+                out.push(')');
             }
             RustIrPathSegment::IndexValue(expr) => {
                 out.push_str("PathSeg::IndexValue(");
@@ -1278,8 +1307,11 @@ fn collect_free_locals_in_expr(expr: &RustIrExpr, bound: &mut Vec<String>, out: 
         RustIrExpr::Record { fields, .. } | RustIrExpr::Patch { fields, .. } => {
             for field in fields {
                 for seg in &field.path {
-                    if let RustIrPathSegment::IndexValue(expr) = seg {
-                        collect_free_locals_in_expr(expr, bound, out);
+                    match seg {
+                        RustIrPathSegment::IndexValue(expr) | RustIrPathSegment::IndexPredicate(expr) => {
+                            collect_free_locals_in_expr(expr, bound, out);
+                        }
+                        RustIrPathSegment::Field(_) | RustIrPathSegment::IndexFieldBool(_) => {}
                     }
                 }
                 collect_free_locals_in_expr(&field.value, bound, out);

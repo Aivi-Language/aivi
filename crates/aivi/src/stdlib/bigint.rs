@@ -5,6 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.number.bigint
 export fromInt, toInt, absInt
 export domain BigInt
+export 1n
 
 use aivi
 
