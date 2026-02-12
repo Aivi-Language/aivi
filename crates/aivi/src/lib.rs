@@ -11,6 +11,7 @@ mod runtime;
 mod rust_codegen;
 mod rust_ir;
 mod rustc_backend;
+mod native_rust_backend;
 mod stdlib;
 mod surface;
 pub mod syntax;
@@ -42,6 +43,7 @@ pub use rust_codegen::{
 };
 pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
 pub use rustc_backend::{build_with_rustc, emit_rustc_source};
+pub use native_rust_backend::{emit_native_rust_source, emit_native_rust_source_lib};
 pub use stdlib::{embedded_stdlib_modules, embedded_stdlib_source};
 pub use surface::{
     parse_modules, parse_modules_from_tokens, BlockItem, ClassDecl, Decorator, Def, DomainDecl,

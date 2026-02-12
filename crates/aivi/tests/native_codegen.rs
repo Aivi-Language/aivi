@@ -1,4 +1,5 @@
 use std::process::Command;
+use std::path::PathBuf;
 
 use aivi::{compile_rust_native, desugar_target};
 use tempfile::tempdir;
@@ -25,30 +26,27 @@ main = effect {
     assert!(rust.contains("fn main()"));
     assert!(!rust.contains("PROGRAM_JSON"));
 
-    let rust_path = dir.path().join("main.rs");
-    std::fs::write(&rust_path, rust).expect("write rust source");
-
-    let out_path = dir.path().join("aivi_native_out");
-    let output = Command::new("rustc")
-        .arg(&rust_path)
-        .arg("--edition=2021")
-        .arg("-o")
-        .arg(&out_path)
-        .output()
-        .expect("spawn rustc");
-    assert!(
-        output.status.success(),
-        "rustc failed\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
+    let cargo_toml = format!(
+        "[package]\nname = \"aivi-native-smoke\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\naivi_native_runtime = {{ path = {:?} }}\n",
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../aivi_native_runtime")
+            .display()
+            .to_string()
     );
+    std::fs::write(dir.path().join("Cargo.toml"), cargo_toml).expect("write Cargo.toml");
+    let src_dir = dir.path().join("src");
+    std::fs::create_dir_all(&src_dir).expect("create src dir");
+    std::fs::write(src_dir.join("main.rs"), rust).expect("write main.rs");
 
-    let output = Command::new(&out_path)
+    let output = Command::new("cargo")
+        .arg("run")
+        .arg("--quiet")
+        .current_dir(dir.path())
         .output()
-        .expect("run native output");
+        .expect("cargo run");
     assert!(
         output.status.success(),
-        "native output failed\nstdout:\n{}\nstderr:\n{}",
+        "cargo run failed\nstdout:\n{}\nstderr:\n{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
@@ -58,4 +56,3 @@ main = effect {
         "unexpected stdout: {stdout}"
     );
 }
-

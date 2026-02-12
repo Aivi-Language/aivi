@@ -1,6 +1,6 @@
 use crate::rust_ir::{
-    Builtin, RustIrBlockItem, RustIrBlockKind, RustIrDef, RustIrExpr, RustIrModule,
-    RustIrPathSegment, RustIrProgram, RustIrRecordField,
+    RustIrBlockItem, RustIrBlockKind, RustIrDef, RustIrExpr, RustIrModule, RustIrPathSegment,
+    RustIrProgram, RustIrRecordField,
 };
 use crate::{kernel, rust_ir, AiviError, HirProgram};
 use sha2::{Digest, Sha256};
@@ -319,10 +319,10 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
     Ok(match expr {
         RustIrExpr::Local { name, .. } => format!("ok({})", rust_local_name(name)),
         RustIrExpr::Global { name, .. } => format!("{}()", rust_global_fn_name(name)),
-        RustIrExpr::Builtin { builtin, .. } => match builtin {
-            Builtin::Unit => "ok(Value::Unit)".to_string(),
-            Builtin::True => "ok(Value::Bool(true))".to_string(),
-            Builtin::False => "ok(Value::Bool(false))".to_string(),
+        RustIrExpr::Builtin { builtin, .. } => match builtin.as_str() {
+            "Unit" => "ok(Value::Unit)".to_string(),
+            "True" => "ok(Value::Bool(true))".to_string(),
+            "False" => "ok(Value::Bool(false))".to_string(),
             other => {
                 return Err(AiviError::Codegen(format!(
                     "builtin {other:?} used as a value is not supported by the rustc backend yet"
@@ -401,7 +401,7 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
         }
         RustIrExpr::Call { func, args, .. } => {
             if let RustIrExpr::Builtin { builtin, .. } = func.as_ref() {
-                return emit_builtin_call(*builtin, args, indent);
+                return emit_builtin_call(builtin, args, indent);
             }
             let func_code = emit_expr(func, indent)?;
             let mut rendered_args = Vec::new();
@@ -499,41 +499,43 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
                 "raw expressions are not supported by the rustc backend yet: {text}"
             )))
         }
-        RustIrExpr::Match { .. } => unreachable!("match lowering should have failed earlier"),
+        RustIrExpr::Match { .. } => {
+            return Err(AiviError::Codegen(
+                "match is not supported by the rustc backend yet".to_string(),
+            ))
+        }
     })
 }
 
 fn emit_builtin_call(
-    builtin: Builtin,
+    builtin: &str,
     args: &[RustIrExpr],
     indent: usize,
 ) -> Result<String, AiviError> {
     match builtin {
-        Builtin::Unit | Builtin::True | Builtin::False => Err(AiviError::Codegen(format!(
-            "{builtin:?} is not callable"
-        ))),
-        Builtin::Pure => {
+        "Unit" | "True" | "False" => Err(AiviError::Codegen(format!("{builtin:?} is not callable"))),
+        "pure" => {
             if args.len() != 1 {
                 return Err(AiviError::Codegen("pure expects 1 arg".to_string()));
             }
             let arg_code = emit_expr(&args[0], indent)?;
             Ok(format!("({arg_code}).map(builtin_pure)"))
         }
-        Builtin::Print => {
+        "print" => {
             if args.len() != 1 {
                 return Err(AiviError::Codegen("print expects 1 arg".to_string()));
             }
             let arg_code = emit_expr(&args[0], indent)?;
             Ok(format!("({arg_code}).map(builtin_print)"))
         }
-        Builtin::Println => {
+        "println" => {
             if args.len() != 1 {
                 return Err(AiviError::Codegen("println expects 1 arg".to_string()));
             }
             let arg_code = emit_expr(&args[0], indent)?;
             Ok(format!("({arg_code}).map(builtin_println)"))
         }
-        Builtin::Bind => {
+        "bind" => {
             if args.len() != 2 {
                 return Err(AiviError::Codegen("bind expects 2 args".to_string()));
             }
@@ -543,6 +545,9 @@ fn emit_builtin_call(
                 "({eff_code}).and_then(|e| ({func_code}).and_then(|f| builtin_bind(e, f)))"
             ))
         }
+        other => Err(AiviError::Codegen(format!(
+            "builtin call not supported by rustc backend yet: {other}"
+        ))),
     }
 }
 
@@ -693,6 +698,11 @@ fn emit_plain_block(items: &[RustIrBlockItem], indent: usize) -> Result<String, 
                         emit_expr(expr, indent + 1)?
                     ));
                 }
+                _ => {
+                    return Err(AiviError::Codegen(
+                        "only wildcard/var patterns are supported in block binds".to_string(),
+                    ))
+                }
             },
             RustIrBlockItem::Expr { expr } => {
                 s.push_str(&ind2);
@@ -715,6 +725,11 @@ fn emit_plain_block(items: &[RustIrBlockItem], indent: usize) -> Result<String, 
                         rust_local_name(name),
                         emit_expr(expr, indent + 1)?
                     ));
+                }
+                _ => {
+                    return Err(AiviError::Codegen(
+                        "only wildcard/var patterns are supported in block binds".to_string(),
+                    ))
                 }
             }
             s.push_str(&ind2);
@@ -754,6 +769,11 @@ fn emit_effect_block(items: &[RustIrBlockItem], indent: usize) -> Result<String,
                             rust_local_name(name),
                             expr_code
                         ));
+                    }
+                    _ => {
+                        return Err(AiviError::Codegen(
+                            "only wildcard/var patterns are supported in block binds".to_string(),
+                        ))
                     }
                 }
                 if last {

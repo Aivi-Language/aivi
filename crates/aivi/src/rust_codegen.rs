@@ -1,5 +1,5 @@
 use crate::hir::HirProgram;
-use crate::{kernel, rust_ir, rustc_backend};
+use crate::{emit_native_rust_source, emit_native_rust_source_lib, kernel, rust_ir};
 use crate::AiviError;
 
 /// Legacy backend: embed HIR as JSON and run via `aivi::run_native`.
@@ -54,24 +54,16 @@ pub fn compile_rust_lib(program: HirProgram) -> Result<String, AiviError> {
 ///
 /// Limitations are those of `rust_ir` + `rustc_backend` (e.g. `match` not supported yet).
 pub fn compile_rust_native(program: HirProgram) -> Result<String, AiviError> {
-    let kernel = kernel::lower_hir(strip_stdlib_modules(program));
+    let kernel = kernel::lower_hir(program);
     let rust_ir = rust_ir::lower_kernel(kernel)?;
-    rustc_backend::emit_rustc_source(rust_ir)
+    emit_native_rust_source(rust_ir)
 }
 
 /// Experimental backend: emit a Rust library with exported definitions.
 pub fn compile_rust_native_lib(program: HirProgram) -> Result<String, AiviError> {
-    let kernel = kernel::lower_hir(strip_stdlib_modules(program));
+    let kernel = kernel::lower_hir(program);
     let rust_ir = rust_ir::lower_kernel(kernel)?;
-    rustc_backend::emit_rustc_source_lib(rust_ir)
-}
-
-fn strip_stdlib_modules(mut program: HirProgram) -> HirProgram {
-    // The embedded stdlib is used for parsing/typechecking today, but in the interpreter
-    // runtime those values are provided via Rust builtins. The native codegen backend
-    // currently only supports a small builtin subset, so we avoid emitting stdlib modules.
-    program.modules.retain(|m| !m.name.starts_with("aivi"));
-    program
+    emit_native_rust_source_lib(rust_ir)
 }
 
 fn escape_bytes(bytes: &[u8]) -> String {

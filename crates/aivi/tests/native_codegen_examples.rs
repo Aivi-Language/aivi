@@ -60,30 +60,42 @@ fn native_codegen_examples_compile_with_rustc() {
         };
 
         let dir = tempdir().expect("tempdir");
-        let rust_path = dir.path().join("main.rs");
-        let out_path = dir.path().join("aivi_native_out");
-        if let Err(err) = std::fs::write(&rust_path, rust) {
-            failures.push(format!("{rel_str}: write rust failed: {err}"));
+        let cargo_toml = format!(
+            "[package]\nname = \"aivi-native-example\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\naivi_native_runtime = {{ path = {:?} }}\n",
+            root.join("crates/aivi_native_runtime")
+                .display()
+                .to_string()
+        );
+        if let Err(err) = std::fs::write(dir.path().join("Cargo.toml"), cargo_toml) {
+            failures.push(format!("{rel_str}: write Cargo.toml failed: {err}"));
+            continue;
+        }
+        let src_dir = dir.path().join("src");
+        if let Err(err) = std::fs::create_dir_all(&src_dir) {
+            failures.push(format!("{rel_str}: create src dir failed: {err}"));
+            continue;
+        }
+        if let Err(err) = std::fs::write(src_dir.join("main.rs"), rust) {
+            failures.push(format!("{rel_str}: write main.rs failed: {err}"));
             continue;
         }
 
-        let output = match Command::new("rustc")
-            .arg(&rust_path)
-            .arg("--edition=2021")
-            .arg("-o")
-            .arg(&out_path)
+        let output = match Command::new("cargo")
+            .arg("build")
+            .arg("--quiet")
+            .current_dir(dir.path())
             .output()
         {
             Ok(output) => output,
             Err(err) => {
-                failures.push(format!("{rel_str}: rustc spawn failed: {err}"));
+                failures.push(format!("{rel_str}: cargo spawn failed: {err}"));
                 continue;
             }
         };
 
         if !output.status.success() {
             failures.push(format!(
-                "{rel_str}: rustc failed\nstdout:\n{}\nstderr:\n{}",
+                "{rel_str}: cargo build failed\nstdout:\n{}\nstderr:\n{}",
                 String::from_utf8_lossy(&output.stdout),
                 String::from_utf8_lossy(&output.stderr),
             ));
@@ -107,4 +119,3 @@ fn native_codegen_examples_compile_with_rustc() {
         );
     }
 }
-

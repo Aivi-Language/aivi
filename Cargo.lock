@@ -87,6 +87,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "aivi_native_runtime"
+version = "0.1.0"
+dependencies = [
+ "aivi_http_server",
+ "chrono",
+ "getrandom 0.2.17",
+ "im",
+ "num-bigint",
+ "num-rational",
+ "num-traits",
+ "ordered-float",
+ "palette",
+ "regex",
+ "rust_decimal",
+ "rustfft",
+ "sha2",
+ "thiserror",
+ "tokio",
+ "unicode-normalization",
+ "unicode-segmentation",
+ "ureq",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

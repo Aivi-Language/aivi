@@ -23,16 +23,7 @@ pub struct RustIrDef {
     pub expr: RustIrExpr,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
-pub enum Builtin {
-    Unit,
-    True,
-    False,
-    Pure,
-    Bind,
-    Print,
-    Println,
-}
+pub type BuiltinName = String;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "kind")]
@@ -54,7 +45,7 @@ pub enum RustIrExpr {
     },
     Builtin {
         id: u32,
-        builtin: Builtin,
+        builtin: BuiltinName,
     },
 
     LitNumber {
@@ -185,6 +176,40 @@ pub struct RustIrMatchArm {
 pub enum RustIrPattern {
     Wildcard { id: u32 },
     Var { id: u32, name: String },
+    Literal { id: u32, value: RustIrLiteral },
+    Constructor {
+        id: u32,
+        name: String,
+        args: Vec<RustIrPattern>,
+    },
+    Tuple {
+        id: u32,
+        items: Vec<RustIrPattern>,
+    },
+    List {
+        id: u32,
+        items: Vec<RustIrPattern>,
+        rest: Option<Box<RustIrPattern>>,
+    },
+    Record {
+        id: u32,
+        fields: Vec<RustIrRecordPatternField>,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RustIrRecordPatternField {
+    pub path: Vec<String>,
+    pub pattern: RustIrPattern,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum RustIrLiteral {
+    Number(String),
+    String(String),
+    Sigil { tag: String, body: String, flags: String },
+    Bool(bool),
+    DateTime(String),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -205,18 +230,25 @@ pub enum RustIrBlockItem {
 }
 
 pub fn lower_kernel(program: KernelProgram) -> Result<RustIrProgram, AiviError> {
+    // Runtime/global namespace today is "flat": all defs from all modules end up in the same
+    // global environment. For native codegen we mirror that so cross-module references lower.
+    let globals: Vec<String> = program
+        .modules
+        .iter()
+        .flat_map(|m| m.defs.iter().map(|d| d.name.clone()))
+        .collect();
+
     let mut modules = Vec::new();
     for module in program.modules {
-        modules.push(lower_module(module)?);
+        modules.push(lower_module(module, &globals)?);
     }
     Ok(RustIrProgram { modules })
 }
 
-fn lower_module(module: KernelModule) -> Result<RustIrModule, AiviError> {
-    let globals: Vec<String> = module.defs.iter().map(|d| d.name.clone()).collect();
+fn lower_module(module: KernelModule, globals: &[String]) -> Result<RustIrModule, AiviError> {
     let mut defs = Vec::new();
     for def in module.defs {
-        defs.push(lower_def(def, &globals)?);
+        defs.push(lower_def(def, globals)?);
     }
     Ok(RustIrModule {
         name: module.name,
@@ -348,11 +380,18 @@ fn lower_expr(
             base: Box::new(lower_expr(*base, globals, locals)?),
             index: Box::new(lower_expr(*index, globals, locals)?),
         },
-        KernelExpr::Match { .. } => {
-            return Err(AiviError::Codegen(
-                "match is not supported by the rustc backend yet".to_string(),
-            ))
-        }
+        KernelExpr::Match {
+            id,
+            scrutinee,
+            arms,
+        } => RustIrExpr::Match {
+            id,
+            scrutinee: Box::new(lower_expr(*scrutinee, globals, locals)?),
+            arms: arms
+                .into_iter()
+                .map(|arm| lower_match_arm(arm, globals, locals))
+                .collect::<Result<Vec<_>, _>>()?,
+        },
         KernelExpr::If {
             id,
             cond,
@@ -462,6 +501,11 @@ fn lower_block_item(
             match &pat {
                 RustIrPattern::Var { name, .. } => locals.push(name.clone()),
                 RustIrPattern::Wildcard { .. } => {}
+                _ => {
+                    return Err(AiviError::Codegen(
+                        "only wildcard/variable patterns are supported in block binds".to_string(),
+                    ))
+                }
             }
             Ok(RustIrBlockItem::Bind {
                 pattern: pat,
@@ -483,28 +527,176 @@ fn lower_pattern(pattern: KernelPattern) -> Result<RustIrPattern, AiviError> {
     match pattern {
         KernelPattern::Wildcard { id } => Ok(RustIrPattern::Wildcard { id }),
         KernelPattern::Var { id, name } => Ok(RustIrPattern::Var { id, name }),
-        _ => Err(AiviError::Codegen(
-            "only wildcard/variable patterns are supported by the rustc backend yet".to_string(),
-        )),
+        KernelPattern::Literal { id, value } => Ok(RustIrPattern::Literal {
+            id,
+            value: lower_literal(value),
+        }),
+        KernelPattern::Constructor { id, name, args } => Ok(RustIrPattern::Constructor {
+            id,
+            name,
+            args: args
+                .into_iter()
+                .map(lower_pattern)
+                .collect::<Result<Vec<_>, _>>()?,
+        }),
+        KernelPattern::Tuple { id, items } => Ok(RustIrPattern::Tuple {
+            id,
+            items: items
+                .into_iter()
+                .map(lower_pattern)
+                .collect::<Result<Vec<_>, _>>()?,
+        }),
+        KernelPattern::List { id, items, rest } => Ok(RustIrPattern::List {
+            id,
+            items: items
+                .into_iter()
+                .map(lower_pattern)
+                .collect::<Result<Vec<_>, _>>()?,
+            rest: rest.map(|p| lower_pattern(*p).map(Box::new)).transpose()?,
+        }),
+        KernelPattern::Record { id, fields } => Ok(RustIrPattern::Record {
+            id,
+            fields: fields
+                .into_iter()
+                .map(|f| {
+                    Ok::<RustIrRecordPatternField, AiviError>(RustIrRecordPatternField {
+                        path: f.path,
+                        pattern: lower_pattern(f.pattern)?,
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        }),
     }
 }
 
-#[allow(dead_code)]
-fn lower_match_arm(_arm: KernelMatchArm) -> Result<RustIrMatchArm, AiviError> {
-    Err(AiviError::Codegen(
-        "match is not supported by the rustc backend yet".to_string(),
-    ))
+fn lower_match_arm(
+    arm: KernelMatchArm,
+    globals: &[String],
+    locals: &mut Vec<String>,
+) -> Result<RustIrMatchArm, AiviError> {
+    // Pattern bindings are introduced as locals for the arm's guard/body.
+    // We conservatively extend `locals` while lowering the guard/body.
+    let before = locals.len();
+    let mut binders = Vec::new();
+    collect_pattern_binders(&arm.pattern, &mut binders);
+    for name in binders {
+        locals.push(name);
+    }
+    let guard = arm
+        .guard
+        .map(|g| lower_expr(g, globals, locals))
+        .transpose()?;
+    let body = lower_expr(arm.body, globals, locals)?;
+    locals.truncate(before);
+    Ok(RustIrMatchArm {
+        pattern: lower_pattern(arm.pattern)?,
+        guard,
+        body,
+    })
 }
 
-fn resolve_builtin(name: &str) -> Option<Builtin> {
-    match name {
-        "Unit" => Some(Builtin::Unit),
-        "True" => Some(Builtin::True),
-        "False" => Some(Builtin::False),
-        "pure" => Some(Builtin::Pure),
-        "bind" => Some(Builtin::Bind),
-        "print" => Some(Builtin::Print),
-        "println" => Some(Builtin::Println),
-        _ => None,
+fn lower_literal(lit: crate::kernel::KernelLiteral) -> RustIrLiteral {
+    match lit {
+        crate::kernel::KernelLiteral::Number(text) => RustIrLiteral::Number(text),
+        crate::kernel::KernelLiteral::String(text) => RustIrLiteral::String(text),
+        crate::kernel::KernelLiteral::Sigil { tag, body, flags } => {
+            RustIrLiteral::Sigil { tag, body, flags }
+        }
+        crate::kernel::KernelLiteral::Bool(value) => RustIrLiteral::Bool(value),
+        crate::kernel::KernelLiteral::DateTime(text) => RustIrLiteral::DateTime(text),
+    }
+}
+
+fn collect_pattern_binders(pattern: &KernelPattern, out: &mut Vec<String>) {
+    match pattern {
+        KernelPattern::Wildcard { .. } => {}
+        KernelPattern::Var { name, .. } => out.push(name.clone()),
+        KernelPattern::Literal { .. } => {}
+        KernelPattern::Constructor { args, .. } => {
+            for arg in args {
+                collect_pattern_binders(arg, out);
+            }
+        }
+        KernelPattern::Tuple { items, .. } => {
+            for item in items {
+                collect_pattern_binders(item, out);
+            }
+        }
+        KernelPattern::List { items, rest, .. } => {
+            for item in items {
+                collect_pattern_binders(item, out);
+            }
+            if let Some(rest) = rest.as_deref() {
+                collect_pattern_binders(rest, out);
+            }
+        }
+        KernelPattern::Record { fields, .. } => {
+            for field in fields {
+                collect_pattern_binders(&field.pattern, out);
+            }
+        }
+    }
+}
+
+fn resolve_builtin(name: &str) -> Option<BuiltinName> {
+    // Keep this list in sync with `aivi_native_runtime::builtins`.
+    let ok = matches!(
+        name,
+        "Unit"
+            | "True"
+            | "False"
+            | "None"
+            | "Some"
+            | "Ok"
+            | "Err"
+            | "Closed"
+            | "pure"
+            | "fail"
+            | "attempt"
+            | "load"
+            | "bind"
+            | "print"
+            | "println"
+            | "map"
+            | "chain"
+            | "assertEq"
+            | "file"
+            | "system"
+            | "clock"
+            | "random"
+            | "channel"
+            | "concurrent"
+            | "httpServer"
+            | "text"
+            | "regex"
+            | "math"
+            | "calendar"
+            | "color"
+            | "linalg"
+            | "signal"
+            | "graph"
+            | "bigint"
+            | "rational"
+            | "decimal"
+            | "url"
+            | "http"
+            | "https"
+            | "sockets"
+            | "streams"
+            | "collections"
+            | "console"
+            | "crypto"
+            | "logger"
+            | "database"
+            | "Map"
+            | "Set"
+            | "Queue"
+            | "Deque"
+            | "Heap"
+    );
+    if ok {
+        Some(name.to_string())
+    } else {
+        None
     }
 }
