@@ -55,7 +55,8 @@ Dependencies are managed via `Cargo.toml`'s `[dependencies]` section. You can us
 
 ```toml
 [dependencies]
-aivi = { path = "..." } # The standard library / runtime
+aivi = { path = "..." } # Embed backend runtime (HIR + interpreter)
+aivi_native_runtime = { path = "..." } # Native backend runtime (standalone Rust; experimental)
 serde_json = "1.0"      # Standard Rust crate
 my-aivi-lib = { path = "../my-aivi-lib" } # Another Aivi package
 ```
@@ -76,6 +77,7 @@ AIVI v0.1 supports two Rust codegen modes for projects:
 
 - `codegen = "embed"`: Generates Rust that embeds the program (HIR) and executes it with the interpreter runtime.
   This is the most complete backend today.
-- `codegen = "native"`: Generates standalone Rust logic (experimental; partial feature/builtin coverage).
+- `codegen = "native"`: Generates standalone Rust logic (experimental). Generated code depends on `aivi_native_runtime`
+  instead of the interpreter.
 
 Select the backend in `aivi.toml` under `[build]`.
