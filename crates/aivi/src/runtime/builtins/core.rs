@@ -45,6 +45,18 @@ pub(crate) fn register_builtins(env: &Env) {
     );
 
     env.set(
+        "foldGen".to_string(),
+        builtin("foldGen", 3, |mut args, runtime| {
+            let init = args.pop().unwrap();
+            let step = args.pop().unwrap();
+            let gen = args.pop().unwrap();
+            let with_step = runtime.apply(gen, step)?;
+            let result = runtime.apply(with_step, init)?;
+            Ok(result)
+        }),
+    );
+
+    env.set(
         "pure".to_string(),
         builtin("pure", 1, |mut args, _| {
             let value = args.remove(0);

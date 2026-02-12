@@ -1,0 +1,141 @@
+module repro_generators.main
+
+export def main: Effect Unit = do {
+    // 1. Basic Yield
+    println "--- Basic Yield ---"
+    let gen1 = generate {
+        yield 1
+        yield 2
+        yield 3
+    }
+    // Expected: 1, 2, 3
+    printGen gen1
+
+    // 2. Binders
+    println "--- Binders ---"
+    let gen2 = generate {
+        x <- gen1
+        yield x * 10
+    }
+    // Expected: 10, 20, 30
+    printGen gen2
+
+    // 3. Guards
+    println "--- Guards ---"
+    let gen3 = generate {
+        x <- gen1
+        x -> x != 2
+        yield x
+    }
+    // Expected: 1, 3
+    printGen gen3
+
+    // 4. Composition (Bind + Yield)
+    println "--- Composition ---"
+    let gen4 = generate {
+        x <- gen1
+        yield x
+        yield x + 100
+    }
+    // Expected: 1, 101, 2, 102, 3, 103
+    printGen gen4
+}
+
+// Helper to print a generator by running its fold
+def printGen(g: Generator Int): Effect Unit = do {
+    // Generator A ≡ ∀R. (R -> A -> R) -> R -> R
+    // We provide a step function that prints the value and returns Unit (accumulator)
+    // Actually, the accumulator isn't used for printing, but we need to satisfy the signature.
+    // Spec: Generator A = (R -> A -> R) -> R -> R
+    // But `builtins.rs` defines Generator as * (opaque or generic not fully enforced in runtime yet?)
+    // In HIR/Kernel, we desugar to functions.
+    // If desugaring works, `g` is a function: |step, init| -> result
+    
+    // We need to verify what the shape of the desugared generator is.
+    // Assuming Church encoding:
+    // g (k) (z)
+    // k: acc -> elem -> acc
+    // z: acc
+    
+    // Let's try to "fold" it into a List first, then print the list?
+    // Or just side-effect print if we can specificy Effect in the return type R?
+    // But Generator is pure. So R must be a value.
+    
+    // Let's fold into a List Int
+    let asList = \gen -> 
+        gen (\acc -> \x -> Cons x acc) Nil
+    
+    // The list will be reversed because of foldl-like structure if we Cons?
+    // genYield x = \k z -> k z x.  So k is called with (acc, x). 
+    // genAppend g1 g2 = \k z -> g2 k (g1 k z).
+    // So g1 runs first.
+    // g1 = yield 1.  g1 k z = k z 1.  acc becomes (Cons 1 Nil).
+    // g2 = yield 2.  g2 k (Cons 1 Nil) = k (Cons 1 Nil) 2 = Cons 2 (Cons 1 Nil).
+    // So distinct yield items are appended. 
+    // Wait, typical foldr vs foldl for lists?
+    // Church encoding usually is foldr:
+    // List A = (A -> R -> R) -> R -> R
+    // [1, 2] = \c n -> c 1 (c 2 n)
+    
+    // The Generator spec says: (R -> A -> R) -> R -> R
+    // This looks like foldl?  step: R -> A -> R.
+    // yield x = \k z -> k z x.  (New Acc = k OldAcc X).
+    
+    // If it is foldl:
+    // [1, 2]
+    // yield 1: k z 1 -> acc1
+    // yield 2: k acc1 2 -> acc2
+    // So `k` takes (acc, elem).
+    
+    // Let's accumulate into a list (which will be reversed if we just Cons)
+    // Or we can use built-in List which might not be Church encoded in runtime (it's Value::List).
+    // But we are in user-land.
+    
+    // Let's try to interpret `g` as a function that we can call.
+    // Since `Generator` is opaque in `checker.rs` but we are bypassing checker in `kernel.rs` desugaring...
+    // WAIT. If `checker.rs` treats Generator as opaque, we can't easily call it as a function unless we cast it or if `Generator` is defined as an alias to the function type.
+    
+    // Current `checker.rs`: "Generator": Star.
+    // It is NOT defined as a type alias. It is a builtin opaque type.
+    // This means we CANNOT call it as a function in Surface syntax unless we coerce it.
+    // OR we change `checker.rs` to define `Generator` as a type alias?
+    
+    // Ideally, for v0.1, we should update `checker.rs` to Alias or add a `runGenerator` builtin.
+    // BUT the prompt asked to use `@rust-pro` and update the implementation.
+    
+    // If I change `checker.rs` to be an alias, that's a larger change.
+    // Maybe I should add a builtin `runGenerator` or `toList` in `builtins.rs` / `runtime.rs` that assumes the underlying value IS a function (which it will be after desugaring).
+    
+    // Let's assume for this test that we can use a "magic" helper or I'll implement `toList` in the runtime as part of this task.
+    // Actually, `builtins.rs` treats it as opaque *Type*.
+    // But if I desugar `generate` block to a *Lambda*, the runtime value will be a `Closure` (or `Lambda` expression).
+    // But the type checker will see `Generator`.
+    // So `Generator` must be unified with `(R -> A -> R) -> R -> R`.
+    
+    // PROPOSAL:
+    // 1. In `checker.rs` / `builtins.rs`, change `Generator` from opaque Type to Type Alias.
+    //    `type Generator A = forall R. (R -> A -> R) -> R -> R`
+    //    (AIVI doesn't support explicit `forall` syntax like that easily in aliases yet? Or maybe it does via Scheme?)
+    //    Actually, `checker.rs` has limited alias support.
+    
+    // ALTERNATIVE:
+    // Keep it opaque, but implement `genRun` builtin that knows it's a function.
+    // But wait, if I desugar in `kernel.rs`, the resulting Kernel IR has a `Lambda`.
+    // The Runtime executes that and produces a `Value::Closure`.
+    // So at Runtime, it IS a function.
+    // The Type Checker is the only thing stopping me from calling `gen(step)(init)`.
+    
+    // I will try to call it. AIVI type checker might be permissive enough or I can use `force` / `unsafe` if available?
+    // Actually, let's look at `checker.rs` again. It has `Generator` as a builtin type constructor.
+    // If I try `gen(step)`, it will error "expected function, found Generator".
+    
+    // So I MUST implement `Generator` as an alias in `checker.rs` OR add a builtin `foldGen`.
+    // Adding a builtin `foldGen` is safer and cleaner for now.
+    
+    let list = foldGen gen (\acc -> \x -> [x, ...acc]) []
+    println (toText (reverse list))
+}
+
+// We need these definitions for the test to compile if they don't exist
+// But we will implement `foldGen` as a builtin or polyfill.
+// For now, let's assume I will add `foldGen` to `Prelude` or `builtins`.

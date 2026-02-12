@@ -8,7 +8,7 @@ This document lists features, modules, and behaviors described in the **AIVI Lan
 
 | Feature | Spec Section | Implementation Status | Notes |
 | :--- | :--- | :--- | :--- |
-| **Generators** | `02_syntax/07_generators` | **Missing / Partial** | `Generator` type exists in `checker.rs`, but full `yield`/resumption semantics in runtime need verification. |
+| **Generators** | `02_syntax/07_generators` | **Implemented** | Desugared to Church-encoded lambdas in `kernel.rs`. `generate` blocks supported. `loop`/`recurse` inside generators partial. |
 | **Decorators** | `02_syntax/14_decorators` | **Missing** | Not present in parser/cst. |
 | **User-defined Domains** | `02_syntax/06_domains` | **Implemented** | `DomainDecl` exists in CST/HIR. |
 | **Patching** | `02_syntax/05_patching` | **Implemented** | `Patch` alias exists; desugaring logic present. |

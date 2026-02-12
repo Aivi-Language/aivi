@@ -133,6 +133,25 @@ impl TypeChecker {
         env.insert("Closed".to_string(), Scheme::mono(Type::con("Closed")));
 
         let a = self.fresh_var_id();
+        let b = self.fresh_var_id();
+        env.insert(
+            "foldGen".to_string(),
+            Scheme {
+                vars: vec![a, b],
+                ty: Type::Func(
+                    Box::new(Type::con("Generator").app(vec![Type::Var(a)])),
+                    Box::new(Type::Func(
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(b)),
+                            Box::new(Type::Func(Box::new(Type::Var(a)), Box::new(Type::Var(b)))),
+                        )),
+                        Box::new(Type::Func(Box::new(Type::Var(b)), Box::new(Type::Var(b)))),
+                    )),
+                ),
+            },
+        );
+
+        let a = self.fresh_var_id();
         let e = self.fresh_var_id();
         env.insert(
             "pure".to_string(),
