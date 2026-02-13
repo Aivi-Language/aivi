@@ -1,0 +1,7 @@
+use aivi.vector
+
+position = { x: 10.0, y: 20.0 }
+velocity = { x: 1.0, y: 0.5 }
+
+newPos = position + velocity * 0.016 // 60fps frame
+direction = normalize velocity

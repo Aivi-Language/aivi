@@ -1,0 +1,13 @@
+use aivi.calendar (DateTime)
+use aivi.chronos.timezone (TimeZone, ZonedDateTime)
+
+// Instantiation
+paris = ~tz(Europe/Paris)
+tokyo = ~tz(Asia/Tokyo)
+
+// Creating a ZonedDateTime
+meeting = ~zdt(2024-05-21T12:00:00[Europe/Paris])
+
+// Conversion
+local_time = meeting.dateTime
+utc_moment = meeting.instant

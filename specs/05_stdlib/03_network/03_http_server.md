@@ -2,47 +2,11 @@
 
 The `HttpServer` domain provides a scalable HTTP/1.1 + HTTP/2 server with optional WebSocket upgrades. The server is designed to run across multiple CPU cores.
 
-```aivi
-use aivi.net.http_server
-```
+<<< ../../snippets/from_md/05_stdlib/03_network/03_http_server/block_01.aivi{aivi}
 
 ## Types
 
-```aivi
-type Header = { name: Text, value: Text }
-
-type Request = {
-  method: Text,
-  path: Text,
-  headers: List Header,
-  body: List Int,
-  remoteAddr: Option Text
-}
-
-type Response = {
-  status: Int,
-  headers: List Header,
-  body: List Int
-}
-
-type ServerConfig = {
-  address: Text
-}
-
-type HttpError = { message: Text }
-type WsError = { message: Text }
-
-type WsMessage
-  = TextMsg Text
-  | BinaryMsg (List Int)
-  | Ping
-  | Pong
-  | Close
-
-type ServerReply
-  = Http Response
-  | Ws (WebSocket -> Effect WsError Unit)
-```
+<<< ../../snippets/from_md/05_stdlib/03_network/03_http_server/block_02.aivi{aivi}
 
 ## Functions
 

@@ -1,0 +1,6 @@
+// Set multiple fields based on previous state
+user2 = user <| {
+  name: toUpper
+  status: if admin then SuperUser else Normal
+  stats.lastVisit: now
+}

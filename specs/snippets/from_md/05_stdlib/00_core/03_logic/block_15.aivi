@@ -1,0 +1,3 @@
+class Traversable (T *) = {
+  traverse: (A -> F B) -> T A -> F (T B)
+}

@@ -1,0 +1,7 @@
+use aivi.matrix
+
+scale2 = { m00: 2.0, m01: 0.0, m10: 0.0, m11: 2.0 }
+rotate2 = { m00: 0.0, m01: -1.0, m10: 1.0, m11: 0.0 }
+
+combined = multiply2 scale2 rotate2
+unit = combined * 0.5

@@ -8,37 +8,16 @@ Whether you're simulating heat flow across a computer chip, calculating structur
 
 ## Overview
 
-```aivi
-use aivi.linalg (solve, eigen)
-
-// Matrix A and Vector b
-// Solve for x in: Ax = b
-// (Finds the inputs that produce the known output)
-x = solve(A, b)
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_01.aivi{aivi}
 
 
 ## Features
 
-```aivi
-Vec = { size: Int, data: List Float }
-Mat = { rows: Int, cols: Int, data: List Float }
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain LinearAlgebra over Vec = {
-  (+) : Vec -> Vec -> Vec
-  (+) a b = { size: a.size, data: zipWith (+) a.data b.data }
-  
-  (-) : Vec -> Vec -> Vec
-  (-) a b = { size: a.size, data: zipWith (-) a.data b.data }
-  
-  (*) : Vec -> Float -> Vec
-  (*) v s = { size: v.size, data: map (\x -> x * s) v.data }
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_03.aivi{aivi}
 
 ## Helper Functions
 
@@ -50,11 +29,4 @@ domain LinearAlgebra over Vec = {
 
 ## Usage Examples
 
-```aivi
-use aivi.linear_algebra
-
-v1 = { size: 3, data: [1.0, 2.0, 3.0] }
-v2 = { size: 3, data: [4.0, 5.0, 6.0] }
-
-prod = dot v1 v2
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_04.aivi{aivi}

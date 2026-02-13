@@ -1,0 +1,12 @@
+// Attempt operation, providing a typed default on error
+getUser = id => effect {
+  res <- attempt (api.fetchUser id)
+  res ?
+    | Ok user => pure user
+    | Err _   => pure GuestUser
+}
+
+validatedUser = effect {
+  u <- getUser 123
+  if u.age > 18 then pure (toAdmin u) else fail TooYoung
+}

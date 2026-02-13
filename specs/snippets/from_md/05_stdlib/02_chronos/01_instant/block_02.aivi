@@ -1,0 +1,2 @@
+// Wraps a 64-bit integer (nanoseconds since epoch)
+Timestamp = { nanos: Int }

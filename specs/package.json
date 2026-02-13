@@ -7,8 +7,13 @@
     "docs:dev": "vitepress dev",
     "docs:build": "vitepress build",
     "docs:preview": "vitepress preview",
-    "snippets:check": "node scripts/verify-snippets.mjs",
-    "snippets:fix": "node scripts/verify-snippets.mjs --fix"
+    "snippets:scan": "node scripts/scan-aivi-fences.mjs",
+    "snippets:verify": "node scripts/verify-snippets.mjs",
+    "snippets:verify:fix": "node scripts/verify-snippets.mjs --fix",
+    "snippets:extract:dry": "node scripts/extract-aivi-snippets.mjs",
+    "snippets:extract": "node scripts/extract-aivi-snippets.mjs --apply",
+    "snippets:check": "pnpm snippets:verify",
+    "snippets:fix": "pnpm snippets:verify:fix"
   },
   "devDependencies": {
     "vitepress": "1.6.4",

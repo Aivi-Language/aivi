@@ -1,0 +1,19 @@
+module aivi.prelude
+// Core types
+export Int, Float, Bool, Text, Char, Bytes
+export List, Option, Result, Tuple
+
+// Standard domains
+export domain Calendar
+export domain Duration
+export domain Color
+export domain Vector
+
+// Re-exports
+use aivi
+use aivi.text
+use aivi.logic
+use aivi.calendar
+use aivi.duration
+use aivi.color
+use aivi.vector

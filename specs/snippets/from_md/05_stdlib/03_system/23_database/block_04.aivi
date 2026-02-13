@@ -1,0 +1,15 @@
+createUser : User -> Effect DbError User
+createUser newUser = effect {
+  _ <- userTable + ins newUser
+  pure newUser
+}
+
+activateUsers : Effect DbError Unit
+activateUsers = effect {
+  _ <- userTable + upd (!active) (u => u <| { active: True, loginCount: _ + 1 })
+}
+
+deleteOldPosts : Instant -> Effect DbError Unit
+deleteOldPosts cutoff = effect {
+  _ <- postTable + del (_.createdAt < cutoff)
+}

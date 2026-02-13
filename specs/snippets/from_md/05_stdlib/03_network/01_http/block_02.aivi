@@ -1,0 +1,5 @@
+type Response = {
+  status: Int,
+  headers: List { name: Text, value: Text },
+  body: Text
+}

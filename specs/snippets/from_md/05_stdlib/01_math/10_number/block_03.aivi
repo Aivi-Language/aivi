@@ -1,0 +1,7 @@
+domain BigInt over BigInt = {
+  (+): BigInt -> BigInt -> BigInt
+  (-): BigInt -> BigInt -> BigInt
+  (*): BigInt -> BigInt -> BigInt
+
+  1n = fromInt 1
+}

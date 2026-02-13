@@ -1,0 +1,4 @@
+domain Graph over Graph = {
+  (+) : Graph -> Graph -> Graph
+  (+) a b = { nodes: unique (a.nodes ++ b.nodes), edges: a.edges ++ b.edges }
+}

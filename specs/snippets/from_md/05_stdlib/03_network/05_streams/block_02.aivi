@@ -1,0 +1,2 @@
+type Stream A
+type StreamError = { message: Text }

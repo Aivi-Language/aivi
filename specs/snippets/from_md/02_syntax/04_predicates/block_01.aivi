@@ -1,0 +1,5 @@
+price > 80
+_.price > 80
+email == Some "x"
+Some _
+Ok { value } when value > 10

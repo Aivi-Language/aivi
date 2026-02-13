@@ -1,0 +1,8 @@
+Url = {
+  protocol: String,
+  host: String,
+  port: Option Int,
+  path: String,
+  query: List (String, String),
+  hash: Option String
+}

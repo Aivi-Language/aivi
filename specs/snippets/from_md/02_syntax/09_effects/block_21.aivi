@@ -1,0 +1,19 @@
+// Sequence with effect block
+transfer fromAccount toAccount amount = effect {
+  balance <- getBalance fromAccount
+  if balance >= amount then effect {
+    withdraw fromAccount amount
+    deposit toAccount amount
+  } else fail InsufficientFunds
+}
+
+// Equivalent functional composition
+transfer fromAccount toAccount amount =
+(getBalance fromAccount |> bind) (balance =>
+  if balance >= amount then
+  (withdraw fromAccount amount |> bind) (_ =>
+    (deposit toAccount amount |> bind) (_ =>
+      pure Unit))
+  else
+  fail InsufficientFunds
+)

@@ -2,9 +2,7 @@
 
 The `Http` domain connects your program to the world. Whether you're fetching data from an API, submitting a form, or scraping a website, this domain provides the standard tools (`get`, `post`, `fetch`) to speak the language of the web reliably.
 
-```aivi
-use aivi.net.http
-```
+<<< ../../snippets/from_md/05_stdlib/03_network/01_http/block_01.aivi{aivi}
 
 ## Functions
 
@@ -18,21 +16,8 @@ use aivi.net.http
 
 ### `Response`
 
-```aivi
-type Response = {
-    status: Int,
-    headers: List { name: Text, value: Text },
-    body: Text
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_network/01_http/block_02.aivi{aivi}
 
 ### `Request`
 
-```aivi
-type Request = {
-    method: Text,
-    url: Url,
-    headers: List { name: Text, value: Text },
-    body: Option Text
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_network/01_http/block_03.aivi{aivi}

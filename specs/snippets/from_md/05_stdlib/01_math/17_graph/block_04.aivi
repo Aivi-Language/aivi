@@ -1,0 +1,7 @@
+use aivi.graph
+
+g0 = { nodes: [], edges: [] }
+g1 = addEdge g0 { from: 1, to: 2, weight: 1.0 }
+g2 = addEdge g1 { from: 2, to: 3, weight: 2.0 }
+
+path = shortestPath g2 1 3

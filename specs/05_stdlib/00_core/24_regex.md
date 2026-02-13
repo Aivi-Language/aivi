@@ -4,28 +4,11 @@ The `Regex` domain handles **Pattern Matching** for text. Whether you're validat
 
 ## Overview
 
-```aivi
-use aivi.regex (Regex)
-
-email_pattern = ~r/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/
-match = Regex.test(email_pattern, "user@example.com")
-
-// With flags (example: case-insensitive)
-email_ci = ~r/^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/i
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/24_regex/block_01.aivi{aivi}
 
 ## Types
 
-```aivi
-type RegexError = InvalidPattern Text
-
-Match = {
-  full: Text,
-  groups: List (Option Text),
-  start: Int,
-  end: Int
-}
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/24_regex/block_02.aivi{aivi}
 
 ## Core API (v0.1)
 

@@ -1,0 +1,1 @@
+Rename { createdAt: created_at } (Omit (isAdmin) User)

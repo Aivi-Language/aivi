@@ -41,33 +41,22 @@ date + 1m
 
 When carrier type cannot disambiguate:
 
-```aivi
-x + 1m  // Error: x : Int, neither Calendar nor Physics apply
-```
+<<< ../snippets/from_md/04_desugaring/09_domains/block_01.aivi{aivi}
 
 When multiple domains match:
 
-```aivi
-// If both Calendar and Physics define (+) over the same carrier
-ambiguous + 1m  // Error: Ambiguous domain for (+)
-```
+<<< ../snippets/from_md/04_desugaring/09_domains/block_02.aivi{aivi}
 
 Resolution: Use qualified literals or operators.
 
-```aivi
-date + Calendar.1m
-position + Physics.1m
-```
+<<< ../snippets/from_md/04_desugaring/09_domains/block_03.aivi{aivi}
 
 
 ## 9.3 Operator Precedence
 
 Domain operators follow standard precedence. Domains do not redefine precedence — only semantics:
 
-```aivi
-1 + 2 * 3      // Parsed as: 1 + (2 * 3)
-date + 1m      // Parsed as: (date + 1m)
-```
+<<< ../snippets/from_md/04_desugaring/09_domains/block_04.aivi{aivi}
 
 
 ## 9.4 Desugaring Order

@@ -1,0 +1,7 @@
+use aivi.chronos.instant
+
+start = 2024-01-01T00:00:00Z
+end = 2024-01-01T00:00:10Z
+
+elapsed = end - start
+// elapsed is 10s (Duration)

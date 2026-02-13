@@ -1,0 +1,8 @@
+use aivi.color
+
+primary = { r: 255, g: 85, b: 0 } // Orange
+
+lighter = primary + 10l
+darker = primary -20l
+muted = primary -30s
+shifted = primary + 30h

@@ -1,0 +1,4 @@
+class Applicative (F *) =
+Apply (F *) & {
+  of: A -> F A
+}

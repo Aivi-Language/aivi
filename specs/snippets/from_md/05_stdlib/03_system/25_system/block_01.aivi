@@ -1,0 +1,11 @@
+use aivi.system (env)
+
+main = effect {
+  // Read an environment variable (missing => default)
+  portOpt <- env.get "PORT"
+  port =
+  portOpt ?
+    | Some p => p
+    | None   => "8080"
+  print port
+}

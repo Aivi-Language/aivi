@@ -1,0 +1,3 @@
+u -> isValidEmail email
+u -> isValidEmail (_.email)
+u -> isValidEmail u.email

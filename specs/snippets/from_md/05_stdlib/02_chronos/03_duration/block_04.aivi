@@ -1,0 +1,5 @@
+use aivi.duration
+
+timeout = { millis: 0 } + 30s
+delay = timeout + 500ms
+longPoll = { millis: 0 } + 5min

@@ -1,0 +1,9 @@
+use aivi.collections (Map, Set)
+
+scores = Map.empty()
+|> Map.insert("Alice", 100)
+|> Map.insert("Bob", 95)
+
+if scores |> Map.has("Alice") {
+  print("Alice is present")
+}

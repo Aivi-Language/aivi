@@ -1,0 +1,3 @@
+class Chain (F *) = {
+  chain: (A -> F B) -> F A -> F B
+}

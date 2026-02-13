@@ -1,0 +1,12 @@
+domain Name over CarrierType = {
+  // 1. Define the "change" type
+  type Delta = ...
+
+  // 2. Implement operators
+  (+) : CarrierType -> Delta -> CarrierType
+  (+) carrier delta = ...
+
+  // 3. Define literals
+  1d = Day 1
+  ~my_sigil(...) = ...
+}

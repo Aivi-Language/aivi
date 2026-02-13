@@ -1,0 +1,33 @@
+type Header = { name: Text, value: Text }
+
+type Request = {
+  method: Text,
+  path: Text,
+  headers: List Header,
+  body: List Int,
+  remoteAddr: Option Text
+}
+
+type Response = {
+  status: Int,
+  headers: List Header,
+  body: List Int
+}
+
+type ServerConfig = {
+  address: Text
+}
+
+type HttpError = { message: Text }
+type WsError = { message: Text }
+
+type WsMessage
+= TextMsg Text
+| BinaryMsg (List Int)
+| Ping
+| Pong
+| Close
+
+type ServerReply
+= Http Response
+| Ws (WebSocket -> Effect WsError Unit)

@@ -1,0 +1,2 @@
+// Native type (backed by Rust Decimal or similar)
+type Decimal

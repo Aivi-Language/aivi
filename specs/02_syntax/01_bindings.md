@@ -11,20 +11,14 @@ All bindings use `=`:
 * instances
 * modules
 
-```aivi
-pi = 3.14159
-add = x y => x + y
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_01.aivi{aivi}
 
 
 ## 1.2 Shadowing
 
 Bindings are lexical and may be shadowed.
 
-```aivi
-x = 1
-x = x + 1
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_02.aivi{aivi}
 
 This introduces a new binding; no mutation exists. This is common in functional languages like OCaml and Rust (re-binding) but distinct from mutation.
 
@@ -34,14 +28,7 @@ Within a module body (flat or braced), top-level value bindings are **recursive*
 
 This supports ordinary recursive functions:
 
-```aivi
-module demo.recursion
-export sum
-
-sum =
-  | []        => 0
-  | [h, ...t] => h + sum t
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_03.aivi{aivi}
 
 Local recursion inside `do { ... }` / `effect { ... }` blocks is a future surface feature; in v0.1, prefer defining recursive helpers at module scope.
 
@@ -50,11 +37,7 @@ Local recursion inside `do { ... }` / `effect { ... }` blocks is a future surfac
 
 Structural patterns may appear in bindings.
 
-```aivi
-{ name } = user      // Shorthand for { name: name }
-{ name: n } = user   // Rename binding to 'n'
-[h, ...t] = xs       // List destructuring
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_04.aivi{aivi}
 
 * `=` may only be used where the compiler can prove the pattern is **total** (i.e., it covers all possible shapes of the data).
 * Potentially failing matches (refutable patterns) must use `?` (case analysis) or appear in a context where failure can be handled.
@@ -67,10 +50,7 @@ Structural patterns may appear in bindings.
 
 Patterns may bind the **entire value** alongside destructuring.
 
-```aivi
-user@{ name: n } = input
-user@{ name } = input
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_05.aivi{aivi}
 
 Semantics:
 
@@ -86,43 +66,24 @@ Allowed in:
 
 Example:
 
-```aivi
-// u is bound to the full record; id/name come from destructuring
-formatUser = u@{ id, name } => "{id}: {name}"
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_06.aivi{aivi}
 
 
 ## 1.5 Usage Examples
 
 ### Config Binding
 
-```aivi
-config = {
-  host: "localhost"
-  port: 8080
-  debug: True
-}
-
-{ host, port } = config
-serverUrl = "http://{host}:{port}" 
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_07.aivi{aivi}
 
 ### Tuple Destructuring
 
-```aivi
-point = (10, 20)
-(x, y) = point
-
-distance = sqrt ((x * x) + (y * y))
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_08.aivi{aivi}
 
 ### Deep path destructuring
 
 Record destructuring supports **dot-paths** to access nested fields directly. This combines path addressing with the `@` whole-value binder.
 
-```aivi
-{ data.user.profile@{ name } } = response
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_09.aivi{aivi}
 
 Semantics:
 * `data.user.profile` is the path to the record being destructured.
@@ -130,9 +91,7 @@ Semantics:
 * Intermediate records are **not** bound unless explicitly requested.
 
 This is exactly equivalent to the nested expansion:
-```aivi
-{ data: { user: { profile: p@{ name } } } } = response
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_10.aivi{aivi}
 But much more readable for deep hierarchies.
 
 > [!NOTE]
@@ -140,23 +99,8 @@ But much more readable for deep hierarchies.
 
 ### List Head/Tail
 
-```aivi
-numbers = [1, 2, 3, 4, 5]
-[first, second, ...rest] = numbers
-
-// first = 1, second = 2, rest = [3, 4, 5]
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_11.aivi{aivi}
 
 ### Function Definitions
 
-```aivi
-// Named function
-greet = name => "Hello, {name}!"
-
-// Multi-argument
-add = x y => x + y
-
-// With type annotation
-multiply : Int -> Int -> Int
-multiply = a b => a * b
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_12.aivi{aivi}

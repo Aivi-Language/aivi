@@ -1,0 +1,7 @@
+// Update application state based on event
+nextState = (state, event) => (state, event) ?
+  | (Idle, Start)    => Running
+  | (Running, Pause) => Paused
+  | (Paused, Resume) => Running
+  | (Running, Stop)  => Idle
+  | _                => state // Unchanged on invalid events

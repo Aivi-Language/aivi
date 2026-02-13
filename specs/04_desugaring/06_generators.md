@@ -20,34 +20,19 @@ Primitive “constructors” as definable macros:
 
 - Sequencing:
 
-  ```aivi
-  generate {
-    s1
-    s2
-  }
-  ```
+<<< ../snippets/from_md/04_desugaring/06_generators/block_01.aivi{aivi}
 
   desugars to `genAppend ⟦gen s1⟧ ⟦gen s2⟧`.
 
 - Binding:
 
-  ```aivi
-  generate {
-    x <- g
-    body
-  }
-  ```
+<<< ../snippets/from_md/04_desugaring/06_generators/block_02.aivi{aivi}
 
   desugars to `genBind ⟦g⟧ (λx. ⟦generate { body }⟧)` where `genBind g f = ΛR. λk. λz. g (λacc a. (f a) k acc) z`.
 
 - Filtering:
 
-  ```aivi
-  generate {
-    x -> pred
-    body
-  }
-  ```
+<<< ../snippets/from_md/04_desugaring/06_generators/block_03.aivi{aivi}
 
   desugars to `genFilter (λx. ⟦pred⟧[_ := x]) ⟦generate { body }⟧`.
 
@@ -61,13 +46,7 @@ Resources are desugared into `bracket` calls.
 
 - Resource sequencing:
 
-  ```aivi
-  resource {
-    setup
-    yield r
-    cleanup
-  }
-  ```
+<<< ../snippets/from_md/04_desugaring/06_generators/block_04.aivi{aivi}
 
   desugars to `Resource { acquire = ⟦setup pure r⟧, release = λr. ⟦cleanup⟧ }`.
 

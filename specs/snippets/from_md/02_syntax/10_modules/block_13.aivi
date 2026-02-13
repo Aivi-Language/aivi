@@ -1,0 +1,8 @@
+// Instead of hardcoding, load from environment
+config : Source Env { apiUrl: Text }
+config = env.decode { apiUrl: "https://localhost:8080" }
+
+connect = effect {
+  cfg <- load config
+  // ... use cfg.apiUrl
+}

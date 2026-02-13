@@ -1,0 +1,9 @@
+// Named function
+greet = name => "Hello, {name}!"
+
+// Multi-argument
+add = x y => x + y
+
+// With type annotation
+multiply : Int -> Int -> Int
+multiply = a b => a * b

@@ -1,0 +1,20 @@
+use aivi.i18n
+
+catalog : Catalog
+catalog = catalogFromBundles[deDeBundle, deBundle, enUsBundle]
+
+// `fallbackTags` is right-to-left stripping:
+// `de-DE` -> ["de-DE", "de"]
+tags = fallbackTags { language: "de", region: Some "DE", variants: [], tag: "de-DE" }
+
+// Translate using the best available locale bundle (including `de` fallback).
+msg = tCatalog catalog { language: "de", region: Some "DE", variants: [], tag: "de-DE" } (~k"app.welcome") { name: "Alice" }
+
+// Add an explicit default bundle at the end when the user's locale isn't present.
+msg2 =
+tCatalogWithDefault
+catalog
+{ language: "fr", region: Some "FR", variants: [], tag: "fr-FR" }
+enUsBundle
+(~k"app.welcome")
+{ name: "Alice" }

@@ -1,0 +1,2 @@
+instance Monad (Option *) = { ...}
+instance E: Monad (Result E *) = { ...} // E: binds the error parameter for the Result monad instance

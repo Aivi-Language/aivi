@@ -1,0 +1,7 @@
+@static
+version : Text
+version = file.read "./VERSION"
+
+@static
+schema : JsonSchema
+schema = file.json "./schema.json"

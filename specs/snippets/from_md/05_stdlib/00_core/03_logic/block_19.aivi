@@ -1,0 +1,10 @@
+use aivi.logic
+use aivi.text as text
+
+instance Semigroup Text = {
+  concat: a b => text.concat[a, b]
+}
+
+instance Monoid Text = {
+  empty: ""
+}

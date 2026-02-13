@@ -13,11 +13,7 @@ Decorators are intentionally narrow:
 
 ## 14.1 Syntax
 
-```aivi
-@decorator_name
-@decorator_name value
-@decorator_name { key: value }
-```
+<<< ../snippets/from_md/02_syntax/14_decorators/block_01.aivi{aivi}
 
 Decorators appear before the binding they annotate.
 
@@ -63,24 +59,8 @@ Decorators desugar to compile-time metadata:
 
 ### Compile-Time Embedding
 
-```aivi
-@static
-version : Text
-version = file.read "./VERSION"
-
-@static
-schema : JsonSchema
-schema = file.json "./schema.json"
-```
+<<< ../snippets/from_md/02_syntax/14_decorators/block_02.aivi{aivi}
 
 ### MCP Tools
 
-```aivi
-@mcp_tool
-searchDocs : Query -> Effect Http (List Document)
-searchDocs query = http.get "https://api.example.com/search?q={query}"
-
-@mcp_resource
-appConfig : Source File Config
-appConfig = file.json "./config.json"
-```
+<<< ../snippets/from_md/02_syntax/14_decorators/block_03.aivi{aivi}

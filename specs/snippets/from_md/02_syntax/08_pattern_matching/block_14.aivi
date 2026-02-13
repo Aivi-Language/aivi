@@ -1,0 +1,4 @@
+headerLabel = response ?
+  | { data.user.profile@{ name } } => name
+  | { data.guest: True }           => "Guest"
+  | _                              => "Unknown"

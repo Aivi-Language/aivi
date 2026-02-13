@@ -6,33 +6,11 @@ It allows you to read **Environment Variables** (like secret queries or API keys
 
 ## Overview
 
-```aivi
-use aivi.system (env)
-
-main = effect {
-  // Read an environment variable (missing => default)
-  portOpt <- env.get "PORT"
-  port =
-    portOpt ?
-      | Some p => p
-      | None   => "8080"
-  print port
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/25_system/block_01.aivi{aivi}
 
 ## Values
 
-```aivi
-env : {
-  get: Text -> Effect Text (Option Text)
-  set: Text -> Text -> Effect Text Unit
-  remove: Text -> Effect Text Unit
-}
-
-args : Effect Text (List Text)
-localeTag : Effect Text (Option Text)
-exit : Int -> Effect Text Unit
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/25_system/block_02.aivi{aivi}
 
 ## Goals for v1.0
 

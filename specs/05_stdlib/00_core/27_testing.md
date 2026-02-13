@@ -4,14 +4,7 @@ The `Testing` domain is built right into the language because reliability should
 
 ## Overview
 
-```aivi
-use aivi.testing (assert, assertEq)
-
-@test
-additionWorks _ = {
-    assertEq (1 + 1) 2
-}
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/27_testing/block_01.aivi{aivi}
 
 ## Goals for v1.0
 

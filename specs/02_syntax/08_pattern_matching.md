@@ -2,11 +2,7 @@
 
 ## 8.1 `?` branching
 
-```aivi
-classify = v => v ?
-  | 0 => "zero"
-  | _ => "nonzero"
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_01.aivi{aivi}
 
 This is a concise way to do case analysis, similar to `match` in Rust or `case` in Haskell/Elixir.
 
@@ -20,67 +16,33 @@ Compiler checks:
 
 This is **not** a pipeline (`|>`). A leading `|` introduces an arm of a **unary** function that pattern-matches on its single (implicit) argument.
 
-```aivi
-// Multi-clause unary function (matches on the implicit argument)
-greet =
-  | None => "hi"
-  | Some name => "hi {name}"
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_02.aivi{aivi}
 
-// Equivalent explicit form
-greet2 = u => u ?
-  | None => "hi"
-  | Some name => "hi {name}"
-```
-
-```aivi
-sum =
-  | []        => 0
-  | [h, ...t] => h + sum t
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_03.aivi{aivi}
 
 
 ## 8.3 Record Patterns
 
-```aivi
-greet =
-  | { role: Admin, name } => "Welcome back, Admin {name}!"
-  | { role: Guest }       => "Welcome, guest!"
-  | { name }              => "Hello, {name}!"
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_04.aivi{aivi}
 
 
 ## 8.4 Nested Patterns
 
 Record patterns support dotted keys, so nested patterns can often be written without extra braces.
 
-```aivi
-processResult =
-  | Ok { data.users: [first, ...] } => "First user: {first.name}"
-  | Ok { data.users: [] }           => "No users found"
-  | Err { code: 404 }               => "Not found"
-  | Err { code, message }           => "Error {code}: {message}"
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_05.aivi{aivi}
 
 ### Nested constructor patterns
 
 Constructor patterns may themselves take pattern arguments, so you can nest them:
 
-```aivi
-msg = res ?
-  | Err (NotFound m) => m
-  | Err _            => "no-msg"
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_06.aivi{aivi}
 
 ### Flattened constructor-chain patterns
 
 For readability, nested constructor patterns can be written without parentheses in pattern position:
 
-```aivi
-// Parsed as: `Err (NotFound m)`
-msg = res ?
-  | Err NotFound m => m
-  | _              => "no-msg"
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_07.aivi{aivi}
 
 This "constructor chain" rule applies only in pattern context (after `|` and before `=>`).
 
@@ -89,122 +51,38 @@ This "constructor chain" rule applies only in pattern context (after `|` and bef
 
 Patterns can have guards using `when`:
 
-```aivi
-classify =
-  | n when n < 0   => "negative"
-  | 0              => "zero"
-  | n when n < 10  => "small"
-  | n when n < 100 => "medium"
-  | _              => "large"
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_08.aivi{aivi}
 
 
 ## 8.6 Usage Examples
 
 ### Option Handling
 
-```aivi
-Option A = None | Some A
-
-getOrDefault = default => v => v ?
-  | None       => default
-  | Some value => value
-
-userName = user.nickname |> getOrDefault "Anonymous"
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_09.aivi{aivi}
 
 ### Result Processing
 
-```aivi
-Result E A = Err E | Ok A
-
-handleResult =
-  | Ok data => processData data
-  | Err e => logError e
-
-// With chaining
-fetchUser id
-  |> handleResult
-  |> renderView
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_10.aivi{aivi}
 
 ### List Processing
 
-```aivi
-// Safe head
-head =
-  | [] => None
-  | [x, ...] => Some x
-
-// Take first n
-take = (n, xs) => (n, xs) ?
-  | (n, _) when n <= 0 => []
-  | (_, [])            => []
-  | (n, [x, ...xs])    => [x, ...take (n - 1, xs)]
-
-// Zip two lists
-zip =
-  | ([], _) => []
-  | (_, []) => []
-  | ([x, ...xs], [y, ...ys]) => [(x, y), ...zip (xs, ys)]
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_11.aivi{aivi}
 
 ### Tree Traversal
 
-```aivi
-Tree A = Leaf A | Node (Tree A) (Tree A)
-
-depth =
-  | Leaf _ => 1
-  | Node left right => 1 + max (depth left) (depth right)
-
-flatten =
-  | Leaf x => [x]
-  | Node left right => flatten left ++ flatten right
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_12.aivi{aivi}
 
 ### Expression Evaluation
 
-```aivi
-Expr = Num Int | Add Expr Expr | Mul Expr Expr
-
-eval =
-  | Num n   => n
-  | Add a b => eval a + eval b
-  | Mul a b => eval a * eval b
-
-// (2 + 3) * 4 = 20
-expr = Mul (Add (Num 2) (Num 3)) (Num 4)
-result = eval expr
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_13.aivi{aivi}
 ## 8.7 Expressive Pattern Orchestration
 
 Pattern matching excels at simplifying complex conditional branches into readable declarations.
 
-```aivi
-headerLabel = response ?
-  | { data.user.profile@{ name } } => name
-  | { data.guest: True }           => "Guest"
-  | _                              => "Unknown"
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_14.aivi{aivi}
 
 ### Concise State Machines
-```aivi
-// Update application state based on event
-nextState = (state, event) => (state, event) ?
-  | (Idle, Start)    => Running
-  | (Running, Pause) => Paused
-  | (Paused, Resume) => Running
-  | (Running, Stop)  => Idle
-  | _                => state // Unchanged on invalid events
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_15.aivi{aivi}
 
 ### Expressive Logic Branches
-```aivi
-// Business rule mapping
-discount = user => user ?
-  | _ when user.age > 65 && user.tier == Gold => 0.3
-  | _ when user.tier == Gold                  => 0.2
-  | _ when user.tier == Silver                => 0.1
-  | _                                         => 0.0
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_16.aivi{aivi}

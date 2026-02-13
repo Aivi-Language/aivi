@@ -27,56 +27,29 @@ For *handling* an effect error as a value, the standard library provides:
 
 `pure` lifts a value into an effect:
 
-```aivi
-pureExample : Effect Text Int
-pureExample =
-  pure 42
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_01.aivi{aivi}
 
 `bind` sequences effects explicitly (the `effect { ... }` block desugars to `bind`):
 
-```aivi
-bindExample : Effect Text Int
-bindExample =
-  (pure 41 |> bind) (n => pure (n + 1))
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_02.aivi{aivi}
 
 `fail` aborts an effect with an error value:
 
-```aivi
-failExample : Effect Text Int
-failExample =
-  fail "boom"
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_03.aivi{aivi}
 
 `attempt` runs an effect and captures success/failure as a `Result`:
 
-```aivi
-attemptExample : Effect Text Text
-attemptExample = effect {
-  res <- attempt (fail "nope")
-  res ?
-    | Ok _  => pure "unexpected"
-    | Err e => pure e
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_04.aivi{aivi}
 
 ### `load`
 
 The standard library function `load` lifts a typed `Source` (see [External Sources](12_external_sources.md)) into an `Effect`.
 
-```aivi
-load : Source K A -> Effect (SourceError K) A
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_05.aivi{aivi}
 
 ## 9.2 `effect` blocks
 
-```aivi
-main = effect {
-  cfg <- load (file.json "config.json")
-  print "loaded"
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_06.aivi{aivi}
 
 This is syntax sugar for monadic binding (see Desugaring section). All effectful operations within these blocks are automatically sequenced.
 
@@ -105,34 +78,21 @@ Two forms exist:
 
 1) **Effect fallback** (inside `effect {}` and only after `<-`):
 
-```aivi
-txt <- load (file.read path) or "(missing)"
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_07.aivi{aivi}
 
 This runs the effect; if it fails, it produces the fallback value instead.
 
 You can also match on the error value using arms (patterns match the **error**, not `Err`):
 
-```aivi
-txt <- load (file.read path) or
-  | NotFound _ => "(missing)"
-  | _          => "(other-error)"
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_08.aivi{aivi}
 
 2) **Result fallback** (expression form):
 
-```aivi
-msg = res or "boom"
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_09.aivi{aivi}
 
 Or with explicit `Err ...` arms:
 
-```aivi
-msg =
-  res or
-    | Err NotFound m => m
-    | Err _          => "boom"
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_10.aivi{aivi}
 
 Restrictions (v0.1):
 
@@ -146,11 +106,7 @@ Restrictions (v0.1):
 
 In `effect { ... }`, this common pattern is allowed without `_ <-`:
 
-```aivi
-effect {
-  if cond then print "branch" else Unit
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_11.aivi{aivi}
 
 Conceptually, the `Unit` branch is lifted to `pure Unit` so both branches have an `Effect` type.
 
@@ -158,33 +114,9 @@ Conceptually, the `Unit` branch is lifted to `pure Unit` so both branches have a
 
 These are equivalent:
 
-```aivi
-// Concise (recommended in effect blocks)
-main = effect {
-  res <- attempt (foo x)
-  verdict = res ?
-    | Ok _  => "ok"
-    | Err _ => "err"
+<<< ../snippets/from_md/02_syntax/09_effects/block_12.aivi{aivi}
 
-  print verdict
-
-  if cond then print "branch" else Unit
-}
-```
-
-```aivi
-// More explicit (same semantics)
-main = effect {
-  res <- attempt (foo x)
-  verdict = res ?
-    | Ok _  => "ok"
-    | Err _ => "err"
-
-  _ <- print verdict
-
-  _ <- if cond then print "branch" else pure Unit
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_13.aivi{aivi}
 
 ### `if` with nested blocks inside `effect`
 
@@ -192,17 +124,7 @@ main = effect {
 
 This pattern is common when a branch needs multiple effectful steps:
 
-```aivi
-main = effect {
-  u     <- loadUser
-  token <- if u.isAdmin then effect {
-    log "admin login"
-    token <- mintToken u
-    pure token
-  } else pure "guest"
-  pure token
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_14.aivi{aivi}
 
 Desugaring-wise, the `if … then … else …` appears inside the continuation of a `bind`, and each branch desugars to its own sequence of `bind` calls.
 
@@ -210,24 +132,14 @@ Desugaring-wise, the `if … then … else …` appears inside the continuation 
 
 An explicit `effect { … }` is itself an expression of type `Effect E A`. If you write `effect { … }` in an `if` branch, you usually want to run (bind) the chosen effect:
 
-```aivi
-main = effect {
-  token <- if shouldMint then mintToken user else pure "guest"
-  pure token
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_15.aivi{aivi}
 
 If you instead write `if … then effect { … } else effect { … }` *without* binding it, the result of the `if` is an `Effect …` value, not a sequence of steps in the surrounding block (unless it is the final expression of that surrounding `effect { … }`).
 
 
 ## 9.3 Effects and patching
 
-```aivi
-authorize = user => user <| {
-  roles: _ ++ ["Admin"]
-  lastLogin: now
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_16.aivi{aivi}
 
 Patches are pure values. Apply them where you have the record value available (often inside an `effect` block after decoding/loading).
 
@@ -238,77 +150,23 @@ The `effect` block is the primary way to sequence impure operations. It translat
 
 Example translations:
 
-```aivi
-val = effect {
-  x <- f
-  g x
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_17.aivi{aivi}
 
-```aivi
-val = (f |> bind) (x => g x)
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_18.aivi{aivi}
 
-```aivi
-effect {
-  f
-  g
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_19.aivi{aivi}
 
-```aivi
-(f |> bind) (_ => g)
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_20.aivi{aivi}
 
 Example translation:
 
-```aivi
-// Sequence with effect block
-transfer fromAccount toAccount amount = effect {
-  balance <- getBalance fromAccount
-  if balance >= amount then effect {
-    withdraw fromAccount amount
-    deposit toAccount amount
-  } else fail InsufficientFunds
-}
-
-// Equivalent functional composition
-transfer fromAccount toAccount amount =
-  (getBalance fromAccount |> bind) (balance =>
-    if balance >= amount then
-      (withdraw fromAccount amount |> bind) (_ =>
-        (deposit toAccount amount |> bind) (_ =>
-          pure Unit))
-    else
-      fail InsufficientFunds
-  )
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_21.aivi{aivi}
 ## 9.5 Expressive Effect Composition
 
 Effect blocks can be combined with pipelines and pattern matching to create very readable business logic.
 
 ### Concatenating effectful operations
-```aivi
-// Fetch config, then fetch data, then log
-setup = effect {
-  cfg  <- loadConfig "prod.json"
-  data <- fetchRemoteData cfg
-  logSuccess data
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_22.aivi{aivi}
 
 ### Expressive Error Handling
-```aivi
-// Attempt operation, providing a typed default on error
-getUser = id => effect {
-  res <- attempt (api.fetchUser id)
-  res ?
-    | Ok user => pure user
-    | Err _   => pure GuestUser
-}
-
-validatedUser = effect {
-  u <- getUser 123
-  if u.age > 18 then pure (toAdmin u) else fail TooYoung
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_23.aivi{aivi}

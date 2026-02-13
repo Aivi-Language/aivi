@@ -10,35 +10,16 @@ The **Fast Fourier Transform (FFT)** is a legendary algorithm that converts Time
 
 ## Overview
 
-```aivi
-use aivi.signal (fft, ifft)
-
-// A simple signal (e.g., audio samples)
-timeDomain = [1.0, 0.5, 0.25, 0.125]
-
-// Convert to frequencies to analyze pitch
-freqDomain = fft(timeDomain)
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/14_signal/block_01.aivi{aivi}
 
 
 ## Features
 
-```aivi
-Signal = { samples: List Float, rate: Float }
-Spectrum = { bins: List Complex, rate: Float }
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/14_signal/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain Signal over Signal = {
-  (+) : Signal -> Signal -> Signal
-  (+) a b = { samples: zipWith (+) a.samples b.samples, rate: a.rate }
-  
-  (*) : Signal -> Float -> Signal
-  (*) s k = { samples: map (\x -> x * k) s.samples, rate: s.rate }
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/14_signal/block_03.aivi{aivi}
 
 ## Helper Functions
 
@@ -51,11 +32,4 @@ domain Signal over Signal = {
 
 ## Usage Examples
 
-```aivi
-use aivi.signal
-use aivi.number.complex
-
-audio = { samples: [0.0, 0.5, 1.0, 0.5], rate: 44100.0 }
-spectrum = fft audio
-recon = ifft spectrum
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/14_signal/block_04.aivi{aivi}

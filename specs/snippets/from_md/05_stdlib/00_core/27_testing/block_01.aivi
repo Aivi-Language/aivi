@@ -1,0 +1,6 @@
+use aivi.testing (assert, assertEq)
+
+@test
+additionWorks _ = {
+  assertEq (1 + 1) 2
+}

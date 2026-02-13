@@ -4,17 +4,7 @@ The `Collections` domain is your toolbox for structured data. While `List` is gr
 
 ## Overview
 
-```aivi
-use aivi.collections (Map, Set)
-
-scores = Map.empty()
-  |> Map.insert("Alice", 100)
-  |> Map.insert("Bob", 95)
-
-if scores |> Map.has("Alice") {
-  print("Alice is present")
-}
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_01.aivi{aivi}
 
 ## v1.0 Scope
 
@@ -29,12 +19,7 @@ Collections introduce sigil-based literals for concise construction. These are d
 
 ### Map literal
 
-```aivi
-users = ~map{
-  "id-1" => { name: "Alice", age: 30 }
-  "id-2" => { name: "Bob", age: 25 }
-}
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_02.aivi{aivi}
 
 Rules:
 - Entries use `key => value`.
@@ -42,17 +27,11 @@ Rules:
 - `...expr` spreads another map into the literal.
 - When duplicate keys exist, the **last** entry wins (right-biased).
 
-```aivi
-defaults = ~map{ "theme" => "light", "lang" => "en" }
-settings = ~map{ ...defaults, "theme" => "dark" }
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_03.aivi{aivi}
 
 ### Set literal
 
-```aivi
-primes = ~set[2, 3, 5, 7, 11]
-combined = ~set[...a, ...b]
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_04.aivi{aivi}
 
 Rules:
 - Elements are expressions.
@@ -63,12 +42,7 @@ Rules:
 
 The `Collections` domain provides `++` as a right-biased merge for `Map` and union for `Set`.
 
-```aivi
-use aivi.collections (Map, Set, domain Collections)
-
-merged = map1 ++ map2
-allTags = set1 ++ set2
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_05.aivi{aivi}
 
 ## Core API (v1.0)
 

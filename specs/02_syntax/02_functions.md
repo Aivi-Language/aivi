@@ -5,9 +5,7 @@
 * Functions are **curried by default**
 * Application is by whitespace
 
-```aivi
-add 5 10
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_01.aivi{aivi}
 
 ---
 
@@ -15,15 +13,11 @@ add 5 10
 
 `_` denotes a **single-argument lambda**.
 
-```aivi
-inc = _ + 1
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_02.aivi{aivi}
 
 Multi-argument lambdas must be explicit:
 
-```aivi
-add = x y => x + y
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_03.aivi{aivi}
 
 ---
 
@@ -31,9 +25,7 @@ add = x y => x + y
 
 Pipelines use `|>`.
 
-```aivi
-xs |> map inc |> filter (_ > 0)
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_04.aivi{aivi}
 
 ---
 
@@ -41,110 +33,30 @@ xs |> map inc |> filter (_ > 0)
 
 ### Basic Functions
 
-```aivi
-// Identity
-id = x => x
-
-// Constant: returns a function that ignores its input and always returns x
-const = x _ => x
-
-// Flip arguments
-flip = f => x y => f y x
- 
-// Function composition is most common via the pipe operator:
-processName = name => name |> trim |> lowercase |> capitalize
-result = processName "  HELLO  "
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_05.aivi{aivi}
 
 
 ### Higher-Order Functions
 
-```aivi
-// Apply function twice
-twice = f => x => f (f x)
-
-increment = _ + 1
-addTwo = twice increment
-
-// Result: addTwo 5 = 7
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_06.aivi{aivi}
 
 ### Partial Application
 
-```aivi
-add = x y => x + y
-add5 = add 5
-
-// add5 10 = 15
-
-// With pipes
-numbers = [1, 2, 3]
-result = numbers |> map (add 10)
-// [11, 12, 13]
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_07.aivi{aivi}
 
 ### Block Pipelines
 
 
 Pipelines allow building complex data transformations without nested function calls.
 
-```aivi
-users = [
-  { name: "Alice", age: 30, active: True }
-  { name: "Bob", age: 25, active: False }
-  { name: "Carol", age: 35, active: True }
-]
-
-// Data processing pipeline
-activeNames = users
-  |> filter active
-  |> map .name
-  |> sort
-  |> join ", "
-// "Alice, Carol"
-
-// Mathematical series
-sigma = [1..100]
-  |> filter (_ % 2 == 0)
-  |> map (n => pow n 2)
-  |> sum
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_08.aivi{aivi}
 
 ### Expressive Logic: Point-Free Style
 
 Functions can be combined to form new functions without naming their arguments, leading to very concise code.
 
-```aivi
-// Boolean logic composition
-isAdmin = user => user.role == Admin
-isOwner = user => user.id == ownerId
-canDelete = user => isAdmin user || isOwner user
-
-// Validation chains
-isEmail = contains "@"
-isLongEnough = x => x |> len |> (_ > 8)
-isValidPassword = x => isEmail x && isLongEnough x
-
-// Usage
-passwords |> filter isValidPassword
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_09.aivi{aivi}
 
 ### Lambda Shorthand
 
-```aivi
-// Single arg with _
-double = _ * 2
-isEven = _ % 2 == 0 
-getName = .name // Accessor shorthand for x => x.name
-
-// Equivalent explicit forms
-double = x => x * 2
-isEven = x => x % 2 == 0
-getName = user => user.name
-
-// Predicates can automatically deconstruct fields:
-// filter active is a shortcut for filter (_.active)
-
-// Complexity can be handled inline via explicit record deconstruction:
-// map { name, id } => if id > 10 then name else "Anonymous"
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_10.aivi{aivi}

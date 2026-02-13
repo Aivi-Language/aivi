@@ -11,50 +11,16 @@ Almost every visual application needs to know when two things collide. This doma
 
 ## Overview
 
-```aivi
-use aivi.geometry (Ray, Sphere, intersect)
-
-// A ray firing forwards from origin
-ray = Ray(origin: {x:0, y:0, z:0}, dir: {x:0, y:0, z:1})
-
-// A sphere 5 units away
-sphere = Sphere(center: {x:0, y:0, z:5}, radius: 1.0)
-
-if intersect(ray, sphere) {
-    print("Hit!")
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/15_geometry/block_01.aivi{aivi}
 
 
 ## Features
 
-```aivi
-Point2 = { x: Float, y: Float }
-Point3 = { x: Float, y: Float, z: Float }
-Line2 = { origin: Point2, direction: Point2 }
-Segment2 = { start: Point2, end: Point2 }
-Polygon = { vertices: List Point2 }
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/15_geometry/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain Geometry over Point2 = {
-  (+) : Point2 -> Point2 -> Point2
-  (+) a b = { x: a.x + b.x, y: a.y + b.y }
-  
-  (-) : Point2 -> Point2 -> Point2
-  (-) a b = { x: a.x - b.x, y: a.y - b.y }
-}
-
-domain Geometry over Point3 = {
-  (+) : Point3 -> Point3 -> Point3
-  (+) a b = { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }
-  
-  (-) : Point3 -> Point3 -> Point3
-  (-) a b = { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/15_geometry/block_03.aivi{aivi}
 
 ## Helper Functions
 
@@ -66,12 +32,4 @@ domain Geometry over Point3 = {
 
 ## Usage Examples
 
-```aivi
-use aivi.geometry
-
-p1 = { x: 0.0, y: 0.0 }
-p2 = { x: 3.0, y: 4.0 }
-
-d = distance p1 p2
-center = midpoint { start: p1, end: p2 }
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/15_geometry/block_04.aivi{aivi}

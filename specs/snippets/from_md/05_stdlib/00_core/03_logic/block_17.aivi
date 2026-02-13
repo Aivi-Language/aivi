@@ -1,0 +1,3 @@
+class Profunctor (F * *) = {
+  promap: (A -> B) -> (C -> D) -> F B C -> F A D
+}

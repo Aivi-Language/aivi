@@ -1,0 +1,5 @@
+generate {
+  u <- users
+  u -> active && tier == Premium
+  yield u
+}

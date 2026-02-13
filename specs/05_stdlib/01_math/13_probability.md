@@ -11,34 +11,16 @@ This domain lets you define the *shape* of the chaotic world you want to simulat
 
 ## Overview
 
-```aivi
-use aivi.probability (Normal, uniform)
-
-// Create a Bell curve centered at 0 with standard deviation of 1
-distribution = Normal(0.0, 1.0) 
-
-// Get a random number that fits this curve
-// (Most values will be near 0, few will be near -3 or 3)
-sample = distribution |> sample()
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/13_probability/block_01.aivi{aivi}
 
 
 ## Features
 
-```aivi
-Probability = Float
-Distribution a = { pdf: a -> Probability }
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/13_probability/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain Probability over Probability = {
-  (+) : Probability -> Probability -> Probability
-  (-) : Probability -> Probability -> Probability
-  (*) : Probability -> Probability -> Probability
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/13_probability/block_03.aivi{aivi}
 
 ## Helper Functions
 
@@ -51,10 +33,4 @@ domain Probability over Probability = {
 
 ## Usage Examples
 
-```aivi
-use aivi.probability
-
-p = clamp 0.7
-coin = bernoulli p
-probHeads = coin.pdf true
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/13_probability/block_04.aivi{aivi}

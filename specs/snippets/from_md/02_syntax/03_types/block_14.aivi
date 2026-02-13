@@ -1,0 +1,4 @@
+class Apply (F *) =
+Functor (F *) & {
+  ap: F A -> F (A -> B) -> F B
+}

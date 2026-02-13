@@ -1,0 +1,14 @@
+// Define expected output shape
+Sentiment = Positive | Negative | Neutral
+
+Analysis = {
+  sentiment: Sentiment
+  summary: Text
+}
+
+// LLM completion with strict schema enforcement
+analyze input = llm.complete {
+  model: "gpt-4o"
+  prompt: "Analyze this feedback: {input}"
+  schema: Analysis
+}

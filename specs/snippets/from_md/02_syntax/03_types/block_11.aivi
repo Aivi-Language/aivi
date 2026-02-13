@@ -1,0 +1,1 @@
+User |> Omit (isAdmin) |> Rename { createdAt: created_at }

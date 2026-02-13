@@ -1,0 +1,5 @@
+generate {
+  x <- xs
+  x -> p x
+  yield x
+}

@@ -1,0 +1,8 @@
+// Bring Vector math into scope
+use aivi.vector
+
+position = (10, 20)
+velocity = (1, 0)
+
+// The '+' operator now knows how to add tuples as vectors
+new_pos = position + velocity

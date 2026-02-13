@@ -1,0 +1,6 @@
+use aivi.number.quaternion
+
+axis = { x: 0.0, y: 1.0, z: 0.0 }
+spin = fromAxisAngle axis 1.570796
+
+unit = normalize spin

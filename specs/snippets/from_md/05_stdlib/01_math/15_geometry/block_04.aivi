@@ -1,0 +1,7 @@
+use aivi.geometry
+
+p1 = { x: 0.0, y: 0.0 }
+p2 = { x: 3.0, y: 4.0 }
+
+d = distance p1 p2
+center = midpoint { start: p1, end: p2 }

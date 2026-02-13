@@ -1,0 +1,4 @@
+migrate : Effect DbError Unit
+migrate = effect {
+  db.runMigrations[userTable]
+}

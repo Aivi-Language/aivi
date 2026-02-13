@@ -1,0 +1,4 @@
+user3 = user <| {
+  name: toUpper
+  stats.loginCount: _ + 1
+}

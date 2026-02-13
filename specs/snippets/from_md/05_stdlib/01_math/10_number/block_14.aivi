@@ -1,0 +1,10 @@
+use aivi.number.quaternion (Quat)
+
+// Rotate 90 degrees around the Y (up) axis
+q1 = Quat.fromEuler(0.0, 90.0, 0.0)
+
+// The "identity" quaternion means "no rotation"
+q2 = Quat.identity()
+
+// Smoothly transition halfway between "no rotation" and "90 degrees"
+interpolated = Quat.slerp(q1, q2, 0.5)

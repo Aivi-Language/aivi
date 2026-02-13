@@ -1,0 +1,8 @@
+main = effect {
+  // Acquire resource
+  f <- managedFile "data.txt"
+
+  // Use resource
+  content <- file.readAll f
+  print content
+} // f is automatically closed here

@@ -1,0 +1,7 @@
+TimeZone = { id: Text }
+
+ZonedDateTime = {
+  dateTime: DateTime,
+  zone: TimeZone,
+  offset: Duration
+}

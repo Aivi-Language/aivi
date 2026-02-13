@@ -2,9 +2,7 @@
 
 The `Net` package groups networking domains under a single entry point. These modules cover outbound HTTP/HTTPS, inbound servers, raw sockets, and stream utilities.
 
-```aivi
-use aivi.net
-```
+<<< ../../snippets/from_md/05_stdlib/03_network/00_network/block_01.aivi{aivi}
 
 ## Modules
 

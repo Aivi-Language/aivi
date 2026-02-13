@@ -11,19 +11,11 @@ They:
 
 ## 7.1 Generator type
 
-```aivi
-Generator A
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_01.aivi{aivi}
 
 ## 7.2 Generator expressions
 
-```aivi
-gen = generate {
-  yield 1
-  yield 2
-  yield 3
-}
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_02.aivi{aivi}
 
 ### From Python/JavaScript
 Similar to `yield` syntax, but purely functional (no mutable iterator state).
@@ -32,20 +24,11 @@ Similar to `yield` syntax, but purely functional (no mutable iterator state).
 
 AIVI does **not** use Haskell-style list comprehensions like:
 
-```aivi
-// Not AIVI syntax
-[ x | x <- xs, p x ]
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_03.aivi{aivi}
 
 Instead, write the equivalent logic with a `generate` block:
 
-```aivi
-generate {
-  x <- xs
-  x -> p x
-  yield x
-}
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_04.aivi{aivi}
 
 
 ## 7.3 Guards and predicates
@@ -60,21 +43,11 @@ In a guard, `pred` is a predicate expression with the implicit `_` bound to `x` 
 
 This means these are equivalent:
 
-```aivi
-u -> isValidEmail email
-u -> isValidEmail (_.email)
-u -> isValidEmail u.email
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_05.aivi{aivi}
 
 Note: `.email` is an accessor function (`x => x.email`). It’s useful for `map .email`, but in a predicate position you usually want a value like `email` / `_.email`, not a function.
 
-```aivi
-generate {
-  x <- xs
-  x -> price > 80
-  yield x
-}
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_06.aivi{aivi}
 
 Predicate rules are identical to `filter`.
 
@@ -94,35 +67,13 @@ This aligns with the general design principle: generators stay pure; use `Effect
 Generators provide a powerful, declarative way to build complex sequences without intermediate collections or mutation.
 
 ### Cartesian Products
-```aivi
-// Generate all pairs in a grid
-grid = generate {
-  x <- [0..width]
-  y <- [0..height]
-  yield (x, y)
-}
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_07.aivi{aivi}
 
 ### Complex Filtering and Transformation
-```aivi
-// Find active premium users with valid emails
-processed = generate {
-  u <- users
-  u -> active && tier == Premium && isValidEmail email
-  yield { name: u.name, email: toLower u.email }
-}
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_08.aivi{aivi}
 
 ### Expressive Infinity
-```aivi
-// Infinite sequence of Fibonacci numbers
-fibs = generate {
-  loop (a, b) = (0, 1) => {
-    yield a
-    recurse (b, a + b)
-  }
-}
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_09.aivi{aivi}
 
 `loop (pat) = init => { ... }` introduces a local tail-recursive loop for generators.
 Inside the loop body, `recurse next` continues with the next state.

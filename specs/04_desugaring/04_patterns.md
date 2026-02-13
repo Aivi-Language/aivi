@@ -4,30 +4,15 @@ Kernel has only `case`, so even total bindings can lower via `case`. (A compiler
 
 In surface syntax, these bindings appear in a `do { ... }` block:
 
-```aivi
-do {
-  { a: x } = e
-  body
-}
-```
+<<< ../snippets/from_md/04_desugaring/04_patterns/block_01.aivi{aivi}
 
 desugars to `case ⟦e⟧ of \| { a = x } -> ⟦body⟧`.
 
-```aivi
-do {
-  [h, ...t] = e
-  body
-}
-```
+<<< ../snippets/from_md/04_desugaring/04_patterns/block_02.aivi{aivi}
 
 desugars to `case ⟦e⟧ of \| (h :: t) -> ⟦body⟧`.
 
-```aivi
-do {
-  p = e
-  body
-}
-```
+<<< ../snippets/from_md/04_desugaring/04_patterns/block_03.aivi{aivi}
 
 desugars to `case ⟦e⟧ of \| ⟦p⟧ -> ⟦body⟧`.
 
@@ -48,12 +33,7 @@ Pattern translation `⟦p⟧` uses the kernel pattern forms.
 
 A `do { ... }` binding with `@`:
 
-```aivi
-do {
-  v@p = e
-  body
-}
-```
+<<< ../snippets/from_md/04_desugaring/04_patterns/block_04.aivi{aivi}
 
 desugars to `case ⟦e⟧ of \| v @ ⟦p⟧ -> ⟦body⟧`.
 

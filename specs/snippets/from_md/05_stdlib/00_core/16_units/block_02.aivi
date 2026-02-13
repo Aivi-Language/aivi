@@ -1,0 +1,2 @@
+Unit = { name: Text, factor: Float }
+Quantity = { value: Float, unit: Unit }

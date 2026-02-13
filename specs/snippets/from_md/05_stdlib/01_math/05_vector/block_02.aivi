@@ -1,0 +1,5 @@
+Vec2 = { x: Float, y: Float }
+Vec3 = { x: Float, y: Float, z: Float }
+Vec4 = { x: Float, y: Float, z: Float, w: Float }
+
+Scalar = Float

@@ -1,0 +1,24 @@
+use aivi.database as db
+
+User = { id: Int, name: Text, email: Option Text, active: Bool, loginCount: Int, createdAt: Instant }
+
+dbDefault = { driver: Sqlite, url: ":memory:" }
+
+@static
+userTable : Table User
+userTable = db.table "users"[
+  { name: "id", type: IntType, constraints: [AutoIncrement, NotNull], default: None }
+  { name: "name", type: Varchar 100, constraints: [NotNull], default: None }
+  { name: "email", type: Varchar 255, constraints: [], default: None }
+  { name: "active", type: BoolType, constraints: [NotNull], default: Some (DefaultBool True) }
+  { name: "loginCount", type: IntType, constraints: [NotNull], default: Some (DefaultInt 0) }
+  { name: "createdAt", type: TimestampType, constraints: [NotNull], default: Some DefaultNow }
+]
+
+getActiveUsers : Effect DbError (List User)
+getActiveUsers = effect {
+  _     <- db.configure dbDefault
+  _     <- db.runMigrations[userTable]
+  users <- db.load userTable
+  pure (users |> filter active |> sortBy.createdAt)
+}

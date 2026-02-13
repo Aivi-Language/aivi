@@ -1,0 +1,10 @@
+domain Database over Table A = {
+  type Delta = Delta A
+
+  (+) : Table A -> Delta A -> Effect DbError (Table A)
+  (+) table delta = db.applyDelta table delta
+
+  ins = Insert
+  upd = Update
+  del = Delete
+}

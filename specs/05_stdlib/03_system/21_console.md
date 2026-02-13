@@ -2,9 +2,7 @@
 
 The `Console` domain is your program's voice. It handles basic interactions with the terminal. Whether you're debugging with a quick `print`, logging a status update, or asking the user for input, this is where your program talks to the human running it.
 
-```aivi
-use aivi.console
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/21_console/block_01.aivi{aivi}
 
 ## Functions
 
@@ -22,19 +20,4 @@ use aivi.console
 
 ## ANSI Types
 
-```aivi
-type AnsiColor = Black | Red | Green | Yellow | Blue | Magenta | Cyan | White | Default
-
-type AnsiStyle = {
-  fg: Option AnsiColor
-  bg: Option AnsiColor
-  bold: Bool
-  dim: Bool
-  italic: Bool
-  underline: Bool
-  blink: Bool
-  inverse: Bool
-  hidden: Bool
-  strike: Bool
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/21_console/block_02.aivi{aivi}

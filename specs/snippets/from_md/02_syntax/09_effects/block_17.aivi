@@ -1,0 +1,4 @@
+val = effect {
+  x <- f
+  g x
+}

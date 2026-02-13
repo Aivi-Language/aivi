@@ -1,0 +1,7 @@
+use aivi.text
+
+greeting = "Hello, AIVI!"
+
+len = length greeting
+words = split " " greeting
+upper = toUpper greeting

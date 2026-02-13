@@ -1,0 +1,23 @@
+parseLocale: Text -> Result Text Locale
+
+key: Text -> Result Text Key
+message: Text -> Result Text Message
+
+render: Message -> {} -> Result Text Text
+
+bundleFromProperties: Locale -> Text -> Result Text Bundle
+bundleFromPropertiesFile: Locale -> Text -> Effect Text (Result Text Bundle)
+
+tResult: Bundle -> Key -> {} -> Result Text Text
+tOpt: Bundle -> Key -> {} -> Option Text
+t: Bundle -> Key -> {} -> Text
+tWithFallback: List Bundle -> Key -> {} -> Text
+
+fallbackTags: Locale -> List Text
+
+catalogFromBundles: List Bundle -> Catalog
+bundleForLocale: Catalog -> Locale -> Option Bundle
+bundlesForLocale: Catalog -> Locale -> List Bundle
+
+tCatalog: Catalog -> Locale -> Key -> {} -> Text
+tCatalogWithDefault: Catalog -> Locale -> Bundle -> Key -> {} -> Text

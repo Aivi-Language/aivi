@@ -1,0 +1,3 @@
+class Apply (F *) = {
+  ap: F (A -> B) -> F A -> F B
+}

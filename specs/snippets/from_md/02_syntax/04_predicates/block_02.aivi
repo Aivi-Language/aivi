@@ -1,0 +1,13 @@
+Pred A = A => Bool
+
+andPred : Pred A -> Pred A -> Pred A
+andPred p q = x => p x && q x
+
+isActive : Pred User
+isActive = .active
+
+isPremium : Pred User
+isPremium = u => u.tier == Premium
+
+isActivePremium : Pred User
+isActivePremium = andPred isActive isPremium

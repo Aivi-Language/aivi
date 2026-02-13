@@ -1,0 +1,6 @@
+logger.log: Level -> Text -> Context -> Effect Text Unit
+logger.trace: Text -> Context -> Effect Text Unit
+logger.debug: Text -> Context -> Effect Text Unit
+logger.info: Text -> Context -> Effect Text Unit
+logger.warn: Text -> Context -> Effect Text Unit
+logger.error: Text -> Context -> Effect Text Unit

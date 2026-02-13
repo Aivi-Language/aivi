@@ -1,0 +1,12 @@
+effect {
+  (tx, rx) = channel.make ()
+
+  // Sending
+  channel.send tx "hello"
+
+  // Receiving (returns Result for closed channels)
+  msg <- channel.recv rx or "Channel closed"
+
+  // Closing
+  channel.close tx
+}

@@ -6,23 +6,11 @@ sentinel values like `-1`.
 
 ## Overview
 
-```aivi
-use aivi.text
-
-greeting = "Hello, AIVI!"
-
-len = length greeting
-words = split " " greeting
-upper = toUpper greeting
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/02_text/block_01.aivi{aivi}
 
 ## Types
 
-```aivi
-type Bytes
-type Encoding = Utf8 | Utf16 | Utf32 | Latin1
-type TextError = InvalidEncoding Encoding
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/02_text/block_02.aivi{aivi}
 
 ## Core API (v0.1)
 
@@ -132,11 +120,4 @@ Notes:
 
 ## Usage Examples
 
-```aivi
-use aivi.text
-
-slug = "  Hello World  "
-clean = slug |> trim |> toLower |> replaceAll " " "-"
-
-maybePort = parseInt "8080"
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/02_text/block_03.aivi{aivi}

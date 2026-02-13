@@ -1,0 +1,3 @@
+failExample : Effect Text Int
+failExample =
+fail "boom"

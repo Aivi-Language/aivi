@@ -1,0 +1,3 @@
+pureExample : Effect Text Int
+pureExample =
+pure 42

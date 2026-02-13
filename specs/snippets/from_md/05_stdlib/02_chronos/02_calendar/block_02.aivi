@@ -1,0 +1,5 @@
+Date = { year: Int, month: Int, day: Int }
+Time = { hour: Int, min: Int, sec: Int, nanos: Int }
+DateTime = { date: Date, time: Time }
+
+EndOfMonth = EndOfMonth

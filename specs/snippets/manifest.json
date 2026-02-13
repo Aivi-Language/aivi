@@ -4,18 +4,2330 @@
     {
       "path": "specs/snippets/02_syntax/13_sigils/basic.aivi",
       "module": "docs.syntax.sigils.basic",
-      "verify": ["fmt", "parse"]
+      "verify": [
+        "fmt",
+        "parse"
+      ]
     },
     {
       "path": "specs/snippets/02_syntax/13_sigils/structured.aivi",
       "module": "docs.syntax.sigils.structured",
-      "verify": ["fmt", "parse"]
+      "verify": [
+        "fmt",
+        "parse"
+      ]
     },
     {
       "path": "specs/snippets/_smoke/typecheck_ok.aivi",
       "module": "docs.snippets.smoke.typecheck_ok",
       "stdlib": "none",
-      "verify": ["fmt", "check"]
+      "verify": [
+        "fmt",
+        "check"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/00_grammar/block_01.aivi",
+      "module": "docs.snippets.02_syntax.00_grammar.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/00_grammar/block_02.aivi",
+      "module": "docs.snippets.02_syntax.00_grammar.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_01.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_02.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_03.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_04.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_05.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_06.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_07.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_08.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_09.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_10.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_11.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_12.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/02_functions/block_01.aivi",
+      "module": "docs.snippets.02_syntax.02_functions.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/02_functions/block_02.aivi",
+      "module": "docs.snippets.02_syntax.02_functions.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/02_functions/block_03.aivi",
+      "module": "docs.snippets.02_syntax.02_functions.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/02_functions/block_04.aivi",
+      "module": "docs.snippets.02_syntax.02_functions.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/02_functions/block_05.aivi",
+      "module": "docs.snippets.02_syntax.02_functions.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/02_functions/block_06.aivi",
+      "module": "docs.snippets.02_syntax.02_functions.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/02_functions/block_07.aivi",
+      "module": "docs.snippets.02_syntax.02_functions.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/02_functions/block_08.aivi",
+      "module": "docs.snippets.02_syntax.02_functions.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/02_functions/block_09.aivi",
+      "module": "docs.snippets.02_syntax.02_functions.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/02_functions/block_10.aivi",
+      "module": "docs.snippets.02_syntax.02_functions.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_01.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_02.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_03.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_04.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_05.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_06.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_07.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_08.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_09.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_10.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_11.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_12.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_13.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_13",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_14.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_14",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_15.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_15",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_16.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_16",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_17.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_17",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_18.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_18",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_19.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_19",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_20.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_20",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/04_predicates/block_01.aivi",
+      "module": "docs.snippets.02_syntax.04_predicates.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/04_predicates/block_02.aivi",
+      "module": "docs.snippets.02_syntax.04_predicates.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/04_predicates/block_03.aivi",
+      "module": "docs.snippets.02_syntax.04_predicates.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/04_predicates/block_04.aivi",
+      "module": "docs.snippets.02_syntax.04_predicates.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/04_predicates/block_05.aivi",
+      "module": "docs.snippets.02_syntax.04_predicates.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/04_predicates/block_06.aivi",
+      "module": "docs.snippets.02_syntax.04_predicates.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/04_predicates/block_07.aivi",
+      "module": "docs.snippets.02_syntax.04_predicates.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/04_predicates/block_08.aivi",
+      "module": "docs.snippets.02_syntax.04_predicates.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/04_predicates/block_09.aivi",
+      "module": "docs.snippets.02_syntax.04_predicates.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_01.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_02.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_03.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_04.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_05.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_06.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_07.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_08.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_09.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_10.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_11.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_12.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_13.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_13",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/05_patching/block_14.aivi",
+      "module": "docs.snippets.02_syntax.05_patching.block_14",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/06_domains/block_01.aivi",
+      "module": "docs.snippets.02_syntax.06_domains.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/06_domains/block_02.aivi",
+      "module": "docs.snippets.02_syntax.06_domains.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/06_domains/block_03.aivi",
+      "module": "docs.snippets.02_syntax.06_domains.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/06_domains/block_04.aivi",
+      "module": "docs.snippets.02_syntax.06_domains.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/06_domains/block_05.aivi",
+      "module": "docs.snippets.02_syntax.06_domains.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/06_domains/block_06.aivi",
+      "module": "docs.snippets.02_syntax.06_domains.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/06_domains/block_07.aivi",
+      "module": "docs.snippets.02_syntax.06_domains.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_01.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_02.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_03.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_04.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_05.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_06.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_07.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_08.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_09.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_01.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_02.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_03.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_04.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_05.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_06.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_07.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_08.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_09.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_10.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_11.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_12.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_13.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_13",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_14.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_14",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_15.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_15",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_16.aivi",
+      "module": "docs.snippets.02_syntax.08_pattern_matching.block_16",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_01.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_02.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_03.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_04.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_05.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_06.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_07.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_08.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_09.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_10.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_11.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_12.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_13.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_13",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_14.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_14",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_15.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_15",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_16.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_16",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_17.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_17",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_18.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_18",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_19.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_19",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_20.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_20",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_21.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_21",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_22.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_22",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_23.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_23",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_01.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_02.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_03.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_04.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_05.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_06.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_07.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_08.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_09.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_10.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_11.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_12.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_13.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_13",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_01.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_02.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_03.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_04.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_05.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_06.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_07.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_08.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_09.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_10.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_11.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/12_external_sources/block_12.aivi",
+      "module": "docs.snippets.02_syntax.12_external_sources.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/14_decorators/block_01.aivi",
+      "module": "docs.snippets.02_syntax.14_decorators.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/14_decorators/block_02.aivi",
+      "module": "docs.snippets.02_syntax.14_decorators.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/14_decorators/block_03.aivi",
+      "module": "docs.snippets.02_syntax.14_decorators.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/15_resources/block_01.aivi",
+      "module": "docs.snippets.02_syntax.15_resources.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/15_resources/block_02.aivi",
+      "module": "docs.snippets.02_syntax.15_resources.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/15_resources/block_03.aivi",
+      "module": "docs.snippets.02_syntax.15_resources.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/04_patterns/block_01.aivi",
+      "module": "docs.snippets.04_desugaring.04_patterns.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/04_patterns/block_02.aivi",
+      "module": "docs.snippets.04_desugaring.04_patterns.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/04_patterns/block_03.aivi",
+      "module": "docs.snippets.04_desugaring.04_patterns.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/04_patterns/block_04.aivi",
+      "module": "docs.snippets.04_desugaring.04_patterns.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/06_generators/block_01.aivi",
+      "module": "docs.snippets.04_desugaring.06_generators.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/06_generators/block_02.aivi",
+      "module": "docs.snippets.04_desugaring.06_generators.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/06_generators/block_03.aivi",
+      "module": "docs.snippets.04_desugaring.06_generators.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/06_generators/block_04.aivi",
+      "module": "docs.snippets.04_desugaring.06_generators.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/07_effects/block_01.aivi",
+      "module": "docs.snippets.04_desugaring.07_effects.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/07_effects/block_02.aivi",
+      "module": "docs.snippets.04_desugaring.07_effects.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/07_effects/block_03.aivi",
+      "module": "docs.snippets.04_desugaring.07_effects.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/07_effects/block_04.aivi",
+      "module": "docs.snippets.04_desugaring.07_effects.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/09_domains/block_01.aivi",
+      "module": "docs.snippets.04_desugaring.09_domains.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/09_domains/block_02.aivi",
+      "module": "docs.snippets.04_desugaring.09_domains.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/09_domains/block_03.aivi",
+      "module": "docs.snippets.04_desugaring.09_domains.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/09_domains/block_04.aivi",
+      "module": "docs.snippets.04_desugaring.09_domains.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/01_prelude/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.01_prelude.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/01_prelude/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.01_prelude.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/02_text/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.02_text.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/02_text/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.02_text.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/02_text/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.02_text.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_05.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_06.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_07.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_08.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_09.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_10.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_11.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_12.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_13.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_13",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_14.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_14",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_15.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_15",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_16.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_16",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_17.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_17",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_18.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_18",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_19.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_19",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/03_logic/block_20.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.03_logic.block_20",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/16_units/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.16_units.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/16_units/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.16_units.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/16_units/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.16_units.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/16_units/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.16_units.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/24_regex/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.24_regex.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/24_regex/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.24_regex.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/27_testing/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.27_testing.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/28_collections/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.28_collections.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/28_collections/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.28_collections.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/28_collections/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.28_collections.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/28_collections/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.28_collections.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/28_collections/block_05.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.28_collections.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_05.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_06.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_07.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_08.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_09.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_10.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_11.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/29_i18n/block_12.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.29_i18n.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/01_math/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.01_math.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/01_math/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.01_math.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/01_math/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.01_math.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/01_math/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.01_math.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/05_vector/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.05_vector.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/05_vector/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.05_vector.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/05_vector/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.05_vector.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/05_vector/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.05_vector.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/09_matrix/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.09_matrix.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/09_matrix/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.09_matrix.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/09_matrix/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.09_matrix.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/09_matrix/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.09_matrix.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_05.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_06.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_07.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_08.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_09.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_09",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_10.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_11.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_12.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_13.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_13",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_14.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_14",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_15.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_15",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_16.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_16",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/10_number/block_17.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.10_number.block_17",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/13_probability/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.13_probability.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/13_probability/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.13_probability.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/13_probability/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.13_probability.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/13_probability/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.13_probability.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/14_signal/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.14_signal.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/14_signal/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.14_signal.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/14_signal/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.14_signal.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/14_signal/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.14_signal.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/15_geometry/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.15_geometry.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/15_geometry/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.15_geometry.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/15_geometry/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.15_geometry.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/15_geometry/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.15_geometry.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/17_graph/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.17_graph.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/17_graph/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.17_graph.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/17_graph/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.17_graph.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/17_graph/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.17_graph.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.18_linear_algebra.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.18_linear_algebra.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.18_linear_algebra.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.18_linear_algebra.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/01_instant/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.01_instant.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/01_instant/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.01_instant.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/01_instant/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.01_instant.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/01_instant/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.01_instant.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/02_calendar/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.02_calendar.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/02_calendar/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.02_calendar.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/02_calendar/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.02_calendar.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/02_calendar/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.02_calendar.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/03_duration/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.03_duration.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/03_duration/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.03_duration.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/03_duration/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.03_duration.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/03_duration/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.03_duration.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/04_timezone/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.04_timezone.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/04_timezone/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.04_timezone.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/04_timezone/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.04_timezone.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/02_chronos/04_timezone/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.02_chronos.04_timezone.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_network/00_network/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_network.00_network.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_network/01_http/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_network.01_http.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_network/01_http/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.03_network.01_http.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_network/01_http/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.03_network.01_http.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_network/02_https/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_network.02_https.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_network/03_http_server/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_network.03_http_server.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_network/03_http_server/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.03_network.03_http_server.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_network/04_sockets/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_network.04_sockets.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_network/04_sockets/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.03_network.04_sockets.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_network/05_streams/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_network.05_streams.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_network/05_streams/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.03_network.05_streams.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/20_file/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.20_file.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/20_file/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.20_file.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/21_console/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.21_console.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/21_console/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.21_console.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/22_crypto/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.22_crypto.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/23_database/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.23_database.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/23_database/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.23_database.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/23_database/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.23_database.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/23_database/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.23_database.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/23_database/block_05.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.23_database.block_05",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/23_database/block_06.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.23_database.block_06",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/23_database/block_07.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.23_database.block_07",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/23_database/block_08.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.23_database.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/25_system/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.25_system.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/25_system/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.25_system.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/25_url/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.25_url.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/25_url/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.25_url.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/25_url/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.25_url.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/25_url/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.25_url.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/26_log/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.26_log.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/26_log/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.26_log.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/26_log/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.26_log.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/30_concurrency/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.30_concurrency.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/03_system/30_concurrency/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.03_system.30_concurrency.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/01_layout/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.01_layout.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/01_layout/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.01_layout.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/01_layout/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.01_layout.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/04_color/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.04_color.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/04_color/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.04_color.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/04_color/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.04_color.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/04_color/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.04_color.block_04",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/06_runtime/01_concurrency/block_01.aivi",
+      "module": "docs.snippets.06_runtime.01_concurrency.block_01",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/06_runtime/01_concurrency/block_02.aivi",
+      "module": "docs.snippets.06_runtime.01_concurrency.block_02",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/06_runtime/01_concurrency/block_03.aivi",
+      "module": "docs.snippets.06_runtime.01_concurrency.block_03",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/06_runtime/01_concurrency/block_04.aivi",
+      "module": "docs.snippets.06_runtime.01_concurrency.block_04",
+      "verify": [
+        "fmt"
+      ]
     }
   ]
 }

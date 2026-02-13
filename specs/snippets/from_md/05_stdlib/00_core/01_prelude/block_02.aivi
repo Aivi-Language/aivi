@@ -1,0 +1,4 @@
+@no_prelude
+module my.custom.module
+// Nothing used automatically
+use aivi (Int, Bool)

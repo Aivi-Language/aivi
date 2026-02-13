@@ -1,0 +1,9 @@
+// Multi-clause unary function (matches on the implicit argument)
+greet =
+  | None      => "hi"
+  | Some name => "hi {name}"
+
+// Equivalent explicit form
+greet2 = u => u ?
+  | None      => "hi"
+  | Some name => "hi {name}"

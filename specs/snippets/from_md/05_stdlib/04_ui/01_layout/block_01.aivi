@@ -1,0 +1,8 @@
+use aivi.ui.layout (Length, Percentage)
+
+// Typed literals
+width = 100px
+height = 50%
+
+// Invalid:
+// width + height -> Error: Cannot add Length and Percentage directly

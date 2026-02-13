@@ -1,0 +1,5 @@
+use aivi.color (Color)
+
+primary = #007bff
+// Mathematically correct lightening
+lighter = primary + 10lightness

@@ -1,0 +1,9 @@
+pi: Float
+tau: Float
+e: Float
+inf: Float
+nan: Float
+phi: Float
+sqrt2: Float
+ln2: Float
+ln10: Float

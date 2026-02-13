@@ -1,0 +1,6 @@
+// Define a reusable resource
+managedFile path = resource {
+  handle <- file.open path // Acquire
+  yield handle // Provide to user
+  file.close handle // Release
+}

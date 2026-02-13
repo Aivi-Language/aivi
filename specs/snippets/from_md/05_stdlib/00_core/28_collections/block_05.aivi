@@ -1,0 +1,4 @@
+use aivi.collections (Map, Set, domain Collections)
+
+merged = map1 ++ map2
+allTags = set1 ++ set2

@@ -1,0 +1,4 @@
+// In v0.1, `Monad` is a marker class used for constraints.
+class Monad (M *) = {
+  __monad: Unit
+}

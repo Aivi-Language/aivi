@@ -1,0 +1,5 @@
+// Bucket listings
+images = s3.bucket "my-assets" |> s3.list "thumbnails/"
+
+// Fetch object content
+logo = s3.get "my-assets" "branding/logo.png"

@@ -9,27 +9,11 @@ AIVI distinguishes:
 
 In v0.1, the recommended minimal set of **compiler primitives** is:
 
-```aivi
-Unit
-Bool
-Int
-Float
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_01.aivi{aivi}
 
 Everything else below should be treated as a **standard library type** (even if an implementation chooses to represent it specially at first for performance/interop).
 
-```aivi
-Decimal
-BigInt
-Text
-Bytes
-Duration
-Instant
-Date
-Time
-TimeZone
-ZonedDateTime
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_02.aivi{aivi}
 
 Numeric suffixes:
 
@@ -46,10 +30,7 @@ Numeric suffixes:
 
 `Bool` has exactly two values:
 
-```aivi
-True : Bool
-False : Bool
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_03.aivi{aivi}
 
 `if ... then ... else ...` requires a `Bool` condition, and can be understood as desugaring to a `case` on `True`/`False`.
 
@@ -61,18 +42,11 @@ AIVI does not have “objects” in the OO sense. You create values using:
 - **Literals** for primitives and records
 - **Domain-owned literals/operators** for domain types (e.g. `2w + 3d` for `Duration`)
 
-```aivi
-Option A = None | Some A
-Result E A = Err E | Ok A
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_04.aivi{aivi}
 
 To create ADT values, apply constructors like ordinary functions:
 
-```aivi
-someCount = Some 123
-okText    = Ok "done"
-bad       = Err "nope"
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_05.aivi{aivi}
 
 Nullary constructors (like `None`, `True`, `False`) are values.
 
@@ -83,31 +57,21 @@ Records are:
 * structural
 * open by default
 
-```aivi
-User = { id: Int, name: Text, email: Option Text }
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_06.aivi{aivi}
 
 To create a record value, use a record literal:
 
-```aivi
-alice : User
-alice = { id: 1, name: "Alice", email: None }
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_07.aivi{aivi}
 
 Record literals can spread existing records:
 
-```aivi
-alice = { ...defaults, name: "Alice" }
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_08.aivi{aivi}
 
 Spreads merge fields left-to-right; later entries override earlier ones.
 
 Functions specify **minimum required fields**, not exact shapes.
 
-```aivi
-getName : { name: Text } -> Text
-getName = .name
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_09.aivi{aivi}
 
 ## 3.4 Record Row Transforms
 
@@ -116,14 +80,7 @@ that transform record rows. These are type-level only and elaborate to plain rec
 
 Field lists are written as tuples of field labels, and rename maps use record-like syntax:
 
-```aivi
-Pick (id, name) User
-Omit (isAdmin) User
-Optional (email, name) User
-Required (email, name) User
-Rename { createdAt: created_at, updatedAt: updated_at } User
-Defaulted { createdAt: Instant, updatedAt: Instant } User
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_10.aivi{aivi}
 
 Semantics:
 
@@ -141,65 +98,30 @@ Errors:
 
 Type-level piping mirrors expression piping and applies the left type as the final argument:
 
-```aivi
-User |> Omit (isAdmin) |> Rename { createdAt: created_at }
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_11.aivi{aivi}
 
 desugars to:
 
-```aivi
-Rename { createdAt: created_at } (Omit (isAdmin) User)
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_12.aivi{aivi}
 
 
 ## 3.5 Classes and HKTs
 
-```aivi
-class Functor (F *) = {
-  map: F A -> (A -> B) -> F B
-}
+<<< ../snippets/from_md/02_syntax/03_types/block_13.aivi{aivi}
 
-// Tokens explained:
-// - Functor: The class name
-// - F: Generic type parameter
-// - *: Denotes a higher-kinded type (F takes one type argument)
-// - A, B: Type variables within the definition
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_14.aivi{aivi}
 
-```aivi
-class Apply (F *) =
-  Functor (F *) & {
-    ap: F A -> F (A -> B) -> F B
-  }
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_15.aivi{aivi}
 
-```aivi
-class Applicative (F *) =
-  Apply (F *) & {
-    of: A -> F A
-  }
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_16.aivi{aivi}
 
-```aivi
-class Chain (F *) =
-  Apply (F *) & {
-    chain: F A -> (A -> F B) -> F B
-  }
-```
-
-```aivi
-class Monad (M *) =
-  Applicative (M *) & Chain (M *)
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_17.aivi{aivi}
 
 `A & B` in type position denotes **record/type composition** (an intersection-like merge). It is primarily used for class inheritance and trait aggregation in v0.1.
 
 Instances:
 
-```aivi
-instance Monad (Option *) = { ... }
-instance E: Monad (Result E *) = { ... } // E: binds the error parameter for the Result monad instance
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_18.aivi{aivi}
 
 > [!NOTE] Implementation Note: Kinds
 > In the v0.1 compiler, kind annotations like `(F *)` were hints. The type checker now (planned) enforces kinds explicitly.
@@ -217,9 +139,7 @@ in-scope instance that authorizes the coercion.
 
 The standard library provides:
 
-```aivi
-class ToText A = { toText: A -> Text }
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_19.aivi{aivi}
 
 Rule (informal):
 
@@ -228,14 +148,7 @@ Rule (informal):
 
 This supports ergonomic boundary code such as HTTP requests:
 
-```aivi
-req = {
-  method: "Post",
-  url: ~u(https://api.example.com/v1/users),
-  headers: [("Content-Type", "application/json")],
-  body: Some { name: "New User" }
-}
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_20.aivi{aivi}
 
 ### Record Instances
 

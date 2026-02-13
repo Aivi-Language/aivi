@@ -1,0 +1,6 @@
+copy src dest = effect {
+  input  <- managedFile src
+  output <- managedFile dest
+
+  file.copyTo input output
+}

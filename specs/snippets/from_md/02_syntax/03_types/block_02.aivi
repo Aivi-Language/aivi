@@ -1,0 +1,10 @@
+Decimal
+BigInt
+Text
+Bytes
+Duration
+Instant
+Date
+Time
+TimeZone
+ZonedDateTime

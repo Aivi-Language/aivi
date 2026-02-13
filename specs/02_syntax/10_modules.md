@@ -6,18 +6,7 @@ Modules are the primary unit of code organization, encapsulation, and reuse in A
 
 Modules can be written in a **flat** form that keeps file indentation shallow. The module body runs until end-of-file:
 
-```aivi
-module my.utility.math
-export add, subtract
-export pi
-
-pi = 3.14159
-add = a b => a + b
-subtract = a b => a - b
-
-// Internal helper, not exported
-abs = n => if n < 0 then -n else n
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_01.aivi{aivi}
 
 In v0.1, there is exactly one module per file. In the flat form, the `module` declaration must be the last top-level item in the file and its body extends to EOF. The braced form (`module path = { ... }`) is equivalent but ends at the closing `}`.
 
@@ -37,21 +26,13 @@ Module resolution is static and determined at compile time based on the project 
 Use the `use` keyword to bring symbols from another module into the current scope.
 
 ### Basic Import
-```aivi
-use aivi
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_02.aivi{aivi}
 
 ### Selective / Selective Hiding
-```aivi
-use aivi.calendar (Date, isLeapYear)
-use aivi.list hiding (map, filter)
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_03.aivi{aivi}
 
 ### Renaming / Aliasing
-```aivi
-use aivi.calendar as Cal
-use vendor.legacy.math (v1_add as add)
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_04.aivi{aivi}
 
 Compiler checks:
 
@@ -63,19 +44,7 @@ Compiler checks:
 
 Modules are the primary vehicle for delivering **Domains**. Exporting a domain automatically exports its carrier type, delta types, and operators.
 
-```aivi
-module geo.vector = {
-  export domain Vector
-  export Vec2
-  
-  Vec2 = { x: Float, y: Float }
-  
-  domain Vector over Vec2 = {
-    (+) : Vec2 -> Vec2 -> Vec2
-    (+) a b = { x: a.x + b.x, y: a.y + b.y }
-  }
-}
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_05.aivi{aivi}
 
 When another module calls `use geo.vector`, it gains the ability to use `+` on `Vec2` records.
 
@@ -85,26 +54,12 @@ When another module calls `use geo.vector`, it gains the ability to use `+` on `
 Modules are statically resolved but behave like first-class records within the compiler's intermediate representation. This enables powerful composition patterns.
 
 ### Nested Modules
-```aivi
-module aivi = {
-  module calendar = { ... }
-  module number = { ... }
-}
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_06.aivi{aivi}
 
 ### Module Re-exports
 A module can aggregate other modules, acting as a facade.
 
-```aivi
-module aivi.prelude = {
-  export domain Calendar, Color
-  export List, Result, Ok, Err
-  
-  use aivi.calendar (domain Calendar)
-  use aivi.color (domain Color)
-  use aivi (List, Result, Ok, Err)
-}
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_07.aivi{aivi}
 
 
 ## 10.6 The Prelude
@@ -113,12 +68,7 @@ Every AIVI module implicitly starts with `use aivi.prelude`. This provides acces
 
 To opt-out of this behavior (mandatory for the core stdlib itself):
 
-```aivi
-@no_prelude
-module aivi.bootstrap = {
-  // Pure bootstrap logic
-}
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_08.aivi{aivi}
 
 
 ## 10.7 Circular Dependencies
@@ -129,55 +79,20 @@ Circular module dependencies are **strictly prohibited** at the import level. Th
 Modules allow for building clean, layered architectures where complex internal implementations are hidden behind simple, expressive facades.
 
 ### Clean App Facade
-```aivi
-// Aggregate multiple sub-modules into a single clean API
-module my.app.api = {
-  export login, fetchDashboard, updateProfile
-  
-  use my.app.auth (login)
-  use my.app.data (fetchDashboard)
-  use my.app.user (updateProfile)
-}
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_09.aivi{aivi}
 
 ### Domain Extension Pattern
-```aivi
-// Enhance an existing domain with local helpers
-module my.geo.utils = {
-  export domain Vector
-  export distanceToOrigin, isZero
-  
-  use geo.vector (domain Vector, Vec2)
-  
-  distanceToOrigin = v => sqrt (v.x * v.x + v.y * v.y)
-  isZero = v => v.x == 0 && v.y == 0
-}
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_10.aivi{aivi}
 
 ### Context-Specific Environments (Static Injection)
 
 This pattern allows you to **statically swap** entire module implementations for different build contexts (e.g., Test vs. Prod). This is not for runtime configuration (see below), but for compile-time substitution of logic.
 
-```aivi
-// 1. Define the production module
-module my.app.api = {
-  export fetchDashboard
-  fetchDashboard = ... // Real HTTP call
-}
-
-// 2. Define the test module (same interface, different logic)
-module my.app.api.test = {
-  export fetchDashboard
-  fetchDashboard = _ => { id: 1, title: "Mock Dash" }
-}
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_11.aivi{aivi}
 
 To use the test environment, your test entry point (`tests/main.aivi`) simply imports the test module instead of the production one:
 
-```aivi
-// within tests/main.aivi
-use my.app.api.test (fetchDashboard) // injected mock
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_12.aivi{aivi}
 
 ## 10.9 Runtime Configuration (Env Vars)
 
@@ -187,13 +102,4 @@ Do not use module swapping for this. Instead, inject the configuration as data.
 
 See [12.4 Environment Sources](12_external_sources.md#124-environment-sources-env) for details.
 
-```aivi
-// Instead of hardcoding, load from environment
-config : Source Env { apiUrl: Text }
-config = env.decode { apiUrl: "https://localhost:8080" }
-
-connect = effect {
-  cfg <- load config
-  // ... use cfg.apiUrl
-}
-```
+<<< ../snippets/from_md/02_syntax/10_modules/block_13.aivi{aivi}

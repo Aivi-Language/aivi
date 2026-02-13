@@ -1,0 +1,7 @@
+Image A = { width: Int, height: Int, format: ImageFormat, pixels: A }
+
+// Load image metadata only
+meta = file.imageMeta "./photo.jpg"
+
+// Load full image with RGB pixel access
+photo = file.image "./photo.jpg"

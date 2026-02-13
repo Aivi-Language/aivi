@@ -19,11 +19,7 @@ For parser simplicity in v0.1, these are described as **standard library APIs** 
 
 When a task must outlive its creator (e.g., a background daemon), it must be explicitly detached from the structural tree.
 
-```aivi
-effect {
-  concurrent.spawnDetached logger.run
-}
-```
+<<< ../snippets/from_md/06_runtime/01_concurrency/block_01.aivi{aivi}
 
 
 ## 20.2 Communication: Channels
@@ -32,40 +28,17 @@ AIVI uses typed CSP-style channels for communication between concurrent tasks.
 
 ### Types
 
-```aivi
-Send A // Capability to send values of type A
-Recv A // Capability to receive values of type A
-```
+<<< ../snippets/from_md/06_runtime/01_concurrency/block_02.aivi{aivi}
 
 ### Channel Operations
 
-```aivi
-effect {
-  (tx, rx) = channel.make ()
-  
-  // Sending
-  channel.send tx "hello"
-  
-  // Receiving (returns Result for closed channels)
-  msg <- channel.recv rx or "Channel closed"
-  
-  // Closing
-  channel.close tx
-}
-```
+<<< ../snippets/from_md/06_runtime/01_concurrency/block_03.aivi{aivi}
 
 
 ## 20.3 Non-deterministic Selection (select)
 
 Selecting across multiple concurrent operations is essential for channel-based code.
 
-```aivi
-// Proposed surface syntax (future):
-// next = select {
-//   rx1.recv () => msg => handle1 msg
-//   rx2.recv () => msg => handle2 msg
-//   timeout 1s  => _   => handleTimeout ()
-// }
-```
+<<< ../snippets/from_md/06_runtime/01_concurrency/block_04.aivi{aivi}
 
 The first operation to succeed is chosen; all other pending operations in the block are cancelled.

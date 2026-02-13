@@ -2,16 +2,11 @@
 
 The `Sockets` domain exposes low-level TCP/UDP sockets for custom protocols and long-lived connections.
 
-```aivi
-use aivi.net.sockets
-```
+<<< ../../snippets/from_md/05_stdlib/03_network/04_sockets/block_01.aivi{aivi}
 
 ## Types
 
-```aivi
-type Address = { host: Text, port: Int }
-type SocketError = { message: Text }
-```
+<<< ../../snippets/from_md/05_stdlib/03_network/04_sockets/block_02.aivi{aivi}
 
 ## TCP
 

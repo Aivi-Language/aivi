@@ -1,0 +1,6 @@
+req = {
+  method: "Post",
+  url: ~u(https://api.example.com/v1/users),
+  headers: [("Content-Type", "application/json")],
+  body: Some { name: "New User" }
+}

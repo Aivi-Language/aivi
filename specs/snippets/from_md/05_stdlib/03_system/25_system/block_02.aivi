@@ -1,0 +1,9 @@
+env: {
+  get: Text -> Effect Text (Option Text)
+  set: Text -> Text -> Effect Text Unit
+  remove: Text -> Effect Text Unit
+}
+
+args: Effect Text (List Text)
+localeTag: Effect Text (Option Text)
+exit: Int -> Effect Text Unit

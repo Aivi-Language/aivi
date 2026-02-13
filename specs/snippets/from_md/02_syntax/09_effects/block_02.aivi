@@ -1,0 +1,3 @@
+bindExample : Effect Text Int
+bindExample =
+(pure 41 |> bind) (n => pure (n + 1))

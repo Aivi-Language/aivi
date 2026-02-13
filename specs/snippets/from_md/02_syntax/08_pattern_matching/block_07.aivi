@@ -1,0 +1,4 @@
+// Parsed as: `Err (NotFound m)`
+msg = res ?
+  | Err NotFound m => m
+  | _              => "no-msg"

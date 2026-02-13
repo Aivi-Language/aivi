@@ -1,0 +1,2 @@
+welcomeKey : Key
+welcomeKey = ~k"app.welcome"

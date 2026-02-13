@@ -1,0 +1,20 @@
+domain Calendar over Date = {
+  type Delta = Day Int | Month Int | Year Int | End EndOfMonth
+
+  // Add delta to date
+  (+) : Date -> Delta -> Date
+  (+) date (Day n) = addDays date n
+  (+) date (Month n) = addMonths date n
+  (+) date (Year n) = addYears date n
+  (+) date End = endOfMonth date
+
+  // Subtract delta from date
+  (-) : Date -> Delta -> Date
+  (-) date delta = date + (negateDelta delta)
+
+  // Delta literals
+  1d = Day 1
+  1m = Month 1
+  1y = Year 1
+  eom = End
+}

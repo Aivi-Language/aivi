@@ -1,0 +1,7 @@
+// Apply function twice
+twice = f => x => f (f x)
+
+increment = _ + 1
+addTwo = twice increment
+
+// Result: addTwo 5 = 7

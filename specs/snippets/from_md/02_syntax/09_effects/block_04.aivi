@@ -1,0 +1,7 @@
+attemptExample : Effect Text Text
+attemptExample = effect {
+  res <- attempt (fail "nope")
+  res ?
+    | Ok _  => pure "unexpected"
+    | Err e => pure e
+}

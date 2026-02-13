@@ -1,0 +1,2 @@
+// Native type (backed by Rust BigInt or similar)
+type BigInt

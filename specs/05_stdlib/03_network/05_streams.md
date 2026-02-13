@@ -2,16 +2,11 @@
 
 The `Streams` domain provides stream-oriented utilities for processing inbound and outbound data without loading everything into memory.
 
-```aivi
-use aivi.net.streams
-```
+<<< ../../snippets/from_md/05_stdlib/03_network/05_streams/block_01.aivi{aivi}
 
 ## Types
 
-```aivi
-type Stream A
-type StreamError = { message: Text }
-```
+<<< ../../snippets/from_md/05_stdlib/03_network/05_streams/block_02.aivi{aivi}
 
 ## Functions
 

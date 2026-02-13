@@ -1,0 +1,7 @@
+use aivi.signal (fft, ifft)
+
+// A simple signal (e.g., audio samples)
+timeDomain = [1.0, 0.5, 0.25, 0.125]
+
+// Convert to frequencies to analyze pitch
+freqDomain = fft(timeDomain)

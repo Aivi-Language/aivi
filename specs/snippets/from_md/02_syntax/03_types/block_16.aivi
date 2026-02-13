@@ -1,0 +1,4 @@
+class Chain (F *) =
+Apply (F *) & {
+  chain: F A -> (A -> F B) -> F B
+}

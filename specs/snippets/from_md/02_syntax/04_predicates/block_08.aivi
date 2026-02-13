@@ -1,0 +1,5 @@
+where : (A => Bool) -> List A -> List A
+where pred xs = xs |> filter pred
+
+admins = where (role == Admin) users
+activeUsers = where active users

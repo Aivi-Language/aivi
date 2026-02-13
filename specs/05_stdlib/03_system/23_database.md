@@ -10,179 +10,42 @@ It builds on existing AIVI features:
 
 ## Overview
 
-```aivi
-use aivi.database as db
-
-	User = { id: Int, name: Text, email: Option Text, active: Bool, loginCount: Int, createdAt: Instant }
-
-dbDefault = { driver: Sqlite, url: ":memory:" }
-
-@static
-userTable : Table User
-userTable = db.table "users" [
-  { name: "id", type: IntType, constraints: [AutoIncrement, NotNull], default: None }
-  { name: "name", type: Varchar 100, constraints: [NotNull], default: None }
-  { name: "email", type: Varchar 255, constraints: [], default: None }
-  { name: "active", type: BoolType, constraints: [NotNull], default: Some (DefaultBool True) }
-  { name: "loginCount", type: IntType, constraints: [NotNull], default: Some (DefaultInt 0) }
-  { name: "createdAt", type: TimestampType, constraints: [NotNull], default: Some DefaultNow }
-]
-
-getActiveUsers : Effect DbError (List User)
-getActiveUsers = effect {
-  _ <- db.configure dbDefault
-  _ <- db.runMigrations [ userTable ]
-  users <- db.load userTable
-  pure (users |> filter active |> sortBy .createdAt)
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_01.aivi{aivi}
 
 Table schemas are defined with ordinary values. `db.table` takes a table name and a
 list of `Column` values; the row type comes from the table binding's type annotation.
 
 ## Types
 
-```aivi
-// Tables carry schema metadata and hold rows
-type Table A = {
-  name: Text
-  columns: List Column
-  rows: List A
-}
-
-// Schema definitions are regular AIVI values.
-// The row type is inferred from the table binding (e.g. Table User).
-type ColumnType =
-  | IntType
-  | BoolType
-  | TimestampType
-  | Varchar Int
-
-type ColumnConstraint =
-  | AutoIncrement
-  | NotNull
-
-type ColumnDefault =
-  | DefaultBool Bool
-  | DefaultInt Int
-  | DefaultText Text
-  | DefaultNow
-
-	type Column = {
-	  name: Text
-	  type: ColumnType
-	  constraints: List ColumnConstraint
-	  default: Option ColumnDefault
-	}
-
-// Predicate alias
-type Pred A = A => Bool
-
-// Select the runtime backend.
-type Driver
-  | Sqlite
-  | Postgresql
-  | Mysql
-
-// Configure the default database backend used by db.load / db.applyDelta / db.runMigrations.
-// - Sqlite: url is a filesystem path or ":memory:".
-// - Postgresql/Mysql: url is a connection string.
-type DbConfig = { driver: Driver, url: Text }
-
-// Deltas express insert/update/delete
-type Delta A =
-  | Insert A
-  | Update (Pred A) (Patch A)
-  | Delete (Pred A)
-
-// Patch functions apply record updates
-type Patch A = A -> A
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain Database over Table A = {
-  type Delta = Delta A
-
-  (+) : Table A -> Delta A -> Effect DbError (Table A)
-  (+) table delta = db.applyDelta table delta
-
-  ins = Insert
-  upd = Update
-  del = Delete
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_03.aivi{aivi}
 
 ### Applying Deltas
 
-```aivi
-createUser : User -> Effect DbError User
-createUser newUser = effect {
-  _ <- userTable + ins newUser
-  pure newUser
-}
-
-activateUsers : Effect DbError Unit
-activateUsers = effect {
-  _ <- userTable + upd (!active) (u => u <| { active: True, loginCount: _ + 1 })
-}
-
-deleteOldPosts : Instant -> Effect DbError Unit
-deleteOldPosts cutoff = effect {
-  _ <- postTable + del (_.createdAt < cutoff)
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_04.aivi{aivi}
 
 ## Querying
 
 Tables behave like lazy sequences. Operations such as `filter`, `find`, `sortBy`, `groupBy`, and `join` build a query plan. The query executes only when observed (e.g. via `db.load`, `toList`, or a generator).
 
-```aivi
-getUserById : Int -> Effect DbError (Option User)
-getUserById id = effect {
-  users <- db.load userTable
-  pure (users |> find (_.id == id))
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_05.aivi{aivi}
 
 ## Joins and Preloading
 
-```aivi
-UserWithPosts = { user: User, posts: List Post }
-
-getUsersWithPosts : Effect DbError (List UserWithPosts)
-getUsersWithPosts = effect {
-  users <- db.load userTable
-  posts <- db.load postTable
-  pure (
-    users
-    |> join posts on (_.id == _.authorId)
-    |> groupBy { userId = _.id, user = _.left, post = _.right }
-    |> map { key, group } => {
-      user: group.head.user,
-      posts: group |> map .post
-    }
-  )
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_06.aivi{aivi}
 
 For eager loading:
 
-```aivi
-usersWithPosts <- db.load (userTable |> preload posts on (_.id == _.authorId))
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_07.aivi{aivi}
 
 ## Migrations
 
 Schema definitions are typed values. Mark them `@static` to allow compile-time validation and migration planning.
 
-```aivi
-migrate : Effect DbError Unit
-migrate = effect {
-  db.runMigrations [ userTable ]
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_08.aivi{aivi}
 
 ## Notes
 

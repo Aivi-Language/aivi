@@ -5,34 +5,17 @@ It is intentionally small, predictable, and aligned with common math libraries a
 
 ## Overview
 
-```aivi
-use aivi.math
-
-area = pi * r * r
-clamped = clamp 0.0 1.0 x
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/01_math/block_01.aivi{aivi}
 
 ## Constants
 
-```aivi
-pi : Float
-tau : Float
-e : Float
-inf : Float
-nan : Float
-phi : Float
-sqrt2 : Float
-ln2 : Float
-ln10 : Float
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/01_math/block_02.aivi{aivi}
 
 ## Angles
 
 Angles are represented by a dedicated domain so trigonometric functions are not called with raw `Float` values.
 
-```aivi
-Angle = { radians: Float }
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/01_math/block_03.aivi{aivi}
 
 | Function | Explanation |
 | --- | --- |
@@ -181,11 +164,4 @@ Notes:
 
 ## Usage Examples
 
-```aivi
-use aivi.math
-
-angle = degrees 90.0
-unit = sin angle
-
-digits = [1.0, 2.0, 3.0] |> sum
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/01_math/block_04.aivi{aivi}

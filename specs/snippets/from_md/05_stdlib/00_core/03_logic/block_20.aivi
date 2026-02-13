@@ -1,0 +1,9 @@
+// Sugar
+val = effect {
+  x <- fetch
+  y <- decode x
+  pure y
+}
+
+// Desugared shape (conceptually)
+val2 = (fetch |> bind) (x => (decode x |> bind) (y => pure y))

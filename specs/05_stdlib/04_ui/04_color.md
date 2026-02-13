@@ -6,42 +6,15 @@ Screens think in Red, Green, and Blue, but people think in **Hue**, **Saturation
 
 ## Overview
 
-```aivi
-use aivi.color (Color)
-
-primary = #007bff
-// Mathematically correct lightening
-lighter = primary + 10lightness
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_01.aivi{aivi}
 
 ## Features
 
-```aivi
-Rgb = { r: Int, g: Int, b: Int }  // 0-255
-Hsl = { h: Float, s: Float, l: Float }  // h: 0-360, s/l: 0-1
-Hex = Text  // "#rrggbb"
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain Color over Rgb = {
-  type Delta = Lightness Int | Saturation Int | Hue Int
-  
-  (+) : Rgb -> Delta -> Rgb
-  (+) col (Lightness n) = adjustLightness col n
-  (+) col (Saturation n) = adjustSaturation col n
-  (+) col (Hue n) = adjustHue col n
-  
-  (-) : Rgb -> Delta -> Rgb
-  (-) col delta = col + (negateDelta delta)
-  
-  // Delta literals
-  1l = Lightness 1
-  1s = Saturation 1
-  1h = Hue 1
-}
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_03.aivi{aivi}
 
 ## Helper Functions
 
@@ -56,13 +29,4 @@ domain Color over Rgb = {
 
 ## Usage Examples
 
-```aivi
-use aivi.color
-
-primary = { r: 255, g: 85, b: 0 }  // Orange
-
-lighter = primary + 10l
-darker = primary - 20l
-muted = primary - 30s
-shifted = primary + 30h
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_04.aivi{aivi}

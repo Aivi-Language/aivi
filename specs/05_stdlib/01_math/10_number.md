@@ -8,35 +8,16 @@ The `aivi.number` family groups numeric domains that sit above `Int` and `Float`
 
 You can use either the facade module or the specific domain module depending on how much you want in scope.
 
-```aivi
-// Facade (types + helpers)
-use aivi.number
-
-// Domain modules (operators + literals)
-use aivi.number.bigint
-use aivi.number.rational
-use aivi.number.complex
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_01.aivi{aivi}
 
 
 ## BigInt
 
 `BigInt` is an **opaque native type** for arbitrary-precision integers.
 
-```aivi
-// Native type (backed by Rust BigInt or similar)
-type BigInt
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_02.aivi{aivi}
 
-```aivi
-domain BigInt over BigInt = {
-  (+) : BigInt -> BigInt -> BigInt
-  (-) : BigInt -> BigInt -> BigInt
-  (*) : BigInt -> BigInt -> BigInt
-
-  1n = fromInt 1
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_03.aivi{aivi}
 
 Helpers:
 
@@ -47,33 +28,15 @@ Helpers:
 
 Example:
 
-```aivi
-use aivi.number.bigint
-
-huge = 10_000_000_000_000_000_000_000n
-sum = huge + 1n
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_04.aivi{aivi}
 
 ## Decimal
 
 `Decimal` is an **opaque native type** for fixed-point arithmetic (base-10), suitable for financial calculations where `Float` precision errors are unacceptable.
 
-```aivi
-// Native type (backed by Rust Decimal or similar)
-type Decimal
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_05.aivi{aivi}
 
-```aivi
-domain Decimal over Decimal = {
-  (+) : Decimal -> Decimal -> Decimal
-  (-) : Decimal -> Decimal -> Decimal
-  (*) : Decimal -> Decimal -> Decimal
-  (/) : Decimal -> Decimal -> Decimal
-
-  // Literal suffix 'dec'
-  1.0dec = fromFloat 1.0
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_06.aivi{aivi}
 
 Helpers:
 
@@ -85,31 +48,15 @@ Helpers:
 
 Example:
 
-```aivi
-use aivi.number.decimal
-
-price = 19.99dec
-tax = price * 0.2dec
-total = price + tax
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_07.aivi{aivi}
 
 ## Rational
 
 `Rational` is an **opaque native type** for exact fractions (`num/den`).
 
-```aivi
-// Native type (backed by Rust Rational or similar)
-type Rational
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_08.aivi{aivi}
 
-```aivi
-domain Rational over Rational = {
-  (+) : Rational -> Rational -> Rational
-  (-) : Rational -> Rational -> Rational
-  (*) : Rational -> Rational -> Rational
-  (/) : Rational -> Rational -> Rational
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_09.aivi{aivi}
 
 Helpers:
 
@@ -121,93 +68,29 @@ Helpers:
 
 Example:
 
-```aivi
-use aivi.number.rational
-
-// exact 1/2
-half = normalize (fromInt 1 / fromInt 2) 
-sum = half + half
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_10.aivi{aivi}
 
 ## Complex
 
 `Complex` represents values of the form `a + bi`. It is typically a struct of two floats, but domain operations are backed by optimized native implementations.
 
-```aivi
-Complex = { re: Float, im: Float }
-i : Complex
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_11.aivi{aivi}
 
-```aivi
-domain Complex over Complex = {
-  (+) : Complex -> Complex -> Complex
-  (+) a b = { re: a.re + b.re, im: a.im + b.im }
-
-  (-) : Complex -> Complex -> Complex
-  (-) a b = { re: a.re - b.re, im: a.im - b.im }
-
-  (*) : Complex -> Complex -> Complex
-  (*) a b = {
-    re: a.re * b.re - a.im * b.im,
-    im: a.re * b.im + a.im * b.re
-  }
-
-  (/) : Complex -> Float -> Complex
-  (/) z s = { re: z.re / s, im: z.im / s }
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_12.aivi{aivi}
 
 Example:
 
-```aivi
-use aivi.number.complex
-
-z1 = 3.0 + 4.0 * i
-z2 = 1.0 - 2.0 * i
-sum = z1 + z2
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_13.aivi{aivi}
 
 ## Quaternion
 
 The `Quaternion` domain provides tools for handling **3D rotations** without gimbal lock.
 
-```aivi
-use aivi.number.quaternion (Quat)
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_14.aivi{aivi}
 
-// Rotate 90 degrees around the Y (up) axis
-q1 = Quat.fromEuler(0.0, 90.0, 0.0)
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_15.aivi{aivi}
 
-// The "identity" quaternion means "no rotation"
-q2 = Quat.identity()
-
-// Smoothly transition halfway between "no rotation" and "90 degrees"
-interpolated = Quat.slerp(q1, q2, 0.5)
-```
-
-```aivi
-Quaternion = { w: Float, x: Float, y: Float, z: Float }
-```
-
-```aivi
-domain Quaternion over Quaternion = {
-  (+) : Quaternion -> Quaternion -> Quaternion
-  (+) a b = { w: a.w + b.w, x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }
-
-  (-) : Quaternion -> Quaternion -> Quaternion
-  (-) a b = { w: a.w - b.w, x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }
-
-  (*) : Quaternion -> Quaternion -> Quaternion
-  (*) a b = {
-    w: a.w * b.w - a.x * b.x - a.y * b.y - a.z * b.z,
-    x: a.w * b.x + a.x * b.w + a.y * b.z - a.z * b.y,
-    y: a.w * b.y - a.x * b.z + a.y * b.w + a.z * b.x,
-    z: a.w * b.z + a.x * b.y - a.y * b.x + a.z * b.w
-  }
-
-  (/) : Quaternion -> Float -> Quaternion
-  (/) q s = { w: q.w / s, x: q.x / s, y: q.y / s, z: q.z / s }
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_16.aivi{aivi}
 
 | Function | Explanation |
 | --- | --- |
@@ -216,11 +99,4 @@ domain Quaternion over Quaternion = {
 | **magnitude** q<br><pre><code>`Quaternion -> Float`</code></pre> | Returns the quaternion length. |
 | **normalize** q<br><pre><code>`Quaternion -> Quaternion`</code></pre> | Returns a unit-length quaternion. |
 
-```aivi
-use aivi.number.quaternion
-
-axis = { x: 0.0, y: 1.0, z: 0.0 }
-spin = fromAxisAngle axis 1.570796
-
-unit = normalize spin
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_17.aivi{aivi}

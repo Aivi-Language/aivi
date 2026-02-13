@@ -1,0 +1,2 @@
+// If both Calendar and Physics define (+) over the same carrier
+ambiguous + 1m // Error: Ambiguous domain for (+)

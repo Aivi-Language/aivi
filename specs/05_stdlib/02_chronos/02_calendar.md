@@ -8,54 +8,15 @@ The `Calendar` domain hides this chaos. Writing `timestamp + 86400` works until 
 
 ## Overview
 
-```aivi
-use aivi.calendar (Date, DateTime)
-
-now = DateTime.now()
-
-// Instantiation using sigils
-birthday = ~d(1990-12-31)
-event    = ~dt(2025-02-08T12:34:56Z)
-lunch    = ~t(12:30:00)
-
-// "Human" math: Add 7 days, regardless of seconds
-next_week = now + 7d
-```
+<<< ../../snippets/from_md/05_stdlib/02_chronos/02_calendar/block_01.aivi{aivi}
 
 ## Features
 
-```aivi
-Date     = { year: Int, month: Int, day: Int }
-Time     = { hour: Int, min: Int, sec: Int, nanos: Int }
-DateTime = { date: Date, time: Time }
-
-EndOfMonth = EndOfMonth
-```
+<<< ../../snippets/from_md/05_stdlib/02_chronos/02_calendar/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain Calendar over Date = {
-  type Delta = Day Int | Month Int | Year Int | End EndOfMonth
-  
-  // Add delta to date
-  (+) : Date -> Delta -> Date
-  (+) date (Day n)   = addDays date n
-  (+) date (Month n) = addMonths date n
-  (+) date (Year n)  = addYears date n
-  (+) date End       = endOfMonth date
-  
-  // Subtract delta from date
-  (-) : Date -> Delta -> Date
-  (-) date delta = date + (negateDelta delta)
-  
-  // Delta literals
-  1d = Day 1
-  1m = Month 1
-  1y = Year 1
-  eom = End
-}
-```
+<<< ../../snippets/from_md/05_stdlib/02_chronos/02_calendar/block_03.aivi{aivi}
 
 ## Helper Functions
 
@@ -71,13 +32,4 @@ domain Calendar over Date = {
 
 ## Usage Examples
 
-```aivi
-use aivi.calendar
-
-today = { year: 2025, month: 2, day: 8 }
-
-tomorrow = today + 1d
-nextMonth = today + 1m
-lastYear = today - 1y
-monthEnd = today + eom
-```
+<<< ../../snippets/from_md/05_stdlib/02_chronos/02_calendar/block_04.aivi{aivi}

@@ -1,0 +1,4 @@
+// Update prices of all active items in a category
+store2 = store <| {
+  categories[name == "Hardware"].items[active].price: _ * 1
+}

@@ -1,0 +1,9 @@
+class Functor (F *) = {
+  map: F A -> (A -> B) -> F B
+}
+
+// Tokens explained:
+// - Functor: The class name
+// - F: Generic type parameter
+// - *: Denotes a higher-kinded type (F takes one type argument)
+// - A, B: Type variables within the definition

@@ -1,0 +1,4 @@
+user4 = user <| {
+  email: -
+  preferences.notifications.email: -
+}

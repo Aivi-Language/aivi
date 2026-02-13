@@ -1,0 +1,11 @@
+module geo.vector = {
+  export domain Vector
+  export Vec2
+
+  Vec2 = { x: Float, y: Float }
+
+  domain Vector over Vec2 = {
+    (+) : Vec2 -> Vec2 -> Vec2
+    (+) a b = { x: a.x + b.x, y: a.y + b.y }
+  }
+}

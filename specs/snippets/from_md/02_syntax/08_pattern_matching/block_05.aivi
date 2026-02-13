@@ -1,0 +1,5 @@
+processResult =
+  | Ok { data.users: [first, ...] } => "First user: {first.name}"
+  | Ok { data.users: [] }           => "No users found"
+  | Err { code: 404 }               => "Not found"
+  | Err { code, message }           => "Error {code}: {message}"

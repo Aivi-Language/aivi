@@ -1,0 +1,8 @@
+type RegexError = InvalidPattern Text
+
+Match = {
+  full: Text,
+  groups: List (Option Text),
+  start: Int,
+  end: Int
+}

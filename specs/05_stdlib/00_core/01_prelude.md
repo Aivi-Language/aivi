@@ -2,36 +2,11 @@
 
 The **Prelude** is your default toolkit. It acts as the "standard library of the standard library," automatically using the core types and domains you use in almost every program (like `Int`, `List`, `Text`, and `Result`). It ensures you don't have to write fifty `use` lines just to add two numbers or print "Hello World".
 
-```aivi
-module aivi.prelude
-// Core types
-export Int, Float, Bool, Text, Char, Bytes
-export List, Option, Result, Tuple
-
-// Standard domains
-export domain Calendar
-export domain Duration
-export domain Color
-export domain Vector
-
-// Re-exports
-use aivi
-use aivi.text
-use aivi.logic
-use aivi.calendar
-use aivi.duration
-use aivi.color
-use aivi.vector
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/01_prelude/block_01.aivi{aivi}
 
 ## Opting Out
 
-```aivi
-@no_prelude
-module my.custom.module
-// Nothing used automatically
-use aivi (Int, Bool)
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/01_prelude/block_02.aivi{aivi}
 
 ## Rationale
 

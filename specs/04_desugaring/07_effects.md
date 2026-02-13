@@ -12,34 +12,19 @@ Kernel effect primitives:
 
 - Bind:
 
-  ```aivi
-  effect {
-    x <- e
-    body
-  }
-  ```
+<<< ../snippets/from_md/04_desugaring/07_effects/block_01.aivi{aivi}
 
   desugars to `bind ⟦e⟧ (λx. ⟦effect { body }⟧)`.
 
 - Pure let-binding:
 
-  ```aivi
-  effect {
-    x = e
-    body
-  }
-  ```
+<<< ../snippets/from_md/04_desugaring/07_effects/block_02.aivi{aivi}
 
   desugars to `let x = ⟦e⟧ in ⟦effect { body }⟧`.
 
 - Sequencing an `Effect E Unit` expression:
 
-  ```aivi
-  effect {
-    e
-    body
-  }
-  ```
+<<< ../snippets/from_md/04_desugaring/07_effects/block_03.aivi{aivi}
 
   desugars to `bind ⟦e⟧ (λ_. ⟦effect { body }⟧)` (if `e : Effect E Unit`).
 
@@ -53,13 +38,7 @@ Kernel effect primitives:
 
 - No final expression:
 
-  ```aivi
-  effect {
-    s1
-    ...
-    sn
-  }
-  ```
+<<< ../snippets/from_md/04_desugaring/07_effects/block_04.aivi{aivi}
 
   desugars to `⟦effect { s1 ... sn pure Unit }⟧` (i.e. insert `pure Unit` as the final expression).
 

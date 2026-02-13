@@ -1,0 +1,11 @@
+// More explicit (same semantics)
+main = effect {
+  res <- attempt (foo x)
+  verdict = res ?
+    | Ok _  => "ok"
+    | Err _ => "err"
+
+  _ <- print verdict
+
+  _ <- if cond then print "branch" else pure Unit
+}

@@ -1,0 +1,8 @@
+// SQLite connection
+db = sqlite.open "./local.db"
+
+User = { id: Int, name: Text }
+
+// Typed query source (the expected type drives decoding)
+activeUsers : Source Db (List User)
+activeUsers = db.query "SELECT id, name FROM users WHERE active = 1"

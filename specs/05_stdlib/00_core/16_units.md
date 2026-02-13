@@ -4,42 +4,15 @@ The `Units` domain brings **Dimensional Analysis** to your code, solving the "Ma
 
 ## Overview
 
-```aivi
-use aivi.units (Length, Time, Velocity)
-
-// Define values with units attached
-distance = 100.0m
-time = 9.58s
-
-// The compiler knows (Length / Time) results in Velocity
-speed = distance / time 
-// speed is now roughly 10.43 (m/s)
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/16_units/block_01.aivi{aivi}
 
 ## Supported Dimensions
 
-```aivi
-Unit = { name: Text, factor: Float }
-Quantity = { value: Float, unit: Unit }
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/16_units/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain Units over Quantity = {
-  (+) : Quantity -> Quantity -> Quantity
-  (+) a b = { value: a.value + b.value, unit: a.unit }
-  
-  (-) : Quantity -> Quantity -> Quantity
-  (-) a b = { value: a.value - b.value, unit: a.unit }
-  
-  (*) : Quantity -> Float -> Quantity
-  (*) q s = { value: q.value * s, unit: q.unit }
-  
-  (/) : Quantity -> Float -> Quantity
-  (/) q s = { value: q.value / s, unit: q.unit }
-}
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/16_units/block_03.aivi{aivi}
 
 ## Helper Functions
 
@@ -51,12 +24,4 @@ domain Units over Quantity = {
 
 ## Usage Examples
 
-```aivi
-use aivi.units
-
-meter = defineUnit "m" 1.0
-kilometer = defineUnit "km" 1000.0
-
-distance = { value: 1500.0, unit: meter }
-distanceKm = convert distance kilometer
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/16_units/block_04.aivi{aivi}

@@ -9,14 +9,7 @@ Resources are defined using `resource` blocks. The syntax is analogous to genera
 
 The code after `yield` is guaranteed to run when the resource goes out of scope.
 
-```aivi
-// Define a reusable resource
-managedFile path = resource {
-  handle <- file.open path  // Acquire
-  yield handle              // Provide to user
-  file.close handle         // Release
-}
-```
+<<< ../snippets/from_md/02_syntax/15_resources/block_01.aivi{aivi}
 
 This declarative approach hides the complexity of error handling and cancellation checks.
 
@@ -25,26 +18,10 @@ This declarative approach hides the complexity of error handling and cancellatio
 
 Inside an `effect` block, you use the `<-` binder to acquire a resource. This is similar to the generator binder, but instead of iterating, it scopes the resource to the current block.
 
-```aivi
-main = effect {
-  // Acquire resource
-  f <- managedFile "data.txt"
-  
-  // Use resource
-  content <- file.readAll f
-  print content
-} // f is automatically closed here
-```
+<<< ../snippets/from_md/02_syntax/15_resources/block_02.aivi{aivi}
 
 ### Multiple Resources
 
 You can acquire multiple resources in sequence. They will be released in reverse order of acquisition (LIFO).
 
-```aivi
-copy src dest = effect {
-  input  <- managedFile src
-  output <- managedFile dest
-  
-  file.copyTo input output
-}
-```
+<<< ../snippets/from_md/02_syntax/15_resources/block_03.aivi{aivi}

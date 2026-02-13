@@ -1,0 +1,4 @@
+use aivi.i18n
+
+// Prefer `userBundle`, fall back to `defaultBundle`.
+msg = tWithFallback[userBundle, defaultBundle] (~k"app.welcome") { name: "Alice" }

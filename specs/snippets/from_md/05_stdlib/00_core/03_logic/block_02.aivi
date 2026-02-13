@@ -1,0 +1,3 @@
+class Setoid A = {
+  equals: A -> A -> Bool
+}

@@ -1,0 +1,14 @@
+type AnsiColor = Black | Red | Green | Yellow | Blue | Magenta | Cyan | White | Default
+
+type AnsiStyle = {
+  fg: Option AnsiColor
+  bg: Option AnsiColor
+  bold: Bool
+  dim: Bool
+  italic: Bool
+  underline: Bool
+  blink: Bool
+  inverse: Bool
+  hidden: Bool
+  strike: Bool
+}

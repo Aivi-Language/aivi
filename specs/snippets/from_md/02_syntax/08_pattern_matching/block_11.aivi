@@ -1,0 +1,16 @@
+// Safe head
+head =
+  | []       => None
+  | [x, ...] => Some x
+
+// Take first n
+take = (n, xs) => (n, xs) ?
+  | (n, _) when n <= 0 => []
+  | (_, [])            => []
+  | (n, [x, ...xs])    => [x, ...take (n -1, xs)]
+
+// Zip two lists
+zip =
+  | ([], _)                  => []
+  | (_, [])                  => []
+  | ([x, ...xs], [y, ...ys]) => [(x, y), ...zip (xs, ys)]

@@ -1,0 +1,2 @@
+type Scope = Unit
+type ChannelError = Closed

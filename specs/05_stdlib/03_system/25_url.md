@@ -6,48 +6,15 @@ A URL isn't just text; it's a structured address with protocols, hosts, and quer
 
 ## Module
 
-```aivi
-module aivi.url
-export domain Url
-export Url
-export parse, toString
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/25_url/block_01.aivi{aivi}
 
 ## Types
 
-```aivi
-Url = {
-  protocol: String,
-  host: String,
-  port: Option Int,
-  path: String,
-  query: List (String, String),
-  hash: Option String
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/25_url/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain Url over Url = {
-  // Add a query parameter
-  (+) : Url -> (String, String) -> Url
-  (+) url (key, value) = { 
-    ...url, 
-    query: url.query ++ [(key, value)] 
-  }
-  
-  // Remove a query parameter by key
-  (-) : Url -> String -> Url
-  (-) url key = { 
-    ...url, 
-    query: filter (\(k, _) -> k != key) url.query 
-  }
-  
-  // Update record fields (standard record update syntax)
-  // url <| { protocol: "https" }
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/25_url/block_03.aivi{aivi}
 
 ## Helper Functions
 
@@ -58,21 +25,4 @@ domain Url over Url = {
 
 ## Usage Examples
 
-```aivi
-use aivi.url
-
-// Create using the ~u sigil
-base = ~u(https://api.example.com/v1/search)
-
-// Add parameter: "?q=aivi"
-search = base + ("q", "aivi")
-
-// Add another: "?q=aivi&sort=desc"
-sorted = search + ("sort", "desc")
-
-// Change protocol or path using record update
-secure_login = base <| { 
-  path: "/v1/login",
-  protocol: "wss" 
-}
-```
+<<< ../../snippets/from_md/05_stdlib/03_system/25_url/block_04.aivi{aivi}

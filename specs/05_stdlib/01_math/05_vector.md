@@ -11,59 +11,16 @@ Graphics and physics use vectors for clean math (`v1 + v2`) and benefit from har
 
 ## Overview
 
-```aivi
-use aivi.vector (Vec2, Vec3)
-
-// Define using the `v2` tag
-v1 = (1.0, 2.0)v2
-v2 = (3.0, 4.0)v2
-
-// Add components parallelly
-v3 = v1 + v2 // (4.0, 6.0)
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_01.aivi{aivi}
 
 
 ## Features
 
-```aivi
-Vec2 = { x: Float, y: Float }
-Vec3 = { x: Float, y: Float, z: Float }
-Vec4 = { x: Float, y: Float, z: Float, w: Float }
-
-Scalar = Float
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain Vector over Vec2 = {
-  (+) : Vec2 -> Vec2 -> Vec2
-  (+) v1 v2 = { x: v1.x + v2.x, y: v1.y + v2.y }
-  
-  (-) : Vec2 -> Vec2 -> Vec2
-  (-) v1 v2 = { x: v1.x - v2.x, y: v1.y - v2.y }
-  
-  (*) : Vec2 -> Scalar -> Vec2
-  (*) v s = { x: v.x * s, y: v.y * s }
-  
-  (/) : Vec2 -> Scalar -> Vec2
-  (/) v s = { x: v.x / s, y: v.y / s }
-}
-
-domain Vector over Vec3 = {
-  (+) : Vec3 -> Vec3 -> Vec3
-  (+) v1 v2 = { x: v1.x + v2.x, y: v1.y + v2.y, z: v1.z + v2.z }
-  
-  (-) : Vec3 -> Vec3 -> Vec3
-  (-) v1 v2 = { x: v1.x - v2.x, y: v1.y - v2.y, z: v1.z - v2.z }
-  
-  (*) : Vec3 -> Scalar -> Vec3
-  (*) v s = { x: v.x * s, y: v.y * s, z: v.z * s }
-  
-  (/) : Vec3 -> Scalar -> Vec3
-  (/) v s = { x: v.x / s, y: v.y / s, z: v.z / s }
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_03.aivi{aivi}
 
 ## Helper Functions
 
@@ -76,12 +33,4 @@ domain Vector over Vec3 = {
 
 ## Usage Examples
 
-```aivi
-use aivi.vector
-
-position = { x: 10.0, y: 20.0 }
-velocity = { x: 1.0, y: 0.5 }
-
-newPos = position + velocity * 0.016  // 60fps frame
-direction = normalize velocity
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_04.aivi{aivi}

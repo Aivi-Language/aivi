@@ -46,11 +46,7 @@ instance module or over recurse resource then type use yield loop
 
 Text literals are delimited by `"` and support interpolation segments `{ Expr }`:
 
-```aivi
-"Hello"
-"Count: {n}"
-"{user.name}: {status}"
-```
+<<< ../snippets/from_md/02_syntax/00_grammar/block_01.aivi{aivi}
 
 Inside a `TextLit`, `{` starts interpolation and `}` ends it; braces must be balanced within the interpolated expression.
 
@@ -294,11 +290,7 @@ This form desugars to a single-argument function that performs a `case` on its i
 
 If you want multi-argument matching, match on a tuple:
 
-```aivi
-nextState =
-  | (Idle, Start) => Running
-  | (state, _)    => state
-```
+<<< ../snippets/from_md/02_syntax/00_grammar/block_02.aivi{aivi}
 
 ## 0.6 Types
 

@@ -1,0 +1,10 @@
+use aivi.duration (Duration)
+
+// Clear, unambiguous literals
+timeout = 500ms
+delay = 2seconds
+
+// Type-safe comparison
+if delay > timeout {
+  // ...
+}

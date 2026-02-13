@@ -1,0 +1,3 @@
+class Ord A = {
+  lte: A -> A -> Bool
+}

@@ -1,0 +1,12 @@
+// Identity
+id = x => x
+
+// Constant: returns a function that ignores its input and always returns x
+const = x _ => x
+
+// Flip arguments
+flip = f => x y => f y x
+
+// Function composition is most common via the pipe operator:
+processName = name => name |> trim |> lowercase |> capitalize
+result = processName "  HELLO  "

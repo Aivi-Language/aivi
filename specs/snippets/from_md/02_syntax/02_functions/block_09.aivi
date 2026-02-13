@@ -1,0 +1,12 @@
+// Boolean logic composition
+isAdmin = user => user.role == Admin
+isOwner = user => user.id == ownerId
+canDelete = user => isAdmin user || isOwner user
+
+// Validation chains
+isEmail = contains "@"
+isLongEnough = x => x |> len |> (_ > 8)
+isValidPassword = x => isEmail x && isLongEnough x
+
+// Usage
+passwords |> filter isValidPassword

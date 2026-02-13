@@ -11,37 +11,16 @@ If you need to find the shortest path between two points or see who is friends w
 
 ## Overview
 
-```aivi
-use aivi.graph (Graph, bfs)
-
-// Create a small network
-g = Graph.fromEdges([
-  (1, 2),  // Node 1 connects to 2
-  (2, 3),  // Node 2 connects to 3
-  (1, 3)   // Node 1 connects to 3
-])
-
-// Find a path through the network
-path = bfs(g, start: 1, end: 3)
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/17_graph/block_01.aivi{aivi}
 
 
 ## Features
 
-```aivi
-NodeId = Int
-Edge = { from: NodeId, to: NodeId, weight: Float }
-Graph = { nodes: List NodeId, edges: List Edge }
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/17_graph/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain Graph over Graph = {
-  (+) : Graph -> Graph -> Graph
-  (+) a b = { nodes: unique (a.nodes ++ b.nodes), edges: a.edges ++ b.edges }
-}
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/17_graph/block_03.aivi{aivi}
 
 ## Helper Functions
 
@@ -53,12 +32,4 @@ domain Graph over Graph = {
 
 ## Usage Examples
 
-```aivi
-use aivi.graph
-
-g0 = { nodes: [], edges: [] }
-g1 = addEdge g0 { from: 1, to: 2, weight: 1.0 }
-g2 = addEdge g1 { from: 2, to: 3, weight: 2.0 }
-
-path = shortestPath g2 1 3
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/17_graph/block_04.aivi{aivi}

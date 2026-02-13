@@ -1,0 +1,4 @@
+authorize = user => user <| {
+  roles: _ ++ ["Admin"]
+  lastLogin: now
+}

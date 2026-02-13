@@ -1,0 +1,12 @@
+domain TimeZone over TimeZone = {
+  // Returns the offset at a specific instant
+  getOffset: TimeZone -> Instant -> Duration
+}
+
+domain ZonedDateTime over ZonedDateTime = {
+  // Conversion to physics time (UTC)
+  toInstant: ZonedDateTime -> Instant
+
+  // Changing zones (keeping the same instant)
+  atZone: ZonedDateTime -> TimeZone -> ZonedDateTime
+}

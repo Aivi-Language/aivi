@@ -8,58 +8,16 @@ In many systems, a timeout is just an integer like `500`. But is that 500 millis
 
 ## Overview
 
-```aivi
-use aivi.duration (Duration)
-
-// Clear, unambiguous literals
-timeout = 500ms
-delay = 2seconds
-
-// Type-safe comparison
-if delay > timeout {
-    // ...
-}
-```
+<<< ../../snippets/from_md/05_stdlib/02_chronos/03_duration/block_01.aivi{aivi}
 
 ## Features
 
-```aivi
-Span = { millis: Int }
-```
+<<< ../../snippets/from_md/05_stdlib/02_chronos/03_duration/block_02.aivi{aivi}
 
 ## Domain Definition
 
-```aivi
-domain Duration over Span = {
-  type Delta = Millisecond Int | Second Int | Minute Int | Hour Int
-  
-  (+) : Span -> Delta -> Span
-  (+) span (Millisecond n) = { millis: span.millis + n }
-  (+) span (Second n)      = { millis: span.millis + n * 1000 }
-  (+) span (Minute n)      = { millis: span.millis + n * 60000 }
-  (+) span (Hour n)        = { millis: span.millis + n * 3600000 }
-  
-  (-) : Span -> Delta -> Span
-  (-) span delta = span + (negateDelta delta)
-  
-  // Span arithmetic
-  (+) : Span -> Span -> Span
-  (+) s1 s2 = { millis: s1.millis + s2.millis }
-  
-  // Delta literals
-  1ms = Millisecond 1
-  1s = Second 1
-  1min = Minute 1
-  1h = Hour 1
-}
-```
+<<< ../../snippets/from_md/05_stdlib/02_chronos/03_duration/block_03.aivi{aivi}
 
 ## Usage Examples
 
-```aivi
-use aivi.duration
-
-timeout = { millis: 0 } + 30s
-delay = timeout + 500ms
-longPoll = { millis: 0 } + 5min
-```
+<<< ../../snippets/from_md/05_stdlib/02_chronos/03_duration/block_04.aivi{aivi}

@@ -1,0 +1,10 @@
+domain LinearAlgebra over Vec = {
+  (+) : Vec -> Vec -> Vec
+  (+) a b = { size: a.size, data: zipWith (+) a.data b.data }
+
+  (-) : Vec -> Vec -> Vec
+  (-) a b = { size: a.size, data: zipWith (-) a.data b.data }
+
+  (*) : Vec -> Float -> Vec
+  (*) v s = { size: v.size, data: map (\x -> x * s) v.data }
+}

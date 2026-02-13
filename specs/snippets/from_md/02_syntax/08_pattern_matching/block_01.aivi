@@ -1,0 +1,3 @@
+classify = v => v ?
+  | 0 => "zero"
+  | _ => "nonzero"

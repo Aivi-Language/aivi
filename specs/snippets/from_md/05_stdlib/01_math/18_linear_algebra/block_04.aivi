@@ -1,0 +1,6 @@
+use aivi.linear_algebra
+
+v1 = { size: 3, data: [1.0, 2.0, 3.0] }
+v2 = { size: 3, data: [4.0, 5.0, 6.0] }
+
+prod = dot v1 v2

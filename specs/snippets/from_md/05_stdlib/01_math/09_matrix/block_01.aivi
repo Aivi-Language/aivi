@@ -1,0 +1,10 @@
+use aivi.matrix (Mat4)
+
+// A generic "identity" matrix (does nothing)
+m = Mat4.identity()
+
+// Create a instruction to move 10 units X
+translation = Mat4.translate(10.0, 0.0, 0.0)
+
+// Combine them
+m_prime = m * translation

@@ -1,0 +1,16 @@
+UserWithPosts = { user: User, posts: List Post }
+
+getUsersWithPosts : Effect DbError (List UserWithPosts)
+getUsersWithPosts = effect {
+  users <- db.load userTable
+  posts <- db.load postTable
+  pure (
+    users
+    |> join posts on (_.id == _.authorId)
+    |> groupBy { userId = _.id, user = _.left, post = _.right }
+    |> map { key, group } => {
+      user: group.head.user,
+      posts: group |> map.post
+    }
+  )
+}

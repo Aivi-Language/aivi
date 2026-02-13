@@ -1,0 +1,9 @@
+domain Decimal over Decimal = {
+  (+): Decimal -> Decimal -> Decimal
+  (-): Decimal -> Decimal -> Decimal
+  (*): Decimal -> Decimal -> Decimal
+  (/): Decimal -> Decimal -> Decimal
+
+  // Literal suffix 'dec'
+  1.0dec = fromFloat 1.0
+}

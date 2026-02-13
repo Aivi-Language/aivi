@@ -1,0 +1,15 @@
+domain Geometry over Point2 = {
+  (+) : Point2 -> Point2 -> Point2
+  (+) a b = { x: a.x + b.x, y: a.y + b.y }
+
+  (-) : Point2 -> Point2 -> Point2
+  (-) a b = { x: a.x - b.x, y: a.y - b.y }
+}
+
+domain Geometry over Point3 = {
+  (+) : Point3 -> Point3 -> Point3
+  (+) a b = { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }
+
+  (-) : Point3 -> Point3 -> Point3
+  (-) a b = { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }
+}

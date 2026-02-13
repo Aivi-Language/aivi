@@ -1,0 +1,3 @@
+@decorator_name
+@decorator_name value
+@decorator_name { key: value }

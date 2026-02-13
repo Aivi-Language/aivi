@@ -1,0 +1,18 @@
+domain Layout over UnitVal = {
+  // Length (pixels)
+  type Length = Px Float
+
+  // Percentage (0.0 - 1.0 or 0 - 100)
+  type Percentage = Pct Float
+
+  // Literals
+  1px = Px 1.0
+  1% = Pct 1.0
+
+  // Arithmetic within same unit type
+  (+) : Length -> Length -> Length
+  (+) (Px a) (Px b) = Px (a + b)
+
+  (-) : Length -> Length -> Length
+  (-) (Px a) (Px b) = Px (a - b)
+}

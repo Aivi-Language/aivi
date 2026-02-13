@@ -1,0 +1,2 @@
+Option A = None | Some A
+Result E A = Err E | Ok A

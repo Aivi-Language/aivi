@@ -1,0 +1,7 @@
+FileStats = {
+  size: Int // Size in bytes
+  created: Int // Unix timestamp (ms)
+  modified: Int // Unix timestamp (ms)
+  isFile: Bool
+  isDirectory: Bool
+}

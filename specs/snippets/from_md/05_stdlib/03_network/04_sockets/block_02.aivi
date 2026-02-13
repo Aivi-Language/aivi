@@ -1,0 +1,2 @@
+type Address = { host: Text, port: Int }
+type SocketError = { message: Text }

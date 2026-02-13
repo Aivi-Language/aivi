@@ -1,0 +1,3 @@
+class Group A = {
+  invert: A -> A
+}

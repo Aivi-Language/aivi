@@ -1,0 +1,4 @@
+greet =
+  | { role: Admin, name } => "Welcome back, Admin {name}!"
+  | { role: Guest }       => "Welcome, guest!"
+  | { name }              => "Hello, {name}!"

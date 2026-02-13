@@ -1,0 +1,2 @@
+Probability = Float
+Distribution a = { pdf: a -> Probability }

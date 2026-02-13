@@ -1,0 +1,5 @@
+generate {
+  x <- xs
+  x -> price > 80
+  yield x
+}
