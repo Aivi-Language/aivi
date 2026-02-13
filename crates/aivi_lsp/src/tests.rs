@@ -640,6 +640,102 @@ fn semantic_tokens_highlight_keywords_types_and_literals() {
     assert!(seen_decorator);
 }
 
+fn collect_semantic_token_texts(text: &str) -> Vec<(u32, String)> {
+    let tokens = Backend::build_semantic_tokens(text);
+    let lines: Vec<&str> = text.lines().collect();
+
+    let mut abs_line = 0u32;
+    let mut abs_start = 0u32;
+    let mut out = Vec::new();
+
+    for token in tokens.data.iter() {
+        abs_line += token.delta_line;
+        if token.delta_line == 0 {
+            abs_start += token.delta_start;
+        } else {
+            abs_start = token.delta_start;
+        }
+        let line = lines.get(abs_line as usize).copied().unwrap_or_default();
+        let text: String = line
+            .chars()
+            .skip(abs_start as usize)
+            .take(token.length as usize)
+            .collect();
+        out.push((token.token_type, text));
+    }
+
+    out
+}
+
+#[test]
+fn semantic_tokens_split_i18n_sigils_into_delimiters_and_string_content() {
+    let text = r#"module Test.i18n
+x = ~k"app.welcome"
+y = ~m"Hello, {name:Text}!"
+"#;
+
+    let tokens = collect_semantic_token_texts(text);
+
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_SIGIL && s == "~k\""),
+        "expected `~k\\\"` prefix to be a sigil token, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s == "app.welcome"),
+        "expected `~k` body to be a string token, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_SIGIL && s == "\""),
+        "expected closing quote to be a sigil token, got: {tokens:?}"
+    );
+
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_SIGIL && s == "~m\""),
+        "expected `~m\\\"` prefix to be a sigil token, got: {tokens:?}"
+    );
+    assert!(
+        tokens.iter().any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING
+            && s == "Hello, {name:Text}!"),
+        "expected `~m` body to be a string token, got: {tokens:?}"
+    );
+}
+
+#[test]
+fn semantic_tokens_highlight_html_inside_html_sigil() {
+    let text = r#"module Test.html
+x = ~html~> <div class="a">{ foo }</div> <~html
+"#;
+
+    let tokens = collect_semantic_token_texts(text);
+
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_TYPE && s == "div"),
+        "expected tag name to be highlighted as a type token, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_PROPERTY && s == "class"),
+        "expected attribute name to be highlighted as a property token, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s == "\"a\""),
+        "expected attribute value to be highlighted as a string token, got: {tokens:?}"
+    );
+}
+
 #[test]
 fn semantic_tokens_highlight_paths_and_calls() {
     let text = r#"use aivi.net.https (get)
