@@ -1154,15 +1154,31 @@ impl TypeChecker {
                             let (expr, _ty) = self.elab_expr(expr, None, &mut local_env)?;
                             new_items.push(BlockItem::Expr { expr, span });
                         }
-                        BlockItem::Let { pattern, expr, span } => {
+                        BlockItem::Let {
+                            pattern,
+                            expr,
+                            span,
+                        } => {
                             let (expr, _ty) = self.elab_expr(expr, None, &mut local_env)?;
                             let _ = self.infer_pattern(&pattern, &mut local_env)?;
-                            new_items.push(BlockItem::Let { pattern, expr, span });
+                            new_items.push(BlockItem::Let {
+                                pattern,
+                                expr,
+                                span,
+                            });
                         }
-                        BlockItem::Bind { pattern, expr, span } => {
+                        BlockItem::Bind {
+                            pattern,
+                            expr,
+                            span,
+                        } => {
                             let (expr, _ty) = self.elab_expr(expr, None, &mut local_env)?;
                             let _ = self.infer_pattern(&pattern, &mut local_env)?;
-                            new_items.push(BlockItem::Bind { pattern, expr, span });
+                            new_items.push(BlockItem::Bind {
+                                pattern,
+                                expr,
+                                span,
+                            });
                         }
                         BlockItem::Filter { expr, span } => {
                             let (expr, _ty) = self.elab_expr(expr, None, &mut local_env)?;

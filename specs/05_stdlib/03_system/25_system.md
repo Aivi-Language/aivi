@@ -9,8 +9,15 @@ It allows you to read **Environment Variables** (like secret queries or API keys
 ```aivi
 use aivi.system (env)
 
-// Read an environment variable
-port = env.get("PORT") |> Option.default("8080")
+main = effect {
+  // Read an environment variable (missing => default)
+  portOpt <- env.get "PORT"
+  port =
+    portOpt ?
+      | Some p => p
+      | None   => "8080"
+  print port
+}
 ```
 
 ## Values
@@ -23,6 +30,7 @@ env : {
 }
 
 args : Effect Text (List Text)
+localeTag : Effect Text (Option Text)
 exit : Int -> Effect Text Unit
 ```
 

@@ -4,43 +4,19 @@ use aivi
 use aivi.calendar (DateTime)
 use aivi.file (open, readAll)
 use aivi.i18n
-use aivi.system (env)
-use aivi.text (split)
+use aivi.system (localeTag)
 
 defaultLocale : Locale
 defaultLocale = { language: "en", region: Some "US", variants: [], tag: "en-US" }
 
 systemLocale : Effect Text Locale
 systemLocale = effect {
-  lcAll <- env.get "LC_ALL"
-  lcMsg <- env.get "LC_MESSAGES"
-  lang  <- env.get "LANG"
-
-  tagOpt =
-  lcAll ?
-    | Some t => Some t
-    | None   =>
-  lcMsg ?
-    | Some t => Some t
-    | None   => lang
-
+  tagOpt <- localeTag
   tag =
   tagOpt ?
     | Some t => t
     | None   => defaultLocale.tag
-
-  baseTag =
-  (split "." tag) ?
-    | []        => tag
-    | [x, ..._] => x
-  cleanTag =
-  (split "@" baseTag) ?
-    | []        => baseTag
-    | [x, ..._] => x
-
-  parseLocale cleanTag ?
-    | Ok loc => pure loc
-    | Err _  => pure defaultLocale
+  pure (parseLocale tag or defaultLocale)
 }
 
 loadBundle : Locale -> Effect Text Bundle

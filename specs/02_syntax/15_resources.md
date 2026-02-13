@@ -14,7 +14,7 @@ The code after `yield` is guaranteed to run when the resource goes out of scope.
 managedFile path = resource {
   handle <- file.open path  // Acquire
   yield handle              // Provide to user
-  _ <- file.close handle    // Release
+  file.close handle         // Release
 }
 ```
 
@@ -45,6 +45,6 @@ copy src dest = effect {
   input  <- managedFile src
   output <- managedFile dest
   
-  _ <- file.copyTo input output
+  file.copyTo input output
 }
 ```

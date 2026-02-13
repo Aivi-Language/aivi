@@ -17,9 +17,8 @@ use aivi.file (readText, stat)
 main = effect {
   // Safe reading
   contentRes <- readText "config.json"
-  contentRes ?
-    | Ok content => print content
-    | Err _ => print "missing config"
+  content = contentRes or "missing config"
+  print content
 
   // Metadata inspection
   infoRes <- stat "large_video.mp4"

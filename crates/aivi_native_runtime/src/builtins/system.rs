@@ -392,6 +392,18 @@ pub(super) fn build_system_record() -> Value {
         }),
     );
     fields.insert(
+        "localeTag".to_string(),
+        builtin("system.localeTag", 1, |_, _| {
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| match system_locale_tag_best_effort() {
+                    Some(tag) => Ok(make_some(Value::Text(tag))),
+                    None => Ok(make_none()),
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
         "exit".to_string(),
         builtin("system.exit", 1, |mut args, _| {
             let code = match args.pop().unwrap() {
@@ -405,6 +417,27 @@ pub(super) fn build_system_record() -> Value {
         }),
     );
     Value::Record(Arc::new(fields))
+}
+
+fn system_locale_tag_best_effort() -> Option<String> {
+    let raw = std::env::var("LC_ALL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .or_else(|| {
+            std::env::var("LC_MESSAGES")
+                .ok()
+                .filter(|v| !v.trim().is_empty())
+        })
+        .or_else(|| std::env::var("LANG").ok().filter(|v| !v.trim().is_empty()))?;
+
+    let tag = raw.trim();
+    let base = tag.split('.').next().unwrap_or(tag);
+    let clean = base.split('@').next().unwrap_or(base).trim();
+    if clean.is_empty() {
+        None
+    } else {
+        Some(clean.to_string())
+    }
 }
 
 fn build_env_record() -> Value {

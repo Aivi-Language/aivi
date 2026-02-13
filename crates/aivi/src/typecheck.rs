@@ -5,9 +5,9 @@ use crate::surface::{DomainItem, Module, ModuleItem, TypeExpr};
 
 mod builtins;
 mod checker;
-mod types;
 #[cfg(test)]
 mod expected_coercions_tests;
+mod types;
 
 use self::checker::TypeChecker;
 use self::types::Scheme;
@@ -407,8 +407,7 @@ pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnosti
                         for domain_item in domain.items.iter_mut() {
                             match domain_item {
                                 DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                                    if let Err(err) = checker.elaborate_def_expr(def, &sigs, &env)
-                                    {
+                                    if let Err(err) = checker.elaborate_def_expr(def, &sigs, &env) {
                                         elab_errors.push(err);
                                     }
                                 }
