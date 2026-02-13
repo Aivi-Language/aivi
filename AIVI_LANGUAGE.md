@@ -18,6 +18,9 @@ x = 42
 // Function (lambda)
 inc = n => n + 1
 
+// Function (shorthand sugar) mechanism
+add a b = a + b
+
 // Piping (Data-last convention)
 result = data |> filter valid |> map transform
 
