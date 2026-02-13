@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use crate::diagnostics::{Diagnostic, DiagnosticSeverity, FileDiagnostic};
 use crate::surface::{
     BlockItem, Decorator, Def, DomainItem, Expr, Literal, Module, ModuleItem, Pattern, TextPart,
+    TypeAlias, TypeDecl, TypeExpr, TypeSig,
 };
 
 pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
@@ -30,6 +31,7 @@ pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
         check_duplicate_exports(module, &mut diagnostics);
         check_uses(module, &module_map, &mut diagnostics);
         check_defs(module, &module_map, &mut diagnostics);
+        check_unused_imports_and_bindings(module, &mut diagnostics);
     }
 
     let cycle_nodes = detect_cycles(&module_map);
@@ -49,6 +51,259 @@ pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
     }
 
     diagnostics
+}
+
+fn check_unused_imports_and_bindings(module: &Module, diagnostics: &mut Vec<FileDiagnostic>) {
+    // Embedded stdlib modules are not held to the same hygiene bar in v0.1; avoid failing
+    // compiler/LSP checks due to warning-only lint rules.
+    if module.path.starts_with("<embedded:") {
+        return;
+    }
+
+    let used = collect_used_names(module);
+    let exported: HashSet<&str> = module.exports.iter().map(|e| e.name.as_str()).collect();
+
+    // Unused explicit imports.
+    for use_decl in &module.uses {
+        if use_decl.wildcard {
+            continue;
+        }
+        for item in &use_decl.items {
+            if !used.contains(item.name.as_str()) {
+                diagnostics.push(file_diag(
+                    module,
+                    Diagnostic {
+                        code: "W2100".to_string(),
+                        severity: DiagnosticSeverity::Warning,
+                        message: format!("unused import '{}'", item.name),
+                        span: item.span.clone(),
+                        labels: Vec::new(),
+                    },
+                ));
+            }
+        }
+    }
+
+    // Unused private (non-exported) top-level value bindings.
+    for item in &module.items {
+        if let ModuleItem::Def(def) = item {
+            if exported.contains(def.name.name.as_str()) {
+                continue;
+            }
+            if used.contains(def.name.name.as_str()) {
+                continue;
+            }
+            diagnostics.push(file_diag(
+                module,
+                Diagnostic {
+                    code: "W2101".to_string(),
+                    severity: DiagnosticSeverity::Warning,
+                    message: format!("unused binding '{}'", def.name.name),
+                    span: def.name.span.clone(),
+                    labels: Vec::new(),
+                },
+            ));
+        }
+    }
+}
+
+fn collect_used_names(module: &Module) -> HashSet<String> {
+    fn collect_type_expr(expr: &TypeExpr, out: &mut HashSet<String>) {
+        match expr {
+            TypeExpr::Name(name) => {
+                out.insert(name.name.clone());
+            }
+            TypeExpr::And { items, .. } | TypeExpr::Tuple { items, .. } => {
+                for item in items {
+                    collect_type_expr(item, out);
+                }
+            }
+            TypeExpr::Apply { base, args, .. } => {
+                collect_type_expr(base, out);
+                for arg in args {
+                    collect_type_expr(arg, out);
+                }
+            }
+            TypeExpr::Func { params, result, .. } => {
+                for param in params {
+                    collect_type_expr(param, out);
+                }
+                collect_type_expr(result, out);
+            }
+            TypeExpr::Record { fields, .. } => {
+                for (_label, ty) in fields {
+                    collect_type_expr(ty, out);
+                }
+            }
+            TypeExpr::Star { .. } | TypeExpr::Unknown { .. } => {}
+        }
+    }
+
+    fn collect_pattern_uses(pattern: &Pattern, out: &mut HashSet<String>) {
+        match pattern {
+            Pattern::Constructor { name, args, .. } => {
+                out.insert(name.name.clone());
+                for arg in args {
+                    collect_pattern_uses(arg, out);
+                }
+            }
+            Pattern::Tuple { items, .. } => {
+                for item in items {
+                    collect_pattern_uses(item, out);
+                }
+            }
+            Pattern::List { items, rest, .. } => {
+                for item in items {
+                    collect_pattern_uses(item, out);
+                }
+                if let Some(rest) = rest.as_deref() {
+                    collect_pattern_uses(rest, out);
+                }
+            }
+            Pattern::Record { fields, .. } => {
+                for field in fields {
+                    collect_pattern_uses(&field.pattern, out);
+                }
+            }
+            Pattern::Ident(_) | Pattern::Wildcard(_) | Pattern::Literal(_) => {}
+        }
+    }
+
+    fn collect_expr(expr: &Expr, out: &mut HashSet<String>) {
+        match expr {
+            Expr::Ident(name) => {
+                out.insert(name.name.clone());
+            }
+            Expr::TextInterpolate { parts, .. } => {
+                for part in parts {
+                    if let TextPart::Expr { expr, .. } = part {
+                        collect_expr(expr, out);
+                    }
+                }
+            }
+            Expr::List { items, .. } => {
+                for item in items {
+                    collect_expr(&item.expr, out);
+                }
+            }
+            Expr::Tuple { items, .. } => {
+                for item in items {
+                    collect_expr(item, out);
+                }
+            }
+            Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => {
+                for field in fields {
+                    collect_expr(&field.value, out);
+                }
+            }
+            Expr::FieldAccess { base, field, .. } => {
+                out.insert(field.name.clone());
+                collect_expr(base, out);
+            }
+            Expr::Index { base, index, .. } => {
+                collect_expr(base, out);
+                collect_expr(index, out);
+            }
+            Expr::Call { func, args, .. } => {
+                collect_expr(func, out);
+                for arg in args {
+                    collect_expr(arg, out);
+                }
+            }
+            Expr::Lambda { params, body, .. } => {
+                for param in params {
+                    collect_pattern_uses(param, out);
+                }
+                collect_expr(body, out);
+            }
+            Expr::Match {
+                scrutinee, arms, ..
+            } => {
+                if let Some(scrutinee) = scrutinee.as_deref() {
+                    collect_expr(scrutinee, out);
+                }
+                for arm in arms {
+                    collect_pattern_uses(&arm.pattern, out);
+                    if let Some(guard) = &arm.guard {
+                        collect_expr(guard, out);
+                    }
+                    collect_expr(&arm.body, out);
+                }
+            }
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                collect_expr(cond, out);
+                collect_expr(then_branch, out);
+                collect_expr(else_branch, out);
+            }
+            Expr::Binary { left, right, .. } => {
+                collect_expr(left, out);
+                collect_expr(right, out);
+            }
+            Expr::Block { items, .. } => {
+                for item in items {
+                    match item {
+                        BlockItem::Bind { pattern, expr, .. }
+                        | BlockItem::Let { pattern, expr, .. } => {
+                            collect_pattern_uses(pattern, out);
+                            collect_expr(expr, out);
+                        }
+                        BlockItem::Filter { expr, .. }
+                        | BlockItem::Yield { expr, .. }
+                        | BlockItem::Recurse { expr, .. }
+                        | BlockItem::Expr { expr, .. } => collect_expr(expr, out),
+                    }
+                }
+            }
+            Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => {}
+        }
+    }
+
+    let mut out = HashSet::new();
+    for item in &module.items {
+        match item {
+            ModuleItem::TypeSig(TypeSig { ty, .. }) => collect_type_expr(ty, &mut out),
+            ModuleItem::TypeAlias(TypeAlias { aliased, .. }) => collect_type_expr(aliased, &mut out),
+            ModuleItem::TypeDecl(TypeDecl { constructors, .. }) => {
+                for ctor in constructors {
+                    for arg in &ctor.args {
+                        collect_type_expr(arg, &mut out);
+                    }
+                }
+            }
+            ModuleItem::Def(def) => {
+                collect_expr(&def.expr, &mut out);
+            }
+            ModuleItem::DomainDecl(domain) => {
+                for domain_item in &domain.items {
+                    match domain_item {
+                        DomainItem::TypeSig(TypeSig { ty, .. }) => collect_type_expr(ty, &mut out),
+                        DomainItem::TypeAlias(TypeDecl { constructors, .. }) => {
+                            for ctor in constructors {
+                                for arg in &ctor.args {
+                                    collect_type_expr(arg, &mut out);
+                                }
+                            }
+                        }
+                        DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
+                            collect_expr(&def.expr, &mut out);
+                        }
+                    }
+                }
+            }
+            ModuleItem::InstanceDecl(instance) => {
+                for def in &instance.defs {
+                    collect_expr(&def.expr, &mut out);
+                }
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 fn check_duplicate_exports(module: &Module, diagnostics: &mut Vec<FileDiagnostic>) {
@@ -355,12 +610,14 @@ fn check_expr(
                 ));
             }
             if !scope.contains_key(&name.name) {
+                let message = special_unknown_name_message(&name.name)
+                    .unwrap_or_else(|| format!("unknown name '{}'", name.name));
                 diagnostics.push(file_diag(
                     module,
                     Diagnostic {
                         code: "E2005".to_string(),
                         severity: DiagnosticSeverity::Error,
-                        message: format!("unknown name '{}'", name.name),
+                        message,
                         span: name.span.clone(),
                         labels: Vec::new(),
                     },
@@ -464,6 +721,21 @@ fn check_expr(
             }
         }
         Expr::Raw { .. } => {}
+    }
+}
+
+fn special_unknown_name_message(name: &str) -> Option<String> {
+    // Common “ported” keywords from other languages that AIVI intentionally does not have.
+    match name {
+        "return" => Some("unknown name 'return' (AIVI has no `return`; the last expression is the result)".to_string()),
+        "mut" => Some("unknown name 'mut' (AIVI is immutable; use a new binding instead of mutation)".to_string()),
+        "for" | "while" => Some(format!(
+            "unknown name '{name}' (AIVI has no loops; use recursion, `generate`, or higher-order functions)"
+        )),
+        "null" | "undefined" => Some(format!(
+            "unknown name '{name}' (AIVI has no nulls; use `Option`/`Result`)"
+        )),
+        _ => None,
     }
 }
 

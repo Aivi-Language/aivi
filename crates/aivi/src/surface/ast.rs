@@ -19,6 +19,7 @@ pub struct UseDecl {
     pub items: Vec<SpannedName>,
     pub span: Span,
     pub wildcard: bool,
+    pub alias: Option<SpannedName>,
 }
 
 #[derive(Debug, Clone)]

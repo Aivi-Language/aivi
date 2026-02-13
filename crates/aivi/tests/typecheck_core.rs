@@ -1,16 +1,21 @@
 use std::path::Path;
 
-use aivi::{check_modules, check_types, embedded_stdlib_source, parse_modules};
+use aivi::{
+    check_modules, check_types, embedded_stdlib_source, file_diagnostics_have_errors, parse_modules,
+};
 
 fn check_ok(source: &str) {
     let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
-    assert!(diagnostics.is_empty(), "parse diagnostics: {diagnostics:?}");
+    assert!(
+        !file_diagnostics_have_errors(&diagnostics),
+        "parse errors: {diagnostics:?}"
+    );
 
     let mut module_diags = check_modules(&modules);
     module_diags.extend(check_types(&modules));
     assert!(
-        module_diags.is_empty(),
-        "type diagnostics: {module_diags:?}"
+        !file_diagnostics_have_errors(&module_diags),
+        "unexpected errors: {module_diags:?}"
     );
 }
 
@@ -24,31 +29,75 @@ fn check_ok_with_embedded(source: &str, embedded: &[&str]) {
             embedded_source,
         );
         assert!(
-            embedded_diags.is_empty(),
-            "parse diagnostics in embedded {module_name}: {embedded_diags:?}"
+            !file_diagnostics_have_errors(&embedded_diags),
+            "parse errors in embedded {module_name}: {embedded_diags:?}"
         );
         modules.append(&mut embedded_modules);
     }
 
     let (mut user_modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
-    assert!(diagnostics.is_empty(), "parse diagnostics: {diagnostics:?}");
+    assert!(
+        !file_diagnostics_have_errors(&diagnostics),
+        "parse errors: {diagnostics:?}"
+    );
     modules.append(&mut user_modules);
 
     let mut module_diags = check_modules(&modules);
     module_diags.extend(check_types(&modules));
     assert!(
-        module_diags.is_empty(),
-        "type diagnostics: {module_diags:?}"
+        !file_diagnostics_have_errors(&module_diags),
+        "unexpected errors: {module_diags:?}"
     );
 }
 
 fn check_err(source: &str) {
     let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
-    assert!(diagnostics.is_empty(), "parse diagnostics: {diagnostics:?}");
+    assert!(
+        !file_diagnostics_have_errors(&diagnostics),
+        "parse errors: {diagnostics:?}"
+    );
 
     let mut module_diags = check_modules(&modules);
     module_diags.extend(check_types(&modules));
-    assert!(!module_diags.is_empty(), "expected diagnostics");
+    assert!(
+        file_diagnostics_have_errors(&module_diags),
+        "expected errors, got: {module_diags:?}"
+    );
+}
+
+fn slice_span(source: &str, span: &aivi::Span) -> String {
+    // Spans are 1-based (line/column) and end column is inclusive; VSCode ranges are derived from
+    // these by treating end.column as exclusive in 0-based coordinates.
+    let mut offset = 0usize;
+    let mut current_line = 1usize;
+    let mut start_offset = None;
+    let mut end_offset = None;
+    for line in source.split_inclusive('\n') {
+        let line_start = offset;
+        let line_end = offset + line.len();
+        if current_line == span.start.line {
+            let start_col0 = span.start.column.saturating_sub(1);
+            start_offset = Some(line_start + start_col0);
+        }
+        if current_line == span.end.line {
+            // Convert inclusive end column (1-based) to exclusive byte offset in ASCII.
+            end_offset = Some(line_start + span.end.column);
+        }
+        if start_offset.is_some() && end_offset.is_some() {
+            break;
+        }
+        offset = line_end;
+        current_line += 1;
+    }
+    let Some(start) = start_offset else {
+        return String::new();
+    };
+    let Some(end) = end_offset else {
+        return String::new();
+    };
+    let end = end.min(source.len());
+    let start = start.min(end);
+    source.get(start..end).unwrap_or("").to_string()
 }
 
 #[test]
@@ -116,6 +165,33 @@ node =
     </div>
   }"#;
     check_ok_with_embedded(source, &["aivi", "aivi.ui", "aivi.ui.layout"]);
+}
+
+#[test]
+fn typecheck_record_field_mismatch_points_at_value() {
+    let source = "module test.user\n\
+User = { name: Text, age: Int }\n\
+\n\
+user1 : User\n\
+user1 = { name: \"Alice\", age: \"a\" }\n";
+
+    let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
+    assert!(diagnostics.is_empty(), "parse diagnostics: {diagnostics:?}");
+
+    let mut module_diags = check_modules(&modules);
+    module_diags.extend(check_types(&modules));
+    assert!(!module_diags.is_empty(), "expected diagnostics");
+
+    let mismatch = module_diags
+        .iter()
+        .find(|d| d.diagnostic.message.starts_with("type mismatch"))
+        .unwrap_or_else(|| panic!("expected type mismatch diagnostic, got: {module_diags:?}"));
+    let slice = slice_span(source, &mismatch.diagnostic.span);
+    assert!(
+        slice == "\"a\"" || slice == "a",
+        "expected span to highlight the bad value, got slice={slice:?}, span={:?}",
+        mismatch.diagnostic.span
+    );
 }
 
 #[test]
@@ -398,4 +474,88 @@ instance Functor (Option *) = {
 inc x = x + 1
 value = map (Some 1) inc"#;
     check_ok(source);
+}
+
+#[test]
+fn typecheck_non_exhaustive_match_is_error() {
+    let source = r#"
+module test.match_err
+
+Option A = None | Some A
+
+value = Some 1 ? 
+  | Some _ => 1
+"#;
+
+    let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
+    assert!(
+        !file_diagnostics_have_errors(&diagnostics),
+        "parse errors: {diagnostics:?}"
+    );
+
+    let mut module_diags = check_modules(&modules);
+    module_diags.extend(check_types(&modules));
+    assert!(
+        module_diags
+            .iter()
+            .any(|d| d.diagnostic.code == "E3100"),
+        "expected E3100 non-exhaustive match diagnostic, got: {module_diags:?}"
+    );
+}
+
+#[test]
+fn typecheck_unreachable_match_arm_is_warning() {
+    let source = r#"
+module test.match_warn
+
+Option A = None | Some A
+
+value = Some 1 ? 
+  | _ => 0
+  | Some _ => 1
+"#;
+
+    let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
+    assert!(
+        !file_diagnostics_have_errors(&diagnostics),
+        "parse errors: {diagnostics:?}"
+    );
+
+    let mut module_diags = check_modules(&modules);
+    module_diags.extend(check_types(&modules));
+    assert!(
+        module_diags
+            .iter()
+            .any(|d| d.diagnostic.code == "W3101"),
+        "expected W3101 unreachable arm warning, got: {module_diags:?}"
+    );
+}
+
+#[test]
+fn typecheck_reports_missing_domain_operator_for_concrete_non_int_operands() {
+    let source = r#"
+module test.domain_op_err
+
+bad = True + False
+"#;
+
+    let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
+    assert!(
+        !file_diagnostics_have_errors(&diagnostics),
+        "parse errors: {diagnostics:?}"
+    );
+
+    let mut module_diags = check_modules(&modules);
+    module_diags.extend(check_types(&modules));
+    assert!(
+        file_diagnostics_have_errors(&module_diags),
+        "expected errors, got: {module_diags:?}"
+    );
+    assert!(
+        module_diags.iter().any(|d| d
+            .diagnostic
+            .message
+            .contains("no domain operator '+'")),
+        "expected missing domain operator message, got: {module_diags:?}"
+    );
 }

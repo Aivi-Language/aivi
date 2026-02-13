@@ -121,6 +121,34 @@ x = ~map{ "a" => 1 }
     );
 }
 
+#[test]
+fn rejects_missing_module_declaration() {
+    let src = r#"
+x = 1
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1517".to_string()),
+        "expected missing module diagnostic, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
+#[test]
+fn rejects_type_sig_and_binding_on_same_line() {
+    let src = r#"
+module Example
+
+x : Int = 1
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1528".to_string()),
+        "expected inline type signature diagnostic, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
 fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
     match expr {
         Expr::Ident(name) => name.name == target,

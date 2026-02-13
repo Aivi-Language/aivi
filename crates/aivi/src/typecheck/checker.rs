@@ -24,6 +24,9 @@ pub(super) struct TypeChecker {
     pub(super) classes: HashMap<String, ClassDeclInfo>,
     pub(super) instances: Vec<InstanceDeclInfo>,
     method_to_classes: HashMap<String, Vec<String>>,
+    current_module_path: String,
+    extra_diagnostics: Vec<FileDiagnostic>,
+    adt_constructors: HashMap<String, Vec<String>>,
 }
 
 impl TypeChecker {
@@ -39,6 +42,9 @@ impl TypeChecker {
             classes: HashMap::new(),
             instances: Vec::new(),
             method_to_classes: HashMap::new(),
+            current_module_path: String::new(),
+            extra_diagnostics: Vec::new(),
+            adt_constructors: HashMap::new(),
         };
         checker.register_builtin_types();
         checker.register_builtin_aliases();
@@ -55,6 +61,28 @@ impl TypeChecker {
         self.classes.clear();
         self.instances.clear();
         self.method_to_classes.clear();
+        self.extra_diagnostics.clear();
+        self.adt_constructors.clear();
+        self.current_module_path = _module.path.clone();
+    }
+
+    fn emit_extra_diag(
+        &mut self,
+        code: &str,
+        severity: crate::diagnostics::DiagnosticSeverity,
+        message: String,
+        span: Span,
+    ) {
+        self.extra_diagnostics.push(FileDiagnostic {
+            path: self.current_module_path.clone(),
+            diagnostic: Diagnostic {
+                code: code.to_string(),
+                severity,
+                message,
+                span,
+                labels: Vec::new(),
+            },
+        });
     }
 
     pub(super) fn set_class_env(
@@ -573,11 +601,31 @@ impl TypeChecker {
         for item in &module.items {
             match item {
                 ModuleItem::TypeDecl(type_decl) => {
+                    if !type_decl.constructors.is_empty() {
+                        self.adt_constructors.insert(
+                            type_decl.name.name.clone(),
+                            type_decl
+                                .constructors
+                                .iter()
+                                .map(|ctor| ctor.name.name.clone())
+                                .collect(),
+                        );
+                    }
                     self.register_adt_constructors(type_decl, env);
                 }
                 ModuleItem::DomainDecl(domain) => {
                     for domain_item in &domain.items {
                         if let DomainItem::TypeAlias(type_decl) = domain_item {
+                            if !type_decl.constructors.is_empty() {
+                                self.adt_constructors.insert(
+                                    type_decl.name.name.clone(),
+                                    type_decl
+                                        .constructors
+                                        .iter()
+                                        .map(|ctor| ctor.name.name.clone())
+                                        .collect(),
+                                );
+                            }
                             self.register_adt_constructors(type_decl, env);
                         }
                     }
@@ -700,6 +748,7 @@ impl TypeChecker {
                 _ => {}
             }
         }
+        diagnostics.append(&mut self.extra_diagnostics);
         diagnostics
     }
 
@@ -955,8 +1004,10 @@ impl TypeChecker {
 
             let result: Result<(), TypeError> = (|| {
                 if def.params.is_empty() {
-                    let inferred = self.infer_expr(&expr, &mut local_env)?;
-                    self.unify_with_span(inferred, expected, def.span.clone())?;
+                    // Use expected-type elaboration so mismatches inside the expression (e.g. a
+                    // record field) get a precise span instead of underlining the entire def.
+                    let (_elab, _ty) =
+                        self.elab_expr(expr.clone(), Some(expected), &mut local_env)?;
                     return Ok(());
                 }
 
@@ -1098,8 +1149,8 @@ impl TypeChecker {
             Expr::Call { func, args, .. } => self.infer_call(func, args, env),
             Expr::Lambda { params, body, .. } => self.infer_lambda(params, body, env),
             Expr::Match {
-                scrutinee, arms, ..
-            } => self.infer_match(scrutinee, arms, env),
+                scrutinee, arms, span, ..
+            } => self.infer_match(scrutinee, arms, span, env),
             Expr::If {
                 cond,
                 then_branch,
@@ -1835,6 +1886,7 @@ impl TypeChecker {
         &mut self,
         scrutinee: &Option<Box<Expr>>,
         arms: &[crate::surface::MatchArm],
+        match_span: &Span,
         env: &mut TypeEnv,
     ) -> Result<Type, TypeError> {
         let scrutinee_ty = if let Some(scrutinee) = scrutinee {
@@ -1854,7 +1906,101 @@ impl TypeChecker {
             let body_ty = self.infer_expr(&arm.body, &mut arm_env)?;
             self.unify_with_span(body_ty, result_ty.clone(), arm.span.clone())?;
         }
+        self.check_match_arms(scrutinee_ty, arms, match_span);
         Ok(result_ty)
+    }
+
+    fn check_match_arms(
+        &mut self,
+        scrutinee_ty: Type,
+        arms: &[crate::surface::MatchArm],
+        match_span: &Span,
+    ) {
+        // Unreachable arms: catch-all without a guard makes later arms unreachable.
+        let mut has_catch_all: Option<Span> = None;
+        let mut covered_ctors: HashSet<String> = HashSet::new();
+
+        for arm in arms {
+            if has_catch_all.is_some() {
+                self.emit_extra_diag(
+                    "W3101",
+                    crate::diagnostics::DiagnosticSeverity::Warning,
+                    "unreachable match arm (previous arm matches everything)".to_string(),
+                    arm.span.clone(),
+                );
+                continue;
+            }
+
+            let guarded = arm.guard.is_some();
+            if !guarded {
+                if matches!(arm.pattern, Pattern::Wildcard(_) | Pattern::Ident(_)) {
+                    has_catch_all = Some(arm.span.clone());
+                    continue;
+                }
+                if let Pattern::Constructor { name, ref args, .. } = &arm.pattern {
+                    let ctor_catch_all = args.iter().all(|arg| {
+                        matches!(arg, Pattern::Wildcard(_) | Pattern::Ident(_))
+                    });
+                    if ctor_catch_all {
+                        covered_ctors.insert(name.name.clone());
+                    }
+                }
+            }
+
+            if let Pattern::Constructor { name, .. } = &arm.pattern {
+                if covered_ctors.contains(&name.name) {
+                    self.emit_extra_diag(
+                        "W3101",
+                        crate::diagnostics::DiagnosticSeverity::Warning,
+                        format!(
+                            "unreachable match arm (constructor '{}' already matched by a previous arm)",
+                            name.name
+                        ),
+                        arm.span.clone(),
+                    );
+                }
+            }
+        }
+
+        // Non-exhaustive matches are errors unless there is a catch-all arm.
+        if has_catch_all.is_some() {
+            return;
+        }
+
+        let scrutinee_ty = self.apply(scrutinee_ty);
+        let scrutinee_ty = self.expand_alias(scrutinee_ty);
+        let expected_ctors: Option<Vec<String>> = match scrutinee_ty {
+            Type::Con(ref name, _) if name == "Bool" => {
+                Some(vec!["True".to_string(), "False".to_string()])
+            }
+            Type::Con(ref name, _) if name == "Option" => {
+                Some(vec!["None".to_string(), "Some".to_string()])
+            }
+            Type::Con(ref name, _) if name == "Result" => {
+                Some(vec!["Ok".to_string(), "Err".to_string()])
+            }
+            Type::Con(ref name, _) => self.adt_constructors.get(name).cloned(),
+            _ => None,
+        };
+
+        let Some(expected_ctors) = expected_ctors else {
+            return;
+        };
+
+        let mut missing = Vec::new();
+        for ctor in expected_ctors {
+            if !covered_ctors.contains(&ctor) {
+                missing.push(ctor);
+            }
+        }
+        if !missing.is_empty() {
+            self.emit_extra_diag(
+                "E3100",
+                crate::diagnostics::DiagnosticSeverity::Error,
+                format!("non-exhaustive match (missing: {})", missing.join(", ")),
+                match_span.clone(),
+            );
+        }
     }
 
     fn infer_if(
@@ -1919,6 +2065,9 @@ impl TypeChecker {
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
 
                 if !both_int {
+                    let any_var = matches!(left_applied, Type::Var(_)) || matches!(right_applied, Type::Var(_));
+                    let concrete_non_int = matches!(left_applied, Type::Con(ref name, _) if name != "Int")
+                        || matches!(right_applied, Type::Con(ref name, _) if name != "Int");
                     if let Some(scheme) = env.get(&op_name) {
                         let checkpoint_subst = self.subst.clone();
                         let op_ty = self.instantiate(scheme);
@@ -1939,6 +2088,14 @@ impl TypeChecker {
                         }
                         self.subst = checkpoint_subst;
                     }
+                    if concrete_non_int && !any_var {
+                        return Err(TypeError {
+                            span: expr_span(left),
+                            message: format!("no domain operator '{}' for these operand types", op),
+                            expected: None,
+                            found: None,
+                        });
+                    }
                 }
 
                 self.unify_with_span(left_ty, Type::con("Int"), expr_span(left))?;
@@ -1955,6 +2112,9 @@ impl TypeChecker {
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
 
                 if !both_int {
+                    let any_var = matches!(left_applied, Type::Var(_)) || matches!(right_applied, Type::Var(_));
+                    let concrete_non_int = matches!(left_applied, Type::Con(ref name, _) if name != "Int")
+                        || matches!(right_applied, Type::Con(ref name, _) if name != "Int");
                     if let Some(scheme) = env.get(&op_name) {
                         let checkpoint_subst = self.subst.clone();
                         let op_ty = self.instantiate(scheme);
@@ -1973,6 +2133,14 @@ impl TypeChecker {
                             return Ok(result_ty);
                         }
                         self.subst = checkpoint_subst;
+                    }
+                    if concrete_non_int && !any_var {
+                        return Err(TypeError {
+                            span: expr_span(left),
+                            message: format!("no domain operator '{}' for these operand types", op),
+                            expected: None,
+                            found: None,
+                        });
                     }
                 }
 

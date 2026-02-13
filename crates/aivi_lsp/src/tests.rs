@@ -392,6 +392,32 @@ fn build_diagnostics_reports_error() {
 }
 
 #[test]
+fn diagnostics_report_missing_module_declaration() {
+    let text = "x = 1\n";
+    let uri = sample_uri();
+    let diagnostics = Backend::build_diagnostics(text, &uri);
+    assert!(diagnostics.iter().any(|diag| {
+        matches!(diag.code.as_ref(), Some(NumberOrString::String(code)) if code == "E1517")
+    }));
+}
+
+#[test]
+fn diagnostics_report_non_exhaustive_match() {
+    let text = r#"module demo
+
+Option A = None | Some A
+
+value = Some 1 ?
+  | Some _ => 1
+"#;
+    let uri = sample_uri();
+    let diagnostics = Backend::build_diagnostics(text, &uri);
+    assert!(diagnostics.iter().any(|diag| {
+        matches!(diag.code.as_ref(), Some(NumberOrString::String(code)) if code == "E3100")
+    }));
+}
+
+#[test]
 #[ignore]
 fn diagnostics_report_missing_list_comma() {
     let text = "module demo\n\nitems = [1 2]";

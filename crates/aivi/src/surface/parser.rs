@@ -15,6 +15,7 @@ pub fn parse_modules(path: &Path, content: &str) -> (Vec<Module>, Vec<FileDiagno
     let mut modules = parser.parse_modules();
     inject_prelude_imports(&mut modules);
     expand_domain_exports(&mut modules);
+    expand_module_aliases(&mut modules);
     let mut decorator_diags = apply_static_decorators(&mut modules);
     let mut diagnostics: Vec<FileDiagnostic> = lex_diags
         .into_iter()
@@ -70,6 +71,7 @@ fn inject_prelude_imports(modules: &mut [Module]) {
                 items: Vec::new(),
                 span,
                 wildcard: true,
+                alias: None,
             },
         );
     }
@@ -104,6 +106,303 @@ fn expand_domain_exports(modules: &mut [Module]) {
             }
         }
         module.exports.extend(extra_exports);
+    }
+}
+
+fn expand_module_aliases(modules: &mut [Module]) {
+    use std::collections::HashMap;
+
+    fn rewrite_type_expr(expr: TypeExpr, aliases: &HashMap<String, String>) -> TypeExpr {
+        match expr {
+            TypeExpr::Name(mut name) => {
+                if let Some((head, tail)) = name.name.split_once('.') {
+                    if aliases.contains_key(head) {
+                        name.name = tail.to_string();
+                    }
+                }
+                TypeExpr::Name(name)
+            }
+            TypeExpr::And { items, span } => TypeExpr::And {
+                items: items
+                    .into_iter()
+                    .map(|item| rewrite_type_expr(item, aliases))
+                    .collect(),
+                span,
+            },
+            TypeExpr::Apply { base, args, span } => TypeExpr::Apply {
+                base: Box::new(rewrite_type_expr(*base, aliases)),
+                args: args
+                    .into_iter()
+                    .map(|arg| rewrite_type_expr(arg, aliases))
+                    .collect(),
+                span,
+            },
+            TypeExpr::Func {
+                params,
+                result,
+                span,
+            } => TypeExpr::Func {
+                params: params
+                    .into_iter()
+                    .map(|p| rewrite_type_expr(p, aliases))
+                    .collect(),
+                result: Box::new(rewrite_type_expr(*result, aliases)),
+                span,
+            },
+            TypeExpr::Record { fields, span } => TypeExpr::Record {
+                fields: fields
+                    .into_iter()
+                    .map(|(label, ty)| (label, rewrite_type_expr(ty, aliases)))
+                    .collect(),
+                span,
+            },
+            TypeExpr::Tuple { items, span } => TypeExpr::Tuple {
+                items: items
+                    .into_iter()
+                    .map(|item| rewrite_type_expr(item, aliases))
+                    .collect(),
+                span,
+            },
+            TypeExpr::Star { .. } | TypeExpr::Unknown { .. } => expr,
+        }
+    }
+
+    fn rewrite_expr(expr: Expr, aliases: &HashMap<String, String>) -> Expr {
+        match expr {
+            Expr::FieldAccess { base, field, span } => {
+                // Best-effort support for `use some.module as alias` by rewriting `alias.x`
+                // into `x`. The import itself remains a wildcard import, so `x` resolves
+                // through the normal import/export path.
+                if let Expr::Ident(name) = *base.clone() {
+                    if aliases.contains_key(name.name.as_str()) {
+                        return Expr::Ident(SpannedName {
+                            name: field.name,
+                            span: field.span,
+                        });
+                    }
+                }
+                Expr::FieldAccess {
+                    base: Box::new(rewrite_expr(*base, aliases)),
+                    field,
+                    span,
+                }
+            }
+            Expr::TextInterpolate { parts, span } => Expr::TextInterpolate {
+                parts: parts
+                    .into_iter()
+                    .map(|part| match part {
+                        TextPart::Text { .. } => part,
+                        TextPart::Expr { expr, span } => TextPart::Expr {
+                            expr: Box::new(rewrite_expr(*expr, aliases)),
+                            span,
+                        },
+                    })
+                    .collect(),
+                span,
+            },
+            Expr::List { items, span } => Expr::List {
+                items: items
+                    .into_iter()
+                    .map(|item| ListItem {
+                        expr: rewrite_expr(item.expr, aliases),
+                        spread: item.spread,
+                        span: item.span,
+                    })
+                    .collect(),
+                span,
+            },
+            Expr::Tuple { items, span } => Expr::Tuple {
+                items: items
+                    .into_iter()
+                    .map(|item| rewrite_expr(item, aliases))
+                    .collect(),
+                span,
+            },
+            Expr::Record { fields, span } => Expr::Record {
+                fields: fields
+                    .into_iter()
+                    .map(|field| RecordField {
+                        path: field.path,
+                        value: rewrite_expr(field.value, aliases),
+                        spread: field.spread,
+                        span: field.span,
+                    })
+                    .collect(),
+                span,
+            },
+            Expr::PatchLit { fields, span } => Expr::PatchLit {
+                fields: fields
+                    .into_iter()
+                    .map(|field| RecordField {
+                        path: field.path,
+                        value: rewrite_expr(field.value, aliases),
+                        spread: field.spread,
+                        span: field.span,
+                    })
+                    .collect(),
+                span,
+            },
+            Expr::Index { base, index, span } => Expr::Index {
+                base: Box::new(rewrite_expr(*base, aliases)),
+                index: Box::new(rewrite_expr(*index, aliases)),
+                span,
+            },
+            Expr::Call { func, args, span } => Expr::Call {
+                func: Box::new(rewrite_expr(*func, aliases)),
+                args: args.into_iter().map(|arg| rewrite_expr(arg, aliases)).collect(),
+                span,
+            },
+            Expr::Lambda { params, body, span } => Expr::Lambda {
+                params,
+                body: Box::new(rewrite_expr(*body, aliases)),
+                span,
+            },
+            Expr::Match {
+                scrutinee,
+                arms,
+                span,
+            } => Expr::Match {
+                scrutinee: scrutinee.map(|e| Box::new(rewrite_expr(*e, aliases))),
+                arms: arms
+                    .into_iter()
+                    .map(|arm| MatchArm {
+                        pattern: arm.pattern,
+                        guard: arm.guard.map(|g| rewrite_expr(g, aliases)),
+                        body: rewrite_expr(arm.body, aliases),
+                        span: arm.span,
+                    })
+                    .collect(),
+                span,
+            },
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                span,
+            } => Expr::If {
+                cond: Box::new(rewrite_expr(*cond, aliases)),
+                then_branch: Box::new(rewrite_expr(*then_branch, aliases)),
+                else_branch: Box::new(rewrite_expr(*else_branch, aliases)),
+                span,
+            },
+            Expr::Binary { op, left, right, span } => Expr::Binary {
+                op,
+                left: Box::new(rewrite_expr(*left, aliases)),
+                right: Box::new(rewrite_expr(*right, aliases)),
+                span,
+            },
+            Expr::Block { kind, items, span } => Expr::Block {
+                kind,
+                items: items
+                    .into_iter()
+                    .map(|item| match item {
+                        BlockItem::Bind { pattern, expr, span } => BlockItem::Bind {
+                            pattern,
+                            expr: rewrite_expr(expr, aliases),
+                            span,
+                        },
+                        BlockItem::Let { pattern, expr, span } => BlockItem::Let {
+                            pattern,
+                            expr: rewrite_expr(expr, aliases),
+                            span,
+                        },
+                        BlockItem::Filter { expr, span } => BlockItem::Filter {
+                            expr: rewrite_expr(expr, aliases),
+                            span,
+                        },
+                        BlockItem::Yield { expr, span } => BlockItem::Yield {
+                            expr: rewrite_expr(expr, aliases),
+                            span,
+                        },
+                        BlockItem::Recurse { expr, span } => BlockItem::Recurse {
+                            expr: rewrite_expr(expr, aliases),
+                            span,
+                        },
+                        BlockItem::Expr { expr, span } => BlockItem::Expr {
+                            expr: rewrite_expr(expr, aliases),
+                            span,
+                        },
+                    })
+                    .collect(),
+                span,
+            },
+            Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => expr,
+        }
+    }
+
+    for module in modules {
+        let mut aliases: HashMap<String, String> = HashMap::new();
+        for use_decl in &module.uses {
+            if let Some(alias) = &use_decl.alias {
+                aliases.insert(alias.name.clone(), use_decl.module.name.clone());
+            }
+        }
+        if aliases.is_empty() {
+            continue;
+        }
+
+        for item in module.items.iter_mut() {
+            match item {
+                ModuleItem::TypeSig(sig) => {
+                    sig.ty = rewrite_type_expr(sig.ty.clone(), &aliases);
+                }
+                ModuleItem::TypeAlias(alias) => {
+                    alias.aliased = rewrite_type_expr(alias.aliased.clone(), &aliases);
+                }
+                ModuleItem::TypeDecl(decl) => {
+                    for ctor in &mut decl.constructors {
+                        ctor.args = ctor
+                            .args
+                            .iter()
+                            .cloned()
+                            .map(|arg| rewrite_type_expr(arg, &aliases))
+                            .collect();
+                    }
+                }
+                ModuleItem::Def(def) => {
+                    def.expr = rewrite_expr(def.expr.clone(), &aliases);
+                }
+                ModuleItem::DomainDecl(domain) => {
+                    domain.over = rewrite_type_expr(domain.over.clone(), &aliases);
+                    for domain_item in domain.items.iter_mut() {
+                        match domain_item {
+                            DomainItem::TypeSig(sig) => {
+                                sig.ty = rewrite_type_expr(sig.ty.clone(), &aliases);
+                            }
+                            DomainItem::TypeAlias(decl) => {
+                                for ctor in &mut decl.constructors {
+                                    ctor.args = ctor
+                                        .args
+                                        .iter()
+                                        .cloned()
+                                        .map(|arg| rewrite_type_expr(arg, &aliases))
+                                        .collect();
+                                }
+                            }
+                            DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
+                                def.expr = rewrite_expr(def.expr.clone(), &aliases);
+                            }
+                        }
+                    }
+                }
+                ModuleItem::InstanceDecl(instance) => {
+                    for def in instance.defs.iter_mut() {
+                        def.expr = rewrite_expr(def.expr.clone(), &aliases);
+                    }
+                }
+                ModuleItem::ClassDecl(class_decl) => {
+                    for member in class_decl.members.iter_mut() {
+                        member.ty = rewrite_type_expr(member.ty.clone(), &aliases);
+                    }
+                    class_decl.supers = class_decl
+                        .supers
+                        .iter()
+                        .cloned()
+                        .map(|super_expr| rewrite_type_expr(super_expr, &aliases))
+                        .collect();
+                }
+            }
+        }
     }
 }
 
@@ -340,6 +639,14 @@ impl Parser {
                 self.pos += 1;
             }
         }
+        // In v0.1 there must be exactly one module per file. When users are typing in an editor
+        // it's easy to start with just definitions; emit a clear parse diagnostic instead of
+        // returning an empty module set (which would otherwise suppress downstream checking).
+        if modules.is_empty() {
+            if let Some(first) = self.tokens.first() {
+                self.emit_diag("E1517", "expected `module` declaration", first.span.clone());
+            }
+        }
         modules
     }
 
@@ -557,6 +864,18 @@ impl Parser {
     fn parse_use_decl(&mut self) -> Option<UseDecl> {
         let start = self.previous_span();
         let module = self.parse_dotted_name()?;
+        let alias = if self.match_keyword("as") {
+            let as_span = self.previous_span();
+            match self.consume_ident() {
+                Some(name) => Some(name),
+                None => {
+                    self.emit_diag("E1500", "expected alias name after 'as'", as_span);
+                    None
+                }
+            }
+        } else {
+            None
+        };
         let mut items = Vec::new();
         let mut wildcard = true;
         if self.consume_symbol("(") {
@@ -579,12 +898,16 @@ impl Parser {
             }
             self.expect_symbol(")", "expected ')' to close import list");
         }
-        let span = merge_span(start, module.span.clone());
+        let span = match &alias {
+            Some(alias) => merge_span(start, alias.span.clone()),
+            None => merge_span(start, module.span.clone()),
+        };
         Some(UseDecl {
             module,
             items,
             span,
             wildcard,
+            alias,
         })
     }
 
@@ -681,6 +1004,34 @@ impl Parser {
             span: start.clone(),
         });
         let span = merge_span(start, type_span(&ty));
+
+        // `name : Type` is a standalone item; `name : Type = expr` is not valid syntax.
+        // If there are more tokens on the same line, emit a targeted diagnostic and
+        // skip the rest of the line to avoid cascading errors.
+        if let Some(next) = self.tokens.get(self.pos) {
+            let same_line = next.span.start.line == span.end.line;
+            let allowed_terminator = next.kind == TokenKind::Newline
+                || (next.kind == TokenKind::Symbol && next.text == "}");
+            if same_line && !allowed_terminator {
+                let next_span = next.span.clone();
+                let line = next.span.start.line;
+                self.emit_diag(
+                    "E1528",
+                    "type signatures must be written on their own line (write `name = ...` on the next line)",
+                    merge_span(span.clone(), next_span.clone()),
+                );
+                while self.pos < self.tokens.len() {
+                    let tok = &self.tokens[self.pos];
+                    if tok.kind == TokenKind::Newline
+                        || (tok.kind == TokenKind::Symbol && tok.text == "}")
+                        || tok.span.start.line != line
+                    {
+                        break;
+                    }
+                    self.pos += 1;
+                }
+            }
+        }
         Some(TypeSig {
             decorators,
             name,
@@ -1630,12 +1981,56 @@ impl Parser {
             if self.peek_symbol("[") {
                 if let Some(span) = self.peek_span() {
                     if is_adjacent(&expr_span(&expr), &span) {
+                        // `_` is the placeholder used heavily in patching; `_["x"]` is almost
+                        // always meant as `_ ["x"]` (a list literal argument) rather than an
+                        // index expression. Let the application parser treat `["x"]` as a
+                        // separate expression/argument.
+                        if matches!(&expr, Expr::Ident(name) if name.name == "_") {
+                            break;
+                        }
+
+                        // Similarly, `"users"[]` in stdlib examples is intended as a second
+                        // argument `[]` (an empty list literal), not an index on the string.
+                        if matches!(&expr, Expr::Literal(Literal::String { .. }))
+                            && self
+                                .tokens
+                                .get(self.pos + 1)
+                                .is_some_and(|tok| tok.kind == TokenKind::Symbol && tok.text == "]")
+                        {
+                            break;
+                        }
+
                         self.consume_symbol("[");
                         self.consume_newlines();
                         let spread = self.consume_symbol("...");
-                        let first = self.parse_expr().unwrap_or(Expr::Raw {
-                            text: String::new(),
-                            span: expr_span(&expr),
+                        let base_allows_single_bracket_call =
+                            matches!(expr, Expr::FieldAccess { .. });
+
+                        // Empty bracket-list call: `f[]` => `f []`
+                        if self.check_symbol("]") && base_allows_single_bracket_call {
+                            let end = self
+                                .expect_symbol("]", "expected ']' to close bracket list")
+                                .unwrap_or_else(|| expr_span(&expr));
+                            let list = Expr::List {
+                                items: Vec::new(),
+                                span: end.clone(),
+                            };
+                            let span = merge_span(expr_span(&expr), end);
+                            expr = Expr::Call {
+                                func: Box::new(expr),
+                                args: vec![list],
+                                span,
+                            };
+                            continue;
+                        }
+
+                        let first = self.parse_expr().unwrap_or_else(|| {
+                            let span = self.peek_span().unwrap_or_else(|| expr_span(&expr));
+                            self.emit_diag("E1529", "expected expression inside brackets", span.clone());
+                            Expr::Raw {
+                                text: String::new(),
+                                span,
+                            }
                         });
                         let first_span = expr_span(&first);
                         self.consume_newlines();
@@ -1671,6 +2066,27 @@ impl Parser {
                             );
                             let list = Expr::List {
                                 items,
+                                span: list_span.clone(),
+                            };
+                            let span = merge_span(expr_span(&expr), list_span);
+                            expr = Expr::Call {
+                                func: Box::new(expr),
+                                args: vec![list],
+                                span,
+                            };
+                        } else if base_allows_single_bracket_call {
+                            // Single-element bracket-list call: `f[x]` => `f [x]`
+                            let end = self.expect_symbol("]", "expected ']' to close bracket list");
+                            let list_span = merge_span(
+                                first_span.clone(),
+                                end.unwrap_or_else(|| first_span.clone()),
+                            );
+                            let list = Expr::List {
+                                items: vec![ListItem {
+                                    expr: first,
+                                    spread,
+                                    span: first_span.clone(),
+                                }],
                                 span: list_span.clone(),
                             };
                             let span = merge_span(expr_span(&expr), list_span);
@@ -2711,6 +3127,13 @@ impl Parser {
             }
             if self.match_keyword("loop") {
                 let loop_start = self.previous_span();
+                if !matches!(kind, BlockKind::Generate) {
+                    self.emit_diag(
+                        "E1533",
+                        "`loop` is only allowed inside `generate { ... }` blocks",
+                        loop_start.clone(),
+                    );
+                }
                 let _ = self.parse_pattern();
                 self.expect_symbol("=", "expected '=' in loop binding");
                 self.consume_newlines();
@@ -2731,21 +3154,46 @@ impl Parser {
                 continue;
             }
             if self.match_keyword("yield") {
+                let yield_kw = self.previous_span();
+                if !matches!(kind, BlockKind::Generate | BlockKind::Resource) {
+                    self.emit_diag(
+                        "E1534",
+                        "`yield` is only allowed inside `generate { ... }` or `resource { ... }` blocks",
+                        yield_kw.clone(),
+                    );
+                }
                 let expr = self.parse_expr().unwrap_or(Expr::Raw {
                     text: String::new(),
-                    span: self.previous_span(),
+                    span: yield_kw.clone(),
                 });
-                let span = merge_span(self.previous_span(), expr_span(&expr));
-                items.push(BlockItem::Yield { expr, span });
+                let span = merge_span(yield_kw, expr_span(&expr));
+                if matches!(kind, BlockKind::Generate | BlockKind::Resource) {
+                    items.push(BlockItem::Yield { expr, span });
+                } else {
+                    // Recovery: treat as a plain expression statement to keep parsing.
+                    items.push(BlockItem::Expr { expr, span });
+                }
                 continue;
             }
             if self.match_keyword("recurse") {
+                let recurse_kw = self.previous_span();
+                if !matches!(kind, BlockKind::Generate) {
+                    self.emit_diag(
+                        "E1535",
+                        "`recurse` is only allowed inside `generate { ... }` blocks",
+                        recurse_kw.clone(),
+                    );
+                }
                 let expr = self.parse_expr().unwrap_or(Expr::Raw {
                     text: String::new(),
-                    span: self.previous_span(),
+                    span: recurse_kw.clone(),
                 });
-                let span = merge_span(self.previous_span(), expr_span(&expr));
-                items.push(BlockItem::Recurse { expr, span });
+                let span = merge_span(recurse_kw, expr_span(&expr));
+                if matches!(kind, BlockKind::Generate) {
+                    items.push(BlockItem::Recurse { expr, span });
+                } else {
+                    items.push(BlockItem::Expr { expr, span });
+                }
                 continue;
             }
             let checkpoint = self.pos;
@@ -2755,6 +3203,20 @@ impl Parser {
                         text: String::new(),
                         span: pattern_span(&pattern),
                     });
+                    if !matches!(kind, BlockKind::Effect | BlockKind::Resource) {
+                        self.emit_diag(
+                            "E1536",
+                            "`<-` is only allowed inside `effect { ... }` or `resource { ... }` blocks",
+                            merge_span(pattern_span(&pattern), expr_span(&expr)),
+                        );
+                        let span = merge_span(pattern_span(&pattern), expr_span(&expr));
+                        items.push(BlockItem::Let {
+                            pattern,
+                            expr,
+                            span,
+                        });
+                        continue;
+                    }
                     let expr = if matches!(kind, BlockKind::Effect) && self.peek_keyword("or") {
                         // Disambiguation:
                         // - `x <- eff or | NotFound m => ...` is effect-fallback (patterns match E)
@@ -3426,7 +3888,7 @@ impl Parser {
             let span = self.previous_span();
             return Some(TypeExpr::Star { span });
         }
-        if let Some(name) = self.consume_ident() {
+        if let Some(name) = self.parse_dotted_name() {
             if name.name == "with" {
                 // `with` is reserved in type position (composition operator).
                 self.pos -= 1;
