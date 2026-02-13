@@ -46,6 +46,30 @@ fn position_for(text: &str, needle: &str) -> Position {
     Position::new(line, column)
 }
 
+fn position_after(text: &str, needle: &str) -> Position {
+    let pos = position_for(text, needle);
+    Position::new(pos.line, pos.character + needle.chars().count() as u32)
+}
+
+fn workspace_with_stdlib(names: &[&str]) -> HashMap<String, IndexedModule> {
+    let mut workspace = HashMap::new();
+    let modules = aivi::embedded_stdlib_modules();
+    for name in names {
+        let Some(module) = modules.iter().find(|m| m.name.name == *name) else {
+            panic!("expected embedded stdlib module {name}");
+        };
+        workspace.insert(
+            (*name).to_string(),
+            IndexedModule {
+                uri: Backend::stdlib_uri(name),
+                module: module.clone(),
+                text: None,
+            },
+        );
+    }
+    workspace
+}
+
 fn find_symbol_span(text: &str, name: &str) -> Span {
     let path = PathBuf::from("test.aivi");
     let (modules, _) = parse_modules(&path, text);
@@ -87,11 +111,52 @@ fn find_symbol_span(text: &str, name: &str) -> Span {
 fn completion_items_include_keywords_and_defs() {
     let text = sample_text();
     let uri = sample_uri();
-    let items = Backend::build_completion_items(text, &uri, &HashMap::new());
+    let items = Backend::build_completion_items(text, &uri, Position::new(0, 0), &HashMap::new());
     let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
     assert!(labels.contains(&"module"));
     assert!(labels.contains(&"examples.compiler.math"));
     assert!(labels.contains(&"add"));
+}
+
+#[test]
+fn completion_after_use_suggests_modules() {
+    let text = "module examples.app\nuse aivi.t";
+    let uri = sample_uri();
+    let workspace = workspace_with_stdlib(&["aivi", "aivi.text"]);
+    let position = position_after(text, "use aivi.t");
+    let items = Backend::build_completion_items(text, &uri, position, &workspace);
+    let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
+    assert!(labels.contains(&"aivi.text"));
+}
+
+#[test]
+fn completion_inside_use_import_list_suggests_remaining_exports() {
+    let text = "module examples.app\nuse aivi.text (length, isE";
+    let uri = sample_uri();
+    let workspace = workspace_with_stdlib(&["aivi.text"]);
+    let position = position_after(text, "use aivi.text (length, isE");
+    let items = Backend::build_completion_items(text, &uri, position, &workspace);
+    let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
+    assert!(
+        !labels.contains(&"length"),
+        "already imported export should be filtered"
+    );
+    assert!(
+        labels.contains(&"isEmpty"),
+        "expected export completion from module"
+    );
+}
+
+#[test]
+fn completion_after_qualified_module_name_suggests_exports() {
+    let text = "module examples.app\nrun = aivi.text.";
+    let uri = sample_uri();
+    let workspace = workspace_with_stdlib(&["aivi.text"]);
+    let position = position_after(text, "aivi.text.");
+    let items = Backend::build_completion_items(text, &uri, position, &workspace);
+    let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
+    assert!(labels.contains(&"length"));
+    assert!(labels.contains(&"isEmpty"));
 }
 
 #[test]

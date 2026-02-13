@@ -470,13 +470,14 @@ impl LanguageServer for Backend {
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
         let items = match self
             .with_document_text(&uri, |content| content.to_string())
             .await
         {
             Some(text) => {
                 let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_completion_items(&text, &uri, &workspace)
+                Self::build_completion_items(&text, &uri, position, &workspace)
             }
             None => Vec::new(),
         };
