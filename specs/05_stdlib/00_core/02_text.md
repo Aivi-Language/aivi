@@ -48,12 +48,12 @@ type TextError = InvalidEncoding Encoding
 
 | Function | Explanation |
 | --- | --- |
-| **contains** haystack needle<br><pre><code>`Text -> Text -> Bool`</code></pre> | Returns whether `needle` occurs in `haystack`. |
-| **startsWith** text prefix<br><pre><code>`Text -> Text -> Bool`</code></pre> | Returns whether `text` starts with `prefix`. |
-| **endsWith** text suffix<br><pre><code>`Text -> Text -> Bool`</code></pre> | Returns whether `text` ends with `suffix`. |
-| **indexOf** haystack needle<br><pre><code>`Text -> Text -> Option Int`</code></pre> | Returns the first index of `needle`, or `None` when not found. |
-| **lastIndexOf** haystack needle<br><pre><code>`Text -> Text -> Option Int`</code></pre> | Returns the last index of `needle`, or `None` when not found. |
-| **count** haystack needle<br><pre><code>`Text -> Text -> Int`</code></pre> | Returns the number of non-overlapping occurrences. |
+| **contains** needle haystack<br><pre><code>`Text -> Text -> Bool`</code></pre> | Returns whether `needle` occurs in `haystack`. |
+| **startsWith** prefix text<br><pre><code>`Text -> Text -> Bool`</code></pre> | Returns whether `text` starts with `prefix`. |
+| **endsWith** suffix text<br><pre><code>`Text -> Text -> Bool`</code></pre> | Returns whether `text` ends with `suffix`. |
+| **indexOf** needle haystack<br><pre><code>`Text -> Text -> Option Int`</code></pre> | Returns the first index of `needle`, or `None` when not found. |
+| **lastIndexOf** needle haystack<br><pre><code>`Text -> Text -> Option Int`</code></pre> | Returns the last index of `needle`, or `None` when not found. |
+| **count** needle haystack<br><pre><code>`Text -> Text -> Int`</code></pre> | Returns the number of non-overlapping occurrences. |
 | **compare** a b<br><pre><code>`Text -> Text -> Int`</code></pre> | Returns `-1`, `0`, or `1` in Unicode codepoint order (not locale-aware). |
 
 Notes:
@@ -89,16 +89,16 @@ Notes:
 
 | Function | Explanation |
 | --- | --- |
-| **replace** text needle replacement<br><pre><code>`Text -> Text -> Text -> Text`</code></pre> | Replaces the first occurrence of `needle`. |
-| **replaceAll** text needle replacement<br><pre><code>`Text -> Text -> Text -> Text`</code></pre> | Replaces all occurrences of `needle`. |
-| **remove** text needle<br><pre><code>`Text -> Text -> Text`</code></pre> | Removes all occurrences of `needle`. |
+| **replace** needle replacement text<br><pre><code>`Text -> Text -> Text -> Text`</code></pre> | Replaces the first occurrence of `needle`. |
+| **replaceAll** needle replacement text<br><pre><code>`Text -> Text -> Text -> Text`</code></pre> | Replaces all occurrences of `needle`. |
+| **remove** needle text<br><pre><code>`Text -> Text -> Text`</code></pre> | Removes all occurrences of `needle`. |
 | **repeat** count text<br><pre><code>`Int -> Text -> Text`</code></pre> | Repeats `text` `count` times. |
 | **reverse** text<br><pre><code>`Text -> Text`</code></pre> | Reverses grapheme clusters. |
 | **concat** parts<br><pre><code>`List Text -> Text`</code></pre> | Concatenates all parts into one `Text`. |
 
 Notes:
 - `replace` changes the first occurrence only.
-- `remove` is `replaceAll needle ""`.
+- `remove needle text` is `replaceAll needle "" text`.
 - `reverse` is grapheme-aware and may be linear-time with extra allocations.
 
 ### Case and normalization

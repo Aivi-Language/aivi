@@ -240,6 +240,7 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: 'Concurrency', link: '/06_runtime/01_concurrency' },
+          { text: 'Memory Management', link: '/06_runtime/02_memory_management' },
           { text: 'Package Manager (Cargo-backed)', link: '/06_runtime/03_package_manager' },
         ]
       },

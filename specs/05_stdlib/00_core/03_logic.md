@@ -23,9 +23,9 @@ class Setoid A = {
 ```
 
 ### Ord
-An `Ord` must be a `Setoid` and have a [total](https://en.wikipedia.org/wiki/Total_order) ordering.
+An `Ord` provides a [total](https://en.wikipedia.org/wiki/Total_order) ordering.
 ```aivi
-class Ord A = Setoid A & {
+class Ord A = {
   lte: A -> A -> Bool
 }
 ```
@@ -41,17 +41,17 @@ class Semigroup A = {
 ```
 
 ### Monoid
-A `Monoid` must be a `Semigroup` and have an `empty` value.
+A `Monoid` provides an `empty` value.
 ```aivi
-class Monoid A = Semigroup A & {
+class Monoid A = {
   empty: A
 }
 ```
 
 ### Group
-A `Group` must be a `Monoid` and have an `invert` operation.
+A `Group` provides an `invert` operation.
 ```aivi
-class Group A = Monoid A & {
+class Group A = {
   invert: A -> A
 }
 ```
@@ -77,34 +77,37 @@ class Category (F * *) = {
 ### Functor
 ```aivi
 class Functor (F *) = {
-  map: F A -> (A -> B) -> F B
+  map: (A -> B) -> F A -> F B
 }
 ```
 
 ### Apply
 ```aivi
-class Apply (F *) = Functor (F *) & {
-  ap: F A -> F (A -> B) -> F B
+class Apply (F *) = {
+  ap: F (A -> B) -> F A -> F B
 }
 ```
 
 ### Applicative
 ```aivi
-class Applicative (F *) = Apply (F *) & {
+class Applicative (F *) = {
   of: A -> F A
 }
 ```
 
 ### Chain
 ```aivi
-class Chain (F *) = Apply (F *) & {
-  chain: F A -> (A -> F B) -> F B
+class Chain (F *) = {
+  chain: (A -> F B) -> F A -> F B
 }
 ```
 
 ### Monad
 ```aivi
-class Monad (M *) = Applicative (M *) & Chain (M *)
+// In v0.1, `Monad` is a marker class used for constraints.
+class Monad (M *) = {
+  __monad: Unit
+}
 ```
 
 ## 5. Folds and Traversals
@@ -112,14 +115,14 @@ class Monad (M *) = Applicative (M *) & Chain (M *)
 ### Foldable
 ```aivi
 class Foldable (F *) = {
-  reduce: F A -> (B -> A -> B) -> B -> B
+  reduce: (B -> A -> B) -> B -> F A -> B
 }
 ```
 
 ### Traversable
 ```aivi
 class Traversable (T *) = {
-  traverse: T A -> (A -> F B) -> F (T B)
+  traverse: (A -> F B) -> T A -> F (T B)
 }
 ```
 
@@ -128,14 +131,14 @@ class Traversable (T *) = {
 ### Bifunctor
 ```aivi
 class Bifunctor (F * *) = {
-  bimap: F A B -> (A -> C) -> (B -> D) -> F C D
+  bimap: (A -> C) -> (B -> D) -> F A B -> F C D
 }
 ```
 
 ### Profunctor
 ```aivi
 class Profunctor (F * *) = {
-  promap: F B C -> (A -> B) -> (C -> D) -> F A D
+  promap: (A -> B) -> (C -> D) -> F B C -> F A D
 }
 ```
 
@@ -147,7 +150,7 @@ class Profunctor (F * *) = {
 use aivi.logic
 
 instance Functor (Option *) = {
-  map: opt f =>
+  map: f opt =>
     opt ?
       | None => None
       | Some x => Some (f x)
@@ -164,10 +167,13 @@ instance Semigroup Text = {
   concat: a b => text.concat [a, b]
 }
 
-instance Monoid Text = Semigroup Text & {
+instance Monoid Text = {
   empty: ""
 }
 ```
+
+Note:
+- In v0.1, the standard algebraic hierarchy is modeled as independent classes (no superclass constraints are enforced).
 
 ### `Effect` sequencing is `chain`/`bind`
 

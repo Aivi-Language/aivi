@@ -40,6 +40,7 @@ pub struct TypeSig {
 
 #[derive(Debug, Clone)]
 pub struct TypeDecl {
+    pub decorators: Vec<Decorator>,
     pub name: SpannedName,
     pub params: Vec<SpannedName>,
     pub constructors: Vec<TypeCtor>,
@@ -48,6 +49,7 @@ pub struct TypeDecl {
 
 #[derive(Debug, Clone)]
 pub struct TypeAlias {
+    pub decorators: Vec<Decorator>,
     pub name: SpannedName,
     pub params: Vec<SpannedName>,
     pub aliased: TypeExpr,
@@ -63,6 +65,7 @@ pub struct TypeCtor {
 
 #[derive(Debug, Clone)]
 pub struct ClassDecl {
+    pub decorators: Vec<Decorator>,
     pub name: SpannedName,
     pub params: Vec<TypeExpr>,
     pub supers: Vec<TypeExpr>,
@@ -79,6 +82,8 @@ pub struct ClassMember {
 
 #[derive(Debug, Clone)]
 pub struct InstanceDecl {
+    pub decorators: Vec<Decorator>,
+    pub label: Option<SpannedName>,
     pub name: SpannedName,
     pub params: Vec<TypeExpr>,
     pub defs: Vec<Def>,
@@ -87,6 +92,7 @@ pub struct InstanceDecl {
 
 #[derive(Debug, Clone)]
 pub struct DomainDecl {
+    pub decorators: Vec<Decorator>,
     pub name: SpannedName,
     pub over: TypeExpr,
     pub items: Vec<DomainItem>,

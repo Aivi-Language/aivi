@@ -92,6 +92,100 @@ module Example
 }
 
 #[test]
+fn parses_structured_sigil_map_literal() {
+    let src = r#"
+module Example
+
+x = ~map{ "a" => 1 }
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    assert!(
+        !matches!(def.expr, Expr::Literal(Literal::Sigil { tag, .. }) if tag == "map"),
+        "expected ~map{{...}} to parse as a structured literal, not a sigil literal"
+    );
+}
+
+#[test]
+fn parses_decorator_on_class_decl() {
+    let src = r#"
+module Example
+
+@inline
+class Functor (F *) = { map: (A -> B) -> F A -> F B }
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let class_decl = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::ClassDecl(class_decl) if class_decl.name.name == "Functor" => {
+                Some(class_decl)
+            }
+            _ => None,
+        })
+        .expect("Functor class decl");
+
+    assert_eq!(class_decl.decorators.len(), 1);
+    assert_eq!(class_decl.decorators[0].name.name, "inline");
+}
+
+#[test]
+fn parses_named_instance_decl() {
+    let src = r#"
+module Example
+
+instance MyFunctor : Functor (Option *) = {
+  map: f opt => opt
+}
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let instance_decl = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::InstanceDecl(instance_decl) => Some(instance_decl),
+            _ => None,
+        })
+        .expect("instance decl");
+
+    assert_eq!(instance_decl.name.name, "Functor");
+    assert_eq!(
+        instance_decl.label.as_ref().map(|name| name.name.as_str()),
+        Some("MyFunctor")
+    );
+}
+
+#[test]
 fn rejects_multiple_modules_per_file() {
     let src = r#"
 module A = {

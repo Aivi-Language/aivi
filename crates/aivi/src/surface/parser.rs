@@ -321,54 +321,26 @@ impl Parser {
                 continue;
             }
             if self.match_keyword("class") {
-                for decorator in decorators {
-                    self.emit_diag(
-                        "E1507",
-                        "decorators are not supported on `class` declarations yet",
-                        decorator.span,
-                    );
-                }
-                if let Some(class_decl) = self.parse_class_decl() {
+                if let Some(class_decl) = self.parse_class_decl(decorators) {
                     items.push(ModuleItem::ClassDecl(class_decl));
                 }
                 continue;
             }
             if self.match_keyword("instance") {
-                for decorator in decorators {
-                    self.emit_diag(
-                        "E1507",
-                        "decorators are not supported on `instance` declarations yet",
-                        decorator.span,
-                    );
-                }
-                if let Some(instance_decl) = self.parse_instance_decl() {
+                if let Some(instance_decl) = self.parse_instance_decl(decorators) {
                     items.push(ModuleItem::InstanceDecl(instance_decl));
                 }
                 continue;
             }
             if self.match_keyword("domain") {
-                for decorator in decorators {
-                    self.emit_diag(
-                        "E1507",
-                        "decorators are not supported on `domain` declarations yet",
-                        decorator.span,
-                    );
-                }
-                if let Some(domain) = self.parse_domain_decl() {
+                if let Some(domain) = self.parse_domain_decl(decorators) {
                     items.push(ModuleItem::DomainDecl(domain));
                 }
                 continue;
             }
 
             if self.match_keyword("type") {
-                for decorator in decorators {
-                    self.emit_diag(
-                        "E1507",
-                        "decorators are not supported on type declarations yet",
-                        decorator.span,
-                    );
-                }
-                if let Some(item) = self.parse_type_decl_or_alias() {
+                if let Some(item) = self.parse_type_decl_or_alias(decorators) {
                     items.push(item);
                 }
                 continue;
@@ -562,30 +534,23 @@ impl Parser {
             .map(|c| c.is_uppercase())
             .unwrap_or(false)
         {
-            for decorator in decorators {
-                self.emit_diag(
-                    "E1507",
-                    "decorators are not supported on type declarations yet",
-                    decorator.span,
-                );
-            }
             self.pos = checkpoint;
-            return self.parse_type_decl_or_alias();
+            return self.parse_type_decl_or_alias(decorators);
         }
         self.pos = checkpoint;
         self.parse_def(decorators).map(ModuleItem::Def)
     }
 
-    fn parse_type_decl_or_alias(&mut self) -> Option<ModuleItem> {
+    fn parse_type_decl_or_alias(&mut self, decorators: Vec<Decorator>) -> Option<ModuleItem> {
         let checkpoint = self.pos;
         let diag_checkpoint = self.diagnostics.len();
-        if let Some(decl) = self.parse_type_decl() {
+        if let Some(decl) = self.parse_type_decl(decorators.clone()) {
             if !decl.constructors.is_empty() {
                 return Some(ModuleItem::TypeDecl(decl));
             }
         }
         self.pos = checkpoint;
-        if let Some(alias) = self.parse_type_alias() {
+        if let Some(alias) = self.parse_type_alias(decorators) {
             if self.check_symbol("=>") {
                 self.pos = checkpoint;
                 self.diagnostics.truncate(diag_checkpoint);
@@ -597,7 +562,7 @@ impl Parser {
         None
     }
 
-    fn parse_type_decl(&mut self) -> Option<TypeDecl> {
+    fn parse_type_decl(&mut self, decorators: Vec<Decorator>) -> Option<TypeDecl> {
         let name = self.consume_ident()?;
         let mut params = Vec::new();
         while let Some(param) = self.consume_ident() {
@@ -677,6 +642,7 @@ impl Parser {
                 .unwrap_or(name.span.clone()),
         );
         Some(TypeDecl {
+            decorators,
             name,
             params,
             constructors: ctors,
@@ -684,7 +650,7 @@ impl Parser {
         })
     }
 
-    fn parse_type_alias(&mut self) -> Option<TypeAlias> {
+    fn parse_type_alias(&mut self, decorators: Vec<Decorator>) -> Option<TypeAlias> {
         let name = self.consume_ident()?;
         let mut params = Vec::new();
         while let Some(param) = self.consume_ident() {
@@ -696,6 +662,7 @@ impl Parser {
         });
         let span = merge_span(name.span.clone(), type_span(&aliased));
         Some(TypeAlias {
+            decorators,
             name,
             params,
             aliased,
@@ -703,7 +670,7 @@ impl Parser {
         })
     }
 
-    fn parse_class_decl(&mut self) -> Option<ClassDecl> {
+    fn parse_class_decl(&mut self, decorators: Vec<Decorator>) -> Option<ClassDecl> {
         let start = self.previous_span();
         let name = self.consume_ident()?;
         let mut params = Vec::new();
@@ -762,6 +729,7 @@ impl Parser {
 
         let span = merge_span(start, type_span(&body));
         Some(ClassDecl {
+            decorators,
             name,
             params,
             supers,
@@ -770,9 +738,23 @@ impl Parser {
         })
     }
 
-    fn parse_instance_decl(&mut self) -> Option<InstanceDecl> {
+    fn parse_instance_decl(&mut self, decorators: Vec<Decorator>) -> Option<InstanceDecl> {
         let start = self.previous_span();
-        let name = self.consume_ident()?;
+        let first = self.consume_ident()?;
+        let mut label = None;
+        let name = if self.consume_symbol(":") {
+            label = Some(first);
+            self.consume_ident().unwrap_or_else(|| {
+                let span = self.peek_span().unwrap_or_else(|| self.previous_span());
+                self.emit_diag("E1500", "expected class name after ':'", span.clone());
+                SpannedName {
+                    name: "<missing>".to_string(),
+                    span,
+                }
+            })
+        } else {
+            first
+        };
         let mut params = Vec::new();
         while !self.check_symbol("=") && self.pos < self.tokens.len() {
             if let Some(ty) = self.parse_type_atom() {
@@ -799,6 +781,8 @@ impl Parser {
         let end = self.expect_symbol("}", "expected '}' to close instance body");
         let span = merge_span(start, end.unwrap_or(name.span.clone()));
         Some(InstanceDecl {
+            decorators,
+            label,
             name,
             params,
             defs,
@@ -831,7 +815,7 @@ impl Parser {
         None
     }
 
-    fn parse_domain_decl(&mut self) -> Option<DomainDecl> {
+    fn parse_domain_decl(&mut self, decorators: Vec<Decorator>) -> Option<DomainDecl> {
         let start = self.previous_span();
         let name = self.consume_ident()?;
         self.expect_keyword("over", "expected 'over' in domain declaration");
@@ -850,14 +834,7 @@ impl Parser {
             let decorators = self.consume_decorators();
             self.validate_item_decorators(&decorators);
             if self.match_keyword("type") {
-                for decorator in &decorators {
-                    self.emit_diag(
-                        "E1507",
-                        "decorators are not supported on domain type declarations yet",
-                        decorator.span.clone(),
-                    );
-                }
-                if let Some(type_decl) = self.parse_type_decl() {
+                if let Some(type_decl) = self.parse_type_decl(decorators) {
                     items.push(DomainItem::TypeAlias(type_decl));
                     continue;
                 }
@@ -886,6 +863,7 @@ impl Parser {
         let end = self.expect_symbol("}", "expected '}' to close domain body");
         let span = merge_span(start, end.unwrap_or(name.span.clone()));
         Some(DomainDecl {
+            decorators,
             name,
             over,
             items,

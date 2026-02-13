@@ -64,9 +64,10 @@ class Chain (F *) = {
   chain: (A -> F B) -> F A -> F B
 }
 
-// NOTE: Without class inheritance syntax, we model `Monad` as a marker
-// class to avoid duplicating method names like `map`/`chain`/`of`, which
-// can lead to ambiguous resolution.
+// NOTE: Although class declarations can name superclasses, instances currently
+// must explicitly define every member (including inherited ones). We keep
+// `Monad` as a marker class to avoid forcing redundant `map`/`ap`/`of`/`chain`
+// definitions in every `Monad` instance.
 class Monad (M *) = {
   __monad: Unit
 }

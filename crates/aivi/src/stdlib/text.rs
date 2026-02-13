@@ -61,22 +61,22 @@ isLower : Char -> Bool
 isLower value = text.isLower value
 
 contains : Text -> Text -> Bool
-contains haystack needle = text.contains haystack needle
+contains needle haystack = text.contains haystack needle
 
 startsWith : Text -> Text -> Bool
-startsWith value prefix = text.startsWith value prefix
+startsWith prefix value = text.startsWith value prefix
 
 endsWith : Text -> Text -> Bool
-endsWith value suffix = text.endsWith value suffix
+endsWith suffix value = text.endsWith value suffix
 
 indexOf : Text -> Text -> Option Int
-indexOf haystack needle = text.indexOf haystack needle
+indexOf needle haystack = text.indexOf haystack needle
 
 lastIndexOf : Text -> Text -> Option Int
-lastIndexOf haystack needle = text.lastIndexOf haystack needle
+lastIndexOf needle haystack = text.lastIndexOf haystack needle
 
 count : Text -> Text -> Int
-count haystack needle = text.count haystack needle
+count needle haystack = text.count haystack needle
 
 compare : Text -> Text -> Int
 compare left right = text.compare left right
@@ -109,13 +109,13 @@ padEnd : Int -> Text -> Text -> Text
 padEnd width fill value = text.padEnd width fill value
 
 replace : Text -> Text -> Text -> Text
-replace value needle replacement = text.replace value needle replacement
+replace needle replacement value = text.replace value needle replacement
 
 replaceAll : Text -> Text -> Text -> Text
-replaceAll value needle replacement = text.replaceAll value needle replacement
+replaceAll needle replacement value = text.replaceAll value needle replacement
 
 remove : Text -> Text -> Text
-remove value needle = text.remove value needle
+remove needle value = text.remove value needle
 
 repeat : Int -> Text -> Text
 repeat count value = text.repeat count value
