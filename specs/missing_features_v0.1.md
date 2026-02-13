@@ -4,14 +4,6 @@ This document tracks features specified in the documentation but not yet impleme
 
 ## Standard Library
 
-### UI
-- (none)
-
-## Core Language Features
-- **Decorators**: Fully supported as specified in v0.1.
-    - Supported decorators: `@static`, `@inline`, `@deprecated`, `@mcp_tool`, `@mcp_resource`, `@test`, `@no_prelude`.
-    - User-defined decorators are correctly rejected.
-
 ## Test Coverage (v0.1)
 
 ### Strong Coverage
