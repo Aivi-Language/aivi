@@ -249,7 +249,10 @@ fn expand_module_aliases(modules: &mut [Module]) {
             },
             Expr::Call { func, args, span } => Expr::Call {
                 func: Box::new(rewrite_expr(*func, aliases)),
-                args: args.into_iter().map(|arg| rewrite_expr(arg, aliases)).collect(),
+                args: args
+                    .into_iter()
+                    .map(|arg| rewrite_expr(arg, aliases))
+                    .collect(),
                 span,
             },
             Expr::Lambda { params, body, span } => Expr::Lambda {
@@ -285,7 +288,12 @@ fn expand_module_aliases(modules: &mut [Module]) {
                 else_branch: Box::new(rewrite_expr(*else_branch, aliases)),
                 span,
             },
-            Expr::Binary { op, left, right, span } => Expr::Binary {
+            Expr::Binary {
+                op,
+                left,
+                right,
+                span,
+            } => Expr::Binary {
                 op,
                 left: Box::new(rewrite_expr(*left, aliases)),
                 right: Box::new(rewrite_expr(*right, aliases)),
@@ -296,12 +304,20 @@ fn expand_module_aliases(modules: &mut [Module]) {
                 items: items
                     .into_iter()
                     .map(|item| match item {
-                        BlockItem::Bind { pattern, expr, span } => BlockItem::Bind {
+                        BlockItem::Bind {
+                            pattern,
+                            expr,
+                            span,
+                        } => BlockItem::Bind {
                             pattern,
                             expr: rewrite_expr(expr, aliases),
                             span,
                         },
-                        BlockItem::Let { pattern, expr, span } => BlockItem::Let {
+                        BlockItem::Let {
+                            pattern,
+                            expr,
+                            span,
+                        } => BlockItem::Let {
                             pattern,
                             expr: rewrite_expr(expr, aliases),
                             span,
@@ -326,7 +342,9 @@ fn expand_module_aliases(modules: &mut [Module]) {
                     .collect(),
                 span,
             },
-            Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => expr,
+            Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => {
+                expr
+            }
         }
     }
 
@@ -1208,11 +1226,54 @@ impl Parser {
         //   class Monad (M *) =
         //     Functor (M *) with { pure: A -> M A }
         //
-        // We parse the RHS as a type expression, then treat record-type operands as the class
-        // member set and non-record operands as superclasses.
-        let body = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
-            span: name.span.clone(),
-        });
+        // Extended:
+        //   class Collection (C *) = with (A: Eq) { unique: C A -> C A }
+        //   class Monad (M *) = Applicative (M *) with (A: Eq, B: Show) { bind: ... }
+        //
+        // We parse:
+        // - an optional superclass/type-composition chain (`... with ...`)
+        // - an optional constraint clause (`with (A: Eq, ...)`)
+        // - an optional record type for members (`{ ... }` or `with { ... }`)
+        //
+        // For backward compatibility, record-type operands that appear as part of the superclass
+        // chain (e.g. `Super with { ... }`) still contribute members.
+        fn peek_is_with_constraints(parser: &Parser) -> bool {
+            if !parser.peek_keyword("with") {
+                return false;
+            }
+            parser
+                .tokens
+                .get(parser.pos + 1)
+                .is_some_and(|tok| tok.kind == TokenKind::Symbol && tok.text == "(")
+        }
+
+        let mut body_opt: Option<TypeExpr> = None;
+        if !self.check_symbol("{") && !peek_is_with_constraints(self) {
+            // Parse a `with`-separated chain, but stop before `with (...)` constraints.
+            if let Some(first) = self.parse_type_pipe() {
+                let mut items = vec![first];
+                loop {
+                    self.consume_newlines();
+                    if peek_is_with_constraints(self) {
+                        break;
+                    }
+                    if self.consume_ident_text("with").is_none() {
+                        break;
+                    }
+                    self.consume_newlines();
+                    let rhs = self.parse_type_pipe().unwrap_or(TypeExpr::Unknown {
+                        span: type_span(items.last().unwrap()),
+                    });
+                    items.push(rhs);
+                }
+                body_opt = Some(if items.len() == 1 {
+                    items.remove(0)
+                } else {
+                    let span = merge_span(type_span(&items[0]), type_span(items.last().unwrap()));
+                    TypeExpr::And { items, span }
+                });
+            }
+        }
 
         fn flatten_and(ty: TypeExpr, out: &mut Vec<TypeExpr>) {
             match ty {
@@ -1226,7 +1287,9 @@ impl Parser {
         }
 
         let mut parts = Vec::new();
-        flatten_and(body.clone(), &mut parts);
+        if let Some(body) = body_opt.clone() {
+            flatten_and(body, &mut parts);
+        }
 
         let mut supers = Vec::new();
         let mut members = Vec::new();
@@ -1242,15 +1305,77 @@ impl Parser {
                         });
                     }
                 }
+                TypeExpr::Unknown { .. } => {}
                 other => supers.push(other),
             }
         }
 
-        let span = merge_span(start, type_span(&body));
+        // Parse optional `with (...)` constraint clause.
+        let mut constraints = Vec::new();
+        self.consume_newlines();
+        if peek_is_with_constraints(self) {
+            let with_span = self.consume_ident_text("with").unwrap().span;
+            self.expect_symbol("(", "expected '(' after 'with' in class constraints");
+            self.consume_newlines();
+            while self.pos < self.tokens.len() && !self.check_symbol(")") {
+                self.consume_newlines();
+                let var = match self.consume_ident() {
+                    Some(var) => var,
+                    None => break,
+                };
+                self.consume_newlines();
+                self.expect_symbol(":", "expected ':' in class type-variable constraint");
+                self.consume_newlines();
+                let class = self.consume_ident().unwrap_or(SpannedName {
+                    name: String::new(),
+                    span: var.span.clone(),
+                });
+                let span = merge_span(var.span.clone(), class.span.clone());
+                constraints.push(crate::surface::TypeVarConstraint { var, class, span });
+                self.consume_newlines();
+                if self.consume_symbol(",") {
+                    self.consume_newlines();
+                    continue;
+                }
+            }
+            let end = self.expect_symbol(")", "expected ')' to close class constraints");
+            if let Some(end) = end {
+                let _ = merge_span(with_span, end);
+            }
+        }
+
+        // Parse optional trailing member record (`{ ... }` or `with { ... }`).
+        self.consume_newlines();
+        if self.peek_keyword("with")
+            && self
+                .tokens
+                .get(self.pos + 1)
+                .is_some_and(|tok| tok.kind == TokenKind::Symbol && tok.text == "{")
+        {
+            let _ = self.consume_ident_text("with");
+            self.consume_newlines();
+        }
+        if self.check_symbol("{") {
+            if let Some(TypeExpr::Record { fields, .. }) = self.parse_type_atom() {
+                for (field_name, field_ty) in fields {
+                    let span = merge_span(field_name.span.clone(), type_span(&field_ty));
+                    members.push(ClassMember {
+                        name: field_name,
+                        ty: field_ty,
+                        span,
+                    });
+                }
+            } else {
+                self.expect_symbol("{", "expected '{' to start class member set");
+            }
+        }
+
+        let span = merge_span(start, self.previous_span());
         Some(ClassDecl {
             decorators,
             name,
             params,
+            constraints,
             supers,
             members,
             span,
@@ -2026,7 +2151,11 @@ impl Parser {
 
                         let first = self.parse_expr().unwrap_or_else(|| {
                             let span = self.peek_span().unwrap_or_else(|| expr_span(&expr));
-                            self.emit_diag("E1529", "expected expression inside brackets", span.clone());
+                            self.emit_diag(
+                                "E1529",
+                                "expected expression inside brackets",
+                                span.clone(),
+                            );
                             Expr::Raw {
                                 text: String::new(),
                                 span,
@@ -3203,10 +3332,13 @@ impl Parser {
                         text: String::new(),
                         span: pattern_span(&pattern),
                     });
-                    if !matches!(kind, BlockKind::Effect | BlockKind::Resource) {
+                    if !matches!(
+                        kind,
+                        BlockKind::Effect | BlockKind::Generate | BlockKind::Resource
+                    ) {
                         self.emit_diag(
                             "E1536",
-                            "`<-` is only allowed inside `effect { ... }` or `resource { ... }` blocks",
+                            "`<-` is only allowed inside `effect { ... }`, `generate { ... }`, or `resource { ... }` blocks",
                             merge_span(pattern_span(&pattern), expr_span(&expr)),
                         );
                         let span = merge_span(pattern_span(&pattern), expr_span(&expr));

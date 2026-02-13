@@ -69,8 +69,16 @@ pub struct ClassDecl {
     pub decorators: Vec<Decorator>,
     pub name: SpannedName,
     pub params: Vec<TypeExpr>,
+    pub constraints: Vec<TypeVarConstraint>,
     pub supers: Vec<TypeExpr>,
     pub members: Vec<ClassMember>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct TypeVarConstraint {
+    pub var: SpannedName,
+    pub class: SpannedName,
     pub span: Span,
 }
 

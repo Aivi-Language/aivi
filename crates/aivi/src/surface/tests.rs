@@ -439,6 +439,42 @@ instance Functor (Option *) = {
 }
 
 #[test]
+fn parses_class_type_variable_constraints() {
+    let src = r#"
+module Example
+
+class Collection (C *) = with (A: Eq, B: Show) {
+  elem: A -> C A -> Bool
+  render: B -> Text
+}
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let class_decl = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::ClassDecl(class_decl) if class_decl.name.name == "Collection" => {
+                Some(class_decl)
+            }
+            _ => None,
+        })
+        .expect("Collection class decl");
+
+    assert_eq!(class_decl.constraints.len(), 2);
+    assert_eq!(class_decl.constraints[0].var.name, "A");
+    assert_eq!(class_decl.constraints[0].class.name, "Eq");
+    assert_eq!(class_decl.constraints[1].var.name, "B");
+    assert_eq!(class_decl.constraints[1].class.name, "Show");
+}
+
+#[test]
 fn rejects_multiple_modules_per_file() {
     let src = r#"
 module A = {

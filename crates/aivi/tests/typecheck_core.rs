@@ -496,9 +496,7 @@ value = Some 1 ?
     let mut module_diags = check_modules(&modules);
     module_diags.extend(check_types(&modules));
     assert!(
-        module_diags
-            .iter()
-            .any(|d| d.diagnostic.code == "E3100"),
+        module_diags.iter().any(|d| d.diagnostic.code == "E3100"),
         "expected E3100 non-exhaustive match diagnostic, got: {module_diags:?}"
     );
 }
@@ -524,9 +522,7 @@ value = Some 1 ?
     let mut module_diags = check_modules(&modules);
     module_diags.extend(check_types(&modules));
     assert!(
-        module_diags
-            .iter()
-            .any(|d| d.diagnostic.code == "W3101"),
+        module_diags.iter().any(|d| d.diagnostic.code == "W3101"),
         "expected W3101 unreachable arm warning, got: {module_diags:?}"
     );
 }
@@ -552,10 +548,9 @@ bad = True + False
         "expected errors, got: {module_diags:?}"
     );
     assert!(
-        module_diags.iter().any(|d| d
-            .diagnostic
-            .message
-            .contains("no domain operator '+'")),
+        module_diags
+            .iter()
+            .any(|d| d.diagnostic.message.contains("no domain operator '+'")),
         "expected missing domain operator message, got: {module_diags:?}"
     );
 }

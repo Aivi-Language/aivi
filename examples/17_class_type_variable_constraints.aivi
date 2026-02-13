@@ -1,0 +1,33 @@
+module examples.compiler.classTypeVariableConstraints
+export Eq, NeedsEq
+
+// A tiny typeclass, used only to demonstrate constrained member variables.
+class Eq A = {
+  eq: A -> A -> Bool
+}
+
+// Instances that can be distinguished at runtime by constructor patterns.
+instance Eq (Option X) = {
+  eq: x y =>
+  (x, y) ?
+    | (None, None)     => True
+    | (Some _, Some _) => True
+    | _                => False
+}
+
+instance Eq (Result E X) = {
+  eq: x y =>
+  (x, y) ?
+    | (Ok _, Ok _)   => True
+    | (Err _, Err _) => True
+    | _              => False
+}
+
+// `with (A: Eq)` constrains the member type variable `A`.
+class NeedsEq = with (A: Eq) {
+  same: A -> Bool
+}
+
+instance NeedsEq = {
+  same: x => eq x x
+}

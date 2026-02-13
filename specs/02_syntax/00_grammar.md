@@ -121,10 +121,18 @@ Operator       := "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | "<=" | ">" |
                | "|" | "^" | "~" | "<<" | ">>"
 DeltaLitBinding:= SuffixedNumberLit "=" Expr Sep
 
-ClassDef       := "class" UpperIdent ClassParams "=" Type Sep
+ClassDef       := "class" UpperIdent ClassParams "=" ClassRhs Sep
 ClassParams    := ClassParam { ClassParam }
 ClassParam     := UpperIdent
                | "(" UpperIdent "*" { "*" } ")"
+
+(* Classes are records of methods ("dictionaries") with optional superclass composition.
+   A class may also declare constraints on the type variables used in its member signatures. *)
+ClassRhs       := [ ClassSupers ] [ ClassConstraints ] ClassMembers
+ClassSupers    := TypeExpr { "with" TypeExpr }
+ClassConstraints := "with" "(" TypeVarConstraint { "," TypeVarConstraint } ")"
+TypeVarConstraint := UpperIdent ":" UpperIdent
+ClassMembers   := [ "with" ] RecordType
 
 InstanceDef    := "instance" UpperIdent InstanceHead "=" RecordLit Sep
 InstanceHead   := "(" Type ")"

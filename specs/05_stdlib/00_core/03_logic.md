@@ -97,6 +97,10 @@ A `Group` provides an `invert` operation.
 
 <<< ../../snippets/from_md/05_stdlib/00_core/03_logic/block_18.aivi{aivi}
 
+### Implementing a new `Monad`: `Id`
+
+<<< ../../snippets/from_md/05_stdlib/00_core/03_logic/block_21.aivi{aivi}
+
 ### `Monoid` for `Text`
 
 <<< ../../snippets/from_md/05_stdlib/00_core/03_logic/block_19.aivi{aivi}

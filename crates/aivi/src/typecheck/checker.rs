@@ -24,6 +24,7 @@ pub(super) struct TypeChecker {
     pub(super) classes: HashMap<String, ClassDeclInfo>,
     pub(super) instances: Vec<InstanceDeclInfo>,
     method_to_classes: HashMap<String, Vec<String>>,
+    assumed_class_constraints: Vec<(String, TypeVarId)>,
     current_module_path: String,
     extra_diagnostics: Vec<FileDiagnostic>,
     adt_constructors: HashMap<String, Vec<String>>,
@@ -42,6 +43,7 @@ impl TypeChecker {
             classes: HashMap::new(),
             instances: Vec::new(),
             method_to_classes: HashMap::new(),
+            assumed_class_constraints: Vec::new(),
             current_module_path: String::new(),
             extra_diagnostics: Vec::new(),
             adt_constructors: HashMap::new(),
@@ -61,6 +63,7 @@ impl TypeChecker {
         self.classes.clear();
         self.instances.clear();
         self.method_to_classes.clear();
+        self.assumed_class_constraints.clear();
         self.extra_diagnostics.clear();
         self.adt_constructors.clear();
         self.current_module_path = _module.path.clone();
@@ -842,21 +845,80 @@ impl TypeChecker {
             let mut local_env = env.clone();
             local_env.insert(def.name.name.clone(), Scheme::mono(expected.clone()));
 
-            let inferred = if def.params.is_empty() {
-                self.infer_expr(&expr, &mut local_env)
-            } else {
-                self.infer_lambda(&def.params, &expr, &mut local_env)
-            };
+            let assumed_constraints: Vec<(String, TypeVarId)> = class_info
+                .constraints
+                .iter()
+                .filter_map(|(var_name, class_name)| {
+                    ctx.type_vars
+                        .get(var_name)
+                        .map(|id| (class_name.clone(), *id))
+                })
+                .collect();
+            let old_assumed =
+                std::mem::replace(&mut self.assumed_class_constraints, assumed_constraints);
 
-            match inferred {
-                Ok(inferred) => {
-                    if let Err(err) = self.unify_with_span(inferred, expected, def.span.clone()) {
-                        diagnostics.push(self.error_to_diag(module, err));
+            let result: Result<(), TypeError> = (|| {
+                // Instance methods are often written as `name: x y => ...` (a lambda expression).
+                // When an expected member type exists, unify parameter patterns against it so
+                // member-level type-variable constraints can participate in overload checking.
+                if !def.params.is_empty() {
+                    let mut remaining = expected.clone();
+                    for param in &def.params {
+                        let remaining_applied = self.apply(remaining);
+                        let remaining_norm = self.expand_alias(remaining_applied);
+                        let Type::Func(expected_param, expected_rest) = remaining_norm else {
+                            return Err(TypeError {
+                                span: def.span.clone(),
+                                message: format!(
+                                    "expected function type for instance method '{}'",
+                                    def.name.name
+                                ),
+                                expected: None,
+                                found: None,
+                            });
+                        };
+                        let pat_ty = self.infer_pattern(param, &mut local_env)?;
+                        self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
+                        remaining = *expected_rest;
                     }
+                    let body_ty = self.infer_expr(&expr, &mut local_env)?;
+                    self.unify_with_span(body_ty, remaining, expr_span(&expr))?;
+                    return Ok(());
                 }
-                Err(err) => {
-                    diagnostics.push(self.error_to_diag(module, err));
+
+                if let Expr::Lambda { params, body, .. } = &expr {
+                    let mut remaining = expected.clone();
+                    for param in params {
+                        let remaining_applied = self.apply(remaining);
+                        let remaining_norm = self.expand_alias(remaining_applied);
+                        let Type::Func(expected_param, expected_rest) = remaining_norm else {
+                            return Err(TypeError {
+                                span: def.span.clone(),
+                                message: format!(
+                                    "expected function type for instance method '{}'",
+                                    def.name.name
+                                ),
+                                expected: None,
+                                found: None,
+                            });
+                        };
+                        let pat_ty = self.infer_pattern(param, &mut local_env)?;
+                        self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
+                        remaining = *expected_rest;
+                    }
+                    let body_ty = self.infer_expr(body, &mut local_env)?;
+                    self.unify_with_span(body_ty, remaining, expr_span(body))?;
+                    return Ok(());
                 }
+
+                let inferred = self.infer_expr(&expr, &mut local_env)?;
+                self.unify_with_span(inferred, expected, def.span.clone())?;
+                Ok(())
+            })();
+
+            self.assumed_class_constraints = old_assumed;
+            if let Err(err) = result {
+                diagnostics.push(self.error_to_diag(module, err));
             }
 
             self.subst = base_subst;
@@ -1149,7 +1211,10 @@ impl TypeChecker {
             Expr::Call { func, args, .. } => self.infer_call(func, args, env),
             Expr::Lambda { params, body, .. } => self.infer_lambda(params, body, env),
             Expr::Match {
-                scrutinee, arms, span, ..
+                scrutinee,
+                arms,
+                span,
+                ..
             } => self.infer_match(scrutinee, arms, span, env),
             Expr::If {
                 cond,
@@ -1784,7 +1849,7 @@ impl TypeChecker {
         let base_subst = self.subst.clone();
         let mut candidates: Vec<(HashMap<TypeVarId, Type>, Type)> = Vec::new();
 
-        for class_name in classes {
+        for class_name in classes.iter().cloned() {
             let Some(class_info) = self.classes.get(&class_name).cloned() else {
                 continue;
             };
@@ -1842,21 +1907,84 @@ impl TypeChecker {
         }
 
         self.subst = base_subst;
-        match candidates.len() {
-            0 => Err(TypeError {
+        if candidates.len() == 1 {
+            let (subst, result) = candidates.remove(0);
+            self.subst = subst;
+            return Ok(result);
+        }
+
+        // If instance selection fails due to polymorphism, allow the call when a matching class
+        // constraint is in scope for one of the argument type variables.
+        //
+        // This supports class members that require constraints like `with (A: Eq)` where method
+        // bodies can call `eq` on `A` without committing to a particular instance upfront.
+        let arg_tys_applied: Vec<Type> = arg_tys.into_iter().map(|ty| self.apply(ty)).collect();
+        let arg_var_ids: HashSet<TypeVarId> = arg_tys_applied
+            .iter()
+            .filter_map(|ty| match ty {
+                Type::Var(id) => Some(*id),
+                _ => None,
+            })
+            .collect();
+
+        let mut constrained_candidates: Vec<(HashMap<TypeVarId, Type>, Type)> = Vec::new();
+        for class_name in classes.iter().cloned() {
+            if !self
+                .assumed_class_constraints
+                .iter()
+                .any(|(constraint_class, constraint_var)| {
+                    constraint_class == &class_name && arg_var_ids.contains(constraint_var)
+                })
+            {
+                continue;
+            }
+            let Some(class_info) = self.classes.get(&class_name).cloned() else {
+                continue;
+            };
+            let Some(member_ty_expr) = class_info.members.get(&method.name).cloned() else {
+                continue;
+            };
+
+            let base_subst = self.subst.clone();
+            let mut ctx = TypeContext::new(&self.type_constructors);
+            let member_ty = self.type_from_expr(&member_ty_expr, &mut ctx);
+
+            let result_ty = self.fresh_var();
+            let mut expected = result_ty.clone();
+            for arg_ty in arg_tys_applied.iter().rev() {
+                expected = Type::Func(Box::new(arg_ty.clone()), Box::new(expected));
+            }
+
+            if self
+                .unify_with_span(member_ty, expected, method.span.clone())
+                .is_ok()
+            {
+                constrained_candidates.push((self.subst.clone(), self.apply(result_ty)));
+            }
+            self.subst = base_subst;
+        }
+
+        match (candidates.len(), constrained_candidates.len()) {
+            (_, 1) => {
+                let (subst, result) = constrained_candidates.remove(0);
+                self.subst = subst;
+                Ok(result)
+            }
+            (0, 0) => Err(TypeError {
                 span: method.span.clone(),
                 message: format!("no instance found for method '{}'", method.name),
                 expected: None,
                 found: None,
             }),
-            1 => {
-                let (subst, result) = candidates.remove(0);
-                self.subst = subst;
-                Ok(result)
-            }
-            _ => Err(TypeError {
+            (_, 0) => Err(TypeError {
                 span: method.span.clone(),
                 message: format!("ambiguous instance for method '{}'", method.name),
+                expected: None,
+                found: None,
+            }),
+            _ => Err(TypeError {
+                span: method.span.clone(),
+                message: format!("ambiguous constrained call for method '{}'", method.name),
                 expected: None,
                 found: None,
             }),
@@ -1938,9 +2066,9 @@ impl TypeChecker {
                     continue;
                 }
                 if let Pattern::Constructor { name, ref args, .. } = &arm.pattern {
-                    let ctor_catch_all = args.iter().all(|arg| {
-                        matches!(arg, Pattern::Wildcard(_) | Pattern::Ident(_))
-                    });
+                    let ctor_catch_all = args
+                        .iter()
+                        .all(|arg| matches!(arg, Pattern::Wildcard(_) | Pattern::Ident(_)));
                     if ctor_catch_all {
                         covered_ctors.insert(name.name.clone());
                     }
@@ -2065,7 +2193,8 @@ impl TypeChecker {
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
 
                 if !both_int {
-                    let any_var = matches!(left_applied, Type::Var(_)) || matches!(right_applied, Type::Var(_));
+                    let any_var = matches!(left_applied, Type::Var(_))
+                        || matches!(right_applied, Type::Var(_));
                     let concrete_non_int = matches!(left_applied, Type::Con(ref name, _) if name != "Int")
                         || matches!(right_applied, Type::Con(ref name, _) if name != "Int");
                     if let Some(scheme) = env.get(&op_name) {
@@ -2112,7 +2241,8 @@ impl TypeChecker {
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
 
                 if !both_int {
-                    let any_var = matches!(left_applied, Type::Var(_)) || matches!(right_applied, Type::Var(_));
+                    let any_var = matches!(left_applied, Type::Var(_))
+                        || matches!(right_applied, Type::Var(_));
                     let concrete_non_int = matches!(left_applied, Type::Con(ref name, _) if name != "Int")
                         || matches!(right_applied, Type::Con(ref name, _) if name != "Int");
                     if let Some(scheme) = env.get(&op_name) {

@@ -117,6 +117,13 @@ desugars to:
 
 <<< ../snippets/from_md/02_syntax/03_types/block_17.aivi{aivi}
 
+### Type Variable Constraints
+
+Class declarations may attach constraints to the **type variables used in member signatures**
+using `with (...)`:
+
+<<< ../snippets/from_md/02_syntax/03_types/block_21.aivi{aivi}
+
 `A with B` in type position denotes **record/type composition** (an intersection-like merge). It is primarily used for class inheritance and trait aggregation in v0.1.
 
 Instances:

@@ -6,6 +6,8 @@ use crate::surface::{DomainItem, Module, ModuleItem, TypeExpr};
 mod builtins;
 mod checker;
 #[cfg(test)]
+mod class_constraints_tests;
+#[cfg(test)]
 mod expected_coercions_tests;
 mod types;
 
@@ -16,6 +18,7 @@ use self::types::Scheme;
 struct ClassDeclInfo {
     params: Vec<TypeExpr>,
     supers: Vec<TypeExpr>,
+    constraints: Vec<(String, String)>,
     members: HashMap<String, TypeExpr>,
 }
 
@@ -37,11 +40,17 @@ fn collect_local_class_env(
                 for member in &class_decl.members {
                     members.insert(member.name.name.clone(), member.ty.clone());
                 }
+                let constraints = class_decl
+                    .constraints
+                    .iter()
+                    .map(|constraint| (constraint.var.name.clone(), constraint.class.name.clone()))
+                    .collect();
                 classes.insert(
                     class_decl.name.name.clone(),
                     ClassDeclInfo {
                         params: class_decl.params.clone(),
                         supers: class_decl.supers.clone(),
+                        constraints,
                         members,
                     },
                 );

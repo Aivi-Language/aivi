@@ -267,7 +267,9 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
     for item in &module.items {
         match item {
             ModuleItem::TypeSig(TypeSig { ty, .. }) => collect_type_expr(ty, &mut out),
-            ModuleItem::TypeAlias(TypeAlias { aliased, .. }) => collect_type_expr(aliased, &mut out),
+            ModuleItem::TypeAlias(TypeAlias { aliased, .. }) => {
+                collect_type_expr(aliased, &mut out)
+            }
             ModuleItem::TypeDecl(TypeDecl { constructors, .. }) => {
                 for ctor in constructors {
                     for arg in &ctor.args {
