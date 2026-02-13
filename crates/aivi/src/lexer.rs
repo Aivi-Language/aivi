@@ -417,7 +417,7 @@ fn lex_sigil_multiline(
 
     // Default: single-line sigils (to avoid swallowing the rest of the file on a missing close).
     index += 1; // consume opener
-    let mut line = start_line;
+    let line = start_line;
     let mut col = start_col + (index - start);
     let mut closed = false;
     while index < chars.len() {

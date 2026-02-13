@@ -2080,7 +2080,7 @@ impl Parser {
             this.emit_diag("E1600", message, sigil.span.clone());
         };
 
-        let mut push_node =
+        let push_node =
             |node: HtmlNode,
              nodes: &mut Vec<HtmlNode>,
              stack: &mut Vec<(String, Vec<HtmlAttr>, Vec<HtmlNode>)>| {
