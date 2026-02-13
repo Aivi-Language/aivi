@@ -2,8 +2,6 @@
 
 This document tracks features specified in the documentation but not yet implemented (or only partially implemented) in the v0.1 codebase.
 
-## Standard Library
-
 ## Test Coverage (v0.1)
 
 ### Strong Coverage

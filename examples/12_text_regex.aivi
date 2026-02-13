@@ -3,7 +3,7 @@ export main
 
 use aivi.console (print)
 use aivi.text
-use aivi.regex
+use aivi.regex (compile, test)
 
 main : Effect Text Unit
 main = effect {

@@ -119,6 +119,86 @@ fn completion_items_include_keywords_and_defs() {
     assert!(labels.contains(&"add"));
 }
 
+fn collect_aivi_files(dir: &std::path::Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_aivi_files(&path, out);
+        } else if path.extension().and_then(|s| s.to_str()) == Some("aivi") {
+            out.push(path);
+        }
+    }
+}
+
+#[test]
+fn examples_open_without_lsp_errors() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("repo root");
+    let examples_dir = repo_root.join("examples");
+
+    let mut files = Vec::new();
+    collect_aivi_files(&examples_dir, &mut files);
+    files.sort();
+    assert!(!files.is_empty(), "expected examples/**/*.aivi");
+
+    // Build a workspace index from all example modules so `use ...` across examples resolves.
+    let mut workspace = HashMap::new();
+    for path in &files {
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let (modules, _diags) = parse_modules(path, &text);
+        let Ok(uri) = Url::from_file_path(path) else {
+            continue;
+        };
+        for module in modules {
+            workspace.insert(
+                module.name.name.clone(),
+                IndexedModule {
+                    uri: uri.clone(),
+                    module,
+                    text: Some(text.clone()),
+                },
+            );
+        }
+    }
+
+    let mut failures = Vec::new();
+    for path in files {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(uri) = Url::from_file_path(&path) else {
+            continue;
+        };
+        let diags = Backend::build_diagnostics_with_workspace(&text, &uri, &workspace);
+        let errors: Vec<_> = diags
+            .into_iter()
+            .filter(|d| d.severity == Some(DiagnosticSeverity::ERROR))
+            .collect();
+        if errors.is_empty() {
+            continue;
+        }
+        let mut msg = format!("{}:", path.display());
+        for diag in errors.iter().take(5) {
+            msg.push_str(&format!(" {}", diag.message));
+        }
+        failures.push(msg);
+    }
+
+    assert!(
+        failures.is_empty(),
+        "expected no ERROR diagnostics from aivi-lsp for examples; got:\n{}",
+        failures.join("\n")
+    );
+}
+
 #[test]
 fn completion_after_use_suggests_modules() {
     let text = "module examples.app\nuse aivi.t";

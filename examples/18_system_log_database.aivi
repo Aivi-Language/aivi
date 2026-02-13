@@ -1,31 +1,31 @@
 module examples.system_log_database
 export main
 
-use aivi (database)
-use aivi (logger)
+use aivi.database as db
 use aivi.system (env)
-use aivi.text
 
 User = { id: Int, name: Text, active: Bool }
 
-userTable = (database.table "users")[
-  { name: "id", type: IntType, constraints: [NotNull], default: None },
-  { name: "name", type: Varchar 64, constraints: [NotNull], default: None },
-  { name: "active", type: BoolType, constraints: [NotNull], default: Some (DefaultBool False) }
+userTable = (db.table "users")[
+  { name: "id", type: db.IntType, constraints: [db.NotNull], default: None },
+  { name: "name", type: db.Varchar 64, constraints: [db.NotNull], default: None },
+  {
+    name: "active",
+    type: db.BoolType,
+    constraints: [db.NotNull],
+    default: Some (db.DefaultBool False)
+  }
 ]
 
 main : Effect Text Unit
 main = effect {
   envValue <- env.get "APP_ENV"
 
-  table1 <- database.applyDelta userTable (database.ins { id: 1, name: "Ada", active: False })
-  table2 <- database.applyDelta table1 (database.ins { id: 2, name: "Lin", active: True })
-  table3 <- database.applyDelta table2 (database.upd (u => u.active == False) (u => u <| { active: True }))
-
-  rows <- database.load table3
-
-  _ <- (logger.info "users updated")[
-    ("env", text.toText envValue),
-    ("rows", text.toText rows)
-  ]
+  table1 <- db.applyDelta userTable (db.ins { id: 1, name: "Ada", active: False })
+  table2 <- db.applyDelta table1 (db.ins { id: 2, name: "Lin", active: True })
+  table3 = table2
+ 
+  rows <- db.load table3
+ 
+  _ <- print "users updated env={envValue} rows={rows}\n"
 }

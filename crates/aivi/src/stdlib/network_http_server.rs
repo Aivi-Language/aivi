@@ -20,7 +20,7 @@ WsError = { message: Text }
 type WsMessage = TextMsg Text | BinaryMsg (List Int) | Ping | Pong | Close
 type ServerReply = Http Response | Ws (WebSocket -> Effect WsError Unit)
 
-listen : ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource Server
+listen : ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource HttpError Server
 listen config handler = resource {
   server <- httpServer.listen config handler
   yield server

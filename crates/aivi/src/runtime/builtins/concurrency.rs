@@ -44,10 +44,7 @@ pub(super) fn build_channel_record() -> Value {
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     if sender.inner.closed.load(Ordering::SeqCst) {
-                        return Err(RuntimeError::Error(Value::Constructor {
-                            name: "Closed".to_string(),
-                            args: Vec::new(),
-                        }));
+                        return Err(RuntimeError::Message("channel is closed".to_string()));
                     }
                     let sender_guard = sender
                         .inner
@@ -56,17 +53,11 @@ pub(super) fn build_channel_record() -> Value {
                         .map_err(|_| RuntimeError::Message("channel poisoned".to_string()))?;
                     if let Some(sender) = sender_guard.as_ref() {
                         sender.send(value.clone()).map_err(|_| {
-                            RuntimeError::Error(Value::Constructor {
-                                name: "Closed".to_string(),
-                                args: Vec::new(),
-                            })
+                            RuntimeError::Message("channel is closed".to_string())
                         })?;
                         Ok(Value::Unit)
                     } else {
-                        Err(RuntimeError::Error(Value::Constructor {
-                            name: "Closed".to_string(),
-                            args: Vec::new(),
-                        }))
+                        Err(RuntimeError::Message("channel is closed".to_string()))
                     }
                 }),
             };

@@ -23,10 +23,12 @@ class Chain (F *) = {
 
 Option A = None | Some A
 
-instance Setoid (Option A) = {
+// v0.1 does not support instance contexts like `instance Setoid A => Setoid (Option A)`,
+// so keep this instance concrete.
+instance Setoid (Option Int) = {
   equals: a b => (a, b) ?
     | (None, None)     => True
-    | (Some x, Some y) => equals x y
+    | (Some x, Some y) => x == y
     | _                => False
 }
 

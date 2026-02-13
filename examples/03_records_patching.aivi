@@ -38,10 +38,9 @@ store = {
 }
 
 store2 = store <| {
-  items[active].price: _ + 5
+  items[0].price: x => x + 5
 }
 
 store3 = store2 <| {
-  items[price > 15].price: _ -2
-  items[price > 15].active: True
+  items[2].active: True
 }

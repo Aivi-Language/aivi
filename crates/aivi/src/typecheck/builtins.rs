@@ -56,8 +56,11 @@ impl TypeChecker {
             .insert("List".to_string(), arrow(star.clone(), star.clone()));
         self.builtin_types
             .insert("Option".to_string(), arrow(star.clone(), star.clone()));
-        self.builtin_types
-            .insert("Resource".to_string(), arrow(star.clone(), star.clone()));
+        // `Resource E A` mirrors `Effect E A`: acquisition may fail with `E`.
+        self.builtin_types.insert(
+            "Resource".to_string(),
+            arrow(star.clone(), arrow(star.clone(), star.clone())),
+        );
         self.builtin_types.insert(
             "Result".to_string(),
             arrow(star.clone(), arrow(star.clone(), star.clone())),
@@ -309,7 +312,7 @@ impl TypeChecker {
                     Type::Func(
                         Box::new(Type::con("Unit")),
                         Box::new(Type::con("Effect").app(vec![
-                            Type::con("Closed"),
+                            Type::con("Text"),
                             Type::Tuple(vec![send_ty.clone(), recv_ty.clone()]),
                         ])),
                     ),
@@ -322,7 +325,7 @@ impl TypeChecker {
                             Box::new(Type::Var(a)),
                             Box::new(
                                 Type::con("Effect")
-                                    .app(vec![Type::con("Closed"), Type::con("Unit")]),
+                                    .app(vec![Type::con("Text"), Type::con("Unit")]),
                             ),
                         )),
                     ),
@@ -332,7 +335,7 @@ impl TypeChecker {
                     Type::Func(
                         Box::new(recv_ty.clone()),
                         Box::new(Type::con("Effect").app(vec![
-                            Type::con("Closed"),
+                            Type::con("Text"),
                             Type::con("Result").app(vec![Type::con("Closed"), Type::Var(a)]),
                         ])),
                     ),
@@ -342,7 +345,7 @@ impl TypeChecker {
                     Type::Func(
                         Box::new(send_ty),
                         Box::new(
-                            Type::con("Effect").app(vec![Type::con("Closed"), Type::con("Unit")]),
+                            Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")]),
                         ),
                     ),
                 ),
@@ -1789,7 +1792,7 @@ impl TypeChecker {
         let error_ty = Type::con("Error");
         let http_result_ty = Type::con("Result").app(vec![error_ty.clone(), response_ty.clone()]);
         let http_effect_ty =
-            Type::con("Effect").app(vec![error_ty.clone(), http_result_ty.clone()]);
+            Type::con("Effect").app(vec![Type::con("Text"), http_result_ty.clone()]);
         let http_record = Type::Record {
             fields: vec![
                 (

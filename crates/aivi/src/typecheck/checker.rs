@@ -113,7 +113,7 @@ impl TypeChecker {
         self.instances = instances;
         self.method_to_classes.clear();
         for (class_name, class_info) in &self.classes {
-            for member_name in class_info.members.keys() {
+            for member_name in class_info.direct_members.keys() {
                 self.method_to_classes
                     .entry(member_name.clone())
                     .or_default()
@@ -2103,7 +2103,12 @@ impl TypeChecker {
     ) {
         // Unreachable arms: catch-all without a guard makes later arms unreachable.
         let mut has_catch_all: Option<Span> = None;
+        // `covered_ctors` tracks constructors that are fully covered by a previous arm
+        // (i.e. a constructor arm whose arguments are all wildcards/idents).
         let mut covered_ctors: HashSet<String> = HashSet::new();
+        // `seen_ctors` tracks constructors that appear anywhere in the match, regardless of
+        // argument patterns, for basic exhaustiveness checking.
+        let mut seen_ctors: HashSet<String> = HashSet::new();
 
         for arm in arms {
             if has_catch_all.is_some() {
@@ -2123,6 +2128,7 @@ impl TypeChecker {
                     continue;
                 }
                 if let Pattern::Constructor { name, ref args, .. } = &arm.pattern {
+                    seen_ctors.insert(name.name.clone());
                     let ctor_catch_all = args
                         .iter()
                         .all(|arg| matches!(arg, Pattern::Wildcard(_) | Pattern::Ident(_)));
@@ -2133,6 +2139,7 @@ impl TypeChecker {
             }
 
             if let Pattern::Constructor { name, .. } = &arm.pattern {
+                seen_ctors.insert(name.name.clone());
                 if covered_ctors.contains(&name.name) {
                     self.emit_extra_diag(
                         "W3101",
@@ -2174,7 +2181,7 @@ impl TypeChecker {
 
         let mut missing = Vec::new();
         for ctor in expected_ctors {
-            if !covered_ctors.contains(&ctor) {
+            if !seen_ctors.contains(&ctor) {
                 missing.push(ctor);
             }
         }
@@ -2223,7 +2230,7 @@ impl TypeChecker {
         }
         if op == "<|" {
             let target_ty = self.infer_expr(left, env)?;
-            if let Expr::Record { fields, .. } = right {
+            if let Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } = right {
                 return self.infer_patch(target_ty, fields, env);
             }
         }
@@ -3018,7 +3025,10 @@ impl TypeChecker {
                 Ok(())
             }
             (Type::App(base_a, args_a), Type::Con(name_b, args_b)) => {
-                if args_a.len() != args_b.len() {
+                // Allow unifying a type application with a fully-applied constructor by splitting
+                // constructor args into a "prefix" (applied to the base) and a "suffix"
+                // corresponding to this application.
+                if args_a.len() > args_b.len() {
                     return Err(TypeError {
                         span,
                         message: "type mismatch".to_string(),
@@ -3026,14 +3036,21 @@ impl TypeChecker {
                         found: Some(Box::new(Type::Con(name_b, args_b))),
                     });
                 }
-                self.unify(*base_a, Type::Con(name_b, Vec::new()), span.clone())?;
-                for (a, b) in args_a.into_iter().zip(args_b.into_iter()) {
+
+                let split = args_b.len() - args_a.len();
+                let (prefix, suffix) = args_b.split_at(split);
+                self.unify(
+                    *base_a,
+                    Type::Con(name_b, prefix.to_vec()),
+                    span.clone(),
+                )?;
+                for (a, b) in args_a.into_iter().zip(suffix.iter().cloned()) {
                     self.unify(a, b, span.clone())?;
                 }
                 Ok(())
             }
             (Type::Con(name_a, args_a), Type::App(base_b, args_b)) => {
-                if args_a.len() != args_b.len() {
+                if args_b.len() > args_a.len() {
                     return Err(TypeError {
                         span,
                         message: "type mismatch".to_string(),
@@ -3041,8 +3058,15 @@ impl TypeChecker {
                         found: Some(Box::new(Type::App(base_b, args_b))),
                     });
                 }
-                self.unify(Type::Con(name_a, Vec::new()), *base_b, span.clone())?;
-                for (a, b) in args_a.into_iter().zip(args_b.into_iter()) {
+
+                let split = args_a.len() - args_b.len();
+                let (prefix, suffix) = args_a.split_at(split);
+                self.unify(
+                    Type::Con(name_a, prefix.to_vec()),
+                    *base_b,
+                    span.clone(),
+                )?;
+                for (a, b) in suffix.iter().cloned().zip(args_b.into_iter()) {
                     self.unify(a, b, span.clone())?;
                 }
                 Ok(())

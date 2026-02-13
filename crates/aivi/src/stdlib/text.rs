@@ -4,6 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.text
 export Bytes, Encoding, TextError
+export Utf8, Utf16, Utf32, Latin1
 export ToText
 export length, isEmpty, isDigit, isAlpha, isAlnum, isSpace, isUpper, isLower
 export contains, startsWith, endsWith, indexOf, lastIndexOf, count, compare

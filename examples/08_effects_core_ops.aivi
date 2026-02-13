@@ -6,7 +6,7 @@ use aivi.console (print)
 main : Effect Text Unit
 main = effect {
   n <- pure 41
-  m <- bind (pure n) (x => pure (x + 1))
+  m <- pure (n + 1)
 
   res <- attempt (if m == 42 then fail "boom" else pure m)
 

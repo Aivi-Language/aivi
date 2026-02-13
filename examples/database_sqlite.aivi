@@ -9,7 +9,7 @@ userTable : db.Table User
 userTable = db.table "users"[]
 
 main = effect {
-  _ <- db.configure { driver: Sqlite, url: ":memory:" }
+  _ <- db.configure { driver: db.Sqlite, url: ":memory:" }
   _ <- db.runMigrations[userTable]
   _ <- userTable + db.ins { id: 1, name: "Alice" }
   db.load userTable
