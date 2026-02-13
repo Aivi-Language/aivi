@@ -18,7 +18,7 @@ readConfig path = effect {
     | Err (_)  => fail "missing"
 }
 
-managedFile : Text -> Resource Text
+managedFile : Text -> Resource Text FileHandle
 managedFile path = resource {
   handle <- file.open path
   yield handle

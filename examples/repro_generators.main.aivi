@@ -14,8 +14,5 @@ main = effect {
 }
 
 printGen = g => effect {
-  f1 = acc => x => [x, ...acc]
-  asList = gen => gen f1 ([])
-  list = asList g
-  _ <- print "{reverse list}"
+  _ <- print "{g}\n"
 }

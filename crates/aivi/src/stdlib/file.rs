@@ -11,7 +11,7 @@ use aivi
 
 FileStats = { size: Int, created: Int, modified: Int, isFile: Bool, isDirectory: Bool }
 
-open : Text -> Resource FileHandle
+open : Text -> Resource Text FileHandle
 open path = resource {
   handle <- file.open path
   yield handle

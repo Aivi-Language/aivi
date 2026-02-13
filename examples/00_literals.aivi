@@ -1,6 +1,7 @@
 module examples.compiler.literals
 export ints, floats, texts, suffixes, instant, tuple, records, nested, palette
 
+use aivi.duration (domain Duration)
 use aivi.number.bigint
 use aivi.number.decimal
 
@@ -8,7 +9,12 @@ ints = [0, 1, -1, 42]
 floats = [0.0, 3.14, -2.5]
 texts = ["hello", "world"]
 
-suffixes = [30s, 1min, 3.14dec, 42n]
+suffixes = {
+  duration: 30s,
+  duration2: 1min,
+  decimal: 3.14dec,
+  bigint: 42n
+}
 instant = 2024-05-21T12:00:00Z
 
 tuple = (1, "ok", True)

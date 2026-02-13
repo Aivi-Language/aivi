@@ -3424,19 +3424,11 @@ impl Parser {
                         span: pattern_span(&pattern),
                     });
                     let span = merge_span(pattern_span(&pattern), expr_span(&expr));
-                    if matches!(kind, BlockKind::Effect) {
-                        items.push(BlockItem::Let {
-                            pattern,
-                            expr,
-                            span,
-                        });
-                    } else {
-                        items.push(BlockItem::Bind {
-                            pattern,
-                            expr,
-                            span,
-                        });
-                    }
+                    items.push(BlockItem::Let {
+                        pattern,
+                        expr,
+                        span,
+                    });
                     continue;
                 }
             }

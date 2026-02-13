@@ -2,7 +2,7 @@
 
 ## 1.1 Definitions
 
-All bindings use `=`:
+All bindings use `=`
 
 * values
 * functions

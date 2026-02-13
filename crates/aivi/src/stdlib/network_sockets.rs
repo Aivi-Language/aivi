@@ -11,7 +11,7 @@ use aivi
 Address = { host: Text, port: Int }
 SocketError = { message: Text }
 
-listen : Address -> Resource Listener
+listen : Address -> Resource SocketError Listener
 listen address = resource {
   listener <- sockets.listen address
   yield listener

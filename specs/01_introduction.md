@@ -4,7 +4,7 @@
 > Experimental Rust codegen exists for ahead-of-time compilation, but coverage is still evolving.
 > See [Missing Features](./missing_features_v0.1.md) for current implementation status.
 
-## 0. Overview
+## Overview
 
 AIVI is a statically typed, purely functional language designed for **high-integrity data pipelines** and **domain-driven design**.
 
@@ -13,7 +13,7 @@ AIVI is a statically typed, purely functional language designed for **high-integ
 **Logic**
 
 * Global type inference
-* Classes (ad-hoc polymorphism)
+* (Type) Classes (ad-hoc polymorphism)
 * Higher-Kinded Types (HKTs)
 
 **Data**

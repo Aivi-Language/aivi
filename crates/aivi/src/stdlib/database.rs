@@ -4,8 +4,12 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.database
 export Table, ColumnType, ColumnConstraint, ColumnDefault, Column
+export IntType, BoolType, TimestampType, Varchar
+export AutoIncrement, NotNull
+export DefaultBool, DefaultInt, DefaultText, DefaultNow
 export Pred, Patch, Delta, DbError
 export Driver, DbConfig, configure
+export Sqlite, Postgresql, Mysql
 export table, load, applyDelta, runMigrations
 export ins, upd, del
 export domain Database

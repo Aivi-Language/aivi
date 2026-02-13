@@ -21,17 +21,17 @@ systemLocale = effect {
 
 loadBundle : Locale -> Effect Text Bundle
 loadBundle locale = effect {
-  path =
-  if locale.tag == "de-DE" then "examples/i18n/app.de-DE.properties" else "examples/i18n/app.en-US.properties"
+  path = if locale.tag == "de-DE" then "examples/i18n/app.de-DE.properties" else "examples/i18n/app.en-US.properties"
 
-  h        <- open path
+  h <- open path
   propsRes <- readAll h
 
-  propsRes ?
-    | Ok props =>
+  props <- propsRes ?
+    | Ok p  => pure p
+    | Err e => fail e
+
   bundleFromProperties locale props ?
     | Ok b  => pure b
-    | Err e => fail e
     | Err e => fail e
 }
 

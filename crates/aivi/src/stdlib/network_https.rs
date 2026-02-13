@@ -14,11 +14,11 @@ Request = { method: Text, url: Url, headers: List Header, body: Option Text }
 Response = { status: Int, headers: List Header, body: Text }
 Error = { message: Text }
 
-get : Url -> Effect Error (Result Error Response)
+get : Url -> Effect Text (Result Error Response)
 get url = https.get url
 
-post : Url -> Text -> Effect Error (Result Error Response)
+post : Url -> Text -> Effect Text (Result Error Response)
 post url body = https.post url body
 
-fetch : Request -> Effect Error (Result Error Response)
+fetch : Request -> Effect Text (Result Error Response)
 fetch request = https.fetch request"#;

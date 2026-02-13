@@ -3,8 +3,7 @@ export main
 
 use aivi.console (print)
 use aivi.math
-use aivi.number.bigint (fromInt)
-use aivi.number.decimal (fromFloat)
+use aivi.number.decimal (fromFloat, domain Decimal)
 
 main : Effect Text Unit
 main = effect {

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use aivi::{check_modules, check_types, parse_modules};
+use aivi::{check_modules, check_types, embedded_stdlib_modules, parse_modules};
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, Diagnostic, DiagnosticRelatedInformation,
     DiagnosticSeverity, Location, NumberOrString, Position, Range, TextEdit, Url, WorkspaceEdit,
@@ -33,6 +33,11 @@ impl Backend {
 
         // Build a module set for resolver + typechecker: workspace modules + this file's modules.
         let mut module_map = HashMap::new();
+        // Include embedded stdlib so imports/prelude/classes resolve for user code, but keep
+        // diagnostics scoped to the current file (below) to avoid surfacing stdlib churn.
+        for module in embedded_stdlib_modules() {
+            module_map.insert(module.name.name.clone(), module);
+        }
         for indexed in workspace_modules.values() {
             module_map.insert(indexed.module.name.name.clone(), indexed.module.clone());
         }

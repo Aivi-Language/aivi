@@ -1,8 +1,7 @@
 module examples.httpClient
 export main
 
-use aivi.console (println)
-use aivi.net.https (get)
+use aivi.net.https (Error, get)
 
 main : Effect Text Unit
 main = effect {
@@ -10,5 +9,5 @@ main = effect {
   message = result ?
     | Ok response => "Status {response.status}"
     | Err err     => "Error {err.message}"
-  println message
+  _ <- print "{message}\n"
 }

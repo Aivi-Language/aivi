@@ -1,8 +1,6 @@
 module examples.runtime
 export main
 
-use aivi.console (print)
-
 main : Effect Text Unit
 main = effect {
   _        <- concurrent.par (print "left\n") (print "right\n")

@@ -77,6 +77,9 @@ struct ClassDeclInfo {
     params: Vec<TypeExpr>,
     supers: Vec<TypeExpr>,
     constraints: Vec<(String, String)>,
+    // Members declared directly on the class (excluding inherited members). Used for resolving
+    // method names without introducing ambiguity from superclass expansion.
+    direct_members: HashMap<String, TypeExpr>,
     members: HashMap<String, TypeExpr>,
 }
 
@@ -98,6 +101,7 @@ fn collect_local_class_env(
                 for member in &class_decl.members {
                     members.insert(member.name.name.clone(), member.ty.clone());
                 }
+                let direct_members = members.clone();
                 let constraints = class_decl
                     .constraints
                     .iter()
@@ -109,6 +113,7 @@ fn collect_local_class_env(
                         params: class_decl.params.clone(),
                         supers: class_decl.supers.clone(),
                         constraints,
+                        direct_members,
                         members,
                     },
                 );
