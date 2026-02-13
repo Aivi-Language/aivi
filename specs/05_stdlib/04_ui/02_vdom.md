@@ -46,5 +46,5 @@ next = base <| { width: 12px }
 Style values are not restricted to `Text`. The runtime renderer recognizes common shapes:
 
 - `Text`, `Int`, `Float`, `Bool`
-- `aivi.ui.layout` unit constructors like `Px 1.0`, `Em 2.0`, `Pct 50.0` (via literals `1px`, `2em`, `50%`)
+- `aivi.ui.layout` unit constructors like `Px 1`, `Em 2`, `Pct 50` (via literals `1px`, `2em`, `50%`)
 - `{ r: Int, g: Int, b: Int }` as a CSS `#rrggbb` color

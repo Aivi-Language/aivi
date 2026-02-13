@@ -39,11 +39,11 @@ mod signal;
 mod system;
 mod testing;
 mod text;
+mod ui;
+mod ui_layout;
 mod units;
 mod url;
 mod vector;
-mod ui;
-mod ui_layout;
 
 struct EmbeddedModule {
     name: &'static str,

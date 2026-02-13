@@ -189,8 +189,7 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
                 index += 1;
                 col += 1;
             }
-            if index + 1 < chars.len() && chars[index] == '.' && chars[index + 1].is_ascii_digit()
-            {
+            if index + 1 < chars.len() && chars[index] == '.' && chars[index + 1].is_ascii_digit() {
                 index += 1;
                 col += 1;
                 while index < chars.len() && chars[index].is_ascii_digit() {

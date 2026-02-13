@@ -1199,7 +1199,11 @@ impl TypeChecker {
                 });
                 let mut new_items = Vec::new();
                 for item in items {
-                    let item_expected = if item.spread { None } else { expected_elem.clone() };
+                    let item_expected = if item.spread {
+                        None
+                    } else {
+                        expected_elem.clone()
+                    };
                     let (expr, _ty) = self.elab_expr(item.expr, item_expected, env)?;
                     new_items.push(ListItem {
                         expr,
@@ -1482,14 +1486,16 @@ impl TypeChecker {
             Type::Con(ref name, ref args) if name == "VNode" && args.len() == 1
         );
         if is_vnode {
-            let text_fn = Expr::Ident(SpannedName {
-                name: "text".to_string(),
+            // Coerce into a `VNode` via `TextNode`, either directly from `Text`
+            // or via `toText` when available.
+            let text_node = Expr::Ident(SpannedName {
+                name: "TextNode".to_string(),
                 span: expr_span(&expr),
             });
 
-            // First try `text <expr>` if `<expr>` already is `Text`.
+            // First try `TextNode <expr>` if `<expr>` already is `Text`.
             let call_expr = Expr::Call {
-                func: Box::new(text_fn.clone()),
+                func: Box::new(text_node.clone()),
                 args: vec![expr.clone()],
                 span: expr_span(&expr),
             };
@@ -1503,7 +1509,7 @@ impl TypeChecker {
             }
             self.subst = base_subst2;
 
-            // Then try `text (toText <expr>)`.
+            // Then try `TextNode (toText <expr>)`.
             let to_text = Expr::Ident(SpannedName {
                 name: "toText".to_string(),
                 span: expr_span(&expr),
@@ -1514,7 +1520,7 @@ impl TypeChecker {
                 span: expr_span(&expr),
             };
             let call_expr = Expr::Call {
-                func: Box::new(text_fn),
+                func: Box::new(text_node),
                 args: vec![to_text_call],
                 span: expr_span(&expr),
             };

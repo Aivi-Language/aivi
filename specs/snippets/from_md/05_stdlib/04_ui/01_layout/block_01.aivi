@@ -4,6 +4,3 @@ use aivi.ui.layout (Length, Percentage)
 width = 100px
 height = 50%
 gap = 2em
-
-// Invalid:
-// width + height -> Error: Cannot add Length and Percentage directly

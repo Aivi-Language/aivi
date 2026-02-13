@@ -85,20 +85,31 @@ fn ui_live(
     let record = expect_record(cfg, "ui.live expects LiveConfig record")?;
     let address = match record.get("address") {
         Some(Value::Text(t)) => t.clone(),
-        _ => return Err(RuntimeError::Error(live_error_value("LiveConfig.address must be Text"))),
+        _ => {
+            return Err(RuntimeError::Error(live_error_value(
+                "LiveConfig.address must be Text",
+            )))
+        }
     };
     let path = match record.get("path") {
         Some(Value::Text(t)) => t.clone(),
-        _ => return Err(RuntimeError::Error(live_error_value("LiveConfig.path must be Text"))),
+        _ => {
+            return Err(RuntimeError::Error(live_error_value(
+                "LiveConfig.path must be Text",
+            )))
+        }
     };
     let title = match record.get("title") {
         Some(Value::Text(t)) => t.clone(),
-        _ => return Err(RuntimeError::Error(live_error_value("LiveConfig.title must be Text"))),
+        _ => {
+            return Err(RuntimeError::Error(live_error_value(
+                "LiveConfig.title must be Text",
+            )))
+        }
     };
 
-    let addr = SocketAddr::from_str(address.trim()).map_err(|err| {
-        RuntimeError::Error(live_error_value(&format!("invalid address: {err}")))
-    })?;
+    let addr = SocketAddr::from_str(address.trim())
+        .map_err(|err| RuntimeError::Error(live_error_value(&format!("invalid address: {err}"))))?;
 
     let ws_path = live_ws_path(&path);
     let ctx = runtime.ctx.clone();
@@ -216,7 +227,9 @@ fn run_ws_session(
 
     // No need to send an init message: the initial HTML is delivered via HTTP.
     loop {
-        let msg = socket.recv().map_err(|err| RuntimeError::Message(err.message))?;
+        let msg = socket
+            .recv()
+            .map_err(|err| RuntimeError::Message(err.message))?;
         let text = match msg {
             AiviWsMessage::TextMsg(t) => t,
             AiviWsMessage::Close => break,
@@ -526,11 +539,17 @@ fn css_value_to_text(value: &Value) -> String {
         Value::Bool(true) => "true".to_string(),
         Value::Bool(false) => "false".to_string(),
         Value::Constructor { name, args } if args.len() == 1 => match (name.as_str(), &args[0]) {
+            ("Px", Value::Int(v)) => format!("{v}px"),
             ("Px", Value::Float(v)) => format!("{}px", trim_float(*v)),
+            ("Em", Value::Int(v)) => format!("{v}em"),
             ("Em", Value::Float(v)) => format!("{}em", trim_float(*v)),
+            ("Rem", Value::Int(v)) => format!("{v}rem"),
             ("Rem", Value::Float(v)) => format!("{}rem", trim_float(*v)),
+            ("Vh", Value::Int(v)) => format!("{v}vh"),
             ("Vh", Value::Float(v)) => format!("{}vh", trim_float(*v)),
+            ("Vw", Value::Int(v)) => format!("{v}vw"),
             ("Vw", Value::Float(v)) => format!("{}vw", trim_float(*v)),
+            ("Pct", Value::Int(v)) => format!("{v}%"),
             ("Pct", Value::Float(v)) => format!("{}%", trim_float(*v)),
             _ => format_value(value),
         },
@@ -618,10 +637,9 @@ fn diff_vnode(old: &Value, new: &Value, node_id: &str, out: &mut Vec<Value>) {
     }
 
     match (old, new) {
-        (
-            Value::Constructor { name: on, args: oa },
-            Value::Constructor { name: nn, args: na },
-        ) if on == "TextNode" && nn == "TextNode" && oa.len() == 1 && na.len() == 1 => {
+        (Value::Constructor { name: on, args: oa }, Value::Constructor { name: nn, args: na })
+            if on == "TextNode" && nn == "TextNode" && oa.len() == 1 && na.len() == 1 =>
+        {
             let ot = match &oa[0] {
                 Value::Text(t) => t.as_str(),
                 _ => "",
@@ -633,14 +651,16 @@ fn diff_vnode(old: &Value, new: &Value, node_id: &str, out: &mut Vec<Value>) {
             if ot != nt {
                 out.push(Value::Constructor {
                     name: "SetText".to_string(),
-                    args: vec![Value::Text(node_id.to_string()), Value::Text(nt.to_string())],
+                    args: vec![
+                        Value::Text(node_id.to_string()),
+                        Value::Text(nt.to_string()),
+                    ],
                 });
             }
         }
-        (
-            Value::Constructor { name: on, args: oa },
-            Value::Constructor { name: nn, args: na },
-        ) if on == "Keyed" && nn == "Keyed" && oa.len() == 2 && na.len() == 2 => {
+        (Value::Constructor { name: on, args: oa }, Value::Constructor { name: nn, args: na })
+            if on == "Keyed" && nn == "Keyed" && oa.len() == 2 && na.len() == 2 =>
+        {
             let ok = match &oa[0] {
                 Value::Text(t) => t.as_str(),
                 _ => "",
@@ -659,10 +679,9 @@ fn diff_vnode(old: &Value, new: &Value, node_id: &str, out: &mut Vec<Value>) {
             }
             diff_vnode(&oa[1], &na[1], node_id, out);
         }
-        (
-            Value::Constructor { name: on, args: oa },
-            Value::Constructor { name: nn, args: na },
-        ) if on == "Element" && nn == "Element" && oa.len() == 3 && na.len() == 3 => {
+        (Value::Constructor { name: on, args: oa }, Value::Constructor { name: nn, args: na })
+            if on == "Element" && nn == "Element" && oa.len() == 3 && na.len() == 3 =>
+        {
             let otag = match &oa[0] {
                 Value::Text(t) => t.as_str(),
                 _ => "",
@@ -718,10 +737,11 @@ fn child_segments(children: &Value) -> Vec<String> {
 
 fn same_vnode_shape(a: &Value, b: &Value) -> bool {
     match (a, b) {
-        (
-            Value::Constructor { name: an, args: aa },
-            Value::Constructor { name: bn, args: ba },
-        ) if an == bn && aa.len() == ba.len() => true,
+        (Value::Constructor { name: an, args: aa }, Value::Constructor { name: bn, args: ba })
+            if an == bn && aa.len() == ba.len() =>
+        {
+            true
+        }
         _ => false,
     }
 }

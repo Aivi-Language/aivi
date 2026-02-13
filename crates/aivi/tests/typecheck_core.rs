@@ -1,10 +1,38 @@
 use std::path::Path;
 
-use aivi::{check_modules, check_types, parse_modules};
+use aivi::{check_modules, check_types, embedded_stdlib_source, parse_modules};
 
 fn check_ok(source: &str) {
     let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
     assert!(diagnostics.is_empty(), "parse diagnostics: {diagnostics:?}");
+
+    let mut module_diags = check_modules(&modules);
+    module_diags.extend(check_types(&modules));
+    assert!(
+        module_diags.is_empty(),
+        "type diagnostics: {module_diags:?}"
+    );
+}
+
+fn check_ok_with_embedded(source: &str, embedded: &[&str]) {
+    let mut modules = Vec::new();
+    for module_name in embedded {
+        let embedded_source =
+            embedded_stdlib_source(module_name).unwrap_or_else(|| panic!("missing {module_name}"));
+        let (mut embedded_modules, embedded_diags) = parse_modules(
+            Path::new(&format!("<embedded:{module_name}>")),
+            embedded_source,
+        );
+        assert!(
+            embedded_diags.is_empty(),
+            "parse diagnostics in embedded {module_name}: {embedded_diags:?}"
+        );
+        modules.append(&mut embedded_modules);
+    }
+
+    let (mut user_modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
+    assert!(diagnostics.is_empty(), "parse diagnostics: {diagnostics:?}");
+    modules.append(&mut user_modules);
 
     let mut module_diags = check_modules(&modules);
     module_diags.extend(check_types(&modules));
@@ -84,10 +112,10 @@ use aivi.ui.layout
 node =
   ~html{
     <div style={ { width: 10px, gap: 2em } }>
-      <span>{ 1 }</span>
+      <span>{ TextNode "1" }</span>
     </div>
   }"#;
-    check_ok(source);
+    check_ok_with_embedded(source, &["aivi", "aivi.ui", "aivi.ui.layout"]);
 }
 
 #[test]

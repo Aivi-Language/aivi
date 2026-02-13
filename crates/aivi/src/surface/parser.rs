@@ -780,7 +780,10 @@ impl Parser {
             let mut args = Vec::new();
             while !self.check_symbol("|") && !self.check_symbol("}") && self.pos < self.tokens.len()
             {
-                if let Some(ty) = self.parse_type_expr() {
+                // Constructor arguments are a sequence of *type atoms* so that
+                // multi-argument constructors like `Element Text (List A) (List B)`
+                // don't get parsed as a single type application `Text (List A) (List B)`.
+                if let Some(ty) = self.parse_type_atom() {
                     args.push(ty);
                 } else {
                     break;
@@ -984,7 +987,7 @@ impl Parser {
             let decorators = self.consume_decorators();
             self.validate_item_decorators(&decorators);
             if self.match_keyword("type") {
-                if let Some(type_decl) = self.parse_type_decl(decorators.clone()) {
+                if let Some(type_decl) = self.parse_domain_type_decl(decorators.clone()) {
                     items.push(DomainItem::TypeAlias(type_decl));
                     continue;
                 }
@@ -2077,13 +2080,16 @@ impl Parser {
             this.emit_diag("E1600", message, sigil.span.clone());
         };
 
-        let mut push_node = |node: HtmlNode, nodes: &mut Vec<HtmlNode>, stack: &mut Vec<(String, Vec<HtmlAttr>, Vec<HtmlNode>)>| {
-            if let Some((_tag, _attrs, children)) = stack.last_mut() {
-                children.push(node);
-            } else {
-                nodes.push(node);
-            }
-        };
+        let mut push_node =
+            |node: HtmlNode,
+             nodes: &mut Vec<HtmlNode>,
+             stack: &mut Vec<(String, Vec<HtmlAttr>, Vec<HtmlNode>)>| {
+                if let Some((_tag, _attrs, children)) = stack.last_mut() {
+                    children.push(node);
+                } else {
+                    nodes.push(node);
+                }
+            };
 
         while i < body_chars.len() {
             let ch = body_chars[i];
@@ -2102,7 +2108,8 @@ impl Parser {
                 let expr_start_offset = body_start_offset + (i + 1);
                 let (expr_line, expr_col) =
                     pos_at_char_offset(&sigil.span.start, &sigil.text, expr_start_offset);
-                let expr = self.parse_embedded_expr(&expr_decoded, &expr_raw_map, expr_line, expr_col);
+                let expr =
+                    self.parse_embedded_expr(&expr_decoded, &expr_raw_map, expr_line, expr_col);
                 if let Some(expr) = expr {
                     push_node(HtmlNode::Splice(expr), &mut nodes, &mut stack);
                 } else {
@@ -2189,7 +2196,8 @@ impl Parser {
                         stack.push((tag.clone(), attrs, Vec::new()));
                         break;
                     }
-                    if body_chars[i] == '/' && i + 1 < body_chars.len() && body_chars[i + 1] == '>' {
+                    if body_chars[i] == '/' && i + 1 < body_chars.len() && body_chars[i + 1] == '>'
+                    {
                         i += 2;
                         push_node(
                             HtmlNode::Element {
@@ -2291,7 +2299,10 @@ impl Parser {
                                 && !body_chars[i].is_whitespace()
                                 && body_chars[i] != '>'
                             {
-                                if body_chars[i] == '/' && i + 1 < body_chars.len() && body_chars[i + 1] == '>' {
+                                if body_chars[i] == '/'
+                                    && i + 1 < body_chars.len()
+                                    && body_chars[i + 1] == '>'
+                                {
                                     break;
                                 }
                                 i += 1;
@@ -2333,11 +2344,15 @@ impl Parser {
         }
 
         // Lower parsed HTML nodes to `aivi.ui` constructors.
-        fn lower_attr(this: &mut Parser, attr: HtmlAttr, span: &Span) -> Option<Expr> {
-            let mk_ident = |name: &str| Expr::Ident(SpannedName {
-                name: name.to_string(),
-                span: span.clone(),
-            });
+        fn lower_attr(_this: &mut Parser, attr: HtmlAttr, span: &Span) -> Option<Expr> {
+            // Use `aivi.ui` helper names with a unique prefix so the lowered code is resilient
+            // to collisions in the runtime's flat global namespace (e.g. `id`, `style`).
+            let mk_ident = |name: &str| {
+                Expr::Ident(SpannedName {
+                    name: name.to_string(),
+                    span: span.clone(),
+                })
+            };
             let mk_string = |value: &str| {
                 Expr::Literal(Literal::String {
                     text: value.to_string(),
@@ -2357,23 +2372,31 @@ impl Parser {
 
             let name = attr.name;
             match (name.as_str(), attr.value) {
-                ("class", HtmlAttrValue::Text(v)) => Some(call1("className", mk_string(&v))),
-                ("id", HtmlAttrValue::Text(v)) => Some(call1("id", mk_string(&v))),
-                ("style", HtmlAttrValue::Splice(expr)) => Some(call1("style", expr)),
-                ("onClick", HtmlAttrValue::Splice(expr)) => Some(call1("onClick", expr)),
-                ("onInput", HtmlAttrValue::Splice(expr)) => Some(call1("onInput", expr)),
+                ("class", HtmlAttrValue::Text(v)) => Some(call1("vClass", mk_string(&v))),
+                ("id", HtmlAttrValue::Text(v)) => Some(call1("vId", mk_string(&v))),
+                ("style", HtmlAttrValue::Splice(expr)) => Some(call1("vStyle", expr)),
+                ("onClick", HtmlAttrValue::Splice(expr)) => Some(call1("vOnClick", expr)),
+                ("onInput", HtmlAttrValue::Splice(expr)) => Some(call1("vOnInput", expr)),
                 ("key", _) => None, // handled separately
-                (_other, HtmlAttrValue::Text(v)) => Some(call2("attr", mk_string(&name), mk_string(&v))),
-                (_other, HtmlAttrValue::Splice(expr)) => Some(call2("attr", mk_string(&name), expr)),
-                (_other, HtmlAttrValue::Bare) => Some(call2("attr", mk_string(&name), mk_string("true"))),
+                (_other, HtmlAttrValue::Text(v)) => {
+                    Some(call2("vAttr", mk_string(&name), mk_string(&v)))
+                }
+                (_other, HtmlAttrValue::Splice(expr)) => {
+                    Some(call2("vAttr", mk_string(&name), expr))
+                }
+                (_other, HtmlAttrValue::Bare) => {
+                    Some(call2("vAttr", mk_string(&name), mk_string("true")))
+                }
             }
         }
 
         fn lower_node(this: &mut Parser, node: HtmlNode, span: &Span) -> Expr {
-            let mk_ident = |name: &str| Expr::Ident(SpannedName {
-                name: name.to_string(),
-                span: span.clone(),
-            });
+            let mk_ident = |name: &str| {
+                Expr::Ident(SpannedName {
+                    name: name.to_string(),
+                    span: span.clone(),
+                })
+            };
             let mk_string = |value: &str| {
                 Expr::Literal(Literal::String {
                     text: value.to_string(),
@@ -2394,12 +2417,16 @@ impl Parser {
 
             match node {
                 HtmlNode::Text(t) => Expr::Call {
-                    func: Box::new(mk_ident("text")),
+                    func: Box::new(mk_ident("vText")),
                     args: vec![mk_string(&t)],
                     span: span.clone(),
                 },
                 HtmlNode::Splice(expr) => expr,
-                HtmlNode::Element { tag, attrs, children } => {
+                HtmlNode::Element {
+                    tag,
+                    attrs,
+                    children,
+                } => {
                     let mut key_expr: Option<Expr> = None;
                     let mut lowered_attrs = Vec::new();
                     for attr in attrs {
@@ -2422,13 +2449,13 @@ impl Parser {
                         .collect();
 
                     let element_expr = Expr::Call {
-                        func: Box::new(mk_ident("element")),
+                        func: Box::new(mk_ident("vElement")),
                         args: vec![mk_string(&tag), list(lowered_attrs), list(lowered_children)],
                         span: span.clone(),
                     };
                     if let Some(key_expr) = key_expr {
                         Expr::Call {
-                            func: Box::new(mk_ident("keyed")),
+                            func: Box::new(mk_ident("vKeyed")),
                             args: vec![key_expr, element_expr],
                             span: span.clone(),
                         }
@@ -3210,6 +3237,58 @@ impl Parser {
         Some(RecordPatternField {
             path,
             pattern,
+            span,
+        })
+    }
+
+    fn parse_domain_type_decl(&mut self, decorators: Vec<Decorator>) -> Option<TypeDecl> {
+        let name = self.consume_ident()?;
+        let mut params = Vec::new();
+        while let Some(param) = self.consume_ident() {
+            params.push(param);
+        }
+        self.expect_symbol("=", "expected '=' in type declaration");
+
+        let mut ctors = Vec::new();
+        while let Some(ctor_name) = self.consume_ident() {
+            let mut args = Vec::new();
+            while !self.check_symbol("|")
+                && !self.peek_newline()
+                && !self.check_symbol("}")
+                && self.pos < self.tokens.len()
+            {
+                if let Some(ty) = self.parse_type_expr() {
+                    args.push(ty);
+                } else {
+                    break;
+                }
+            }
+            let span = merge_span(
+                ctor_name.span.clone(),
+                args.last().map(type_span).unwrap_or(ctor_name.span.clone()),
+            );
+            ctors.push(TypeCtor {
+                name: ctor_name,
+                args,
+                span,
+            });
+            if !self.consume_symbol("|") {
+                break;
+            }
+        }
+
+        let span = merge_span(
+            name.span.clone(),
+            ctors
+                .last()
+                .map(|ctor| ctor.span.clone())
+                .unwrap_or(name.span.clone()),
+        );
+        Some(TypeDecl {
+            decorators,
+            name,
+            params,
+            constructors: ctors,
             span,
         })
     }

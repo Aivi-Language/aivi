@@ -129,7 +129,9 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
             crate::surface::TextPart::Text { .. } => false,
             crate::surface::TextPart::Expr { expr, .. } => expr_contains_ident(expr, target),
         }),
-        Expr::List { items, .. } => items.iter().any(|item| expr_contains_ident(&item.expr, target)),
+        Expr::List { items, .. } => items
+            .iter()
+            .any(|item| expr_contains_ident(&item.expr, target)),
         Expr::Tuple { items, .. } => items.iter().any(|item| expr_contains_ident(item, target)),
         Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => fields
             .iter()
@@ -142,10 +144,13 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
         }
         Expr::FieldSection { field, .. } => field.name == target,
         Expr::Call { func, args, .. } => {
-            expr_contains_ident(func, target) || args.iter().any(|arg| expr_contains_ident(arg, target))
+            expr_contains_ident(func, target)
+                || args.iter().any(|arg| expr_contains_ident(arg, target))
         }
         Expr::Lambda { body, .. } => expr_contains_ident(body, target),
-        Expr::Match { scrutinee, arms, .. } => {
+        Expr::Match {
+            scrutinee, arms, ..
+        } => {
             scrutinee
                 .as_ref()
                 .is_some_and(|e| expr_contains_ident(e, target))
@@ -216,8 +221,8 @@ x =
     );
 
     assert!(
-        expr_contains_ident(&def.expr, "element") && expr_contains_ident(&def.expr, "class"),
-        "expected ~html{{...}} to lower into UI element constructor calls"
+        expr_contains_ident(&def.expr, "vElement") && expr_contains_ident(&def.expr, "vClass"),
+        "expected ~html{{...}} to lower into UI helpers"
     );
 }
 
@@ -246,8 +251,8 @@ x = ~html{ <div key="k">Hi</div> }
         .expect("x def");
 
     assert!(
-        expr_contains_ident(&def.expr, "keyed"),
-        "expected key= to lower into `keyed`"
+        expr_contains_ident(&def.expr, "vKeyed"),
+        "expected key= to lower into `vKeyed`"
     );
 }
 
@@ -286,31 +291,14 @@ fn parses_domain_literal_def_in_embedded_ui_layout() {
             _ => None,
         })
         .collect();
-    let plain_defs: Vec<String> = domain
-        .items
-        .iter()
-        .filter_map(|item| match item {
-            crate::surface::DomainItem::Def(def) => Some(def.name.name.clone()),
-            _ => None,
-        })
-        .collect();
-    eprintln!("Layout literal defs: {literal_defs:?}");
-    eprintln!("Layout plain defs: {plain_defs:?}");
-    if !has_1px {
-        let (cst, lex_diags) = crate::lexer::lex(src);
-        assert!(lex_diags.is_empty(), "unexpected lex diagnostics: {lex_diags:?}");
-        let toks = crate::lexer::filter_tokens(&cst);
-        let mut px_context = Vec::new();
-        for i in 0..toks.len() {
-            if toks[i].text == "px" {
-                let prev = toks.get(i.wrapping_sub(1)).map(|t| (t.kind.clone(), t.text.clone()));
-                let next = toks.get(i + 1).map(|t| (t.kind.clone(), t.text.clone()));
-                px_context.push((toks[i].span.start.line, prev, next));
-            }
-        }
-        eprintln!("px token contexts (line, prev, next): {px_context:?}");
-    }
-    assert!(has_1px, "expected Layout domain to define a `1px` literal template");
+    assert!(
+        has_1px,
+        "expected Layout domain to define a `1px` literal template"
+    );
+    assert!(
+        literal_defs.contains(&"1%".to_string()),
+        "expected Layout domain to define a `1%` literal template"
+    );
 }
 
 #[test]

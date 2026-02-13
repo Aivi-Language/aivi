@@ -115,9 +115,8 @@ fn ui_live(
         }
     };
 
-    let addr = SocketAddr::from_str(address.trim()).map_err(|err| {
-        RuntimeError::Error(live_error_value(&format!("invalid address: {err}")))
-    })?;
+    let addr = SocketAddr::from_str(address.trim())
+        .map_err(|err| RuntimeError::Error(live_error_value(&format!("invalid address: {err}"))))?;
 
     let ws_path = live_ws_path(&path);
     let ctx = runtime.ctx.clone();
@@ -283,7 +282,9 @@ fn run_ws_session(
         handlers = collect_handlers(&vnode, "root");
     }
 
-    socket.close().map_err(|err| RuntimeError::Message(err.message))?;
+    socket
+        .close()
+        .map_err(|err| RuntimeError::Message(err.message))?;
     Ok(())
 }
 
@@ -383,10 +384,7 @@ fn render_vnode_inner(
             };
             let mut attrs = format!(" data-aivi-node=\"{}\"", escape_attr_value(node_id));
             if let Some(key) = keyed {
-                attrs.push_str(&format!(
-                    " data-aivi-key=\"{}\"",
-                    escape_attr_value(key)
-                ));
+                attrs.push_str(&format!(" data-aivi-key=\"{}\"", escape_attr_value(key)));
             }
             format!(
                 "<span{attrs}>{}</span>",
@@ -415,10 +413,7 @@ fn render_vnode_inner(
                 escape_attr_value(node_id)
             ));
             if let Some(key) = keyed {
-                attrs.push_str(&format!(
-                    " data-aivi-key=\"{}\"",
-                    escape_attr_value(key)
-                ));
+                attrs.push_str(&format!(" data-aivi-key=\"{}\"", escape_attr_value(key)));
             }
             attrs.push_str(&render_attrs(attrs_value, node_id, state));
 
@@ -496,11 +491,7 @@ fn render_attrs(attrs: &Value, node_id: &str, state: &mut RenderState) -> String
             Value::Constructor { name, args } if name == "Attr" && args.len() == 2 => {
                 if let (Value::Text(k), Value::Text(v)) = (&args[0], &args[1]) {
                     if is_safe_attr_name(k) {
-                        out.push_str(&format!(
-                            " {}=\"{}\"",
-                            k,
-                            escape_attr_value(v)
-                        ));
+                        out.push_str(&format!(" {}=\"{}\"", k, escape_attr_value(v)));
                     }
                 }
             }
@@ -524,7 +515,7 @@ fn is_safe_attr_name(name: &str) -> bool {
     !name.is_empty()
         && name
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':' ))
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':'))
 }
 
 fn style_record_to_text(value: &Value) -> String {
@@ -563,17 +554,21 @@ fn css_value_to_text(value: &Value) -> String {
         Value::Float(v) => trim_float(*v),
         Value::Bool(true) => "true".to_string(),
         Value::Bool(false) => "false".to_string(),
-        Value::Constructor { name, args } if args.len() == 1 => {
-            match (name.as_str(), &args[0]) {
-                ("Px", Value::Float(v)) => format!("{}px", trim_float(*v)),
-                ("Em", Value::Float(v)) => format!("{}em", trim_float(*v)),
-                ("Rem", Value::Float(v)) => format!("{}rem", trim_float(*v)),
-                ("Vh", Value::Float(v)) => format!("{}vh", trim_float(*v)),
-                ("Vw", Value::Float(v)) => format!("{}vw", trim_float(*v)),
-                ("Pct", Value::Float(v)) => format!("{}%", trim_float(*v)),
-                _ => crate::runtime::format_value(value),
-            }
-        }
+        Value::Constructor { name, args } if args.len() == 1 => match (name.as_str(), &args[0]) {
+            ("Px", Value::Int(v)) => format!("{v}px"),
+            ("Px", Value::Float(v)) => format!("{}px", trim_float(*v)),
+            ("Em", Value::Int(v)) => format!("{v}em"),
+            ("Em", Value::Float(v)) => format!("{}em", trim_float(*v)),
+            ("Rem", Value::Int(v)) => format!("{v}rem"),
+            ("Rem", Value::Float(v)) => format!("{}rem", trim_float(*v)),
+            ("Vh", Value::Int(v)) => format!("{v}vh"),
+            ("Vh", Value::Float(v)) => format!("{}vh", trim_float(*v)),
+            ("Vw", Value::Int(v)) => format!("{v}vw"),
+            ("Vw", Value::Float(v)) => format!("{}vw", trim_float(*v)),
+            ("Pct", Value::Int(v)) => format!("{v}%"),
+            ("Pct", Value::Float(v)) => format!("{}%", trim_float(*v)),
+            _ => crate::runtime::format_value(value),
+        },
         Value::Record(fields) => {
             // Heuristic: treat `{ r, g, b }` as a CSS rgb color.
             if let (Some(Value::Int(r)), Some(Value::Int(g)), Some(Value::Int(b))) =
@@ -636,7 +631,12 @@ fn escape_attr_value(text: &str) -> String {
 
 fn event_id(kind: &str, node_id: &str) -> i64 {
     let mut hash: u64 = 0xcbf29ce484222325;
-    for b in kind.as_bytes().iter().chain([b':'].iter()).chain(node_id.as_bytes().iter()) {
+    for b in kind
+        .as_bytes()
+        .iter()
+        .chain([b':'].iter())
+        .chain(node_id.as_bytes().iter())
+    {
         hash ^= *b as u64;
         hash = hash.wrapping_mul(0x100000001b3);
     }
@@ -656,10 +656,9 @@ fn diff_vnode(old: &Value, new: &Value, node_id: &str, out: &mut Vec<Value>) {
     }
 
     match (old, new) {
-        (
-            Value::Constructor { name: on, args: oa },
-            Value::Constructor { name: nn, args: na },
-        ) if on == "TextNode" && nn == "TextNode" && oa.len() == 1 && na.len() == 1 => {
+        (Value::Constructor { name: on, args: oa }, Value::Constructor { name: nn, args: na })
+            if on == "TextNode" && nn == "TextNode" && oa.len() == 1 && na.len() == 1 =>
+        {
             let ot = match &oa[0] {
                 Value::Text(t) => t.as_str(),
                 _ => "",
@@ -671,14 +670,16 @@ fn diff_vnode(old: &Value, new: &Value, node_id: &str, out: &mut Vec<Value>) {
             if ot != nt {
                 out.push(Value::Constructor {
                     name: "SetText".to_string(),
-                    args: vec![Value::Text(node_id.to_string()), Value::Text(nt.to_string())],
+                    args: vec![
+                        Value::Text(node_id.to_string()),
+                        Value::Text(nt.to_string()),
+                    ],
                 });
             }
         }
-        (
-            Value::Constructor { name: on, args: oa },
-            Value::Constructor { name: nn, args: na },
-        ) if on == "Keyed" && nn == "Keyed" && oa.len() == 2 && na.len() == 2 => {
+        (Value::Constructor { name: on, args: oa }, Value::Constructor { name: nn, args: na })
+            if on == "Keyed" && nn == "Keyed" && oa.len() == 2 && na.len() == 2 =>
+        {
             let ok = match &oa[0] {
                 Value::Text(t) => t.as_str(),
                 _ => "",
@@ -697,10 +698,9 @@ fn diff_vnode(old: &Value, new: &Value, node_id: &str, out: &mut Vec<Value>) {
             }
             diff_vnode(&oa[1], &na[1], node_id, out);
         }
-        (
-            Value::Constructor { name: on, args: oa },
-            Value::Constructor { name: nn, args: na },
-        ) if on == "Element" && nn == "Element" && oa.len() == 3 && na.len() == 3 => {
+        (Value::Constructor { name: on, args: oa }, Value::Constructor { name: nn, args: na })
+            if on == "Element" && nn == "Element" && oa.len() == 3 && na.len() == 3 =>
+        {
             let otag = match &oa[0] {
                 Value::Text(t) => t.as_str(),
                 _ => "",
@@ -757,10 +757,11 @@ fn child_segments(children: &Value) -> Vec<String> {
 
 fn same_vnode_shape(a: &Value, b: &Value) -> bool {
     match (a, b) {
-        (
-            Value::Constructor { name: an, args: aa },
-            Value::Constructor { name: bn, args: ba },
-        ) if an == bn && aa.len() == ba.len() => true,
+        (Value::Constructor { name: an, args: aa }, Value::Constructor { name: bn, args: ba })
+            if an == bn && aa.len() == ba.len() =>
+        {
+            true
+        }
         _ => false,
     }
 }
@@ -907,7 +908,9 @@ fn decode_event(text: &str) -> Result<Value, String> {
 fn decode_event_raw(text: &str) -> Result<DecodedEvent, String> {
     let value: serde_json::Value =
         serde_json::from_str(text).map_err(|e| format!("invalid json: {e}"))?;
-    let obj = value.as_object().ok_or_else(|| "event must be an object".to_string())?;
+    let obj = value
+        .as_object()
+        .ok_or_else(|| "event must be an object".to_string())?;
     let t = obj
         .get("t")
         .and_then(|v| v.as_str())

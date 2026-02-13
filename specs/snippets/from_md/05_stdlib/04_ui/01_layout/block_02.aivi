@@ -1,2 +1,2 @@
 // Underlying representation
-UnitVal = { val: Float }
+UnitVal = { val: Int }

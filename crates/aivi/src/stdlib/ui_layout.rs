@@ -9,26 +9,19 @@ export domain Layout
 use aivi
 
 // Underlying representation (implementation detail).
-UnitVal = { val: Float }
+type UnitVal = { val: Int }
 
 domain Layout over UnitVal = {
   // Typed UI/layout units. These are also used by CSS-style records.
-  type Length = Px Float | Em Float | Rem Float | Vh Float | Vw Float
-  type Percentage = Pct Float
+  type Length = Px Int | Em Int | Rem Int | Vh Int | Vw Int
+  type Percentage = Pct Int
 
   // Literals
-  1px = Px 1.0
-  1em = Em 1.0
-  1rem = Rem 1.0
-  1vh = Vh 1.0
-  1vw = Vw 1.0
-  1% = Pct 1.0
-
-  // Arithmetic within same unit type
-  (+) : Length -> Length -> Length
-  (+) (Px a) (Px b) = Px (a + b)
-
-  (-) : Length -> Length -> Length
-  (-) (Px a) (Px b) = Px (a - b)
+  1px = Px 1
+  1em = Em 1
+  1rem = Rem 1
+  1vh = Vh 1
+  1vw = Vw 1
+  1% = Pct 1
 }
 "#;

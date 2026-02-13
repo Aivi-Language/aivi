@@ -4,52 +4,58 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.ui
 export VNode, Attr, PatchOp, Event, LiveConfig, LiveError
-export element, text, keyed
-export className, id, style, attr, onClick, onInput
+export Element, TextNode, Keyed
+export Class, Id, Style, OnClick, OnInput
+export Replace, SetText, SetAttr, RemoveAttr
+export Click, Input
+export vElement, vText, vKeyed
+export vClass, vId, vStyle, vAttr, vOnClick, vOnInput
 export renderHtml, diff, patchToJson, eventFromJson
 export live
 
 use aivi
 
 // A typed Virtual DOM. Rendering is backend/runtime-specific.
-VNode msg = Element Text (List (Attr msg)) (List (VNode msg)) | TextNode Text | Keyed Text (VNode msg)
+type VNode msg = Element Text (List (Attr msg)) (List (VNode msg)) | TextNode Text | Keyed Text (VNode msg)
 
-Attr msg = Class Text | Id Text | Style { } | OnClick msg | OnInput (Text -> msg) | Attr Text Text
+type Attr msg = Class Text | Id Text | Style { } | OnClick msg | OnInput (Text -> msg) | Attr Text Text
 
-element : Text -> List (Attr msg) -> List (VNode msg) -> VNode msg
-element tag attrs children = Element tag attrs children
+// Helpers for tooling/lowerings. These avoid common names like `id` or `style`,
+// which are likely to appear in user code and other stdlib modules.
+vElement : Text -> List (Attr msg) -> List (VNode msg) -> VNode msg
+vElement tag attrs children = Element tag attrs children
 
-text : Text -> VNode msg
-text t = TextNode t
+vText : Text -> VNode msg
+vText t = TextNode t
 
-keyed : Text -> VNode msg -> VNode msg
-keyed key node = Keyed key node
+vKeyed : Text -> VNode msg -> VNode msg
+vKeyed key node = Keyed key node
 
-className : Text -> Attr msg
-className t = Class t
+vClass : Text -> Attr msg
+vClass t = Class t
 
-id : Text -> Attr msg
-id t = Id t
+vId : Text -> Attr msg
+vId t = Id t
 
-style : { } -> Attr msg
-style css = Style css
+vStyle : { } -> Attr msg
+vStyle css = Style css
 
-attr : Text -> Text -> Attr msg
-attr k v = Attr k v
+vAttr : Text -> Text -> Attr msg
+vAttr k v = Attr k v
 
-onClick : msg -> Attr msg
-onClick msg = OnClick msg
+vOnClick : msg -> Attr msg
+vOnClick msg = OnClick msg
 
-onInput : (Text -> msg) -> Attr msg
-onInput f = OnInput f
+vOnInput : (Text -> msg) -> Attr msg
+vOnInput f = OnInput f
 
 // Patch operations for LiveView-like updates.
-PatchOp = Replace Text Text | SetText Text Text | SetAttr Text Text Text | RemoveAttr Text Text
+type PatchOp = Replace Text Text | SetText Text Text | SetAttr Text Text Text | RemoveAttr Text Text
 
-Event = Click Int | Input Int Text
+type Event = Click Int | Input Int Text
 
-LiveConfig = { address: Text, path: Text, title: Text }
-LiveError = { message: Text }
+type LiveConfig = { address: Text, path: Text, title: Text }
+type LiveError = { message: Text }
 
 renderHtml : VNode msg -> Text
 renderHtml node = ui.renderHtml node

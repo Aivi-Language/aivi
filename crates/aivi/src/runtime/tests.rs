@@ -193,7 +193,8 @@ use aivi.ui.layout
 x = 10px
 "#;
 
-    let (mut modules, diags) = crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+    let (mut modules, diags) =
+        crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
     let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();

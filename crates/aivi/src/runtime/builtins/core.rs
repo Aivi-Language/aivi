@@ -18,11 +18,11 @@ use super::system::{
     build_system_record,
 };
 use super::text::build_text_record;
+use super::ui::build_ui_record;
 use super::url_http::{build_http_client_record, build_url_record, HttpClientMode};
 use super::util::{builtin, builtin_constructor};
 use super::{database::build_database_record, log::build_log_record};
 use crate::runtime::http::build_http_server_record;
-use super::ui::build_ui_record;
 use crate::runtime::{format_value, EffectValue, Env, RuntimeError, Value};
 
 pub(crate) fn register_builtins(env: &Env) {

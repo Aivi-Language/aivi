@@ -8,7 +8,7 @@ The `~html{ ... }` sigil parses HTML-like syntax and lowers it to `aivi.ui.VNode
 
 Use `{ expr }` inside `~html{}` to splice an AIVI expression:
 
-- In child position, the expected type is `VNode msg`. If the splice is `Text` (or implements `ToText`), it is coerced via `text` / `toText`.
+- In child position, the expected type is `VNode msg`. If the splice is `Text` (or implements `ToText`), it is coerced by wrapping with `TextNode` (and inserting `toText` when needed).
 - In attribute position, `...={expr}` is type-checked against the attribute's expected type (e.g. `style` expects a record).
 
 <<< ../../snippets/from_md/05_stdlib/04_ui/03_html/block_01.aivi{aivi}
@@ -17,22 +17,22 @@ Use `{ expr }` inside `~html{}` to splice an AIVI expression:
 
 The compiler lowers some attributes to typed constructors:
 
-- `class="..."` -> `aivi.ui.className`
-- `id="..."` -> `aivi.ui.id`
-- `style={ expr }` -> `aivi.ui.style expr` (expects a record; see `aivi.ui.layout` for units like `10px`, `50%`)
-- `onClick={ msg }` -> `aivi.ui.onClick msg`
-- `onInput={ f }` -> `aivi.ui.onInput f` where `f : Text -> msg`
+- `class="..."` -> `Class "..."`
+- `id="..."` -> `Id "..."`
+- `style={ expr }` -> `Style expr` (expects a record; see `aivi.ui.layout` for units like `10px`, `50%`)
+- `onClick={ msg }` -> `OnClick msg`
+- `onInput={ f }` -> `OnInput f` where `f : Text -> msg`
 
-All other attributes lower to `aivi.ui.attr name value`:
+All other attributes lower to `Attr name value`:
 
-- `title="Hello"` -> `attr "title" "Hello"`
-- `data-x={ expr }` -> `attr "data-x" (toText expr)` (via expected-type `Text` coercion)
+- `title="Hello"` -> `Attr "title" "Hello"`
+- `data-x={ expr }` -> `Attr "data-x" (toText expr)` (via expected-type `Text` coercion)
 
 ## Keys
 
 The `key=` attribute is special-cased to produce keyed nodes:
 
-- `<li key="k">...</li>` lowers to `aivi.ui.keyed "k" (element "li" ...)`.
+- `<li key="k">...</li>` lowers to `Keyed "k" (Element "li" ...)`.
 
 ## Whitespace
 
