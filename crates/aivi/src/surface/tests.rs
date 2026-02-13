@@ -116,7 +116,7 @@ x = ~map{ "a" => 1 }
         .expect("x def");
 
     assert!(
-        !matches!(def.expr, Expr::Literal(Literal::Sigil { tag, .. }) if tag == "map"),
+        !matches!(&def.expr, Expr::Literal(Literal::Sigil { tag, .. }) if tag == "map"),
         "expected ~map{{...}} to parse as a structured literal, not a sigil literal"
     );
 }

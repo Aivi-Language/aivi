@@ -834,7 +834,7 @@ impl Parser {
             let decorators = self.consume_decorators();
             self.validate_item_decorators(&decorators);
             if self.match_keyword("type") {
-                if let Some(type_decl) = self.parse_type_decl(decorators) {
+                if let Some(type_decl) = self.parse_type_decl(decorators.clone()) {
                     items.push(DomainItem::TypeAlias(type_decl));
                     continue;
                 }
