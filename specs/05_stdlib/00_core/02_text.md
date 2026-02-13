@@ -1,8 +1,10 @@
 # Text Module
 
+<!-- quick-info: {"kind":"module","name":"aivi.text"} -->
 The `aivi.text` module provides core string and character utilities for `Text` and `Char`.
 It focuses on predictable, Unicode-aware behavior, and uses `Option`/`Result` instead of
 sentinel values like `-1`.
+<!-- /quick-info -->
 
 ## Overview
 
@@ -27,7 +29,7 @@ sentinel values like `-1`.
 | --- | --- |
 | **isDigit** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is a Unicode digit. |
 | **isAlpha** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is a Unicode letter. |
-| **isAlnum** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is a Unicode letter or digit. |
+| **isAlnum** char<br><pre><code>`Char -> Bool`</code></pre> | <!-- quick-info: {"kind":"function","name":"isAlnum","module":"aivi.text"} -->Returns whether `char` is a Unicode letter or digit.<!-- /quick-info --> |
 | **isSpace** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is a Unicode whitespace. |
 | **isUpper** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is uppercase. |
 | **isLower** char<br><pre><code>`Char -> Bool`</code></pre> | Returns whether `char` is lowercase. |

@@ -6,10 +6,10 @@
       "include": "#comment"
     },
     {
-      "include": "#sigil"
+      "include": "#type_signature"
     },
     {
-      "include": "#type_signature"
+      "include": "#sigil"
     },
     {
       "include": "#string"
@@ -210,10 +210,6 @@
     },
     "sigil": {
       "patterns": [
-        {
-          "match": "<~[a-z][A-Za-z0-9_]*\\b",
-          "name": "entity.name.function.sigil.close.aivi"
-        },
         {
           "begin": "(~html)(\\{)",
           "beginCaptures": {

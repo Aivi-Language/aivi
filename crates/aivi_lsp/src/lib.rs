@@ -1,6 +1,7 @@
 mod backend;
 mod completion;
 mod diagnostics;
+mod doc_index;
 mod document_symbols;
 mod navigation;
 mod semantic_tokens;
