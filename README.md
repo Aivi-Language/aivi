@@ -1,3 +1,7 @@
+<p align="center">
+  <img width="128" height="128" alt="image" src="https://github.com/user-attachments/assets/f2815310-861c-454d-a37c-9dd4f4bd0aed" />
+</p>
+
 # AIVI Language Specification & Implementation
 
 > [!WARNING]
