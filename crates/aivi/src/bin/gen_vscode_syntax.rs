@@ -217,6 +217,20 @@ fn aivi_tmlanguage() -> serde_json::Value {
         "sigil": {
           "patterns": [
             {
+              // Special-case: `~html{ ... }` commonly contains `{ expr }` splices, which would
+              // prematurely terminate the generic `{ ... }` sigil rule.
+              "name": "string.quoted.other.sigil.aivi",
+              "begin": "(~html)(\\{)",
+              "beginCaptures": {
+                "1": { "name": "entity.name.function.sigil.aivi" },
+                "2": { "name": "punctuation.definition.string.begin.aivi" }
+              },
+              "end": "^\\s*\\}",
+              "endCaptures": {
+                "0": { "name": "punctuation.definition.string.end.aivi" }
+              }
+            },
+            {
               "name": "string.quoted.other.sigil.aivi",
               "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(/)",
               "beginCaptures": {

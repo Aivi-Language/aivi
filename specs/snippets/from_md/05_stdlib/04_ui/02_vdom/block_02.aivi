@@ -1,0 +1,3 @@
+use aivi.ui (element, text, className)
+
+view = name => element "div" [className "greeting"] [text "Hello {name}"]

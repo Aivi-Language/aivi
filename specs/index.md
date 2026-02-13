@@ -121,7 +121,10 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 
 #### UI
 - [Layout](05_stdlib/04_ui/01_layout)
+- [Virtual DOM](05_stdlib/04_ui/02_vdom)
+- [HTML Sigil](05_stdlib/04_ui/03_html)
 - [Color](05_stdlib/04_ui/04_color)
+- [LiveView](05_stdlib/04_ui/05_liveview)
 
 ### Execution & Concurrency
 

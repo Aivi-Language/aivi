@@ -631,6 +631,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "channel"
             | "concurrent"
             | "httpServer"
+            | "ui"
             | "sockets"
             | "streams"
     )

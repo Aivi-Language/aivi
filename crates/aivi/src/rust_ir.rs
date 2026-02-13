@@ -1189,6 +1189,7 @@ fn resolve_builtin(name: &str) -> Option<BuiltinName> {
             | "channel"
             | "concurrent"
             | "httpServer"
+            | "ui"
             | "text"
             | "regex"
             | "math"

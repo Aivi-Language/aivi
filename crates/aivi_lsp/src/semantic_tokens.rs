@@ -9,7 +9,7 @@ use crate::backend::Backend;
 
 impl Backend {
     pub(super) const KEYWORDS: &'static [&'static str] = syntax::KEYWORDS_ALL;
-    pub(super) const SIGILS: [&'static str; 4] = ["~r//", "~u()", "~d()", "~dt()"];
+    pub(super) const SIGILS: [&'static str; 5] = ["~r//", "~u()", "~d()", "~dt()", "~html{}"];
 
     pub(super) const SEM_TOKEN_KEYWORD: u32 = 0;
     pub(super) const SEM_TOKEN_TYPE: u32 = 1;
@@ -671,8 +671,36 @@ impl Backend {
                 continue;
             };
 
-            let line = token.span.start.line.saturating_sub(1) as u32;
-            let start = token.span.start.column.saturating_sub(1) as u32;
+            let start_line = token.span.start.line.saturating_sub(1) as u32;
+            let start_col = token.span.start.column.saturating_sub(1) as u32;
+
+            if token.span.start.line != token.span.end.line {
+                // LSP semantic tokens cannot span multiple lines.
+                for (idx, part) in token.text.split('\n').enumerate() {
+                    let line = start_line.saturating_add(idx as u32);
+                    let start = if idx == 0 { start_col } else { 0 };
+                    let len = part.chars().count() as u32;
+                    let modifiers = if signature_lines.contains(&line) {
+                        1u32 << Self::SEM_MOD_SIGNATURE
+                    } else {
+                        0
+                    };
+                    Self::push_semantic_token(
+                        &mut data,
+                        &mut last_line,
+                        &mut last_start,
+                        line,
+                        start,
+                        len,
+                        token_type,
+                        modifiers,
+                    );
+                }
+                continue;
+            }
+
+            let line = start_line;
+            let start = start_col;
             let len = token
                 .span
                 .end

@@ -121,6 +121,136 @@ x = ~map{ "a" => 1 }
     );
 }
 
+fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
+    match expr {
+        Expr::Ident(name) => name.name == target,
+        Expr::Literal(_) => false,
+        Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
+            crate::surface::TextPart::Text { .. } => false,
+            crate::surface::TextPart::Expr { expr, .. } => expr_contains_ident(expr, target),
+        }),
+        Expr::List { items, .. } => items.iter().any(|item| expr_contains_ident(&item.expr, target)),
+        Expr::Tuple { items, .. } => items.iter().any(|item| expr_contains_ident(item, target)),
+        Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => fields
+            .iter()
+            .any(|field| expr_contains_ident(&field.value, target)),
+        Expr::FieldAccess { base, field, .. } => {
+            field.name == target || expr_contains_ident(base, target)
+        }
+        Expr::Index { base, index, .. } => {
+            expr_contains_ident(base, target) || expr_contains_ident(index, target)
+        }
+        Expr::FieldSection { field, .. } => field.name == target,
+        Expr::Call { func, args, .. } => {
+            expr_contains_ident(func, target) || args.iter().any(|arg| expr_contains_ident(arg, target))
+        }
+        Expr::Lambda { body, .. } => expr_contains_ident(body, target),
+        Expr::Match { scrutinee, arms, .. } => {
+            scrutinee
+                .as_ref()
+                .is_some_and(|e| expr_contains_ident(e, target))
+                || arms.iter().any(|arm| {
+                    arm.guard
+                        .as_ref()
+                        .is_some_and(|e| expr_contains_ident(e, target))
+                        || expr_contains_ident(&arm.body, target)
+                })
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            expr_contains_ident(cond, target)
+                || expr_contains_ident(then_branch, target)
+                || expr_contains_ident(else_branch, target)
+        }
+        Expr::Binary { left, right, .. } => {
+            expr_contains_ident(left, target) || expr_contains_ident(right, target)
+        }
+        Expr::Block { items, .. } => items.iter().any(|item| match item {
+            crate::surface::BlockItem::Bind { expr, .. }
+            | crate::surface::BlockItem::Let { expr, .. }
+            | crate::surface::BlockItem::Filter { expr, .. }
+            | crate::surface::BlockItem::Yield { expr, .. }
+            | crate::surface::BlockItem::Recurse { expr, .. }
+            | crate::surface::BlockItem::Expr { expr, .. } => expr_contains_ident(expr, target),
+        }),
+        Expr::Raw { .. } => false,
+    }
+}
+
+#[test]
+fn parses_structured_sigil_html_literal() {
+    let src = r#"
+module Example
+
+x =
+  ~html{
+    <div class="card">
+      <span>{ 1 }</span>
+    </div>
+  }
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    assert!(
+        !matches!(&def.expr, Expr::Literal(Literal::Sigil { tag, .. }) if tag == "html"),
+        "expected ~html{{...}} to parse as a structured literal, not a sigil literal"
+    );
+
+    assert!(
+        expr_contains_ident(&def.expr, "element") && expr_contains_ident(&def.expr, "class"),
+        "expected ~html{{...}} to lower into UI element constructor calls"
+    );
+}
+
+#[test]
+fn parses_html_sigil_key_attribute() {
+    let src = r#"
+module Example
+
+x = ~html{ <div key="k">Hi</div> }
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    assert!(
+        expr_contains_ident(&def.expr, "keyed"),
+        "expected key= to lower into `keyed`"
+    );
+}
+
 #[test]
 fn parses_decorator_on_class_decl() {
     let src = r#"

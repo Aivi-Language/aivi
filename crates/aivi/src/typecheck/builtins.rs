@@ -569,6 +569,84 @@ impl TypeChecker {
         };
         env.insert("html".to_string(), Scheme::mono(html_record));
 
+        // UI runtime helpers (VDOM rendering + LiveView loop).
+        let msg = self.fresh_var_id();
+        let model = self.fresh_var_id();
+        let vnode_msg = Type::con("VNode").app(vec![Type::Var(msg)]);
+        let patch_op = Type::con("PatchOp");
+        let list_patch_op = Type::con("List").app(vec![patch_op.clone()]);
+        let event_ty = Type::con("Event");
+        let live_error_ty = Type::con("LiveError");
+        let live_config_ty = Type::con("LiveConfig");
+
+        let ui_record = Type::Record {
+            fields: vec![
+                (
+                    "renderHtml".to_string(),
+                    Type::Func(Box::new(vnode_msg.clone()), Box::new(Type::con("Text"))),
+                ),
+                (
+                    "diff".to_string(),
+                    Type::Func(
+                        Box::new(vnode_msg.clone()),
+                        Box::new(Type::Func(
+                            Box::new(vnode_msg.clone()),
+                            Box::new(list_patch_op.clone()),
+                        )),
+                    ),
+                ),
+                (
+                    "patchToJson".to_string(),
+                    Type::Func(Box::new(list_patch_op.clone()), Box::new(Type::con("Text"))),
+                ),
+                (
+                    "eventFromJson".to_string(),
+                    Type::Func(
+                        Box::new(Type::con("Text")),
+                        Box::new(Type::con("Result").app(vec![live_error_ty.clone(), event_ty])),
+                    ),
+                ),
+                (
+                    "live".to_string(),
+                    Type::Func(
+                        Box::new(live_config_ty),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(model)),
+                            Box::new(Type::Func(
+                                Box::new(Type::Func(
+                                    Box::new(Type::Var(model)),
+                                    Box::new(vnode_msg.clone()),
+                                )),
+                                Box::new(Type::Func(
+                                    Box::new(Type::Func(
+                                        Box::new(Type::Var(msg)),
+                                        Box::new(Type::Func(
+                                            Box::new(Type::Var(model)),
+                                            Box::new(Type::Var(model)),
+                                        )),
+                                    )),
+                                    Box::new(
+                                        Type::con("Effect")
+                                            .app(vec![live_error_ty, Type::con("Server")]),
+                                    ),
+                                )),
+                            )),
+                        )),
+                    ),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            open: true,
+        };
+        env.insert(
+            "ui".to_string(),
+            Scheme {
+                vars: vec![msg, model],
+                ty: ui_record,
+            },
+        );
+
         let text_ty = Type::con("Text");
         let char_ty = Type::con("Char");
         let int_ty = Type::con("Int");

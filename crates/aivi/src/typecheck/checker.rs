@@ -1187,9 +1187,20 @@ impl TypeChecker {
                 self.check_or_coerce(out, expected, env)
             }
             Expr::List { items, span } => {
+                let expected_elem = expected.as_ref().and_then(|ty| {
+                    let applied = self.apply(ty.clone());
+                    let expanded = self.expand_alias(applied);
+                    match expanded {
+                        Type::Con(ref name, ref args) if name == "List" && args.len() == 1 => {
+                            Some(args[0].clone())
+                        }
+                        _ => None,
+                    }
+                });
                 let mut new_items = Vec::new();
                 for item in items {
-                    let (expr, _ty) = self.elab_expr(item.expr, None, env)?;
+                    let item_expected = if item.spread { None } else { expected_elem.clone() };
+                    let (expr, _ty) = self.elab_expr(item.expr, item_expected, env)?;
                     new_items.push(ListItem {
                         expr,
                         spread: item.spread,
@@ -1464,6 +1475,58 @@ impl TypeChecker {
                 return Ok((call_expr, self.apply(expected)));
             }
             self.subst = base_subst2;
+        }
+
+        let is_vnode = matches!(
+            expected_applied,
+            Type::Con(ref name, ref args) if name == "VNode" && args.len() == 1
+        );
+        if is_vnode {
+            let text_fn = Expr::Ident(SpannedName {
+                name: "text".to_string(),
+                span: expr_span(&expr),
+            });
+
+            // First try `text <expr>` if `<expr>` already is `Text`.
+            let call_expr = Expr::Call {
+                func: Box::new(text_fn.clone()),
+                args: vec![expr.clone()],
+                span: expr_span(&expr),
+            };
+            let call_ty = self.infer_expr(&call_expr, env)?;
+            let base_subst2 = self.subst.clone();
+            if self
+                .unify_with_span(call_ty, expected.clone(), expr_span(&call_expr))
+                .is_ok()
+            {
+                return Ok((call_expr, self.apply(expected)));
+            }
+            self.subst = base_subst2;
+
+            // Then try `text (toText <expr>)`.
+            let to_text = Expr::Ident(SpannedName {
+                name: "toText".to_string(),
+                span: expr_span(&expr),
+            });
+            let to_text_call = Expr::Call {
+                func: Box::new(to_text),
+                args: vec![expr.clone()],
+                span: expr_span(&expr),
+            };
+            let call_expr = Expr::Call {
+                func: Box::new(text_fn),
+                args: vec![to_text_call],
+                span: expr_span(&expr),
+            };
+            let call_ty = self.infer_expr(&call_expr, env)?;
+            let base_subst3 = self.subst.clone();
+            if self
+                .unify_with_span(call_ty, expected.clone(), expr_span(&call_expr))
+                .is_ok()
+            {
+                return Ok((call_expr, self.apply(expected)));
+            }
+            self.subst = base_subst3;
         }
 
         // Fall back to the original mismatch (without keeping any partial unifications).

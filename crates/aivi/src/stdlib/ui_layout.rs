@@ -1,8 +1,19 @@
-domain Layout over UnitVal = {
-  // Length (pixels)
-  type Length = Px Float | Em Float | Rem Float | Vh Float | Vw Float
+pub const MODULE_NAME: &str = "aivi.ui.layout";
 
-  // Percentage (0.0 - 1.0 or 0 - 100)
+pub const SOURCE: &str = r#"
+@no_prelude
+module aivi.ui.layout
+export UnitVal, Length, Percentage
+export domain Layout
+
+use aivi
+
+// Underlying representation (implementation detail).
+UnitVal = { val: Float }
+
+domain Layout over UnitVal = {
+  // Typed UI/layout units. These are also used by CSS-style records.
+  type Length = Px Float | Em Float | Rem Float | Vh Float | Vw Float
   type Percentage = Pct Float
 
   // Literals
@@ -20,3 +31,4 @@ domain Layout over UnitVal = {
   (-) : Length -> Length -> Length
   (-) (Px a) (Px b) = Px (a - b)
 }
+"#;

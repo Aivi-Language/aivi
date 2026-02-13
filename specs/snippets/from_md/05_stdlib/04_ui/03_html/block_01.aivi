@@ -1,0 +1,13 @@
+use aivi.ui
+use aivi.ui.layout
+
+model = { name: "Ada" }
+
+node =
+  ~html{
+    <div class="card" style={ { width: 240px, gap: 2em } }>
+      <h1>Hello</h1>
+      { model.name }
+    </div>
+  }
+

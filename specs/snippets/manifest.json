@@ -2274,6 +2274,38 @@
       ]
     },
     {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/02_vdom/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.02_vdom.block_01",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/02_vdom/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.02_vdom.block_02",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/03_html/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.03_html.block_01",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_liveview/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_liveview.block_01",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
       "path": "specs/snippets/from_md/05_stdlib/04_ui/04_color/block_01.aivi",
       "module": "docs.snippets.05_stdlib.04_ui.04_color.block_01",
       "verify": [

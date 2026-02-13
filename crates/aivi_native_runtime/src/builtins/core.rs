@@ -27,6 +27,7 @@ use super::system::{
     build_system_record,
 };
 use super::text::build_text_record;
+use super::ui::build_ui_record;
 use super::url_http::{build_http_client_record, build_url_record, HttpClientMode};
 use super::util::{builtin, builtin_constructor};
 
@@ -293,6 +294,7 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
     env.insert("channel".to_string(), build_channel_record());
     env.insert("concurrent".to_string(), build_concurrent_record());
     env.insert("httpServer".to_string(), build_http_server_record());
+    env.insert("ui".to_string(), build_ui_record());
     env.insert("text".to_string(), build_text_record());
     env.insert("regex".to_string(), build_regex_record());
     env.insert("math".to_string(), build_math_record());

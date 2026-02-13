@@ -23,202 +23,238 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
     let mut tokens = Vec::new();
     let mut diagnostics = Vec::new();
 
-    for (line_index, line) in content.lines().enumerate() {
-        let line_no = line_index + 1;
-        let chars: Vec<char> = line.chars().collect();
-        let mut col = 1;
-        let mut index = 0;
-        while index < chars.len() {
-            let ch = chars[index];
-            if ch == ' ' || ch == '\t' {
-                let start = index;
-                while index < chars.len() && (chars[index] == ' ' || chars[index] == '\t') {
-                    index += 1;
-                }
-                let text: String = chars[start..index].iter().collect();
-                tokens.push(CstToken {
-                    kind: "whitespace".to_string(),
-                    text,
-                    span: span(line_no, col, index - start),
-                });
-                col += index - start;
-                continue;
-            }
+    // Scan across the full source so we can support multiline sigils like `~html{ ... }`.
+    let chars: Vec<char> = content.chars().collect();
+    let mut index = 0usize;
+    let mut line = 1usize;
+    let mut col = 1usize;
 
-            if ch == '/' && index + 1 < chars.len() && chars[index + 1] == '/' {
-                let text: String = chars[index..].iter().collect();
-                tokens.push(CstToken {
-                    kind: "comment".to_string(),
-                    text,
-                    span: span(line_no, col, chars.len() - index),
-                });
-                break;
-            }
+    while index < chars.len() {
+        let ch = chars[index];
 
-            if ch == '-' && index + 1 < chars.len() && chars[index + 1] == '-' {
-                let text: String = chars[index..].iter().collect();
-                tokens.push(CstToken {
-                    kind: "comment".to_string(),
-                    text,
-                    span: span(line_no, col, chars.len() - index),
-                });
-                break;
-            }
+        if ch == '\n' {
+            index += 1;
+            line += 1;
+            col = 1;
+            continue;
+        }
 
-            if ch == '"' {
-                let start = index;
+        if ch == ' ' || ch == '\t' {
+            let start = index;
+            let start_col = col;
+            while index < chars.len() && (chars[index] == ' ' || chars[index] == '\t') {
                 index += 1;
-                let mut closed = false;
-                while index < chars.len() {
-                    if chars[index] == '\\' && index + 1 < chars.len() {
-                        index += 2;
-                        continue;
-                    }
-                    if chars[index] == '"' {
-                        index += 1;
-                        closed = true;
-                        break;
-                    }
-                    index += 1;
+                col += 1;
+            }
+            let text: String = chars[start..index].iter().collect();
+            tokens.push(CstToken {
+                kind: "whitespace".to_string(),
+                text,
+                span: span_single(line, start_col, index - start),
+            });
+            continue;
+        }
+
+        // Line comments (`// ...` and `-- ...`) run to end-of-line.
+        if ch == '/' && index + 1 < chars.len() && chars[index + 1] == '/' {
+            let start = index;
+            let start_col = col;
+            while index < chars.len() && chars[index] != '\n' {
+                index += 1;
+                col += 1;
+            }
+            let text: String = chars[start..index].iter().collect();
+            tokens.push(CstToken {
+                kind: "comment".to_string(),
+                text,
+                span: span_single(line, start_col, index - start),
+            });
+            continue;
+        }
+        if ch == '-' && index + 1 < chars.len() && chars[index + 1] == '-' {
+            let start = index;
+            let start_col = col;
+            while index < chars.len() && chars[index] != '\n' {
+                index += 1;
+                col += 1;
+            }
+            let text: String = chars[start..index].iter().collect();
+            tokens.push(CstToken {
+                kind: "comment".to_string(),
+                text,
+                span: span_single(line, start_col, index - start),
+            });
+            continue;
+        }
+
+        if ch == '"' {
+            let start = index;
+            let start_col = col;
+            index += 1;
+            col += 1;
+            let mut closed = false;
+            while index < chars.len() {
+                if chars[index] == '\n' {
+                    break;
                 }
-                let text: String = chars[start..index.min(chars.len())].iter().collect();
+                if chars[index] == '\\' && index + 1 < chars.len() && chars[index + 1] != '\n' {
+                    index += 2;
+                    col += 2;
+                    continue;
+                }
+                if chars[index] == '"' {
+                    index += 1;
+                    col += 1;
+                    closed = true;
+                    break;
+                }
+                index += 1;
+                col += 1;
+            }
+            let text: String = chars[start..index.min(chars.len())].iter().collect();
+            tokens.push(CstToken {
+                kind: "string".to_string(),
+                text: text.clone(),
+                span: span_single(line, start_col, index - start),
+            });
+            if !closed {
+                diagnostics.push(Diagnostic {
+                    code: "E1001".to_string(),
+                    severity: DiagnosticSeverity::Error,
+                    message: "unterminated string literal".to_string(),
+                    span: span_single(line, start_col, index - start),
+                    labels: vec![DiagnosticLabel {
+                        message: "string literal started here".to_string(),
+                        span: span_single(line, start_col, 1),
+                    }],
+                });
+            }
+            continue;
+        }
+
+        if ch == '~' {
+            if let Some((text, end_line, end_col, closed)) =
+                lex_sigil_multiline(&chars, index, line, col)
+            {
+                let len_chars = text.chars().count();
                 tokens.push(CstToken {
-                    kind: "string".to_string(),
-                    text: text.clone(),
-                    span: span(line_no, col, index - start),
+                    kind: "sigil".to_string(),
+                    text,
+                    span: span_multiline(line, col, end_line, end_col),
                 });
                 if !closed {
+                    let sigil_span = span_multiline(line, col, end_line, end_col);
                     diagnostics.push(Diagnostic {
-                        code: "E1001".to_string(),
+                        code: "E1005".to_string(),
                         severity: DiagnosticSeverity::Error,
-                        message: "unterminated string literal".to_string(),
-                        span: span(line_no, col, index - start),
+                        message: "unterminated sigil literal".to_string(),
+                        span: sigil_span.clone(),
                         labels: vec![DiagnosticLabel {
-                            message: "string literal started here".to_string(),
-                            span: span(line_no, col, 1),
+                            message: "sigil literal started here".to_string(),
+                            span: span_single(line, col, 1),
                         }],
                     });
                 }
-                col += index - start;
+                index += len_chars;
+                line = end_line;
+                col = end_col + 1;
                 continue;
             }
+        }
 
-            if ch == '~' {
-                if let Some((text, len, closed)) = lex_sigil(&chars, index) {
-                    tokens.push(CstToken {
-                        kind: "sigil".to_string(),
-                        text,
-                        span: span(line_no, col, len),
-                    });
-                    if !closed {
-                        let sigil_span = span(line_no, col, len);
-                        diagnostics.push(Diagnostic {
-                            code: "E1005".to_string(),
-                            severity: DiagnosticSeverity::Error,
-                            message: "unterminated sigil literal".to_string(),
-                            span: sigil_span.clone(),
-                            labels: vec![DiagnosticLabel {
-                                message: "sigil literal started here".to_string(),
-                                span: span(line_no, col, 1),
-                            }],
-                        });
-                    }
-                    index += len;
-                    col += len;
-                    continue;
-                }
-            }
-
-            if is_ident_start(ch) {
-                let start = index;
-                index += 1;
-                while index < chars.len() && is_ident_continue(chars[index]) {
-                    index += 1;
-                }
-                let text: String = chars[start..index].iter().collect();
-                tokens.push(CstToken {
-                    kind: "ident".to_string(),
-                    text,
-                    span: span(line_no, col, index - start),
-                });
-                col += index - start;
-                continue;
-            }
-
-            if ch.is_ascii_digit() {
-                let start = index;
-                index += 1;
-                while index < chars.len() && chars[index].is_ascii_digit() {
-                    index += 1;
-                }
-                if index + 1 < chars.len()
-                    && chars[index] == '.'
-                    && chars[index + 1].is_ascii_digit()
-                {
-                    index += 1;
-                    while index < chars.len() && chars[index].is_ascii_digit() {
-                        index += 1;
-                    }
-                }
-                let text: String = chars[start..index].iter().collect();
-                tokens.push(CstToken {
-                    kind: "number".to_string(),
-                    text,
-                    span: span(line_no, col, index - start),
-                });
-                col += index - start;
-                continue;
-            }
-
-            // Semicolons are not part of the surface syntax; keep them as recoverable tokens so
-            // the parser/LSP can continue and the formatter can drop them.
-            if ch == ';' {
-                diagnostics.push(Diagnostic {
-                    code: "E1006".to_string(),
-                    severity: DiagnosticSeverity::Error,
-                    message: "semicolons are not part of AIVI syntax; use newlines".to_string(),
-                    span: span(line_no, col, 1),
-                    labels: vec![DiagnosticLabel {
-                        message: "remove this ';'".to_string(),
-                        span: span(line_no, col, 1),
-                    }],
-                });
-                tokens.push(CstToken {
-                    kind: "symbol".to_string(),
-                    text: ";".to_string(),
-                    span: span(line_no, col, 1),
-                });
+        if is_ident_start(ch) {
+            let start = index;
+            let start_col = col;
+            index += 1;
+            col += 1;
+            while index < chars.len() && is_ident_continue(chars[index]) {
                 index += 1;
                 col += 1;
-                continue;
             }
+            let text: String = chars[start..index].iter().collect();
+            tokens.push(CstToken {
+                kind: "ident".to_string(),
+                text,
+                span: span_single(line, start_col, index - start),
+            });
+            continue;
+        }
 
-            if let Some((symbol, len)) = match_symbol(&chars, index) {
-                tokens.push(CstToken {
-                    kind: "symbol".to_string(),
-                    text: symbol,
-                    span: span(line_no, col, len),
-                });
-                index += len;
-                col += len;
-                continue;
+        if ch.is_ascii_digit() {
+            let start = index;
+            let start_col = col;
+            index += 1;
+            col += 1;
+            while index < chars.len() && chars[index].is_ascii_digit() {
+                index += 1;
+                col += 1;
             }
+            if index + 1 < chars.len() && chars[index] == '.' && chars[index + 1].is_ascii_digit()
+            {
+                index += 1;
+                col += 1;
+                while index < chars.len() && chars[index].is_ascii_digit() {
+                    index += 1;
+                    col += 1;
+                }
+            }
+            let text: String = chars[start..index].iter().collect();
+            tokens.push(CstToken {
+                kind: "number".to_string(),
+                text,
+                span: span_single(line, start_col, index - start),
+            });
+            continue;
+        }
 
+        // Semicolons are not part of the surface syntax; keep them as recoverable tokens so
+        // the parser/LSP can continue and the formatter can drop them.
+        if ch == ';' {
             diagnostics.push(Diagnostic {
-                code: "E1000".to_string(),
+                code: "E1006".to_string(),
                 severity: DiagnosticSeverity::Error,
-                message: format!("unexpected character '{ch}'"),
-                span: span(line_no, col, 1),
-                labels: Vec::new(),
+                message: "semicolons are not part of AIVI syntax; use newlines".to_string(),
+                span: span_single(line, col, 1),
+                labels: vec![DiagnosticLabel {
+                    message: "remove this ';'".to_string(),
+                    span: span_single(line, col, 1),
+                }],
             });
             tokens.push(CstToken {
-                kind: "unknown".to_string(),
-                text: ch.to_string(),
-                span: span(line_no, col, 1),
+                kind: "symbol".to_string(),
+                text: ";".to_string(),
+                span: span_single(line, col, 1),
             });
             index += 1;
             col += 1;
+            continue;
         }
+
+        if let Some((symbol, len)) = match_symbol(&chars, index) {
+            tokens.push(CstToken {
+                kind: "symbol".to_string(),
+                text: symbol,
+                span: span_single(line, col, len),
+            });
+            index += len;
+            col += len;
+            continue;
+        }
+
+        diagnostics.push(Diagnostic {
+            code: "E1000".to_string(),
+            severity: DiagnosticSeverity::Error,
+            message: format!("unexpected character '{ch}'"),
+            span: span_single(line, col, 1),
+            labels: Vec::new(),
+        });
+        tokens.push(CstToken {
+            kind: "unknown".to_string(),
+            text: ch.to_string(),
+            span: span_single(line, col, 1),
+        });
+        index += 1;
+        col += 1;
     }
 
     diagnostics.extend(check_braces(&tokens));
@@ -262,12 +298,17 @@ fn match_symbol(chars: &[char], index: usize) -> Option<(String, usize)> {
     None
 }
 
-fn lex_sigil(chars: &[char], start: usize) -> Option<(String, usize, bool)> {
+fn lex_sigil_multiline(
+    chars: &[char],
+    start: usize,
+    start_line: usize,
+    start_col: usize,
+) -> Option<(String, usize, usize, bool)> {
     if chars.get(start) != Some(&'~') {
         return None;
     }
     let mut index = start + 1;
-    let &tag_start = chars.get(index)?;
+    let tag_start = *chars.get(index)?;
     if !is_ident_start(tag_start) {
         return None;
     }
@@ -275,7 +316,7 @@ fn lex_sigil(chars: &[char], start: usize) -> Option<(String, usize, bool)> {
     while index < chars.len() && is_ident_continue(chars[index]) {
         index += 1;
     }
-    let &open = chars.get(index)?;
+    let open = *chars.get(index)?;
     let tag: String = chars[start + 1..index].iter().collect();
     if (tag == "map" && open == '{') || (tag == "set" && open == '[') {
         return None;
@@ -288,30 +329,130 @@ fn lex_sigil(chars: &[char], start: usize) -> Option<(String, usize, bool)> {
         '{' => '}',
         _ => return None,
     };
-    index += 1;
+
+    // `~html{ ... }` is allowed to span multiple lines and contain nested `{ ... }` splices.
+    if tag == "html" && open == '{' {
+        index += 1; // consume '{'
+
+        let mut line = start_line;
+        let mut col = start_col + (index - start);
+        let mut depth = 1usize;
+        let mut in_quote: Option<char> = None;
+        let mut escaped = false;
+        let mut closed = false;
+
+        while index < chars.len() {
+            let ch = chars[index];
+            if ch == '\n' {
+                line += 1;
+                col = 1;
+                index += 1;
+                escaped = false;
+                continue;
+            }
+
+            if escaped {
+                escaped = false;
+                index += 1;
+                col += 1;
+                continue;
+            }
+            if ch == '\\' {
+                escaped = true;
+                index += 1;
+                col += 1;
+                continue;
+            }
+
+            if let Some(q) = in_quote {
+                if ch == q {
+                    in_quote = None;
+                }
+                index += 1;
+                col += 1;
+                continue;
+            }
+
+            if ch == '"' || ch == '\'' {
+                in_quote = Some(ch);
+                index += 1;
+                col += 1;
+                continue;
+            }
+
+            if ch == '{' {
+                depth += 1;
+                index += 1;
+                col += 1;
+                continue;
+            }
+            if ch == '}' {
+                depth = depth.saturating_sub(1);
+                index += 1;
+                col += 1;
+                if depth == 0 {
+                    closed = true;
+                    break;
+                }
+                continue;
+            }
+
+            index += 1;
+            col += 1;
+        }
+
+        if closed {
+            while index < chars.len() && chars[index].is_ascii_alphabetic() {
+                if chars[index] == '\n' {
+                    break;
+                }
+                index += 1;
+                col += 1;
+            }
+        }
+
+        let text: String = chars[start..index.min(chars.len())].iter().collect();
+        let end_col = col.saturating_sub(1).max(1);
+        return Some((text, line, end_col, closed));
+    }
+
+    // Default: single-line sigils (to avoid swallowing the rest of the file on a missing close).
+    index += 1; // consume opener
+    let mut line = start_line;
+    let mut col = start_col + (index - start);
     let mut closed = false;
     while index < chars.len() {
-        if chars[index] == '\\' && index + 1 < chars.len() {
+        if chars[index] == '\n' {
+            break;
+        }
+        if chars[index] == '\\' && index + 1 < chars.len() && chars[index + 1] != '\n' {
             index += 2;
+            col += 2;
             continue;
         }
         if chars[index] == close {
             index += 1;
+            col += 1;
             closed = true;
             break;
         }
         index += 1;
+        col += 1;
     }
 
     if closed {
         while index < chars.len() && chars[index].is_ascii_alphabetic() {
+            if chars[index] == '\n' {
+                break;
+            }
             index += 1;
+            col += 1;
         }
     }
 
-    let len = index - start;
     let text: String = chars[start..index.min(chars.len())].iter().collect();
-    Some((text, len, closed))
+    let end_col = col.saturating_sub(1).max(1);
+    Some((text, line, end_col, closed))
 }
 
 fn check_braces(tokens: &[CstToken]) -> Vec<Diagnostic> {
@@ -369,12 +510,25 @@ fn matches_pair(open: &str, close: &str) -> bool {
     matches!((open, close), ("{", "}") | ("(", ")") | ("[", "]"))
 }
 
-fn span(line: usize, column: usize, len: usize) -> Span {
+fn span_single(line: usize, column: usize, len: usize) -> Span {
     Span {
         start: Position { line, column },
         end: Position {
             line,
             column: if len == 0 { column } else { column + len - 1 },
+        },
+    }
+}
+
+fn span_multiline(start_line: usize, start_col: usize, end_line: usize, end_col: usize) -> Span {
+    Span {
+        start: Position {
+            line: start_line,
+            column: start_col,
+        },
+        end: Position {
+            line: end_line,
+            column: end_col,
         },
     }
 }
@@ -391,7 +545,11 @@ pub fn filter_tokens(tokens: &[CstToken]) -> Vec<Token> {
                     span: token.span.clone(),
                 });
             }
-            last_line = token.span.start.line;
+            last_line = token.span.end.line;
+        } else {
+            // Multiline tokens (e.g. `~html{ ... }`) should advance the logical "current line"
+            // so we don't synthesize a newline when the next token starts on the closing line.
+            last_line = last_line.max(token.span.end.line);
         }
         if token.kind == "symbol" && token.text == ";" {
             // Treat legacy `;` as a line separator for recovery.

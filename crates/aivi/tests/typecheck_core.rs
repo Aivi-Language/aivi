@@ -73,6 +73,24 @@ updated = addWeek { year: 2024, month: 9, day: 1 }"#;
 }
 
 #[test]
+fn typecheck_html_sigil_vdom_and_layout_units() {
+    let source = r#"
+module test.ui
+export node
+
+use aivi.ui
+use aivi.ui.layout
+
+node =
+  ~html{
+    <div style={ { width: 10px, gap: 2em } }>
+      <span>{ 1 }</span>
+    </div>
+  }"#;
+    check_ok(source);
+}
+
+#[test]
 fn typecheck_domain_operator_overload_without_deltas() {
     let source = r#"
 module test.domain_ops

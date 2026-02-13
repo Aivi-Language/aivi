@@ -42,6 +42,8 @@ mod text;
 mod units;
 mod url;
 mod vector;
+mod ui;
+mod ui_layout;
 
 struct EmbeddedModule {
     name: &'static str,
@@ -208,6 +210,14 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: network_http_server::MODULE_NAME,
         source: network_http_server::SOURCE,
+    },
+    EmbeddedModule {
+        name: ui_layout::MODULE_NAME,
+        source: ui_layout::SOURCE,
+    },
+    EmbeddedModule {
+        name: ui::MODULE_NAME,
+        source: ui::SOURCE,
     },
 ];
 

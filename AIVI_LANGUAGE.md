@@ -93,6 +93,7 @@ AIVI uses **Sigils** for complex literals that are validated at compile-time by 
     *   `~r/[a-z]+/`: Regex literal.
     *   `~json{ "x": 1 }`: JSON literal (parsed at compile time).
 *   **Structured Sigils**: `~map{ k => v }` and `~set[1, 2]` are syntactic sugar for collection construction.
+*   **UI Sigil**: `~html{ <div>{expr}</div> }` parses HTML-like syntax into typed `aivi.ui.VNode msg` values (not strings) and supports `{expr}` splices.
 
 ## 4. Kernel & Semantics (Under the Hood)
 *   **Desugaring**: Surface syntax desugars into a minimal **Kernel** (AST defined in `crates/aivi/src/kernel.rs`).

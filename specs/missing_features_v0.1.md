@@ -5,8 +5,7 @@ This document tracks features specified in the documentation but not yet impleme
 ## Standard Library
 
 ### UI
-- **Layout Engine**: The `aivi.ui.layout` module (specified in `04_ui/01_layout.md`) is currently **missing** from the standard library implementation.
-    - No `layout.rs` exists in `crates/aivi/src/stdlib` or `crates/aivi/src/runtime/builtins`.
+- (none)
 
 ## Core Language Features
 - **Decorators**: Fully supported as specified in v0.1.
