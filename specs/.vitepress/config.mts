@@ -97,7 +97,6 @@ export default defineConfig({
         collapsed: false,
         items: [
           { text: 'Introduction', link: '/01_introduction' },
-          { text: 'Language Comparison', link: '/language_comparison' },
           { text: 'Missing Features (v0.1)', link: '/missing_features_v0.1' }
         ]
       },
