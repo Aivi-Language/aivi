@@ -33,7 +33,11 @@ pub use hir::{HirModule, HirProgram};
 pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
 };
-pub use kernel::{lower_hir as lower_kernel, KernelProgram};
+pub use kernel::{
+    lower_hir as lower_kernel, KernelBlockItem, KernelBlockKind, KernelDef, KernelExpr,
+    KernelListItem, KernelLiteral, KernelMatchArm, KernelModule, KernelPathSegment, KernelPattern,
+    KernelProgram, KernelRecordField, KernelRecordPatternField, KernelTextPart,
+};
 pub use mcp::{
     collect_mcp_manifest, serve_mcp_stdio, serve_mcp_stdio_with_policy, McpManifest, McpPolicy,
     McpResource, McpTool,
@@ -51,10 +55,10 @@ pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
 pub use rustc_backend::{build_with_rustc, emit_rustc_source};
 pub use stdlib::{embedded_stdlib_modules, embedded_stdlib_source};
 pub use surface::{
-    parse_modules, parse_modules_from_tokens, BlockItem, ClassDecl, Decorator, Def, DomainDecl,
-    DomainItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem, PathSegment,
-    Pattern, RecordField, RecordPatternField, SpannedName, TextPart, TypeAlias, TypeCtor, TypeDecl,
-    TypeExpr, TypeSig, UseDecl,
+    parse_modules, parse_modules_from_tokens, BlockItem, BlockKind, ClassDecl, Decorator, Def,
+    DomainDecl, DomainItem, Expr, InstanceDecl, ListItem, Literal, MatchArm, Module, ModuleItem,
+    PathSegment, Pattern, RecordField, RecordPatternField, SpannedName, TextPart, TypeAlias,
+    TypeCtor, TypeDecl, TypeExpr, TypeSig, UseDecl,
 };
 pub use typecheck::{check_types, elaborate_expected_coercions, infer_value_types};
 

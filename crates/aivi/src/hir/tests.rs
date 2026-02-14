@@ -159,7 +159,7 @@ mod debug_tests {
 module test.debug
 
 @debug(pipes, args, return, time)
-f x = x |> g 1 |> h
+f = x => x |> g 1 |> h
 "#;
         let path = write_temp_source(source);
         with_debug_trace(false, || {
@@ -178,11 +178,11 @@ f x = x |> g 1 |> h
         let source = r#"
 module test.debug
 
-g n x = x + n
-h x = x * 2
+g = n x => x + n
+h = x => x * 2
 
 @debug(pipes, time)
-f x = x |> g 1 |> h
+f = x => x |> g 1 |> h
 "#;
         let path = write_temp_source(source);
         with_debug_trace(true, || {

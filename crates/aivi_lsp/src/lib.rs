@@ -8,6 +8,7 @@ mod semantic_tokens;
 mod server;
 mod signature;
 mod state;
+mod strict;
 mod workspace;
 
 #[cfg(test)]

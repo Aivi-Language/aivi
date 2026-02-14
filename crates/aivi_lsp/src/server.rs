@@ -23,6 +23,7 @@ use tower_lsp::{LanguageServer, LspService, Server};
 
 use crate::backend::Backend;
 use crate::state::BackendState;
+use crate::strict::StrictLevel;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -38,9 +39,18 @@ struct AiviDiagnosticsConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AiviStrictConfig {
+    level: Option<u8>,
+    forbid_implicit_coercions: Option<bool>,
+    warnings_as_errors: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
 struct AiviConfig {
     format: Option<AiviFormatConfig>,
     diagnostics: Option<AiviDiagnosticsConfig>,
+    strict: Option<AiviStrictConfig>,
 }
 
 #[tower_lsp::async_trait]
@@ -175,6 +185,18 @@ impl LanguageServer for Backend {
                 state.diagnostics_in_specs_snippets = include;
             }
         }
+
+        if let Some(strict) = config.strict {
+            if let Some(level) = strict.level {
+                state.strict.level = StrictLevel::from_u8(level);
+            }
+            if let Some(forbid) = strict.forbid_implicit_coercions {
+                state.strict.forbid_implicit_coercions = forbid;
+            }
+            if let Some(warnings_as_errors) = strict.warnings_as_errors {
+                state.strict.warnings_as_errors = warnings_as_errors;
+            }
+        }
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -187,7 +209,10 @@ impl LanguageServer for Backend {
         let version = params.text_document.version;
         self.update_document(uri.clone(), text).await;
         let workspace = self.workspace_modules_for(&uri).await;
-        let include_specs_snippets = self.state.lock().await.diagnostics_in_specs_snippets;
+        let (include_specs_snippets, strict) = {
+            let state = self.state.lock().await;
+            (state.diagnostics_in_specs_snippets, state.strict.clone())
+        };
         if let Some(diagnostics) = self
             .with_document_text(&uri, |content| {
                 Self::build_diagnostics_with_workspace(
@@ -195,6 +220,7 @@ impl LanguageServer for Backend {
                     &uri,
                     &workspace,
                     include_specs_snippets,
+                    &strict,
                 )
             })
             .await
@@ -211,7 +237,10 @@ impl LanguageServer for Backend {
         if let Some(change) = params.content_changes.into_iter().next() {
             self.update_document(uri.clone(), change.text).await;
             let workspace = self.workspace_modules_for(&uri).await;
-            let include_specs_snippets = self.state.lock().await.diagnostics_in_specs_snippets;
+            let (include_specs_snippets, strict) = {
+                let state = self.state.lock().await;
+                (state.diagnostics_in_specs_snippets, state.strict.clone())
+            };
             if let Some(diagnostics) = self
                 .with_document_text(&uri, |content| {
                     Self::build_diagnostics_with_workspace(
@@ -219,6 +248,7 @@ impl LanguageServer for Backend {
                         &uri,
                         &workspace,
                         include_specs_snippets,
+                        &strict,
                     )
                 })
                 .await

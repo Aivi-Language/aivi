@@ -9,6 +9,7 @@ use tower_lsp::lsp_types::{
 
 use crate::backend::Backend;
 use crate::state::IndexedModule;
+use crate::strict::{build_strict_diagnostics, StrictConfig};
 
 impl Backend {
     fn is_specs_snippet_path(path: &Path) -> bool {
@@ -23,7 +24,22 @@ impl Backend {
 
     #[cfg(test)]
     pub(super) fn build_diagnostics(text: &str, uri: &Url) -> Vec<Diagnostic> {
-        Self::build_diagnostics_with_workspace(text, uri, &HashMap::new(), false)
+        Self::build_diagnostics_with_workspace(
+            text,
+            uri,
+            &HashMap::new(),
+            false,
+            &StrictConfig::default(),
+        )
+    }
+
+    #[cfg(test)]
+    pub(super) fn build_diagnostics_strict(
+        text: &str,
+        uri: &Url,
+        strict: &StrictConfig,
+    ) -> Vec<Diagnostic> {
+        Self::build_diagnostics_with_workspace(text, uri, &HashMap::new(), false, strict)
     }
 
     pub(super) fn build_diagnostics_with_workspace(
@@ -31,6 +47,7 @@ impl Backend {
         uri: &Url,
         workspace_modules: &HashMap<String, IndexedModule>,
         include_specs_snippets: bool,
+        strict: &StrictConfig,
     ) -> Vec<Diagnostic> {
         let path = PathBuf::from(Self::path_from_uri(uri));
         if !include_specs_snippets && Self::is_specs_snippet_path(&path) {
@@ -77,6 +94,16 @@ impl Backend {
             out.push(Self::file_diag_to_lsp(uri, file_diag));
         }
 
+        // Strict-mode diagnostics are an additive overlay. They must not affect parsing,
+        // name resolution, or typing; they only provide additional validation and quick fixes.
+        out.extend(build_strict_diagnostics(
+            text,
+            uri,
+            &path,
+            strict,
+            workspace_modules,
+        ));
+
         out
     }
 
@@ -96,15 +123,16 @@ impl Backend {
                 .collect()
         });
 
+        let code = file_diag.diagnostic.code.clone();
         Diagnostic {
             range: Self::span_to_range(file_diag.diagnostic.span),
             severity: Some(match file_diag.diagnostic.severity {
                 aivi::DiagnosticSeverity::Error => DiagnosticSeverity::ERROR,
                 aivi::DiagnosticSeverity::Warning => DiagnosticSeverity::WARNING,
             }),
-            code: Some(NumberOrString::String(file_diag.diagnostic.code)),
+            code: Some(NumberOrString::String(code.clone())),
             code_description: None,
-            source: Some("aivi".to_string()),
+            source: Some(format!("aivi.{}", category_for_code(&code))),
             message: file_diag.diagnostic.message,
             related_information,
             tags: None,
@@ -160,6 +188,12 @@ impl Backend {
     ) -> Vec<CodeActionOrCommand> {
         let mut out = Vec::new();
         for diagnostic in diagnostics {
+            // Generic strict-mode (and future) quickfix embedding: Diagnostics may carry a
+            // serialized `TextEdit` list in `Diagnostic.data`.
+            if let Some(actions) = quickfixes_from_diagnostic_data(uri, diagnostic) {
+                out.extend(actions);
+            }
+
             let code = match diagnostic.code.as_ref() {
                 Some(NumberOrString::String(code)) => code.as_str(),
                 Some(NumberOrString::Number(_)) => continue,
@@ -246,4 +280,59 @@ impl Backend {
         }
         out
     }
+}
+
+fn category_for_code(code: &str) -> &'static str {
+    // Keep the mapping coarse and stable; strict-mode uses its own source.
+    if code.starts_with('E') {
+        match &code.get(1..2) {
+            Some("1") => "Syntax",
+            Some("2") => "NameResolution",
+            Some("3") => "Type",
+            _ => "Syntax",
+        }
+    } else if code.starts_with('W') {
+        "Style"
+    } else if code.starts_with("AIVI-S") {
+        "Strict"
+    } else {
+        "Syntax"
+    }
+}
+
+fn quickfixes_from_diagnostic_data(
+    uri: &Url,
+    diagnostic: &Diagnostic,
+) -> Option<Vec<CodeActionOrCommand>> {
+    let data = diagnostic.data.as_ref()?;
+    let obj = data.as_object()?;
+    let fix = obj.get("aiviQuickFix")?;
+
+    #[derive(serde::Deserialize)]
+    struct FixPayload {
+        title: String,
+        #[serde(default)]
+        is_preferred: bool,
+        edits: Vec<TextEdit>,
+    }
+
+    let payload: FixPayload = serde_json::from_value::<FixPayload>(fix.clone()).ok()?;
+    if payload.edits.is_empty() {
+        return None;
+    }
+
+    Some(vec![CodeActionOrCommand::CodeAction(CodeAction {
+        title: payload.title,
+        kind: Some(CodeActionKind::QUICKFIX),
+        diagnostics: Some(vec![diagnostic.clone()]),
+        edit: Some(WorkspaceEdit {
+            changes: Some(HashMap::from([(uri.clone(), payload.edits)])),
+            document_changes: None,
+            change_annotations: None,
+        }),
+        command: None,
+        is_preferred: Some(payload.is_preferred),
+        disabled: None,
+        data: None,
+    })])
 }

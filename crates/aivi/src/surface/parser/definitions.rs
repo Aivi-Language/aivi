@@ -219,7 +219,7 @@ impl Parser {
         // For error recovery (LSP), we still recognize the legacy form:
         //   f x y = ...
         // but emit a hard diagnostic and desugar it to the explicit lambda.
-        let (params, mut expr) = if self.check_symbol("=") {
+        let (params, expr) = if self.check_symbol("=") {
             self.expect_symbol("=", "expected '=' in definition");
             self.consume_newlines();
             let expr = self.parse_expr().unwrap_or(Expr::Raw {
@@ -255,7 +255,7 @@ impl Parser {
                 legacy_span.clone(),
             );
 
-            expr = Expr::Lambda {
+            let expr = Expr::Lambda {
                 params: legacy_params.clone(),
                 body: Box::new(body),
                 span: legacy_span,

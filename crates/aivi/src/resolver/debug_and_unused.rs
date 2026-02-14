@@ -528,7 +528,7 @@ main = effect {
 module test.debug_params
 
 @debug(pipes, nope, time)
-f x = x
+f = x => x
 "#;
         let (modules, diags) =
             crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
