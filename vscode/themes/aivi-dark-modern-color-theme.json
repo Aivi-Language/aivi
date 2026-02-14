@@ -300,6 +300,52 @@
       "name": "AIVI Type Signatures",
       "scope": ["meta.type.signature.aivi"],
       "settings": { "foreground": "#6E6E6E" }
+    },
+    {
+      "name": "HTML Comments (Dark Modern)",
+      "scope": ["comment.block.html", "comment.line.html"],
+      "settings": { "foreground": "#6A9955" }
+    },
+    {
+      "name": "HTML Tag Names (Dark Modern)",
+      "scope": ["entity.name.tag.html"],
+      "settings": { "foreground": "#569CD6" }
+    },
+    {
+      "name": "HTML Tag Punctuation (Dark Modern)",
+      "scope": [
+        "punctuation.definition.tag.begin.html",
+        "punctuation.definition.tag.end.html",
+        "punctuation.definition.tag.html"
+      ],
+      "settings": { "foreground": "#808080" }
+    },
+    {
+      "name": "HTML Attributes (Dark Modern)",
+      "scope": ["entity.other.attribute-name.html"],
+      "settings": { "foreground": "#9CDCFE" }
+    },
+    {
+      "name": "HTML Attribute Equals (Dark Modern)",
+      "scope": ["punctuation.separator.key-value.html"],
+      "settings": { "foreground": "#D4D4D4" }
+    },
+    {
+      "name": "HTML Strings (Dark Modern)",
+      "scope": [
+        "string.quoted.double.html",
+        "string.quoted.single.html",
+        "string.quoted.double.html punctuation.definition.string.begin.html",
+        "string.quoted.double.html punctuation.definition.string.end.html",
+        "string.quoted.single.html punctuation.definition.string.begin.html",
+        "string.quoted.single.html punctuation.definition.string.end.html"
+      ],
+      "settings": { "foreground": "#CE9178" }
+    },
+    {
+      "name": "HTML Entities (Dark Modern)",
+      "scope": ["constant.character.entity.html", "constant.character.entity.named.html"],
+      "settings": { "foreground": "#D7BA7D" }
     }
   ]
 }
