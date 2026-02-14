@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use aivi::{check_modules, check_types, embedded_stdlib_modules, parse_modules};
 use tower_lsp::lsp_types::{
@@ -11,6 +11,16 @@ use crate::backend::Backend;
 use crate::state::IndexedModule;
 
 impl Backend {
+    fn is_specs_snippet_path(path: &Path) -> bool {
+        let mut comps = path.components().map(|c| c.as_os_str());
+        while let Some(comp) = comps.next() {
+            if comp == "specs" {
+                return comps.any(|c| c == "snippets");
+            }
+        }
+        false
+    }
+
     #[cfg(test)]
     pub(super) fn build_diagnostics(text: &str, uri: &Url) -> Vec<Diagnostic> {
         Self::build_diagnostics_with_workspace(text, uri, &HashMap::new())
@@ -22,6 +32,11 @@ impl Backend {
         workspace_modules: &HashMap<String, IndexedModule>,
     ) -> Vec<Diagnostic> {
         let path = PathBuf::from(Self::path_from_uri(uri));
+        if Self::is_specs_snippet_path(&path) {
+            // `specs/snippets/**/*.aivi` contains documentation fragments, not necessarily complete
+            // modules. Avoid surfacing diagnostics as "nags" when authoring specs.
+            return Vec::new();
+        }
         let (file_modules, parse_diags) = parse_modules(&path, text);
 
         // Always surface lex/parse diagnostics first; semantic checking on malformed syntax is

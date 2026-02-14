@@ -200,6 +200,46 @@ fn examples_open_without_lsp_errors() {
 }
 
 #[test]
+fn specs_snippets_open_without_lsp_diagnostics() {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let repo_root = manifest_dir
+        .parent()
+        .and_then(|p| p.parent())
+        .expect("repo root");
+    let snippets_dir = repo_root.join("specs").join("snippets");
+
+    let mut files = Vec::new();
+    collect_aivi_files(&snippets_dir, &mut files);
+    files.sort();
+    assert!(!files.is_empty(), "expected specs/snippets/**/*.aivi");
+
+    let mut failures = Vec::new();
+    for path in files {
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(uri) = Url::from_file_path(&path) else {
+            continue;
+        };
+        let diags = Backend::build_diagnostics_with_workspace(&text, &uri, &HashMap::new());
+        if diags.is_empty() {
+            continue;
+        }
+        let mut msg = format!("{}:", path.display());
+        for diag in diags.iter().take(5) {
+            msg.push_str(&format!(" {}", diag.message));
+        }
+        failures.push(msg);
+    }
+
+    assert!(
+        failures.is_empty(),
+        "expected no diagnostics from aivi-lsp for specs snippets; got:\n{}",
+        failures.join("\n")
+    );
+}
+
+#[test]
 fn completion_after_use_suggests_modules() {
     let text = "module examples.app\nuse aivi.t";
     let uri = sample_uri();
