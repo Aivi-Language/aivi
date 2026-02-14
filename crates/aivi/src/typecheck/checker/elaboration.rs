@@ -204,9 +204,16 @@ impl TypeChecker {
                 self.check_or_coerce(out, expected, env)
             }
             Expr::Lambda { params, body, span } => {
+                // Bind lambda parameters before elaborating the body so references resolve during
+                // expected-coercion elaboration.
+                let mut lambda_env = env.clone();
+                for pattern in &params {
+                    let _ = self.infer_pattern(pattern, &mut lambda_env)?;
+                }
+
                 // For now, only elaborate the body with no expected type. Expected-type coercions
                 // are primarily needed at call sites (arguments/fields), not for lambda bodies.
-                let (body, _ty) = self.elab_expr(*body, None, env)?;
+                let (body, _ty) = self.elab_expr(*body, None, &mut lambda_env)?;
                 let out = Expr::Lambda {
                     params,
                     body: Box::new(body),

@@ -1,7 +1,7 @@
 module examples.i18nSystemLocale
+export main
 
 use aivi
-use aivi.calendar (DateTime)
 use aivi.file (open, readAll)
 use aivi.i18n
 use aivi.system (localeTag)

@@ -396,8 +396,16 @@ impl TypeChecker {
             let body_ty = self.infer_expr(&arm.body, &mut arm_env)?;
             self.unify_with_span(body_ty, result_ty.clone(), arm.span.clone())?;
         }
-        self.check_match_arms(scrutinee_ty, arms, match_span);
-        Ok(result_ty)
+        self.check_match_arms(scrutinee_ty.clone(), arms, match_span);
+        // A match without an explicit scrutinee is the multi-clause unary-function sugar:
+        //   f =
+        //     | Pat1 => expr1
+        //     | Pat2 => expr2
+        if scrutinee.is_none() {
+            Ok(Type::Func(Box::new(scrutinee_ty), Box::new(result_ty)))
+        } else {
+            Ok(result_ty)
+        }
     }
 
     fn check_match_arms(
@@ -427,34 +435,39 @@ impl TypeChecker {
             }
 
             let guarded = arm.guard.is_some();
-            if !guarded {
-                if matches!(arm.pattern, Pattern::Wildcard(_) | Pattern::Ident(_)) {
-                    has_catch_all = Some(arm.span.clone());
-                    continue;
-                }
-                if let Pattern::Constructor { name, ref args, .. } = &arm.pattern {
-                    seen_ctors.insert(name.name.clone());
-                    let ctor_catch_all = args
-                        .iter()
-                        .all(|arg| matches!(arg, Pattern::Wildcard(_) | Pattern::Ident(_)));
-                    if ctor_catch_all {
-                        covered_ctors.insert(name.name.clone());
-                    }
-                }
+            if matches!(arm.pattern, Pattern::Wildcard(_) | Pattern::Ident(_)) && !guarded {
+                has_catch_all = Some(arm.span.clone());
+                continue;
             }
 
-            if let Pattern::Constructor { name, .. } = &arm.pattern {
-                seen_ctors.insert(name.name.clone());
-                if covered_ctors.contains(&name.name) {
+            if let Pattern::Constructor { name, ref args, .. } = &arm.pattern {
+                let ctor_name = name.name.clone();
+                seen_ctors.insert(ctor_name.clone());
+
+                if guarded {
+                    continue;
+                }
+
+                let ctor_catch_all = args
+                    .iter()
+                    .all(|arg| matches!(arg, Pattern::Wildcard(_) | Pattern::Ident(_)));
+                if !ctor_catch_all {
+                    continue;
+                }
+
+                // If a previous arm already fully covered this constructor, this arm is unreachable.
+                if covered_ctors.contains(&ctor_name) {
                     self.emit_extra_diag(
                         "W3101",
                         crate::diagnostics::DiagnosticSeverity::Warning,
                         format!(
                             "unreachable match arm (constructor '{}' already matched by a previous arm)",
-                            name.name
+                            ctor_name
                         ),
                         arm.span.clone(),
                     );
+                } else {
+                    covered_ctors.insert(ctor_name);
                 }
             }
         }

@@ -1,4 +1,5 @@
 module examples.i18nCatalogFallback
+export main
 
 use aivi
 use aivi.i18n

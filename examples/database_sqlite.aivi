@@ -1,4 +1,5 @@
 module examples.databaseSqlite
+export main
 
 use aivi.database as db
 

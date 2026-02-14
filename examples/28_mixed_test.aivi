@@ -8,7 +8,10 @@ export Model, Msg, init, update, view
 
 Model = { count: Int, step: Int }
 
-Msg = Inc | Dec | SetStep Int
+Msg =
+  | Inc
+  | Dec
+  | SetStep Int
 
 init : Model
 init = { count: 0, step: 1 }
@@ -25,5 +28,7 @@ renderCount model = "Count: {model.count}"
 welcomeKey = ~k"app.welcome"
 welcomeMsg = ~m"Hello, {name:Text}!"
 
+welcomeText = (render welcomeMsg { name: "AIVI" }) ? | Ok txt => txt | Err _ => keyText welcomeKey
+
 view : Model -> VNode Msg
-view model = vElement "div" ([vClass "card", vStyle { width: 240px, gap: 2em }]) ([vElement "h1" ([]) ([vText "Hello"]), vText (renderCount model)])
+view model = vElement "div" ([vClass "card", vStyle { width: 240px, gap: 2em }]) ([vElement "h1" ([]) ([vText "Hello"]), vElement "p" ([]) ([vText welcomeText]), vText (renderCount model)])

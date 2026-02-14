@@ -43,6 +43,8 @@ append = xs ys => xs ?
   | []        => ys
   | [h, ...t] => [h, ...append t ys]
 
+max = a b => if a > b then a else b
+
 depth =
   | Leaf _          => 1
   | Node left right => 1 + max (depth left)(depth right)

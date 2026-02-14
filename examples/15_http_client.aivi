@@ -1,7 +1,7 @@
 module examples.httpClient
 export main
 
-use aivi.net.https (Error, get)
+use aivi.net.https (get)
 
 main : Effect Text Unit
 main = effect {

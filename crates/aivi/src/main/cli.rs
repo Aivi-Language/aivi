@@ -1,7 +1,8 @@
 use aivi::{
     check_modules, check_types, collect_mcp_manifest, compile_rust_native, compile_rust_native_lib,
-    desugar_target, embedded_stdlib_source, ensure_aivi_dependency, format_target, kernel_target,
-    load_module_diagnostics, load_modules, parse_target, render_diagnostics, run_native,
+    desugar_target, embedded_stdlib_source, ensure_aivi_dependency,
+    format_target, kernel_target, load_module_diagnostics, load_modules, parse_target,
+    render_diagnostics, run_native,
     rust_ir_target, serve_mcp_stdio_with_policy, validate_publish_preflight, write_scaffold,
     AiviError, CargoDepSpec, McpPolicy, ProjectKind,
 };
@@ -77,6 +78,7 @@ fn run() -> Result<(), AiviError> {
         }
         "check" => {
             let (debug_trace, rest) = consume_debug_trace_flag(&rest);
+            let (check_stdlib, rest) = consume_check_stdlib_flag(&rest);
             maybe_enable_debug_trace(debug_trace);
             let Some(target) = rest.first() else {
                 print_help();
@@ -87,6 +89,9 @@ fn run() -> Result<(), AiviError> {
             diagnostics.extend(check_modules(&modules));
             if !aivi::file_diagnostics_have_errors(&diagnostics) {
                 diagnostics.extend(check_types(&modules));
+            }
+            if !check_stdlib {
+                diagnostics.retain(|diag| !diag.path.starts_with("<embedded:"));
             }
             let has_errors = aivi::file_diagnostics_have_errors(&diagnostics);
             for diag in &diagnostics {
@@ -303,7 +308,7 @@ Fix:\n\
 
 fn print_help() {
     println!(
-        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] <path|dir/...>\n  fmt <path>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--target rust|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--debug-trace] [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
+        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] [--check-stdlib] <path|dir/...>\n  fmt <path>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--target rust|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--debug-trace] [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
     );
 }
 
@@ -418,6 +423,7 @@ fn cmd_mcp_serve(target: &str, allow_effects: bool) -> Result<(), AiviError> {
     if !aivi::file_diagnostics_have_errors(&diagnostics) {
         diagnostics.extend(check_types(&modules));
     }
+    diagnostics.retain(|diag| !diag.path.starts_with("<embedded:"));
     if aivi::file_diagnostics_have_errors(&diagnostics) {
         for diag in diagnostics {
             let rendered = render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
@@ -520,6 +526,19 @@ fn consume_debug_trace_flag(args: &[String]) -> (bool, Vec<String>) {
     let mut out = Vec::new();
     for arg in args {
         if arg == "--debug-trace" {
+            enabled = true;
+        } else {
+            out.push(arg.clone());
+        }
+    }
+    (enabled, out)
+}
+
+fn consume_check_stdlib_flag(args: &[String]) -> (bool, Vec<String>) {
+    let mut enabled = false;
+    let mut out = Vec::new();
+    for arg in args {
+        if arg == "--check-stdlib" {
             enabled = true;
         } else {
             out.push(arg.clone());

@@ -14,10 +14,10 @@ Repo guardrails (see `AGENTS.md`):
 
 ## Baseline (Quality Gate Status)
 
-`cargo test --workspace` is currently failing on:
-- `examples_are_formatter_idempotent` due to a formatter-idempotence diff in `examples/27_algorithms.aivi` (line 123) involving `<-` spacing alignment.
-
-This needs to be fixed before landing P0 work so the repo returns to green.
+Baseline quality gates are currently green:
+- `cargo fmt --all -- --check` passes.
+- `cargo test --workspace` passes.
+- `target/debug/aivi check examples` passes (stdlib diagnostics are suppressed by default; use `target/debug/aivi check --check-stdlib <target>` to include `<embedded:...>` typecheck errors).
 
 ---
 
@@ -208,4 +208,3 @@ Quality gates (before finalizing):
 13) Run `cargo test --workspace`
 14) Run `cargo fmt --all -- --check`
 15) Run `aivi fmt` for any touched AIVI doc snippets and ensure examples still parse/build.
-

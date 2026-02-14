@@ -148,6 +148,17 @@ impl Parser {
         }
 
         let mut ctors = Vec::new();
+        // Constructors may be written inline:
+        //   Msg = Inc | Dec
+        // or in a multi-line style:
+        //   Msg =
+        //     | Inc
+        //     | Dec
+        //
+        // Accept an optional leading `|` and allow newlines between ctors.
+        self.consume_newlines();
+        let _ = self.consume_symbol("|");
+        self.consume_newlines();
         while let Some(ctor_name) = self.consume_ident() {
             let mut args = Vec::new();
             while !self.check_symbol("|") && !self.check_symbol("}") && self.pos < self.tokens.len()
@@ -170,9 +181,11 @@ impl Parser {
                 args,
                 span,
             });
+            self.consume_newlines();
             if !self.consume_symbol("|") {
                 break;
             }
+            self.consume_newlines();
         }
         let span = merge_span(
             name.span.clone(),

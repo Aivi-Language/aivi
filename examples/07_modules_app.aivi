@@ -2,10 +2,10 @@
 module examples.compiler.app
 export run
 
-use examples.compiler.math (add, square)
-use examples.compiler.stats (mean)
+use examples.compiler.math as math
+use examples.compiler.stats as stats
 
 run =
 [1, 2, 3, 4]
-|> mean
-|> add (square 2)
+|> stats.mean
+|> math.add (math.square 2)

@@ -441,6 +441,7 @@ impl Parser {
             });
             (None, Some(rhs))
         };
+        let has_pattern_arms = patterns.is_some();
 
         // Desugar to:
         //   effect {
@@ -518,23 +519,27 @@ impl Parser {
             }
         }
 
-        let err_name = self.fresh_internal_name("or_err", or_span.clone());
-        let err_pat = self.build_ctor_pattern(
-            "Err",
-            vec![Pattern::Ident(err_name.clone())],
-            or_span.clone(),
-        );
-        let err_body = self.build_call_expr(
-            self.build_ident_expr("fail", or_span.clone()),
-            vec![Expr::Ident(err_name)],
-            or_span.clone(),
-        );
-        match_arms.push(MatchArm {
-            pattern: err_pat,
-            guard: None,
-            body: err_body,
-            span: or_span.clone(),
-        });
+        // If the user provided explicit error-pattern arms, propagate unmatched errors.
+        // For `or <fallbackExpr>`, the `Err _ => pure fallbackExpr` arm is exhaustive.
+        if has_pattern_arms {
+            let err_name = self.fresh_internal_name("or_err", or_span.clone());
+            let err_pat = self.build_ctor_pattern(
+                "Err",
+                vec![Pattern::Ident(err_name.clone())],
+                or_span.clone(),
+            );
+            let err_body = self.build_call_expr(
+                self.build_ident_expr("fail", or_span.clone()),
+                vec![Expr::Ident(err_name)],
+                or_span.clone(),
+            );
+            match_arms.push(MatchArm {
+                pattern: err_pat,
+                guard: None,
+                body: err_body,
+                span: or_span.clone(),
+            });
+        }
 
         let match_expr = Expr::Match {
             scrutinee: Some(Box::new(Expr::Ident(res_name))),
