@@ -344,5 +344,6 @@ pub(super) fn build_database_record() -> Value {
     fields.insert("ins".to_string(), builtin_constructor("Insert", 1));
     fields.insert("upd".to_string(), builtin_constructor("Update", 2));
     fields.insert("del".to_string(), builtin_constructor("Delete", 1));
+    fields.insert("pool".to_string(), build_database_pool_record());
     Value::Record(Arc::new(fields))
 }

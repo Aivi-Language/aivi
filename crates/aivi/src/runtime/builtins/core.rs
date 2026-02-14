@@ -9,6 +9,7 @@ use super::crypto::build_crypto_record;
 use super::graph::build_graph_record;
 use super::i18n::build_i18n_record;
 use super::linalg::build_linalg_record;
+use super::list::build_list_record;
 use super::math::build_math_record;
 use super::number::{build_bigint_record, build_decimal_record, build_rational_record};
 use super::regex::build_regex_record;
@@ -320,6 +321,7 @@ pub(crate) fn register_builtins(env: &Env) {
         "streams".to_string(),
         super::streams::build_streams_record(),
     );
+    env.set("List".to_string(), build_list_record());
     let collections = build_collections_record();
     if let Value::Record(fields) = &collections {
         if let Some(map) = fields.get("map") {

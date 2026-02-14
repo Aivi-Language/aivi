@@ -1,0 +1,29 @@
+module App
+
+use aivi.ui (VNode, vElement, vText, vClass, vStyle)
+use aivi.ui.layout (domain Layout)
+use aivi.i18n
+
+export Model, Msg, init, update, view
+
+Model = { count: Int, step: Int }
+
+Msg = Inc | Dec | SetStep Int
+
+init : Model
+init = { count: 0, step: 1 }
+
+update : Msg -> Model -> Model
+update msg model = msg ?
+  | Inc       => model <| { count: _ + model.step }
+  | Dec       => model <| { count: _ - model.step }
+  | SetStep s => model <| { step: s }
+
+renderCount : Model -> Text
+renderCount model = "Count: {model.count}"
+
+welcomeKey = ~k"app.welcome"
+welcomeMsg = ~m"Hello, {name:Text}!"
+
+view : Model -> VNode Msg
+view model = vElement "div" ([vClass "card", vStyle { width: 240px, gap: 2em }]) ([vElement "h1" ([]) ([vText "Hello"]), vText (renderCount model)])

@@ -83,6 +83,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Testing](05_stdlib/00_core/27_testing)
 - [Collections](05_stdlib/00_core/28_collections)
 - [I18n](05_stdlib/00_core/29_i18n)
+- [Generator](05_stdlib/00_core/30_generator)
 
 #### Math & Science
 - [Math](05_stdlib/01_math/01_math)

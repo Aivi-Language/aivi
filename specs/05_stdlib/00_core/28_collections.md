@@ -43,6 +43,39 @@ The `Collections` domain provides `++` as a right-biased merge for `Map` and uni
 
 The following functions are required. Exact module layout may vary, but names and behavior should match.
 
+### List
+
+While `List` is a built-in type, AIVI provides a standard `List` API (like `Map` and `Set`) for
+pipeline-friendly functional programming.
+
+| Function | Explanation |
+| --- | --- |
+| **List.empty**<br><pre><code>`List a`</code></pre> | The empty list `[]`. |
+| **List.isEmpty** list<br><pre><code>`List a -> Bool`</code></pre> | Returns `true` when the list has zero length. |
+| **List.length** list<br><pre><code>`List a -> Int`</code></pre> | Returns the number of elements. |
+| **List.map** f list<br><pre><code>`(a -> b) -> List a -> List b`</code></pre> | Transforms all elements. |
+| **List.filter** pred list<br><pre><code>`(a -> Bool) -> List a -> List a`</code></pre> | Keeps only elements where `pred` returns `true`. |
+| **List.flatMap** f list<br><pre><code>`(a -> List b) -> List a -> List b`</code></pre> | Maps and concatenates (List monad bind). |
+| **List.foldl** f init list<br><pre><code>`(b -> a -> b) -> b -> List a -> b`</code></pre> | Left fold. |
+| **List.foldr** f init list<br><pre><code>`(a -> b -> b) -> b -> List a -> b`</code></pre> | Right fold. |
+| **List.scanl** f init list<br><pre><code>`(b -> a -> b) -> b -> List a -> List b`</code></pre> | Like `foldl`, but returns all intermediate accumulators (including `init`). |
+| **List.take** n list<br><pre><code>`Int -> List a -> List a`</code></pre> | Takes up to `n` elements. For `n <= 0`, returns `[]`. |
+| **List.drop** n list<br><pre><code>`Int -> List a -> List a`</code></pre> | Drops up to `n` elements. For `n <= 0`, returns the original list. |
+| **List.takeWhile** pred list<br><pre><code>`(a -> Bool) -> List a -> List a`</code></pre> | Takes the longest prefix where `pred` holds. |
+| **List.dropWhile** pred list<br><pre><code>`(a -> Bool) -> List a -> List a`</code></pre> | Drops the longest prefix where `pred` holds. |
+| **List.partition** pred list<br><pre><code>`(a -> Bool) -> List a -> (List a, List a)`</code></pre> | Stable partition into `(yes, no)`. |
+| **List.find** pred list<br><pre><code>`(a -> Bool) -> List a -> Option a`</code></pre> | Returns the first matching element (or `None`). |
+| **List.findMap** f list<br><pre><code>`(a -> Option b) -> List a -> Option b`</code></pre> | Returns the first `Some` produced by `f` (or `None`). |
+| **List.at** index list<br><pre><code>`Int -> List a -> Option a`</code></pre> | Returns `Some element` at `index`, or `None` (supports only `index >= 0`). |
+| **List.indexOf** needle list<br><pre><code>`a -> List a -> Option Int`</code></pre> | Returns the first index of `needle` (or `None`). |
+| **List.zip** left right<br><pre><code>`List a -> List b -> List (a, b)`</code></pre> | Zips two lists, truncating to the shorter length. |
+| **List.zipWith** f left right<br><pre><code>`(a -> b -> c) -> List a -> List b -> List c`</code></pre> | Zips with a combining function, truncating to the shorter length. |
+| **List.unzip** pairs<br><pre><code>`List (a, b) -> (List a, List b)`</code></pre> | Unzips a list of pairs. |
+| **List.intersperse** sep list<br><pre><code>`a -> List a -> List a`</code></pre> | Inserts `sep` between elements (no leading/trailing). |
+| **List.chunk** size list<br><pre><code>`Int -> List a -> List (List a)`</code></pre> | Chunks into sublists of length `size`. For `size <= 0`, returns `[]`. |
+| **List.dedup** list<br><pre><code>`List a -> List a`</code></pre> | Stable consecutive de-duplication (`[a,a,b,b,a] -> [a,b,a]`). |
+| **List.uniqueBy** key list<br><pre><code>`(a -> k) -> List a -> List a`</code></pre> | Stable uniqueness by key (keeps first occurrence). Key must be hashable. |
+
 ### Map
 
 | Function | Explanation |
@@ -62,6 +95,11 @@ The following functions are required. Exact module layout may vary, but names an
 | **Map.fromList** entries<br><pre><code>`List (k, v) -> Map k v`</code></pre> | Builds a map from key/value pairs. |
 | **Map.toList** map<br><pre><code>`Map k v -> List (k, v)`</code></pre> | Converts a map into key/value pairs. |
 | **Map.union** left right<br><pre><code>`Map k v -> Map k v -> Map k v`</code></pre> | Merges maps with right-biased keys. |
+| **Map.getOrElse** key default map<br><pre><code>`k -> v -> Map k v -> v`</code></pre> | Returns the value for `key`, or `default` when missing. |
+| **Map.alter** key f map<br><pre><code>`k -> (Option v -> Option v) -> Map k v -> Map k v`</code></pre> | Inserts/updates/removes by transforming the existing `Option`. |
+| **Map.mergeWith** combine left right<br><pre><code>`(k -> v -> v -> v) -> Map k v -> Map k v -> Map k v`</code></pre> | Merges, resolving conflicts with `combine` (only for keys present in both). |
+| **Map.filterWithKey** pred map<br><pre><code>`(k -> v -> Bool) -> Map k v -> Map k v`</code></pre> | Keeps entries where `pred key value` returns `true`. |
+| **Map.foldWithKey** f init map<br><pre><code>`(b -> k -> v -> b) -> b -> Map k v -> b`</code></pre> | Folds over entries (iteration order is unspecified). |
 
 Notes:
 - `Map.union` is right-biased (keys from the right map override).
@@ -81,6 +119,7 @@ Notes:
 | **Set.difference** left right<br><pre><code>`Set a -> Set a -> Set a`</code></pre> | Returns elements in `left` not in `right`. |
 | **Set.fromList** values<br><pre><code>`List a -> Set a`</code></pre> | Builds a set from a list. |
 | **Set.toList** set<br><pre><code>`Set a -> List a`</code></pre> | Converts a set into a list. |
+| **Set.contains** value set<br><pre><code>`a -> Set a -> Bool`</code></pre> | Alias of `Set.has`. |
 
 ### Queue / Deque
 

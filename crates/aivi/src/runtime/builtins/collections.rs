@@ -85,6 +85,33 @@ pub(super) fn build_map_record() -> Value {
         }),
     );
     fields.insert(
+        "map".to_string(),
+        builtin("map.map", 2, |mut args, runtime| {
+            let map = expect_map(args.pop().unwrap(), "map.map")?;
+            let func = args.pop().unwrap();
+            let mut out = ImHashMap::new();
+            for (key, value) in map.iter() {
+                let mapped = runtime.apply(func.clone(), value.clone())?;
+                out.insert(key.clone(), mapped);
+            }
+            Ok(Value::Map(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "mapWithKey".to_string(),
+        builtin("map.mapWithKey", 2, |mut args, runtime| {
+            let map = expect_map(args.pop().unwrap(), "map.mapWithKey")?;
+            let func = args.pop().unwrap();
+            let mut out = ImHashMap::new();
+            for (key, value) in map.iter() {
+                let partial = runtime.apply(func.clone(), key.to_value())?;
+                let mapped = runtime.apply(partial, value.clone())?;
+                out.insert(key.clone(), mapped);
+            }
+            Ok(Value::Map(Arc::new(out)))
+        }),
+    );
+    fields.insert(
         "keys".to_string(),
         builtin("map.keys", 1, |mut args, _| {
             let map = expect_map(args.pop().unwrap(), "map.keys")?;
@@ -155,6 +182,107 @@ pub(super) fn build_map_record() -> Value {
             Ok(Value::Map(Arc::new(out)))
         }),
     );
+    fields.insert(
+        "getOrElse".to_string(),
+        builtin("map.getOrElse", 3, |mut args, _| {
+            let map = expect_map(args.pop().unwrap(), "map.getOrElse")?;
+            let default = args.pop().unwrap();
+            let key = key_from_value(&args.pop().unwrap(), "map.getOrElse")?;
+            Ok(map.get(&key).cloned().unwrap_or(default))
+        }),
+    );
+    fields.insert(
+        "alter".to_string(),
+        builtin("map.alter", 3, |mut args, runtime| {
+            let map = expect_map(args.pop().unwrap(), "map.alter")?;
+            let func = args.pop().unwrap();
+            let key = key_from_value(&args.pop().unwrap(), "map.alter")?;
+            let current = match map.get(&key) {
+                Some(value) => make_some(value.clone()),
+                None => make_none(),
+            };
+            let updated = runtime.apply(func, current)?;
+            match updated {
+                Value::Constructor { name, args } if name == "None" && args.is_empty() => {
+                    let mut out = (*map).clone();
+                    out.remove(&key);
+                    Ok(Value::Map(Arc::new(out)))
+                }
+                Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
+                    let mut out = (*map).clone();
+                    out.insert(key, args[0].clone());
+                    Ok(Value::Map(Arc::new(out)))
+                }
+                other => Err(RuntimeError::Message(format!(
+                    "map.alter expects f : Option v -> Option v, got {}",
+                    crate::runtime::format_value(&other)
+                ))),
+            }
+        }),
+    );
+    fields.insert(
+        "mergeWith".to_string(),
+        builtin("map.mergeWith", 3, |mut args, runtime| {
+            let right = expect_map(args.pop().unwrap(), "map.mergeWith")?;
+            let left = expect_map(args.pop().unwrap(), "map.mergeWith")?;
+            let combine = args.pop().unwrap();
+            let mut out = (*left).clone();
+            for (key, right_val) in right.iter() {
+                match left.get(key) {
+                    Some(left_val) => {
+                        let partial = runtime.apply(combine.clone(), key.to_value())?;
+                        let partial = runtime.apply(partial, left_val.clone())?;
+                        let merged = runtime.apply(partial, right_val.clone())?;
+                        out.insert(key.clone(), merged);
+                    }
+                    None => {
+                        out.insert(key.clone(), right_val.clone());
+                    }
+                }
+            }
+            Ok(Value::Map(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "filterWithKey".to_string(),
+        builtin("map.filterWithKey", 2, |mut args, runtime| {
+            let map = expect_map(args.pop().unwrap(), "map.filterWithKey")?;
+            let pred = args.pop().unwrap();
+            let mut out = ImHashMap::new();
+            for (key, value) in map.iter() {
+                let partial = runtime.apply(pred.clone(), key.to_value())?;
+                let ok = runtime.apply(partial, value.clone())?;
+                match ok {
+                    Value::Bool(true) => {
+                        out.insert(key.clone(), value.clone());
+                    }
+                    Value::Bool(false) => {}
+                    other => {
+                        return Err(RuntimeError::Message(format!(
+                            "map.filterWithKey expects Bool predicate, got {}",
+                            crate::runtime::format_value(&other)
+                        )))
+                    }
+                }
+            }
+            Ok(Value::Map(Arc::new(out)))
+        }),
+    );
+    fields.insert(
+        "foldWithKey".to_string(),
+        builtin("map.foldWithKey", 3, |mut args, runtime| {
+            let map = expect_map(args.pop().unwrap(), "map.foldWithKey")?;
+            let init = args.pop().unwrap();
+            let func = args.pop().unwrap();
+            let mut acc = init;
+            for (key, value) in map.iter() {
+                let partial = runtime.apply(func.clone(), acc)?;
+                let partial = runtime.apply(partial, key.to_value())?;
+                acc = runtime.apply(partial, value.clone())?;
+            }
+            Ok(acc)
+        }),
+    );
     Value::Record(Arc::new(fields))
 }
 
@@ -173,6 +301,14 @@ pub(super) fn build_set_record() -> Value {
         builtin("set.has", 2, |mut args, _| {
             let set = expect_set(args.pop().unwrap(), "set.has")?;
             let key = key_from_value(&args.pop().unwrap(), "set.has")?;
+            Ok(Value::Bool(set.contains(&key)))
+        }),
+    );
+    fields.insert(
+        "contains".to_string(),
+        builtin("set.contains", 2, |mut args, _| {
+            let set = expect_set(args.pop().unwrap(), "set.contains")?;
+            let key = key_from_value(&args.pop().unwrap(), "set.contains")?;
             Ok(Value::Bool(set.contains(&key)))
         }),
     );

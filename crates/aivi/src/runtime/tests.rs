@@ -57,6 +57,17 @@ fn runtime_from_source(source: &str) -> Runtime {
     Runtime::new(ctx, cancel)
 }
 
+fn runtime_from_source_with_stdlib(source: &str) -> Runtime {
+    let (mut modules, diags) =
+        crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    let program = crate::hir::desugar_modules(&stdlib_modules);
+    build_runtime_from_program(program).expect("runtime")
+}
+
 #[test]
 fn cleanups_run_even_when_cancelled() {
     let globals = Env::new(None);
@@ -526,6 +537,229 @@ fn collections_map_set_queue_heap() {
         }
         _ => panic!("expected Some from heap pop"),
     }
+}
+
+#[test]
+fn list_core_ops() {
+    let globals = Env::new(None);
+    register_builtins(&globals);
+    let ctx = Arc::new(RuntimeContext::new(globals));
+    let cancel = CancelToken::root();
+    let mut runtime = Runtime::new(ctx, cancel);
+
+    let list_record = runtime.ctx.globals.get("List").expect("List record");
+    let Value::Record(fields) = list_record else {
+        panic!("List record missing");
+    };
+
+    let empty = fields.get("empty").expect("empty").clone();
+    assert!(matches!(empty, Value::List(items) if items.is_empty()));
+
+    let length = fields.get("length").expect("length").clone();
+    let len = expect_ok(
+        runtime.apply(
+            length,
+            Value::List(Arc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)])),
+        ),
+        "List.length",
+    );
+    assert!(matches!(len, Value::Int(3)));
+
+    let take = fields.get("take").expect("take").clone();
+    let take = expect_ok(runtime.apply(take, Value::Int(2)), "List.take arg1");
+    let taken = runtime
+        .apply(
+            take,
+            Value::List(Arc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)])),
+        );
+    let taken = expect_ok(taken, "List.take arg2");
+    assert!(matches!(taken, Value::List(items) if items.len() == 2));
+
+    let chunk = fields.get("chunk").expect("chunk").clone();
+    let chunk = expect_ok(runtime.apply(chunk, Value::Int(2)), "List.chunk arg1");
+    let chunked = runtime
+        .apply(
+            chunk,
+            Value::List(Arc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)])),
+        );
+    let chunked = expect_ok(chunked, "List.chunk arg2");
+    let Value::List(chunks) = chunked else {
+        panic!("expected List of chunks");
+    };
+    assert_eq!(chunks.len(), 2);
+    assert!(matches!(&chunks[0], Value::List(items) if items.len() == 2));
+    assert!(matches!(&chunks[1], Value::List(items) if items.len() == 1));
+}
+
+#[test]
+fn map_new_ops() {
+    let globals = Env::new(None);
+    register_builtins(&globals);
+    let ctx = Arc::new(RuntimeContext::new(globals));
+    let cancel = CancelToken::root();
+    let mut runtime = Runtime::new(ctx, cancel);
+
+    let map_record = runtime.ctx.globals.get("Map").expect("Map record");
+    let Value::Record(fields) = map_record else {
+        panic!("Map record missing");
+    };
+
+    let empty = fields.get("empty").expect("empty").clone();
+    let insert = fields.get("insert").expect("insert").clone();
+    let insert = expect_ok(runtime.apply(insert, Value::Text("a".to_string())), "insert k");
+    let insert = expect_ok(runtime.apply(insert, Value::Int(1)), "insert v");
+    let map = expect_ok(runtime.apply(insert, empty), "insert map");
+
+    let get_or_else = fields.get("getOrElse").expect("getOrElse").clone();
+    let applied = runtime
+        .apply(get_or_else, Value::Text("a".to_string()))
+        ;
+    let applied = expect_ok(applied, "getOrElse k");
+    let applied = expect_ok(runtime.apply(applied, Value::Int(9)), "getOrElse default");
+    let got = expect_ok(runtime.apply(applied, map.clone()), "getOrElse map");
+    assert!(matches!(got, Value::Int(1)));
+
+    let alter = fields.get("alter").expect("alter").clone();
+    let alter = expect_ok(
+        runtime.apply(alter, Value::Text("a".to_string())),
+        "alter key",
+    );
+    let remove_fn = Value::Builtin(crate::runtime::values::BuiltinValue {
+        imp: Arc::new(crate::runtime::values::BuiltinImpl {
+            name: "<remove>".to_string(),
+            arity: 1,
+            func: Arc::new(|_args, _runtime| Ok(Value::Constructor { name: "None".to_string(), args: Vec::new() })),
+        }),
+        args: Vec::new(),
+    });
+    let alter = expect_ok(runtime.apply(alter, remove_fn), "alter f");
+    let map2 = expect_ok(runtime.apply(alter, map), "alter map");
+
+    let has = fields.get("has").expect("has").clone();
+    let has = expect_ok(runtime.apply(has, Value::Text("a".to_string())), "has k");
+    let present = expect_ok(runtime.apply(has, map2), "has map");
+    assert!(matches!(present, Value::Bool(false)));
+}
+
+#[test]
+fn database_pool_withconn_releases_on_failure() {
+    let source = r#"
+module test.poolRelease
+
+use aivi.database.pool as Pool
+
+Conn = { id: Int }
+
+cfg : Pool.Config Conn
+cfg = {
+  maxSize: 1,
+  minIdle: 0,
+  acquireTimeout: { millis: 200 },
+  idleTimeout: None,
+  maxLifetime: None,
+  healthCheckInterval: None,
+  backoffPolicy: Pool.Fixed ({ millis: 10 }),
+  queuePolicy: Pool.Fifo,
+  acquire: _ => pure { id: 1 },
+  release: _ => pure Unit,
+  healthCheck: _ => pure True
+}
+
+main : Effect Text (Pool.PoolStats, Pool.PoolStats)
+main = effect {
+  poolRes <- Pool.create cfg
+  pool = poolRes ? | Ok p => p | Err _ => { acquire: _ => pure (Err Pool.Closed), release: _ => pure Unit, stats: _ => pure { size: 0, idle: 0, inUse: 0, waiters: 0, closed: True }, drain: _ => pure Unit, close: _ => pure Unit }
+  before <- Pool.stats pool
+  _ <- attempt (Pool.withConn pool (_ => fail "boom"))
+  after <- Pool.stats pool
+  pure (before, after)
+}
+"#;
+
+    let mut runtime = runtime_from_source_with_stdlib(source);
+    let main = runtime.ctx.globals.get("main").unwrap();
+    let main = expect_ok(runtime.force_value(main), "evaluate main");
+    let Value::Effect(effect) = main else {
+        panic!("expected main to be an Effect");
+    };
+    let result = expect_ok(runtime.run_effect_value(Value::Effect(effect)), "run main effect");
+    let Value::Tuple(items) = result else {
+        panic!("expected stats tuple");
+    };
+    assert_eq!(items.len(), 2);
+    let Value::Record(after) = &items[1] else {
+        panic!("expected after stats record");
+    };
+    let in_use = after.get("inUse").cloned().unwrap_or(Value::Unit);
+    let idle = after.get("idle").cloned().unwrap_or(Value::Unit);
+    let size = after.get("size").cloned().unwrap_or(Value::Unit);
+    assert!(
+        matches!(in_use, Value::Int(0)),
+        "expected pool inUse==0 after failure; got inUse={}, idle={}, size={}",
+        crate::runtime::format_value(&in_use),
+        crate::runtime::format_value(&idle),
+        crate::runtime::format_value(&size)
+    );
+}
+
+#[test]
+fn database_pool_acquire_times_out_when_full() {
+    let source = r#"
+module test.poolTimeout
+
+use aivi.database.pool as Pool
+
+Conn = { id: Int }
+
+cfg : Pool.Config Conn
+cfg = {
+  maxSize: 1,
+  minIdle: 0,
+  acquireTimeout: { millis: 0 },
+  idleTimeout: None,
+  maxLifetime: None,
+  healthCheckInterval: None,
+  backoffPolicy: Pool.Fixed ({ millis: 10 }),
+  queuePolicy: Pool.Fifo,
+  acquire: _ => pure { id: 1 },
+  release: _ => pure Unit,
+  healthCheck: _ => pure True
+}
+
+main : Effect Text (Result Pool.PoolError Conn, Result Pool.PoolError Conn)
+main = effect {
+  poolRes <- Pool.create cfg
+  pool = poolRes ? | Ok p => p | Err _ => { acquire: _ => pure (Err Pool.Closed), release: _ => pure Unit, stats: _ => pure { size: 0, idle: 0, inUse: 0, waiters: 0, closed: True }, drain: _ => pure Unit, close: _ => pure Unit }
+  c1 <- Pool.acquire pool
+  c2 <- Pool.acquire pool
+  pure (c1, c2)
+}
+"#;
+
+    let mut runtime = runtime_from_source_with_stdlib(source);
+    let main = runtime.ctx.globals.get("main").unwrap();
+    let main = expect_ok(runtime.force_value(main), "evaluate main");
+    let Value::Effect(effect) = main else {
+        panic!("expected main to be an Effect");
+    };
+    let result = expect_ok(runtime.run_effect_value(Value::Effect(effect)), "run main effect");
+    let Value::Tuple(items) = result else {
+        panic!("expected tuple");
+    };
+    assert_eq!(items.len(), 2);
+
+    let Value::Constructor { name, args } = &items[0] else {
+        panic!("expected Result for c1");
+    };
+    assert_eq!(name, "Ok");
+    assert_eq!(args.len(), 1);
+
+    let Value::Constructor { name, args } = &items[1] else {
+        panic!("expected Result for c2");
+    };
+    assert_eq!(name, "Err");
+    assert_eq!(args.len(), 1);
+    assert!(matches!(&args[0], Value::Constructor { name, args } if name == "Timeout" && args.is_empty()));
 }
 
 #[test]

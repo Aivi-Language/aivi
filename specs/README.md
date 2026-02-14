@@ -72,6 +72,7 @@ A high-integrity functional language targeting WebAssembly.
 - [Testing](05_stdlib/00_core/27_testing.md)
 - [Collections](05_stdlib/00_core/28_collections.md)
 - [I18n](05_stdlib/00_core/29_i18n.md)
+- [Generator](05_stdlib/00_core/30_generator.md)
 
 #### Math & Science
 - [Math](05_stdlib/01_math/01_math.md)

@@ -50,7 +50,9 @@ algo_mergeSort xs = xs ?
 
 AlgoEdge = { from: Int, to: Int, cost: Int }
 
-algo_neighbors = adj node => (Map.get node adj) ? | None => [] | Some xs => xs
+algo_neighbors = adj node => (Map.get node adj) ?
+  | None    => []
+  | Some xs => xs
 
 algo_pushAdj = from to cost adj =>
 (Map.get from adj) ?
@@ -125,6 +127,4 @@ main = effect {
 
   path = aStar gridEdges Map.empty 0 22
   _ <- assertEq path (Some ([0, 1, 2, 12, 22]))
-
-  pure Unit
 }

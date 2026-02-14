@@ -12,10 +12,12 @@ mod console;
 mod core;
 mod crypto;
 mod database;
+mod database_pool;
 mod decimal;
 mod duration;
 mod file;
 mod geometry;
+mod generator;
 mod graph;
 mod i18n;
 mod linalg_facade;
@@ -66,6 +68,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: collections::MODULE_NAME,
         source: collections::SOURCE,
+    },
+    EmbeddedModule {
+        name: generator::MODULE_NAME,
+        source: generator::SOURCE,
     },
     EmbeddedModule {
         name: logic::MODULE_NAME,
@@ -154,6 +160,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: database::MODULE_NAME,
         source: database::SOURCE,
+    },
+    EmbeddedModule {
+        name: database_pool::MODULE_NAME,
+        source: database_pool::SOURCE,
     },
     EmbeddedModule {
         name: file::MODULE_NAME,

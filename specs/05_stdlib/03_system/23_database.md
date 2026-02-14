@@ -31,7 +31,10 @@ list of `Column` values; the row type comes from the table binding's type annota
 
 ## Querying
 
-Tables behave like lazy sequences. Operations such as `filter`, `find`, `sortBy`, `groupBy`, and `join` build a query plan. The query executes only when observed (e.g. via `db.load`, `toList`, or a generator).
+In v0.1, `Table A` is a persistent in-memory structure with explicit observation via `db.load`.
+
+Query planning utilities (`filter`, `find`, `sortBy`, `groupBy`, `join`) are part of the design direction,
+but are not yet guaranteed to be implemented end-to-end in the runtime.
 
 <<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_05.aivi{aivi}
 
@@ -48,6 +51,13 @@ For eager loading:
 Schema definitions are typed values. Mark them `@static` to allow compile-time validation and migration planning.
 
 <<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_08.aivi{aivi}
+
+## Pooling
+
+Database pooling is provided by `aivi.database.pool`. The pool is configured explicitly (no hidden globals),
+and `withConn` guarantees deterministic release via AIVI resources even on failure or cancellation.
+
+<<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_09.aivi{aivi}
 
 ## Notes
 

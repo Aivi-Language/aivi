@@ -1,0 +1,5 @@
+use aivi.generator as Gen
+
+xs = Gen.range 0 5 |> Gen.toList
+// xs == [0, 1, 2, 3, 4]
+

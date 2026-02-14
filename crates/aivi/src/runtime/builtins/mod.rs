@@ -8,6 +8,7 @@ mod database;
 mod graph;
 mod i18n;
 mod linalg;
+mod list;
 mod log;
 mod math;
 mod number;
