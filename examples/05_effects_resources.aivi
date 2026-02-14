@@ -11,7 +11,7 @@ program = effect {
 }
 
 readConfig : Text -> Effect Text Text
-readConfig path = effect {
+readConfig = path => effect {
   res <- attempt (load (file.read path))
   res ?
     | Ok (txt) => pure txt
@@ -19,20 +19,20 @@ readConfig path = effect {
 }
 
 managedFile : Text -> Resource Text FileHandle
-managedFile path = resource {
+managedFile = path => resource {
   handle <- file.open path
   yield handle
   _ <- file.close handle
 }
 
 withFile : Text -> Effect Text Unit
-withFile path = effect {
+withFile = path => effect {
   f <- managedFile path
   _ <- file.readAll f
 }
 
 loadOrDefault : Text -> Text -> Effect Text Text
-loadOrDefault path fallback = effect {
+loadOrDefault = path fallback => effect {
   res <- attempt (load (file.read path))
   res ?
     | Ok (txt) => pure txt

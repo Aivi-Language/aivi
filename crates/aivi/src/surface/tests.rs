@@ -122,6 +122,36 @@ x = ~map{ "a" => 1 }
 }
 
 #[test]
+fn record_pattern_shorthand_rejects_trailing_garbage() {
+    let src = r#"
+module Example
+
+renderCount = { count * 23 sasd, step } => count
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1537".to_string()),
+        "expected E1537, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
+#[test]
+fn record_pattern_fields_require_separator_between_fields() {
+    let src = r#"
+module Example
+
+f = { a: x b: y } => x
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1538".to_string()),
+        "expected E1538, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
+#[test]
 fn rejects_missing_module_declaration() {
     let src = r#"
 x = 1

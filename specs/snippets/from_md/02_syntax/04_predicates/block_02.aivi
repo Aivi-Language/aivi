@@ -1,7 +1,7 @@
 Pred A = A => Bool
 
 andPred : Pred A -> Pred A -> Pred A
-andPred p q = x => p x && q x
+andPred = p q => x => p x && q x
 
 isActive : Pred User
 isActive = .active

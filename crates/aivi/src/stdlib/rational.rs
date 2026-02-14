@@ -10,27 +10,27 @@ use aivi
 use aivi.number.bigint (BigInt)
 
 fromBigInts : BigInt -> BigInt -> Rational
-fromBigInts num den = rational.fromBigInts num den
+fromBigInts = num den => rational.fromBigInts num den
 
 normalize : Rational -> Rational
-normalize value = rational.normalize value
+normalize = value => rational.normalize value
 
 numerator : Rational -> BigInt
-numerator value = rational.numerator value
+numerator = value => rational.numerator value
 
 denominator : Rational -> BigInt
-denominator value = rational.denominator value
+denominator = value => rational.denominator value
 
 domain Rational over Rational = {
   (+) : Rational -> Rational -> Rational
-  (+) a b = rational.add a b
+  (+) = a b => rational.add a b
 
   (-) : Rational -> Rational -> Rational
-  (-) a b = rational.sub a b
+  (-) = a b => rational.sub a b
 
   (*) : Rational -> Rational -> Rational
-  (*) a b = rational.mul a b
+  (*) = a b => rational.mul a b
 
   (/) : Rational -> Rational -> Rational
-  (/) a b = rational.div a b
+  (/) = a b => rational.div a b
 }"#;

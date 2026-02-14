@@ -7,7 +7,7 @@ domain Calendar over Date = {
   type Delta = Day Int | Week Int
 
   (+) : Date -> Delta -> Date
-  (+) d delta = delta ?
+  (+) = d delta => delta ?
     | Day n  => addDays d n
     | Week n => addDays d (n * 7)
 

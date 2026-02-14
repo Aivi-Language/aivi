@@ -1,13 +1,13 @@
 domain Units over Quantity = {
   (+) : Quantity -> Quantity -> Quantity
-  (+) a b = { value: a.value + b.value, unit: a.unit }
+  (+) = a b => { value: a.value + b.value, unit: a.unit }
 
   (-) : Quantity -> Quantity -> Quantity
-  (-) a b = { value: a.value - b.value, unit: a.unit }
+  (-) = a b => { value: a.value - b.value, unit: a.unit }
 
   (*) : Quantity -> Float -> Quantity
-  (*) q s = { value: q.value * s, unit: q.unit }
+  (*) = q s => { value: q.value * s, unit: q.unit }
 
   (/) : Quantity -> Float -> Quantity
-  (/) q s = { value: q.value / s, unit: q.unit }
+  (/) = q s => { value: q.value / s, unit: q.unit }
 }

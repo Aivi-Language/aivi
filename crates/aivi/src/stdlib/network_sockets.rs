@@ -12,23 +12,24 @@ Address = { host: Text, port: Int }
 SocketError = { message: Text }
 
 listen : Address -> Resource SocketError Listener
-listen address = resource {
+listen = address => resource {
   listener <- sockets.listen address
   yield listener
   _ <- sockets.closeListener listener
 }
 
 accept : Listener -> Effect SocketError Connection
-accept listener = sockets.accept listener
+accept = listener => sockets.accept listener
 
 connect : Address -> Effect SocketError Connection
-connect address = sockets.connect address
+connect = address => sockets.connect address
 
 send : Connection -> List Int -> Effect SocketError Unit
-send conn bytes = sockets.send conn bytes
+send = conn bytes => sockets.send conn bytes
 
 recv : Connection -> Effect SocketError (List Int)
-recv conn = sockets.recv conn
+recv = conn => sockets.recv conn
 
 close : Connection -> Effect SocketError Unit
-close conn = sockets.close conn"#;
+close = conn => sockets.close conn
+"#;

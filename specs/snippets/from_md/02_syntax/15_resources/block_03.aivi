@@ -1,4 +1,4 @@
-copy src dest = effect {
+copy = src dest => effect {
   input  <- managedFile src
   output <- managedFile dest
 

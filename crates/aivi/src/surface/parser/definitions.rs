@@ -211,24 +211,66 @@ impl Parser {
     fn parse_def(&mut self, decorators: Vec<Decorator>) -> Option<Def> {
         self.consume_newlines();
         let name = self.consume_name()?;
-        let mut params = Vec::new();
-        while {
+        self.consume_newlines();
+
+        // v0.1 surface: parameters must be written as an explicit lambda on the RHS:
+        //   f = x y => ...
+        //
+        // For error recovery (LSP), we still recognize the legacy form:
+        //   f x y = ...
+        // but emit a hard diagnostic and desugar it to the explicit lambda.
+        let (params, mut expr) = if self.check_symbol("=") {
+            self.expect_symbol("=", "expected '=' in definition");
             self.consume_newlines();
-            !self.check_symbol("=") && self.pos < self.tokens.len()
-        } {
-            if let Some(pattern) = self.parse_pattern() {
-                params.push(pattern);
-                continue;
+            let expr = self.parse_expr().unwrap_or(Expr::Raw {
+                text: String::new(),
+                span: name.span.clone(),
+            });
+            (Vec::new(), expr)
+        } else if self.is_pattern_start() {
+            let start_span = name.span.clone();
+            let mut legacy_params = Vec::new();
+            while {
+                self.consume_newlines();
+                !self.check_symbol("=") && self.pos < self.tokens.len()
+            } {
+                if let Some(pattern) = self.parse_pattern() {
+                    legacy_params.push(pattern);
+                    continue;
+                }
+                break;
             }
-            break;
-        }
-        self.consume_newlines();
-        self.expect_symbol("=", "expected '=' in definition");
-        self.consume_newlines();
-        let expr = self.parse_expr().unwrap_or(Expr::Raw {
-            text: String::new(),
-            span: name.span.clone(),
-        });
+            self.consume_newlines();
+            self.expect_symbol("=", "expected '=' in definition");
+            self.consume_newlines();
+            let body = self.parse_expr().unwrap_or(Expr::Raw {
+                text: String::new(),
+                span: start_span.clone(),
+            });
+
+            let legacy_span = merge_span(start_span, expr_span(&body));
+            self.emit_diag(
+                "E1539",
+                "function parameters must be written after '=' (use `f = x y => ...`)",
+                legacy_span.clone(),
+            );
+
+            expr = Expr::Lambda {
+                params: legacy_params.clone(),
+                body: Box::new(body),
+                span: legacy_span,
+            };
+            (Vec::new(), expr)
+        } else {
+            self.expect_symbol("=", "expected '=' in definition");
+            self.consume_newlines();
+            let expr = self.parse_expr().unwrap_or(Expr::Raw {
+                text: String::new(),
+                span: name.span.clone(),
+            });
+            (Vec::new(), expr)
+        };
+
         let span = merge_span(name.span.clone(), expr_span(&expr));
         Some(Def {
             decorators,

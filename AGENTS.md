@@ -36,6 +36,8 @@ graph TD
 **Never invent syntax or features.**
 Always verify against `specs/` before writing AIVI code or compiler logic. If a feature is missing from specs, ask for clarification or check `specs/roadmap/`.
 
+**Read in all .gemini/skills/** files to pick appropriete skills when adding features.
+
 ### 2.2 Task Execution Protocol
 
 1.  **Analyze**: Read the relevant `specs/` files first.
@@ -56,7 +58,7 @@ Always verify against `specs/` before writing AIVI code or compiler logic. If a 
 Maintain hygiene in the codebase and documentation.
 *   **Syntax Correction**: If you see syntax that violates the specs (e.g., `let x =` instead of `x =`, or `def foo()`), fix it immediately to match `specs/02_syntax`.
 *   **Gap Filling**: If you encounter code using features not present in `specs/` or `examples/`, document them or add a test case.
-*   **Refactoring**: Keep files small and readable. Propose splitting large files into logical units.
+*   **Refactoring**: Keep files small and readable. Propose splitting large files into logical units with good naming and subfolder structure if needed.
 
 ## 3. AIVI Language Best Practices
 

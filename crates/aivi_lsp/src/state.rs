@@ -27,6 +27,7 @@ pub(super) struct BackendState {
     pub(super) disk_indexes: HashMap<PathBuf, DiskIndex>,
     pub(super) format_options: aivi::FormatOptions,
     pub(super) format_options_from_config: bool,
+    pub(super) diagnostics_in_specs_snippets: bool,
     pub(super) doc_index: Arc<DocIndex>,
 }
 
@@ -42,6 +43,7 @@ impl Default for BackendState {
             disk_indexes: HashMap::new(),
             format_options: aivi::FormatOptions::default(),
             format_options_from_config: false,
+            diagnostics_in_specs_snippets: false,
             doc_index: Arc::new(doc_index),
         }
     }

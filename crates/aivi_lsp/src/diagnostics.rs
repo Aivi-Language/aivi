@@ -23,16 +23,17 @@ impl Backend {
 
     #[cfg(test)]
     pub(super) fn build_diagnostics(text: &str, uri: &Url) -> Vec<Diagnostic> {
-        Self::build_diagnostics_with_workspace(text, uri, &HashMap::new())
+        Self::build_diagnostics_with_workspace(text, uri, &HashMap::new(), false)
     }
 
     pub(super) fn build_diagnostics_with_workspace(
         text: &str,
         uri: &Url,
         workspace_modules: &HashMap<String, IndexedModule>,
+        include_specs_snippets: bool,
     ) -> Vec<Diagnostic> {
         let path = PathBuf::from(Self::path_from_uri(uri));
-        if Self::is_specs_snippet_path(&path) {
+        if !include_specs_snippets && Self::is_specs_snippet_path(&path) {
             // `specs/snippets/**/*.aivi` contains documentation fragments, not necessarily complete
             // modules. Avoid surfacing diagnostics as "nags" when authoring specs.
             return Vec::new();

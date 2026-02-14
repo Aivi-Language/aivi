@@ -31,17 +31,17 @@ identity4 = {
 }
 
 transpose2 : Mat2 -> Mat2
-transpose2 m = { m00: m.m00, m01: m.m10, m10: m.m01, m11: m.m11 }
+transpose2 = m => { m00: m.m00, m01: m.m10, m10: m.m01, m11: m.m11 }
 
 transpose3 : Mat3 -> Mat3
-transpose3 m = {
+transpose3 = m => {
   m00: m.m00, m01: m.m10, m02: m.m20,
   m10: m.m01, m11: m.m11, m12: m.m21,
   m20: m.m02, m21: m.m12, m22: m.m22
 }
 
 transpose4 : Mat4 -> Mat4
-transpose4 m = {
+transpose4 = m => {
   m00: m.m00, m01: m.m10, m02: m.m20, m03: m.m30,
   m10: m.m01, m11: m.m11, m12: m.m21, m13: m.m31,
   m20: m.m02, m21: m.m12, m22: m.m22, m23: m.m32,
@@ -49,13 +49,13 @@ transpose4 m = {
 }
 
 multiply2 : Mat2 -> Mat2 -> Mat2
-multiply2 a b = {
+multiply2 = a b => {
   m00: a.m00 * b.m00 + a.m01 * b.m10, m01: a.m00 * b.m01 + a.m01 * b.m11,
   m10: a.m10 * b.m00 + a.m11 * b.m10, m11: a.m10 * b.m01 + a.m11 * b.m11
 }
 
 multiply3 : Mat3 -> Mat3 -> Mat3
-multiply3 a b = {
+multiply3 = a b => {
   m00: a.m00 * b.m00 + a.m01 * b.m10 + a.m02 * b.m20,
   m01: a.m00 * b.m01 + a.m01 * b.m11 + a.m02 * b.m21,
   m02: a.m00 * b.m02 + a.m01 * b.m12 + a.m02 * b.m22,
@@ -68,7 +68,7 @@ multiply3 a b = {
 }
 
 multiply4 : Mat4 -> Mat4 -> Mat4
-multiply4 a b = {
+multiply4 = a b => {
   m00: a.m00 * b.m00 + a.m01 * b.m10 + a.m02 * b.m20 + a.m03 * b.m30,
   m01: a.m00 * b.m01 + a.m01 * b.m11 + a.m02 * b.m21 + a.m03 * b.m31,
   m02: a.m00 * b.m02 + a.m01 * b.m12 + a.m02 * b.m22 + a.m03 * b.m32,
@@ -89,32 +89,32 @@ multiply4 a b = {
 
 domain Matrix over Mat2 = {
   (+) : Mat2 -> Mat2 -> Mat2
-  (+) a b = { m00: a.m00 + b.m00, m01: a.m01 + b.m01, m10: a.m10 + b.m10, m11: a.m11 + b.m11 }
+  (+) = a b => { m00: a.m00 + b.m00, m01: a.m01 + b.m01, m10: a.m10 + b.m10, m11: a.m11 + b.m11 }
 
   (-) : Mat2 -> Mat2 -> Mat2
-  (-) a b = { m00: a.m00 - b.m00, m01: a.m01 - b.m01, m10: a.m10 - b.m10, m11: a.m11 - b.m11 }
+  (-) = a b => { m00: a.m00 - b.m00, m01: a.m01 - b.m01, m10: a.m10 - b.m10, m11: a.m11 - b.m11 }
 
   (*) : Mat2 -> Scalar -> Mat2
-  (*) m s = { m00: m.m00 * s, m01: m.m01 * s, m10: m.m10 * s, m11: m.m11 * s }
+  (*) = m s => { m00: m.m00 * s, m01: m.m01 * s, m10: m.m10 * s, m11: m.m11 * s }
 }
 
 domain Matrix over Mat3 = {
   (+) : Mat3 -> Mat3 -> Mat3
-  (+) a b = {
+  (+) = a b => {
     m00: a.m00 + b.m00, m01: a.m01 + b.m01, m02: a.m02 + b.m02,
     m10: a.m10 + b.m10, m11: a.m11 + b.m11, m12: a.m12 + b.m12,
     m20: a.m20 + b.m20, m21: a.m21 + b.m21, m22: a.m22 + b.m22
   }
 
   (-) : Mat3 -> Mat3 -> Mat3
-  (-) a b = {
+  (-) = a b => {
     m00: a.m00 - b.m00, m01: a.m01 - b.m01, m02: a.m02 - b.m02,
     m10: a.m10 - b.m10, m11: a.m11 - b.m11, m12: a.m12 - b.m12,
     m20: a.m20 - b.m20, m21: a.m21 - b.m21, m22: a.m22 - b.m22
   }
 
   (*) : Mat3 -> Scalar -> Mat3
-  (*) m s = {
+  (*) = m s => {
     m00: m.m00 * s, m01: m.m01 * s, m02: m.m02 * s,
     m10: m.m10 * s, m11: m.m11 * s, m12: m.m12 * s,
     m20: m.m20 * s, m21: m.m21 * s, m22: m.m22 * s
@@ -123,7 +123,7 @@ domain Matrix over Mat3 = {
 
 domain Matrix over Mat4 = {
   (+) : Mat4 -> Mat4 -> Mat4
-  (+) a b = {
+  (+) = a b => {
     m00: a.m00 + b.m00, m01: a.m01 + b.m01, m02: a.m02 + b.m02, m03: a.m03 + b.m03,
     m10: a.m10 + b.m10, m11: a.m11 + b.m11, m12: a.m12 + b.m12, m13: a.m13 + b.m13,
     m20: a.m20 + b.m20, m21: a.m21 + b.m21, m22: a.m22 + b.m22, m23: a.m23 + b.m23,
@@ -131,7 +131,7 @@ domain Matrix over Mat4 = {
   }
 
   (-) : Mat4 -> Mat4 -> Mat4
-  (-) a b = {
+  (-) = a b => {
     m00: a.m00 - b.m00, m01: a.m01 - b.m01, m02: a.m02 - b.m02, m03: a.m03 - b.m03,
     m10: a.m10 - b.m10, m11: a.m11 - b.m11, m12: a.m12 - b.m12, m13: a.m13 - b.m13,
     m20: a.m20 - b.m20, m21: a.m21 - b.m21, m22: a.m22 - b.m22, m23: a.m23 - b.m23,
@@ -139,7 +139,7 @@ domain Matrix over Mat4 = {
   }
 
   (*) : Mat4 -> Scalar -> Mat4
-  (*) m s = {
+  (*) = m s => {
     m00: m.m00 * s, m01: m.m01 * s, m02: m.m02 * s, m03: m.m03 * s,
     m10: m.m10 * s, m11: m.m11 * s, m12: m.m12 * s, m13: m.m13 * s,
     m20: m.m20 * s, m21: m.m21 * s, m22: m.m22 * s, m23: m.m23 * s,

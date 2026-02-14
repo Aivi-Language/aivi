@@ -22,7 +22,7 @@ algo_partition = p xs => xs ?
   | (yes, no) => if p h then ([h, ...yes], no) else (yes, [h, ...no])
 
 algo_quicksort : List Int -> List Int
-algo_quicksort xs = xs ?
+algo_quicksort = xs => xs ?
   | []        => []
   | [p, ...t] =>
 (algo_partition (_ < p) t) ?
@@ -41,7 +41,7 @@ algo_merge = left right => (left, right) ?
   | ([x, ...xs], [y, ...ys]) => if x <= y then[x, ...algo_merge xs ([y, ...ys])] else[y, ...algo_merge ([x, ...xs]) ys]
 
 algo_mergeSort : List Int -> List Int
-algo_mergeSort xs = xs ?
+algo_mergeSort = xs => xs ?
   | []  => []
   | [_] => xs
   | _   =>

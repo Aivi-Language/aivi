@@ -24,7 +24,7 @@ type TextError = InvalidEncoding Encoding
 // Expected-type coercions: `A` -> `Text` via instances
 // ------------------------------------------------------------
 
-class ToText A = {
+class = ToText A => {
   toText: A -> Text
 }
 
@@ -38,133 +38,134 @@ instance ToText {} = {
 }
 
 length : Text -> Int
-length value = text.length value
+length = value => text.length value
 
 isEmpty : Text -> Bool
-isEmpty value = text.isEmpty value
+isEmpty = value => text.isEmpty value
 
 isDigit : Char -> Bool
-isDigit value = text.isDigit value
+isDigit = value => text.isDigit value
 
 isAlpha : Char -> Bool
-isAlpha value = text.isAlpha value
+isAlpha = value => text.isAlpha value
 
 isAlnum : Char -> Bool
-isAlnum value = text.isAlnum value
+isAlnum = value => text.isAlnum value
 
 isSpace : Char -> Bool
-isSpace value = text.isSpace value
+isSpace = value => text.isSpace value
 
 isUpper : Char -> Bool
-isUpper value = text.isUpper value
+isUpper = value => text.isUpper value
 
 isLower : Char -> Bool
-isLower value = text.isLower value
+isLower = value => text.isLower value
 
 contains : Text -> Text -> Bool
-contains needle haystack = text.contains haystack needle
+contains = needle haystack => text.contains haystack needle
 
 startsWith : Text -> Text -> Bool
-startsWith prefix value = text.startsWith value prefix
+startsWith = prefix value => text.startsWith value prefix
 
 endsWith : Text -> Text -> Bool
-endsWith suffix value = text.endsWith value suffix
+endsWith = suffix value => text.endsWith value suffix
 
 indexOf : Text -> Text -> Option Int
-indexOf needle haystack = text.indexOf haystack needle
+indexOf = needle haystack => text.indexOf haystack needle
 
 lastIndexOf : Text -> Text -> Option Int
-lastIndexOf needle haystack = text.lastIndexOf haystack needle
+lastIndexOf = needle haystack => text.lastIndexOf haystack needle
 
 count : Text -> Text -> Int
-count needle haystack = text.count haystack needle
+count = needle haystack => text.count haystack needle
 
 compare : Text -> Text -> Int
-compare left right = text.compare left right
+compare = left right => text.compare left right
 
 slice : Int -> Int -> Text -> Text
-slice start end value = text.slice start end value
+slice = start end value => text.slice start end value
 
 split : Text -> Text -> List Text
-split sep value = text.split sep value
+split = sep value => text.split sep value
 
 splitLines : Text -> List Text
-splitLines value = text.splitLines value
+splitLines = value => text.splitLines value
 
 chunk : Int -> Text -> List Text
-chunk size value = text.chunk size value
+chunk = size value => text.chunk size value
 
 trim : Text -> Text
-trim value = text.trim value
+trim = value => text.trim value
 
 trimStart : Text -> Text
-trimStart value = text.trimStart value
+trimStart = value => text.trimStart value
 
 trimEnd : Text -> Text
-trimEnd value = text.trimEnd value
+trimEnd = value => text.trimEnd value
 
 padStart : Int -> Text -> Text -> Text
-padStart width fill value = text.padStart width fill value
+padStart = width fill value => text.padStart width fill value
 
 padEnd : Int -> Text -> Text -> Text
-padEnd width fill value = text.padEnd width fill value
+padEnd = width fill value => text.padEnd width fill value
 
 replace : Text -> Text -> Text -> Text
-replace needle replacement value = text.replace value needle replacement
+replace = needle replacement value => text.replace value needle replacement
 
 replaceAll : Text -> Text -> Text -> Text
-replaceAll needle replacement value = text.replaceAll value needle replacement
+replaceAll = needle replacement value => text.replaceAll value needle replacement
 
 remove : Text -> Text -> Text
-remove needle value = text.remove value needle
+remove = needle value => text.remove value needle
 
 repeat : Int -> Text -> Text
-repeat count value = text.repeat count value
+repeat = count value => text.repeat count value
 
 reverse : Text -> Text
-reverse value = text.reverse value
+reverse = value => text.reverse value
 
 concat : List Text -> Text
-concat values = text.concat values
+concat = values => text.concat values
 
 toLower : Text -> Text
-toLower value = text.toLower value
+toLower = value => text.toLower value
 
 toUpper : Text -> Text
-toUpper value = text.toUpper value
+toUpper = value => text.toUpper value
 
 capitalize : Text -> Text
-capitalize value = text.capitalize value
+capitalize = value => text.capitalize value
 
 titleCase : Text -> Text
-titleCase value = text.titleCase value
+titleCase = value => text.titleCase value
 
 caseFold : Text -> Text
-caseFold value = text.caseFold value
+caseFold = value => text.caseFold value
 
 normalizeNFC : Text -> Text
-normalizeNFC value = text.normalizeNFC value
+normalizeNFC = value => text.normalizeNFC value
 
 normalizeNFD : Text -> Text
-normalizeNFD value = text.normalizeNFD value
+normalizeNFD = value => text.normalizeNFD value
 
 normalizeNFKC : Text -> Text
-normalizeNFKC value = text.normalizeNFKC value
+normalizeNFKC = value => text.normalizeNFKC value
 
 normalizeNFKD : Text -> Text
-normalizeNFKD value = text.normalizeNFKD value
+normalizeNFKD = value => text.normalizeNFKD value
 
 toBytes : Encoding -> Text -> Bytes
-toBytes encoding value = text.toBytes encoding value
+toBytes = encoding value => text.toBytes encoding value
 
 fromBytes : Encoding -> Bytes -> Result TextError Text
-fromBytes encoding value = text.fromBytes encoding value
+fromBytes = encoding value => text.fromBytes encoding value
 
 debugText : A -> Text
-debugText value = text.toText value
+debugText = value => text.toText value
 
 parseInt : Text -> Option Int
-parseInt value = text.parseInt value
+parseInt = value => text.parseInt value
 
 parseFloat : Text -> Option Float
-parseFloat value = text.parseFloat value"#;
+parseFloat = value => text.parseFloat value
+"#;

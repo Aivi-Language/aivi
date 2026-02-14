@@ -32,8 +32,15 @@ struct AiviFormatConfig {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AiviDiagnosticsConfig {
+    include_specs_snippets: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
 struct AiviConfig {
     format: Option<AiviFormatConfig>,
+    diagnostics: Option<AiviDiagnosticsConfig>,
 }
 
 #[tower_lsp::async_trait]
@@ -162,6 +169,12 @@ impl LanguageServer for Backend {
                 state.format_options.max_blank_lines = max_blank_lines;
             }
         }
+
+        if let Some(diagnostics) = config.diagnostics {
+            if let Some(include) = diagnostics.include_specs_snippets {
+                state.diagnostics_in_specs_snippets = include;
+            }
+        }
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -174,9 +187,15 @@ impl LanguageServer for Backend {
         let version = params.text_document.version;
         self.update_document(uri.clone(), text).await;
         let workspace = self.workspace_modules_for(&uri).await;
+        let include_specs_snippets = self.state.lock().await.diagnostics_in_specs_snippets;
         if let Some(diagnostics) = self
             .with_document_text(&uri, |content| {
-                Self::build_diagnostics_with_workspace(content, &uri, &workspace)
+                Self::build_diagnostics_with_workspace(
+                    content,
+                    &uri,
+                    &workspace,
+                    include_specs_snippets,
+                )
             })
             .await
         {
@@ -192,9 +211,15 @@ impl LanguageServer for Backend {
         if let Some(change) = params.content_changes.into_iter().next() {
             self.update_document(uri.clone(), change.text).await;
             let workspace = self.workspace_modules_for(&uri).await;
+            let include_specs_snippets = self.state.lock().await.diagnostics_in_specs_snippets;
             if let Some(diagnostics) = self
                 .with_document_text(&uri, |content| {
-                    Self::build_diagnostics_with_workspace(content, &uri, &workspace)
+                    Self::build_diagnostics_with_workspace(
+                        content,
+                        &uri,
+                        &workspace,
+                        include_specs_snippets,
+                    )
                 })
                 .await
             {

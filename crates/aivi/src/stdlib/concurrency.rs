@@ -13,19 +13,20 @@ type Scope = Unit
 type ChannelError = Closed
 
 par : Effect e a -> Effect e b -> Effect e (a, b)
-par left right = concurrent.par left right
+par = left right => concurrent.par left right
 
 scope : (Scope -> Effect e a) -> Effect e a
-scope run = concurrent.scope (run Unit)
+scope = run => concurrent.scope (run Unit)
 
 make : A -> Effect e (Sender A, Receiver A)
-make sample = channel.make sample
+make = sample => channel.make sample
 
 send : Sender A -> A -> Effect e Unit
-send sender value = channel.send sender value
+send = sender value => channel.send sender value
 
 recv : Receiver A -> Effect e (Result A ChannelError)
-recv receiver = channel.recv receiver
+recv = receiver => channel.recv receiver
 
 close : Sender A -> Effect e Unit
-close sender = channel.close sender"#;
+close = sender => channel.close sender
+"#;

@@ -15,17 +15,17 @@ i = { re: 0.0, im: 1.0 }
 
 domain Complex over Complex = {
   (+) : Complex -> Complex -> Complex
-  (+) a b = { re: a.re + b.re, im: a.im + b.im }
+  (+) = a b => { re: a.re + b.re, im: a.im + b.im }
 
   (-) : Complex -> Complex -> Complex
-  (-) a b = { re: a.re - b.re, im: a.im - b.im }
+  (-) = a b => { re: a.re - b.re, im: a.im - b.im }
 
   (*) : Complex -> Complex -> Complex
-  (*) a b = {
+  (*) = a b => {
     re: a.re * b.re - a.im * b.im
     im: a.re * b.im + a.im * b.re
   }
 
   (/) : Complex -> Float -> Complex
-  (/) z s = { re: z.re / s, im: z.im / s }
+  (/) = z s => { re: z.re / s, im: z.im / s }
 }"#;

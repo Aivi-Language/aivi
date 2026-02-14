@@ -24,28 +24,29 @@ type AnsiStyle = {
 }
 
 log : Text -> Effect Text Unit
-log value = console.log value
+log = value => console.log value
 
 println : Text -> Effect Text Unit
-println value = console.println value
+println = value => console.println value
 
 print : Text -> Effect Text Unit
-print value = console.print value
+print = value => console.print value
 
 error : Text -> Effect Text Unit
-error value = console.error value
+error = value => console.error value
 
 readLine : Effect Text (Result Text Text)
 readLine = console.readLine Unit
 
 color : AnsiColor -> Text -> Text
-color tone value = console.color tone value
+color = tone value => console.color tone value
 
 bgColor : AnsiColor -> Text -> Text
-bgColor tone value = console.bgColor tone value
+bgColor = tone value => console.bgColor tone value
 
 style : AnsiStyle -> Text -> Text
-style attrs value = console.style attrs value
+style = attrs value => console.style attrs value
 
 strip : Text -> Text
-strip value = console.strip value"#;
+strip = value => console.strip value
+"#;

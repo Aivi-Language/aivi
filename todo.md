@@ -27,10 +27,14 @@ This is a bit weird def syntax. What alternatives?
 
 > This requires the domain to be in scope (e.g. use aivi.color (domain Color)), not just the carrier type.
 
-are aivi.color auto importing domains?
+aren't aivi.color auto importing domains?
 
 > use aivi.calendar as Cal
 > use vendor.legacy.math (v1_add as add)
 
 do we have tests for this?
+
+> renderCount = { count * 23 sasd, adsad step } =>
+
+lsp server is bad at spotting garbage code...how to fix. it should complain about bad destructors, unknown symbols etc.
 

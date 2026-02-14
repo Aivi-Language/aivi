@@ -16,4 +16,5 @@ localeTag : Effect Text (Option Text)
 localeTag = system.localeTag Unit
 
 exit : Int -> Effect Text Unit
-exit code = system.exit code"#;
+exit = code => system.exit code
+"#;

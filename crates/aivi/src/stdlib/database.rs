@@ -38,32 +38,32 @@ type Driver = Sqlite | Postgresql | Mysql
 type DbConfig = { driver: Driver, url: Text }
 
 configure : DbConfig -> Effect DbError Unit
-configure config = database.configure config
+configure = config => database.configure config
 
 table : Text -> List Column -> Table A
-table name columns = database.table name columns
+table = name columns => database.table name columns
 
 load : Table A -> Effect DbError (List A)
-load value = database.load value
+load = value => database.load value
 
 applyDelta : Table A -> Delta A -> Effect DbError (Table A)
-applyDelta table delta = database.applyDelta table delta
+applyDelta = table delta => database.applyDelta table delta
 
 runMigrations : List (Table A) -> Effect DbError Unit
-runMigrations tables = database.runMigrations tables
+runMigrations = tables => database.runMigrations tables
 
 ins : A -> Delta A
-ins value = Insert value
+ins = value => Insert value
 
 upd : Pred A -> Patch A -> Delta A
-upd pred patchFn = Update pred patchFn
+upd = pred patchFn => Update pred patchFn
 
 del : Pred A -> Delta A
-del pred = Delete pred
+del = pred => Delete pred
 
 domain Database over Table A = {
   (+) : Table A -> Delta A -> Effect DbError (Table A)
-  (+) table delta = applyDelta table delta
+  (+) = table delta => applyDelta table delta
 
   ins = Insert
   upd = Update

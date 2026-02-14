@@ -6,6 +6,6 @@ module geo.vector = {
 
   domain Vector over Vec2 = {
     (+) : Vec2 -> Vec2 -> Vec2
-    (+) a b = { x: a.x + b.x, y: a.y + b.y }
+    (+) = a b => { x: a.x + b.x, y: a.y + b.y }
   }
 }

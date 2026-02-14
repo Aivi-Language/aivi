@@ -1,6 +1,6 @@
 @mcp_tool
 searchDocs : Query -> Effect Http (List Document)
-searchDocs query = http.get "https://api.example.com/search?q={query}"
+searchDocs = query => http.get "https://api.example.com/search?q={query}"
 
 @mcp_resource
 appConfig : Source File Config

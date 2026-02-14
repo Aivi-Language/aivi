@@ -300,6 +300,7 @@ impl Parser {
                 continue;
             }
             let checkpoint = self.pos;
+            let diag_checkpoint = self.diagnostics.len();
             if let Some(pattern) = self.parse_pattern() {
                 if self.consume_symbol("<-") {
                     let expr = self.parse_expr_without_result_or().unwrap_or(Expr::Raw {
@@ -384,6 +385,10 @@ impl Parser {
                     continue;
                 }
             }
+            // `parse_pattern()` above is speculative (it might be the start of an expression
+            // statement). If we didn't commit to a pattern-led statement (`<-`/`->`/`=`),
+            // roll back both the token position and any diagnostics it emitted.
+            self.diagnostics.truncate(diag_checkpoint);
             self.pos = checkpoint;
             if let Some(expr) = self.parse_expr() {
                 let span = expr_span(&expr);

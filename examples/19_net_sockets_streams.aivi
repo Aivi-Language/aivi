@@ -9,14 +9,14 @@ main = effect {
 }
 
 echoServer : Int -> Effect SocketError Unit
-echoServer port = effect {
+echoServer = port => effect {
   server <- listen { host: "127.0.0.1", port: port }
   socket <- accept server
   handle socket
 }
 
 handle : Connection -> Effect SocketError Unit
-handle socket = effect {
+handle = socket => effect {
   msg <- recv socket
   _   <- send socket msg
   handle socket

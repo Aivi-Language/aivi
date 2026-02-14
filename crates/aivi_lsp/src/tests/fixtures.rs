@@ -166,7 +166,7 @@ fn examples_open_without_lsp_errors() {
         let Ok(uri) = Url::from_file_path(&path) else {
             continue;
         };
-        let diags = Backend::build_diagnostics_with_workspace(&text, &uri, &workspace);
+        let diags = Backend::build_diagnostics_with_workspace(&text, &uri, &workspace, false);
         let errors: Vec<_> = diags
             .into_iter()
             .filter(|d| d.severity == Some(DiagnosticSeverity::ERROR))
@@ -210,7 +210,7 @@ fn specs_snippets_open_without_lsp_diagnostics() {
         let Ok(uri) = Url::from_file_path(&path) else {
             continue;
         };
-        let diags = Backend::build_diagnostics_with_workspace(&text, &uri, &HashMap::new());
+        let diags = Backend::build_diagnostics_with_workspace(&text, &uri, &HashMap::new(), false);
         if diags.is_empty() {
             continue;
         }
@@ -557,4 +557,3 @@ run = add 1 2"#;
         .flatten()
         .all(|edit| edit.new_text == "sum"));
 }
-

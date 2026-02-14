@@ -13,27 +13,27 @@ Unit = { name: Text, factor: Float }
 Quantity = { value: Float, unit: Unit }
 
 defineUnit : Text -> Float -> Unit
-defineUnit name factor = { name: name, factor: factor }
+defineUnit = name factor => { name: name, factor: factor }
 
 convert : Quantity -> Unit -> Quantity
-convert q target = {
+convert = q target => {
   value: q.value * (q.unit.factor / target.factor)
   unit: target
 }
 
 sameUnit : Quantity -> Quantity -> Bool
-sameUnit a b = a.unit.name == b.unit.name
+sameUnit = a b => a.unit.name == b.unit.name
 
 domain Units over Quantity = {
   (+) : Quantity -> Quantity -> Quantity
-  (+) a b = { value: a.value + b.value, unit: a.unit }
+  (+) = a b => { value: a.value + b.value, unit: a.unit }
 
   (-) : Quantity -> Quantity -> Quantity
-  (-) a b = { value: a.value - b.value, unit: a.unit }
+  (-) = a b => { value: a.value - b.value, unit: a.unit }
 
   (*) : Quantity -> Float -> Quantity
-  (*) q s = { value: q.value * s, unit: q.unit }
+  (*) = q s => { value: q.value * s, unit: q.unit }
 
   (/) : Quantity -> Float -> Quantity
-  (/) q s = { value: q.value / s, unit: q.unit }
+  (/) = q s => { value: q.value / s, unit: q.unit }
 }"#;

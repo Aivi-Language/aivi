@@ -50,23 +50,23 @@ type Pool Conn = {
 }
 
 create : Config Conn -> Effect DbError (Result PoolError (Pool Conn))
-create config = database.pool.create config
+create = config => database.pool.create config
 
 acquire : Pool Conn -> Effect DbError (Result PoolError Conn)
-acquire pool = pool.acquire Unit
+acquire = pool => pool.acquire Unit
 
 release : Pool Conn -> Conn -> Effect DbError Unit
-release pool conn = pool.release conn
+release = pool conn => pool.release conn
 
 stats : Pool Conn -> Effect DbError PoolStats
-stats pool = pool.stats Unit
+stats = pool => pool.stats Unit
 
 drain : Pool Conn -> Effect DbError Unit
-drain pool = pool.drain Unit
+drain = pool => pool.drain Unit
 
 close : Pool Conn -> Effect DbError Unit
-close pool = pool.close Unit
+close = pool => pool.close Unit
 
 withConn : Pool Conn -> (Conn -> Effect DbError A) -> Effect DbError (Result PoolError A)
-withConn pool run = pool.withConn run
+withConn = pool run => pool.withConn run
 "#;

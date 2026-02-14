@@ -7,7 +7,7 @@ Analysis = {
 }
 
 // LLM completion with strict schema enforcement
-analyze input = llm.complete {
+analyze = input => llm.complete {
   model: "gpt-4o"
   prompt: "Analyze this feedback: {input}"
   schema: Analysis

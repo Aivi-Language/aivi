@@ -15,25 +15,25 @@ Date = { year: Int, month: Int, day: Int }
 type EndOfMonth = EndOfMonth
 
 isLeapYear : Date -> Bool
-isLeapYear value = calendar.isLeapYear value
+isLeapYear = value => calendar.isLeapYear value
 
 daysInMonth : Date -> Int
-daysInMonth value = calendar.daysInMonth value
+daysInMonth = value => calendar.daysInMonth value
 
 endOfMonth : Date -> Date
-endOfMonth value = calendar.endOfMonth value
+endOfMonth = value => calendar.endOfMonth value
 
 addDays : Date -> Int -> Date
-addDays value n = calendar.addDays value n
+addDays = value n => calendar.addDays value n
 
 addMonths : Date -> Int -> Date
-addMonths value n = calendar.addMonths value n
+addMonths = value n => calendar.addMonths value n
 
 addYears : Date -> Int -> Date
-addYears value n = calendar.addYears value n
+addYears = value n => calendar.addYears value n
 
 negateDelta : Delta -> Delta
-negateDelta delta = delta ?
+negateDelta = delta => delta ?
   | Day n => Day (-n)
   | Month n => Month (-n)
   | Year n => Year (-n)
@@ -46,13 +46,13 @@ domain Calendar over Date = {
   type Delta = Day Int | Month Int | Year Int | End EndOfMonth
 
   (+) : Date -> Delta -> Date
-  (+) date (Day n) = addDays date n
-  (+) date (Month n) = addMonths date n
-  (+) date (Year n) = addYears date n
-  (+) date End = endOfMonth date
+  (+) = date (Day n) => addDays date n
+  (+) = date (Month n) => addMonths date n
+  (+) = date (Year n) => addYears date n
+  (+) = date End => endOfMonth date
 
   (-) : Date -> Delta -> Date
-  (-) date delta = date + (negateDelta delta)
+  (-) = date delta => date + (negateDelta delta)
 
   1d = Day 1
   1m = Month 1

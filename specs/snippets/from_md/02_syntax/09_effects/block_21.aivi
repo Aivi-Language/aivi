@@ -1,5 +1,5 @@
 // Sequence with effect block
-transfer fromAccount toAccount amount = effect {
+transfer = fromAccount toAccount amount => effect {
   balance <- getBalance fromAccount
   if balance >= amount then effect {
     withdraw fromAccount amount
@@ -8,7 +8,7 @@ transfer fromAccount toAccount amount = effect {
 }
 
 // Equivalent functional composition
-transfer fromAccount toAccount amount =
+transfer = fromAccount toAccount amount =>
 (getBalance fromAccount |> bind) (balance =>
   if balance >= amount then
   (withdraw fromAccount amount |> bind) (_ =>

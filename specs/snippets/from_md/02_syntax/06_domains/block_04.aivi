@@ -4,7 +4,7 @@ domain Name over CarrierType = {
 
   // 2. Implement operators
   (+) : CarrierType -> Delta -> CarrierType
-  (+) carrier delta = ...
+  (+) = carrier delta => ...
 
   // 3. Define literals
   1d = Day 1

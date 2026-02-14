@@ -17,13 +17,13 @@ init : Model
 init = { count: 0, step: 1 }
 
 update : Msg -> Model -> Model
-update msg model = msg ?
+update = msg model => msg ?
   | Inc       => model <| { count: _ + model.step }
   | Dec       => model <| { count: _ - model.step }
   | SetStep s => model <| { step: s }
 
 renderCount : Model -> Text
-renderCount model = "Count: {model.count}"
+renderCount = model => "Count: {model.count}"
 
 welcomeKey = ~k"app.welcome"
 welcomeMsg = ~m"Hello, {name:Text}!"
@@ -31,4 +31,4 @@ welcomeMsg = ~m"Hello, {name:Text}!"
 welcomeText = (render welcomeMsg { name: "AIVI" }) ? | Ok txt => txt | Err _ => keyText welcomeKey
 
 view : Model -> VNode Msg
-view model = vElement "div" ([vClass "card", vStyle { width: 240px, gap: 2em }]) ([vElement "h1" ([]) ([vText "Hello"]), vElement "p" ([]) ([vText welcomeText]), vText (renderCount model)])
+view = model => vElement "div" ([vClass "card", vStyle { width: 240px, gap: 2em }]) ([vElement "h1" ([]) ([vText "Hello"]), vElement "p" ([]) ([vText welcomeText]), vText (renderCount model)])

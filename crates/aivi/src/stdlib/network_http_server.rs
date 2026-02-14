@@ -21,20 +21,21 @@ type WsMessage = TextMsg Text | BinaryMsg (List Int) | Ping | Pong | Close
 type ServerReply = Http Response | Ws (WebSocket -> Effect WsError Unit)
 
 listen : ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource HttpError Server
-listen config handler = resource {
+listen = config handler => resource {
   server <- httpServer.listen config handler
   yield server
   _ <- httpServer.stop server
 }
 
 stop : Server -> Effect HttpError Unit
-stop server = httpServer.stop server
+stop = server => httpServer.stop server
 
 wsRecv : WebSocket -> Effect WsError WsMessage
-wsRecv socket = httpServer.ws_recv socket
+wsRecv = socket => httpServer.ws_recv socket
 
 wsSend : WebSocket -> WsMessage -> Effect WsError Unit
-wsSend socket msg = httpServer.ws_send socket msg
+wsSend = socket msg => httpServer.ws_send socket msg
 
 wsClose : WebSocket -> Effect WsError Unit
-wsClose socket = httpServer.ws_close socket"#;
+wsClose = socket => httpServer.ws_close socket
+"#;

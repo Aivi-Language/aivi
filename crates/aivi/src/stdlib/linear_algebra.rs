@@ -13,38 +13,39 @@ Vec = { size: Int, data: List Float }
 Mat = { rows: Int, cols: Int, data: List Float }
 
 map : (A -> B) -> List A -> List B
-map f items = items ?
+map = f items => items ?
   | [] => []
   | [x, ...xs] => [f x, ...map f xs]
 
 zipWith : (A -> B -> C) -> List A -> List B -> List C
-zipWith f left right = (left, right) ?
+zipWith = f left right => (left, right) ?
   | ([], _) => []
   | (_, []) => []
   | ([x, ...xs], [y, ...ys]) => [f x y, ...zipWith f xs ys]
 
 add : Float -> Float -> Float
-add a b = a + b
+add = a b => a + b
 
 sub : Float -> Float -> Float
-sub a b = a - b
+sub = a b => a - b
 
 domain LinearAlgebra over Vec = {
   (+) : Vec -> Vec -> Vec
-  (+) a b = { size: a.size, data: zipWith add a.data b.data }
+  (+) = a b => { size: a.size, data: zipWith add a.data b.data }
 
   (-) : Vec -> Vec -> Vec
-  (-) a b = { size: a.size, data: zipWith sub a.data b.data }
+  (-) = a b => { size: a.size, data: zipWith sub a.data b.data }
 
   (*) : Vec -> Float -> Vec
-  (*) v s = { size: v.size, data: map (_ * s) v.data }
+  (*) = v s => { size: v.size, data: map (_ * s) v.data }
 }
 
 dot : Vec -> Vec -> Float
-dot a b = linalg.dot a b
+dot = a b => linalg.dot a b
 
 matMul : Mat -> Mat -> Mat
-matMul a b = linalg.matMul a b
+matMul = a b => linalg.matMul a b
 
 solve2x2 : Mat -> Vec -> Vec
-solve2x2 m v = linalg.solve2x2 m v"#;
+solve2x2 = m v => linalg.solve2x2 m v
+"#;

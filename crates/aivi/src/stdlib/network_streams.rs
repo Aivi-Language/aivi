@@ -11,10 +11,11 @@ use aivi
 StreamError = { message: Text }
 
 fromSocket : Connection -> Stream (List Int)
-fromSocket conn = streams.fromSocket conn
+fromSocket = conn => streams.fromSocket conn
 
 toSocket : Connection -> Stream (List Int) -> Effect StreamError Unit
-toSocket conn stream = streams.toSocket conn stream
+toSocket = conn stream => streams.toSocket conn stream
 
 chunks : Int -> Stream (List Int) -> Stream (List Int)
-chunks size stream = streams.chunks size stream"#;
+chunks = size stream => streams.chunks size stream
+"#;

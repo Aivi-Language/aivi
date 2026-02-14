@@ -11,7 +11,7 @@ Error =
   | Other
 
 messageFrom : Result Error Text -> Text
-messageFrom res =
+messageFrom = res =>
 res or
 | Err NotFound m => m
 | Err _          => "boom"
