@@ -84,7 +84,7 @@ fn inserts_to_text_for_record_when_text_expected() {
 module test.coerce
 
 needsText : Text -> Int
-needsText x = text.length x
+needsText = x => text.length x
 
 x = needsText { name: "A" }
 "#;
@@ -125,7 +125,7 @@ fn does_not_coerce_without_instance() {
 module test.no_coerce
 
 needsText : Text -> Int
-needsText x = text.length x
+needsText = x => text.length x
 
 x = needsText 123
 "#;

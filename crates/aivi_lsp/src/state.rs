@@ -6,6 +6,7 @@ use aivi::Module;
 use tower_lsp::lsp_types::Url;
 
 use crate::doc_index::{DocIndex, DOC_INDEX_JSON};
+use crate::strict::StrictConfig;
 
 #[derive(Default)]
 pub(super) struct DocumentState {
@@ -28,6 +29,7 @@ pub(super) struct BackendState {
     pub(super) format_options: aivi::FormatOptions,
     pub(super) format_options_from_config: bool,
     pub(super) diagnostics_in_specs_snippets: bool,
+    pub(super) strict: StrictConfig,
     pub(super) doc_index: Arc<DocIndex>,
 }
 
@@ -44,6 +46,7 @@ impl Default for BackendState {
             format_options: aivi::FormatOptions::default(),
             format_options_from_config: false,
             diagnostics_in_specs_snippets: false,
+            strict: StrictConfig::default(),
             doc_index: Arc::new(doc_index),
         }
     }

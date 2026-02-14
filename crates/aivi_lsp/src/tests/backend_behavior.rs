@@ -5,7 +5,10 @@ fn build_diagnostics_reports_error() {
     let diagnostics = Backend::build_diagnostics(text, &uri);
     assert!(!diagnostics.is_empty());
     assert_eq!(diagnostics[0].severity, Some(DiagnosticSeverity::ERROR));
-    assert_eq!(diagnostics[0].source.as_deref(), Some("aivi"));
+    assert!(diagnostics[0]
+        .source
+        .as_deref()
+        .is_some_and(|s| s.starts_with("aivi.")));
 }
 
 #[test]
@@ -128,6 +131,28 @@ fn code_actions_offer_quick_fix_for_unclosed_delimiter() {
     }
 
     assert!(saw_fix);
+}
+
+#[test]
+fn strict_mode_reports_split_arrow_and_offers_fix() {
+    let text = "module demo\n\nid = x = > x\n";
+    let uri = sample_uri();
+    let strict = crate::strict::StrictConfig {
+        level: crate::strict::StrictLevel::LexicalStructural,
+        forbid_implicit_coercions: false,
+        warnings_as_errors: false,
+    };
+    let diagnostics = Backend::build_diagnostics_strict(text, &uri, &strict);
+    let split_arrow = diagnostics.iter().find(|diag| {
+        matches!(diag.code.as_ref(), Some(NumberOrString::String(code)) if code == "AIVI-S014")
+    });
+    assert!(split_arrow.is_some(), "expected split-arrow diagnostic");
+
+    let actions = Backend::build_code_actions(text, &uri, &diagnostics);
+    assert!(actions.iter().any(|action| match action {
+        CodeActionOrCommand::CodeAction(action) => action.title.contains("Replace with \"=>\""),
+        _ => false,
+    }));
 }
 
 #[test]

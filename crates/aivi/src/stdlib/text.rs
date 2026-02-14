@@ -24,7 +24,7 @@ type TextError = InvalidEncoding Encoding
 // Expected-type coercions: `A` -> `Text` via instances
 // ------------------------------------------------------------
 
-class = ToText A => {
+class ToText A = {
   toText: A -> Text
 }
 

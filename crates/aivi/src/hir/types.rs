@@ -422,8 +422,28 @@ fn lower_def_expr(
     module_source: Option<&str>,
     id_gen: &mut IdGen,
 ) -> HirExpr {
-    let fn_name = format!("{}.{}", module.name.name, def.name.name);
-    let debug_params = debug_params.filter(|_| !def.params.is_empty());
+    let Def {
+        name,
+        params,
+        expr,
+        ..
+    } = def;
+    let fn_name = format!("{}.{}", module.name.name, name.name);
+
+    // `@debug(...)` is intended for functions. In v0.1 surface syntax, function parameters are
+    // written as an explicit lambda on the RHS (`f = x y => ...`). Preserve `@debug` on this
+    // common shape by treating a top-level lambda as the function binder when `def.params` is
+    // empty.
+    let (effective_params, effective_expr) = if params.is_empty() {
+        match (debug_params.as_ref(), expr) {
+            (Some(_), Expr::Lambda { params, body, .. }) => (params, *body),
+            (_, expr) => (Vec::new(), expr),
+        }
+    } else {
+        (params, expr)
+    };
+
+    let debug_params = debug_params.filter(|_| !effective_params.is_empty());
 
     let mut ctx = LowerCtx {
         debug: debug_params.map(|params| LowerDebug {
@@ -434,12 +454,12 @@ fn lower_def_expr(
         }),
     };
 
-    let body_hir = lower_expr_ctx(def.expr, id_gen, &mut ctx, false);
+    let body_hir = lower_expr_ctx(effective_expr, id_gen, &mut ctx, false);
     let body_hir = if let Some(debug) = &ctx.debug {
         HirExpr::DebugFn {
             id: id_gen.next(),
             fn_name: debug.fn_name.clone(),
-            arg_vars: debug_arg_vars(&def.params),
+            arg_vars: debug_arg_vars(&effective_params),
             log_args: debug.params.args,
             log_return: debug.params.ret,
             log_time: debug.params.time,
@@ -449,10 +469,10 @@ fn lower_def_expr(
         body_hir
     };
 
-    if def.params.is_empty() {
+    if effective_params.is_empty() {
         body_hir
     } else {
-        lower_lambda_hir(def.params, body_hir, id_gen)
+        lower_lambda_hir(effective_params, body_hir, id_gen)
     }
 }
 
