@@ -48,6 +48,9 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
                     out.insert(name.name.clone());
                 }
             }
+            Expr::Suffixed { base, .. } => {
+                collect_expr(base, env, bound, out);
+            }
             Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => {}
             Expr::TextInterpolate { parts, .. } => {
                 for part in parts {
@@ -173,6 +176,11 @@ fn rewrite_implicit_field_vars(
             }
         }
         Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => expr,
+        Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
+            base: Box::new(rewrite_implicit_field_vars(*base, implicit_param, unbound)),
+            suffix,
+            span,
+        },
         Expr::TextInterpolate { parts, span } => Expr::TextInterpolate {
             parts: parts
                 .into_iter()
@@ -345,4 +353,3 @@ fn rewrite_implicit_field_vars(
         },
     }
 }
-

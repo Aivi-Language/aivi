@@ -100,6 +100,17 @@ fn lower_expr_inner_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, 
                 text,
             },
         },
+        Expr::Suffixed { base, suffix, .. } => {
+            let template_name = format!("1{}", suffix.name);
+            HirExpr::App {
+                id: id_gen.next(),
+                func: Box::new(HirExpr::Var {
+                    id: id_gen.next(),
+                    name: template_name,
+                }),
+                arg: Box::new(lower_expr_ctx(*base, id_gen, ctx, false)),
+            }
+        }
         Expr::List { items, .. } => HirExpr::List {
             id: id_gen.next(),
             items: items
@@ -356,6 +367,7 @@ fn surface_expr_span(expr: &Expr) -> crate::diagnostics::Span {
         | Expr::Tuple { span, .. }
         | Expr::Record { span, .. }
         | Expr::PatchLit { span, .. }
+        | Expr::Suffixed { span, .. }
         | Expr::FieldAccess { span, .. }
         | Expr::FieldSection { span, .. }
         | Expr::Index { span, .. }

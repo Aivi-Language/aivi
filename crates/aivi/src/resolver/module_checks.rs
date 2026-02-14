@@ -182,6 +182,9 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
             Expr::Ident(name) => {
                 out.insert(name.name.clone());
             }
+            Expr::Suffixed { base, .. } => {
+                collect_expr(base, out);
+            }
             Expr::TextInterpolate { parts, .. } => {
                 for part in parts {
                     if let TextPart::Expr { expr, .. } = part {

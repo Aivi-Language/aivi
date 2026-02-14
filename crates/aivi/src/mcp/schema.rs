@@ -83,6 +83,7 @@ fn type_is_effectful_return(ty: &TypeExpr) -> bool {
 
 fn expr_is_effectful(expr: &Expr) -> bool {
     match expr {
+        Expr::Suffixed { base, .. } => expr_is_effectful(base),
         Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
             TextPart::Text { .. } => false,
             TextPart::Expr { expr, .. } => expr_is_effectful(expr),

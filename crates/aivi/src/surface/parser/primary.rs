@@ -100,6 +100,7 @@ impl Parser {
             return Some(expr);
         }
         if self.consume_symbol("(") {
+            let open_span = self.previous_span();
             if self.consume_symbol(")") {
                 let span = self.previous_span();
                 return Some(Expr::Tuple {
@@ -122,7 +123,26 @@ impl Parser {
                 let span = merge_span(expr_span(&items[0]), end.unwrap_or(expr_span(&items[0])));
                 return Some(Expr::Tuple { items, span });
             }
-            let _ = self.expect_symbol(")", "expected ')' to close group");
+            let close_span = self
+                .expect_symbol(")", "expected ')' to close group")
+                .unwrap_or_else(|| expr_span(&expr));
+
+            // Postfix suffix application: `(expr)suffix` where `suffix` is adjacent to `)`.
+            // This keeps `xkg` from becoming ambiguous with identifiers, while allowing
+            // variables/expressions as the numeric part.
+            if let Some(suffix_token) = self.consume_adjacent_suffix(&close_span) {
+                let suffix = SpannedName {
+                    name: suffix_token.text,
+                    span: suffix_token.span,
+                };
+                let span = merge_span(open_span, suffix.span.clone());
+                return Some(Expr::Suffixed {
+                    base: Box::new(expr),
+                    suffix,
+                    span,
+                });
+            }
+
             return Some(expr);
         }
 

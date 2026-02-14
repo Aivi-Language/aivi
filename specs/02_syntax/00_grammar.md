@@ -118,6 +118,7 @@ DomainItem     := TypeAlias | TypeDef | ValueSig | ValueBinding | OpDef | DeltaL
 OpDef          := "(" Operator ")" ":" Type Sep
                | "(" Operator ")" Pattern { Pattern } "=" Expr Sep
 Operator       := "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||" | "++" | "??"
+               | "×"
                | "|" | "^" | "~" | "<<" | ">>"
 DeltaLitBinding:= SuffixedNumberLit "=" Expr Sep
 
@@ -176,7 +177,7 @@ BitOrExpr      := BitXorExpr { "|" BitXorExpr }
 BitXorExpr     := ShiftExpr { "^" ShiftExpr }
 ShiftExpr      := AddExpr { ("<<" | ">>") AddExpr }
 AddExpr        := MulExpr { ("+" | "-" | "++") MulExpr }
-MulExpr        := UnaryExpr { ("*" | "/" | "%") UnaryExpr }
+MulExpr        := UnaryExpr { ("*" | "×" | "/" | "%") UnaryExpr }
 UnaryExpr      := ("!" | "-" | "~" ) UnaryExpr
                | PatchExpr
 
@@ -189,6 +190,7 @@ Atom           := Literal
                | lowerIdent
                | UpperIdent
                | "." lowerIdent                 (* accessor sugar *)
+               | SuffixedParens
                | "(" Expr ")"
                | TupleLit
                | ListLit
@@ -199,6 +201,8 @@ Atom           := Literal
                | GenerateBlock
                | ResourceBlock
                
+SuffixedParens := "(" Expr ")" Suffix
+Suffix         := lowerIdent | "%"
 
 Block          := "do" "{" { Stmt } "}"
 EffectBlock    := "effect" "{" { Stmt } "}"

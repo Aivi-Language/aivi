@@ -395,6 +395,9 @@ impl Backend {
                 }
             }
             Expr::Literal(_) => {}
+            Expr::Suffixed { base, .. } => {
+                Self::collect_expr_references(base, ident, text, uri, locations);
+            }
             Expr::List { items, .. } => {
                 for item in items.iter() {
                     Self::collect_list_item_references(item, ident, text, uri, locations);

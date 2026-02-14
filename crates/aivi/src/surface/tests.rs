@@ -153,6 +153,7 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
     match expr {
         Expr::Ident(name) => name.name == target,
         Expr::Literal(_) => false,
+        Expr::Suffixed { base, .. } => expr_contains_ident(base, target),
         Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
             crate::surface::TextPart::Text { .. } => false,
             crate::surface::TextPart::Expr { expr, .. } => expr_contains_ident(expr, target),
@@ -215,6 +216,43 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
 }
 
 #[test]
+fn parses_parenthesized_suffix_application_expression() {
+    let src = r#"
+module Example
+
+x = (1 + 2)px
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    match &def.expr {
+        Expr::Suffixed { base, suffix, .. } => {
+            assert_eq!(suffix.name, "px");
+            assert!(
+                matches!(base.as_ref(), Expr::Binary { op, .. } if op == "+"),
+                "expected base to be a binary '+', got: {base:?}"
+            );
+        }
+        other => panic!("expected suffixed expression, got: {other:?}"),
+    }
+}
+
+#[test]
 fn parses_binary_operator_precedence_multiplication_binds_tighter_than_addition() {
     let src = r#"
 module Example
@@ -250,6 +288,48 @@ x = 1 + 2 * 3
             assert!(
                 matches!(right.as_ref(), Expr::Binary { op, .. } if op == "*"),
                 "expected right side to be multiplication, got: {right:?}"
+            );
+        }
+        other => panic!("expected binary expression, got: {other:?}"),
+    }
+}
+
+#[test]
+fn parses_binary_operator_precedence_cross_binds_tighter_than_addition() {
+    let src = r#"
+module Example
+
+x = 1 + 2 × 3
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    match &def.expr {
+        Expr::Binary {
+            op, left, right, ..
+        } => {
+            assert_eq!(op, "+");
+            assert!(
+                matches!(left.as_ref(), Expr::Literal(Literal::Number { text, .. }) if text == "1")
+            );
+            assert!(
+                matches!(right.as_ref(), Expr::Binary { op, .. } if op == "×"),
+                "expected right side to be cross operator, got: {right:?}"
             );
         }
         other => panic!("expected binary expression, got: {other:?}"),

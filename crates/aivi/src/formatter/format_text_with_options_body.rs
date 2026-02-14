@@ -223,6 +223,15 @@
             return false;
         }
 
+        // Postfix domain-literal application: no space between `)` and adjacent suffix.
+        // This preserves forms like `(x)px` and `(n)%`.
+        if prev_text == ")"
+            && adjacent_in_input
+            && (curr_text == "%" || (curr_kind == "ident" && !is_keyword(curr_text)))
+        {
+            return false;
+        }
+
         // Unary +/-: no space between sign and number if it doesn't follow a binary precursor.
         if (prev_text == "-" || prev_text == "+") && curr_kind == "number" {
             let precursor = prevprev.map(|(_, t)| t).unwrap_or("");

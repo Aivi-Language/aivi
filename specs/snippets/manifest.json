@@ -545,6 +545,13 @@
       ]
     },
     {
+      "path": "specs/snippets/from_md/02_syntax/06_domains/block_08.aivi",
+      "module": "docs.snippets.02_syntax.06_domains.block_08",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
       "path": "specs/snippets/from_md/02_syntax/07_generators/block_01.aivi",
       "module": "docs.snippets.02_syntax.07_generators.block_01",
       "verify": [

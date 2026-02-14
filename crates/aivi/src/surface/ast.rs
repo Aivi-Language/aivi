@@ -224,6 +224,15 @@ pub enum TextPart {
 pub enum Expr {
     Ident(SpannedName),
     Literal(Literal),
+    /// Postfix domain literal application: `(expr)suffix`.
+    ///
+    /// This is the generalization of numeric suffix literals like `10px`.
+    /// It elaborates as applying the in-scope literal template `1{suffix}` to `expr`.
+    Suffixed {
+        base: Box<Expr>,
+        suffix: SpannedName,
+        span: Span,
+    },
     TextInterpolate {
         parts: Vec<TextPart>,
         span: Span,

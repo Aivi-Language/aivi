@@ -15,6 +15,7 @@ fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, modu
             | Expr::Tuple { span, .. }
             | Expr::Record { span, .. }
             | Expr::PatchLit { span, .. }
+            | Expr::Suffixed { span, .. }
             | Expr::FieldAccess { span, .. }
             | Expr::FieldSection { span, .. }
             | Expr::Index { span, .. }
@@ -116,6 +117,9 @@ fn check_expr(
     allow_unknown: bool,
 ) {
     match expr {
+        Expr::Suffixed { base, .. } => {
+            check_expr(base, scope, diagnostics, module, allow_unknown);
+        }
         Expr::TextInterpolate { parts, .. } => {
             for part in parts {
                 if let TextPart::Expr { expr, .. } = part {

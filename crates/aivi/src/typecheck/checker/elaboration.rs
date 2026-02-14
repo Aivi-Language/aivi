@@ -35,6 +35,27 @@ impl TypeChecker {
                 },
                 _ => Ok(self.literal_type(literal)),
             },
+            Expr::Suffixed { base, suffix, span } => {
+                let arg_ty = self.infer_expr(base, env)?;
+                let template_name = format!("1{}", suffix.name);
+                let scheme = env.get(&template_name).cloned().ok_or_else(|| TypeError {
+                    span: span.clone(),
+                    message: format!(
+                        "unknown suffix '{}' (suffix literals require a '{template_name}' template in scope; import the relevant domain with `use ... (domain ...)` or define '{template_name} = ...`)",
+                        suffix.name
+                    ),
+                    expected: None,
+                    found: None,
+                })?;
+                let template_ty = self.instantiate(&scheme);
+                let result_ty = self.fresh_var();
+                self.unify_with_span(
+                    template_ty,
+                    Type::Func(Box::new(arg_ty), Box::new(result_ty.clone())),
+                    span.clone(),
+                )?;
+                Ok(result_ty)
+            }
             Expr::TextInterpolate { parts, .. } => {
                 for part in parts {
                     if let TextPart::Expr { expr, .. } = part {
@@ -140,6 +161,15 @@ impl TypeChecker {
     ) -> Result<(Expr, Type), TypeError> {
         match expr {
             Expr::Call { func, args, span } => self.elab_call(*func, args, span, expected, env),
+            Expr::Suffixed { base, suffix, span } => {
+                let (base, _base_ty) = self.elab_expr(*base, None, env)?;
+                let out = Expr::Suffixed {
+                    base: Box::new(base),
+                    suffix,
+                    span,
+                };
+                self.check_or_coerce(out, expected, env)
+            }
             Expr::Record { fields, span } => self.elab_record(fields, span, expected, env),
             Expr::If {
                 cond,

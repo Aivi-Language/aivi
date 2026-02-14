@@ -179,6 +179,11 @@ fn expand_module_aliases(modules: &mut [Module]) {
 
     fn rewrite_expr(expr: Expr, aliases: &HashMap<String, String>) -> Expr {
         match expr {
+            Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
+                base: Box::new(rewrite_expr(*base, aliases)),
+                suffix,
+                span,
+            },
             Expr::FieldAccess { base, field, span } => {
                 // Best-effort support for `use some.module as alias`.
                 //

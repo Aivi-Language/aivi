@@ -613,7 +613,7 @@ impl TypeChecker {
                 self.unify_with_span(right_ty, Type::con("Int"), expr_span(right))?;
                 Ok(Type::con("Bool"))
             }
-            "+" | "-" | "*" | "/" | "%" => {
+            "+" | "-" | "*" | "×" | "/" | "%" => {
                 let op_name = format!("({})", op);
                 let left_applied = self.apply(left_ty.clone());
                 let left_applied = self.expand_alias(left_applied);

@@ -6,7 +6,7 @@ fn binary_prec(op: &str) -> u8 {
         "==" | "!=" | "<" | ">" | "<=" | ">=" => 4,
         ".." => 5,
         "+" | "-" => 6,
-        "*" | "/" | "%" => 7,
+        "*" | "×" | "/" | "%" => 7,
         _ => 0,
     }
 }
@@ -176,6 +176,7 @@ fn expr_span(expr: &Expr) -> Span {
     match expr {
         Expr::Ident(name) => name.span.clone(),
         Expr::Literal(literal) => literal_span(literal),
+        Expr::Suffixed { span, .. } => span.clone(),
         Expr::TextInterpolate { span, .. } => span.clone(),
         Expr::List { span, .. }
         | Expr::Tuple { span, .. }

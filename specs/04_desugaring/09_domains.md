@@ -7,6 +7,7 @@ Domains are not terms; they elaborate operator syntax to named functions.
 | `a + b` | `(+)_D ⟦a⟧ ⟦b⟧` where `D` is the resolved domain for the carrier of `a` |
 | `date + 1m` | `addMonth date 1m` (or domain-specific `applyDelta`) |
 | `col + 3l` | `applyLightness col 3l` |
+| `(x)px` | `1px ⟦x⟧` (apply the in-scope literal template) |
 
 This is a static rewrite: `(operator, carrier-type)` ↦ implementation.
 

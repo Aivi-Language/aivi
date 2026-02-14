@@ -184,6 +184,7 @@ impl Backend {
             Expr::List { items, .. } => items
                 .iter()
                 .find_map(|item| Self::find_call_info(&item.expr, position)),
+            Expr::Suffixed { base, .. } => Self::find_call_info(base, position),
             Expr::TextInterpolate { parts, .. } => parts.iter().find_map(|part| match part {
                 aivi::TextPart::Text { .. } => None,
                 aivi::TextPart::Expr { expr, .. } => Self::find_call_info(expr, position),
@@ -289,6 +290,7 @@ impl Backend {
             | Expr::Tuple { span, .. }
             | Expr::Record { span, .. }
             | Expr::PatchLit { span, .. }
+            | Expr::Suffixed { span, .. }
             | Expr::FieldAccess { span, .. }
             | Expr::FieldSection { span, .. }
             | Expr::Index { span, .. }

@@ -24,6 +24,17 @@ These are **not** strings; they are typed values. `10m` might compile to a `Dura
 
 <<< ../snippets/from_md/02_syntax/06_domains/block_03.aivi{aivi}
 
+### Suffix Application (Variables)
+
+Suffix literals can also be applied to a parenthesized expression, allowing variables and computed values:
+
+<<< ../snippets/from_md/02_syntax/06_domains/block_08.aivi{aivi}
+
+This form requires parentheses and the suffix must be **adjacent** to the closing `)` (write `(x)kg`, not `(x) kg`).
+
+### Domain-Owned Operators (Including `×`)
+
+Domains may define semantics for operators beyond plain numeric arithmetic, including the `×` operator for product/cross-product style operations.
 
 
 ## Defining Domains

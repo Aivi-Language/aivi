@@ -19,6 +19,7 @@ fn wrap_in_pure(expr: Expr) -> Expr {
         | Expr::Tuple { span, .. }
         | Expr::Record { span, .. }
         | Expr::PatchLit { span, .. }
+        | Expr::Suffixed { span, .. }
         | Expr::FieldAccess { span, .. }
         | Expr::FieldSection { span, .. }
         | Expr::Index { span, .. }
@@ -80,6 +81,11 @@ fn desugar_effect_stmt_expr(expr: Expr) -> Expr {
 fn desugar_expr(expr: Expr) -> Expr {
     match expr {
         Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => expr,
+        Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
+            base: Box::new(desugar_expr(*base)),
+            suffix,
+            span,
+        },
         Expr::TextInterpolate { parts, span } => Expr::TextInterpolate {
             parts: parts
                 .into_iter()

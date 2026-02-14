@@ -270,6 +270,34 @@ brightRed = red + 10l"#;
 }
 
 #[test]
+fn typecheck_suffix_application_with_variable() {
+    let source = r#"
+module test.delta_apply
+export value
+
+domain Units over Int = {
+  type Delta = Kg Int
+  1kg = Kg 1
+}
+
+n : Int
+n = 5
+
+value = (n)kg"#;
+    check_ok(source);
+}
+
+#[test]
+fn typecheck_int_cross_operator() {
+    let source = r#"
+module test.cross_int
+export value
+
+value = 2 × 3"#;
+    check_ok(source);
+}
+
+#[test]
 fn typecheck_record_literal_missing_required_field_is_error() {
     let source = r#"
 module test.record_missing

@@ -108,6 +108,7 @@ fn contains_placeholder(expr: &Expr) -> bool {
     match expr {
         Expr::Ident(name) => name.name == "_",
         Expr::Literal(_) => false,
+        Expr::Suffixed { base, .. } => contains_placeholder(base),
         Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
             TextPart::Text { .. } => false,
             TextPart::Expr { expr, .. } => contains_placeholder(expr),
@@ -186,6 +187,11 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
             Expr::Ident(name)
         }
         Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => expr,
+        Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
+            base: Box::new(desugar_placeholder_lambdas(*base)),
+            suffix,
+            span,
+        },
         Expr::TextInterpolate { parts, span } => Expr::TextInterpolate {
             parts: parts
                 .into_iter()
@@ -395,6 +401,7 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
         | Expr::Tuple { span, .. }
         | Expr::Record { span, .. }
         | Expr::PatchLit { span, .. }
+        | Expr::Suffixed { span, .. }
         | Expr::FieldAccess { span, .. }
         | Expr::FieldSection { span, .. }
         | Expr::Index { span, .. }
@@ -441,6 +448,11 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             })
         }
         Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } => expr,
+        Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
+            base: Box::new(replace_holes_inner(*base, counter, params)),
+            suffix,
+            span,
+        },
         Expr::TextInterpolate { parts, span } => Expr::TextInterpolate {
             parts: parts
                 .into_iter()
@@ -657,4 +669,3 @@ impl IdGen {
         id
     }
 }
-

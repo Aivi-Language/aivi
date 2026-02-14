@@ -2,6 +2,7 @@ fn expr_span(expr: &Expr) -> Span {
     match expr {
         Expr::Ident(name) => name.span.clone(),
         Expr::Literal(literal) => literal_span(literal),
+        Expr::Suffixed { span, .. } => span.clone(),
         Expr::TextInterpolate { span, .. } => span.clone(),
         Expr::List { span, .. }
         | Expr::Tuple { span, .. }
@@ -52,6 +53,11 @@ fn desugar_holes(expr: Expr) -> Expr {
 
 fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
     let expr = match expr {
+        Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
+            base: Box::new(desugar_holes_inner(*base, false)),
+            suffix,
+            span,
+        },
         Expr::TextInterpolate { parts, span } => Expr::TextInterpolate {
             parts: parts
                 .into_iter()
@@ -241,6 +247,7 @@ fn contains_hole(expr: &Expr) -> bool {
     match expr {
         Expr::Ident(name) => name.name == "_",
         Expr::Literal(_) => false,
+        Expr::Suffixed { base, .. } => contains_hole(base),
         Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
             TextPart::Text { .. } => false,
             TextPart::Expr { expr, .. } => contains_hole(expr),
@@ -310,6 +317,11 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
             })
         }
         Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } => expr,
+        Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
+            base: Box::new(replace_holes_inner(*base, counter, params)),
+            suffix,
+            span,
+        },
         Expr::TextInterpolate { parts, span } => Expr::TextInterpolate {
             parts: parts
                 .into_iter()
