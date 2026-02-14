@@ -69,7 +69,7 @@ whatIs =
 ## 3. Advanced Semantics: Domains & Coercion
 
 ### 3.1 Domains & Semantic Algebra
-AIVI delegates operator semantics (`+`, `-`, etc.) to **Domains**.
+AIVI delegates operator semantics (`+`, `-`, `×`, etc.) to **Domains**.
 *   **Context-Aware**: `+` means addition for numbers, but "shift" for dates.
 *   **Algebraic Rules**: Domains define how types interact.
     *   `Carrier + Delta -> Carrier` (e.g., `Date + Month -> Date`)
@@ -77,6 +77,7 @@ AIVI delegates operator semantics (`+`, `-`, etc.) to **Domains**.
 
 ### 3.2 Units & Deltas
 *   **Typed Literals**: Values like `10m`, `30s`, `100px` are **not** strings. They are typed symbols (Deltas).
+*   **Suffix Application**: You can also apply a suffix to a parenthesized expression, e.g. `(x)kg`, `(n + 5)s`.
 *   **Resolution**:
     1.  **Lexical**: Finds the delta binding (e.g., `m` -> `Month`).
     2.  **Carrier**: Selects the domain based on the operand type (e.g., `date + 1m` uses `Calendar` domain).
