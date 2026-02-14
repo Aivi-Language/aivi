@@ -3,7 +3,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 
-use aivi::{check_modules, check_types, desugar_modules, file_diagnostics_have_errors, lower_kernel};
+use aivi::{
+    check_modules, check_types, desugar_modules, file_diagnostics_have_errors, lower_kernel,
+};
 
 #[derive(Debug, Clone)]
 struct Fixture {
@@ -53,7 +55,11 @@ fn load_fixtures() -> Vec<Fixture> {
             .unwrap_or("fixture")
             .to_string();
         let contents = fs::read_to_string(&path).expect("read fixture");
-        fixtures.push(Fixture { name, path, contents });
+        fixtures.push(Fixture {
+            name,
+            path,
+            contents,
+        });
     }
     fixtures.sort_by(|a, b| a.name.cmp(&b.name));
     fixtures
@@ -122,7 +128,11 @@ fn build_report() -> PerfReport {
     let fixtures = load_fixtures();
     let mut out = BTreeMap::new();
     for fixture in fixtures {
-        let iters = if fixture.contents.len() < 4 * 1024 { 25 } else { 7 };
+        let iters = if fixture.contents.len() < 4 * 1024 {
+            25
+        } else {
+            7
+        };
         let metrics = measure_fixture(&fixture, iters);
         out.insert(fixture.name, metrics);
     }

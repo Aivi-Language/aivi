@@ -223,7 +223,11 @@ x = 1 + 2 * 3
 "#;
 
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diag_codes(&diags));
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
 
     let module = modules.first().expect("module");
     let def = module
@@ -236,9 +240,13 @@ x = 1 + 2 * 3
         .expect("x def");
 
     match &def.expr {
-        Expr::Binary { op, left, right, .. } => {
+        Expr::Binary {
+            op, left, right, ..
+        } => {
             assert_eq!(op, "+");
-            assert!(matches!(left.as_ref(), Expr::Literal(Literal::Number { text, .. }) if text == "1"));
+            assert!(
+                matches!(left.as_ref(), Expr::Literal(Literal::Number { text, .. }) if text == "1")
+            );
             assert!(
                 matches!(right.as_ref(), Expr::Binary { op, .. } if op == "*"),
                 "expected right side to be multiplication, got: {right:?}"
@@ -257,7 +265,11 @@ x = 1 - 2 - 3
 "#;
 
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diag_codes(&diags));
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
 
     let module = modules.first().expect("module");
     let def = module
@@ -270,9 +282,13 @@ x = 1 - 2 - 3
         .expect("x def");
 
     match &def.expr {
-        Expr::Binary { op, left, right, .. } => {
+        Expr::Binary {
+            op, left, right, ..
+        } => {
             assert_eq!(op, "-");
-            assert!(matches!(right.as_ref(), Expr::Literal(Literal::Number { text, .. }) if text == "3"));
+            assert!(
+                matches!(right.as_ref(), Expr::Literal(Literal::Number { text, .. }) if text == "3")
+            );
             assert!(
                 matches!(left.as_ref(), Expr::Binary { op, .. } if op == "-"),
                 "expected left associativity for '-', got left={left:?}"

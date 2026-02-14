@@ -116,7 +116,10 @@ struct OpenMarker {
     content_start: usize,
 }
 
-fn extract_entries_from_markers(markdown: &str, stack: &mut Vec<OpenMarker>) -> Vec<QuickInfoEntry> {
+fn extract_entries_from_markers(
+    markdown: &str,
+    stack: &mut Vec<OpenMarker>,
+) -> Vec<QuickInfoEntry> {
     const OPEN: &str = "<!-- quick-info:";
     const CLOSE: &str = "<!-- /quick-info -->";
 
@@ -143,11 +146,10 @@ fn extract_entries_from_markers(markdown: &str, stack: &mut Vec<OpenMarker>) -> 
                 let raw = markdown[open.content_start..i].trim();
                 let content = strip_marker_comments(raw).trim().to_string();
                 if !content.is_empty() {
-                    let signature = open
-                        .metadata
-                        .signature
-                        .clone()
-                        .or_else(|| extract_signature(&content, open.metadata.extract_signature));
+                    let signature =
+                        open.metadata.signature.clone().or_else(|| {
+                            extract_signature(&content, open.metadata.extract_signature)
+                        });
                     entries.push(QuickInfoEntry {
                         kind: open.metadata.kind,
                         name: open.metadata.name,

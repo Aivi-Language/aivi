@@ -212,7 +212,8 @@ fn run_case(case_dir: &Path) {
         let formatted1 = fmt_snapshot(&input_src);
         let formatted2 = fmt_snapshot(&formatted1);
         assert_eq!(
-            formatted1, formatted2,
+            formatted1,
+            formatted2,
             "fmt not idempotent for {}",
             case_dir.display()
         );

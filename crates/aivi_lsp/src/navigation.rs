@@ -293,13 +293,9 @@ impl Backend {
         for module in modules.iter() {
             let doc = Self::doc_for_ident(text, module, &ident);
             let inferred = inferred.get(&module.name.name);
-            if let Some(contents) = Self::hover_contents_for_module(
-                module,
-                &ident,
-                inferred,
-                doc.as_deref(),
-                doc_index,
-            ) {
+            if let Some(contents) =
+                Self::hover_contents_for_module(module, &ident, inferred, doc.as_deref(), doc_index)
+            {
                 return Some(Hover {
                     contents: HoverContents::Markup(MarkupContent {
                         kind: MarkupKind::Markdown,
@@ -457,19 +453,19 @@ impl Backend {
             return Self::build_references(text, uri, position, include_declaration);
         };
 
-        let origin_module =
-            if Self::module_member_definition_range(current_module, &ident).is_some() {
-                Some(current_module.name.name.clone())
-            } else {
-                current_module
-                    .uses
-                    .iter()
-                    .find(|use_decl| {
-                        use_decl.wildcard
-                            || use_decl.items.iter().any(|item| item.name.name == ident)
-                    })
-                    .map(|use_decl| use_decl.module.name.clone())
-            };
+        let origin_module = if Self::module_member_definition_range(current_module, &ident)
+            .is_some()
+        {
+            Some(current_module.name.name.clone())
+        } else {
+            current_module
+                .uses
+                .iter()
+                .find(|use_decl| {
+                    use_decl.wildcard || use_decl.items.iter().any(|item| item.name.name == ident)
+                })
+                .map(|use_decl| use_decl.module.name.clone())
+        };
 
         let Some(origin_module) = origin_module else {
             return Self::build_references(text, uri, position, include_declaration);

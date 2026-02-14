@@ -581,10 +581,7 @@ mod tests {
         let src = "x = 1 // hello\n\ny = 2 -- world\n";
         let (tokens, diags) = lex(src);
         assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
-        let comments: Vec<&CstToken> = tokens
-            .iter()
-            .filter(|t| t.kind == "comment")
-            .collect();
+        let comments: Vec<&CstToken> = tokens.iter().filter(|t| t.kind == "comment").collect();
         assert_eq!(comments.len(), 2);
         assert_eq!(comments[0].text, "// hello");
         assert_eq!(comments[1].text, "-- world");

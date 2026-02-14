@@ -57,9 +57,7 @@ impl DocIndex {
         }
         // Avoid incorrect docs when multiple modules export the same name.
         if candidates.len() == 1 {
-            candidates
-                .first()
-                .and_then(|i| self.entries.get(*i))
+            candidates.first().and_then(|i| self.entries.get(*i))
         } else {
             None
         }
@@ -68,10 +66,7 @@ impl DocIndex {
     fn rebuild_maps(&mut self) {
         self.by_name.clear();
         for (i, entry) in self.entries.iter().enumerate() {
-            self.by_name
-                .entry(entry.name.clone())
-                .or_default()
-                .push(i);
+            self.by_name.entry(entry.name.clone()).or_default().push(i);
         }
     }
 }
@@ -132,11 +127,9 @@ mod tests {
                     let raw = markdown[open.content_start..i].trim();
                     let content = strip_marker_comments(raw).trim().to_string();
                     if !content.is_empty() {
-                        let signature = open
-                            .metadata
-                            .signature
-                            .clone()
-                            .or_else(|| extract_signature(&content, open.metadata.extract_signature));
+                        let signature = open.metadata.signature.clone().or_else(|| {
+                            extract_signature(&content, open.metadata.extract_signature)
+                        });
                         entries.push(QuickInfoEntry {
                             kind: open.metadata.kind,
                             name: open.metadata.name,
@@ -272,10 +265,7 @@ Returns string length.
         let mut stack = Vec::new();
         let entries = extract_entries_from_markers(md, &mut stack);
         assert_eq!(entries.len(), 1);
-        assert_eq!(
-            entries[0].content,
-            "Returns whether char is alphanumeric."
-        );
+        assert_eq!(entries[0].content, "Returns whether char is alphanumeric.");
     }
 
     #[test]

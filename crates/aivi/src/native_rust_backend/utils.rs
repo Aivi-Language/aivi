@@ -103,9 +103,7 @@ pub(super) fn collect_free_locals_in_expr(
                 collect_free_locals_in_expr(arg, bound, out);
             }
         }
-        RustIrExpr::DebugFn {
-            arg_vars, body, ..
-        } => {
+        RustIrExpr::DebugFn { arg_vars, body, .. } => {
             for name in arg_vars {
                 if !bound.iter().rev().any(|b| b == name) {
                     out.insert(name.clone());

@@ -1,0 +1,509 @@
+impl Parser {
+    fn parse_type_or_def(&mut self, decorators: Vec<Decorator>) -> Option<ModuleItem> {
+        let checkpoint = self.pos;
+        if self.consume_name().is_some() {
+            if self.check_symbol(":") {
+                self.pos = checkpoint;
+                return self.parse_type_sig(decorators).map(ModuleItem::TypeSig);
+            }
+            if self.check_symbol("=") || self.is_pattern_start() {
+                self.pos = checkpoint;
+                return self.parse_def_or_type(decorators);
+            }
+            self.pos = checkpoint;
+        }
+        None
+    }
+
+    fn parse_type_sig(&mut self, decorators: Vec<Decorator>) -> Option<TypeSig> {
+        self.reject_debug_decorators(&decorators, "type signatures");
+        let name = self.consume_name()?;
+        let start = name.span.clone();
+        self.expect_symbol(":", "expected ':' for type signature");
+        let ty = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
+            span: start.clone(),
+        });
+        let span = merge_span(start, type_span(&ty));
+
+        // `name : Type` is a standalone item; `name : Type = expr` is not valid syntax.
+        // If there are more tokens on the same line, emit a targeted diagnostic and
+        // skip the rest of the line to avoid cascading errors.
+        if let Some(next) = self.tokens.get(self.pos) {
+            let same_line = next.span.start.line == span.end.line;
+            let allowed_terminator = next.kind == TokenKind::Newline
+                || (next.kind == TokenKind::Symbol && next.text == "}");
+            if same_line && !allowed_terminator {
+                let next_span = next.span.clone();
+                let line = next.span.start.line;
+                self.emit_diag(
+                    "E1528",
+                    "type signatures must be written on their own line (write `name = ...` on the next line)",
+                    merge_span(span.clone(), next_span.clone()),
+                );
+                while self.pos < self.tokens.len() {
+                    let tok = &self.tokens[self.pos];
+                    if tok.kind == TokenKind::Newline
+                        || (tok.kind == TokenKind::Symbol && tok.text == "}")
+                        || tok.span.start.line != line
+                    {
+                        break;
+                    }
+                    self.pos += 1;
+                }
+            }
+        }
+        Some(TypeSig {
+            decorators,
+            name,
+            ty,
+            span,
+        })
+    }
+
+    fn parse_def_or_type(&mut self, decorators: Vec<Decorator>) -> Option<ModuleItem> {
+        let checkpoint = self.pos;
+        let name = self.consume_name()?;
+        if name
+            .name
+            .chars()
+            .next()
+            .map(|c| c.is_uppercase())
+            .unwrap_or(false)
+        {
+            self.pos = checkpoint;
+            return self.parse_type_decl_or_alias(decorators);
+        }
+        self.pos = checkpoint;
+        self.parse_def(decorators).map(ModuleItem::Def)
+    }
+
+    fn parse_type_decl_or_alias(&mut self, decorators: Vec<Decorator>) -> Option<ModuleItem> {
+        let checkpoint = self.pos;
+        let diag_checkpoint = self.diagnostics.len();
+        if let Some(decl) = self.parse_type_decl(decorators.clone()) {
+            if !decl.constructors.is_empty() {
+                return Some(ModuleItem::TypeDecl(decl));
+            }
+        }
+        self.pos = checkpoint;
+        if let Some(alias) = self.parse_type_alias(decorators) {
+            if self.check_symbol("=>") {
+                self.pos = checkpoint;
+                self.diagnostics.truncate(diag_checkpoint);
+                return self.parse_def(Vec::new()).map(ModuleItem::Def);
+            }
+            return Some(ModuleItem::TypeAlias(alias));
+        }
+        self.diagnostics.truncate(diag_checkpoint);
+        None
+    }
+
+    fn parse_type_decl(&mut self, decorators: Vec<Decorator>) -> Option<TypeDecl> {
+        self.reject_debug_decorators(&decorators, "type declarations");
+        let name = self.consume_ident()?;
+        let mut params = Vec::new();
+        while let Some(param) = self.consume_ident() {
+            params.push(param);
+        }
+        self.expect_symbol("=", "expected '=' in type declaration");
+
+        // Disambiguation: treat `T = ...` as an ADT only when there's a `|`
+        // constructor separator in the constructor list. Otherwise parse it as a type alias.
+        //
+        // This avoids mis-parsing row/type operators like:
+        //   UserName = Pick (name) User
+        // as an ADT with a `Pick` constructor.
+        let rhs_start = self.pos;
+        let mut scan = self.pos;
+        let mut saw_bar = false;
+        while scan < self.tokens.len() {
+            let token = &self.tokens[scan];
+            if token.kind == TokenKind::Symbol && token.text == "|" {
+                saw_bar = true;
+                break;
+            }
+            if token.kind == TokenKind::Newline {
+                // If the next non-newline token isn't a `|`, assume the type
+                // declaration ends here (and thus has no constructor bars).
+                let mut lookahead = scan + 1;
+                while lookahead < self.tokens.len()
+                    && self.tokens[lookahead].kind == TokenKind::Newline
+                {
+                    lookahead += 1;
+                }
+                if lookahead >= self.tokens.len() {
+                    break;
+                }
+                if !(self.tokens[lookahead].kind == TokenKind::Symbol
+                    && self.tokens[lookahead].text == "|")
+                {
+                    break;
+                }
+            }
+            scan += 1;
+        }
+        if !saw_bar {
+            self.pos = rhs_start;
+            return None;
+        }
+
+        let mut ctors = Vec::new();
+        while let Some(ctor_name) = self.consume_ident() {
+            let mut args = Vec::new();
+            while !self.check_symbol("|") && !self.check_symbol("}") && self.pos < self.tokens.len()
+            {
+                // Constructor arguments are a sequence of *type atoms* so that
+                // multi-argument constructors like `Element Text (List A) (List B)`
+                // don't get parsed as a single type application `Text (List A) (List B)`.
+                if let Some(ty) = self.parse_type_atom() {
+                    args.push(ty);
+                } else {
+                    break;
+                }
+            }
+            let span = merge_span(
+                ctor_name.span.clone(),
+                args.last().map(type_span).unwrap_or(ctor_name.span.clone()),
+            );
+            ctors.push(TypeCtor {
+                name: ctor_name,
+                args,
+                span,
+            });
+            if !self.consume_symbol("|") {
+                break;
+            }
+        }
+        let span = merge_span(
+            name.span.clone(),
+            ctors
+                .last()
+                .map(|ctor| ctor.span.clone())
+                .unwrap_or(name.span.clone()),
+        );
+        Some(TypeDecl {
+            decorators,
+            name,
+            params,
+            constructors: ctors,
+            span,
+        })
+    }
+
+    fn parse_type_alias(&mut self, decorators: Vec<Decorator>) -> Option<TypeAlias> {
+        self.reject_debug_decorators(&decorators, "type aliases");
+        let name = self.consume_ident()?;
+        let mut params = Vec::new();
+        while let Some(param) = self.consume_ident() {
+            params.push(param);
+        }
+        self.expect_symbol("=", "expected '=' in type alias");
+        let aliased = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
+            span: name.span.clone(),
+        });
+        let span = merge_span(name.span.clone(), type_span(&aliased));
+        Some(TypeAlias {
+            decorators,
+            name,
+            params,
+            aliased,
+            span,
+        })
+    }
+
+    fn parse_class_decl(&mut self, decorators: Vec<Decorator>) -> Option<ClassDecl> {
+        self.reject_debug_decorators(&decorators, "class declarations");
+        let start = self.previous_span();
+        let name = self.consume_ident()?;
+        let mut params = Vec::new();
+        while !self.check_symbol("=") && self.pos < self.tokens.len() {
+            if let Some(ty) = self.parse_type_atom() {
+                params.push(ty);
+            } else {
+                break;
+            }
+        }
+        self.consume_newlines();
+        self.expect_symbol("=", "expected '=' in class declaration");
+        self.consume_newlines();
+
+        // Spec form:
+        //   class Monad (M *) =
+        //     Functor (M *) with { pure: A -> M A }
+        //
+        // Extended:
+        //   class Collection (C *) = with (A: Eq) { unique: C A -> C A }
+        //   class Monad (M *) = Applicative (M *) with (A: Eq, B: Show) { bind: ... }
+        //
+        // We parse:
+        // - an optional superclass/type-composition chain (`... with ...`)
+        // - an optional constraint clause (`with (A: Eq, ...)`)
+        // - an optional record type for members (`{ ... }` or `with { ... }`)
+        //
+        // For backward compatibility, record-type operands that appear as part of the superclass
+        // chain (e.g. `Super with { ... }`) still contribute members.
+        fn peek_is_with_constraints(parser: &Parser) -> bool {
+            if !parser.peek_keyword("with") {
+                return false;
+            }
+            parser
+                .tokens
+                .get(parser.pos + 1)
+                .is_some_and(|tok| tok.kind == TokenKind::Symbol && tok.text == "(")
+        }
+
+        let mut body_opt: Option<TypeExpr> = None;
+        if !self.check_symbol("{") && !peek_is_with_constraints(self) {
+            // Parse a `with`-separated chain, but stop before `with (...)` constraints.
+            if let Some(first) = self.parse_type_pipe() {
+                let mut items = vec![first];
+                loop {
+                    self.consume_newlines();
+                    if peek_is_with_constraints(self) {
+                        break;
+                    }
+                    if self.consume_ident_text("with").is_none() {
+                        break;
+                    }
+                    self.consume_newlines();
+                    let rhs = self.parse_type_pipe().unwrap_or(TypeExpr::Unknown {
+                        span: type_span(items.last().unwrap()),
+                    });
+                    items.push(rhs);
+                }
+                body_opt = Some(if items.len() == 1 {
+                    items.remove(0)
+                } else {
+                    let span = merge_span(type_span(&items[0]), type_span(items.last().unwrap()));
+                    TypeExpr::And { items, span }
+                });
+            }
+        }
+
+        fn flatten_and(ty: TypeExpr, out: &mut Vec<TypeExpr>) {
+            match ty {
+                TypeExpr::And { items, .. } => {
+                    for item in items {
+                        flatten_and(item, out);
+                    }
+                }
+                other => out.push(other),
+            }
+        }
+
+        let mut parts = Vec::new();
+        if let Some(body) = body_opt.clone() {
+            flatten_and(body, &mut parts);
+        }
+
+        let mut supers = Vec::new();
+        let mut members = Vec::new();
+        for part in parts {
+            match part {
+                TypeExpr::Record { fields, .. } => {
+                    for (field_name, field_ty) in fields {
+                        let span = merge_span(field_name.span.clone(), type_span(&field_ty));
+                        members.push(ClassMember {
+                            name: field_name,
+                            ty: field_ty,
+                            span,
+                        });
+                    }
+                }
+                TypeExpr::Unknown { .. } => {}
+                other => supers.push(other),
+            }
+        }
+
+        // Parse optional `with (...)` constraint clause.
+        let mut constraints = Vec::new();
+        self.consume_newlines();
+        if peek_is_with_constraints(self) {
+            let with_span = self.consume_ident_text("with").unwrap().span;
+            self.expect_symbol("(", "expected '(' after 'with' in class constraints");
+            self.consume_newlines();
+            while self.pos < self.tokens.len() && !self.check_symbol(")") {
+                self.consume_newlines();
+                let var = match self.consume_ident() {
+                    Some(var) => var,
+                    None => break,
+                };
+                self.consume_newlines();
+                self.expect_symbol(":", "expected ':' in class type-variable constraint");
+                self.consume_newlines();
+                let class = self.consume_ident().unwrap_or(SpannedName {
+                    name: String::new(),
+                    span: var.span.clone(),
+                });
+                let span = merge_span(var.span.clone(), class.span.clone());
+                constraints.push(crate::surface::TypeVarConstraint { var, class, span });
+                self.consume_newlines();
+                if self.consume_symbol(",") {
+                    self.consume_newlines();
+                    continue;
+                }
+            }
+            let end = self.expect_symbol(")", "expected ')' to close class constraints");
+            if let Some(end) = end {
+                let _ = merge_span(with_span, end);
+            }
+        }
+
+        // Parse optional trailing member record (`{ ... }` or `with { ... }`).
+        self.consume_newlines();
+        if self.peek_keyword("with")
+            && self
+                .tokens
+                .get(self.pos + 1)
+                .is_some_and(|tok| tok.kind == TokenKind::Symbol && tok.text == "{")
+        {
+            let _ = self.consume_ident_text("with");
+            self.consume_newlines();
+        }
+        if self.check_symbol("{") {
+            if let Some(TypeExpr::Record { fields, .. }) = self.parse_type_atom() {
+                for (field_name, field_ty) in fields {
+                    let span = merge_span(field_name.span.clone(), type_span(&field_ty));
+                    members.push(ClassMember {
+                        name: field_name,
+                        ty: field_ty,
+                        span,
+                    });
+                }
+            } else {
+                self.expect_symbol("{", "expected '{' to start class member set");
+            }
+        }
+
+        let span = merge_span(start, self.previous_span());
+        Some(ClassDecl {
+            decorators,
+            name,
+            params,
+            constraints,
+            supers,
+            members,
+            span,
+        })
+    }
+
+    fn parse_instance_decl(&mut self, decorators: Vec<Decorator>) -> Option<InstanceDecl> {
+        self.reject_debug_decorators(&decorators, "instance declarations");
+        let start = self.previous_span();
+        let name = self.consume_ident()?;
+        let mut params = Vec::new();
+        while !self.check_symbol("=") && self.pos < self.tokens.len() {
+            if let Some(ty) = self.parse_type_atom() {
+                params.push(ty);
+            } else {
+                break;
+            }
+        }
+        self.consume_newlines();
+        self.expect_symbol("=", "expected '=' in instance declaration");
+        self.expect_symbol("{", "expected '{' to start instance body");
+        let mut defs = Vec::new();
+        while self.pos < self.tokens.len() {
+            self.consume_newlines();
+            if self.check_symbol("}") {
+                break;
+            }
+            if let Some(def) = self.parse_instance_def() {
+                defs.push(def);
+                continue;
+            }
+            self.pos += 1;
+        }
+        let end = self.expect_symbol("}", "expected '}' to close instance body");
+        let span = merge_span(start, end.unwrap_or(name.span.clone()));
+        Some(InstanceDecl {
+            decorators,
+            name,
+            params,
+            defs,
+            span,
+        })
+    }
+
+    fn parse_instance_def(&mut self) -> Option<Def> {
+        let checkpoint = self.pos;
+        let name = self.consume_name()?;
+        if self.consume_symbol(":") {
+            let expr = self.parse_expr().unwrap_or(Expr::Raw {
+                text: String::new(),
+                span: name.span.clone(),
+            });
+            let span = merge_span(name.span.clone(), expr_span(&expr));
+            return Some(Def {
+                decorators: Vec::new(),
+                name,
+                params: Vec::new(),
+                expr,
+                span,
+            });
+        }
+        if self.check_symbol("=") {
+            self.pos = checkpoint;
+            return self.parse_def(Vec::new());
+        }
+        self.pos = checkpoint;
+        None
+    }
+
+    fn parse_domain_decl(&mut self, decorators: Vec<Decorator>) -> Option<DomainDecl> {
+        self.reject_debug_decorators(&decorators, "domain declarations");
+        let start = self.previous_span();
+        let name = self.consume_ident()?;
+        self.expect_keyword("over", "expected 'over' in domain declaration");
+        let over = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
+            span: name.span.clone(),
+        });
+        self.consume_newlines();
+        self.expect_symbol("=", "expected '=' in domain declaration");
+        self.expect_symbol("{", "expected '{' to start domain body");
+        let mut items = Vec::new();
+        while !self.check_symbol("}") && self.pos < self.tokens.len() {
+            self.consume_newlines();
+            if self.check_symbol("}") {
+                break;
+            }
+            let decorators = self.consume_decorators();
+            self.validate_item_decorators(&decorators);
+            if self.match_keyword("type") {
+                if let Some(type_decl) = self.parse_domain_type_decl(decorators.clone()) {
+                    items.push(DomainItem::TypeAlias(type_decl));
+                    continue;
+                }
+            }
+            let checkpoint = self.pos;
+            if self.consume_name().is_some() {
+                if self.check_symbol(":") {
+                    self.pos = checkpoint;
+                    if let Some(sig) = self.parse_type_sig(decorators) {
+                        items.push(DomainItem::TypeSig(sig));
+                    }
+                    continue;
+                }
+                self.pos = checkpoint;
+            }
+            if let Some(def) = self.parse_def(decorators.clone()) {
+                items.push(DomainItem::Def(def));
+                continue;
+            }
+            if let Some(literal_def) = self.parse_literal_def(decorators) {
+                items.push(DomainItem::LiteralDef(literal_def));
+                continue;
+            }
+            self.pos += 1;
+        }
+        let end = self.expect_symbol("}", "expected '}' to close domain body");
+        let span = merge_span(start, end.unwrap_or(name.span.clone()));
+        Some(DomainDecl {
+            decorators,
+            name,
+            over,
+            items,
+            span,
+        })
+    }
+}

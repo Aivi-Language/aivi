@@ -32,10 +32,14 @@ fn collect_global_type_info(
         for item in &module.items {
             match item {
                 ModuleItem::TypeDecl(type_decl) => {
-                    type_constructors.insert(type_decl.name.name.clone(), kind_for_params(type_decl.params.len()));
+                    type_constructors.insert(
+                        type_decl.name.name.clone(),
+                        kind_for_params(type_decl.params.len()),
+                    );
                 }
                 ModuleItem::TypeAlias(alias) => {
-                    type_constructors.insert(alias.name.name.clone(), kind_for_params(alias.params.len()));
+                    type_constructors
+                        .insert(alias.name.name.clone(), kind_for_params(alias.params.len()));
                 }
                 ModuleItem::DomainDecl(domain) => {
                     for domain_item in &domain.items {
@@ -385,7 +389,8 @@ pub fn check_types(modules: &[Module]) -> Vec<FileDiagnostic> {
     let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
 
-    let (global_type_constructors, global_aliases) = collect_global_type_info(&mut checker, modules);
+    let (global_type_constructors, global_aliases) =
+        collect_global_type_info(&mut checker, modules);
     checker.set_global_type_info(global_type_constructors, global_aliases);
 
     for module in ordered_modules(modules) {
@@ -468,7 +473,8 @@ pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnosti
     let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
 
-    let (global_type_constructors, global_aliases) = collect_global_type_info(&mut checker, modules);
+    let (global_type_constructors, global_aliases) =
+        collect_global_type_info(&mut checker, modules);
     checker.set_global_type_info(global_type_constructors, global_aliases);
 
     for idx in ordered_module_indices(modules) {
@@ -596,7 +602,8 @@ pub fn infer_value_types(
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
     let mut inferred: HashMap<String, HashMap<String, String>> = HashMap::new();
 
-    let (global_type_constructors, global_aliases) = collect_global_type_info(&mut checker, modules);
+    let (global_type_constructors, global_aliases) =
+        collect_global_type_info(&mut checker, modules);
     checker.set_global_type_info(global_type_constructors, global_aliases);
 
     for module in ordered_modules(modules) {

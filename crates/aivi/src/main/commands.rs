@@ -1,0 +1,495 @@
+
+fn cmd_init(args: &[String]) -> Result<(), AiviError> {
+    let mut name = None;
+    let mut kind = ProjectKind::Bin;
+    let mut edition = "2024".to_string();
+    let mut language_version = "0.1".to_string();
+    let mut force = false;
+
+    let mut iter = args.iter().cloned();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--bin" => kind = ProjectKind::Bin,
+            "--lib" => kind = ProjectKind::Lib,
+            "--edition" => {
+                let Some(value) = iter.next() else {
+                    return Err(AiviError::InvalidCommand(
+                        "--edition expects a value".to_string(),
+                    ));
+                };
+                edition = value;
+            }
+            "--language-version" => {
+                let Some(value) = iter.next() else {
+                    return Err(AiviError::InvalidCommand(
+                        "--language-version expects a value".to_string(),
+                    ));
+                };
+                language_version = value;
+            }
+            "--force" => force = true,
+            _ if arg.starts_with('-') => {
+                return Err(AiviError::InvalidCommand(format!("unknown flag {arg}")))
+            }
+            _ => {
+                if name.is_some() {
+                    return Err(AiviError::InvalidCommand(format!(
+                        "unexpected argument {arg}"
+                    )));
+                }
+                name = Some(arg);
+            }
+        }
+    }
+
+    let Some(name) = name else {
+        return Err(AiviError::InvalidCommand("init expects <name>".to_string()));
+    };
+
+    let dir = PathBuf::from(&name);
+    write_scaffold(&dir, &name, kind, &edition, &language_version, force)?;
+    println!("{}", dir.display());
+    Ok(())
+}
+
+fn cmd_clean(args: &[String]) -> Result<(), AiviError> {
+    let mut all = false;
+    for arg in args {
+        match arg.as_str() {
+            "--all" => all = true,
+            _ if arg.starts_with('-') => {
+                return Err(AiviError::InvalidCommand(format!("unknown flag {arg}")))
+            }
+            _ => {
+                return Err(AiviError::InvalidCommand(format!(
+                    "unexpected argument {arg}"
+                )))
+            }
+        }
+    }
+
+    let root = env::current_dir()?;
+    let gen_dir: String = if root.join("aivi.toml").exists() {
+        aivi::read_aivi_toml(&root.join("aivi.toml"))?.build.gen_dir
+    } else {
+        "target/aivi-gen".to_string()
+    };
+    let gen_dir = root.join(gen_dir);
+    if gen_dir.exists() {
+        std::fs::remove_dir_all(&gen_dir)?;
+    }
+    if all {
+        let status = Command::new("cargo")
+            .arg("clean")
+            .current_dir(&root)
+            .status()?;
+        if !status.success() {
+            return Err(AiviError::Cargo("cargo clean failed".to_string()));
+        }
+    }
+    Ok(())
+}
+
+fn cmd_search(args: &[String]) -> Result<(), AiviError> {
+    let query = args
+        .first()
+        .ok_or_else(|| AiviError::InvalidCommand("search expects <query>".to_string()))?;
+    let keyword_query = format!("keyword:aivi {query}");
+    let output = Command::new("cargo")
+        .arg("search")
+        .arg(keyword_query)
+        .arg("--limit")
+        .arg("20")
+        .output()?;
+    if !output.status.success() {
+        return Err(AiviError::Cargo(format!(
+            "cargo search failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        )));
+    }
+    print!("{}", String::from_utf8_lossy(&output.stdout));
+    Ok(())
+}
+
+fn cmd_install(args: &[String]) -> Result<(), AiviError> {
+    let mut fetch = true;
+    let mut spec = None;
+
+    for arg in args.iter().cloned() {
+        match arg.as_str() {
+            "--no-fetch" => fetch = false,
+            _ if arg.starts_with('-') => {
+                return Err(AiviError::InvalidCommand(format!("unknown flag {arg}")))
+            }
+            _ => {
+                if spec.is_some() {
+                    return Err(AiviError::InvalidCommand(format!(
+                        "unexpected argument {arg}"
+                    )));
+                }
+                spec = Some(arg);
+            }
+        }
+    }
+
+    let Some(spec) = spec else {
+        return Err(AiviError::InvalidCommand(
+            "install expects <spec>".to_string(),
+        ));
+    };
+
+    let root = env::current_dir()?;
+    if !root.join("aivi.toml").exists() || !root.join("Cargo.toml").exists() {
+        return Err(AiviError::Config(
+            "install expects a directory containing aivi.toml and Cargo.toml".to_string(),
+        ));
+    }
+    let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
+
+    if install_stdlib_module(&root, &spec)? {
+        return Ok(());
+    }
+
+    let dep = CargoDepSpec::parse_in(&root, &spec)
+        .map_err(|err| AiviError::InvalidCommand(err.to_string()))?;
+
+    let cargo_toml_path = root.join("Cargo.toml");
+    let original = std::fs::read_to_string(&cargo_toml_path)?;
+    let cargo_lock_path = root.join("Cargo.lock");
+    let original_lock = std::fs::read_to_string(&cargo_lock_path).ok();
+    let edits = aivi::edit_cargo_toml_dependencies(&original, &dep)?;
+    if edits.changed {
+        std::fs::write(&cargo_toml_path, edits.updated_manifest)?;
+    }
+
+    if fetch {
+        let status = Command::new("cargo")
+            .arg("fetch")
+            .current_dir(&root)
+            .status()?;
+        if !status.success() {
+            restore_install_manifest(
+                &cargo_toml_path,
+                &original,
+                &cargo_lock_path,
+                &original_lock,
+            );
+            return Err(AiviError::Cargo("cargo fetch failed".to_string()));
+        }
+    }
+
+    if let Err(err) = ensure_aivi_dependency(&root, &dep, cfg.project.language_version.as_deref()) {
+        restore_install_manifest(
+            &cargo_toml_path,
+            &original,
+            &cargo_lock_path,
+            &original_lock,
+        );
+        return Err(err);
+    }
+
+    Ok(())
+}
+
+fn restore_install_manifest(
+    cargo_toml_path: &Path,
+    original: &str,
+    cargo_lock_path: &Path,
+    original_lock: &Option<String>,
+) {
+    let _ = std::fs::write(cargo_toml_path, original);
+    match original_lock {
+        Some(contents) => {
+            let _ = std::fs::write(cargo_lock_path, contents);
+        }
+        None => {
+            let _ = std::fs::remove_file(cargo_lock_path);
+        }
+    }
+}
+
+fn cmd_package(args: &[String]) -> Result<(), AiviError> {
+    let mut allow_dirty = false;
+    let mut no_verify = false;
+    let mut cargo_args = Vec::new();
+
+    let mut saw_sep = false;
+    for arg in args.iter().cloned() {
+        if !saw_sep && arg == "--" {
+            saw_sep = true;
+            continue;
+        }
+        if saw_sep {
+            cargo_args.push(arg);
+            continue;
+        }
+        match arg.as_str() {
+            "--allow-dirty" => allow_dirty = true,
+            "--no-verify" => no_verify = true,
+            _ if arg.starts_with('-') => {
+                return Err(AiviError::InvalidCommand(format!("unknown flag {arg}")))
+            }
+            _ => {
+                return Err(AiviError::InvalidCommand(format!(
+                    "unexpected argument {arg}"
+                )))
+            }
+        }
+    }
+
+    let root = env::current_dir()?;
+    let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
+    validate_publish_preflight(&root, &cfg)?;
+
+    let mut cmd = Command::new("cargo");
+    cmd.arg("package");
+    if allow_dirty {
+        cmd.arg("--allow-dirty");
+    }
+    if no_verify {
+        cmd.arg("--no-verify");
+    }
+    cmd.args(cargo_args);
+    let status = cmd.current_dir(&root).status()?;
+    if !status.success() {
+        return Err(AiviError::Cargo("cargo package failed".to_string()));
+    }
+    Ok(())
+}
+
+fn cmd_publish(args: &[String]) -> Result<(), AiviError> {
+    let mut dry_run = false;
+    let mut allow_dirty = false;
+    let mut no_verify = false;
+    let mut cargo_args = Vec::new();
+
+    let mut saw_sep = false;
+    for arg in args.iter().cloned() {
+        if !saw_sep && arg == "--" {
+            saw_sep = true;
+            continue;
+        }
+        if saw_sep {
+            cargo_args.push(arg);
+            continue;
+        }
+        match arg.as_str() {
+            "--dry-run" => dry_run = true,
+            "--allow-dirty" => allow_dirty = true,
+            "--no-verify" => no_verify = true,
+            _ if arg.starts_with('-') => {
+                return Err(AiviError::InvalidCommand(format!("unknown flag {arg}")))
+            }
+            _ => {
+                return Err(AiviError::InvalidCommand(format!(
+                    "unexpected argument {arg}"
+                )))
+            }
+        }
+    }
+
+    let root = env::current_dir()?;
+    let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
+    validate_publish_preflight(&root, &cfg)?;
+
+    let mut cmd = Command::new("cargo");
+    cmd.arg("publish");
+    if dry_run {
+        cmd.arg("--dry-run");
+    }
+    if allow_dirty {
+        cmd.arg("--allow-dirty");
+    }
+    if no_verify {
+        cmd.arg("--no-verify");
+    }
+    cmd.args(cargo_args);
+    let status = cmd.current_dir(&root).status()?;
+    if !status.success() {
+        return Err(AiviError::Cargo("cargo publish failed".to_string()));
+    }
+    Ok(())
+}
+
+fn install_stdlib_module(root: &Path, spec: &str) -> Result<bool, AiviError> {
+    let module_name = if spec.starts_with("aivi.") {
+        spec.to_string()
+    } else if spec.starts_with("std.") {
+        format!("aivi.{spec}")
+    } else {
+        return Ok(false);
+    };
+
+    let Some(source) = embedded_stdlib_source(&module_name) else {
+        return Ok(false);
+    };
+
+    let rel_path = module_name.replace('.', "/") + ".aivi";
+    let out_path = root.join("src").join(rel_path);
+    if out_path.exists() {
+        return Ok(true);
+    }
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(out_path, source)?;
+    Ok(true)
+}
+
+fn should_use_project_pipeline(args: &[String]) -> bool {
+    if args.is_empty() {
+        return true;
+    }
+    let first = &args[0];
+    if first == "--" || first.starts_with('-') {
+        return true;
+    }
+    false
+}
+
+fn cmd_project_build(args: &[String]) -> Result<(), AiviError> {
+    let root = env::current_dir()?;
+    let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
+    let (release_flag, cargo_args) = parse_project_args(args)?;
+    let release = release_flag || cfg.build.cargo_profile == "release";
+    generate_project_rust(&root, &cfg)?;
+    let mut cmd = Command::new("cargo");
+    cmd.arg("build");
+    if release {
+        cmd.arg("--release");
+    }
+    cmd.args(cargo_args);
+    let status = cmd.current_dir(&root).status()?;
+    if !status.success() {
+        return Err(AiviError::Cargo("cargo build failed".to_string()));
+    }
+    Ok(())
+}
+
+fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
+    let root = env::current_dir()?;
+    let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
+    let (release_flag, cargo_args) = parse_project_args(args)?;
+    let release = release_flag || cfg.build.cargo_profile == "release";
+    generate_project_rust(&root, &cfg)?;
+    let mut cmd = Command::new("cargo");
+    cmd.arg("run");
+    if release {
+        cmd.arg("--release");
+    }
+    cmd.args(cargo_args);
+    let status = cmd.current_dir(&root).status()?;
+    if !status.success() {
+        return Err(AiviError::Cargo("cargo run failed".to_string()));
+    }
+    Ok(())
+}
+
+fn parse_project_args(args: &[String]) -> Result<(bool, Vec<String>), AiviError> {
+    let mut before = Vec::new();
+    let mut after = Vec::new();
+    let mut saw_sep = false;
+    for arg in args {
+        if !saw_sep && arg == "--" {
+            saw_sep = true;
+            continue;
+        }
+        if saw_sep {
+            after.push(arg.clone());
+        } else {
+            before.push(arg.clone());
+        }
+    }
+
+    let mut release = false;
+    for arg in before {
+        match arg.as_str() {
+            "--release" => release = true,
+            _ => return Err(AiviError::InvalidCommand(format!("unknown flag {arg}"))),
+        }
+    }
+
+    Ok((release, after))
+}
+
+fn generate_project_rust(project_root: &Path, cfg: &aivi::AiviToml) -> Result<(), AiviError> {
+    let aivi_toml_path = project_root.join("aivi.toml");
+    let cargo_toml_path = project_root.join("Cargo.toml");
+    if !aivi_toml_path.exists() || !cargo_toml_path.exists() {
+        return Err(AiviError::Config(
+            "build expects a directory containing aivi.toml and Cargo.toml".to_string(),
+        ));
+    }
+
+    let entry_path = resolve_project_entry(project_root, &cfg.project.entry);
+    let entry_str = entry_path
+        .to_str()
+        .ok_or_else(|| AiviError::InvalidPath(entry_path.display().to_string()))?;
+
+    let _modules = load_checked_modules(entry_str)?;
+    let program = aivi::desugar_target_typed(entry_str)?;
+
+    let gen_dir = project_root.join(&cfg.build.gen_dir);
+    let src_out = gen_dir.join("src");
+    std::fs::create_dir_all(&src_out)?;
+
+    let (out_path, rust) = match cfg.project.kind {
+        ProjectKind::Bin => (src_out.join("main.rs"), compile_rust_native(program)?),
+        ProjectKind::Lib => (src_out.join("lib.rs"), compile_rust_native_lib(program)?),
+    };
+    std::fs::write(&out_path, rust)?;
+    write_build_stamp(project_root, cfg, &gen_dir, &entry_path)?;
+    Ok(())
+}
+
+fn resolve_project_entry(project_root: &Path, entry: &str) -> PathBuf {
+    let entry_path = Path::new(entry);
+    if entry_path.components().count() == 1 {
+        project_root.join("src").join(entry_path)
+    } else {
+        project_root.join(entry_path)
+    }
+}
+
+fn write_build_stamp(
+    project_root: &Path,
+    cfg: &aivi::AiviToml,
+    gen_dir: &Path,
+    entry_path: &Path,
+) -> Result<(), AiviError> {
+    let src_dir = project_root.join("src");
+    let sources = aivi::collect_aivi_sources(&src_dir)?;
+    let mut inputs = Vec::new();
+    for path in sources {
+        let bytes = std::fs::read(&path)?;
+        let hash = Sha256::digest(&bytes);
+        inputs.push(serde_json::json!({
+            "path": normalize_path(path.strip_prefix(project_root).unwrap_or(&path)),
+            "sha256": hex_lower(&hash),
+        }));
+    }
+
+    let stamp = serde_json::json!({
+        "tool": { "aivi": env!("CARGO_PKG_VERSION") },
+        "language_version": cfg.project.language_version.clone().unwrap_or_else(|| "unknown".to_string()),
+        "kind": match cfg.project.kind { ProjectKind::Bin => "bin", ProjectKind::Lib => "lib" },
+        "entry": normalize_path(entry_path.strip_prefix(project_root).unwrap_or(entry_path)),
+        "rust_edition": cfg.build.rust_edition.clone(),
+        "inputs": inputs,
+    });
+
+    std::fs::create_dir_all(gen_dir)?;
+    std::fs::write(
+        gen_dir.join("aivi.json"),
+        serde_json::to_vec_pretty(&stamp).unwrap(),
+    )?;
+    Ok(())
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for b in bytes {
+        out.push_str(&format!("{:02x}", b));
+    }
+    out
+}

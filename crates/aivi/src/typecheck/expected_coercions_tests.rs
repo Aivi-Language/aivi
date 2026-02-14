@@ -15,7 +15,9 @@ fn hir_contains_var(expr: &HirExpr, name: &str) -> bool {
         HirExpr::DebugFn { arg_vars, body, .. } => {
             arg_vars.iter().any(|v| v == name) || hir_contains_var(body, name)
         }
-        HirExpr::Pipe { func, arg, .. } => hir_contains_var(func, name) || hir_contains_var(arg, name),
+        HirExpr::Pipe { func, arg, .. } => {
+            hir_contains_var(func, name) || hir_contains_var(arg, name)
+        }
         HirExpr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
             crate::hir::HirTextPart::Text { .. } => false,
             crate::hir::HirTextPart::Expr { expr } => hir_contains_var(expr, name),

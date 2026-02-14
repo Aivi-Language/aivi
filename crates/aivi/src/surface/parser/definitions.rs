@@ -1,0 +1,241 @@
+impl Parser {
+    fn parse_literal_def(&mut self, decorators: Vec<Decorator>) -> Option<Def> {
+        let start = self.pos;
+        let number = self.consume_number()?;
+        let suffix = if let Some(suffix) = self.consume_ident() {
+            Some(suffix)
+        } else if self.check_symbol("%") {
+            let token = self.tokens.get(self.pos)?.clone();
+            self.pos += 1;
+            Some(SpannedName {
+                name: "%".to_string(),
+                span: token.span,
+            })
+        } else {
+            None
+        };
+        let Some(suffix) = suffix else {
+            self.pos = start;
+            return None;
+        };
+        self.expect_symbol("=", "expected '=' after domain literal");
+        let expr = self.parse_expr().unwrap_or(Expr::Raw {
+            text: String::new(),
+            span: number.span.clone(),
+        });
+
+        fn rewrite_literal_template(expr: Expr, needle: &str, param: &str) -> Expr {
+            match expr {
+                Expr::Literal(Literal::Number { text, span }) if text == needle => {
+                    Expr::Ident(SpannedName {
+                        name: param.to_string(),
+                        span,
+                    })
+                }
+                Expr::List { items, span } => Expr::List {
+                    items: items
+                        .into_iter()
+                        .map(|item| ListItem {
+                            expr: rewrite_literal_template(item.expr, needle, param),
+                            spread: item.spread,
+                            span: item.span,
+                        })
+                        .collect(),
+                    span,
+                },
+                Expr::Tuple { items, span } => Expr::Tuple {
+                    items: items
+                        .into_iter()
+                        .map(|item| rewrite_literal_template(item, needle, param))
+                        .collect(),
+                    span,
+                },
+                Expr::Record { fields, span } => Expr::Record {
+                    fields: fields
+                        .into_iter()
+                        .map(|field| RecordField {
+                            spread: field.spread,
+                            path: field.path,
+                            value: rewrite_literal_template(field.value, needle, param),
+                            span: field.span,
+                        })
+                        .collect(),
+                    span,
+                },
+                Expr::PatchLit { fields, span } => Expr::PatchLit {
+                    fields: fields
+                        .into_iter()
+                        .map(|field| RecordField {
+                            spread: field.spread,
+                            path: field.path,
+                            value: rewrite_literal_template(field.value, needle, param),
+                            span: field.span,
+                        })
+                        .collect(),
+                    span,
+                },
+                Expr::FieldAccess { base, field, span } => Expr::FieldAccess {
+                    base: Box::new(rewrite_literal_template(*base, needle, param)),
+                    field,
+                    span,
+                },
+                Expr::Index { base, index, span } => Expr::Index {
+                    base: Box::new(rewrite_literal_template(*base, needle, param)),
+                    index: Box::new(rewrite_literal_template(*index, needle, param)),
+                    span,
+                },
+                Expr::Call { func, args, span } => Expr::Call {
+                    func: Box::new(rewrite_literal_template(*func, needle, param)),
+                    args: args
+                        .into_iter()
+                        .map(|arg| rewrite_literal_template(arg, needle, param))
+                        .collect(),
+                    span,
+                },
+                Expr::Lambda { params, body, span } => Expr::Lambda {
+                    params,
+                    body: Box::new(rewrite_literal_template(*body, needle, param)),
+                    span,
+                },
+                Expr::Match {
+                    scrutinee,
+                    arms,
+                    span,
+                } => Expr::Match {
+                    scrutinee: scrutinee.map(|scrutinee| {
+                        Box::new(rewrite_literal_template(*scrutinee, needle, param))
+                    }),
+                    arms: arms
+                        .into_iter()
+                        .map(|arm| MatchArm {
+                            pattern: arm.pattern,
+                            guard: arm
+                                .guard
+                                .map(|guard| rewrite_literal_template(guard, needle, param)),
+                            body: rewrite_literal_template(arm.body, needle, param),
+                            span: arm.span,
+                        })
+                        .collect(),
+                    span,
+                },
+                Expr::If {
+                    cond,
+                    then_branch,
+                    else_branch,
+                    span,
+                } => Expr::If {
+                    cond: Box::new(rewrite_literal_template(*cond, needle, param)),
+                    then_branch: Box::new(rewrite_literal_template(*then_branch, needle, param)),
+                    else_branch: Box::new(rewrite_literal_template(*else_branch, needle, param)),
+                    span,
+                },
+                Expr::Binary {
+                    op,
+                    left,
+                    right,
+                    span,
+                } => Expr::Binary {
+                    op,
+                    left: Box::new(rewrite_literal_template(*left, needle, param)),
+                    right: Box::new(rewrite_literal_template(*right, needle, param)),
+                    span,
+                },
+                Expr::Block { kind, items, span } => Expr::Block {
+                    kind,
+                    items: items
+                        .into_iter()
+                        .map(|item| match item {
+                            BlockItem::Bind {
+                                pattern,
+                                expr,
+                                span,
+                            } => BlockItem::Bind {
+                                pattern,
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
+                            BlockItem::Let {
+                                pattern,
+                                expr,
+                                span,
+                            } => BlockItem::Let {
+                                pattern,
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
+                            BlockItem::Filter { expr, span } => BlockItem::Filter {
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
+                            BlockItem::Yield { expr, span } => BlockItem::Yield {
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
+                            BlockItem::Recurse { expr, span } => BlockItem::Recurse {
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
+                            BlockItem::Expr { expr, span } => BlockItem::Expr {
+                                expr: rewrite_literal_template(expr, needle, param),
+                                span,
+                            },
+                        })
+                        .collect(),
+                    span,
+                },
+                other => other,
+            }
+        }
+
+        let param = format!("__lit_{}", suffix.name);
+        let expr = rewrite_literal_template(expr, &number.text, &param);
+
+        let name_span = merge_span(number.span.clone(), suffix.span.clone());
+        let name = SpannedName {
+            name: format!("{}{}", number.text, suffix.name),
+            span: name_span.clone(),
+        };
+        let span = merge_span(name_span, expr_span(&expr));
+        Some(Def {
+            decorators,
+            name,
+            params: vec![Pattern::Ident(SpannedName {
+                name: param,
+                span: number.span.clone(),
+            })],
+            expr,
+            span,
+        })
+    }
+
+    fn parse_def(&mut self, decorators: Vec<Decorator>) -> Option<Def> {
+        self.consume_newlines();
+        let name = self.consume_name()?;
+        let mut params = Vec::new();
+        while {
+            self.consume_newlines();
+            !self.check_symbol("=") && self.pos < self.tokens.len()
+        } {
+            if let Some(pattern) = self.parse_pattern() {
+                params.push(pattern);
+                continue;
+            }
+            break;
+        }
+        self.consume_newlines();
+        self.expect_symbol("=", "expected '=' in definition");
+        self.consume_newlines();
+        let expr = self.parse_expr().unwrap_or(Expr::Raw {
+            text: String::new(),
+            span: name.span.clone(),
+        });
+        let span = merge_span(name.span.clone(), expr_span(&expr));
+        Some(Def {
+            decorators,
+            name,
+            params,
+            expr,
+            span,
+        })
+    }
+}

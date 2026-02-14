@@ -334,8 +334,14 @@ impl LanguageServer for Backend {
         {
             Some(text) => {
                 let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_hover_with_workspace(&text, &uri, position, &workspace, doc_index.as_ref())
-                    .or_else(|| Self::build_hover(&text, &uri, position, doc_index.as_ref()))
+                Self::build_hover_with_workspace(
+                    &text,
+                    &uri,
+                    position,
+                    &workspace,
+                    doc_index.as_ref(),
+                )
+                .or_else(|| Self::build_hover(&text, &uri, position, doc_index.as_ref()))
             }
             None => None,
         };
