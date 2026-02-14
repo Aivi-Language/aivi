@@ -133,7 +133,10 @@
   "scripts": {
     "compile": "node scripts/bundle.js",
     "build": "node scripts/build.js",
-    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:integration": "node src/test/integration/run-tests.js",
+    "test:all": "pnpm run test:unit && pnpm run test:integration",
+    "test": "pnpm run test:unit",
     "watch": "node scripts/bundle.js --watch",
     "package": "pnpm install --node-linker=hoisted --public-hoist-pattern=* && vsce package --no-dependencies",
     "vscode:prepublish": "pnpm run compile"
@@ -146,9 +149,12 @@
     "@types/vscode": "1.107.0",
     "@typescript/native-preview": "latest",
     "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "2.5.2",
     "@vscode/vsce": "3.7.1",
     "esbuild": "0.25.0",
     "jsdom": "^28.0.0",
+    "vscode-oniguruma": "file:third_party/vscode-oniguruma",
+    "vscode-textmate": "file:third_party/vscode-textmate",
     "vitest": "^4.0.18"
   }
 }
