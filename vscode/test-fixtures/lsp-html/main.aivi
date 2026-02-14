@@ -1,0 +1,13 @@
+module fixtures.lsp_html.main
+export main
+
+doAiviFn : Effect Text Unit
+doAiviFn = pure Unit
+
+main =
+  ~html~>
+    <div class="a">
+      <button onClick={doAiviFn}>ok</button>
+    </div>
+  <~html
+

@@ -1,0 +1,892 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tags and \`<\` that is not a tag 1`] = `
+[
+  {
+    "line": 0,
+    "tokens": [
+      {
+        "end": 4,
+        "scopes": [],
+        "start": 0,
+      },
+      {
+        "end": 5,
+        "scopes": [
+          "keyword.operator.comparison.aivi",
+        ],
+        "start": 4,
+      },
+      {
+        "end": 6,
+        "scopes": [],
+        "start": 5,
+      },
+      {
+        "end": 13,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "storage.type.sigil.aivi",
+        ],
+        "start": 6,
+      },
+      {
+        "end": 14,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 13,
+      },
+      {
+        "end": 15,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.object.img.void.html",
+          "punctuation.definition.tag.begin.html",
+        ],
+        "start": 14,
+      },
+      {
+        "end": 18,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.object.img.void.html",
+          "entity.name.tag.html",
+        ],
+        "start": 15,
+      },
+      {
+        "end": 19,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.object.img.void.html",
+        ],
+        "start": 18,
+      },
+      {
+        "end": 22,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.object.img.void.html",
+          "meta.attribute.alt.html",
+          "entity.other.attribute-name.html",
+        ],
+        "start": 19,
+      },
+      {
+        "end": 23,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.object.img.void.html",
+          "meta.attribute.alt.html",
+          "punctuation.separator.key-value.html",
+        ],
+        "start": 22,
+      },
+      {
+        "end": 24,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.object.img.void.html",
+          "meta.attribute.alt.html",
+          "string.quoted.double.html",
+          "punctuation.definition.string.begin.html",
+        ],
+        "start": 23,
+      },
+      {
+        "end": 25,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.object.img.void.html",
+          "meta.attribute.alt.html",
+          "string.quoted.double.html",
+        ],
+        "start": 24,
+      },
+      {
+        "end": 26,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.object.img.void.html",
+          "meta.attribute.alt.html",
+          "string.quoted.double.html",
+          "punctuation.definition.string.end.html",
+        ],
+        "start": 25,
+      },
+      {
+        "end": 27,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.object.img.void.html",
+        ],
+        "start": 26,
+      },
+      {
+        "end": 29,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.object.img.void.html",
+          "punctuation.definition.tag.end.html",
+        ],
+        "start": 27,
+      },
+      {
+        "end": 30,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 29,
+      },
+      {
+        "end": 31,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+          "punctuation.definition.tag.begin.html",
+        ],
+        "start": 30,
+      },
+      {
+        "end": 34,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+          "entity.name.tag.html",
+        ],
+        "start": 31,
+      },
+      {
+        "end": 35,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+          "punctuation.definition.tag.end.html",
+        ],
+        "start": 34,
+      },
+      {
+        "end": 40,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 35,
+      },
+      {
+        "end": 42,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.end.html",
+          "punctuation.definition.tag.begin.html",
+        ],
+        "start": 40,
+      },
+      {
+        "end": 45,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.end.html",
+          "entity.name.tag.html",
+        ],
+        "start": 42,
+      },
+      {
+        "end": 46,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.end.html",
+          "punctuation.definition.tag.end.html",
+        ],
+        "start": 45,
+      },
+      {
+        "end": 47,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 46,
+      },
+      {
+        "end": 53,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "storage.type.sigil.aivi",
+        ],
+        "start": 47,
+      },
+    ],
+  },
+]
+`;
+
+exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes a simple HTML tag with attribute and string value 1`] = `
+[
+  {
+    "line": 0,
+    "tokens": [
+      {
+        "end": 2,
+        "scopes": [],
+        "start": 0,
+      },
+      {
+        "end": 3,
+        "scopes": [
+          "keyword.operator.comparison.aivi",
+        ],
+        "start": 2,
+      },
+      {
+        "end": 4,
+        "scopes": [],
+        "start": 3,
+      },
+      {
+        "end": 11,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "storage.type.sigil.aivi",
+        ],
+        "start": 4,
+      },
+      {
+        "end": 12,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 11,
+      },
+      {
+        "end": 13,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+          "punctuation.definition.tag.begin.html",
+        ],
+        "start": 12,
+      },
+      {
+        "end": 16,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+          "entity.name.tag.html",
+        ],
+        "start": 13,
+      },
+      {
+        "end": 17,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+        ],
+        "start": 16,
+      },
+      {
+        "end": 22,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+          "meta.attribute.class.html",
+          "entity.other.attribute-name.html",
+        ],
+        "start": 17,
+      },
+      {
+        "end": 23,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+          "meta.attribute.class.html",
+          "punctuation.separator.key-value.html",
+        ],
+        "start": 22,
+      },
+      {
+        "end": 24,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+          "meta.attribute.class.html",
+          "string.quoted.double.html",
+          "punctuation.definition.string.begin.html",
+        ],
+        "start": 23,
+      },
+      {
+        "end": 25,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+          "meta.attribute.class.html",
+          "string.quoted.double.html",
+        ],
+        "start": 24,
+      },
+      {
+        "end": 26,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+          "meta.attribute.class.html",
+          "string.quoted.double.html",
+          "punctuation.definition.string.end.html",
+        ],
+        "start": 25,
+      },
+      {
+        "end": 27,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.start.html",
+          "punctuation.definition.tag.end.html",
+        ],
+        "start": 26,
+      },
+      {
+        "end": 32,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 27,
+      },
+      {
+        "end": 34,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.end.html",
+          "punctuation.definition.tag.begin.html",
+        ],
+        "start": 32,
+      },
+      {
+        "end": 37,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.end.html",
+          "entity.name.tag.html",
+        ],
+        "start": 34,
+      },
+      {
+        "end": 38,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.div.end.html",
+          "punctuation.definition.tag.end.html",
+        ],
+        "start": 37,
+      },
+      {
+        "end": 39,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 38,
+      },
+      {
+        "end": 45,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "storage.type.sigil.aivi",
+        ],
+        "start": 39,
+      },
+    ],
+  },
+]
+`;
+
+exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes nested tags and returns to AIVI scopes outside the sigil 1`] = `
+[
+  {
+    "line": 0,
+    "tokens": [
+      {
+        "end": 3,
+        "scopes": [
+          "keyword.other.aivi",
+        ],
+        "start": 0,
+      },
+      {
+        "end": 8,
+        "scopes": [],
+        "start": 3,
+      },
+      {
+        "end": 9,
+        "scopes": [
+          "keyword.operator.aivi",
+        ],
+        "start": 8,
+      },
+      {
+        "end": 12,
+        "scopes": [],
+        "start": 9,
+      },
+      {
+        "end": 13,
+        "scopes": [
+          "punctuation.section.bracket.aivi",
+        ],
+        "start": 12,
+      },
+      {
+        "end": 21,
+        "scopes": [
+          "entity.name.type.aivi",
+        ],
+        "start": 13,
+      },
+      {
+        "end": 22,
+        "scopes": [
+          "punctuation.section.bracket.aivi",
+        ],
+        "start": 21,
+      },
+      {
+        "end": 26,
+        "scopes": [],
+        "start": 22,
+      },
+      {
+        "end": 27,
+        "scopes": [
+          "keyword.operator.comparison.aivi",
+        ],
+        "start": 26,
+      },
+      {
+        "end": 28,
+        "scopes": [],
+        "start": 27,
+      },
+      {
+        "end": 35,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "storage.type.sigil.aivi",
+        ],
+        "start": 28,
+      },
+      {
+        "end": 36,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 35,
+      },
+      {
+        "end": 37,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.section.start.html",
+          "punctuation.definition.tag.begin.html",
+        ],
+        "start": 36,
+      },
+      {
+        "end": 44,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.section.start.html",
+          "entity.name.tag.html",
+        ],
+        "start": 37,
+      },
+      {
+        "end": 45,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.section.start.html",
+          "punctuation.definition.tag.end.html",
+        ],
+        "start": 44,
+      },
+      {
+        "end": 46,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.start.html",
+          "punctuation.definition.tag.begin.html",
+        ],
+        "start": 45,
+      },
+      {
+        "end": 50,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.start.html",
+          "entity.name.tag.html",
+        ],
+        "start": 46,
+      },
+      {
+        "end": 51,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.start.html",
+        ],
+        "start": 50,
+      },
+      {
+        "end": 53,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.start.html",
+          "meta.attribute.id.html",
+          "entity.other.attribute-name.html",
+        ],
+        "start": 51,
+      },
+      {
+        "end": 54,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.start.html",
+          "meta.attribute.id.html",
+          "punctuation.separator.key-value.html",
+        ],
+        "start": 53,
+      },
+      {
+        "end": 55,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.start.html",
+          "meta.attribute.id.html",
+          "string.quoted.double.html",
+          "punctuation.definition.string.begin.html",
+        ],
+        "start": 54,
+      },
+      {
+        "end": 56,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.start.html",
+          "meta.attribute.id.html",
+          "string.quoted.double.html",
+        ],
+        "start": 55,
+      },
+      {
+        "end": 57,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.start.html",
+          "meta.attribute.id.html",
+          "string.quoted.double.html",
+          "punctuation.definition.string.end.html",
+        ],
+        "start": 56,
+      },
+      {
+        "end": 58,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.start.html",
+          "punctuation.definition.tag.end.html",
+        ],
+        "start": 57,
+      },
+      {
+        "end": 59,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 58,
+      },
+      {
+        "end": 61,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.end.html",
+          "punctuation.definition.tag.begin.html",
+        ],
+        "start": 59,
+      },
+      {
+        "end": 65,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.end.html",
+          "entity.name.tag.html",
+        ],
+        "start": 61,
+      },
+      {
+        "end": 66,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.inline.span.end.html",
+          "punctuation.definition.tag.end.html",
+        ],
+        "start": 65,
+      },
+      {
+        "end": 68,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.section.end.html",
+          "punctuation.definition.tag.begin.html",
+        ],
+        "start": 66,
+      },
+      {
+        "end": 75,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.section.end.html",
+          "entity.name.tag.html",
+        ],
+        "start": 68,
+      },
+      {
+        "end": 76,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.section.end.html",
+          "punctuation.definition.tag.end.html",
+        ],
+        "start": 75,
+      },
+      {
+        "end": 77,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 76,
+      },
+      {
+        "end": 83,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "storage.type.sigil.aivi",
+        ],
+        "start": 77,
+      },
+      {
+        "end": 87,
+        "scopes": [],
+        "start": 83,
+      },
+      {
+        "end": 88,
+        "scopes": [
+          "keyword.operator.comparison.aivi",
+        ],
+        "start": 87,
+      },
+      {
+        "end": 89,
+        "scopes": [],
+        "start": 88,
+      },
+      {
+        "end": 90,
+        "scopes": [
+          "constant.numeric.aivi",
+        ],
+        "start": 89,
+      },
+    ],
+  },
+]
+`;
+
+exports[`TextMate: AIVI + injected HTML (~html sigil) > treats event handler attributes as HTML (no JS parsing required) 1`] = `
+[
+  {
+    "line": 0,
+    "tokens": [
+      {
+        "end": 9,
+        "scopes": [],
+        "start": 0,
+      },
+      {
+        "end": 10,
+        "scopes": [
+          "keyword.operator.comparison.aivi",
+        ],
+        "start": 9,
+      },
+      {
+        "end": 11,
+        "scopes": [],
+        "start": 10,
+      },
+      {
+        "end": 15,
+        "scopes": [
+          "keyword.control.aivi",
+        ],
+        "start": 11,
+      },
+      {
+        "end": 16,
+        "scopes": [],
+        "start": 15,
+      },
+      {
+        "end": 20,
+        "scopes": [
+          "entity.name.type.aivi",
+        ],
+        "start": 16,
+      },
+      {
+        "end": 26,
+        "scopes": [],
+        "start": 20,
+      },
+      {
+        "end": 27,
+        "scopes": [
+          "keyword.operator.comparison.aivi",
+        ],
+        "start": 26,
+      },
+      {
+        "end": 28,
+        "scopes": [],
+        "start": 27,
+      },
+      {
+        "end": 35,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "storage.type.sigil.aivi",
+        ],
+        "start": 28,
+      },
+      {
+        "end": 36,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 35,
+      },
+      {
+        "end": 37,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.button.start.html",
+          "punctuation.definition.tag.begin.html",
+        ],
+        "start": 36,
+      },
+      {
+        "end": 43,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.button.start.html",
+          "entity.name.tag.html",
+        ],
+        "start": 37,
+      },
+      {
+        "end": 44,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.button.start.html",
+        ],
+        "start": 43,
+      },
+      {
+        "end": 51,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.button.start.html",
+          "meta.attribute.unrecognized.onClick.html",
+          "entity.other.attribute-name.html",
+        ],
+        "start": 44,
+      },
+      {
+        "end": 52,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.button.start.html",
+          "meta.attribute.unrecognized.onClick.html",
+          "punctuation.separator.key-value.html",
+        ],
+        "start": 51,
+      },
+      {
+        "end": 62,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.button.start.html",
+          "meta.attribute.unrecognized.onClick.html",
+          "string.unquoted.html",
+        ],
+        "start": 52,
+      },
+      {
+        "end": 63,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.button.start.html",
+          "punctuation.definition.tag.end.html",
+        ],
+        "start": 62,
+      },
+      {
+        "end": 65,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 63,
+      },
+      {
+        "end": 67,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.button.end.html",
+          "punctuation.definition.tag.begin.html",
+        ],
+        "start": 65,
+      },
+      {
+        "end": 73,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.button.end.html",
+          "entity.name.tag.html",
+        ],
+        "start": 67,
+      },
+      {
+        "end": 74,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "meta.tag.structure.button.end.html",
+          "punctuation.definition.tag.end.html",
+        ],
+        "start": 73,
+      },
+      {
+        "end": 75,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+        ],
+        "start": 74,
+      },
+      {
+        "end": 81,
+        "scopes": [
+          "string.quoted.other.sigil.html.aivi",
+          "storage.type.sigil.aivi",
+        ],
+        "start": 75,
+      },
+    ],
+  },
+]
+`;
