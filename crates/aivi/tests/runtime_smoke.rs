@@ -78,3 +78,8 @@ fn run_native_i18n_example() {
 fn run_native_i18n_catalog_fallback_example() {
     run_native_via_cli("examples/25_i18n_catalog_fallback.aivi");
 }
+
+#[test]
+fn run_native_algorithms_example() {
+    run_native_via_cli("examples/27_algorithms.aivi");
+}
