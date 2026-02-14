@@ -174,7 +174,7 @@ impl Backend {
         }
     }
 
-    fn line_prefix<'a>(text: &'a str, position: Position) -> String {
+    fn line_prefix(text: &str, position: Position) -> String {
         let offset = Self::offset_at(text, position).min(text.len());
         let line_start = text[..offset].rfind('\n').map(|idx| idx + 1).unwrap_or(0);
         text[line_start..offset].to_string()

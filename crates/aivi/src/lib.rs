@@ -45,7 +45,7 @@ pub use pm::{
     CargoDepSpecParseError, CargoManifestEdits, ProjectKind,
 };
 pub use resolver::check_modules;
-pub use runtime::{run_native, run_test_suite, TestFailure, TestReport};
+pub use runtime::{run_native, run_native_with_fuel, run_test_suite, TestFailure, TestReport};
 pub use rust_codegen::{compile_rust_native, compile_rust_native_lib};
 pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
 pub use rustc_backend::{build_with_rustc, emit_rustc_source};
@@ -57,6 +57,12 @@ pub use surface::{
     TypeExpr, TypeSig, UseDecl,
 };
 pub use typecheck::{check_types, elaborate_expected_coercions, infer_value_types};
+
+// Expose a small, deterministic building block for tests and fuzzers without forcing callers
+// through the filesystem/stdlib-loading CLI entrypoints.
+pub fn desugar_modules(modules: &[Module]) -> HirProgram {
+    hir::desugar_modules(modules)
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum AiviError {

@@ -1,0 +1,19 @@
+[
+  {
+    "code": "E3000",
+    "labels": [],
+    "message": "unknown name 'y'",
+    "path": "crates/aivi/tests/goldens/cases/err_unknown_name/input.aivi",
+    "severity": "error",
+    "span": {
+      "end": {
+        "column": 5,
+        "line": 4
+      },
+      "start": {
+        "column": 5,
+        "line": 4
+      }
+    }
+  }
+]

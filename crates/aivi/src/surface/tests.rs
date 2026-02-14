@@ -215,6 +215,74 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
 }
 
 #[test]
+fn parses_binary_operator_precedence_multiplication_binds_tighter_than_addition() {
+    let src = r#"
+module Example
+
+x = 1 + 2 * 3
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diag_codes(&diags));
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    match &def.expr {
+        Expr::Binary { op, left, right, .. } => {
+            assert_eq!(op, "+");
+            assert!(matches!(left.as_ref(), Expr::Literal(Literal::Number { text, .. }) if text == "1"));
+            assert!(
+                matches!(right.as_ref(), Expr::Binary { op, .. } if op == "*"),
+                "expected right side to be multiplication, got: {right:?}"
+            );
+        }
+        other => panic!("expected binary expression, got: {other:?}"),
+    }
+}
+
+#[test]
+fn parses_binary_operator_associativity_left_for_minus() {
+    let src = r#"
+module Example
+
+x = 1 - 2 - 3
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diag_codes(&diags));
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    match &def.expr {
+        Expr::Binary { op, left, right, .. } => {
+            assert_eq!(op, "-");
+            assert!(matches!(right.as_ref(), Expr::Literal(Literal::Number { text, .. }) if text == "3"));
+            assert!(
+                matches!(left.as_ref(), Expr::Binary { op, .. } if op == "-"),
+                "expected left associativity for '-', got left={left:?}"
+            );
+        }
+        other => panic!("expected binary expression, got: {other:?}"),
+    }
+}
+
+#[test]
 fn parses_structured_sigil_html_literal() {
     let src = r#"
 module Example

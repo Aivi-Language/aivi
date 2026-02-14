@@ -1076,16 +1076,16 @@ impl TypeChecker {
     fn flatten_type_and_list(&self, items: &[TypeExpr]) -> Vec<TypeExpr> {
         let mut out = Vec::new();
         for item in items {
-            self.flatten_type_and_into(item, &mut out);
+            Self::flatten_type_and_into(item, &mut out);
         }
         out
     }
 
-    fn flatten_type_and_into(&self, item: &TypeExpr, out: &mut Vec<TypeExpr>) {
+    fn flatten_type_and_into(item: &TypeExpr, out: &mut Vec<TypeExpr>) {
         match item {
             TypeExpr::And { items, .. } => {
                 for inner in items {
-                    self.flatten_type_and_into(inner, out);
+                    Self::flatten_type_and_into(inner, out);
                 }
             }
             other => out.push(other.clone()),
@@ -2004,17 +2004,17 @@ impl TypeChecker {
             .collect();
 
         let mut constrained_candidates: Vec<(HashMap<TypeVarId, Type>, Type)> = Vec::new();
-        for class_name in classes.iter().cloned() {
+        for class_name in classes.iter() {
             if !self
                 .assumed_class_constraints
                 .iter()
                 .any(|(constraint_class, constraint_var)| {
-                    constraint_class == &class_name && arg_var_ids.contains(constraint_var)
+                    constraint_class == class_name && arg_var_ids.contains(constraint_var)
                 })
             {
                 continue;
             }
-            let Some(class_info) = self.classes.get(&class_name).cloned() else {
+            let Some(class_info) = self.classes.get(class_name).cloned() else {
                 continue;
             };
             let Some(member_ty_expr) = class_info.members.get(&method.name).cloned() else {

@@ -1,0 +1,36 @@
+name: Nightly (fuzz + perf)
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (stable + nightly)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+          components: llvm-tools-preview
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Fuzz parser (long)
+        run: cargo +nightly fuzz run parser -- -max_total_time=300
+      - name: Fuzz frontend (long)
+        run: cargo +nightly fuzz run frontend -- -max_total_time=300
+      - name: Fuzz runtime (long)
+        run: cargo +nightly fuzz run runtime -- -max_total_time=300
+      - name: Perf check (tighter)
+        run: cargo run -p aivi --bin perf -- check --baseline crates/aivi/perf/baseline.json --max-multiplier 1.25
+      - name: Upload perf report
+        run: cargo run -p aivi --bin perf -- run > perf_report.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: perf_report
+          path: perf_report.json
+

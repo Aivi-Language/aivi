@@ -1,0 +1,6 @@
+target/
+artifacts/
+crash-*
+leak-*
+timeout-*
+

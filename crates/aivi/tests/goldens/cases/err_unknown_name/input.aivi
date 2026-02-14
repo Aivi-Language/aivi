@@ -1,0 +1,5 @@
+module test.err_unknown_name
+export x
+
+x = y
+

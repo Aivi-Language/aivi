@@ -1,0 +1,20 @@
+{
+  "fixtures": {
+    "tiny": {
+      "bytes": 54,
+      "parse_ns": 200000000,
+      "resolve_ns": 200000000,
+      "typecheck_ns": 200000000,
+      "lower_ns": 200000000,
+      "total_ns": 1000000000
+    },
+    "typecheck_medium": {
+      "bytes": 212,
+      "parse_ns": 700000000,
+      "resolve_ns": 700000000,
+      "typecheck_ns": 700000000,
+      "lower_ns": 700000000,
+      "total_ns": 3000000000
+    }
+  }
+}

@@ -1,0 +1,313 @@
+{
+  "files": [
+    {
+      "byte_count": 51,
+      "diagnostics": [],
+      "line_count": 5,
+      "lines": [
+        "module test.ok_binary_ops",
+        "export x",
+        "",
+        "x = 1 + 2 * 3",
+        ""
+      ],
+      "path": "crates/aivi/tests/goldens/cases/ok_binary_ops/input.aivi",
+      "tokens": [
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 6,
+              "line": 1
+            },
+            "start": {
+              "column": 1,
+              "line": 1
+            }
+          },
+          "text": "module"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 1
+            },
+            "start": {
+              "column": 7,
+              "line": 1
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 11,
+              "line": 1
+            },
+            "start": {
+              "column": 8,
+              "line": 1
+            }
+          },
+          "text": "test"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 12,
+              "line": 1
+            },
+            "start": {
+              "column": 12,
+              "line": 1
+            }
+          },
+          "text": "."
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 25,
+              "line": 1
+            },
+            "start": {
+              "column": 13,
+              "line": 1
+            }
+          },
+          "text": "ok_binary_ops"
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 6,
+              "line": 2
+            },
+            "start": {
+              "column": 1,
+              "line": 2
+            }
+          },
+          "text": "export"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 2
+            },
+            "start": {
+              "column": 7,
+              "line": 2
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 8,
+              "line": 2
+            },
+            "start": {
+              "column": 8,
+              "line": 2
+            }
+          },
+          "text": "x"
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 1,
+              "line": 4
+            },
+            "start": {
+              "column": 1,
+              "line": 4
+            }
+          },
+          "text": "x"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 2,
+              "line": 4
+            },
+            "start": {
+              "column": 2,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 3,
+              "line": 4
+            },
+            "start": {
+              "column": 3,
+              "line": 4
+            }
+          },
+          "text": "="
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 4,
+              "line": 4
+            },
+            "start": {
+              "column": 4,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "number",
+          "span": {
+            "end": {
+              "column": 5,
+              "line": 4
+            },
+            "start": {
+              "column": 5,
+              "line": 4
+            }
+          },
+          "text": "1"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 6,
+              "line": 4
+            },
+            "start": {
+              "column": 6,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 4
+            },
+            "start": {
+              "column": 7,
+              "line": 4
+            }
+          },
+          "text": "+"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 8,
+              "line": 4
+            },
+            "start": {
+              "column": 8,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "number",
+          "span": {
+            "end": {
+              "column": 9,
+              "line": 4
+            },
+            "start": {
+              "column": 9,
+              "line": 4
+            }
+          },
+          "text": "2"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 10,
+              "line": 4
+            },
+            "start": {
+              "column": 10,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 11,
+              "line": 4
+            },
+            "start": {
+              "column": 11,
+              "line": 4
+            }
+          },
+          "text": "*"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 12,
+              "line": 4
+            },
+            "start": {
+              "column": 12,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "number",
+          "span": {
+            "end": {
+              "column": 13,
+              "line": 4
+            },
+            "start": {
+              "column": 13,
+              "line": 4
+            }
+          },
+          "text": "3"
+        }
+      ]
+    }
+  ]
+}

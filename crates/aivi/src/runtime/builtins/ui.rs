@@ -756,14 +756,13 @@ fn child_segments(children: &Value) -> Vec<String> {
 }
 
 fn same_vnode_shape(a: &Value, b: &Value) -> bool {
-    match (a, b) {
-        (Value::Constructor { name: an, args: aa }, Value::Constructor { name: bn, args: ba })
-            if an == bn && aa.len() == ba.len() =>
-        {
-            true
-        }
-        _ => false,
-    }
+    matches!(
+        (a, b),
+        (
+            Value::Constructor { name: an, args: aa },
+            Value::Constructor { name: bn, args: ba }
+        ) if an == bn && aa.len() == ba.len()
+    )
 }
 
 fn attrs_to_map(attrs: &Value, node_id: &str) -> HashMap<String, String> {

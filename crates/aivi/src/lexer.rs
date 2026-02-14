@@ -382,19 +382,19 @@ fn lex_sigil_multiline(
             }
 
             // Check for closing delimiter "<~html"
-            if ch == '<' && index + 5 < chars.len() {
-               if chars[index + 1] == '~'
-                    && chars[index + 2] == 'h'
-                    && chars[index + 3] == 't'
-                    && chars[index + 4] == 'm'
-                    && chars[index + 5] == 'l'
-                {
-                    // Found closing delimiter
-                    closed = true;
-                    index += 6; // consume "<~html"
-                    col += 5; // Adjust col to be at the last char of the delimiter
-                    break;
-                }
+            if ch == '<'
+                && index + 5 < chars.len()
+                && chars[index + 1] == '~'
+                && chars[index + 2] == 'h'
+                && chars[index + 3] == 't'
+                && chars[index + 4] == 'm'
+                && chars[index + 5] == 'l'
+            {
+                // Found closing delimiter
+                closed = true;
+                index += 6; // consume "<~html"
+                col += 5; // Adjust col to be at the last char of the delimiter
+                break;
             }
 
             index += 1;
@@ -564,4 +564,107 @@ pub fn filter_tokens(tokens: &[CstToken]) -> Vec<Token> {
         });
     }
     filtered
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn diag_codes(diags: &[Diagnostic]) -> Vec<String> {
+        let mut codes: Vec<String> = diags.iter().map(|d| d.code.clone()).collect();
+        codes.sort();
+        codes
+    }
+
+    #[test]
+    fn lex_recognizes_line_comments_for_slashslash_and_dashdash() {
+        let src = "x = 1 // hello\n\ny = 2 -- world\n";
+        let (tokens, diags) = lex(src);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        let comments: Vec<&CstToken> = tokens
+            .iter()
+            .filter(|t| t.kind == "comment")
+            .collect();
+        assert_eq!(comments.len(), 2);
+        assert_eq!(comments[0].text, "// hello");
+        assert_eq!(comments[1].text, "-- world");
+    }
+
+    #[test]
+    fn lex_unterminated_string_emits_error() {
+        let src = "x = \"unterminated\n";
+        let (_tokens, diags) = lex(src);
+        assert!(
+            diag_codes(&diags).contains(&"E1001".to_string()),
+            "expected E1001, got: {:?}",
+            diag_codes(&diags)
+        );
+        let d = diags
+            .iter()
+            .find(|d| d.code == "E1001")
+            .expect("E1001 diagnostic");
+        assert_eq!(d.span.start.line, 1);
+        assert_eq!(d.span.start.column, 5);
+    }
+
+    #[test]
+    fn lex_semicolons_emit_error_but_remain_recoverable_tokens() {
+        let src = "x = 1; y = 2";
+        let (tokens, diags) = lex(src);
+        assert!(
+            diag_codes(&diags).contains(&"E1006".to_string()),
+            "expected E1006, got: {:?}",
+            diag_codes(&diags)
+        );
+        assert!(
+            tokens.iter().any(|t| t.kind == "symbol" && t.text == ";"),
+            "expected ';' symbol token for recovery"
+        );
+
+        let filtered = filter_tokens(&tokens);
+        assert!(
+            filtered.iter().any(|t| t.kind == TokenKind::Newline),
+            "expected ';' to be treated as newline in filter_tokens"
+        );
+    }
+
+    #[test]
+    fn lex_reports_mismatched_and_unclosed_braces() {
+        let src = "x = (]\n";
+        let (_tokens, diags) = lex(src);
+        let codes = diag_codes(&diags);
+        assert!(
+            codes.contains(&"E1003".to_string()),
+            "expected mismatched brace diagnostic, got: {codes:?}"
+        );
+        assert!(
+            !codes.contains(&"E1004".to_string()),
+            "should not also report unclosed when a close was present, got: {codes:?}"
+        );
+    }
+
+    #[test]
+    fn lex_rejects_non_ascii_identifier_start_as_unexpected_character() {
+        let src = "π = 3";
+        let (_tokens, diags) = lex(src);
+        assert!(
+            diag_codes(&diags).contains(&"E1000".to_string()),
+            "expected E1000, got: {:?}",
+            diag_codes(&diags)
+        );
+    }
+
+    #[test]
+    fn lex_numbers_accept_simple_decimal_fractions() {
+        let src = "x = 12.34\ny=1";
+        let (tokens, diags) = lex(src);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        let nums: Vec<&CstToken> = tokens.iter().filter(|t| t.kind == "number").collect();
+        assert_eq!(nums.len(), 2);
+        assert_eq!(nums[0].text, "12.34");
+        assert_eq!(nums[1].text, "1");
+        assert_eq!(nums[0].span.start.line, 1);
+        assert_eq!(nums[0].span.start.column, 5);
+        assert_eq!(nums[0].span.end.column, 9);
+    }
 }

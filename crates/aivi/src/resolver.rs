@@ -1204,4 +1204,54 @@ x = 1
             "expected E2010, got: {diags:?}"
         );
     }
+
+    #[test]
+    fn warns_on_unused_imports_and_private_bindings() {
+        let source = r#"
+module test.unused
+
+use aivi.console (print)
+
+x = 1
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+
+        let codes: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi")
+            .map(|d| d.diagnostic.code.as_str())
+            .collect();
+        assert!(codes.contains(&"W2100"), "expected W2100, got: {codes:?}");
+        assert!(codes.contains(&"W2101"), "expected W2101, got: {codes:?}");
+    }
+
+    #[test]
+    fn does_not_warn_for_domain_import_used_via_operators() {
+        let source = r#"
+module test.domain_import
+
+// Domain imports can be used implicitly (operators/suffix literals), so the resolver must not warn.
+use aivi.duration (domain Duration)
+
+// Reference a suffix literal so this test continues to exercise "implicit domain usage"
+// paths, but without requiring the imported domain name to appear as an identifier.
+x = 30s
+"#;
+        let (modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let diags = check_modules(&modules);
+        assert!(
+            !diags
+                .iter()
+                .any(|d| d.path == "test.aivi" && d.diagnostic.code == "W2100"),
+            "expected no unused-import warnings for domain import, got: {diags:?}"
+        );
+    }
 }

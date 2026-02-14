@@ -45,12 +45,53 @@ jobs:
         with:
           toolchain: 1.90.0
           components: rustfmt, clippy
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Run clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Run tests
         run: cargo test --workspace
+
+  aivi_perf:
+    name: AIVI (perf smoke)
+    needs: changes
+    if: needs.changes.outputs.aivi == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.90.0
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+      - name: Perf check (lenient)
+        run: cargo run -p aivi --bin perf -- check --baseline crates/aivi/perf/baseline.json --max-multiplier 2.0
+
+  aivi_fuzz:
+    name: AIVI (fuzz smoke)
+    needs: changes
+    if: needs.changes.outputs.aivi == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (nightly)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: nightly
+          components: llvm-tools-preview
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Fuzz parser (short)
+        run: cargo +nightly fuzz run parser -- -max_total_time=30
+      - name: Fuzz frontend (short)
+        run: cargo +nightly fuzz run frontend -- -max_total_time=30
+      - name: Fuzz runtime (short)
+        run: cargo +nightly fuzz run runtime -- -max_total_time=30
 
   docs:
     name: Docs (build)

@@ -12,6 +12,9 @@ use crate::runtime::{EffectValue, Runtime, RuntimeError, Value};
 const META_TABLE: &str = "aivi_tables";
 const EMPTY_ROWS_JSON: &str = "{\"t\":\"List\",\"v\":[]}";
 
+type DbResp<T> = mpsc::Sender<Result<T, String>>;
+type LoadTableRow = (i64, String, String);
+
 #[derive(Clone, Copy, Debug)]
 enum Driver {
     Sqlite,
@@ -23,26 +26,26 @@ enum DbRequest {
     Configure {
         driver: Driver,
         url: String,
-        resp: mpsc::Sender<Result<(), String>>,
+        resp: DbResp<()>,
     },
     EnsureSchema {
-        resp: mpsc::Sender<Result<(), String>>,
+        resp: DbResp<()>,
     },
     LoadTable {
         name: String,
-        resp: mpsc::Sender<Result<Option<(i64, String, String)>, String>>,
+        resp: DbResp<Option<LoadTableRow>>,
     },
     MigrateTable {
         name: String,
         columns_json: String,
-        resp: mpsc::Sender<Result<(), String>>,
+        resp: DbResp<()>,
     },
     CompareAndSwapRows {
         name: String,
         expected_rev: i64,
         columns_json: String,
         rows_json: String,
-        resp: mpsc::Sender<Result<i64, String>>,
+        resp: DbResp<i64>,
     },
 }
 
@@ -96,7 +99,7 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
 
     enum Backend {
         Sqlite(rusqlite::Connection),
-        Postgresql(postgres::Client),
+        Postgresql(Box<postgres::Client>),
         Mysql(mysql::Conn),
     }
 
@@ -332,7 +335,7 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                         Driver::Postgresql => {
                             let client = postgres::Client::connect(&url, postgres::NoTls)
                                 .map_err(|e| backend_err("postgres.connect", e))?;
-                            Backend::Postgresql(client)
+                            Backend::Postgresql(Box::new(client))
                         }
                         Driver::Mysql => {
                             let opts = mysql::Opts::from_url(&url)
@@ -432,7 +435,7 @@ fn encode_value(value: &Value) -> Result<JsonValue, RuntimeError> {
         Value::Rational(v) => serde_json::json!({ "t": "Rational", "v": v.to_string() }),
         Value::Decimal(v) => serde_json::json!({ "t": "Decimal", "v": v.to_string() }),
         Value::Bytes(bytes) => {
-            let arr: Vec<JsonValue> = bytes.iter().copied().map(|b| JsonValue::from(b)).collect();
+            let arr: Vec<JsonValue> = bytes.iter().copied().map(JsonValue::from).collect();
             serde_json::json!({ "t": "Bytes", "v": arr })
         }
         Value::List(items) => {

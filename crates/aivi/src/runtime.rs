@@ -71,6 +71,7 @@ struct Runtime {
     ctx: Arc<RuntimeContext>,
     cancel: Arc<CancelToken>,
     cancel_mask: usize,
+    fuel: Option<u64>,
     rng_state: u64,
     debug_stack: Vec<DebugFrame>,
 }
@@ -125,6 +126,41 @@ pub fn run_native(program: HirProgram) -> Result<(), AiviError> {
 
     match runtime.run_effect_value(effect) {
         Ok(_) => Ok(()),
+        Err(err) => Err(AiviError::Runtime(format_runtime_error(err))),
+    }
+}
+
+/// Runs `main` with a simple "fuel" limit to prevent hangs in fuzzers/tests.
+///
+/// If fuel is exhausted, execution is cancelled and treated as success (the program is considered
+/// non-terminating within the provided budget).
+pub fn run_native_with_fuel(program: HirProgram, fuel: u64) -> Result<(), AiviError> {
+    let mut runtime = build_runtime_from_program(program)?;
+    runtime.fuel = Some(fuel);
+
+    let main = runtime
+        .ctx
+        .globals
+        .get("main")
+        .ok_or_else(|| AiviError::Runtime("missing main definition".to_string()))?;
+    let main_value = match runtime.force_value(main) {
+        Ok(value) => value,
+        Err(RuntimeError::Cancelled) => return Ok(()),
+        Err(err) => return Err(AiviError::Runtime(format_runtime_error(err))),
+    };
+    let effect = match main_value {
+        Value::Effect(effect) => Value::Effect(effect),
+        other => {
+            return Err(AiviError::Runtime(format!(
+                "main must be an Effect value, got {}",
+                format_value(&other)
+            )))
+        }
+    };
+
+    match runtime.run_effect_value(effect) {
+        Ok(_) => Ok(()),
+        Err(RuntimeError::Cancelled) => Ok(()),
         Err(err) => Err(AiviError::Runtime(format_runtime_error(err))),
     }
 }
@@ -266,14 +302,21 @@ impl Runtime {
             ctx,
             cancel,
             cancel_mask: 0,
+            fuel: None,
             rng_state: seed ^ 0x9E37_79B9_7F4A_7C15,
             debug_stack: Vec::new(),
         }
     }
 
-    fn check_cancelled(&self) -> Result<(), RuntimeError> {
+    fn check_cancelled(&mut self) -> Result<(), RuntimeError> {
         if self.cancel_mask > 0 {
             return Ok(());
+        }
+        if let Some(fuel) = self.fuel.as_mut() {
+            if *fuel == 0 {
+                return Err(RuntimeError::Cancelled);
+            }
+            *fuel = fuel.saturating_sub(1);
         }
         if self.cancel.is_cancelled() {
             Err(RuntimeError::Cancelled)

@@ -377,10 +377,10 @@ fn parse_debug_params(decorators: &[Decorator]) -> Option<DebugParams> {
     }
 
     Some(DebugParams {
-        pipes: names.iter().any(|n| *n == "pipes"),
-        args: names.iter().any(|n| *n == "args"),
-        ret: names.iter().any(|n| *n == "return"),
-        time: names.iter().any(|n| *n == "time"),
+        pipes: names.contains(&"pipes"),
+        args: names.contains(&"args"),
+        ret: names.contains(&"return"),
+        time: names.contains(&"time"),
     })
 }
 
@@ -454,11 +454,6 @@ fn lower_def_expr(
     } else {
         lower_lambda_hir(def.params, body_hir, id_gen)
     }
-}
-
-fn lower_expr(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
-    let mut ctx = LowerCtx { debug: None };
-    lower_expr_ctx(expr, id_gen, &mut ctx, false)
 }
 
 fn lower_expr_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, in_pipe_left: bool) -> HirExpr {
@@ -892,8 +887,8 @@ fn slice_source_by_span(source: &str, span: &crate::diagnostics::Span) -> Option
         lines[start_line].chars().count(),
     ));
     out.push('\n');
-    for mid in (start_line + 1)..end_line {
-        out.push_str(lines[mid]);
+    for line in lines.iter().take(end_line).skip(start_line + 1) {
+        out.push_str(line);
         out.push('\n');
     }
     out.push_str(&slice_line(lines[end_line], 1, span.end.column));
@@ -1204,7 +1199,7 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
         Expr::Ident(name) => {
             // Don't desugar a placeholder `_` at the leaf; let the smallest
             // enclosing expression scope capture it. A bare `_` is handled in
-            // `lower_expr`.
+            // `lower_expr_ctx` (which special-cases a leaf `_` into a lambda).
             if name.name == "_" {
                 return Expr::Ident(name);
             }

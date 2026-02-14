@@ -1,0 +1,11 @@
+module perf.fixture.typecheck_medium
+export x, y, z
+
+User = { id: Int, name: Text, active: Bool }
+
+mkUser id name = { id, name, active: True }
+
+x = mkUser 1 "Alice"
+y = x <| { active: _ && False }
+z = y.active
+

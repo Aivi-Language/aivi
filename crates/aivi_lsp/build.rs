@@ -204,9 +204,7 @@ fn extract_fenced_block(content: &str, lang: &str) -> Option<String> {
     while let Some(open_at) = content[i..].find(fence) {
         let open_at = i + open_at;
         let after = &content[open_at + fence.len()..];
-        let Some(line_end) = after.find('\n') else {
-            return None;
-        };
+        let line_end = after.find('\n')?;
         let info = after[..line_end].trim();
         let code_start = open_at + fence.len() + line_end + 1;
         if info != lang {
@@ -214,9 +212,7 @@ fn extract_fenced_block(content: &str, lang: &str) -> Option<String> {
             continue;
         }
         let rest = &content[code_start..];
-        let Some(close_rel) = rest.find("\n```") else {
-            return None;
-        };
+        let close_rel = rest.find("\n```")?;
         return Some(rest[..close_rel].to_string());
     }
     None

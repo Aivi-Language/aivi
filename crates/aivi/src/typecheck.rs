@@ -59,11 +59,8 @@ fn collect_global_type_info(
     let mut aliases = HashMap::new();
     for module in modules {
         for item in &module.items {
-            match item {
-                ModuleItem::TypeAlias(alias) => {
-                    aliases.insert(alias.name.name.clone(), checker.alias_info(alias));
-                }
-                _ => {}
+            if let ModuleItem::TypeAlias(alias) = item {
+                aliases.insert(alias.name.name.clone(), checker.alias_info(alias));
             }
         }
     }

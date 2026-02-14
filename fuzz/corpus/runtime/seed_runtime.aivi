@@ -1,0 +1,8 @@
+module fuzz.seed.runtime
+export main
+
+main : Effect Text Unit
+main = effect {
+  pure Unit
+}
+

@@ -2320,7 +2320,10 @@ impl Parser {
                 }
                 TokenKind::Number | TokenKind::String | TokenKind::Sigil => return true,
                 TokenKind::Symbol => {
-                    return matches!(token.text.as_str(), "(" | "[" | "{" | "." | "-")
+                    // Note: `-` is intentionally *not* an expression-start token. Negative
+                    // numeric literals are handled in `parse_primary` (as a prefix on numbers),
+                    // while `-` in the general case is an infix operator.
+                    return matches!(token.text.as_str(), "(" | "[" | "{" | ".");
                 }
                 TokenKind::Newline => return false,
             }
@@ -2353,7 +2356,16 @@ impl Parser {
                     return true
                 }
                 TokenKind::Symbol => {
-                    return matches!(token.text.as_str(), "(" | "[" | "{" | "-" | "~")
+                    if matches!(token.text.as_str(), "(" | "[" | "{" | "~") {
+                        return true;
+                    }
+                    if token.text == "-" {
+                        return self
+                            .tokens
+                            .get(self.pos + 1)
+                            .is_some_and(|next| next.kind == TokenKind::Number);
+                    }
+                    return false;
                 }
                 TokenKind::Newline => return false,
             }
@@ -2362,12 +2374,37 @@ impl Parser {
     }
 
     fn parse_primary(&mut self) -> Option<Expr> {
-        if self.consume_symbol("-") {
+        if self.peek_symbol("-") {
+            let checkpoint = self.pos;
+            self.consume_symbol("-");
             let minus_span = self.previous_span();
+
+            // Negative numeric literal.
             if let Some(number) = self.consume_number() {
                 let (text, span) = self.consume_number_suffix(number, Some(minus_span));
                 return Some(Expr::Literal(Literal::Number { text, span }));
             }
+
+            // Unary negation: desugar as `0 - expr` at the surface layer so downstream stages
+            // only need to handle the binary operator.
+            let rhs = match self.parse_primary() {
+                Some(expr) => expr,
+                None => {
+                    self.pos = checkpoint;
+                    return None;
+                }
+            };
+            let zero = Expr::Literal(Literal::Number {
+                text: "0".to_string(),
+                span: minus_span.clone(),
+            });
+            let span = merge_span(minus_span, expr_span(&rhs));
+            return Some(Expr::Binary {
+                op: "-".to_string(),
+                left: Box::new(zero),
+                right: Box::new(rhs),
+                span,
+            });
         }
         if let Some(expr) = self.parse_structured_sigil() {
             return Some(expr);
@@ -4080,41 +4117,51 @@ impl Parser {
 
     fn try_parse_datetime(&mut self, head: Token) -> Option<Literal> {
         let checkpoint = self.pos;
-        if !self.consume_symbol("-") {
-            return None;
-        }
-        let month = self.consume_number()?;
-        self.expect_symbol("-", "expected '-' in datetime literal");
-        let day = self.consume_number()?;
-        let t_token = self.consume_ident()?;
-        if !t_token.name.starts_with('T') {
-            self.pos = checkpoint;
-            return None;
-        }
-        let hour_text = t_token.name.trim_start_matches('T');
-        let hour = if hour_text.is_empty() {
-            self.consume_number()?
-        } else {
-            Token {
-                kind: TokenKind::Number,
-                text: hour_text.to_string(),
-                span: t_token.span.clone(),
+        let result = (|| {
+            if !self.consume_symbol("-") {
+                return None;
             }
-        };
-        self.expect_symbol(":", "expected ':' in datetime literal");
-        let minute = self.consume_number()?;
-        self.expect_symbol(":", "expected ':' in datetime literal");
-        let second = self.consume_number()?;
-        if self.consume_ident_text("Z").is_none() {
+            let month = self.consume_number()?;
+            if !self.consume_symbol("-") {
+                return None;
+            }
+            let day = self.consume_number()?;
+            let t_token = self.consume_ident()?;
+            if !t_token.name.starts_with('T') {
+                return None;
+            }
+            let hour_text = t_token.name.trim_start_matches('T');
+            let hour = if hour_text.is_empty() {
+                self.consume_number()?
+            } else {
+                Token {
+                    kind: TokenKind::Number,
+                    text: hour_text.to_string(),
+                    span: t_token.span.clone(),
+                }
+            };
+            if !self.consume_symbol(":") {
+                return None;
+            }
+            let minute = self.consume_number()?;
+            if !self.consume_symbol(":") {
+                return None;
+            }
+            let second = self.consume_number()?;
+            self.consume_ident_text("Z")?;
+
+            let text = format!(
+                "{}-{}-{}T{}:{}:{}Z",
+                head.text, month.text, day.text, hour.text, minute.text, second.text
+            );
+            let span = merge_span(head.span.clone(), second.span.clone());
+            Some(Literal::DateTime { text, span })
+        })();
+
+        if result.is_none() {
             self.pos = checkpoint;
-            return None;
         }
-        let text = format!(
-            "{}-{}-{}T{}:{}:{}Z",
-            head.text, month.text, day.text, hour.text, minute.text, second.text
-        );
-        let span = merge_span(head.span.clone(), second.span.clone());
-        Some(Literal::DateTime { text, span })
+        result
     }
 
     fn parse_dotted_name(&mut self) -> Option<SpannedName> {
