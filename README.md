@@ -45,7 +45,7 @@ AIVI provides:
 
 ### Counter model with ADTs and patching
 
-```haskell
+```aivi
 module demo.counter
 export Model, Msg, init, update, view
 
@@ -60,13 +60,10 @@ update msg model =
   msg ?
   | Inc       => model <| { count: _ + model.step }
   | Dec       => model <| { count: _ - model.step }
-  | SetStep s => model <| { step: _ <- s }
+  | SetStep s => model <| { step: s }
 
-// Pipe composition with ligature-friendly operators
-renderCount = model =>
-  model.count
-    |> toText
-    |> "Count: _"
+renderCount : Model -> Text
+renderCount model = "Count: {model.count}"
 ```
 
 ### Domain-directed deltas (static operator rewrites)
