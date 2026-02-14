@@ -187,7 +187,7 @@
     {
       "name": "AIVI Sigil Literals",
       "scope": ["string.quoted.other.sigil.aivi"],
-      "settings": { "foreground": "#565656" }
+      "settings": { "foreground": "#CE9178" }
     },
     {
       "name": "AIVI Sigil Delimiters",
@@ -196,6 +196,11 @@
         "punctuation.section.embedded.begin.aivi",
         "punctuation.section.embedded.end.aivi"
       ],
+      "settings": { "foreground": "#565656" }
+    },
+    {
+      "name": "AIVI Sigil Quotes",
+      "scope": ["punctuation.definition.string.begin.aivi", "punctuation.definition.string.end.aivi"],
       "settings": { "foreground": "#565656" }
     },
     {
@@ -209,7 +214,7 @@
     {
       "name": "AIVI Sigil Tags",
       "scope": ["entity.name.function.sigil.aivi"],
-      "settings": { "foreground": "#DCDCAA" }
+      "settings": { "foreground": "#565656" }
     },
     {
       "name": "AIVI Numbers",
