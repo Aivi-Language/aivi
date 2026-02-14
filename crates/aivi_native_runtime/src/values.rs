@@ -1,9 +1,9 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering};
 use std::sync::{mpsc, Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use im::{HashMap as ImHashMap, HashSet as ImHashSet, Vector as ImVector};
 use num_bigint::BigInt;
@@ -251,8 +251,23 @@ impl PartialOrd for KeyValue {
     }
 }
 
-#[derive(Clone)]
-pub struct RuntimeContext {}
+pub struct RuntimeContext {
+    debug_call_id: AtomicU64,
+}
+
+impl Default for RuntimeContext {
+    fn default() -> Self {
+        Self {
+            debug_call_id: AtomicU64::new(1),
+        }
+    }
+}
+
+impl RuntimeContext {
+    pub fn next_debug_call_id(&self) -> u64 {
+        self.debug_call_id.fetch_add(1, AtomicOrdering::Relaxed)
+    }
+}
 
 pub struct CancelToken {
     local: AtomicBool,
@@ -297,15 +312,24 @@ pub struct Runtime {
     pub cancel: Arc<CancelToken>,
     cancel_mask: usize,
     rng_state: u64,
+    debug_stack: Vec<DebugFrame>,
+}
+
+#[derive(Clone)]
+struct DebugFrame {
+    fn_name: String,
+    call_id: u64,
+    start: Option<Instant>,
 }
 
 impl Runtime {
     pub fn new() -> Self {
         Self {
-            ctx: Arc::new(RuntimeContext {}),
+            ctx: Arc::new(RuntimeContext::default()),
             cancel: CancelToken::root(),
             cancel_mask: 0,
             rng_state: seed_rng_state(),
+            debug_stack: Vec::new(),
         }
     }
 
@@ -315,6 +339,7 @@ impl Runtime {
             cancel,
             cancel_mask: 0,
             rng_state: seed_rng_state(),
+            debug_stack: Vec::new(),
         }
     }
 
@@ -333,6 +358,177 @@ impl Runtime {
         let out = f(self);
         self.cancel_mask = self.cancel_mask.saturating_sub(1);
         out
+    }
+
+    pub fn debug_fn_enter(
+        &mut self,
+        fn_name: &str,
+        args: Option<Vec<Value>>,
+        log_time: bool,
+    ) {
+        let call_id = self.ctx.next_debug_call_id();
+        let start = log_time.then(Instant::now);
+        self.debug_stack.push(DebugFrame {
+            fn_name: fn_name.to_string(),
+            call_id,
+            start,
+        });
+
+        let ts = log_time.then(now_unix_ms);
+        let mut enter = serde_json::Map::new();
+        enter.insert(
+            "kind".to_string(),
+            serde_json::Value::String("fn.enter".to_string()),
+        );
+        enter.insert("fn".to_string(), serde_json::Value::String(fn_name.to_string()));
+        enter.insert(
+            "callId".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(call_id)),
+        );
+        if let Some(args) = args {
+            enter.insert(
+                "args".to_string(),
+                serde_json::Value::Array(args.iter().map(|v| debug_value_to_json(v, 0)).collect()),
+            );
+        }
+        if let Some(ts) = ts {
+            enter.insert(
+                "ts".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(ts)),
+            );
+        }
+        emit_debug_event(serde_json::Value::Object(enter));
+    }
+
+    pub fn debug_fn_exit(&mut self, result: &R, log_return: bool, log_time: bool) {
+        let Some(frame) = self.debug_stack.pop() else {
+            return;
+        };
+        let dur_ms = if log_time {
+            frame
+                .start
+                .map(|s| s.elapsed().as_millis() as u64)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+
+        let mut exit = serde_json::Map::new();
+        exit.insert(
+            "kind".to_string(),
+            serde_json::Value::String("fn.exit".to_string()),
+        );
+        exit.insert("fn".to_string(), serde_json::Value::String(frame.fn_name));
+        exit.insert(
+            "callId".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(frame.call_id)),
+        );
+        if log_return {
+            if let Ok(value) = result {
+                exit.insert("ret".to_string(), debug_value_to_json(value, 0));
+            }
+        }
+        if log_time {
+            exit.insert(
+                "durMs".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(dur_ms)),
+            );
+        }
+        emit_debug_event(serde_json::Value::Object(exit));
+    }
+
+    pub fn debug_pipe_in(
+        &self,
+        pipe_id: u32,
+        step: u32,
+        label: &str,
+        value: &Value,
+        log_time: bool,
+    ) {
+        let Some(frame) = self.debug_stack.last() else {
+            return;
+        };
+        let ts = log_time.then(now_unix_ms);
+        let mut event = serde_json::Map::new();
+        event.insert(
+            "kind".to_string(),
+            serde_json::Value::String("pipe.in".to_string()),
+        );
+        event.insert("fn".to_string(), serde_json::Value::String(frame.fn_name.clone()));
+        event.insert(
+            "callId".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(frame.call_id)),
+        );
+        event.insert(
+            "pipeId".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(pipe_id)),
+        );
+        event.insert(
+            "step".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(step)),
+        );
+        event.insert("label".to_string(), serde_json::Value::String(label.to_string()));
+        event.insert("value".to_string(), debug_value_to_json(value, 0));
+        if let Some(ts) = ts {
+            event.insert(
+                "ts".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(ts)),
+            );
+        }
+        emit_debug_event(serde_json::Value::Object(event));
+    }
+
+    pub fn debug_pipe_out(
+        &self,
+        pipe_id: u32,
+        step: u32,
+        label: &str,
+        value: &Value,
+        step_start: Option<Instant>,
+        log_time: bool,
+    ) {
+        let Some(frame) = self.debug_stack.last() else {
+            return;
+        };
+        let dur_ms = if log_time {
+            step_start
+                .map(|s| s.elapsed().as_millis() as u64)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        let shape = debug_shape_tag(value);
+
+        let mut event = serde_json::Map::new();
+        event.insert(
+            "kind".to_string(),
+            serde_json::Value::String("pipe.out".to_string()),
+        );
+        event.insert("fn".to_string(), serde_json::Value::String(frame.fn_name.clone()));
+        event.insert(
+            "callId".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(frame.call_id)),
+        );
+        event.insert(
+            "pipeId".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(pipe_id)),
+        );
+        event.insert(
+            "step".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(step)),
+        );
+        event.insert("label".to_string(), serde_json::Value::String(label.to_string()));
+        event.insert("value".to_string(), debug_value_to_json(value, 0));
+        if log_time {
+            event.insert(
+                "durMs".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(dur_ms)),
+            );
+        }
+        if let Some(shape) = shape {
+            event.insert("shape".to_string(), serde_json::Value::String(shape));
+        }
+        emit_debug_event(serde_json::Value::Object(event));
     }
 
     pub fn apply(&mut self, func: Value, arg: Value) -> R {
@@ -586,6 +782,238 @@ pub fn values_equal(left: &Value, right: &Value) -> bool {
         }
         _ => false,
     }
+}
+
+const DEBUG_MAX_CHARS: usize = 200;
+const DEBUG_MAX_DEPTH: usize = 3;
+const DEBUG_MAX_LIST_ITEMS: usize = 20;
+
+fn now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|dur| dur.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn emit_debug_event(event: serde_json::Value) {
+    if let Ok(line) = serde_json::to_string(&event) {
+        eprintln!("{line}");
+    }
+}
+
+fn debug_shape_tag(value: &Value) -> Option<String> {
+    match value {
+        Value::Constructor { name, args } if args.is_empty() => match name.as_str() {
+            "None" | "Some" | "Ok" | "Err" => Some(name.clone()),
+            _ => None,
+        },
+        Value::Constructor { name, args } if args.len() == 1 => match name.as_str() {
+            "Some" | "Ok" | "Err" => Some(name.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn debug_value_to_json(value: &Value, depth: usize) -> serde_json::Value {
+    if let Value::Constructor { name, args } = value {
+        if name == "Sensitive" && args.len() == 1 {
+            return serde_json::Value::String("<redacted>".to_string());
+        }
+    }
+
+    if depth >= DEBUG_MAX_DEPTH {
+        return debug_summary_json(value);
+    }
+
+    match value {
+        Value::Unit => serde_json::Value::String("Unit".to_string()),
+        Value::Bool(v) => serde_json::Value::String(v.to_string()),
+        Value::Int(v) => serde_json::Value::String(v.to_string()),
+        Value::Float(v) => serde_json::Value::String(v.to_string()),
+        Value::Text(t) => serde_json::Value::String(truncate_debug_text(t)),
+        Value::DateTime(t) => serde_json::Value::String(truncate_debug_text(t)),
+        Value::Bytes(bytes) => serde_json::Value::String(format!("<bytes:{}>", bytes.len())),
+        Value::Regex(regex) => serde_json::Value::String(format!("<regex:{}>", regex.as_str())),
+        Value::BigInt(v) => serde_json::Value::String(v.to_string()),
+        Value::Rational(v) => serde_json::Value::String(v.to_string()),
+        Value::Decimal(v) => serde_json::Value::String(v.to_string()),
+        Value::Map(entries) => serde_json::Value::Object(
+            [
+                (
+                    "type".to_string(),
+                    serde_json::Value::String("Map".to_string()),
+                ),
+                (
+                    "summary".to_string(),
+                    serde_json::Value::String("<opaque>".to_string()),
+                ),
+                (
+                    "size".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(entries.len())),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        Value::Set(entries) => serde_json::Value::Object(
+            [
+                (
+                    "type".to_string(),
+                    serde_json::Value::String("Set".to_string()),
+                ),
+                (
+                    "summary".to_string(),
+                    serde_json::Value::String("<opaque>".to_string()),
+                ),
+                (
+                    "size".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(entries.len())),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        Value::Queue(items) => serde_json::Value::String(format!("<queue:{}>", items.len())),
+        Value::Deque(items) => serde_json::Value::String(format!("<deque:{}>", items.len())),
+        Value::Heap(items) => serde_json::Value::String(format!("<heap:{}>", items.len())),
+        Value::List(items) => {
+            let mut parts = Vec::new();
+            for item in items.iter().take(DEBUG_MAX_LIST_ITEMS) {
+                parts.push(debug_value_to_json(item, depth + 1));
+            }
+            let mut out = serde_json::Map::new();
+            out.insert("type".to_string(), serde_json::Value::String("List".to_string()));
+            out.insert(
+                "size".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(items.len())),
+            );
+            out.insert("summary".to_string(), serde_json::Value::Array(parts));
+            serde_json::Value::Object(out)
+        }
+        Value::Tuple(items) => {
+            let mut parts = Vec::new();
+            for item in items.iter().take(DEBUG_MAX_LIST_ITEMS) {
+                parts.push(debug_value_to_json(item, depth + 1));
+            }
+            let mut out = serde_json::Map::new();
+            out.insert("type".to_string(), serde_json::Value::String("Tuple".to_string()));
+            out.insert(
+                "size".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(items.len())),
+            );
+            out.insert("summary".to_string(), serde_json::Value::Array(parts));
+            serde_json::Value::Object(out)
+        }
+        Value::Record(fields) => {
+            let mut keys: Vec<&String> = fields.keys().collect();
+            keys.sort();
+            let mut out_fields = serde_json::Map::new();
+            for key in keys.into_iter().take(DEBUG_MAX_LIST_ITEMS) {
+                if let Some(val) = fields.get(key) {
+                    out_fields.insert(key.clone(), debug_value_to_json(val, depth + 1));
+                }
+            }
+            let mut out = serde_json::Map::new();
+            out.insert(
+                "type".to_string(),
+                serde_json::Value::String("Record".to_string()),
+            );
+            out.insert(
+                "size".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(fields.len())),
+            );
+            out.insert("summary".to_string(), serde_json::Value::Object(out_fields));
+            serde_json::Value::Object(out)
+        }
+        Value::Constructor { name, args } => {
+            if args.is_empty() {
+                serde_json::Value::String(name.clone())
+            } else {
+                let mut out = serde_json::Map::new();
+                out.insert("type".to_string(), serde_json::Value::String(name.clone()));
+                out.insert(
+                    "size".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(args.len())),
+                );
+                out.insert(
+                    "summary".to_string(),
+                    serde_json::Value::Array(
+                        args.iter()
+                            .take(DEBUG_MAX_LIST_ITEMS)
+                            .map(|arg| debug_value_to_json(arg, depth + 1))
+                            .collect(),
+                    ),
+                );
+                serde_json::Value::Object(out)
+            }
+        }
+        _ => debug_summary_json(value),
+    }
+}
+
+fn truncate_debug_text(text: &str) -> String {
+    let mut out = String::new();
+    for ch in text.chars().take(DEBUG_MAX_CHARS) {
+        out.push(ch);
+    }
+    if text.chars().count() > DEBUG_MAX_CHARS {
+        out.push_str("...");
+    }
+    out
+}
+
+fn debug_summary_json(value: &Value) -> serde_json::Value {
+    let (ty, size) = match value {
+        Value::Unit => ("Unit", None),
+        Value::Bool(_) => ("Bool", None),
+        Value::Int(_) => ("Int", None),
+        Value::Float(_) => ("Float", None),
+        Value::Text(_) => ("Text", None),
+        Value::DateTime(_) => ("DateTime", None),
+        Value::Bytes(bytes) => ("Bytes", Some(bytes.len())),
+        Value::Regex(_) => ("Regex", None),
+        Value::BigInt(_) => ("BigInt", None),
+        Value::Rational(_) => ("Rational", None),
+        Value::Decimal(_) => ("Decimal", None),
+        Value::Map(entries) => ("Map", Some(entries.len())),
+        Value::Set(entries) => ("Set", Some(entries.len())),
+        Value::Queue(items) => ("Queue", Some(items.len())),
+        Value::Deque(items) => ("Deque", Some(items.len())),
+        Value::Heap(items) => ("Heap", Some(items.len())),
+        Value::List(items) => ("List", Some(items.len())),
+        Value::Tuple(items) => ("Tuple", Some(items.len())),
+        Value::Record(fields) => ("Record", Some(fields.len())),
+        Value::Constructor { name, args } => (name.as_str(), Some(args.len())),
+        Value::Closure(_) => ("Closure", None),
+        Value::Builtin(_) => ("Builtin", None),
+        Value::Effect(_) => ("Effect", None),
+        Value::Resource(_) => ("Resource", None),
+        Value::Thunk(_) => ("Thunk", None),
+        Value::MultiClause(_) => ("MultiClause", None),
+        Value::ChannelSend(_) => ("Send", None),
+        Value::ChannelRecv(_) => ("Recv", None),
+        Value::FileHandle(_) => ("File", None),
+        Value::Listener(_) => ("Listener", None),
+        Value::Connection(_) => ("Connection", None),
+        Value::Stream(_) => ("Stream", None),
+        Value::HttpServer(_) => ("HttpServer", None),
+        Value::WebSocket(_) => ("WebSocket", None),
+    };
+
+    let mut out = serde_json::Map::new();
+    out.insert("type".to_string(), serde_json::Value::String(ty.to_string()));
+    out.insert(
+        "summary".to_string(),
+        serde_json::Value::String("<opaque>".to_string()),
+    );
+    if let Some(size) = size {
+        out.insert(
+            "size".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(size)),
+        );
+    }
+    serde_json::Value::Object(out)
 }
 
 pub fn format_value(value: &Value) -> String {

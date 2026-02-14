@@ -79,6 +79,24 @@ pub enum KernelExpr {
         func: Box<KernelExpr>,
         args: Vec<KernelExpr>,
     },
+    DebugFn {
+        id: u32,
+        fn_name: String,
+        arg_vars: Vec<String>,
+        log_args: bool,
+        log_return: bool,
+        log_time: bool,
+        body: Box<KernelExpr>,
+    },
+    Pipe {
+        id: u32,
+        pipe_id: u32,
+        step: u32,
+        label: String,
+        log_time: bool,
+        func: Box<KernelExpr>,
+        arg: Box<KernelExpr>,
+    },
     List {
         id: u32,
         items: Vec<KernelListItem>,
@@ -268,13 +286,21 @@ pub fn lower_hir(program: HirProgram) -> KernelProgram {
 }
 
 fn lower_module(module: HirModule, id_gen: &mut IdGen) -> KernelModule {
+    let module_name = module.name.clone();
+    let mut defs = Vec::with_capacity(module.defs.len() * 2);
+    for def in module.defs {
+        let base = lower_def(def.clone(), id_gen);
+        defs.push(base);
+
+        // Emit an additional qualified alias so `some.module.name` can be referenced without
+        // colliding with builtins or other unqualified imports.
+        let mut qualified = lower_def(def, id_gen);
+        qualified.name = format!("{module_name}.{}", qualified.name);
+        defs.push(qualified);
+    }
     KernelModule {
         name: module.name,
-        defs: module
-            .defs
-            .into_iter()
-            .map(|d| lower_def(d, id_gen))
-            .collect(),
+        defs,
     }
 }
 
@@ -330,6 +356,40 @@ fn lower_expr(expr: HirExpr, id_gen: &mut IdGen) -> KernelExpr {
             id,
             func: Box::new(lower_expr(*func, id_gen)),
             args: args.into_iter().map(|a| lower_expr(a, id_gen)).collect(),
+        },
+        HirExpr::DebugFn {
+            id,
+            fn_name,
+            arg_vars,
+            log_args,
+            log_return,
+            log_time,
+            body,
+        } => KernelExpr::DebugFn {
+            id,
+            fn_name,
+            arg_vars,
+            log_args,
+            log_return,
+            log_time,
+            body: Box::new(lower_expr(*body, id_gen)),
+        },
+        HirExpr::Pipe {
+            id,
+            pipe_id,
+            step,
+            label,
+            log_time,
+            func,
+            arg,
+        } => KernelExpr::Pipe {
+            id,
+            pipe_id,
+            step,
+            label,
+            log_time,
+            func: Box::new(lower_expr(*func, id_gen)),
+            arg: Box::new(lower_expr(*arg, id_gen)),
         },
         HirExpr::List { id, items } => KernelExpr::List {
             id,
@@ -883,6 +943,21 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
             for arg in args {
                 find_max_id_expr(arg, max);
             }
+        }
+        HirExpr::DebugFn { id, body, .. } => {
+            if *id > *max {
+                *max = *id;
+            }
+            find_max_id_expr(body, max);
+        }
+        HirExpr::Pipe {
+            id, func, arg, ..
+        } => {
+            if *id > *max {
+                *max = *id;
+            }
+            find_max_id_expr(func, max);
+            find_max_id_expr(arg, max);
         }
         HirExpr::List { id, items } => {
             if *id > *max {

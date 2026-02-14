@@ -76,6 +76,8 @@ fn run() -> Result<(), AiviError> {
             Ok(())
         }
         "check" => {
+            let (debug_trace, rest) = consume_debug_trace_flag(&rest);
+            maybe_enable_debug_trace(debug_trace);
             let Some(target) = rest.first() else {
                 print_help();
                 return Ok(());
@@ -110,6 +112,8 @@ fn run() -> Result<(), AiviError> {
             Ok(())
         }
         "desugar" => {
+            let (debug_trace, rest) = consume_debug_trace_flag(&rest);
+            maybe_enable_debug_trace(debug_trace);
             let Some(target) = rest.first() else {
                 print_help();
                 return Ok(());
@@ -132,6 +136,8 @@ fn run() -> Result<(), AiviError> {
             Ok(())
         }
         "kernel" => {
+            let (debug_trace, rest) = consume_debug_trace_flag(&rest);
+            maybe_enable_debug_trace(debug_trace);
             let Some(target) = rest.first() else {
                 print_help();
                 return Ok(());
@@ -143,6 +149,8 @@ fn run() -> Result<(), AiviError> {
             Ok(())
         }
         "rust-ir" => {
+            let (debug_trace, rest) = consume_debug_trace_flag(&rest);
+            maybe_enable_debug_trace(debug_trace);
             let Some(target) = rest.first() else {
                 print_help();
                 return Ok(());
@@ -171,6 +179,7 @@ fn run() -> Result<(), AiviError> {
                         print_help();
                         return Ok(());
                     };
+                    maybe_enable_debug_trace(opts.debug_trace);
                     if opts.target != "rust"
                         && opts.target != "rust-native"
                         && opts.target != "rustc"
@@ -207,6 +216,7 @@ fn run() -> Result<(), AiviError> {
                         print_help();
                         return Ok(());
                     };
+                    maybe_enable_debug_trace(opts.debug_trace);
                     if opts.target != "native" {
                         return Err(AiviError::InvalidCommand(format!(
                             "unsupported target {}",
@@ -293,7 +303,7 @@ Fix:\n\
 
 fn print_help() {
     println!(
-        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check <path|dir/...>\n  fmt <path>\n  desugar <path|dir/...>\n  kernel <path|dir/...>\n  rust-ir <path|dir/...>\n  lsp\n  build <path|dir/...> [--target rust|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
+        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] <path|dir/...>\n  fmt <path>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--target rust|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--debug-trace] [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
     );
 }
 
@@ -433,6 +443,7 @@ struct BuildArgs {
     output: Option<PathBuf>,
     target: String,
     forward: Vec<String>,
+    debug_trace: bool,
 }
 
 fn parse_build_args(
@@ -444,6 +455,7 @@ fn parse_build_args(
     let mut output = None;
     let mut target = default_target.to_string();
     let mut forward = Vec::new();
+    let mut debug_trace = false;
 
     while let Some(arg) = args.next() {
         if arg == "--" {
@@ -451,6 +463,9 @@ fn parse_build_args(
             break;
         }
         match arg.as_str() {
+            "--debug-trace" => {
+                debug_trace = true;
+            }
             "--target" => {
                 let Some(value) = args.next() else {
                     return Err(AiviError::InvalidCommand(
@@ -490,7 +505,27 @@ fn parse_build_args(
         output,
         target,
         forward,
+        debug_trace,
     }))
+}
+
+fn maybe_enable_debug_trace(enabled: bool) {
+    if enabled {
+        std::env::set_var("AIVI_DEBUG_TRACE", "1");
+    }
+}
+
+fn consume_debug_trace_flag(args: &[String]) -> (bool, Vec<String>) {
+    let mut enabled = false;
+    let mut out = Vec::new();
+    for arg in args {
+        if arg == "--debug-trace" {
+            enabled = true;
+        } else {
+            out.push(arg.clone());
+        }
+    }
+    (enabled, out)
 }
 
 struct Spinner {

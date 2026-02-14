@@ -24,8 +24,8 @@ main = effect {
   table1 <- db.applyDelta userTable (db.ins { id: 1, name: "Ada", active: False })
   table2 <- db.applyDelta table1 (db.ins { id: 2, name: "Lin", active: True })
   table3 = table2
- 
+
   rows <- db.load table3
- 
+
   _ <- print "users updated env={envValue} rows={rows}\n"
 }

@@ -605,6 +605,7 @@ fn check_def(
     module: &Module,
     allow_unknown: bool,
 ) {
+    check_debug_decorators(def, diagnostics, module);
     let mut local_scope = scope.clone();
     collect_pattern_bindings(&def.params, &mut local_scope);
     check_expr(
@@ -614,6 +615,115 @@ fn check_def(
         module,
         allow_unknown,
     );
+}
+
+fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, module: &Module) {
+    fn expr_span(expr: &Expr) -> crate::diagnostics::Span {
+        match expr {
+            Expr::Ident(name) => name.span.clone(),
+            Expr::Literal(literal) => match literal {
+                Literal::Number { span, .. }
+                | Literal::String { span, .. }
+                | Literal::Sigil { span, .. }
+                | Literal::Bool { span, .. }
+                | Literal::DateTime { span, .. } => span.clone(),
+            },
+            Expr::TextInterpolate { span, .. }
+            | Expr::List { span, .. }
+            | Expr::Tuple { span, .. }
+            | Expr::Record { span, .. }
+            | Expr::PatchLit { span, .. }
+            | Expr::FieldAccess { span, .. }
+            | Expr::FieldSection { span, .. }
+            | Expr::Index { span, .. }
+            | Expr::Call { span, .. }
+            | Expr::Lambda { span, .. }
+            | Expr::Match { span, .. }
+            | Expr::If { span, .. }
+            | Expr::Binary { span, .. }
+            | Expr::Block { span, .. }
+            | Expr::Raw { span, .. } => span.clone(),
+        }
+    }
+
+    let allowed = ["pipes", "args", "return", "time"];
+    let has_debug = def.decorators.iter().any(|d| d.name.name == "debug");
+    if !has_debug {
+        return;
+    }
+    if def.params.is_empty() {
+        diagnostics.push(file_diag(
+            module,
+            Diagnostic {
+                code: "E2010".to_string(),
+                severity: DiagnosticSeverity::Error,
+                message: "`@debug` can only be applied to function definitions".to_string(),
+                span: def.name.span.clone(),
+                labels: Vec::new(),
+            },
+        ));
+    }
+
+    for decorator in def.decorators.iter().filter(|d| d.name.name == "debug") {
+        let mut params: Vec<crate::surface::SpannedName> = Vec::new();
+        match &decorator.arg {
+            None => {}
+            Some(Expr::Tuple { items, .. }) => {
+                for item in items {
+                    match item {
+                        Expr::Ident(name) => params.push(name.clone()),
+                        other => {
+                            diagnostics.push(file_diag(
+                                module,
+                                Diagnostic {
+                                    code: "E2011".to_string(),
+                                    severity: DiagnosticSeverity::Error,
+                                    message:
+                                        "`@debug` expects a list of parameter names (e.g. `@debug(pipes, args, return, time)`)".to_string(),
+                                    span: expr_span(other),
+                                    labels: Vec::new(),
+                                },
+                            ));
+                        }
+                    }
+                }
+            }
+            Some(Expr::Ident(name)) => params.push(name.clone()),
+            Some(other) => {
+                diagnostics.push(file_diag(
+                    module,
+                    Diagnostic {
+                        code: "E2011".to_string(),
+                        severity: DiagnosticSeverity::Error,
+                        message:
+                            "`@debug` expects `@debug(pipes, args, return, time)` (or `@debug()`)"
+                                .to_string(),
+                        span: expr_span(other),
+                        labels: Vec::new(),
+                    },
+                ));
+                continue;
+            }
+        }
+
+        for param in params {
+            if !allowed.contains(&param.name.as_str()) {
+                diagnostics.push(file_diag(
+                    module,
+                    Diagnostic {
+                        code: "E2012".to_string(),
+                        severity: DiagnosticSeverity::Error,
+                        message: format!(
+                            "unknown `@debug` parameter `{}` (expected: pipes, args, return, time)",
+                            param.name
+                        ),
+                        span: param.span,
+                        labels: Vec::new(),
+                    },
+                ));
+            }
+        }
+    }
 }
 
 fn check_expr(
@@ -960,5 +1070,46 @@ fn file_diag(module: &Module, diagnostic: Diagnostic) -> FileDiagnostic {
     FileDiagnostic {
         path: module.path.clone(),
         diagnostic,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_unknown_param_is_error() {
+        let source = r#"
+module test.debug_params
+
+@debug(pipes, nope, time)
+f x = x
+"#;
+        let (modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let diags = check_modules(&modules);
+        assert!(
+            diags.iter().any(|d| d.diagnostic.code == "E2012"),
+            "expected E2012, got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn debug_requires_function_binding() {
+        let source = r#"
+module test.debug_params
+
+@debug()
+x = 1
+"#;
+        let (modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let diags = check_modules(&modules);
+        assert!(
+            diags.iter().any(|d| d.diagnostic.code == "E2010"),
+            "expected E2010, got: {diags:?}"
+        );
     }
 }

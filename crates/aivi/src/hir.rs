@@ -3,6 +3,18 @@ use serde::{Deserialize, Serialize};
 use crate::surface::{
     BlockItem, BlockKind, Decorator, Def, DomainItem, Expr, Module, ModuleItem, Pattern, TextPart,
 };
+use std::cell::Cell;
+
+thread_local! {
+    static DEBUG_TRACE_OVERRIDE: Cell<Option<bool>> = const { Cell::new(None) };
+}
+
+fn debug_trace_enabled() -> bool {
+    DEBUG_TRACE_OVERRIDE.with(|cell| {
+        cell.get()
+            .unwrap_or_else(|| std::env::var("AIVI_DEBUG_TRACE").is_ok_and(|v| v == "1"))
+    })
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HirProgram {
@@ -77,6 +89,24 @@ pub enum HirExpr {
         id: u32,
         func: Box<HirExpr>,
         args: Vec<HirExpr>,
+    },
+    DebugFn {
+        id: u32,
+        fn_name: String,
+        arg_vars: Vec<String>,
+        log_args: bool,
+        log_return: bool,
+        log_time: bool,
+        body: Box<HirExpr>,
+    },
+    Pipe {
+        id: u32,
+        pipe_id: u32,
+        step: u32,
+        label: String,
+        log_time: bool,
+        func: Box<HirExpr>,
+        arg: Box<HirExpr>,
     },
     List {
         id: u32,
@@ -231,6 +261,7 @@ pub enum HirBlockItem {
 
 pub fn desugar_modules(modules: &[Module]) -> HirProgram {
     let trace = std::env::var("AIVI_TRACE_DESUGAR").is_ok_and(|v| v == "1");
+    let debug_trace = debug_trace_enabled();
     let mut id_gen = IdGen::default();
     let mut hir_modules = Vec::new();
     for (module_index, module) in modules.iter().enumerate() {
@@ -242,16 +273,34 @@ pub fn desugar_modules(modules: &[Module]) -> HirProgram {
                 module.name.name
             );
         }
-        let defs = collect_defs(module)
+        let module_source = if debug_trace && !module.path.starts_with("<embedded:") {
+            std::fs::read_to_string(&module.path).ok()
+        } else {
+            None
+        };
+        let defs = collect_surface_defs(module)
             .into_iter()
-            .map(|(name, inline, expr)| {
+            .map(|def| {
+                let name = def.name.name.clone();
+                let inline = has_decorator(&def.decorators, "inline");
+                let debug_params = if debug_trace {
+                    parse_debug_params(&def.decorators)
+                } else {
+                    None
+                };
                 if trace {
                     eprintln!("[AIVI_TRACE_DESUGAR]   def {}.{}", module.name.name, name);
                 }
                 HirDef {
                     name,
                     inline,
-                    expr: lower_expr(expr, &mut id_gen),
+                    expr: lower_def_expr(
+                        module,
+                        def,
+                        debug_params,
+                        module_source.as_deref(),
+                        &mut id_gen,
+                    ),
                 }
             })
             .collect();
@@ -265,64 +314,154 @@ pub fn desugar_modules(modules: &[Module]) -> HirProgram {
     }
 }
 
-fn collect_defs(module: &Module) -> Vec<(String, bool, Expr)> {
-    fn has_decorator(decorators: &[Decorator], name: &str) -> bool {
-        decorators
-            .iter()
-            .any(|decorator| decorator.name.name == name)
-    }
+fn has_decorator(decorators: &[Decorator], name: &str) -> bool {
+    decorators
+        .iter()
+        .any(|decorator| decorator.name.name == name)
+}
 
+fn collect_surface_defs(module: &Module) -> Vec<Def> {
     let mut defs = Vec::new();
     for item in &module.items {
         match item {
-            ModuleItem::Def(def) => defs.push((
-                def.name.name.clone(),
-                has_decorator(&def.decorators, "inline"),
-                def_expr(def),
-            )),
-            ModuleItem::InstanceDecl(instance) => {
-                for def in &instance.defs {
-                    defs.push((
-                        def.name.name.clone(),
-                        has_decorator(&def.decorators, "inline"),
-                        def_expr(def),
-                    ));
-                }
-            }
+            ModuleItem::Def(def) => defs.push(def.clone()),
+            ModuleItem::InstanceDecl(instance) => defs.extend(instance.defs.clone()),
             ModuleItem::DomainDecl(domain) => {
                 for domain_item in &domain.items {
                     match domain_item {
                         DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                            defs.push((
-                                def.name.name.clone(),
-                                has_decorator(&def.decorators, "inline"),
-                                def_expr(def),
-                            ));
+                            defs.push(def.clone());
                         }
                         DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                     }
                 }
             }
-            ModuleItem::TypeAlias(_) => {}
             _ => {}
         }
     }
     defs
 }
 
-fn def_expr(def: &Def) -> Expr {
-    if def.params.is_empty() {
-        def.expr.clone()
-    } else {
-        Expr::Lambda {
-            params: def.params.clone(),
-            body: Box::new(def.expr.clone()),
-            span: def.span.clone(),
+#[derive(Debug, Clone, Copy)]
+struct DebugParams {
+    pipes: bool,
+    args: bool,
+    ret: bool,
+    time: bool,
+}
+
+fn parse_debug_params(decorators: &[Decorator]) -> Option<DebugParams> {
+    let decorator = decorators.iter().find(|d| d.name.name == "debug")?;
+    let mut names: Vec<&str> = Vec::new();
+    match &decorator.arg {
+        None => {}
+        Some(Expr::Tuple { items, .. }) => {
+            for item in items {
+                if let Expr::Ident(name) = item {
+                    names.push(name.name.as_str());
+                }
+            }
         }
+        Some(Expr::Ident(name)) => names.push(name.name.as_str()),
+        Some(_) => {}
+    }
+
+    if names.is_empty() {
+        // `@debug()` / `@debug` defaults to function-level timing only.
+        return Some(DebugParams {
+            pipes: false,
+            args: false,
+            ret: false,
+            time: true,
+        });
+    }
+
+    Some(DebugParams {
+        pipes: names.iter().any(|n| *n == "pipes"),
+        args: names.iter().any(|n| *n == "args"),
+        ret: names.iter().any(|n| *n == "return"),
+        time: names.iter().any(|n| *n == "time"),
+    })
+}
+
+struct LowerCtx<'a> {
+    debug: Option<LowerDebug<'a>>,
+}
+
+struct LowerDebug<'a> {
+    fn_name: String,
+    params: DebugParams,
+    source: Option<&'a str>,
+    next_pipe_id: u32,
+}
+
+impl LowerDebug<'_> {
+    fn alloc_pipe_id(&mut self) -> u32 {
+        let id = self.next_pipe_id;
+        self.next_pipe_id = self.next_pipe_id.saturating_add(1);
+        id
+    }
+}
+
+fn debug_arg_vars(params: &[Pattern]) -> Vec<String> {
+    let len = params.len();
+    params
+        .iter()
+        .enumerate()
+        .map(|(i, param)| match param {
+            Pattern::Ident(name) => name.name.clone(),
+            _ => format!("_arg{}", len.saturating_sub(1).saturating_sub(i)),
+        })
+        .collect()
+}
+
+fn lower_def_expr(
+    module: &Module,
+    def: Def,
+    debug_params: Option<DebugParams>,
+    module_source: Option<&str>,
+    id_gen: &mut IdGen,
+) -> HirExpr {
+    let fn_name = format!("{}.{}", module.name.name, def.name.name);
+    let debug_params = debug_params.filter(|_| !def.params.is_empty());
+
+    let mut ctx = LowerCtx {
+        debug: debug_params.map(|params| LowerDebug {
+            fn_name: fn_name.clone(),
+            params,
+            source: module_source,
+            next_pipe_id: 1,
+        }),
+    };
+
+    let body_hir = lower_expr_ctx(def.expr, id_gen, &mut ctx, false);
+    let body_hir = if let Some(debug) = &ctx.debug {
+        HirExpr::DebugFn {
+            id: id_gen.next(),
+            fn_name: debug.fn_name.clone(),
+            arg_vars: debug_arg_vars(&def.params),
+            log_args: debug.params.args,
+            log_return: debug.params.ret,
+            log_time: debug.params.time,
+            body: Box::new(body_hir),
+        }
+    } else {
+        body_hir
+    };
+
+    if def.params.is_empty() {
+        body_hir
+    } else {
+        lower_lambda_hir(def.params, body_hir, id_gen)
     }
 }
 
 fn lower_expr(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
+    let mut ctx = LowerCtx { debug: None };
+    lower_expr_ctx(expr, id_gen, &mut ctx, false)
+}
+
+fn lower_expr_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, in_pipe_left: bool) -> HirExpr {
     // Effect-block surface sugars (pure `=` bindings and `if ... else Unit` in statement position).
     let expr = crate::surface::desugar_effect_sugars(expr);
 
@@ -348,16 +487,16 @@ fn lower_expr(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
     } = &expr
     {
         if op == "<|" && matches!(**right, Expr::Record { .. }) && !contains_placeholder(left) {
-            return lower_expr_inner(expr, id_gen);
+            return lower_expr_inner_ctx(expr, id_gen, ctx, in_pipe_left);
         }
     }
     if matches!(&expr, Expr::PatchLit { .. }) {
-        return lower_expr_inner(expr, id_gen);
+        return lower_expr_inner_ctx(expr, id_gen, ctx, in_pipe_left);
     }
-    lower_expr_inner(expr, id_gen)
+    lower_expr_inner_ctx(expr, id_gen, ctx, in_pipe_left)
 }
 
-fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
+fn lower_expr_inner_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, in_pipe_left: bool) -> HirExpr {
     match expr {
         Expr::Ident(name) => HirExpr::Var {
             id: id_gen.next(),
@@ -370,7 +509,7 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                 .map(|part| match part {
                     TextPart::Text { text, .. } => HirTextPart::Text { text },
                     TextPart::Expr { expr, .. } => HirTextPart::Expr {
-                        expr: lower_expr(*expr, id_gen),
+                        expr: lower_expr_ctx(*expr, id_gen, ctx, false),
                     },
                 })
                 .collect(),
@@ -463,7 +602,7 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
             items: items
                 .into_iter()
                 .map(|item| HirListItem {
-                    expr: lower_expr(item.expr, id_gen),
+                    expr: lower_expr_ctx(item.expr, id_gen, ctx, false),
                     spread: item.spread,
                 })
                 .collect(),
@@ -472,7 +611,7 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
             id: id_gen.next(),
             items: items
                 .into_iter()
-                .map(|item| lower_expr(item, id_gen))
+                .map(|item| lower_expr_ctx(item, id_gen, ctx, false))
                 .collect(),
         },
         Expr::Record { fields, .. } => HirExpr::Record {
@@ -489,12 +628,12 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                                 HirPathSegment::Field(name.name)
                             }
                             crate::surface::PathSegment::Index(expr, _) => {
-                                HirPathSegment::Index(lower_expr(expr, id_gen))
+                                HirPathSegment::Index(lower_expr_ctx(expr, id_gen, ctx, false))
                             }
                             crate::surface::PathSegment::All(_) => HirPathSegment::All,
                         })
                         .collect(),
-                    value: lower_expr(field.value, id_gen),
+                    value: lower_expr_ctx(field.value, id_gen, ctx, false),
                 })
                 .collect(),
         },
@@ -519,12 +658,12 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                                     HirPathSegment::Field(name.name)
                                 }
                                 crate::surface::PathSegment::Index(expr, _) => {
-                                    HirPathSegment::Index(lower_expr(expr, id_gen))
+                                    HirPathSegment::Index(lower_expr_ctx(expr, id_gen, ctx, false))
                                 }
                                 crate::surface::PathSegment::All(_) => HirPathSegment::All,
                             })
                             .collect(),
-                        value: lower_expr(field.value, id_gen),
+                        value: lower_expr_ctx(field.value, id_gen, ctx, false),
                     })
                     .collect(),
             };
@@ -536,7 +675,7 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
         }
         Expr::FieldAccess { base, field, .. } => HirExpr::FieldAccess {
             id: id_gen.next(),
-            base: Box::new(lower_expr(*base, id_gen)),
+            base: Box::new(lower_expr_ctx(*base, id_gen, ctx, false)),
             field: field.name,
         },
         Expr::FieldSection { field, .. } => {
@@ -558,23 +697,26 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
         }
         Expr::Index { base, index, .. } => HirExpr::Index {
             id: id_gen.next(),
-            base: Box::new(lower_expr(*base, id_gen)),
-            index: Box::new(lower_expr(*index, id_gen)),
+            base: Box::new(lower_expr_ctx(*base, id_gen, ctx, false)),
+            index: Box::new(lower_expr_ctx(*index, id_gen, ctx, false)),
         },
         Expr::Call { func, args, .. } => HirExpr::Call {
             id: id_gen.next(),
-            func: Box::new(lower_expr(*func, id_gen)),
+            func: Box::new(lower_expr_ctx(*func, id_gen, ctx, false)),
             args: args
                 .into_iter()
-                .map(|arg| lower_expr(arg, id_gen))
+                .map(|arg| lower_expr_ctx(arg, id_gen, ctx, false))
                 .collect(),
         },
-        Expr::Lambda { params, body, .. } => lower_lambda(params, *body, id_gen),
+        Expr::Lambda { params, body, .. } => {
+            let body = lower_expr_ctx(*body, id_gen, ctx, false);
+            lower_lambda_hir(params, body, id_gen)
+        }
         Expr::Match {
             scrutinee, arms, ..
         } => {
             let scrutinee = if let Some(scrutinee) = scrutinee {
-                lower_expr(*scrutinee, id_gen)
+                lower_expr_ctx(*scrutinee, id_gen, ctx, false)
             } else {
                 let param = "_arg0".to_string();
                 let var = HirExpr::Var {
@@ -588,8 +730,10 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                         .into_iter()
                         .map(|arm| HirMatchArm {
                             pattern: lower_pattern(arm.pattern, id_gen),
-                            guard: arm.guard.map(|guard| lower_expr(guard, id_gen)),
-                            body: lower_expr(arm.body, id_gen),
+                            guard: arm
+                                .guard
+                                .map(|guard| lower_expr_ctx(guard, id_gen, ctx, false)),
+                            body: lower_expr_ctx(arm.body, id_gen, ctx, false),
                         })
                         .collect(),
                 };
@@ -606,8 +750,10 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                     .into_iter()
                     .map(|arm| HirMatchArm {
                         pattern: lower_pattern(arm.pattern, id_gen),
-                        guard: arm.guard.map(|guard| lower_expr(guard, id_gen)),
-                        body: lower_expr(arm.body, id_gen),
+                        guard: arm
+                            .guard
+                            .map(|guard| lower_expr_ctx(guard, id_gen, ctx, false)),
+                        body: lower_expr_ctx(arm.body, id_gen, ctx, false),
                     })
                     .collect(),
             }
@@ -619,16 +765,20 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
             ..
         } => HirExpr::If {
             id: id_gen.next(),
-            cond: Box::new(lower_expr(*cond, id_gen)),
-            then_branch: Box::new(lower_expr(*then_branch, id_gen)),
-            else_branch: Box::new(lower_expr(*else_branch, id_gen)),
+            cond: Box::new(lower_expr_ctx(*cond, id_gen, ctx, false)),
+            then_branch: Box::new(lower_expr_ctx(*then_branch, id_gen, ctx, false)),
+            else_branch: Box::new(lower_expr_ctx(*else_branch, id_gen, ctx, false)),
         },
         Expr::Binary {
             op, left, right, ..
         } => {
             if op == "|>" {
-                let left = lower_expr(*left, id_gen);
-                let right = lower_expr(*right, id_gen);
+                let debug_pipes = ctx.debug.as_ref().is_some_and(|d| d.params.pipes);
+                if debug_pipes && !in_pipe_left {
+                    return lower_pipe_chain(*left, *right, id_gen, ctx);
+                }
+                let left = lower_expr_ctx(*left, id_gen, ctx, true);
+                let right = lower_expr_ctx(*right, id_gen, ctx, false);
                 return HirExpr::App {
                     id: id_gen.next(),
                     func: Box::new(right),
@@ -639,7 +789,7 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                 if let Expr::Record { fields, .. } = *right.clone() {
                     return HirExpr::Patch {
                         id: id_gen.next(),
-                        target: Box::new(lower_expr(*left, id_gen)),
+                        target: Box::new(lower_expr_ctx(*left, id_gen, ctx, false)),
                         fields: fields
                             .into_iter()
                             .map(|field| HirRecordField {
@@ -652,12 +802,12 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                                             HirPathSegment::Field(name.name)
                                         }
                                         crate::surface::PathSegment::Index(expr, _) => {
-                                            HirPathSegment::Index(lower_expr(expr, id_gen))
+                                            HirPathSegment::Index(lower_expr_ctx(expr, id_gen, ctx, false))
                                         }
                                         crate::surface::PathSegment::All(_) => HirPathSegment::All,
                                     })
                                     .collect(),
-                                value: lower_expr(field.value, id_gen),
+                                value: lower_expr_ctx(field.value, id_gen, ctx, false),
                             })
                             .collect(),
                     };
@@ -666,8 +816,8 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
             HirExpr::Binary {
                 id: id_gen.next(),
                 op,
-                left: Box::new(lower_expr(*left, id_gen)),
-                right: Box::new(lower_expr(*right, id_gen)),
+                left: Box::new(lower_expr_ctx(*left, id_gen, ctx, false)),
+                right: Box::new(lower_expr_ctx(*right, id_gen, ctx, false)),
             }
         }
         Expr::Block { kind, items, .. } => {
@@ -677,7 +827,7 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
                 block_kind: block_kind.clone(),
                 items: items
                     .into_iter()
-                    .map(|item| lower_block_item(item, &kind, &block_kind, id_gen))
+                    .map(|item| lower_block_item_ctx(item, &kind, &block_kind, id_gen, ctx))
                     .collect(),
             }
         }
@@ -688,8 +838,142 @@ fn lower_expr_inner(expr: Expr, id_gen: &mut IdGen) -> HirExpr {
     }
 }
 
-fn lower_lambda(params: Vec<Pattern>, body: Expr, id_gen: &mut IdGen) -> HirExpr {
-    let mut acc = lower_expr(body, id_gen);
+fn surface_expr_span(expr: &Expr) -> crate::diagnostics::Span {
+    match expr {
+        Expr::Ident(name) => name.span.clone(),
+        Expr::Literal(literal) => match literal {
+            crate::surface::Literal::Number { span, .. }
+            | crate::surface::Literal::String { span, .. }
+            | crate::surface::Literal::Sigil { span, .. }
+            | crate::surface::Literal::Bool { span, .. }
+            | crate::surface::Literal::DateTime { span, .. } => span.clone(),
+        },
+        Expr::TextInterpolate { span, .. }
+        | Expr::List { span, .. }
+        | Expr::Tuple { span, .. }
+        | Expr::Record { span, .. }
+        | Expr::PatchLit { span, .. }
+        | Expr::FieldAccess { span, .. }
+        | Expr::FieldSection { span, .. }
+        | Expr::Index { span, .. }
+        | Expr::Call { span, .. }
+        | Expr::Lambda { span, .. }
+        | Expr::Match { span, .. }
+        | Expr::If { span, .. }
+        | Expr::Binary { span, .. }
+        | Expr::Block { span, .. }
+        | Expr::Raw { span, .. } => span.clone(),
+    }
+}
+
+fn slice_source_by_span(source: &str, span: &crate::diagnostics::Span) -> Option<String> {
+    let lines: Vec<&str> = source.split('\n').collect();
+    let start_line = span.start.line.checked_sub(1)?;
+    let end_line = span.end.line.checked_sub(1)?;
+    if start_line >= lines.len() || end_line >= lines.len() {
+        return None;
+    }
+
+    fn slice_line(line: &str, start_col: usize, end_col: usize) -> String {
+        let chars: Vec<char> = line.chars().collect();
+        let start = start_col.saturating_sub(1).min(chars.len());
+        let end = end_col.min(chars.len());
+        chars[start..end].iter().collect()
+    }
+
+    if start_line == end_line {
+        return Some(slice_line(lines[start_line], span.start.column, span.end.column));
+    }
+
+    let mut out = String::new();
+    out.push_str(&slice_line(
+        lines[start_line],
+        span.start.column,
+        lines[start_line].chars().count(),
+    ));
+    out.push('\n');
+    for mid in (start_line + 1)..end_line {
+        out.push_str(lines[mid]);
+        out.push('\n');
+    }
+    out.push_str(&slice_line(lines[end_line], 1, span.end.column));
+    Some(out)
+}
+
+fn normalize_debug_label(label: &str) -> String {
+    let mut out = String::new();
+    let mut prev_ws = false;
+    for ch in label.chars() {
+        if ch.is_whitespace() {
+            if !prev_ws {
+                out.push(' ');
+                prev_ws = true;
+            }
+        } else {
+            out.push(ch);
+            prev_ws = false;
+        }
+    }
+    out.trim().to_string()
+}
+
+fn lower_pipe_chain(left: Expr, right: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>) -> HirExpr {
+    let Some(_) = ctx.debug.as_ref() else {
+        let left = lower_expr_ctx(left, id_gen, ctx, true);
+        let right = lower_expr_ctx(right, id_gen, ctx, false);
+        return HirExpr::App {
+            id: id_gen.next(),
+            func: Box::new(right),
+            arg: Box::new(left),
+        };
+    };
+
+    let right_span = surface_expr_span(&right);
+    let mut steps: Vec<(Expr, crate::diagnostics::Span)> = vec![(right, right_span)];
+    let mut base = left;
+    while let Expr::Binary {
+        op,
+        left,
+        right,
+        span,
+    } = base
+    {
+        if op != "|>" {
+            base = Expr::Binary { op, left, right, span };
+            break;
+        }
+        let step_span = surface_expr_span(&right);
+        steps.push((*right, step_span));
+        base = *left;
+    }
+    steps.reverse();
+
+    let (pipe_id, source, log_time) = {
+        let debug = ctx.debug.as_mut().expect("debug ctx");
+        (debug.alloc_pipe_id(), debug.source, debug.params.time)
+    };
+    let mut acc = lower_expr_ctx(base, id_gen, ctx, false);
+    for (idx, (step_expr, step_span)) in steps.into_iter().enumerate() {
+        let func = lower_expr_ctx(step_expr, id_gen, ctx, false);
+        let label = source
+            .and_then(|src| slice_source_by_span(src, &step_span))
+            .map(|s| normalize_debug_label(&s))
+            .unwrap_or_else(|| "<unknown>".to_string());
+        acc = HirExpr::Pipe {
+            id: id_gen.next(),
+            pipe_id,
+            step: (idx as u32) + 1,
+            label,
+            log_time,
+            func: Box::new(func),
+            arg: Box::new(acc),
+        };
+    }
+    acc
+}
+
+fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> HirExpr {
+    let mut acc = body;
     for (index, param) in params.into_iter().rev().enumerate() {
         match param {
             Pattern::Ident(name) => {
@@ -740,19 +1024,20 @@ fn lower_block_kind(kind: &BlockKind) -> HirBlockKind {
     }
 }
 
-fn lower_block_item(
+fn lower_block_item_ctx(
     item: BlockItem,
     surface_kind: &BlockKind,
     hir_kind: &HirBlockKind,
     id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
 ) -> HirBlockItem {
     match item {
         BlockItem::Bind { pattern, expr, .. } => HirBlockItem::Bind {
             pattern: lower_pattern(pattern, id_gen),
-            expr: lower_expr(expr, id_gen),
+            expr: lower_expr_ctx(expr, id_gen, ctx, false),
         },
         BlockItem::Let { pattern, expr, .. } => {
-            let lowered_expr = lower_expr(expr, id_gen);
+            let lowered_expr = lower_expr_ctx(expr, id_gen, ctx, false);
             let expr = if matches!(surface_kind, BlockKind::Effect)
                 && matches!(hir_kind, HirBlockKind::Effect)
             {
@@ -775,16 +1060,16 @@ fn lower_block_item(
             }
         }
         BlockItem::Filter { expr, .. } => HirBlockItem::Filter {
-            expr: lower_expr(expr, id_gen),
+            expr: lower_expr_ctx(expr, id_gen, ctx, false),
         },
         BlockItem::Yield { expr, .. } => HirBlockItem::Yield {
-            expr: lower_expr(expr, id_gen),
+            expr: lower_expr_ctx(expr, id_gen, ctx, false),
         },
         BlockItem::Recurse { expr, .. } => HirBlockItem::Recurse {
-            expr: lower_expr(expr, id_gen),
+            expr: lower_expr_ctx(expr, id_gen, ctx, false),
         },
         BlockItem::Expr { expr, .. } => HirBlockItem::Expr {
-            expr: lower_expr(expr, id_gen),
+            expr: lower_expr_ctx(expr, id_gen, ctx, false),
         },
     }
 }
@@ -1395,5 +1680,223 @@ impl IdGen {
         let id = self.next;
         self.next += 1;
         id
+    }
+}
+
+#[cfg(test)]
+mod debug_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn contains_debug_nodes(expr: &HirExpr) -> bool {
+        match expr {
+            HirExpr::DebugFn { .. } => true,
+            HirExpr::Pipe { .. } => true,
+            HirExpr::Lambda { body, .. } => contains_debug_nodes(body),
+            HirExpr::App { func, arg, .. } => contains_debug_nodes(func) || contains_debug_nodes(arg),
+            HirExpr::Call { func, args, .. } => {
+                contains_debug_nodes(func) || args.iter().any(contains_debug_nodes)
+            }
+            HirExpr::TextInterpolate { parts, .. } => parts.iter().any(|p| match p {
+                HirTextPart::Expr { expr } => contains_debug_nodes(expr),
+                _ => false,
+            }),
+            HirExpr::List { items, .. } => items.iter().any(|i| contains_debug_nodes(&i.expr)),
+            HirExpr::Tuple { items, .. } => items.iter().any(contains_debug_nodes),
+            HirExpr::Record { fields, .. } => fields.iter().any(|f| contains_debug_nodes(&f.value)),
+            HirExpr::Patch { target, fields, .. } => {
+                contains_debug_nodes(target) || fields.iter().any(|f| contains_debug_nodes(&f.value))
+            }
+            HirExpr::FieldAccess { base, .. } => contains_debug_nodes(base),
+            HirExpr::Index { base, index, .. } => contains_debug_nodes(base) || contains_debug_nodes(index),
+            HirExpr::Match { scrutinee, arms, .. } => {
+                contains_debug_nodes(scrutinee) || arms.iter().any(|a| contains_debug_nodes(&a.body))
+            }
+            HirExpr::If { cond, then_branch, else_branch, .. } => {
+                contains_debug_nodes(cond) || contains_debug_nodes(then_branch) || contains_debug_nodes(else_branch)
+            }
+            HirExpr::Binary { left, right, .. } => contains_debug_nodes(left) || contains_debug_nodes(right),
+            HirExpr::Block { items, .. } => items.iter().any(|i| match i {
+                HirBlockItem::Bind { expr, .. } | HirBlockItem::Expr { expr } => contains_debug_nodes(expr),
+                _ => false,
+            }),
+            HirExpr::Var { .. }
+            | HirExpr::LitNumber { .. }
+            | HirExpr::LitString { .. }
+            | HirExpr::LitSigil { .. }
+            | HirExpr::LitBool { .. }
+            | HirExpr::LitDateTime { .. }
+            | HirExpr::Raw { .. } => false,
+        }
+    }
+
+    fn collect_pipes(expr: &HirExpr, out: &mut Vec<(u32, u32, String)>) {
+        match expr {
+            HirExpr::Pipe {
+                pipe_id, step, label, func, arg, ..
+            } => {
+                out.push((*pipe_id, *step, label.clone()));
+                collect_pipes(func, out);
+                collect_pipes(arg, out);
+            }
+            HirExpr::DebugFn { body, .. } => collect_pipes(body, out),
+            HirExpr::Lambda { body, .. } => collect_pipes(body, out),
+            HirExpr::App { func, arg, .. } => {
+                collect_pipes(func, out);
+                collect_pipes(arg, out);
+            }
+            HirExpr::Call { func, args, .. } => {
+                collect_pipes(func, out);
+                for arg in args {
+                    collect_pipes(arg, out);
+                }
+            }
+            HirExpr::TextInterpolate { parts, .. } => {
+                for part in parts {
+                    if let HirTextPart::Expr { expr } = part {
+                        collect_pipes(expr, out);
+                    }
+                }
+            }
+            HirExpr::List { items, .. } => {
+                for item in items {
+                    collect_pipes(&item.expr, out);
+                }
+            }
+            HirExpr::Tuple { items, .. } => {
+                for item in items {
+                    collect_pipes(item, out);
+                }
+            }
+            HirExpr::Record { fields, .. } => {
+                for field in fields {
+                    collect_pipes(&field.value, out);
+                }
+            }
+            HirExpr::Patch { target, fields, .. } => {
+                collect_pipes(target, out);
+                for field in fields {
+                    collect_pipes(&field.value, out);
+                }
+            }
+            HirExpr::FieldAccess { base, .. } => collect_pipes(base, out),
+            HirExpr::Index { base, index, .. } => {
+                collect_pipes(base, out);
+                collect_pipes(index, out);
+            }
+            HirExpr::Match { scrutinee, arms, .. } => {
+                collect_pipes(scrutinee, out);
+                for arm in arms {
+                    collect_pipes(&arm.body, out);
+                }
+            }
+            HirExpr::If { cond, then_branch, else_branch, .. } => {
+                collect_pipes(cond, out);
+                collect_pipes(then_branch, out);
+                collect_pipes(else_branch, out);
+            }
+            HirExpr::Binary { left, right, .. } => {
+                collect_pipes(left, out);
+                collect_pipes(right, out);
+            }
+            HirExpr::Block { items, .. } => {
+                for item in items {
+                    match item {
+                        HirBlockItem::Bind { expr, .. } | HirBlockItem::Expr { expr } => {
+                            collect_pipes(expr, out);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            HirExpr::Var { .. }
+            | HirExpr::LitNumber { .. }
+            | HirExpr::LitString { .. }
+            | HirExpr::LitSigil { .. }
+            | HirExpr::LitBool { .. }
+            | HirExpr::LitDateTime { .. }
+            | HirExpr::Raw { .. } => {}
+        }
+    }
+
+    fn with_debug_trace(enabled: bool, f: impl FnOnce()) {
+        super::DEBUG_TRACE_OVERRIDE.with(|cell| {
+            let prev = cell.get();
+            cell.set(Some(enabled));
+            f();
+            cell.set(prev);
+        });
+    }
+
+    fn write_temp_source(source: &str) -> std::path::PathBuf {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let mut path = std::env::temp_dir();
+        let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let filename = format!("aivi_debug_{}_{}.aivi", std::process::id(), id);
+        path.push(filename);
+        std::fs::write(&path, source).expect("write temp source");
+        path
+    }
+
+    #[test]
+    fn debug_erased_when_flag_off() {
+        let source = r#"
+module test.debug
+
+@debug(pipes, args, return, time)
+f x = x |> g 1 |> h
+"#;
+        let path = write_temp_source(source);
+        with_debug_trace(false, || {
+            let (modules, diags) = crate::surface::parse_modules(&path, source);
+            assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+            let program = desugar_modules(&modules);
+            let module = program.modules.into_iter().next().expect("module");
+            let def = module.defs.into_iter().find(|d| d.name == "f").expect("f");
+            assert!(!contains_debug_nodes(&def.expr));
+        });
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn debug_instruments_pipes_and_labels() {
+        let source = r#"
+module test.debug
+
+g n x = x + n
+h x = x * 2
+
+@debug(pipes, time)
+f x = x |> g 1 |> h
+"#;
+        let path = write_temp_source(source);
+        with_debug_trace(true, || {
+            let (modules, diags) = crate::surface::parse_modules(&path, source);
+            assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+            let surface_def = match &modules[0].items[2] {
+                ModuleItem::Def(def) => def,
+                other => panic!("expected def item, got {other:?}"),
+            };
+            let params = super::parse_debug_params(&surface_def.decorators).expect("debug params");
+            assert!(params.pipes);
+            assert!(params.time);
+            let program = desugar_modules(&modules);
+            let module = program.modules.into_iter().next().expect("module");
+            let def = module.defs.into_iter().find(|d| d.name == "f").expect("f");
+
+            assert!(contains_debug_nodes(&def.expr));
+
+            let mut pipes = Vec::new();
+            collect_pipes(&def.expr, &mut pipes);
+            pipes.sort_by_key(|(pipe_id, step, _)| (*pipe_id, *step));
+            assert_eq!(pipes.len(), 2);
+            assert_eq!(pipes[0].0, 1);
+            assert_eq!(pipes[0].1, 1);
+            assert_eq!(pipes[0].2, "g 1");
+            assert_eq!(pipes[1].0, 1);
+            assert_eq!(pipes[1].1, 2);
+            assert_eq!(pipes[1].2, "h");
+        });
+        let _ = std::fs::remove_file(path);
     }
 }

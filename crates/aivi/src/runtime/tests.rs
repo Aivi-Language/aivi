@@ -52,7 +52,7 @@ fn runtime_from_source(source: &str) -> Runtime {
         }
     }
 
-    let ctx = Arc::new(RuntimeContext { globals });
+    let ctx = Arc::new(RuntimeContext::new(globals));
     let cancel = CancelToken::root();
     Runtime::new(ctx, cancel)
 }
@@ -61,7 +61,7 @@ fn runtime_from_source(source: &str) -> Runtime {
 fn cleanups_run_even_when_cancelled() {
     let globals = Env::new(None);
     register_builtins(&globals);
-    let ctx = Arc::new(RuntimeContext { globals });
+    let ctx = Arc::new(RuntimeContext::new(globals));
     let cancel = CancelToken::root();
     let mut runtime = Runtime::new(ctx, cancel.clone());
 
@@ -271,7 +271,7 @@ main = effect {
 fn concurrent_par_observes_parent_cancellation() {
     let globals = Env::new(None);
     register_builtins(&globals);
-    let ctx = Arc::new(RuntimeContext { globals });
+    let ctx = Arc::new(RuntimeContext::new(globals));
     let cancel = CancelToken::root();
 
     let (started_left_tx, started_left_rx) = mpsc::channel();
@@ -337,7 +337,7 @@ fn concurrent_par_observes_parent_cancellation() {
 fn text_bytes_roundtrip() {
     let globals = Env::new(None);
     register_builtins(&globals);
-    let ctx = Arc::new(RuntimeContext { globals });
+    let ctx = Arc::new(RuntimeContext::new(globals));
     let cancel = CancelToken::root();
     let mut runtime = Runtime::new(ctx, cancel);
 
@@ -391,7 +391,7 @@ fn text_bytes_roundtrip() {
 fn crypto_sha256_randoms() {
     let globals = Env::new(None);
     register_builtins(&globals);
-    let ctx = Arc::new(RuntimeContext { globals });
+    let ctx = Arc::new(RuntimeContext::new(globals));
     let cancel = CancelToken::root();
     let mut runtime = Runtime::new(ctx, cancel);
 
@@ -441,7 +441,7 @@ fn crypto_sha256_randoms() {
 fn collections_map_set_queue_heap() {
     let globals = Env::new(None);
     register_builtins(&globals);
-    let ctx = Arc::new(RuntimeContext { globals });
+    let ctx = Arc::new(RuntimeContext::new(globals));
     let cancel = CancelToken::root();
     let mut runtime = Runtime::new(ctx, cancel);
 
@@ -532,7 +532,7 @@ fn collections_map_set_queue_heap() {
 fn linalg_dot_and_graph_shortest_path() {
     let globals = Env::new(None);
     register_builtins(&globals);
-    let ctx = Arc::new(RuntimeContext { globals });
+    let ctx = Arc::new(RuntimeContext::new(globals));
     let cancel = CancelToken::root();
     let mut runtime = Runtime::new(ctx, cancel);
 
@@ -620,7 +620,7 @@ fn linalg_dot_and_graph_shortest_path() {
 fn https_rejects_non_https_urls() {
     let globals = Env::new(None);
     register_builtins(&globals);
-    let ctx = Arc::new(RuntimeContext { globals });
+    let ctx = Arc::new(RuntimeContext::new(globals));
     let cancel = CancelToken::root();
     let mut runtime = Runtime::new(ctx, cancel);
 
@@ -669,7 +669,7 @@ fn https_rejects_non_https_urls() {
 fn regex_compile_and_match() {
     let globals = Env::new(None);
     register_builtins(&globals);
-    let ctx = Arc::new(RuntimeContext { globals });
+    let ctx = Arc::new(RuntimeContext::new(globals));
     let cancel = CancelToken::root();
     let mut runtime = Runtime::new(ctx, cancel);
 

@@ -103,6 +103,20 @@ pub(super) fn collect_free_locals_in_expr(
                 collect_free_locals_in_expr(arg, bound, out);
             }
         }
+        RustIrExpr::DebugFn {
+            arg_vars, body, ..
+        } => {
+            for name in arg_vars {
+                if !bound.iter().rev().any(|b| b == name) {
+                    out.insert(name.clone());
+                }
+            }
+            collect_free_locals_in_expr(body, bound, out);
+        }
+        RustIrExpr::Pipe { func, arg, .. } => {
+            collect_free_locals_in_expr(func, bound, out);
+            collect_free_locals_in_expr(arg, bound, out);
+        }
         RustIrExpr::List { items, .. } => {
             for item in items {
                 collect_free_locals_in_expr(&item.expr, bound, out);

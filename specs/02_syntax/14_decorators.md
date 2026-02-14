@@ -27,6 +27,7 @@ Decorators appear before the binding they annotate.
 | `@static` | `@static x = file.read "..."` | Embed at compile time |
 | `@inline` | `@inline f = ...` | Always inline function |
 | `@deprecated` | `@deprecated msg` | Emit warning on use |
+| `@debug` | `@debug()` / `@debug(pipes, args, return, time)` | Emit structured debug trace events when compiled with `--debug-trace` |
 
 ### Tooling (MCP)
 
@@ -64,3 +65,18 @@ Decorators desugar to compile-time metadata:
 ### MCP Tools
 
 <<< ../snippets/from_md/02_syntax/14_decorators/block_03.aivi{aivi}
+
+### Debug Tracing
+
+`@debug` is a tooling pragma for compiler-emitted trace logs. It has no semantic effect unless you compile with `--debug-trace`.
+
+- `@debug()` (or `@debug`) defaults to function-level timing only.
+- Parameters are order-insensitive; duplicates are ignored.
+- Allowed parameters: `pipes`, `args`, `return`, `time`.
+
+When enabled, the compiler emits JSONL-friendly structured events:
+
+- `fn.enter` / `fn.exit` per function call
+- `pipe.in` / `pipe.out` per `|>` step (when `pipes` is enabled)
+
+For multiple pipelines in a function body, step numbering restarts per pipeline chain and events include an additional `pipeId` field for disambiguation.

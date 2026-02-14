@@ -23,7 +23,7 @@ loadBundle : Locale -> Effect Text Bundle
 loadBundle locale = effect {
   path = if locale.tag == "de-DE" then "examples/i18n/app.de-DE.properties" else "examples/i18n/app.en-US.properties"
 
-  h <- open path
+  h        <- open path
   propsRes <- readAll h
 
   props <- propsRes ?

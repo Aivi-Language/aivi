@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use super::values::Value;
@@ -44,4 +45,18 @@ impl Env {
 
 pub(super) struct RuntimeContext {
     pub(super) globals: Env,
+    debug_call_id: AtomicU64,
+}
+
+impl RuntimeContext {
+    pub(super) fn new(globals: Env) -> Self {
+        Self {
+            globals,
+            debug_call_id: AtomicU64::new(1),
+        }
+    }
+
+    pub(super) fn next_debug_call_id(&self) -> u64 {
+        self.debug_call_id.fetch_add(1, Ordering::Relaxed)
+    }
 }

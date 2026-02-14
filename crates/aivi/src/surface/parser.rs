@@ -180,13 +180,19 @@ fn expand_module_aliases(modules: &mut [Module]) {
     fn rewrite_expr(expr: Expr, aliases: &HashMap<String, String>) -> Expr {
         match expr {
             Expr::FieldAccess { base, field, span } => {
-                // Best-effort support for `use some.module as alias` by rewriting `alias.x`
-                // into `x`. The import itself remains a wildcard import, so `x` resolves
-                // through the normal import/export path.
+                // Best-effort support for `use some.module as alias`.
+                //
+                // Historically we rewrote `alias.x` into `x` and relied on wildcard imports.
+                // That loses disambiguation for colliding names (e.g. `load`) and diverges
+                // from the spec's "modules are records" model.
+                //
+                // For now, rewrite `alias.x` into a qualified identifier `some.module.x`.
+                // Later passes treat this as a normal identifier, and we also emit qualified
+                // defs during lowering so codegen can resolve it.
                 if let Expr::Ident(name) = *base.clone() {
-                    if aliases.contains_key(name.name.as_str()) {
+                    if let Some(module) = aliases.get(name.name.as_str()) {
                         return Expr::Ident(SpannedName {
-                            name: field.name,
+                            name: format!("{module}.{}", field.name),
                             span: field.span,
                         });
                     }
@@ -976,7 +982,13 @@ impl Parser {
             let name = decorator.name.name.as_str();
             if !matches!(
                 name,
-                "static" | "inline" | "deprecated" | "mcp_tool" | "mcp_resource" | "test"
+                "static"
+                    | "inline"
+                    | "deprecated"
+                    | "mcp_tool"
+                    | "mcp_resource"
+                    | "test"
+                    | "debug"
             ) {
                 self.emit_diag(
                     "E1506",
@@ -1007,6 +1019,9 @@ impl Parser {
                         );
                     }
                 }
+                "debug" => {
+                    // `@debug` supports an optional argument list (validated during module checks).
+                }
                 _ => {
                     if decorator.arg.is_some() {
                         self.emit_diag(
@@ -1016,6 +1031,18 @@ impl Parser {
                         );
                     }
                 }
+            }
+        }
+    }
+
+    fn reject_debug_decorators(&mut self, decorators: &[Decorator], item: &str) {
+        for decorator in decorators {
+            if decorator.name.name == "debug" {
+                self.emit_diag(
+                    "E1514",
+                    &format!("`@debug` can only be applied to function definitions (not {item})"),
+                    decorator.span.clone(),
+                );
             }
         }
     }
@@ -1037,6 +1064,7 @@ impl Parser {
     }
 
     fn parse_type_sig(&mut self, decorators: Vec<Decorator>) -> Option<TypeSig> {
+        self.reject_debug_decorators(&decorators, "type signatures");
         let name = self.consume_name()?;
         let start = name.span.clone();
         self.expect_symbol(":", "expected ':' for type signature");
@@ -1119,6 +1147,7 @@ impl Parser {
     }
 
     fn parse_type_decl(&mut self, decorators: Vec<Decorator>) -> Option<TypeDecl> {
+        self.reject_debug_decorators(&decorators, "type declarations");
         let name = self.consume_ident()?;
         let mut params = Vec::new();
         while let Some(param) = self.consume_ident() {
@@ -1210,6 +1239,7 @@ impl Parser {
     }
 
     fn parse_type_alias(&mut self, decorators: Vec<Decorator>) -> Option<TypeAlias> {
+        self.reject_debug_decorators(&decorators, "type aliases");
         let name = self.consume_ident()?;
         let mut params = Vec::new();
         while let Some(param) = self.consume_ident() {
@@ -1230,6 +1260,7 @@ impl Parser {
     }
 
     fn parse_class_decl(&mut self, decorators: Vec<Decorator>) -> Option<ClassDecl> {
+        self.reject_debug_decorators(&decorators, "class declarations");
         let start = self.previous_span();
         let name = self.consume_ident()?;
         let mut params = Vec::new();
@@ -1405,6 +1436,7 @@ impl Parser {
     }
 
     fn parse_instance_decl(&mut self, decorators: Vec<Decorator>) -> Option<InstanceDecl> {
+        self.reject_debug_decorators(&decorators, "instance declarations");
         let start = self.previous_span();
         let name = self.consume_ident()?;
         let mut params = Vec::new();
@@ -1467,6 +1499,7 @@ impl Parser {
     }
 
     fn parse_domain_decl(&mut self, decorators: Vec<Decorator>) -> Option<DomainDecl> {
+        self.reject_debug_decorators(&decorators, "domain declarations");
         let start = self.previous_span();
         let name = self.consume_ident()?;
         self.expect_keyword("over", "expected 'over' in domain declaration");

@@ -72,6 +72,14 @@ struct Runtime {
     cancel: Arc<CancelToken>,
     cancel_mask: usize,
     rng_state: u64,
+    debug_stack: Vec<DebugFrame>,
+}
+
+#[derive(Clone)]
+struct DebugFrame {
+    fn_name: String,
+    call_id: u64,
+    start: Option<std::time::Instant>,
 }
 
 #[derive(Clone)]
@@ -185,8 +193,20 @@ fn build_runtime_from_program(program: HirProgram) -> Result<Runtime, AiviError>
 
     let mut grouped: HashMap<String, Vec<HirExpr>> = HashMap::new();
     for module in program.modules {
+        let module_name = module.name.clone();
         for def in module.defs {
-            grouped.entry(def.name).or_default().push(def.expr);
+            // Unqualified entry (legacy/global namespace).
+            grouped
+                .entry(def.name.clone())
+                .or_default()
+                .push(def.expr.clone());
+
+            // Qualified entry enables disambiguation (e.g. `aivi.database.load`) without relying
+            // on wildcard imports to win against builtins like `load`.
+            grouped
+                .entry(format!("{module_name}.{}", def.name))
+                .or_default()
+                .push(def.expr);
         }
     }
     if grouped.is_empty() {
@@ -223,7 +243,7 @@ fn build_runtime_from_program(program: HirProgram) -> Result<Runtime, AiviError>
         }
     }
 
-    let ctx = Arc::new(RuntimeContext { globals });
+    let ctx = Arc::new(RuntimeContext::new(globals));
     let cancel = CancelToken::root();
     Ok(Runtime::new(ctx, cancel))
 }
@@ -247,6 +267,7 @@ impl Runtime {
             cancel,
             cancel_mask: 0,
             rng_state: seed ^ 0x9E37_79B9_7F4A_7C15,
+            debug_stack: Vec::new(),
         }
     }
 
@@ -308,9 +329,9 @@ impl Runtime {
                 if let Some(value) = env.get(name) {
                     return self.force_value(value);
                 }
-                if is_constructor_name(name) {
+                if let Some(ctor) = constructor_segment(name) {
                     return Ok(Value::Constructor {
-                        name: name.clone(),
+                        name: ctor.to_string(),
                         args: Vec::new(),
                     });
                 }
@@ -436,6 +457,182 @@ impl Runtime {
                     func_value = self.apply(func_value, arg_value)?;
                 }
                 Ok(func_value)
+            }
+            HirExpr::DebugFn {
+                fn_name,
+                arg_vars,
+                log_args,
+                log_return,
+                log_time,
+                body,
+                ..
+            } => {
+                let call_id = self.ctx.next_debug_call_id();
+                let start = log_time.then(std::time::Instant::now);
+
+                let ts = log_time.then(now_unix_ms);
+                let args_json = if *log_args {
+                    Some(
+                        arg_vars
+                            .iter()
+                            .map(|name| {
+                                env.get(name)
+                                    .as_ref()
+                                    .map(|v| debug_value_to_json(v, 0))
+                                    .unwrap_or(serde_json::Value::Null)
+                            })
+                            .collect::<Vec<_>>(),
+                    )
+                } else {
+                    None
+                };
+
+                self.debug_stack.push(DebugFrame {
+                    fn_name: fn_name.clone(),
+                    call_id,
+                    start,
+                });
+
+                let mut enter = serde_json::Map::new();
+                enter.insert("kind".to_string(), serde_json::Value::String("fn.enter".to_string()));
+                enter.insert("fn".to_string(), serde_json::Value::String(fn_name.clone()));
+                enter.insert(
+                    "callId".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(call_id)),
+                );
+                if let Some(args_json) = args_json {
+                    enter.insert("args".to_string(), serde_json::Value::Array(args_json));
+                }
+                if let Some(ts) = ts {
+                    enter.insert(
+                        "ts".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(ts)),
+                    );
+                }
+                emit_debug_event(serde_json::Value::Object(enter));
+
+                let result = self.eval_expr(body, env);
+
+                let frame = self.debug_stack.pop();
+                if let Some(frame) = frame {
+                    let dur_ms = if *log_time {
+                        frame
+                            .start
+                            .map(|s| s.elapsed().as_millis() as u64)
+                            .unwrap_or(0)
+                    } else {
+                        0
+                    };
+
+                    let mut exit = serde_json::Map::new();
+                    exit.insert("kind".to_string(), serde_json::Value::String("fn.exit".to_string()));
+                    exit.insert("fn".to_string(), serde_json::Value::String(frame.fn_name));
+                    exit.insert(
+                        "callId".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(frame.call_id)),
+                    );
+                    if *log_return {
+                        if let Ok(ref value) = result {
+                            exit.insert("ret".to_string(), debug_value_to_json(value, 0));
+                        }
+                    }
+                    if *log_time {
+                        exit.insert(
+                            "durMs".to_string(),
+                            serde_json::Value::Number(serde_json::Number::from(dur_ms)),
+                        );
+                    }
+                    emit_debug_event(serde_json::Value::Object(exit));
+                }
+
+                result
+            }
+            HirExpr::Pipe {
+                pipe_id,
+                step,
+                label,
+                log_time,
+                func,
+                arg,
+                ..
+            } => {
+                let func_value = self.eval_expr(func, env)?;
+                let arg_value = self.eval_expr(arg, env)?;
+
+                let Some(frame) = self.debug_stack.last().cloned() else {
+                    return self.apply(func_value, arg_value);
+                };
+
+                let ts_in = log_time.then(now_unix_ms);
+                let mut pipe_in = serde_json::Map::new();
+                pipe_in.insert("kind".to_string(), serde_json::Value::String("pipe.in".to_string()));
+                pipe_in.insert("fn".to_string(), serde_json::Value::String(frame.fn_name.clone()));
+                pipe_in.insert(
+                    "callId".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(frame.call_id)),
+                );
+                pipe_in.insert(
+                    "pipeId".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(*pipe_id)),
+                );
+                pipe_in.insert(
+                    "step".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(*step)),
+                );
+                pipe_in.insert("label".to_string(), serde_json::Value::String(label.clone()));
+                pipe_in.insert("value".to_string(), debug_value_to_json(&arg_value, 0));
+                if let Some(ts) = ts_in {
+                    pipe_in.insert(
+                        "ts".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(ts)),
+                    );
+                }
+                emit_debug_event(serde_json::Value::Object(pipe_in));
+
+                let step_start = log_time.then(std::time::Instant::now);
+                let out_value = self.apply(func_value, arg_value)?;
+
+                let dur_ms = if *log_time {
+                    step_start
+                        .map(|s| s.elapsed().as_millis() as u64)
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
+                let shape = debug_shape_tag(&out_value);
+
+                let mut pipe_out = serde_json::Map::new();
+                pipe_out.insert(
+                    "kind".to_string(),
+                    serde_json::Value::String("pipe.out".to_string()),
+                );
+                pipe_out.insert("fn".to_string(), serde_json::Value::String(frame.fn_name));
+                pipe_out.insert(
+                    "callId".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(frame.call_id)),
+                );
+                pipe_out.insert(
+                    "pipeId".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(*pipe_id)),
+                );
+                pipe_out.insert(
+                    "step".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(*step)),
+                );
+                pipe_out.insert("label".to_string(), serde_json::Value::String(label.clone()));
+                pipe_out.insert("value".to_string(), debug_value_to_json(&out_value, 0));
+                if *log_time {
+                    pipe_out.insert(
+                        "durMs".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(dur_ms)),
+                    );
+                }
+                if let Some(shape) = shape {
+                    pipe_out.insert("shape".to_string(), serde_json::Value::String(shape));
+                }
+                emit_debug_event(serde_json::Value::Object(pipe_out));
+
+                Ok(out_value)
             }
             HirExpr::List { items, .. } => self.eval_list(items, env),
             HirExpr::Tuple { items, .. } => {
@@ -1445,11 +1642,14 @@ fn parse_number_value(text: &str) -> Option<Value> {
     }
 }
 
-fn is_constructor_name(name: &str) -> bool {
-    name.chars()
+fn constructor_segment(name: &str) -> Option<&str> {
+    let seg = name.rsplit('.').next().unwrap_or(name);
+    let ok = seg
+        .chars()
         .next()
         .map(|ch| ch.is_ascii_uppercase())
-        .unwrap_or(false)
+        .unwrap_or(false);
+    if ok { Some(seg) } else { None }
 }
 
 fn is_callable(value: &Value) -> bool {
@@ -1461,6 +1661,266 @@ fn is_callable(value: &Value) -> bool {
 
 fn is_match_failure_message(message: &str) -> bool {
     message == "non-exhaustive match"
+}
+
+const DEBUG_MAX_CHARS: usize = 200;
+const DEBUG_MAX_DEPTH: usize = 3;
+const DEBUG_MAX_LIST_ITEMS: usize = 20;
+
+fn now_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|dur| dur.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn emit_debug_event(event: serde_json::Value) {
+    // Emit JSONL-friendly structured logs to stderr by default.
+    if let Ok(line) = serde_json::to_string(&event) {
+        eprintln!("{line}");
+    }
+}
+
+fn debug_shape_tag(value: &Value) -> Option<String> {
+    match value {
+        Value::Constructor { name, args } if args.is_empty() => match name.as_str() {
+            "None" | "Some" | "Ok" | "Err" => Some(name.clone()),
+            _ => None,
+        },
+        Value::Constructor { name, args } if args.len() == 1 => match name.as_str() {
+            "Some" | "Ok" | "Err" => Some(name.clone()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn debug_value_to_json(value: &Value, depth: usize) -> serde_json::Value {
+    if let Value::Constructor { name, args } = value {
+        if name == "Sensitive" && args.len() == 1 {
+            return serde_json::Value::String("<redacted>".to_string());
+        }
+    }
+
+    if depth >= DEBUG_MAX_DEPTH {
+        return debug_summary_json(value);
+    }
+
+    match value {
+        Value::Unit => serde_json::Value::String("Unit".to_string()),
+        Value::Bool(true) => serde_json::Value::String("True".to_string()),
+        Value::Bool(false) => serde_json::Value::String("False".to_string()),
+        Value::Int(v) => serde_json::Value::String(v.to_string()),
+        Value::Float(v) => serde_json::Value::String(v.to_string()),
+        Value::Text(t) => serde_json::Value::String(truncate_debug_text(t)),
+        Value::DateTime(t) => serde_json::Value::String(truncate_debug_text(t)),
+        Value::Bytes(bytes) => serde_json::Value::String(format!("<bytes:{}>", bytes.len())),
+        Value::Regex(regex) => serde_json::Value::String(format!("<regex:{}>", regex.as_str())),
+        Value::BigInt(v) => serde_json::Value::String(v.to_string()),
+        Value::Rational(v) => serde_json::Value::String(v.to_string()),
+        Value::Decimal(v) => serde_json::Value::String(v.to_string()),
+        Value::Map(entries) => serde_json::Value::Object(
+            [
+                (
+                    "type".to_string(),
+                    serde_json::Value::String("Map".to_string()),
+                ),
+                (
+                    "summary".to_string(),
+                    serde_json::Value::String("<opaque>".to_string()),
+                ),
+                (
+                    "size".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(entries.len())),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        Value::Set(entries) => serde_json::Value::Object(
+            [
+                (
+                    "type".to_string(),
+                    serde_json::Value::String("Set".to_string()),
+                ),
+                (
+                    "summary".to_string(),
+                    serde_json::Value::String("<opaque>".to_string()),
+                ),
+                (
+                    "size".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(entries.len())),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        Value::Queue(items) => serde_json::Value::String(format!("<queue:{}>", items.len())),
+        Value::Deque(items) => serde_json::Value::String(format!("<deque:{}>", items.len())),
+        Value::Heap(items) => serde_json::Value::String(format!("<heap:{}>", items.len())),
+        Value::List(items) => {
+            let mut parts = Vec::new();
+            for item in items.iter().take(DEBUG_MAX_LIST_ITEMS) {
+                parts.push(debug_value_to_json(item, depth + 1));
+            }
+            let mut out = serde_json::Map::new();
+            out.insert("type".to_string(), serde_json::Value::String("List".to_string()));
+            out.insert(
+                "size".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(items.len())),
+            );
+            out.insert("summary".to_string(), serde_json::Value::Array(parts));
+            serde_json::Value::Object(out)
+        }
+        Value::Tuple(items) => {
+            let mut parts = Vec::new();
+            for item in items.iter().take(DEBUG_MAX_LIST_ITEMS) {
+                parts.push(debug_value_to_json(item, depth + 1));
+            }
+            let mut out = serde_json::Map::new();
+            out.insert("type".to_string(), serde_json::Value::String("Tuple".to_string()));
+            out.insert(
+                "size".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(items.len())),
+            );
+            out.insert("summary".to_string(), serde_json::Value::Array(parts));
+            serde_json::Value::Object(out)
+        }
+        Value::Record(fields) => {
+            let mut keys: Vec<&String> = fields.keys().collect();
+            keys.sort();
+            let mut out_fields = serde_json::Map::new();
+            for key in keys.into_iter().take(DEBUG_MAX_LIST_ITEMS) {
+                if let Some(val) = fields.get(key) {
+                    out_fields.insert(key.clone(), debug_value_to_json(val, depth + 1));
+                }
+            }
+            let mut out = serde_json::Map::new();
+            out.insert(
+                "type".to_string(),
+                serde_json::Value::String("Record".to_string()),
+            );
+            out.insert(
+                "size".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(fields.len())),
+            );
+            out.insert("summary".to_string(), serde_json::Value::Object(out_fields));
+            serde_json::Value::Object(out)
+        }
+        Value::Constructor { name, args } => {
+            if args.is_empty() {
+                serde_json::Value::String(name.clone())
+            } else {
+                let mut out = serde_json::Map::new();
+                out.insert("type".to_string(), serde_json::Value::String(name.clone()));
+                out.insert(
+                    "size".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(args.len())),
+                );
+                out.insert(
+                    "summary".to_string(),
+                    serde_json::Value::Array(
+                        args.iter()
+                            .take(DEBUG_MAX_LIST_ITEMS)
+                            .map(|arg| debug_value_to_json(arg, depth + 1))
+                            .collect(),
+                    ),
+                );
+                serde_json::Value::Object(out)
+            }
+        }
+        Value::Closure(_) => debug_summary_json(value),
+        Value::Builtin(builtin) => serde_json::Value::Object(
+            [
+                (
+                    "type".to_string(),
+                    serde_json::Value::String("Builtin".to_string()),
+                ),
+                (
+                    "summary".to_string(),
+                    serde_json::Value::String(format!("<builtin:{}>", builtin.imp.name)),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+        Value::Effect(_) => debug_summary_json(value),
+        Value::Resource(_) => debug_summary_json(value),
+        Value::Thunk(_) => debug_summary_json(value),
+        Value::MultiClause(_) => debug_summary_json(value),
+        Value::ChannelSend(_) => debug_summary_json(value),
+        Value::ChannelRecv(_) => debug_summary_json(value),
+        Value::FileHandle(_) => debug_summary_json(value),
+        Value::Listener(_) => debug_summary_json(value),
+        Value::Connection(_) => debug_summary_json(value),
+        Value::Stream(_) => debug_summary_json(value),
+        Value::HttpServer(_) => debug_summary_json(value),
+        Value::WebSocket(_) => debug_summary_json(value),
+    }
+}
+
+fn truncate_debug_text(text: &str) -> String {
+    let mut out = String::new();
+    for ch in text.chars().take(DEBUG_MAX_CHARS) {
+        out.push(ch);
+    }
+    if text.chars().count() > DEBUG_MAX_CHARS {
+        out.push_str("...");
+    }
+    out
+}
+
+fn debug_summary_json(value: &Value) -> serde_json::Value {
+    let (ty, size) = match value {
+        Value::Unit => ("Unit", None),
+        Value::Bool(_) => ("Bool", None),
+        Value::Int(_) => ("Int", None),
+        Value::Float(_) => ("Float", None),
+        Value::Text(_) => ("Text", None),
+        Value::DateTime(_) => ("DateTime", None),
+        Value::Bytes(bytes) => ("Bytes", Some(bytes.len())),
+        Value::Regex(_) => ("Regex", None),
+        Value::BigInt(_) => ("BigInt", None),
+        Value::Rational(_) => ("Rational", None),
+        Value::Decimal(_) => ("Decimal", None),
+        Value::Map(entries) => ("Map", Some(entries.len())),
+        Value::Set(entries) => ("Set", Some(entries.len())),
+        Value::Queue(items) => ("Queue", Some(items.len())),
+        Value::Deque(items) => ("Deque", Some(items.len())),
+        Value::Heap(items) => ("Heap", Some(items.len())),
+        Value::List(items) => ("List", Some(items.len())),
+        Value::Tuple(items) => ("Tuple", Some(items.len())),
+        Value::Record(fields) => ("Record", Some(fields.len())),
+        Value::Constructor { name, args } => (name.as_str(), Some(args.len())),
+        Value::Closure(_) => ("Closure", None),
+        Value::Builtin(_) => ("Builtin", None),
+        Value::Effect(_) => ("Effect", None),
+        Value::Resource(_) => ("Resource", None),
+        Value::Thunk(_) => ("Thunk", None),
+        Value::MultiClause(_) => ("MultiClause", None),
+        Value::ChannelSend(_) => ("Send", None),
+        Value::ChannelRecv(_) => ("Recv", None),
+        Value::FileHandle(_) => ("File", None),
+        Value::Listener(_) => ("Listener", None),
+        Value::Connection(_) => ("Connection", None),
+        Value::Stream(_) => ("Stream", None),
+        Value::HttpServer(_) => ("HttpServer", None),
+        Value::WebSocket(_) => ("WebSocket", None),
+    };
+
+    let mut out = serde_json::Map::new();
+    out.insert("type".to_string(), serde_json::Value::String(ty.to_string()));
+    out.insert(
+        "summary".to_string(),
+        serde_json::Value::String("<opaque>".to_string()),
+    );
+    if let Some(size) = size {
+        out.insert(
+            "size".to_string(),
+            serde_json::Value::Number(serde_json::Number::from(size)),
+        );
+    }
+    serde_json::Value::Object(out)
 }
 
 fn format_value(value: &Value) -> String {

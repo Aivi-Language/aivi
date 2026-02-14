@@ -140,6 +140,51 @@ pub(super) fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, Aivi
             rendered.push_str(&format!("{ind2}rt.call(f, __aivi_call_args)\n{ind}}}"));
             rendered
         }
+        RustIrExpr::DebugFn {
+            fn_name,
+            arg_vars,
+            log_args,
+            log_return,
+            log_time,
+            body,
+            ..
+        } => {
+            let ind = "    ".repeat(indent);
+            let ind2 = "    ".repeat(indent + 1);
+            let body_code = emit_expr(body, indent + 1)?;
+
+            let args_vec = if *log_args {
+                let rendered_args = arg_vars
+                    .iter()
+                    .map(|name| format!("{}.clone()", rust_local_name(name)))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("Some(vec![{rendered_args}])")
+            } else {
+                "None".to_string()
+            };
+
+            format!(
+                "{{\n{ind2}rt.debug_fn_enter({fn_name:?}, {args_vec}, {log_time});\n{ind2}let __aivi_dbg_out: R = {body_code};\n{ind2}rt.debug_fn_exit(&__aivi_dbg_out, {log_return}, {log_time});\n{ind2}__aivi_dbg_out\n{ind}}}"
+            )
+        }
+        RustIrExpr::Pipe {
+            pipe_id,
+            step,
+            label,
+            log_time,
+            func,
+            arg,
+            ..
+        } => {
+            let func_code = emit_expr(func, indent)?;
+            let arg_code = emit_expr(arg, indent)?;
+            let ind = "    ".repeat(indent);
+            let ind2 = "    ".repeat(indent + 1);
+            format!(
+                "{{\n{ind2}let f = ({func_code})?;\n{ind2}let a = ({arg_code})?;\n{ind2}rt.debug_pipe_in({pipe_id}, {step}, {label:?}, &a, {log_time});\n{ind2}let __aivi_dbg_step_start = if {log_time} {{ Some(std::time::Instant::now()) }} else {{ None }};\n{ind2}let out = rt.apply(f, a)?;\n{ind2}rt.debug_pipe_out({pipe_id}, {step}, {label:?}, &out, __aivi_dbg_step_start, {log_time});\n{ind2}aivi_ok(out)\n{ind}}}"
+            )
+        }
         RustIrExpr::List { items, .. } => {
             let mut parts = Vec::new();
             for item in items {

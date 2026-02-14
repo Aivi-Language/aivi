@@ -691,9 +691,16 @@ impl TypeChecker {
     ) {
         for use_decl in &module.uses {
             if let Some(exports) = module_exports.get(&use_decl.module.name) {
+                let qualify = use_decl.alias.is_some();
                 if use_decl.wildcard {
                     for (name, scheme) in exports {
                         env.insert(name.clone(), scheme.clone());
+                        if qualify {
+                            env.insert(
+                                format!("{}.{}", use_decl.module.name, name),
+                                scheme.clone(),
+                            );
+                        }
                     }
                 } else {
                     for item in &use_decl.items {
@@ -701,6 +708,12 @@ impl TypeChecker {
                             crate::surface::ScopeItemKind::Value => {
                                 if let Some(scheme) = exports.get(&item.name.name) {
                                     env.insert(item.name.name.clone(), scheme.clone());
+                                    if qualify {
+                                        env.insert(
+                                            format!("{}.{}", use_decl.module.name, item.name.name),
+                                            scheme.clone(),
+                                        );
+                                    }
                                 }
                             }
                             crate::surface::ScopeItemKind::Domain => {
@@ -714,6 +727,12 @@ impl TypeChecker {
                                 for member in members {
                                     if let Some(scheme) = exports.get(member) {
                                         env.insert(member.clone(), scheme.clone());
+                                        if qualify {
+                                            env.insert(
+                                                format!("{}.{}", use_decl.module.name, member),
+                                                scheme.clone(),
+                                            );
+                                        }
                                     }
                                 }
                             }

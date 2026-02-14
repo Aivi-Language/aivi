@@ -456,6 +456,16 @@ fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, AiviError> {
                 .join(", ");
             format!("({func_code}).and_then(|f| call(f, vec![{args_code}]))")
         }
+        RustIrExpr::DebugFn { body, .. } => {
+            // The rustc backend does not currently support trace logging; treat as a no-op wrapper.
+            emit_expr(body, indent)?
+        }
+        RustIrExpr::Pipe { func, arg, .. } => {
+            // The rustc backend does not currently support trace logging; treat as a normal application.
+            let func_code = emit_expr(func, indent)?;
+            let arg_code = emit_expr(arg, indent)?;
+            format!("({func_code}).and_then(|f| ({arg_code}).and_then(|a| apply(f, a)))")
+        }
         RustIrExpr::List { items, .. } => {
             let mut parts = Vec::new();
             for item in items {

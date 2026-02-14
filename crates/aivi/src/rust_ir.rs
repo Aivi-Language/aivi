@@ -98,6 +98,24 @@ pub enum RustIrExpr {
         func: Box<RustIrExpr>,
         args: Vec<RustIrExpr>,
     },
+    DebugFn {
+        id: u32,
+        fn_name: String,
+        arg_vars: Vec<String>,
+        log_args: bool,
+        log_return: bool,
+        log_time: bool,
+        body: Box<RustIrExpr>,
+    },
+    Pipe {
+        id: u32,
+        pipe_id: u32,
+        step: u32,
+        label: String,
+        log_time: bool,
+        func: Box<RustIrExpr>,
+        arg: Box<RustIrExpr>,
+    },
     List {
         id: u32,
         items: Vec<RustIrListItem>,
@@ -318,7 +336,10 @@ fn lower_expr(
             } else if globals.iter().any(|g| g == &name) {
                 RustIrExpr::Global { id, name }
             } else if is_constructor_name(&name) {
-                RustIrExpr::ConstructorValue { id, name }
+                // Qualified constructor references (e.g. `aivi.database.IntType`) are allowed;
+                // constructors are matched by their unqualified name at runtime.
+                let ctor = name.rsplit('.').next().unwrap_or(&name).to_string();
+                RustIrExpr::ConstructorValue { id, name: ctor }
             } else {
                 return Err(AiviError::Codegen(format!("unbound variable {name}")));
             }
@@ -376,6 +397,40 @@ fn lower_expr(
                 .into_iter()
                 .map(|arg| lower_expr(arg, globals, locals))
                 .collect::<Result<Vec<_>, _>>()?,
+        },
+        KernelExpr::DebugFn {
+            id,
+            fn_name,
+            arg_vars,
+            log_args,
+            log_return,
+            log_time,
+            body,
+        } => RustIrExpr::DebugFn {
+            id,
+            fn_name,
+            arg_vars,
+            log_args,
+            log_return,
+            log_time,
+            body: Box::new(lower_expr(*body, globals, locals)?),
+        },
+        KernelExpr::Pipe {
+            id,
+            pipe_id,
+            step,
+            label,
+            log_time,
+            func,
+            arg,
+        } => RustIrExpr::Pipe {
+            id,
+            pipe_id,
+            step,
+            label,
+            log_time,
+            func: Box::new(lower_expr(*func, globals, locals)?),
+            arg: Box::new(lower_expr(*arg, globals, locals)?),
         },
         KernelExpr::List { id, items } => RustIrExpr::List {
             id,
@@ -562,6 +617,8 @@ fn rust_ir_expr_id(expr: &RustIrExpr) -> u32 {
         | RustIrExpr::Lambda { id, .. }
         | RustIrExpr::App { id, .. }
         | RustIrExpr::Call { id, .. }
+        | RustIrExpr::DebugFn { id, .. }
+        | RustIrExpr::Pipe { id, .. }
         | RustIrExpr::List { id, .. }
         | RustIrExpr::Tuple { id, .. }
         | RustIrExpr::Record { id, .. }
@@ -621,6 +678,13 @@ fn collect_unbound_vars_in_kernel_expr(
             for arg in args {
                 collect_unbound_vars_in_kernel_expr(arg, globals, locals, bound, out);
             }
+        }
+        KernelExpr::DebugFn { body, .. } => {
+            collect_unbound_vars_in_kernel_expr(body, globals, locals, bound, out);
+        }
+        KernelExpr::Pipe { func, arg, .. } => {
+            collect_unbound_vars_in_kernel_expr(func, globals, locals, bound, out);
+            collect_unbound_vars_in_kernel_expr(arg, globals, locals, bound, out);
         }
         KernelExpr::List { items, .. } => {
             for item in items {
@@ -784,6 +848,40 @@ fn rewrite_implicit_field_vars(
                 .into_iter()
                 .map(|a| rewrite_implicit_field_vars(a, implicit_param, unbound))
                 .collect(),
+        },
+        KernelExpr::DebugFn {
+            id,
+            fn_name,
+            arg_vars,
+            log_args,
+            log_return,
+            log_time,
+            body,
+        } => KernelExpr::DebugFn {
+            id,
+            fn_name,
+            arg_vars,
+            log_args,
+            log_return,
+            log_time,
+            body: Box::new(rewrite_implicit_field_vars(*body, implicit_param, unbound)),
+        },
+        KernelExpr::Pipe {
+            id,
+            pipe_id,
+            step,
+            label,
+            log_time,
+            func,
+            arg,
+        } => KernelExpr::Pipe {
+            id,
+            pipe_id,
+            step,
+            label,
+            log_time,
+            func: Box::new(rewrite_implicit_field_vars(*func, implicit_param, unbound)),
+            arg: Box::new(rewrite_implicit_field_vars(*arg, implicit_param, unbound)),
         },
         KernelExpr::List { id, items } => KernelExpr::List {
             id,
@@ -1153,7 +1251,8 @@ fn collect_pattern_binders(pattern: &KernelPattern, out: &mut Vec<String>) {
 }
 
 fn is_constructor_name(name: &str) -> bool {
-    name.chars()
+    let seg = name.rsplit('.').next().unwrap_or(name);
+    seg.chars()
         .next()
         .map(|ch| ch.is_ascii_uppercase())
         .unwrap_or(false)
