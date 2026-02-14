@@ -199,6 +199,24 @@ node =
 }
 
 #[test]
+fn typecheck_html_sigil_splice_text_coerces_to_textnode() {
+    let source = r#"
+module test.ui_splice_text
+export node
+
+use aivi.ui
+use aivi.ui.layout
+
+node =
+  ~html~>
+    <div class="card" style={ { width: 10px } }>
+      { "hallo" }
+    </div>
+  <~html"#;
+    check_ok_with_embedded(source, &["aivi", "aivi.ui", "aivi.ui.layout"]);
+}
+
+#[test]
 fn typecheck_record_field_mismatch_points_at_value() {
     let source = "module test.user\n\
 User = { name: Text, age: Int }\n\
@@ -261,6 +279,23 @@ export brightRed
 
 use aivi
 use aivi.color (Rgb, domain Color)
+
+red : Rgb
+red = { r: 255, g: 0, b: 0 }
+
+brightRed = red + 10l"#;
+    check_ok_with_embedded(source, &["aivi", "aivi.color"]);
+}
+
+#[test]
+fn typecheck_suffix_literal_from_wildcard_imported_domain() {
+    let source = r#"
+@no_prelude
+module test.delta_wildcard_import
+export brightRed
+
+use aivi
+use aivi.color
 
 red : Rgb
 red = { r: 255, g: 0, b: 0 }

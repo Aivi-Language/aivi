@@ -333,8 +333,9 @@ impl TypeChecker {
                     self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
                     remaining = *expected_rest;
                 }
-                let body_ty = self.infer_expr(&expr, &mut local_env)?;
-                self.unify_with_span(body_ty, remaining, expr_span(&expr))?;
+                // Elaborate against the remaining expected return type so the typechecker can
+                // apply expected-type coercions (e.g. `Text` -> `VNode` via `TextNode`).
+                let (_elab, _ty) = self.elab_expr(expr.clone(), Some(remaining), &mut local_env)?;
                 Ok(())
             })();
 
@@ -349,10 +350,19 @@ impl TypeChecker {
             let mut local_env = env.clone();
             let placeholder = self.fresh_var();
             local_env.insert(name.clone(), Scheme::mono(placeholder.clone()));
+            // Even without an explicit signature, run expected-type elaboration so argument/field
+            // positions can insert coercions (e.g. spliced `Text` in `~html~>` children).
             let inferred = if def.params.is_empty() {
-                self.infer_expr(&expr, &mut local_env)
+                self.elab_expr(expr.clone(), None, &mut local_env)
+                    .map(|(_elab, ty)| ty)
             } else {
-                self.infer_lambda(&def.params, &expr, &mut local_env)
+                let lambda = Expr::Lambda {
+                    params: def.params.clone(),
+                    body: Box::new(expr.clone()),
+                    span: def.span.clone(),
+                };
+                self.elab_expr(lambda, None, &mut local_env)
+                    .map(|(_elab, ty)| ty)
             };
             let inferred = match inferred {
                 Ok(ty) => ty,
