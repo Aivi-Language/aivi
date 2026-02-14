@@ -410,6 +410,12 @@ fn check_defs(
                         export.name.name.clone(),
                         deprecated_message_for_export(target, &export.name.name),
                     );
+                    if use_decl.alias.is_some() {
+                        scope.insert(
+                            format!("{}.{}", use_decl.module.name, export.name.name),
+                            deprecated_message_for_export(target, &export.name.name),
+                        );
+                    }
                 }
                 for item in &target.items {
                     if let ModuleItem::ClassDecl(class_decl) = item {
@@ -418,6 +424,12 @@ fn check_defs(
                         }
                         for member in &class_decl.members {
                             scope.insert(member.name.name.clone(), None);
+                            if use_decl.alias.is_some() {
+                                scope.insert(
+                                    format!("{}.{}", use_decl.module.name, member.name.name),
+                                    None,
+                                );
+                            }
                         }
                     }
                 }
@@ -444,12 +456,27 @@ fn check_defs(
                                 item.name.name.clone(),
                                 deprecated_message_for_export(target, &item.name.name),
                             );
+                            if use_decl.alias.is_some() {
+                                scope.insert(
+                                    format!("{}.{}", use_decl.module.name, item.name.name),
+                                    deprecated_message_for_export(target, &item.name.name),
+                                );
+                            }
                             if exported.contains(item.name.name.as_str()) {
                                 for module_item in &target.items {
                                     if let ModuleItem::ClassDecl(class_decl) = module_item {
                                         if class_decl.name.name == item.name.name {
                                             for member in &class_decl.members {
                                                 scope.insert(member.name.name.clone(), None);
+                                                if use_decl.alias.is_some() {
+                                                    scope.insert(
+                                                        format!(
+                                                            "{}.{}",
+                                                            use_decl.module.name, member.name.name
+                                                        ),
+                                                        None,
+                                                    );
+                                                }
                                             }
                                         }
                                     }
@@ -480,6 +507,12 @@ fn check_defs(
                                             def.name.name.clone(),
                                             deprecated_message_for_export(target, &def.name.name),
                                         );
+                                        if use_decl.alias.is_some() {
+                                            scope.insert(
+                                                format!("{}.{}", use_decl.module.name, def.name.name),
+                                                deprecated_message_for_export(target, &def.name.name),
+                                            );
+                                        }
                                     }
                                     DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                                 }
@@ -1076,6 +1109,65 @@ fn file_diag(module: &Module, diagnostic: Diagnostic) -> FileDiagnostic {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn module_aliasing_rewrites_and_resolves_wildcard_imports() {
+        let source = r#"
+module test.db_alias
+use aivi.database as db
+
+// `db.*` gets rewritten to `aivi.database.*` during parsing; resolver must treat these as in-scope.
+x = db.table
+y = db.applyDelta
+z = db.configure
+"#;
+
+        let path = std::path::Path::new("test.aivi");
+        let (mut modules, diags) = crate::surface::parse_modules(path, source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+
+        let errors: Vec<_> = diags
+            .into_iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:#?}");
+    }
+
+    #[test]
+    fn module_aliasing_handles_call_and_index_syntax() {
+        let source = r#"
+module test.db_alias_syntax
+use aivi.database as db
+
+User = { id: Int, name: Text }
+userTable = db.table "users"[]
+
+main = effect {
+  _ <- db.configure { driver: db.Sqlite, url: ":memory:" }
+  _ <- db.runMigrations[userTable]
+  _ <- userTable + db.ins { id: 1, name: "Alice" }
+  db.load userTable
+}
+"#;
+
+        let path = std::path::Path::new("test.aivi");
+        let (mut modules, diags) = crate::surface::parse_modules(path, source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+
+        let errors: Vec<_> = diags
+            .into_iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:#?}");
+    }
 
     #[test]
     fn debug_unknown_param_is_error() {

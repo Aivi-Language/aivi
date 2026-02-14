@@ -464,7 +464,6 @@ run = add 1 2"#;
 }
 
 #[test]
-#[ignore]
 fn build_references_searches_across_modules() {
     let math_text = r#"@no_prelude
 module examples.compiler.math
@@ -489,7 +488,7 @@ run = add 1 2"#;
             IndexedModule {
                 uri: math_uri.clone(),
                 module,
-                text: None,
+                text: Some(math_text.to_string()),
             },
         );
     }
@@ -501,7 +500,7 @@ run = add 1 2"#;
             IndexedModule {
                 uri: app_uri.clone(),
                 module,
-                text: None,
+                text: Some(app_text.to_string()),
             },
         );
     }
@@ -515,7 +514,6 @@ run = add 1 2"#;
 }
 
 #[test]
-#[ignore]
 fn build_rename_edits_across_modules() {
     let math_text = r#"@no_prelude
 module examples.compiler.math
@@ -540,7 +538,7 @@ run = add 1 2"#;
             IndexedModule {
                 uri: math_uri.clone(),
                 module,
-                text: None,
+                text: Some(math_text.to_string()),
             },
         );
     }
@@ -552,7 +550,7 @@ run = add 1 2"#;
             IndexedModule {
                 uri: app_uri.clone(),
                 module,
-                text: None,
+                text: Some(app_text.to_string()),
             },
         );
     }
