@@ -2,7 +2,7 @@
 
 Kernel has only `case`, so even total bindings can lower via `case`. (A compiler may optimize to projections.)
 
-In surface syntax, these bindings appear in a `do { ... }` block:
+In surface syntax, these bindings appear in a `{ ... }` block:
 
 <<< ../snippets/from_md/04_desugaring/04_patterns/block_01.aivi{aivi}
 
@@ -31,7 +31,7 @@ Pattern translation `⟦p⟧` uses the kernel pattern forms.
 | `v@p` (pattern) | kernel pattern `v @ ⟦p⟧` |
 | `case e of \| v@{ name: n } -> b` | `case ⟦e⟧ of \| v @ { name = n } -> ⟦b⟧` |
 
-A `do { ... }` binding with `@`:
+A `{ ... }` binding with `@`:
 
 <<< ../snippets/from_md/04_desugaring/04_patterns/block_04.aivi{aivi}
 

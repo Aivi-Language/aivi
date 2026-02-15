@@ -62,9 +62,9 @@ value ?
     ```
 
 ### 2.3 Blocks & Control Flow
-*   **Do Block** (Sequential execution):
+*   **Block** (Sequential execution):
     ```aivi
-    do {
+    {
       x <- computation // Bind result (monadic bind-like)
       y = x + 1        // Plain let
       y                // Return value
