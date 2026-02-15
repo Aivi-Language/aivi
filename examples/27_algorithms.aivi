@@ -97,14 +97,14 @@ algo_loop = adj coords goal open came gScore closed =>
 if algo_decode encoded == goal then Some (algo_reverse (algo_reconstruct came (algo_decode encoded))) else if Set.has (algo_decode encoded) closed then algo_loop adj coords goal open2 came gScore closed else algo_relaxNeighbors adj coords goal (algo_decode encoded) (algo_neighbors adj (algo_decode encoded)) came gScore open2 (Set.insert (algo_decode encoded) closed)
 
 gridEdges =
-[
+  [
   // horizontal
-  { from: 0, to: 1, cost: 1 },
-  { from: 1, to: 2, cost: 1 },
-  { from: 10, to: 11, cost: 1 },
-  { from: 11, to: 12, cost: 1 },
-  { from: 20, to: 21, cost: 1 },
-  { from: 21, to: 22, cost: 1 },
+    { from: 0, to: 1, cost: 1 },
+    { from: 1, to: 2, cost: 1 },
+    { from: 10, to: 11, cost: 1 },
+    { from: 11, to: 12, cost: 1 },
+    { from: 20, to: 21, cost: 1 },
+    { from: 21, to: 22, cost: 1 },
 
   // vertical
   { from: 0, to: 10, cost: 1 },

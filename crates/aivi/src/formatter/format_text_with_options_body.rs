@@ -569,6 +569,11 @@
     let mut rendered_lines: Vec<String> = Vec::new();
     let mut blank_run = 0usize;
     let mut pipe_block_base_indent: Option<usize> = None;
+    let mut pipeop_block_base_indent: Option<usize> = None;
+    let mut rhs_next_line_indent: Option<usize> = None;
+    let mut rhs_block_active = false;
+    let mut rhs_block_depth: isize = 0;
+    let mut pipeop_seed_indent: Option<usize> = None;
     let pipe_block_extra = " ".repeat(indent_size);
     let mut prev_non_blank_last_token: Option<String> = None;
     for (line_index, state) in lines.iter().enumerate() {
@@ -578,8 +583,13 @@
                 continue;
             }
             rendered_lines.push(String::new());
-            // Blank lines end any active `|` block to avoid surprising indentation carry-over.
+            // Blank lines end any active continuation blocks to avoid surprising indentation carry-over.
             pipe_block_base_indent = None;
+            pipeop_block_base_indent = None;
+            rhs_next_line_indent = None;
+            rhs_block_active = false;
+            rhs_block_depth = 0;
+            pipeop_seed_indent = None;
             continue;
         }
 
@@ -588,11 +598,26 @@
         let base_indent = state.indent.as_str();
         let mut out = String::new();
 
+        // One-shot seeds: only apply to the next non-blank line.
+        let rhs_seed_match = rhs_next_line_indent == Some(state.indent_len);
+        rhs_next_line_indent = None;
+        let pipeop_seed_match = pipeop_seed_indent == Some(state.indent_len);
+        pipeop_seed_indent = None;
+        if rhs_seed_match {
+            rhs_block_active = true;
+            rhs_block_depth = 0;
+        }
+
         if state.degraded {
             out.push_str(base_indent);
             out.push_str(&format_tokens_simple(&state.tokens));
             rendered_lines.push(out);
             pipe_block_base_indent = None;
+            pipeop_block_base_indent = None;
+            rhs_next_line_indent = None;
+            rhs_block_active = false;
+            rhs_block_depth = 0;
+            pipeop_seed_indent = None;
             prev_non_blank_last_token = state
                 .tokens
                 .iter()
@@ -607,6 +632,7 @@
             out.push_str(&format_tokens_simple(&state.tokens));
             rendered_lines.push(out);
             pipe_block_base_indent = None;
+            pipeop_block_base_indent = None;
             prev_non_blank_last_token = state
                 .tokens
                 .iter()
@@ -616,9 +642,15 @@
             continue;
         };
 
-        // Multi-line `| ...` blocks (multi-clause functions, `?` matches, multi-line ADTs) indent one
-        // level after a `=` or `?` line, and keep that indentation for consecutive `|` lines.
+        let line_has_top_level_eq =
+            find_top_level_token(&state.tokens, "=", first_idx).is_some();
+
+        // Continuation blocks:
+        // - Multi-line `| ...` blocks (multi-clause functions, `?` matches, multi-line ADTs).
+        // - Multi-line `|> ...` pipeline blocks (common after `=`, even when RHS starts on same line).
+        // - A single continuation line after a trailing `=` (e.g. `x =\n  expr`).
         let starts_with_pipe = state.tokens[first_idx].text == "|";
+        let starts_with_pipeop = state.tokens[first_idx].text == "|>";
         let should_indent_pipe = if starts_with_pipe {
             if pipe_block_base_indent == Some(state.indent_len) {
                 true
@@ -628,12 +660,34 @@
         } else {
             false
         };
+        let should_indent_pipeop = if starts_with_pipeop {
+            if pipeop_block_base_indent == Some(state.indent_len) {
+                true
+            } else if pipeop_seed_match {
+                true
+            } else {
+                matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?"))
+            }
+        } else {
+            false
+        };
+
         if starts_with_pipe && should_indent_pipe {
             pipe_block_base_indent = Some(state.indent_len);
         } else if !starts_with_pipe {
             pipe_block_base_indent = None;
         }
-        let effective_indent = if starts_with_pipe && should_indent_pipe {
+        if starts_with_pipeop && should_indent_pipeop {
+            pipeop_block_base_indent = Some(state.indent_len);
+        } else if !starts_with_pipeop {
+            pipeop_block_base_indent = None;
+        }
+
+        let should_indent_continuation =
+            (starts_with_pipe && should_indent_pipe)
+                || (starts_with_pipeop && should_indent_pipeop)
+                || rhs_block_active;
+        let effective_indent = if should_indent_continuation {
             // Avoid allocations in the hot path unless we actually need extra indentation.
             format!("{base_indent}{pipe_block_extra}")
         } else {
@@ -663,6 +717,28 @@
                     .rev()
                     .find(|t| t.kind != "comment")
                     .map(|t| t.text.clone());
+                if line_has_top_level_eq {
+                    pipeop_seed_indent = Some(state.indent_len);
+                }
+                if prev_non_blank_last_token.as_deref() == Some("=") {
+                    rhs_next_line_indent = Some(state.indent_len);
+                }
+                if rhs_block_active {
+                    for t in &state.tokens {
+                        if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
+                            continue;
+                        }
+                        let text = t.text.as_str();
+                        if is_open_sym(text).is_some() {
+                            rhs_block_depth += 1;
+                        } else if is_close_sym(text).is_some() {
+                            rhs_block_depth = (rhs_block_depth - 1).max(0);
+                        }
+                    }
+                    if rhs_block_depth == 0 {
+                        rhs_block_active = false;
+                    }
+                }
                 continue;
             }
         }
@@ -692,6 +768,28 @@
                         .rev()
                         .find(|t| t.kind != "comment")
                         .map(|t| t.text.clone());
+                    if line_has_top_level_eq {
+                        pipeop_seed_indent = Some(state.indent_len);
+                    }
+                    if prev_non_blank_last_token.as_deref() == Some("=") {
+                        rhs_next_line_indent = Some(state.indent_len);
+                    }
+                    if rhs_block_active {
+                        for t in &state.tokens {
+                            if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
+                                continue;
+                            }
+                            let text = t.text.as_str();
+                            if is_open_sym(text).is_some() {
+                                rhs_block_depth += 1;
+                            } else if is_close_sym(text).is_some() {
+                                rhs_block_depth = (rhs_block_depth - 1).max(0);
+                            }
+                        }
+                        if rhs_block_depth == 0 {
+                            rhs_block_active = false;
+                        }
+                    }
                     continue;
                 }
             }
@@ -720,6 +818,28 @@
                     .rev()
                     .find(|t| t.kind != "comment")
                     .map(|t| t.text.clone());
+                if line_has_top_level_eq {
+                    pipeop_seed_indent = Some(state.indent_len);
+                }
+                if prev_non_blank_last_token.as_deref() == Some("=") {
+                    rhs_next_line_indent = Some(state.indent_len);
+                }
+                if rhs_block_active {
+                    for t in &state.tokens {
+                        if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
+                            continue;
+                        }
+                        let text = t.text.as_str();
+                        if is_open_sym(text).is_some() {
+                            rhs_block_depth += 1;
+                        } else if is_close_sym(text).is_some() {
+                            rhs_block_depth = (rhs_block_depth - 1).max(0);
+                        }
+                    }
+                    if rhs_block_depth == 0 {
+                        rhs_block_active = false;
+                    }
+                }
                 continue;
             }
         }
@@ -767,6 +887,28 @@
                                 .rev()
                                 .find(|t| t.kind != "comment")
                                 .map(|t| t.text.clone());
+                            if line_has_top_level_eq {
+                                pipeop_seed_indent = Some(state.indent_len);
+                            }
+                            if prev_non_blank_last_token.as_deref() == Some("=") {
+                                rhs_next_line_indent = Some(state.indent_len);
+                            }
+                            if rhs_block_active {
+                                for t in &state.tokens {
+                                    if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
+                                        continue;
+                                    }
+                                    let text = t.text.as_str();
+                                    if is_open_sym(text).is_some() {
+                                        rhs_block_depth += 1;
+                                    } else if is_close_sym(text).is_some() {
+                                        rhs_block_depth = (rhs_block_depth - 1).max(0);
+                                    }
+                                }
+                                if rhs_block_depth == 0 {
+                                    rhs_block_active = false;
+                                }
+                            }
                             continue;
                         }
                     }
@@ -784,6 +926,29 @@
             .rev()
             .find(|t| t.kind != "comment")
             .map(|t| t.text.clone());
+
+        if line_has_top_level_eq {
+            pipeop_seed_indent = Some(state.indent_len);
+        }
+        if prev_non_blank_last_token.as_deref() == Some("=") {
+            rhs_next_line_indent = Some(state.indent_len);
+        }
+        if rhs_block_active {
+            for t in &state.tokens {
+                if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
+                    continue;
+                }
+                let text = t.text.as_str();
+                if is_open_sym(text).is_some() {
+                    rhs_block_depth += 1;
+                } else if is_close_sym(text).is_some() {
+                    rhs_block_depth = (rhs_block_depth - 1).max(0);
+                }
+            }
+            if rhs_block_depth == 0 {
+                rhs_block_active = false;
+            }
+        }
     }
 
     // Strip leading blank lines to keep output stable when inputs start with a newline.

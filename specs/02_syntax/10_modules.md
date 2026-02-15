@@ -49,7 +49,9 @@ Modules are the primary vehicle for delivering **Domains**. Exporting a domain a
 
 <<< ../snippets/from_md/02_syntax/10_modules/block_05.aivi{aivi}
 
-When another module calls `use geo.vector`, it gains the ability to use `+` on `Vec2` records.
+When another module imports the domain (for example: `use geo.vector (domain Vector)`), it gains the ability to use domain-resolved operators like `+` on `Vec2` records.
+
+In v0.1, importing a module does not automatically activate its domains; domains must be imported explicitly via `use ... (domain Name)` (or by importing specific operator/template bindings as values).
 
 
 ## 10.5 File-Scoped Modules (No Nesting)

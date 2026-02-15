@@ -1,2 +1,9 @@
-date + Calendar.1m
-position + Physics.1m
+use aivi.calendar (domain Calendar)
+
+date = ~d[2026-02-15]
+
+// Avoid collisions by importing only the needed domain templates...
+date2 = date + 1m
+
+// ...or by using explicit constructors/functions instead of a colliding suffix.
+date3 = date + (Month 1)

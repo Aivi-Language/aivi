@@ -13,7 +13,7 @@ systemLocale : Effect Text Locale
 systemLocale = effect {
   tagOpt <- localeTag
   tag =
-  tagOpt ?
+    tagOpt ?
     | Some t => t
     | None   => defaultLocale.tag
   pure (parseLocale tag or defaultLocale)

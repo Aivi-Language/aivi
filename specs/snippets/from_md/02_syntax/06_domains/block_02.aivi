@@ -1,4 +1,7 @@
-10m // 10 minutes (Duration) or 10 meters (Length)
-30s // 30 seconds
-90deg // 90 degrees
+use aivi.duration (domain Duration)
+use aivi.ui.layout (domain Layout)
+
+10min // 10 minutes
+30s   // 30 seconds
 100px // 100 pixels
+50%   // 50 percent

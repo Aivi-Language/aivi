@@ -59,6 +59,21 @@ fn insert_record_path(
 
 fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Option<Value> {
     match (op, left, right) {
+        ("..", Value::Int(start), Value::Int(end)) => {
+            if start > end {
+                return Some(Value::List(Arc::new(Vec::new())));
+            }
+            let mut out = Vec::new();
+            let mut current = *start;
+            loop {
+                out.push(Value::Int(current));
+                if current == *end {
+                    break;
+                }
+                current = current.checked_add(1)?;
+            }
+            Some(Value::List(Arc::new(out)))
+        }
         ("+", Value::Int(a), Value::Int(b)) => Some(Value::Int(a + b)),
         ("-", Value::Int(a), Value::Int(b)) => Some(Value::Int(a - b)),
         ("*", Value::Int(a), Value::Int(b)) => Some(Value::Int(a * b)),

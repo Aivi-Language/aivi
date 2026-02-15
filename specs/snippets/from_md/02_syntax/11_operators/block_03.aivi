@@ -1,0 +1,7 @@
+module demo.domainImport
+export addOneSecond
+
+// Import only the domain members (operators and suffix templates).
+use aivi.duration (domain Duration)
+
+addOneSecond = span => span + 1s

@@ -6,6 +6,6 @@ use examples.compiler.math as math
 use examples.compiler.stats as stats
 
 run =
-[1, 2, 3, 4]
+  [1, 2, 3, 4]
 |> stats.mean
 |> math.add (math.square 2)
