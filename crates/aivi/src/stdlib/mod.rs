@@ -44,6 +44,7 @@ mod testing;
 mod text;
 mod ui;
 mod ui_layout;
+mod ui_server_html;
 mod units;
 mod url;
 mod vector;
@@ -233,6 +234,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: ui::MODULE_NAME,
         source: ui::SOURCE,
+    },
+    EmbeddedModule {
+        name: ui_server_html::MODULE_NAME,
+        source: ui_server_html::SOURCE,
     },
 ];
 

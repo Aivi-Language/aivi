@@ -7,6 +7,8 @@
 - accepts browser events over a WebSocket and responds with VDOM diffs as patches.
 
 <!-- /quick-info -->
+
+Note: `aivi.ui.live` is the minimal v0.1 LiveView runtime. For typed event payloads, platform signals, IntersectionObserver subscriptions, and clipboard effects, use `aivi.ui.ServerHtml`.
 <<< ../../snippets/from_md/05_stdlib/04_ui/05_liveview/block_01.aivi{aivi}
 
 ## API Shape

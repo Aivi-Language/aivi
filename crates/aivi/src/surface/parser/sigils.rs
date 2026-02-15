@@ -346,8 +346,6 @@ impl Parser {
 
         // Lower parsed HTML nodes to `aivi.ui` constructors.
         fn lower_attr(_this: &mut Parser, attr: HtmlAttr, span: &Span) -> Option<Expr> {
-            // Use `aivi.ui` helper names with a unique prefix so the lowered code is resilient
-            // to collisions in the runtime's flat global namespace (e.g. `id`, `style`).
             let mk_ident = |name: &str| {
                 Expr::Ident(SpannedName {
                     name: name.to_string(),
@@ -373,21 +371,24 @@ impl Parser {
 
             let name = attr.name;
             match (name.as_str(), attr.value) {
-                ("class", HtmlAttrValue::Text(v)) => Some(call1("vClass", mk_string(&v))),
-                ("id", HtmlAttrValue::Text(v)) => Some(call1("vId", mk_string(&v))),
-                ("style", HtmlAttrValue::Splice(expr)) => Some(call1("vStyle", expr)),
-                ("onClick", HtmlAttrValue::Splice(expr)) => Some(call1("vOnClick", expr)),
-                ("onInput", HtmlAttrValue::Splice(expr)) => Some(call1("vOnInput", expr)),
+                ("class", HtmlAttrValue::Text(v)) => Some(call1("Class", mk_string(&v))),
+                ("id", HtmlAttrValue::Text(v)) => Some(call1("Id", mk_string(&v))),
+                ("style", HtmlAttrValue::Splice(expr)) => Some(call1("Style", expr)),
+                ("onClick", HtmlAttrValue::Splice(expr)) => Some(call1("OnClick", expr)),
+                ("onClickE", HtmlAttrValue::Splice(expr)) => Some(call1("OnClickE", expr)),
+                ("onInput", HtmlAttrValue::Splice(expr)) => Some(call1("OnInput", expr)),
+                ("onInputE", HtmlAttrValue::Splice(expr)) => Some(call1("OnInputE", expr)),
+                ("onKeyDown", HtmlAttrValue::Splice(expr)) => Some(call1("OnKeyDown", expr)),
+                ("onKeyUp", HtmlAttrValue::Splice(expr)) => Some(call1("OnKeyUp", expr)),
+                ("onPointerDown", HtmlAttrValue::Splice(expr)) => Some(call1("OnPointerDown", expr)),
+                ("onPointerUp", HtmlAttrValue::Splice(expr)) => Some(call1("OnPointerUp", expr)),
+                ("onPointerMove", HtmlAttrValue::Splice(expr)) => Some(call1("OnPointerMove", expr)),
+                ("onFocus", HtmlAttrValue::Splice(expr)) => Some(call1("OnFocus", expr)),
+                ("onBlur", HtmlAttrValue::Splice(expr)) => Some(call1("OnBlur", expr)),
                 ("key", _) => None, // handled separately
-                (_other, HtmlAttrValue::Text(v)) => {
-                    Some(call2("vAttr", mk_string(&name), mk_string(&v)))
-                }
-                (_other, HtmlAttrValue::Splice(expr)) => {
-                    Some(call2("vAttr", mk_string(&name), expr))
-                }
-                (_other, HtmlAttrValue::Bare) => {
-                    Some(call2("vAttr", mk_string(&name), mk_string("true")))
-                }
+                (_other, HtmlAttrValue::Text(v)) => Some(call2("Attr", mk_string(&name), mk_string(&v))),
+                (_other, HtmlAttrValue::Splice(expr)) => Some(call2("Attr", mk_string(&name), expr)),
+                (_other, HtmlAttrValue::Bare) => Some(call2("Attr", mk_string(&name), mk_string("true"))),
             }
         }
 
@@ -418,7 +419,7 @@ impl Parser {
 
             match node {
                 HtmlNode::Text(t) => Expr::Call {
-                    func: Box::new(mk_ident("vText")),
+                    func: Box::new(mk_ident("TextNode")),
                     args: vec![mk_string(&t)],
                     span: span.clone(),
                 },
@@ -450,13 +451,13 @@ impl Parser {
                         .collect();
 
                     let element_expr = Expr::Call {
-                        func: Box::new(mk_ident("vElement")),
+                        func: Box::new(mk_ident("Element")),
                         args: vec![mk_string(&tag), list(lowered_attrs), list(lowered_children)],
                         span: span.clone(),
                     };
                     if let Some(key_expr) = key_expr {
                         Expr::Call {
-                            func: Box::new(mk_ident("vKeyed")),
+                            func: Box::new(mk_ident("Keyed")),
                             args: vec![key_expr, element_expr],
                             span: span.clone(),
                         }
