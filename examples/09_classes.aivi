@@ -45,6 +45,6 @@ instance Eq (Option Bool) = {
     | _                => False
 }
 
-isNone = opt => opt ?
+isNone = ?
   | None   => True
   | Some _ => False

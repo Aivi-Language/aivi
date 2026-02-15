@@ -15,10 +15,10 @@ main = effect {
     "c" => 4
   }
   merged = Map.union base more
-  _ <- print "merged: {merged}"
+  print "merged: {merged}"
 
   tags = ~set["hot", "new", ...Set.fromList["fresh"]]
-  _ <- print "tags: {tags}"
+  print "tags: {tags}"
 
   q1 = Queue.enqueue "first" Queue.empty
   q2 = Queue.enqueue "second" q1

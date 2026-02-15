@@ -9,17 +9,17 @@ main : Effect Text Unit
 main = effect {
   today = { year: 2025, month: 2, day: 8 }
   next = addDays today 1
-  _ <- print "{next.year}-{next.month}-{next.day}"
+  print "{next.year}-{next.month}-{next.day}"
 
   timeout = { millis: 1000 }
-  _ <- print "timeout: {timeout.millis}"
+  print "timeout: {timeout.millis}"
 
   primary = { r: 10, g: 20, b: 30 }
   lighter = adjustLightness primary 10
-  _ <- print (toHex lighter)
+  print (toHex lighter)
 
   v1 = { x: 1, y: 2 }
   v2 = { x: 3, y: 4 }
   v3 = { x: v1.x + v2.x, y: v1.y + v2.y }
-  _ <- print "{v3.x},{v3.y}"
+  print "{v3.x},{v3.y}"
 }

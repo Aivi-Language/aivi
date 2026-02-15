@@ -42,5 +42,5 @@ loadOrDefault = path fallback => effect {
 program2 : Effect Text Unit
 program2 = effect {
   cfg <- loadOrDefault "config.json" "default"
-  _   <- print cfg
+  print cfg
 }

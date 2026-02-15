@@ -5,7 +5,7 @@ use aivi.net.sockets (SocketError, Connection, listen, accept, recv, send)
 
 main : Effect SocketError Unit
 main = effect {
-  _ <- echoServer 8080
+  echoServer 8080
 }
 
 echoServer : Int -> Effect SocketError Unit

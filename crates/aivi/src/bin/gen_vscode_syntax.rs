@@ -121,8 +121,7 @@ fn aivi_tmlanguage() -> serde_json::Value {
           "patterns": [
             {
               "name": "meta.type.signature.aivi",
-              "begin": "^\\s*[a-z][A-Za-z0-9_]*\\s+:\\s+",
-              "end": "$"
+              "match": "^\\s*[a-z][A-Za-z0-9_]*\\s+:.*$"
             }
           ]
         },

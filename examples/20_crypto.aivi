@@ -7,11 +7,11 @@ use aivi.crypto
 main : Effect Text Unit
 main = effect {
   hash = sha256 "aivi"
-  _ <- print "sha256: {hash}"
+  print "sha256: {hash}"
 
   uuid <- randomUuid
-  _    <- print "uuid: {uuid}"
+  print "uuid: {uuid}"
 
   bytes <- randomBytes 16
-  _     <- print "bytes: {bytes}"
+  print "bytes: {bytes}"
 }
