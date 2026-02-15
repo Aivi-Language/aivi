@@ -20,10 +20,15 @@ classify = n => n ?
   | n when n < 0 => "negative"
   | _            => "positive"
 
-deepName : { data: { user: { profile: { name: String } } } } -> String
+deepName: { data: {
+    user: { profile: {
+        name: String } } } } -> String
 deepName = ?
-  | { data.user.profile@{ age } } => name
-  | _                             => "unknown"
+  | { data.user.profile@{
+      name
+      age: _
+    } } => name
+  | _ => "unknown"
 
 unwrap =
   | Ok x  => x
