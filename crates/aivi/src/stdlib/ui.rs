@@ -16,9 +16,9 @@ export live
 use aivi
 
 // A typed Virtual DOM. Rendering is backend/runtime-specific.
-type VNode msg = Element Text (List (Attr msg)) (List (VNode msg)) | TextNode Text | Keyed Text (VNode msg)
+VNode msg = Element Text (List (Attr msg)) (List (VNode msg)) | TextNode Text | Keyed Text (VNode msg)
 
-type Attr msg = Class Text | Id Text | Style { } | OnClick msg | OnInput (Text -> msg) | Attr Text Text
+Attr msg = Class Text | Id Text | Style { } | OnClick msg | OnInput (Text -> msg) | Attr Text Text
 
 // Helpers for tooling/lowerings. These avoid common names like `id` or `style`,
 // which are likely to appear in user code and other stdlib modules.
@@ -50,12 +50,12 @@ vOnInput : (Text -> msg) -> Attr msg
 vOnInput = f => OnInput f
 
 // Patch operations for LiveView-like updates.
-type PatchOp = Replace Text Text | SetText Text Text | SetAttr Text Text Text | RemoveAttr Text Text
+PatchOp = Replace Text Text | SetText Text Text | SetAttr Text Text Text | RemoveAttr Text Text
 
-type Event = Click Int | Input Int Text
+Event = Click Int | Input Int Text
 
-type LiveConfig = { address: Text, path: Text, title: Text }
-type LiveError = { message: Text }
+LiveConfig = { address: Text, path: Text, title: Text }
+LiveError = { message: Text }
 
 renderHtml : VNode msg -> Text
 renderHtml = node => ui.renderHtml node

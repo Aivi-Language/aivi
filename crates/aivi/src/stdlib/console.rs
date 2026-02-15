@@ -9,8 +9,8 @@ export color, bgColor, style, strip
 
 use aivi
 
-type AnsiColor = Black | Red | Green | Yellow | Blue | Magenta | Cyan | White | Default
-type AnsiStyle = {
+AnsiColor = Black | Red | Green | Yellow | Blue | Magenta | Cyan | White | Default
+AnsiStyle = {
   fg: Option AnsiColor
   bg: Option AnsiColor
   bold: Bool

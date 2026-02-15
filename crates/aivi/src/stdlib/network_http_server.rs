@@ -17,8 +17,8 @@ ServerConfig = { address: Text }
 HttpError = { message: Text }
 WsError = { message: Text }
 
-type WsMessage = TextMsg Text | BinaryMsg (List Int) | Ping | Pong | Close
-type ServerReply = Http Response | Ws (WebSocket -> Effect WsError Unit)
+WsMessage = TextMsg Text | BinaryMsg (List Int) | Ping | Pong | Close
+ServerReply = Http Response | Ws (WebSocket -> Effect WsError Unit)
 
 listen : ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource HttpError Server
 listen = config handler => resource {

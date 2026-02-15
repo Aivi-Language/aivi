@@ -1,6 +1,6 @@
 domain Name over CarrierType = {
   // 1. Define the "change" type
-  type Delta = ...
+  Delta = ...
 
   // 2. Implement operators
   (+) : CarrierType -> Delta -> CarrierType

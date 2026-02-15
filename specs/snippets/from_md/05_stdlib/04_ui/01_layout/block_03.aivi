@@ -1,9 +1,9 @@
 domain Layout over UnitVal = {
   // Length (pixels)
-  type Length = Px Int | Em Int | Rem Int | Vh Int | Vw Int
+  Length = Px Int | Em Int | Rem Int | Vh Int | Vw Int
 
   // Percentage (0.0 - 1.0 or 0 - 100)
-  type Percentage = Pct Int
+  Percentage = Pct Int
 
   // Literals
   1px = Px 1

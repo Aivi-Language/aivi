@@ -71,7 +71,7 @@ pub fn generate_i18n_module_from_properties(
     out.push_str("use aivi\n");
     out.push('\n');
 
-    out.push_str("type KeyId = ");
+    out.push_str("KeyId = ");
     out.push_str(&ctor_names.join(" | "));
     out.push('\n');
     out.push('\n');

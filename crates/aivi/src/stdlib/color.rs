@@ -40,7 +40,7 @@ negateDelta = delta => delta ?
   | Hue n => Hue (-n)
 
 domain Color over Rgb = {
-  type Delta = Lightness Int | Saturation Int | Hue Int
+  Delta = Lightness Int | Saturation Int | Hue Int
 
   (+) : Rgb -> Delta -> Rgb
   (+) = col (Lightness n) => adjustLightness col n

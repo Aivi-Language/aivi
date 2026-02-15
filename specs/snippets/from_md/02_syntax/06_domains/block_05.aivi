@@ -4,7 +4,7 @@ Rgb = { r: Int, g: Int, b: Int }
 // The definition
 domain Color over Rgb = {
   // Deltas define how values can change
-  type Delta = Lightness Int | Hue Int
+  Delta = Lightness Int | Hue Int
 
   // Operator: Color + Change -> Color
   (+) : Rgb -> Delta -> Rgb

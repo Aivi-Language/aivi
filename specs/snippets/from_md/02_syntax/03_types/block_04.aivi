@@ -1,2 +1,2 @@
-type Option A = None | Some A
-type Result E A = Err E | Ok A
+Option A = None | Some A
+Result E A = Err E | Ok A

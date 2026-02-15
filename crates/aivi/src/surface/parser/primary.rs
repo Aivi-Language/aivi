@@ -64,6 +64,26 @@ impl Parser {
     }
 
     fn parse_primary(&mut self) -> Option<Expr> {
+        if self.consume_symbol("!") {
+            let bang_span = self.previous_span();
+            let rhs = self.parse_primary()?;
+            let true_lit = Expr::Literal(Literal::Bool {
+                value: true,
+                span: bang_span.clone(),
+            });
+            let false_lit = Expr::Literal(Literal::Bool {
+                value: false,
+                span: bang_span.clone(),
+            });
+            let span = merge_span(bang_span, expr_span(&rhs));
+            // `!p` desugars to `if p then False else True`.
+            return Some(Expr::If {
+                cond: Box::new(rhs),
+                then_branch: Box::new(false_lit),
+                else_branch: Box::new(true_lit),
+                span,
+            });
+        }
         if self.peek_symbol("-") {
             let checkpoint = self.pos;
             self.consume_symbol("-");

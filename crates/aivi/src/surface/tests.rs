@@ -554,7 +554,7 @@ module Example
 UnitVal = { val: Float }
 
 domain Layout over UnitVal = {
-  type Length = Px Float
+  Length = Px Float
 
   1px = Px 1.0
   1em = Em 1.0

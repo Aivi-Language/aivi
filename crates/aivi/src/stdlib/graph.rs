@@ -167,7 +167,7 @@ degreeOut = g node => length (edgesFrom g node)
 degreeIn : Graph -> NodeId -> Int
 degreeIn = g node => length (edgesTo g node)
 
-type GraphIndex = { nodes: List NodeId, out: Map NodeId (List Edge), incoming: Map NodeId (List Edge) }
+GraphIndex = { nodes: List NodeId, out: Map NodeId (List Edge), incoming: Map NodeId (List Edge) }
 
 mapPushFront : NodeId -> Edge -> Map NodeId (List Edge) -> Map NodeId (List Edge)
 mapPushFront = key edge m =>

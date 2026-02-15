@@ -91,6 +91,49 @@ fn cleanups_run_even_when_cancelled() {
 }
 
 #[test]
+fn boolean_operators_short_circuit_and_unary_not() {
+    let source = r#"
+module test.bool
+x = False && (([1])[10] == 0)
+y = True || (([1])[10] == 0)
+z = !True
+w = !False
+"#;
+    let mut runtime = runtime_from_source(source);
+
+    let x = runtime.ctx.globals.get("x").unwrap();
+    let y = runtime.ctx.globals.get("y").unwrap();
+    let z = runtime.ctx.globals.get("z").unwrap();
+    let w = runtime.ctx.globals.get("w").unwrap();
+
+    let x = expect_ok(runtime.force_value(x), "failed to evaluate x");
+    let y = expect_ok(runtime.force_value(y), "failed to evaluate y");
+    let z = expect_ok(runtime.force_value(z), "failed to evaluate z");
+    let w = expect_ok(runtime.force_value(w), "failed to evaluate w");
+
+    assert!(
+        matches!(x, Value::Bool(false)),
+        "expected False for x, got {}",
+        format_value(&x)
+    );
+    assert!(
+        matches!(y, Value::Bool(true)),
+        "expected True for y, got {}",
+        format_value(&y)
+    );
+    assert!(
+        matches!(z, Value::Bool(false)),
+        "expected False for z, got {}",
+        format_value(&z)
+    );
+    assert!(
+        matches!(w, Value::Bool(true)),
+        "expected True for w, got {}",
+        format_value(&w)
+    );
+}
+
+#[test]
 fn text_interpolation_evaluates() {
     let source = r#"
 module test.interpolation
@@ -294,8 +337,8 @@ fn database_persists_rows_in_sqlite_memory() {
     let source = r#"
 module test.databaseSqlite
 
-type Driver = Sqlite | Postgresql | Mysql
-type DbConfig = { driver: Driver, url: Text }
+Driver = Sqlite | Postgresql | Mysql
+DbConfig = { driver: Driver, url: Text }
 
 User = { id: Int, name: Text }
 
