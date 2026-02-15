@@ -79,6 +79,9 @@ pub(super) fn build_ui_record() -> Value {
             ui_live(cfg, initial_model, view, update, runtime)
         }),
     );
+
+    // LiveView-style runtime with typed events/effects.
+    fields.insert("ServerHtml".to_string(), build_server_html_record());
     Value::Record(Arc::new(fields))
 }
 

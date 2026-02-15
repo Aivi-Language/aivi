@@ -911,19 +911,17 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
     fn pattern_binds_name(pat: &aivi::Pattern, name: &str) -> bool {
         match pat {
             aivi::Pattern::Ident(n) | aivi::Pattern::SubjectIdent(n) => n.name == name,
-            aivi::Pattern::At { name: n, pattern, .. } => {
-                n.name == name || pattern_binds_name(pattern, name)
-            }
+            aivi::Pattern::At {
+                name: n, pattern, ..
+            } => n.name == name || pattern_binds_name(pattern, name),
             aivi::Pattern::Tuple { items, .. } => items.iter().any(|p| pattern_binds_name(p, name)),
             aivi::Pattern::List { items, rest, .. } => {
                 items.iter().any(|p| pattern_binds_name(p, name))
-                    || rest
-                        .as_deref()
-                        .is_some_and(|p| pattern_binds_name(p, name))
+                    || rest.as_deref().is_some_and(|p| pattern_binds_name(p, name))
             }
-            aivi::Pattern::Record { fields, .. } => fields
-                .iter()
-                .any(|f| pattern_binds_name(&f.pattern, name)),
+            aivi::Pattern::Record { fields, .. } => {
+                fields.iter().any(|f| pattern_binds_name(&f.pattern, name))
+            }
             aivi::Pattern::Constructor { args, .. } => {
                 args.iter().any(|p| pattern_binds_name(p, name))
             }
@@ -938,7 +936,9 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
                 out.push(name.clone());
                 collect_pattern_binders(pattern, out);
             }
-            aivi::Pattern::Tuple { items, .. } => items.iter().for_each(|p| collect_pattern_binders(p, out)),
+            aivi::Pattern::Tuple { items, .. } => {
+                items.iter().for_each(|p| collect_pattern_binders(p, out))
+            }
             aivi::Pattern::List { items, rest, .. } => {
                 items.iter().for_each(|p| collect_pattern_binders(p, out));
                 if let Some(rest) = rest.as_deref() {
@@ -962,12 +962,11 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
             aivi::Expr::List { items, .. } => items
                 .iter()
                 .any(|item| expr_uses_name_free(&item.expr, name)),
-            aivi::Expr::Record { fields, .. } | aivi::Expr::PatchLit { fields, .. } => fields
-                .iter()
-                .any(|f| expr_uses_name_free(&f.value, name)),
+            aivi::Expr::Record { fields, .. } | aivi::Expr::PatchLit { fields, .. } => {
+                fields.iter().any(|f| expr_uses_name_free(&f.value, name))
+            }
             aivi::Expr::Call { func, args, .. } => {
-                expr_uses_name_free(func, name)
-                    || args.iter().any(|a| expr_uses_name_free(a, name))
+                expr_uses_name_free(func, name) || args.iter().any(|a| expr_uses_name_free(a, name))
             }
             aivi::Expr::Lambda { params, body, .. } => {
                 if params.iter().any(|p| pattern_binds_name(p, name)) {
