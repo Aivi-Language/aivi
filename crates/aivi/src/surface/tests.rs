@@ -92,6 +92,29 @@ module Example
 }
 
 #[test]
+fn rejects_legacy_braced_module_body_syntax() {
+    let src = r#"
+module Example = {
+  x = 1
+}
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1518".to_string()));
+}
+
+#[test]
+fn rejects_module_not_at_file_start() {
+    let src = r#"
+x = 1
+
+module Example
+y = 2
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1519".to_string()));
+}
+
+#[test]
 fn parses_structured_sigil_map_literal() {
     let src = r#"
 module Example
@@ -671,13 +694,11 @@ class Collection (C *) = with (A: Eq, B: Show) {
 #[test]
 fn rejects_multiple_modules_per_file() {
     let src = r#"
-module A = {
-  x = 1
-}
+module A
+x = 1
 
-module B = {
-  y = 2
-}
+module B
+y = 2
 "#;
     let (_, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diag_codes(&diags).contains(&"E1516".to_string()));

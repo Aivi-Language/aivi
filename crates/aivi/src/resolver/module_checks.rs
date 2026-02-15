@@ -320,9 +320,11 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
 }
 
 fn check_duplicate_exports(module: &Module, diagnostics: &mut Vec<FileDiagnostic>) {
-    let mut seen: HashSet<&str> = HashSet::new();
+    // Exports live in multiple namespaces (e.g. `domain Path` and `Path`), so only reject
+    // duplicates within the same exported kind.
+    let mut seen: HashSet<(crate::surface::ScopeItemKind, &str)> = HashSet::new();
     for export in &module.exports {
-        if !seen.insert(export.name.name.as_str()) {
+        if !seen.insert((export.kind, export.name.name.as_str())) {
             diagnostics.push(file_diag(
                 module,
                 Diagnostic {

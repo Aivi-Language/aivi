@@ -1,11 +1,5 @@
-// 1. Define the production module
-module my.app.api = {
-  export fetchDashboard
-  fetchDashboard = ... // Real HTTP call
-}
+// in `my/app/api.aivi`
+module my.app.api
+export fetchDashboard
 
-// 2. Define the test module (same interface, different logic)
-module my.app.api.test = {
-  export fetchDashboard
-  fetchDashboard = _ => { id: 1, title: "Mock Dash" }
-}
+fetchDashboard = ... // Real HTTP call

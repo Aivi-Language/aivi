@@ -1,0 +1,5 @@
+// in `my/app/api/test.aivi`
+module my.app.api.test
+export fetchDashboard
+
+fetchDashboard = _ => { id: 1, title: "Mock Dash" }

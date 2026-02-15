@@ -7,16 +7,3 @@ The `Testing` domain is built right into the language because reliability should
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/00_core/27_testing/block_01.aivi{aivi}
-
-## Goals
-
-Status:
-
-- 🟢 Done
-- 🟡 Partial
-- 🔴 Missing
-
-- 🟡 `test` keyword or block construct.
-- 🟡 Assertions with rich diffs (`assertEq`, etc.).
-- 🔴 Test discovery and execution via `aivi test`.
-- 🔴 Property-based testing basics (generators) integration.

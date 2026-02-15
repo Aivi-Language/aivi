@@ -71,8 +71,8 @@ FieldSep   := Sep | ","
 ## 0.2 Top level
 
 ```ebnf
-Program        := { TopItem }
-TopItem        := { Decorator } (ModuleDef | Definition)
+Program        := { Decorator } ModuleDef
+TopItem        := Definition
 
 Decorator      := "@" lowerIdent [ DecoratorArg ] Sep
 DecoratorArg   := Expr | RecordLit
@@ -96,13 +96,12 @@ TypeRhs        := Type
                | [ Sep? "|" ] ConDef { Sep? "|" ConDef }
 ConDef         := UpperIdent { TypeAtom }
 
-ModuleDef      := "module" ModulePath ( "=" ModuleBody Sep | Sep ModuleBodyImplicit )
+ModuleDef      := "module" ModulePath Sep ModuleBodyImplicit
 ModulePath     := ModuleSeg { "." ModuleSeg }
 ModuleSeg      := lowerIdent | UpperIdent
-ModuleBody     := "{" { ModuleItem } "}"
-ModuleItem     := ExportStmt | UseStmt | Definition | ModuleDef
+ModuleItem     := ExportStmt | UseStmt | Definition
 ModuleBodyImplicit := { ModuleItem } EOF
-(* ModuleBodyImplicit must be the last top-level item in the file. *)
+(* `module` must be the first non-empty item in the file (after any module decorators). *)
 ExportStmt     := "export" ( "*" | ExportList ) Sep
 ExportList     := ExportItem { "," ExportItem }
 ExportItem     := lowerIdent | UpperIdent | ("domain" UpperIdent)

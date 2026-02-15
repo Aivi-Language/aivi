@@ -965,6 +965,13 @@
       ]
     },
     {
+      "path": "specs/snippets/from_md/02_syntax/10_modules/block_11_test.aivi",
+      "module": "docs.snippets.02_syntax.10_modules.block_11_test",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
       "path": "specs/snippets/from_md/02_syntax/10_modules/block_12.aivi",
       "module": "docs.snippets.02_syntax.10_modules.block_12",
       "verify": [

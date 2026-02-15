@@ -1,23 +1,21 @@
 @no_prelude
-module aivi.repro_extends = {
+module aivi.repro_extends
 
-  class = Super A => {
-    foo: A -> A
-  }
+class = Super A => {
+  foo: A -> A
+}
 
-  class = Sub A => Super A with {
-    bar: A -> A
-  }
+class = Sub A => Super A with {
+  bar: A -> A
+}
 
-  // Case 1: Checking if Sub instance requires implementing 'foo'
-  // If backend merges members, this should ERROR (missing 'foo').
-  instance Sub Int = {
-    bar: x => x
-  }
+// Case 1: Checking if Sub instance requires implementing 'foo'
+// If backend merges members, this should ERROR (missing 'foo').
+instance Sub Int = {
+  bar: x => x
+}
 
-  // Case 2: If we provide Super instance, does Sub still require 'foo'?
-  instance Super Int = {
-    foo: x => x
-  }
-
+// Case 2: If we provide Super instance, does Sub still require 'foo'?
+instance Super Int = {
+  foo: x => x
 }

@@ -1,8 +1,7 @@
 // Aggregate multiple sub-modules into a single clean API
-module my.app.api = {
-  export login, fetchDashboard, updateProfile
+module my.app.api
+export login, fetchDashboard, updateProfile
 
-  use my.app.auth (login)
-  use my.app.data (fetchDashboard)
-  use my.app.user (updateProfile)
-}
+use my.app.auth (login)
+use my.app.data (fetchDashboard)
+use my.app.user (updateProfile)

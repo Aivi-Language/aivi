@@ -1,4 +1,4 @@
-module aivi = {
-  module calendar = { ...}
-  module number = { ...}
-}
+module aivi
+
+// Modules are file-scoped in v0.1. Use dot paths + separate files for hierarchy.
+// Example submodules: `aivi.calendar`, `aivi.number`, `aivi.text`.
