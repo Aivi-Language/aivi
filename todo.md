@@ -1,5 +1,5 @@
 > 1.2.1 Recursion (module level)
-> Local recursion inside do { ... } / effect { ... } blocks is a future surface feature; in v0.1, prefer defining recursive helpers at module scope.
+> Local recursion inside { ... } / effect { ... } blocks is a future surface feature; in v0.1, prefer defining recursive helpers at module scope.
 
 what does this mean?
 
@@ -37,4 +37,3 @@ do we have tests for this?
 > renderCount = { count * 23 sasd, adsad step } =>
 
 lsp server is bad at spotting garbage code...how to fix. it should complain about bad destructors, unknown symbols etc.
-

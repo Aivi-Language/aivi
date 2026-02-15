@@ -204,7 +204,7 @@ Atom           := Literal
 SuffixedParens := "(" Expr ")" Suffix
 Suffix         := lowerIdent | "%"
 
-Block          := "do" "{" { Stmt } "}"
+Block          := "{" { Stmt } "}"
 EffectBlock    := "effect" "{" { Stmt } "}"
 GenerateBlock  := "generate" "{" { GenStmt } "}"
 ResourceBlock  := "resource" "{" { ResStmt } "}"
@@ -230,7 +230,7 @@ Range          := Expr ".." Expr
 
 RecordLit      := "{" { RecordEntry } "}"
 RecordEntry    := RecordField | RecordSpread
-RecordField    := lowerIdent [ ":" Expr ] [ FieldSep ]
+RecordField    := lowerIdent ":" Expr [ FieldSep ]
 RecordSpread   := "..." Expr [ FieldSep ]
 
 MapLit         := "~map" "{" [ MapEntry { FieldSep MapEntry } ] "}"
@@ -260,8 +260,10 @@ Literal        := "True"
 
 **Notes**
 
-- `{ ... }` is reserved for record-shaped forms (`RecordLit`, `RecordType`, `RecordPat`, `PatchLit`, and module/domain bodies).
-- Multi-statement expression blocks use `do { ... }`, so the parser never needs to guess whether `{ ... }` is a record literal or a block.
+- `{ ... }` is used for both record-shaped forms (`RecordLit`, `RecordType`, `RecordPat`, `PatchLit`, and module/domain bodies) *and* expression blocks.
+- Parsing `{ ... }` should disambiguate **record literal vs block** by lookahead:
+  - If the first non-newline token begins a record entry (`...` spread, or a field name followed by `:`), parse as `RecordLit`.
+  - Otherwise parse as `Block`.
 - `.field` is shorthand for `x => x.field` (a unary accessor function).
 - `_` is *not* a value. It only appears in expressions as part of the placeholder-lambda sugar (see [Desugaring: Functions](../04_desugaring/02_functions.md)).
 - `RawSigilLit` content (`SigilText` / `SigilRegexText`) is lexed as raw text until the matching delimiter; `~map{}` and `~set[]` are parsed as structured literals (`MapLit` / `SetLit`).
@@ -349,7 +351,6 @@ RecordPatKey   := lowerIdent { "." lowerIdent }
 
 ## 0.9 Diagnostics (where the compiler should nag)
 
-- **Likely-missed `do`**: if `{ ... }` contains `=` bindings or statement separators, error and suggest `do { ... }` (since `{ ... }` is record-shaped).
 - **Arms without a `?`**: `| p => e` is only valid after `?` *or* directly after `=` in the multi-clause unary function form.
 - **`_` placeholder**: `_ + 1` is only legal where a unary function is expected; otherwise error and suggest `x => x + 1`.
 - **Deep keys in record literals**: `a.b: 1` should be rejected in record literals (suggest patching with `<|` if the intent was a path).
