@@ -23,8 +23,8 @@ use super::signal::build_signal_record;
 use super::sockets::build_sockets_record;
 use super::streams::build_streams_record;
 use super::system::{
-    build_clock_record, build_console_record, build_file_record, build_random_record,
-    build_env_source_record, build_system_record,
+    build_clock_record, build_console_record, build_env_source_record, build_file_record,
+    build_random_record, build_system_record,
 };
 use super::text::build_text_record;
 use super::ui::build_ui_record;

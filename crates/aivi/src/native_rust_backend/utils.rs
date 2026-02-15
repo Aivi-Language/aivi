@@ -7,6 +7,10 @@ pub(super) fn collect_pattern_vars(pattern: &RustIrPattern, out: &mut Vec<String
         RustIrPattern::Wildcard { .. } => {}
         RustIrPattern::Var { name, .. } => out.push(name.clone()),
         RustIrPattern::Literal { .. } => {}
+        RustIrPattern::At { name, pattern, .. } => {
+            out.push(name.clone());
+            collect_pattern_vars(pattern, out);
+        }
         RustIrPattern::Constructor { args, .. } => {
             for arg in args {
                 collect_pattern_vars(arg, out);

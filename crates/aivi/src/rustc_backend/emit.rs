@@ -62,6 +62,16 @@ fn emit_plain_block(items: &[RustIrBlockItem], indent: usize) -> Result<String, 
                         emit_expr(expr, indent + 1)?
                     ));
                 }
+                crate::rust_ir::RustIrPattern::At { name, pattern, .. }
+                    if matches!(**pattern, crate::rust_ir::RustIrPattern::Wildcard { .. }) =>
+                {
+                    s.push_str(&ind2);
+                    s.push_str(&format!(
+                        "let {} = ({} )?;\n",
+                        rust_local_name(name),
+                        emit_expr(expr, indent + 1)?
+                    ));
+                }
                 _ => {
                     return Err(AiviError::Codegen(
                         "only wildcard/var patterns are supported in block binds".to_string(),
@@ -90,6 +100,16 @@ fn emit_plain_block(items: &[RustIrBlockItem], indent: usize) -> Result<String, 
                     s.push_str(&format!("let _ = ({} )?;\n", emit_expr(expr, indent + 1)?));
                 }
                 crate::rust_ir::RustIrPattern::Var { name, .. } => {
+                    s.push_str(&ind2);
+                    s.push_str(&format!(
+                        "let {} = ({} )?;\n",
+                        rust_local_name(name),
+                        emit_expr(expr, indent + 1)?
+                    ));
+                }
+                crate::rust_ir::RustIrPattern::At { name, pattern, .. }
+                    if matches!(**pattern, crate::rust_ir::RustIrPattern::Wildcard { .. }) =>
+                {
                     s.push_str(&ind2);
                     s.push_str(&format!(
                         "let {} = ({} )?;\n",
@@ -141,6 +161,16 @@ fn emit_effect_block(items: &[RustIrBlockItem], indent: usize) -> Result<String,
                         s.push_str(&format!("let _ = run_effect(({} )?)?;\n", expr_code));
                     }
                     crate::rust_ir::RustIrPattern::Var { name, .. } => {
+                        s.push_str(&ind3);
+                        s.push_str(&format!(
+                            "let {} = run_effect(({} )?)?;\n",
+                            rust_local_name(name),
+                            expr_code
+                        ));
+                    }
+                    crate::rust_ir::RustIrPattern::At { name, pattern, .. }
+                        if matches!(**pattern, crate::rust_ir::RustIrPattern::Wildcard { .. }) =>
+                    {
                         s.push_str(&ind3);
                         s.push_str(&format!(
                             "let {} = run_effect(({} )?)?;\n",

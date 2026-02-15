@@ -188,6 +188,11 @@ pub enum KernelPattern {
         id: u32,
         name: String,
     },
+    At {
+        id: u32,
+        name: String,
+        pattern: Box<KernelPattern>,
+    },
     Literal {
         id: u32,
         value: KernelLiteral,

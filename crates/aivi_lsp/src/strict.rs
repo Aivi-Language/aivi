@@ -1021,6 +1021,11 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
     fn names_in_pattern(pat: &aivi::Pattern, out: &mut Vec<String>) {
         match pat {
             aivi::Pattern::Ident(name) => out.push(name.name.clone()),
+            aivi::Pattern::SubjectIdent(name) => out.push(name.name.clone()),
+            aivi::Pattern::At { name, pattern, .. } => {
+                out.push(name.name.clone());
+                names_in_pattern(pattern, out);
+            }
             aivi::Pattern::Tuple { items, .. } => {
                 items.iter().for_each(|p| names_in_pattern(p, out))
             }

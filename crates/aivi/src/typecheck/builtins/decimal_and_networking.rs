@@ -118,7 +118,10 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
             ),
             (
                 "fetch".to_string(),
-                Type::Func(Box::new(request_ty.clone()), Box::new(http_source_ty.clone())),
+                Type::Func(
+                    Box::new(request_ty.clone()),
+                    Box::new(http_source_ty.clone()),
+                ),
             ),
         ]
         .into_iter()
@@ -127,8 +130,7 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
     };
     env.insert("http".to_string(), Scheme::mono(http_record));
 
-    let https_source_ty =
-        Type::con("Source").app(vec![Type::con("Https"), http_result_ty.clone()]);
+    let https_source_ty = Type::con("Source").app(vec![Type::con("Https"), http_result_ty.clone()]);
     let https_record = Type::Record {
         fields: vec![
             (
@@ -147,7 +149,10 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
             ),
             (
                 "fetch".to_string(),
-                Type::Func(Box::new(request_ty.clone()), Box::new(https_source_ty.clone())),
+                Type::Func(
+                    Box::new(request_ty.clone()),
+                    Box::new(https_source_ty.clone()),
+                ),
             ),
         ]
         .into_iter()

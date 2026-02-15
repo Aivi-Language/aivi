@@ -240,6 +240,147 @@ impl Parser {
                 span,
             });
         }
+
+        fn pattern_has_subject(pattern: &Pattern) -> bool {
+            match pattern {
+                Pattern::SubjectIdent(_) => true,
+                Pattern::At {
+                    subject, pattern, ..
+                } => *subject || pattern_has_subject(pattern),
+                Pattern::Constructor { args, .. } => args.iter().any(pattern_has_subject),
+                Pattern::Tuple { items, .. } => items.iter().any(pattern_has_subject),
+                Pattern::List { items, rest, .. } => {
+                    items.iter().any(pattern_has_subject)
+                        || rest.as_deref().is_some_and(pattern_has_subject)
+                }
+                Pattern::Record { fields, .. } => fields.iter().any(|f| pattern_has_subject(&f.pattern)),
+                Pattern::Wildcard(_)
+                | Pattern::Ident(_)
+                | Pattern::Literal(_) => false,
+            }
+        }
+
+        fn collect_subject_binders(pattern: &Pattern, out: &mut Vec<SpannedName>) {
+            match pattern {
+                Pattern::SubjectIdent(name) => out.push(name.clone()),
+                Pattern::At {
+                    name,
+                    subject,
+                    pattern,
+                    ..
+                } => {
+                    if *subject {
+                        out.push(name.clone());
+                    }
+                    collect_subject_binders(pattern, out);
+                }
+                Pattern::Constructor { args, .. } => args.iter().for_each(|p| collect_subject_binders(p, out)),
+                Pattern::Tuple { items, .. } => items.iter().for_each(|p| collect_subject_binders(p, out)),
+                Pattern::List { items, rest, .. } => {
+                    items.iter().for_each(|p| collect_subject_binders(p, out));
+                    if let Some(rest) = rest.as_deref() {
+                        collect_subject_binders(rest, out);
+                    }
+                }
+                Pattern::Record { fields, .. } => fields.iter().for_each(|f| collect_subject_binders(&f.pattern, out)),
+                Pattern::Wildcard(_)
+                | Pattern::Ident(_)
+                | Pattern::Literal(_) => {}
+            }
+        }
+
+        if !params.is_empty()
+            && params.iter().any(pattern_has_subject)
+            && (self.check_symbol("|>") || self.check_symbol("?"))
+        {
+            let mut binders = Vec::new();
+            for param in &params {
+                collect_subject_binders(param, &mut binders);
+            }
+            if !binders.is_empty() {
+                let subject_expr = if binders.len() == 1 {
+                    Expr::Ident(binders[0].clone())
+                } else {
+                    let span = merge_span(binders[0].span.clone(), binders.last().unwrap().span.clone());
+                    Expr::Tuple {
+                        items: binders.into_iter().map(Expr::Ident).collect(),
+                        span,
+                    }
+                };
+
+                let mut body_expr = if self.check_symbol("?") {
+                    // `p! ? | ...` : match directly on the chosen subject.
+                    subject_expr
+                } else {
+                    // `p! |> ...` : start a pipeline from the chosen subject.
+                    let mut expr = subject_expr;
+                    while self.consume_symbol("|>") {
+                        self.consume_newlines();
+                        let rhs = self.parse_binary(2).unwrap_or(Expr::Raw {
+                            text: String::new(),
+                            span: expr_span(&expr),
+                        });
+                        let span = merge_span(expr_span(&expr), expr_span(&rhs));
+                        expr = Expr::Binary {
+                            op: "|>".to_string(),
+                            left: Box::new(expr),
+                            right: Box::new(rhs),
+                            span,
+                        };
+                    }
+                    expr
+                };
+
+                if self.consume_symbol("?") {
+                    let mut arms = Vec::new();
+                    loop {
+                        self.consume_newlines();
+                        if !self.consume_symbol("|") {
+                            break;
+                        }
+                        let pattern = self
+                            .parse_pattern()
+                            .unwrap_or(Pattern::Wildcard(expr_span(&body_expr)));
+                        let guard = if self.match_keyword("when") {
+                            self.parse_guard_expr()
+                        } else {
+                            None
+                        };
+                        self.expect_symbol("=>", "expected '=>' in match arm");
+                        let body = self.parse_expr().unwrap_or(Expr::Raw {
+                            text: String::new(),
+                            span: expr_span(&body_expr),
+                        });
+                        let span = merge_span(pattern_span(&pattern), expr_span(&body));
+                        arms.push(MatchArm {
+                            pattern,
+                            guard,
+                            body,
+                            span,
+                        });
+                    }
+                    let span = merge_span(
+                        expr_span(&body_expr),
+                        arms.last()
+                            .map(|arm| arm.span.clone())
+                            .unwrap_or(expr_span(&body_expr)),
+                    );
+                    body_expr = Expr::Match {
+                        scrutinee: Some(Box::new(body_expr)),
+                        arms,
+                        span,
+                    };
+                }
+
+                let span = merge_span(pattern_span(&params[0]), expr_span(&body_expr));
+                return Some(Expr::Lambda {
+                    params,
+                    body: Box::new(body_expr),
+                    span,
+                });
+            }
+        }
+
         self.pos = checkpoint;
         self.diagnostics.truncate(diag_checkpoint);
         self.parse_match_or_binary()

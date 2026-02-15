@@ -526,6 +526,13 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
                     body: Box::new(acc),
                 };
             }
+            Pattern::SubjectIdent(name) => {
+                acc = HirExpr::Lambda {
+                    id: id_gen.next(),
+                    param: name.name,
+                    body: Box::new(acc),
+                };
+            }
             Pattern::Wildcard(_) => {
                 acc = HirExpr::Lambda {
                     id: id_gen.next(),

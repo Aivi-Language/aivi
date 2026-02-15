@@ -141,6 +141,10 @@ fn collect_kernel_pattern_binders(pat: &crate::kernel::KernelPattern, out: &mut 
         crate::kernel::KernelPattern::Wildcard { .. } => {}
         crate::kernel::KernelPattern::Var { name, .. } => out.push(name.clone()),
         crate::kernel::KernelPattern::Literal { .. } => {}
+        crate::kernel::KernelPattern::At { name, pattern, .. } => {
+            out.push(name.clone());
+            collect_kernel_pattern_binders(pattern, out);
+        }
         crate::kernel::KernelPattern::Constructor { args, .. } => {
             for arg in args {
                 collect_kernel_pattern_binders(arg, out);
@@ -475,6 +479,10 @@ fn collect_rust_ir_pattern_binders(pattern: &RustIrPattern, out: &mut Vec<String
         RustIrPattern::Wildcard { .. } => {}
         RustIrPattern::Var { name, .. } => out.push(name.clone()),
         RustIrPattern::Literal { .. } => {}
+        RustIrPattern::At { name, pattern, .. } => {
+            out.push(name.clone());
+            collect_rust_ir_pattern_binders(pattern, out);
+        }
         RustIrPattern::Constructor { args, .. } => {
             for arg in args {
                 collect_rust_ir_pattern_binders(arg, out);
@@ -505,6 +513,11 @@ fn lower_pattern(pattern: KernelPattern) -> Result<RustIrPattern, AiviError> {
     match pattern {
         KernelPattern::Wildcard { id } => Ok(RustIrPattern::Wildcard { id }),
         KernelPattern::Var { id, name } => Ok(RustIrPattern::Var { id, name }),
+        KernelPattern::At { id, name, pattern } => Ok(RustIrPattern::At {
+            id,
+            name,
+            pattern: Box::new(lower_pattern(*pattern)?),
+        }),
         KernelPattern::Literal { id, value } => Ok(RustIrPattern::Literal {
             id,
             value: lower_literal(value),
@@ -590,6 +603,10 @@ fn collect_pattern_binders(pattern: &KernelPattern, out: &mut Vec<String>) {
         KernelPattern::Wildcard { .. } => {}
         KernelPattern::Var { name, .. } => out.push(name.clone()),
         KernelPattern::Literal { .. } => {}
+        KernelPattern::At { name, pattern, .. } => {
+            out.push(name.clone());
+            collect_pattern_binders(pattern, out);
+        }
         KernelPattern::Constructor { args, .. } => {
             for arg in args {
                 collect_pattern_binders(arg, out);

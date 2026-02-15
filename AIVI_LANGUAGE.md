@@ -40,6 +40,13 @@ value = parse input
 value ?
   | Ok x  => x
   | Err _ => 0
+
+// Deconstructor heads (subject selection via `!`)
+// f = { name! } |> toUpper  == f = { name } => name |> toUpper
+// g = { name! } ? ...       == g = { name } => name ? ...
+
+// Whole-value binding in patterns
+// user@{ name, age } binds `user` to the full matched value.
 ```
 
 ### 2.2 Data Types

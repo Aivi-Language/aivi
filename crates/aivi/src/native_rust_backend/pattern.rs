@@ -115,6 +115,10 @@ fn emit_pattern_check(
         RustIrPattern::Var { name, .. } => {
             format!("{{ {bindings_ident}.insert({name:?}, {value_ident}.clone()); true }}")
         }
+        RustIrPattern::At { name, pattern, .. } => {
+            let check = emit_pattern_check(pattern, value_ident, bindings_ident, indent + 1)?;
+            format!("{{ {bindings_ident}.insert({name:?}, {value_ident}.clone()); ({check}) }}")
+        }
         RustIrPattern::Literal { value, .. } => match value {
             crate::rust_ir::RustIrLiteral::Bool(b) => {
                 format!("matches!({value_ident}, Value::Bool(v) if *v == {b})")

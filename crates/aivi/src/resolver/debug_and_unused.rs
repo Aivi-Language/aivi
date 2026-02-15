@@ -296,7 +296,18 @@ fn collect_pattern_binding(pattern: &Pattern, scope: &mut HashMap<String, Option
                 scope.insert(name.name.clone(), None);
             }
         }
+        Pattern::SubjectIdent(name) => {
+            if !is_constructor_name(&name.name) {
+                scope.insert(name.name.clone(), None);
+            }
+        }
         Pattern::Literal(_) => {}
+        Pattern::At { name, pattern, .. } => {
+            if !is_constructor_name(&name.name) {
+                scope.insert(name.name.clone(), None);
+            }
+            collect_pattern_binding(pattern, scope);
+        }
         Pattern::Constructor { args, .. } => {
             for arg in args {
                 collect_pattern_binding(arg, scope);

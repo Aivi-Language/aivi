@@ -199,6 +199,11 @@ pub enum HirPattern {
         id: u32,
         name: String,
     },
+    At {
+        id: u32,
+        name: String,
+        pattern: Box<HirPattern>,
+    },
     Literal {
         id: u32,
         value: HirLiteral,
@@ -410,6 +415,8 @@ fn debug_arg_vars(params: &[Pattern]) -> Vec<String> {
         .enumerate()
         .map(|(i, param)| match param {
             Pattern::Ident(name) => name.name.clone(),
+            Pattern::SubjectIdent(name) => name.name.clone(),
+            Pattern::At { name, .. } => name.name.clone(),
             _ => format!("_arg{}", len.saturating_sub(1).saturating_sub(i)),
         })
         .collect()

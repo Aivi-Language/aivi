@@ -116,6 +116,11 @@ fn lower_pattern(pattern: HirPattern, id_gen: &mut IdGen) -> KernelPattern {
     match pattern {
         HirPattern::Wildcard { id } => KernelPattern::Wildcard { id },
         HirPattern::Var { id, name } => KernelPattern::Var { id, name },
+        HirPattern::At { id, name, pattern } => KernelPattern::At {
+            id,
+            name,
+            pattern: Box::new(lower_pattern(*pattern, id_gen)),
+        },
         HirPattern::Literal { id, value } => KernelPattern::Literal {
             id,
             value: lower_literal(value),
@@ -378,12 +383,16 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
 
 fn find_max_id_pattern(pattern: &HirPattern, max: &mut u32) {
     match pattern {
-        HirPattern::Wildcard { id }
-        | HirPattern::Var { id, .. }
-        | HirPattern::Literal { id, .. } => {
+        HirPattern::Wildcard { id } | HirPattern::Var { id, .. } | HirPattern::Literal { id, .. } => {
             if *id > *max {
                 *max = *id;
             }
+        }
+        HirPattern::At { id, pattern, .. } => {
+            if *id > *max {
+                *max = *id;
+            }
+            find_max_id_pattern(pattern, max);
         }
         HirPattern::Constructor { id, args, .. } => {
             if *id > *max {

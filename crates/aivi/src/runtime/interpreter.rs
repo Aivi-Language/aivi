@@ -331,6 +331,10 @@ fn match_pattern(
             bindings.insert(name.clone(), value.clone());
             true
         }
+        HirPattern::At { name, pattern, .. } => {
+            bindings.insert(name.clone(), value.clone());
+            match_pattern(pattern, value, bindings)
+        }
         HirPattern::Literal { value: lit, .. } => match (lit, value) {
             (HirLiteral::Number(text), Value::Int(num)) => parse_number_literal(text) == Some(*num),
             (HirLiteral::Number(text), Value::Float(num)) => text.parse::<f64>().ok() == Some(*num),

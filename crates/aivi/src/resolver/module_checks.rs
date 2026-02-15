@@ -173,7 +173,11 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                     collect_pattern_uses(&field.pattern, out);
                 }
             }
-            Pattern::Ident(_) | Pattern::Wildcard(_) | Pattern::Literal(_) => {}
+            Pattern::At { pattern, .. } => collect_pattern_uses(pattern, out),
+            Pattern::Ident(_)
+            | Pattern::SubjectIdent(_)
+            | Pattern::Wildcard(_)
+            | Pattern::Literal(_) => {}
         }
     }
 

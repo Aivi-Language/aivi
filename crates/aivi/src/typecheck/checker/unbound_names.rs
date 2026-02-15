@@ -3,7 +3,12 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
         match pattern {
             Pattern::Wildcard(_) => {}
             Pattern::Ident(name) => out.push(name.name.clone()),
+            Pattern::SubjectIdent(name) => out.push(name.name.clone()),
             Pattern::Literal(_) => {}
+            Pattern::At { name, pattern, .. } => {
+                out.push(name.name.clone());
+                collect_pattern_binders(pattern, out);
+            }
             Pattern::Constructor { args, .. } => {
                 for arg in args {
                     collect_pattern_binders(arg, out);
