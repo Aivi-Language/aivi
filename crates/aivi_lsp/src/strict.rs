@@ -183,11 +183,7 @@ fn push_simple(
 }
 
 fn keywords_v01() -> HashSet<&'static str> {
-    HashSet::from([
-        "as", "do", "domain", "effect", "else", "export", "generate", "hiding", "if", "instance",
-        "module", "or", "over", "recurse", "resource", "then", "type", "use", "yield", "loop",
-        "when", "with", "patch",
-    ])
+    HashSet::from_iter(aivi::syntax::KEYWORDS_ALL.iter().copied())
 }
 
 fn is_invisible_unicode(ch: char) -> bool {

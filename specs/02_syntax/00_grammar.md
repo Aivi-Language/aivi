@@ -12,7 +12,7 @@ This chapter is intentionally pragmatic: it aims to be complete enough to build 
 ### Whitespace and comments
 
 - Whitespace separates tokens and is otherwise insignificant (no indentation sensitivity in v0.1).
-- Line comments start with `//` and run to the end of the line.
+- Line comments start with `//` or `--` and run to the end of the line.
 - Block comments start with `/*` and end with `*/` (nesting is not required).
 
 ### Identifiers
@@ -25,8 +25,8 @@ This chapter is intentionally pragmatic: it aims to be complete enough to build 
 ### Keywords (v0.1)
 
 ```text
-as do domain effect else export generate hiding if
-instance module or over recurse resource then type use yield loop
+as class do domain effect else export generate hiding if
+instance module or over patch recurse resource then type use when with yield loop
 ```
 
 (`True`, `False`, `None`, `Some`, `Ok`, `Err` are ordinary constructors, not keywords.)
