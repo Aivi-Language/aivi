@@ -18,17 +18,28 @@ x = 42
 // Function (lambda)
 inc = n => n + 1
 
-// Function (shorthand sugar) mechanism
-add a b = a + b
+// Multi-argument function (explicit)
+add = a b => a + b
 
 // Piping (Data-last convention)
 result = data |> filter valid |> map transform
+
+// Choosing the pipe subject (argument position)
+// x |> f      == f x
+// x |> f a b  == f a b x
 
 // Pattern Matching
 whatIs = 
   | 0 => "zero"
   | n when n < 0 => "negative"
   | _ => "positive"
+
+// Choosing the match subject (scrutinee)
+// `?` matches on the expression immediately to its left.
+value = parse input
+value ?
+  | Ok x  => x
+  | Err _ => 0
 ```
 
 ### 2.2 Data Types
@@ -37,6 +48,11 @@ whatIs =
     p = { x: 1, y: 2 }
     x = p.x            // Accessor
     p2 = p <| { x: 3 } // Patching (Update) - NEVER use mutation or spread for updates
+    ```
+
+    Record destructuring uses a record pattern on the left-hand side:
+    ```aivi
+    { x, y } = p
     ```
 *   **Lists**: `[1, 2, 3]`. Spread: `[head, ...tail]`.
 *   **Tuples**: `(1, "a")`.
@@ -97,7 +113,7 @@ AIVI uses **Sigils** for complex literals that are validated at compile-time by 
     *   `~r/[a-z]+/`: Regex literal.
     *   `~json{ "x": 1 }`: JSON literal (parsed at compile time).
 *   **Structured Sigils**: `~map{ k => v }` and `~set[1, 2]` are syntactic sugar for collection construction.
-*   **UI Sigil**: `~html{ <div>{expr}</div> }` parses HTML-like syntax into typed `aivi.ui.VNode msg` values (not strings) and supports `{expr}` splices.
+*   **UI Sigil**: `~html~> <div>{expr}</div> <~html` parses HTML-like syntax into typed `aivi.ui.VNode msg` values (not strings) and supports `{expr}` splices.
 
 ## 4. Kernel & Semantics (Under the Hood)
 *   **Desugaring**: Surface syntax desugars into a minimal **Kernel** (AST defined in `crates/aivi/src/kernel.rs`).
@@ -120,4 +136,4 @@ AIVI uses **Sigils** for complex literals that are validated at compile-time by 
 3.  **No `return`**: The last expression is the return value.
 4.  **No `for/while`**: Use `generate` blocks or recursion.
 5.  **Strict Identifiers**: Types/Modules MUST be `UpperCamelCase`. Variables/Functions MUST be `lowerCamelCase`.
-6.  **Imports**: `use Std.List` or `use Std.List (map, filter)`.
+6.  **Imports**: `use aivi.list` or `use aivi.list (map, filter)`.

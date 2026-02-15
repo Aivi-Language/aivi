@@ -8,11 +8,11 @@ main = effect {
   n <- pure 41
   m <- pure (n + 1)
 
-  res = <- attempt (if m => = 42 then fail "boom" else pure m)
+  res <- attempt (if m == 42 then fail "boom" else pure m)
 
   verdict <- res ?
-    | Ok (x)  => pure "ok"
-    | Err (e) => pure "err"
+    | Ok x  => pure "ok"
+    | Err e => pure "err"
 
   _ <- print verdict
 

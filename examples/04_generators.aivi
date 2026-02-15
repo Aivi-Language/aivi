@@ -9,7 +9,7 @@ gen = generate {
 
 evens = generate {
   x <- [1..10]
-  x = -> _ % 2 => = 0
+  x -> x % 2 == 0
   yield x
 }
 
@@ -29,7 +29,7 @@ pairs = generate {
 squares = generate {
   x <- [1..8]
   sq = x * x
-  sq = -> _ % 2 => = 0
+  sq -> sq % 2 == 0
   yield sq
 }
 

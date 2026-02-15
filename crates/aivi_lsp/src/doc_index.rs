@@ -289,4 +289,18 @@ Done.
         assert!(outer.content.contains("Done."));
         assert!(!outer.content.contains("quick-info:"));
     }
+
+    #[test]
+    fn built_doc_index_includes_match_and_pipe_quick_info() {
+        // Regression guard: core syntax operators should be indexed for hover/quick-info.
+        let index = DocIndex::from_json(DOC_INDEX_JSON).expect("doc index JSON parses");
+        assert!(
+            index.lookup_best("|>", None).is_some(),
+            "expected `|>` quick-info entry"
+        );
+        assert!(
+            index.lookup_best("?", None).is_some(),
+            "expected `?` quick-info entry"
+        );
+    }
 }

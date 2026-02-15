@@ -10,7 +10,7 @@ fn mcp_manifest_collects_decorated_bindings_from_parsed_modules() {
 module Example.Mod
 @mcp_tool
 search : Int -> Int
-search x = x
+search = x => x
 
 @mcp_resource
 config = "ok""#,
@@ -47,7 +47,7 @@ fn mcp_manifest_generates_input_schema_from_type_sigs() {
 module Example.Schema
 @mcp_tool
 search : Int -> List Text -> Effect Http Text
-search n terms = "ok""#,
+search = n terms => "ok""#,
     )
     .expect("write module");
 
@@ -79,11 +79,11 @@ fn mcp_manifest_marks_effectful_tools() {
 module Example.Effects
 @mcp_tool
 pureTool : Int -> Int
-pureTool x = x
+pureTool = x => x
 
 @mcp_tool
 effectTool : Int -> Effect Text Int
-effectTool x = effect { pure x }"#,
+effectTool = x => effect { pure x }"#,
     )
     .expect("write module");
 

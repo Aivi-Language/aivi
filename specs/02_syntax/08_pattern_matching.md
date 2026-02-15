@@ -6,6 +6,32 @@
 
 This is a concise way to do case analysis, similar to `match` in Rust or `case` in Haskell/Elixir.
 
+### Choosing the match subject (scrutinee)
+
+<!-- quick-info: {"kind":"operator","name":"?"} -->
+`?` matches on the expression immediately to its left.
+<!-- /quick-info -->
+
+```aivi
+value = parse input
+
+value ?
+  | Ok x  => x
+  | Err _ => 0
+```
+
+This rule composes with pipelines because `?` comes *after* the full expression:
+
+```aivi
+input |> parse |> validate ?
+  | Ok x  => x
+  | Err e => handle e
+```
+
+In a multi-clause unary function (Section 8.2), the subject is the function's single implicit argument.
+
+See also: [Functions and Pipes](02_functions.md) for `|>`.
+
 Compiler checks:
 
 - Non-exhaustive matches are a compile-time error unless a catch-all arm (`_`) is present.

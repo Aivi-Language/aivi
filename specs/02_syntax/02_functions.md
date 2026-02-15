@@ -29,6 +29,44 @@ Pipelines use `|>`.
 
 <<< ../snippets/from_md/02_syntax/02_functions/block_04.aivi{aivi}
 
+### Choosing the pipe subject (and argument position)
+
+`|>` applies the expression on the right to the value on the left:
+
+```aivi
+x |> f
+```
+
+is equivalent to:
+
+```aivi
+f x
+```
+
+If the right-hand side is already an application, the piped value is passed as the **final** argument:
+
+```aivi
+x |> f a b
+```
+
+is equivalent to:
+
+```aivi
+f a b x
+```
+
+This makes pipelines read left-to-right for data flow while keeping ordinary application whitespace-based.
+
+Pipelines often feed directly into `?` branching:
+
+```aivi
+input |> parse ?
+  | Ok x  => x
+  | Err _ => 0
+```
+
+See also: [Pattern Matching](08_pattern_matching.md) for the `?` operator.
+
 ---
 
 ## 2.4 Usage Examples

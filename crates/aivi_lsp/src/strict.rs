@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use aivi::{
-    embedded_stdlib_modules, elaborate_expected_coercions, lex_cst, lower_kernel, parse_modules,
+    elaborate_expected_coercions, embedded_stdlib_modules, lex_cst, lower_kernel, parse_modules,
     BlockKind, KernelExpr, KernelTextPart, Module,
 };
 use serde::{Deserialize, Serialize};
@@ -184,29 +184,9 @@ fn push_simple(
 
 fn keywords_v01() -> HashSet<&'static str> {
     HashSet::from([
-        "as",
-        "do",
-        "domain",
-        "effect",
-        "else",
-        "export",
-        "generate",
-        "hiding",
-        "if",
-        "instance",
-        "module",
-        "or",
-        "over",
-        "recurse",
-        "resource",
-        "then",
-        "type",
-        "use",
-        "yield",
-        "loop",
-        "when",
-        "with",
-        "patch",
+        "as", "do", "domain", "effect", "else", "export", "generate", "hiding", "if", "instance",
+        "module", "or", "over", "recurse", "resource", "then", "type", "use", "yield", "loop",
+        "when", "with", "patch",
     ])
 }
 
@@ -286,13 +266,14 @@ pub(crate) fn build_strict_diagnostics(
         }
 
         if config.level as u8 >= StrictLevel::Pedantic as u8 {
-            let span_hint = file_modules
-                .first()
-                .map(|m| m.name.span.clone())
-                .unwrap_or(aivi::Span {
-                    start: aivi::Position { line: 1, column: 1 },
-                    end: aivi::Position { line: 1, column: 1 },
-                });
+            let span_hint =
+                file_modules
+                    .first()
+                    .map(|m| m.name.span.clone())
+                    .unwrap_or(aivi::Span {
+                        start: aivi::Position { line: 1, column: 1 },
+                        end: aivi::Position { line: 1, column: 1 },
+                    });
             strict_kernel_consistency(&all_modules, span_hint, &mut out);
         }
 
@@ -310,7 +291,11 @@ pub(crate) fn build_strict_diagnostics(
     .unwrap_or_default()
 }
 
-fn strict_lexical_and_structural(text: &str, cst_tokens: &[aivi::CstToken], out: &mut Vec<Diagnostic>) {
+fn strict_lexical_and_structural(
+    text: &str,
+    cst_tokens: &[aivi::CstToken],
+    out: &mut Vec<Diagnostic>,
+) {
     let keywords = keywords_v01();
 
     // 1) Invisible Unicode (whole-file scan; spans approximate per line/column).
@@ -359,7 +344,11 @@ fn strict_lexical_and_structural(text: &str, cst_tokens: &[aivi::CstToken], out:
             continue;
         }
         let combined = if a.text == "=" { "=>" } else { "|>" };
-        let code = if a.text == "=" { "AIVI-S014" } else { "AIVI-S015" };
+        let code = if a.text == "=" {
+            "AIVI-S014"
+        } else {
+            "AIVI-S015"
+        };
         let category = StrictCategory::Syntax;
         let severity = DiagnosticSeverity::ERROR;
         let message = format!(
@@ -568,7 +557,9 @@ fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                 }
             }
             aivi::Expr::Lambda { body, .. } => walk_expr(body, out),
-            aivi::Expr::Match { scrutinee, arms, .. } => {
+            aivi::Expr::Match {
+                scrutinee, arms, ..
+            } => {
                 if let Some(scrutinee) = scrutinee {
                     walk_expr(scrutinee, out);
                 }
@@ -641,7 +632,12 @@ fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
 fn strict_pipe_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
     fn walk_expr(expr: &aivi::Expr, out: &mut Vec<Diagnostic>) {
         match expr {
-            aivi::Expr::Binary { op, left, right, span } if op == "|>" => {
+            aivi::Expr::Binary {
+                op,
+                left,
+                right,
+                span,
+            } if op == "|>" => {
                 // Rule: RHS should be "callable-ish" to avoid `x |> 1`-style mistakes.
                 let rhs_callable = matches!(
                     &**right,
@@ -713,7 +709,9 @@ fn strict_pipe_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                 args.iter().for_each(|a| walk_expr(a, out));
             }
             aivi::Expr::Lambda { body, .. } => walk_expr(body, out),
-            aivi::Expr::Match { scrutinee, arms, .. } => {
+            aivi::Expr::Match {
+                scrutinee, arms, ..
+            } => {
                 scrutinee.iter().for_each(|e| walk_expr(e, out));
                 for arm in arms {
                     if let Some(guard) = &arm.guard {
@@ -847,7 +845,9 @@ fn strict_record_field_access(file_modules: &[Module], out: &mut Vec<Diagnostic>
                 args.iter().for_each(|a| walk_expr(a, out));
             }
             aivi::Expr::Lambda { body, .. } => walk_expr(body, out),
-            aivi::Expr::Match { scrutinee, arms, .. } => {
+            aivi::Expr::Match {
+                scrutinee, arms, ..
+            } => {
                 scrutinee.iter().for_each(|e| walk_expr(e, out));
                 for arm in arms {
                     if let Some(guard) = &arm.guard {
@@ -1029,15 +1029,21 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
     fn names_in_pattern(pat: &aivi::Pattern, out: &mut Vec<String>) {
         match pat {
             aivi::Pattern::Ident(name) => out.push(name.name.clone()),
-            aivi::Pattern::Tuple { items, .. } => items.iter().for_each(|p| names_in_pattern(p, out)),
+            aivi::Pattern::Tuple { items, .. } => {
+                items.iter().for_each(|p| names_in_pattern(p, out))
+            }
             aivi::Pattern::List { items, rest, .. } => {
                 items.iter().for_each(|p| names_in_pattern(p, out));
                 if let Some(rest) = rest.as_ref() {
                     names_in_pattern(rest, out);
                 }
             }
-            aivi::Pattern::Record { fields, .. } => fields.iter().for_each(|f| names_in_pattern(&f.pattern, out)),
-            aivi::Pattern::Constructor { args, .. } => args.iter().for_each(|p| names_in_pattern(p, out)),
+            aivi::Pattern::Record { fields, .. } => fields
+                .iter()
+                .for_each(|f| names_in_pattern(&f.pattern, out)),
+            aivi::Pattern::Constructor { args, .. } => {
+                args.iter().for_each(|p| names_in_pattern(p, out))
+            }
             aivi::Pattern::Wildcard(_) | aivi::Pattern::Literal(_) => {}
         }
     }
@@ -1065,16 +1071,21 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                     expr_uses_name(body, name)
                 }
             }
-            aivi::Expr::Match { scrutinee, arms, .. } => {
-                scrutinee
-                    .as_ref()
-                    .is_some_and(|e| expr_uses_name(e, name))
+            aivi::Expr::Match {
+                scrutinee, arms, ..
+            } => {
+                scrutinee.as_ref().is_some_and(|e| expr_uses_name(e, name))
                     || arms.iter().any(|arm| {
                         expr_uses_name(&arm.body, name)
                             || arm.guard.as_ref().is_some_and(|g| expr_uses_name(g, name))
                     })
             }
-            aivi::Expr::If { cond, then_branch, else_branch, .. } => {
+            aivi::Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 expr_uses_name(cond, name)
                     || expr_uses_name(then_branch, name)
                     || expr_uses_name(else_branch, name)
@@ -1097,16 +1108,23 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                 aivi::TextPart::Text { .. } => false,
                 aivi::TextPart::Expr { expr, .. } => expr_uses_name(expr, name),
             }),
-            aivi::Expr::Literal(_) | aivi::Expr::FieldSection { .. } | aivi::Expr::Raw { .. } => false,
+            aivi::Expr::Literal(_) | aivi::Expr::FieldSection { .. } | aivi::Expr::Raw { .. } => {
+                false
+            }
         }
     }
 
     fn check_block(kind: BlockKind, items: &[aivi::BlockItem], out: &mut Vec<Diagnostic>) {
         // Rule: block last item should be an expression/yield, not a binding.
         if let Some(last) = items.last() {
-            if matches!(last, aivi::BlockItem::Let { .. } | aivi::BlockItem::Bind { .. }) {
+            if matches!(
+                last,
+                aivi::BlockItem::Let { .. } | aivi::BlockItem::Bind { .. }
+            ) {
                 let span = match last {
-                    aivi::BlockItem::Let { span, .. } | aivi::BlockItem::Bind { span, .. } => span.clone(),
+                    aivi::BlockItem::Let { span, .. } | aivi::BlockItem::Bind { span, .. } => {
+                        span.clone()
+                    }
                     _ => unreachable!(),
                 };
                 let cat = match kind {
@@ -1131,8 +1149,16 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
         // Rule: unused bound names inside a block (simple forward-use check).
         for (idx, item) in items.iter().enumerate() {
             let (pat, expr, span) = match item {
-                aivi::BlockItem::Bind { pattern, expr, span } => (Some(pattern), Some(expr), Some(span)),
-                aivi::BlockItem::Let { pattern, expr, span } => (Some(pattern), Some(expr), Some(span)),
+                aivi::BlockItem::Bind {
+                    pattern,
+                    expr,
+                    span,
+                } => (Some(pattern), Some(expr), Some(span)),
+                aivi::BlockItem::Let {
+                    pattern,
+                    expr,
+                    span,
+                } => (Some(pattern), Some(expr), Some(span)),
                 _ => (None, None, None),
             };
             let (Some(pat), Some(_expr), Some(span)) = (pat, expr, span) else {
@@ -1250,7 +1276,9 @@ fn strict_missing_import_suggestions(
         match expr {
             aivi::Expr::Ident(n) => out.push(n.clone()),
             aivi::Expr::Tuple { items, .. } => items.iter().for_each(|e| collect_idents(e, out)),
-            aivi::Expr::List { items, .. } => items.iter().for_each(|i| collect_idents(&i.expr, out)),
+            aivi::Expr::List { items, .. } => {
+                items.iter().for_each(|i| collect_idents(&i.expr, out))
+            }
             aivi::Expr::Record { fields, .. } | aivi::Expr::PatchLit { fields, .. } => {
                 fields.iter().for_each(|f| collect_idents(&f.value, out))
             }
@@ -1259,7 +1287,9 @@ fn strict_missing_import_suggestions(
                 args.iter().for_each(|a| collect_idents(a, out));
             }
             aivi::Expr::Lambda { body, .. } => collect_idents(body, out),
-            aivi::Expr::Match { scrutinee, arms, .. } => {
+            aivi::Expr::Match {
+                scrutinee, arms, ..
+            } => {
                 if let Some(s) = scrutinee {
                     collect_idents(s, out);
                 }
@@ -1270,7 +1300,12 @@ fn strict_missing_import_suggestions(
                     collect_idents(&arm.body, out);
                 }
             }
-            aivi::Expr::If { cond, then_branch, else_branch, .. } => {
+            aivi::Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 collect_idents(cond, out);
                 collect_idents(then_branch, out);
                 collect_idents(else_branch, out);
@@ -1331,7 +1366,9 @@ fn strict_missing_import_suggestions(
         }
 
         for item in &module.items {
-            let aivi::ModuleItem::Def(def) = item else { continue };
+            let aivi::ModuleItem::Def(def) = item else {
+                continue;
+            };
             let mut used = Vec::new();
             collect_idents(&def.expr, &mut used);
             for name in used {
@@ -1347,7 +1384,9 @@ fn strict_missing_import_suggestions(
                 {
                     continue;
                 }
-                let Some(cands) = providers.get(name.name.as_str()) else { continue };
+                let Some(cands) = providers.get(name.name.as_str()) else {
+                    continue;
+                };
                 if cands.len() != 1 {
                     continue;
                 }
@@ -1387,12 +1426,18 @@ fn strict_domain_operator_heuristics(file_modules: &[Module], out: &mut Vec<Diag
     // Emit a warning for `Date + Int`-like shapes (common footgun: missing unit/delta domain).
     fn walk_expr(expr: &aivi::Expr, out: &mut Vec<Diagnostic>) {
         match expr {
-            aivi::Expr::Binary { op, left, right, span } if op == "+" || op == "-" => {
+            aivi::Expr::Binary {
+                op,
+                left,
+                right,
+                span,
+            } if op == "+" || op == "-" => {
                 let left_is_date_like = matches!(
                     &**left,
                     aivi::Expr::Ident(n) if n.name.to_lowercase().contains("date")
                 );
-                let right_is_number = matches!(&**right, aivi::Expr::Literal(aivi::Literal::Number { .. }));
+                let right_is_number =
+                    matches!(&**right, aivi::Expr::Literal(aivi::Literal::Number { .. }));
                 if left_is_date_like && right_is_number {
                     push_simple(
                         out,
@@ -1455,17 +1500,32 @@ fn strict_expected_type_coercions(
                 }
             }
             aivi::Expr::Tuple { items, .. } => items.iter().for_each(|e| collect_calls(e, out)),
-            aivi::Expr::List { items, .. } => items.iter().for_each(|i| collect_calls(&i.expr, out)),
-            aivi::Expr::Record { fields, .. } | aivi::Expr::PatchLit { fields, .. } => fields.iter().for_each(|f| collect_calls(&f.value, out)),
+            aivi::Expr::List { items, .. } => {
+                items.iter().for_each(|i| collect_calls(&i.expr, out))
+            }
+            aivi::Expr::Record { fields, .. } | aivi::Expr::PatchLit { fields, .. } => {
+                fields.iter().for_each(|f| collect_calls(&f.value, out))
+            }
             aivi::Expr::Lambda { body, .. } => collect_calls(body, out),
-            aivi::Expr::Match { scrutinee, arms, .. } => {
-                if let Some(s) = scrutinee { collect_calls(s, out); }
+            aivi::Expr::Match {
+                scrutinee, arms, ..
+            } => {
+                if let Some(s) = scrutinee {
+                    collect_calls(s, out);
+                }
                 for arm in arms {
-                    if let Some(g) = &arm.guard { collect_calls(g, out); }
+                    if let Some(g) = &arm.guard {
+                        collect_calls(g, out);
+                    }
                     collect_calls(&arm.body, out);
                 }
             }
-            aivi::Expr::If { cond, then_branch, else_branch, .. } => {
+            aivi::Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 collect_calls(cond, out);
                 collect_calls(then_branch, out);
                 collect_calls(else_branch, out);
@@ -1496,7 +1556,10 @@ fn strict_expected_type_coercions(
                     }
                 }
             }
-            aivi::Expr::Ident(_) | aivi::Expr::Literal(_) | aivi::Expr::FieldSection { .. } | aivi::Expr::Raw { .. } => {}
+            aivi::Expr::Ident(_)
+            | aivi::Expr::Literal(_)
+            | aivi::Expr::FieldSection { .. }
+            | aivi::Expr::Raw { .. } => {}
         }
     }
 
@@ -1542,7 +1605,9 @@ fn strict_expected_type_coercions(
             continue;
         }
         for item in &m.items {
-            let aivi::ModuleItem::Def(def) = item else { continue };
+            let aivi::ModuleItem::Def(def) = item else {
+                continue;
+            };
             let mut calls = Vec::new();
             collect_calls(&def.expr, &mut calls);
             let key = (m.name.name.clone(), def.name.name.clone());
@@ -1577,7 +1642,11 @@ fn strict_expected_type_coercions(
     }
 }
 
-fn strict_kernel_consistency(all_modules: &[Module], span_hint: aivi::Span, out: &mut Vec<Diagnostic>) {
+fn strict_kernel_consistency(
+    all_modules: &[Module],
+    span_hint: aivi::Span,
+    out: &mut Vec<Diagnostic>,
+) {
     // Best-effort: lower to kernel and validate shallow invariants.
     let kernel = match std::panic::catch_unwind(|| {
         let hir = aivi::desugar_modules(all_modules);
@@ -1700,7 +1769,9 @@ fn strict_kernel_consistency(all_modules: &[Module], span_hint: aivi::Span, out:
                 walk_expr(base, seen_ids, span_hint, out);
                 walk_expr(index, seen_ids, span_hint, out);
             }
-            KernelExpr::Match { scrutinee, arms, .. } => {
+            KernelExpr::Match {
+                scrutinee, arms, ..
+            } => {
                 walk_expr(scrutinee, seen_ids, span_hint, out);
                 for arm in arms {
                     if let Some(g) = &arm.guard {
@@ -1709,7 +1780,12 @@ fn strict_kernel_consistency(all_modules: &[Module], span_hint: aivi::Span, out:
                     walk_expr(&arm.body, seen_ids, span_hint, out);
                 }
             }
-            KernelExpr::If { cond, then_branch, else_branch, .. } => {
+            KernelExpr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
                 walk_expr(cond, seen_ids, span_hint, out);
                 walk_expr(then_branch, seen_ids, span_hint, out);
                 walk_expr(else_branch, seen_ids, span_hint, out);
