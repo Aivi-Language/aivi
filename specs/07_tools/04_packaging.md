@@ -67,8 +67,3 @@ When you run `aivi build`:
 3.  **Rust Compilation**: `cargo build` is invoked in the project root, compiling the generated sources referenced by your `Cargo.toml`.
 
 This architecture allows Aivi to leverage the full power of the Rust ecosystem, including optimized compilation, linking, and native interoperability.
-
-## Rust Backend (v0.1)
-
-AIVI v0.1 project builds (`aivi build` / `aivi run`) use the **native Rust codegen** backend, which emits standalone Rust
-and links against `aivi_native_runtime`. This backend is experimental and does not yet cover the full language surface.

@@ -167,9 +167,3 @@ This supports ergonomic boundary code such as HTTP requests:
 AIVI uses open structural records, so a record type like `{}` denotes "any record".
 Implementations may ship a default instance `ToText {}` to support record-to-text coercions without
 per-record boilerplate.
-
-## 3.7 Implementation Details
-
-> [!NOTE] Rust Codegen
-> AIVI v0.1 includes a native Rust runtime and an experimental Rust codegen backend.
-> The codegen backend emits standalone Rust logic and is currently partial (limited builtins/stdlib coverage).
