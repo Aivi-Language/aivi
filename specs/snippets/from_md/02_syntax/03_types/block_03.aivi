@@ -1,2 +1,1 @@
-True: Bool
-False: Bool
+type Bool = True | False
