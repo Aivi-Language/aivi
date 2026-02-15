@@ -646,47 +646,47 @@
             find_top_level_token(&state.tokens, "=", first_idx).is_some();
 
         // Continuation blocks:
-        // - Multi-line `| ...` blocks (multi-clause functions, `?` matches, multi-line ADTs).
+        // - Multi-line `| ...` blocks (multi-clause functions and `?` matches).
+        //   These blocks can contain continuation lines (e.g. multi-line patterns/bodies), so we
+        //   keep the block active until we hit a same-indent non-`|` line (or a blank line).
         // - Multi-line `|> ...` pipeline blocks (common after `=`, even when RHS starts on same line).
         // - A single continuation line after a trailing `=` (e.g. `x =\n  expr`).
         let starts_with_pipe = state.tokens[first_idx].text == "|";
         let starts_with_pipeop = state.tokens[first_idx].text == "|>";
-        let should_indent_pipe = if starts_with_pipe {
-            if pipe_block_base_indent == Some(state.indent_len) {
-                true
-            } else {
-                matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?"))
-            }
-        } else {
-            false
-        };
-        let should_indent_pipeop = if starts_with_pipeop {
-            if pipeop_block_base_indent == Some(state.indent_len) {
-                true
-            } else if pipeop_seed_match {
-                true
-            } else {
-                matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?"))
-            }
-        } else {
-            false
-        };
+        let should_start_pipe_block =
+            starts_with_pipe && matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?"));
+        let should_start_pipeop_block = starts_with_pipeop
+            && (pipeop_seed_match
+                || matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?")));
 
-        if starts_with_pipe && should_indent_pipe {
+        if should_start_pipe_block {
             pipe_block_base_indent = Some(state.indent_len);
-        } else if !starts_with_pipe {
-            pipe_block_base_indent = None;
         }
-        if starts_with_pipeop && should_indent_pipeop {
+        if should_start_pipeop_block {
             pipeop_block_base_indent = Some(state.indent_len);
-        } else if !starts_with_pipeop {
-            pipeop_block_base_indent = None;
         }
 
-        let should_indent_continuation =
-            (starts_with_pipe && should_indent_pipe)
-                || (starts_with_pipeop && should_indent_pipeop)
-                || rhs_block_active;
+        // End a continuation block when we hit a line that returns to the block's base indent
+        // and doesn't start with the block operator.
+        if let Some(base) = pipe_block_base_indent {
+            if state.indent_len < base {
+                pipe_block_base_indent = None;
+            } else if state.indent_len == base && !starts_with_pipe && !starts_with_pipeop {
+                pipe_block_base_indent = None;
+            }
+        }
+        if let Some(base) = pipeop_block_base_indent {
+            if state.indent_len < base {
+                pipeop_block_base_indent = None;
+            } else if state.indent_len == base && !starts_with_pipeop {
+                pipeop_block_base_indent = None;
+            }
+        }
+
+        let in_pipe_block = pipe_block_base_indent.is_some_and(|base| state.indent_len >= base);
+        let in_pipeop_block = pipeop_block_base_indent.is_some_and(|base| state.indent_len >= base);
+
+        let should_indent_continuation = in_pipe_block || in_pipeop_block || rhs_block_active;
         let effective_indent = if should_indent_continuation {
             // Avoid allocations in the hot path unless we actually need extra indentation.
             format!("{base_indent}{pipe_block_extra}")

@@ -90,4 +90,14 @@ mod tests {
         );
         assert_eq!(formatted, "module demo\n\nmain = 1\n");
     }
+
+    #[test]
+    fn format_indents_multiline_match_arms_and_continuations() {
+        let text = "module demo\n\nf = ?\n  | { a@{\n    x\n  } } => x\n| _ => 0\n";
+        let formatted = format_text(text);
+        assert_eq!(
+            formatted,
+            "module demo\n\nf = ?\n  | { a@{\n      x\n    } } => x\n  | _ => 0\n"
+        );
+    }
 }
