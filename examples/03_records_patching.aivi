@@ -15,7 +15,7 @@ user2 = user1 <| {
   tags: append _["vip"]
 }
 
-promote = user => user <| {
+promote = _ <| {
   tags: append _["core"]
 }
 
@@ -31,8 +31,8 @@ Store = { items: List Item }
 
 store = {
   items: [
-    { price: 10, active: True },
-    { price: 20, active: False },
+    { price: 10, active: True }
+    { price: 20, active: False }
     { price: 30, active: True }
   ]
 }

@@ -6,10 +6,10 @@ main = effect {
   _        <- concurrent.par (print "left\n") (print "right\n")
   (tx, rx) <- channel.make Unit
   prefix = "ping"
-  _   <- channel.send tx "{prefix}\n"
+  channel.send tx "{prefix}\n"
   res <- channel.recv rx
   msg <- res ?
     | Ok text    => pure text
     | Err Closed => pure "closed\n"
-  _ <- print msg
+  print msg
 }

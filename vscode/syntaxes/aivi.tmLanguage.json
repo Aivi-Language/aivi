@@ -466,8 +466,7 @@
     "type_signature": {
       "patterns": [
         {
-          "begin": "^\\s*[a-z][A-Za-z0-9_]*\\s+:\\s+",
-          "end": "$",
+          "match": "^\\s*[a-z][A-Za-z0-9_]*\\s+:.*$",
           "name": "meta.type.signature.aivi"
         }
       ]

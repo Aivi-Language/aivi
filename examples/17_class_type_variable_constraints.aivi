@@ -8,16 +8,14 @@ class Eq A = {
 
 // Instances that can be distinguished at runtime by constructor patterns.
 instance Eq (Option X) = {
-  eq: x y =>
-  (x, y) ?
+  eq: x y => (x, y) ?
     | (None, None)     => True
     | (Some _, Some _) => True
     | _                => False
 }
 
 instance Eq (Result E X) = {
-  eq: x y =>
-  (x, y) ?
+  eq: x y => (x, y) ?
     | (Ok _, Ok _)   => True
     | (Err _, Err _) => True
     | _              => False

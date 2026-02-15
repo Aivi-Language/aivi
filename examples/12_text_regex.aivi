@@ -9,14 +9,14 @@ main : Effect Text Unit
 main = effect {
   msg = "  Hello World  "
   slug = msg |> trim |> toLower |> replaceAll " " "-"
-  _ <- print slug
+  print slug
 
   compiled = compile "[a-z]+"
   verdict = compiled ?
     | Ok r  => if test r "caa" then "match" else "no"
     | Err _ => "bad"
 
-  _ <- print verdict
+  print verdict
 
   bytes = toBytes Utf8 "ping"
   decoded = fromBytes Utf8 bytes

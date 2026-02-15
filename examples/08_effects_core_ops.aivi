@@ -14,9 +14,9 @@ main = effect {
     | Ok x  => pure "ok"
     | Err e => pure "err"
 
-  _ <- print verdict
+  print verdict
 
-  _ <- if m > 40 then effect {
-    _ <- print "branch"
+  if m > 40 then effect {
+    print "branch"
   } else pure Unit
 }

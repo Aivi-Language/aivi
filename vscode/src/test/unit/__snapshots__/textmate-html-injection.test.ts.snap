@@ -717,21 +717,9 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > treats event handler att
         "start": 9,
       },
       {
-        "end": 11,
-        "scopes": [],
-        "start": 10,
-      },
-      {
-        "end": 15,
-        "scopes": [
-          "keyword.control.aivi",
-        ],
-        "start": 11,
-      },
-      {
         "end": 16,
         "scopes": [],
-        "start": 15,
+        "start": 10,
       },
       {
         "end": 20,
@@ -885,6 +873,23 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > treats event handler att
           "storage.type.sigil.aivi",
         ],
         "start": 75,
+      },
+    ],
+  },
+]
+`;
+
+exports[`TextMate: AIVI + injected HTML (~html sigil) > treats type signature lines as a single scope (no colored braces) 1`] = `
+[
+  {
+    "line": 0,
+    "tokens": [
+      {
+        "end": 70,
+        "scopes": [
+          "meta.type.signature.aivi",
+        ],
+        "start": 0,
       },
     ],
   },

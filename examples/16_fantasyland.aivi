@@ -54,6 +54,6 @@ instance Chain (Option *) = {
     | Some x => f x
 }
 
-isNone = opt => opt ?
+isNone =
   | None   => True
   | Some _ => False

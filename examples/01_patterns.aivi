@@ -1,15 +1,10 @@
 module examples.compiler.patterns
 export head, classify, deepName, unwrap, take, zip, depth, flatten, evalExpr
 
-Option A = None
-| Some A
-Result E A = Err E
-| Ok A
-Tree A = Leaf A
-| Node (Tree A) (Tree A)
-Expr = Num Int
-| Add Expr Expr
-| Mul Expr Expr
+Option A = None | Some A
+Result E A = Err E | Ok A
+Tree A = Leaf A | Node (Tree A) (Tree A)
+Expr = Num Int | Add Expr Expr | Mul Expr Expr
 
 head =
   | []       => None
@@ -20,14 +15,9 @@ classify = n => n ?
   | n when n < 0 => "negative"
   | _            => "positive"
 
-deepName: { data: {
-    user: { profile: {
-        name: String } } } } -> String
+deepName : { data: { user: { profile: { name: String } } } } -> String
 deepName = ?
-  | { data.user.profile@{
-      name
-      age: _
-    } } => name
+  | { data.user.profile.{ name! } }
   | _ => "unknown"
 
 unwrap =

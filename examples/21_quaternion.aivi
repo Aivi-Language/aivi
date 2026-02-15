@@ -10,5 +10,5 @@ main = effect {
   spin = fromAxisAngle axis 1.570796
   unit = normalize spin
   len = magnitude unit
-  _ <- print "quat len: {len}"
+  print "quat len: {len}"
 }

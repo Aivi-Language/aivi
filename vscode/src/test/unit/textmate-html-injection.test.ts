@@ -134,6 +134,19 @@ beforeAll(async () => {
 });
 
 describe('TextMate: AIVI + injected HTML (~html sigil)', () => {
+  it('treats type signature lines as a single scope (no colored braces)', () => {
+    const line = 'deepName : { data: { user: { profile: { name: String } } } } -> String';
+    const tok = tokenizeText(grammar, line);
+    expect(tok).toMatchSnapshot();
+
+    const tokens = tokensForLine(tok, 0, line);
+    const braceIndex = line.indexOf('{');
+    const brace = tokenAt(tokens, braceIndex);
+    expect(brace.text).toContain('{');
+    expect(brace.scopes.join(' ')).toContain('meta.type.signature.aivi');
+    expect(brace.scopes.join(' ')).not.toContain('punctuation.section.bracket.aivi');
+  });
+
   it('tokenizes a simple HTML tag with attribute and string value', () => {
     const line = 'x = ~html~> <div class="a">hello</div> <~html';
     const tok = tokenizeText(grammar, line);

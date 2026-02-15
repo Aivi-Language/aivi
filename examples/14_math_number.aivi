@@ -8,15 +8,15 @@ use aivi.number.decimal (fromFloat, domain Decimal)
 main : Effect Text Unit
 main = effect {
   g = gcd 54 24
-  _ <- print "gcd: {g}"
+  print "gcd: {g}"
 
   fact = factorial 10
-  _ <- print "10! = {fact}"
+  print "10! = {fact}"
 
   price = fromFloat 19.99
   total = price + fromFloat 0.01
-  _ <- print "total: {total}"
+  print "total: {total}"
 
   unit = sin (degrees 90.0)
-  _ <- print "sin: {unit}"
+  print "sin: {unit}"
 }

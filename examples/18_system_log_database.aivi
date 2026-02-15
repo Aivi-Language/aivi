@@ -27,5 +27,5 @@ main = effect {
 
   rows <- db.load table3
 
-  _ <- print "users updated env={envValue} rows={rows}\n"
+  print "users updated env={envValue} rows={rows}\n"
 }
