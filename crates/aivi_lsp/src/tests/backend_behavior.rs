@@ -156,6 +156,27 @@ fn strict_mode_reports_split_arrow_and_offers_fix() {
 }
 
 #[test]
+fn strict_mode_warns_on_unused_match_arm_bindings() {
+    let text = r#"module demo
+
+deepName =
+  | { data.user.profile@{ age } } => "ok"
+  | _                               => "unknown"
+"#;
+    let uri = sample_uri();
+    let strict = crate::strict::StrictConfig {
+        level: crate::strict::StrictLevel::LexicalStructural,
+        forbid_implicit_coercions: false,
+        warnings_as_errors: false,
+    };
+    let diagnostics = Backend::build_diagnostics_strict(text, &uri, &strict);
+    let unused = diagnostics.iter().find(|diag| {
+        matches!(diag.code.as_ref(), Some(NumberOrString::String(code)) if code == "AIVI-S301")
+    });
+    assert!(unused.is_some(), "expected unused-pattern-binding diagnostic");
+}
+
+#[test]
 fn document_symbols_include_module_and_children() {
     let text = sample_text();
     let uri = sample_uri();
