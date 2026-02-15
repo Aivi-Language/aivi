@@ -693,3 +693,34 @@ bad = True + False
         "expected missing domain operator message, got: {module_diags:?}"
     );
 }
+
+#[test]
+fn typecheck_load_accepts_source_values() {
+    let source = r#"
+module test.load_source
+use aivi
+
+main : Effect Text Text
+main = effect {
+  txt <- load (file.read "missing.txt") or "(missing)"
+  pure txt
+}
+"#;
+
+    check_ok_with_embedded(source, &["aivi"]);
+}
+
+#[test]
+fn typecheck_effect_bind_accepts_source_values() {
+    let source = r#"
+module test.file_read_source
+use aivi
+
+main : Effect Text Unit
+main = effect {
+  _ <- file.read "missing.txt"
+}
+"#;
+
+    check_ok_with_embedded(source, &["aivi"]);
+}

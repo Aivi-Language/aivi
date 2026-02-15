@@ -397,6 +397,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "attempt"
             | "load"
             | "file"
+            | "env"
             | "pure"
             | "fail"
             | "Unit"

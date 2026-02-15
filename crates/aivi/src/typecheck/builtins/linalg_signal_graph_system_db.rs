@@ -209,9 +209,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 "get".to_string(),
                 Type::Func(
                     Box::new(text_ty.clone()),
-                    Box::new(
-                        Type::con("Effect").app(vec![text_ty.clone(), option_text_ty.clone()]),
-                    ),
+                    Box::new(Type::con("Source").app(vec![Type::con("Env"), option_text_ty.clone()])),
                 ),
             ),
             (
@@ -236,6 +234,19 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .collect(),
         open: false,
     };
+    let env_source_record = Type::Record {
+        fields: vec![(
+            "get".to_string(),
+            Type::Func(
+                Box::new(text_ty.clone()),
+                Box::new(Type::con("Source").app(vec![Type::con("Env"), text_ty.clone()])),
+            ),
+        )]
+        .into_iter()
+        .collect(),
+        open: false,
+    };
+    env.insert("env".to_string(), Scheme::mono(env_source_record));
     let system_record = Type::Record {
         fields: vec![
             ("env".to_string(), env_record),

@@ -987,7 +987,12 @@ fn https_rejects_non_https_urls() {
         Ok(value) => value,
         Err(_) => panic!("apply get failed"),
     };
-    let result = runtime.run_effect_value(applied);
+    let load = runtime.ctx.globals.get("load").expect("load");
+    let loaded = match runtime.apply(load, applied) {
+        Ok(value) => value,
+        Err(_) => panic!("apply load failed"),
+    };
+    let result = runtime.run_effect_value(loaded);
 
     match result {
         Err(RuntimeError::Message(message)) => {

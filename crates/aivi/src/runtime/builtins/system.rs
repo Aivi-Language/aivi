@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::util::{builtin, expect_record, expect_text, make_err, make_none, make_ok, make_some};
-use crate::runtime::{format_value, EffectValue, RuntimeError, Value};
+use crate::runtime::{format_value, EffectValue, RuntimeError, SourceValue, Value};
 pub(super) fn build_file_record() -> Value {
     let mut fields = HashMap::new();
     fields.insert(
@@ -24,7 +24,10 @@ pub(super) fn build_file_record() -> Value {
                     Err(err) => Err(RuntimeError::Error(Value::Text(err.to_string()))),
                 }),
             };
-            Ok(Value::Effect(Arc::new(effect)))
+            Ok(Value::Source(Arc::new(SourceValue {
+                kind: "File".to_string(),
+                effect: Arc::new(effect),
+            })))
         }),
     );
     fields.insert(
@@ -452,7 +455,10 @@ fn build_env_record() -> Value {
                     Err(err) => Err(RuntimeError::Error(Value::Text(err.to_string()))),
                 }),
             };
-            Ok(Value::Effect(Arc::new(effect)))
+            Ok(Value::Source(Arc::new(SourceValue {
+                kind: "Env".to_string(),
+                effect: Arc::new(effect),
+            })))
         }),
     );
     fields.insert(
@@ -480,6 +486,30 @@ fn build_env_record() -> Value {
                 }),
             };
             Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    Value::Record(Arc::new(fields))
+}
+
+pub(super) fn build_env_source_record() -> Value {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "get".to_string(),
+        builtin("env.get", 1, |mut args, _| {
+            let key = expect_text(args.pop().unwrap(), "env.get")?;
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| match std::env::var(&key) {
+                    Ok(value) => Ok(Value::Text(value)),
+                    Err(std::env::VarError::NotPresent) => Err(RuntimeError::Error(Value::Text(
+                        format!("env var not set: {key}"),
+                    ))),
+                    Err(err) => Err(RuntimeError::Error(Value::Text(err.to_string()))),
+                }),
+            };
+            Ok(Value::Source(Arc::new(SourceValue {
+                kind: "Env".to_string(),
+                effect: Arc::new(effect),
+            })))
         }),
     );
     Value::Record(Arc::new(fields))

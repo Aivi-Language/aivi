@@ -24,8 +24,8 @@ mod values;
 use self::builtins::register_builtins;
 use self::environment::{Env, RuntimeContext};
 use self::values::{
-    BuiltinImpl, BuiltinValue, ClosureValue, EffectValue, KeyValue, ResourceValue, ThunkValue,
-    Value,
+    BuiltinImpl, BuiltinValue, ClosureValue, EffectValue, KeyValue, ResourceValue, SourceValue,
+    ThunkValue, Value,
 };
 
 #[derive(Debug)]

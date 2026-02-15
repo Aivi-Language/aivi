@@ -15,11 +15,11 @@ Response = { status: Int, headers: List Header, body: Text }
 Error = { message: Text }
 
 get : Url -> Effect Text (Result Error Response)
-get = url => https.get url
+get = url => load (https.get url)
 
 post : Url -> Text -> Effect Text (Result Error Response)
-post = url body => https.post url body
+post = url body => load (https.post url body)
 
 fetch : Request -> Effect Text (Result Error Response)
-fetch = request => https.fetch request
+fetch = request => load (https.fetch request)
 "#;

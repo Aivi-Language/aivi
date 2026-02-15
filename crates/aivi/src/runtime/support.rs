@@ -152,6 +152,8 @@ fn values_equal(left: &Value, right: &Value) -> bool {
                 && aa.len() == bb.len()
                 && aa.iter().zip(bb.iter()).all(|(x, y)| values_equal(x, y))
         }
+        // Sources are effectful and are not meaningfully comparable.
+        (Value::Source(_), Value::Source(_)) => false,
         _ => false,
     }
 }
@@ -379,6 +381,7 @@ fn debug_value_to_json(value: &Value, depth: usize) -> serde_json::Value {
             .collect(),
         ),
         Value::Effect(_) => debug_summary_json(value),
+        Value::Source(_) => debug_summary_json(value),
         Value::Resource(_) => debug_summary_json(value),
         Value::Thunk(_) => debug_summary_json(value),
         Value::MultiClause(_) => debug_summary_json(value),
@@ -429,6 +432,7 @@ fn debug_summary_json(value: &Value) -> serde_json::Value {
         Value::Closure(_) => ("Closure", None),
         Value::Builtin(_) => ("Builtin", None),
         Value::Effect(_) => ("Effect", None),
+        Value::Source(_) => ("Source", None),
         Value::Resource(_) => ("Resource", None),
         Value::Thunk(_) => ("Thunk", None),
         Value::MultiClause(_) => ("MultiClause", None),
@@ -512,6 +516,7 @@ fn format_value(value: &Value) -> String {
         Value::Closure(_) => "<closure>".to_string(),
         Value::Builtin(builtin) => format!("<builtin:{}>", builtin.imp.name),
         Value::Effect(_) => "<effect>".to_string(),
+        Value::Source(source) => format!("<source:{}>", source.kind),
         Value::Resource(_) => "<resource>".to_string(),
         Value::Thunk(_) => "<thunk>".to_string(),
         Value::MultiClause(_) => "<multi-clause>".to_string(),

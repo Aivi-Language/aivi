@@ -1,7 +1,7 @@
 @mcp_tool
-searchDocs : Query -> Effect Http (List Document)
-searchDocs = query => http.get "https://api.example.com/search?q={query}"
+searchDocs : Url -> Effect Text (Result Error Response)
+searchDocs = url => load (http.get url)
 
 @mcp_resource
-appConfig : Source File Config
-appConfig = file.json "./config.json"
+appConfig : Source File Text
+appConfig = file.read "./config.json"

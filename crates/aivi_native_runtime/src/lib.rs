@@ -6,7 +6,7 @@ pub use values::ClosureValue;
 pub use values::KeyValue;
 pub use values::{
     format_value, values_equal, Builtin, BuiltinImpl, BuiltinValue, EffectValue, ResourceValue,
-    Runtime, RuntimeContext, RuntimeError, Value,
+    Runtime, RuntimeContext, RuntimeError, SourceValue, Value,
 };
 
 pub type R = Result<Value, RuntimeError>;

@@ -21,6 +21,12 @@ pub(super) type BuiltinFunc =
 pub(super) type ThunkFunc = dyn Fn(&mut Runtime) -> Result<Value, RuntimeError> + Send + Sync;
 
 #[derive(Clone)]
+pub(super) struct SourceValue {
+    pub(super) kind: String,
+    pub(super) effect: Arc<EffectValue>,
+}
+
+#[derive(Clone)]
 pub(super) enum Value {
     Unit,
     Bool(bool),
@@ -45,6 +51,7 @@ pub(super) enum Value {
     Closure(Arc<ClosureValue>),
     Builtin(BuiltinValue),
     Effect(Arc<EffectValue>),
+    Source(Arc<SourceValue>),
     Resource(Arc<ResourceValue>),
     Thunk(Arc<ThunkValue>),
     MultiClause(Vec<Value>),

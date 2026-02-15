@@ -65,6 +65,12 @@ pub type ResourceAcquireFunc =
     dyn FnOnce(&mut Runtime) -> Result<(Value, Value), RuntimeError> + Send;
 
 #[derive(Clone)]
+pub struct SourceValue {
+    pub kind: String,
+    pub effect: Arc<EffectValue>,
+}
+
+#[derive(Clone)]
 pub enum Value {
     Unit,
     Bool(bool),
@@ -89,6 +95,7 @@ pub enum Value {
     Closure(Arc<ClosureValue>),
     Builtin(BuiltinValue),
     Effect(Arc<EffectValue>),
+    Source(Arc<SourceValue>),
     Resource(Arc<ResourceValue>),
     Thunk(Arc<ThunkValue>),
     MultiClause(Vec<Value>),
@@ -560,6 +567,10 @@ impl Runtime {
         self.check_cancelled()?;
         match value {
             Value::Effect(effect) => match effect.as_ref() {
+                EffectValue::Thunk { func } => func(self),
+            },
+            // Sources can be executed anywhere an `Effect` is expected; `load` just makes this explicit.
+            Value::Source(source) => match source.effect.as_ref() {
                 EffectValue::Thunk { func } => func(self),
             },
             other => Err(RuntimeError::Message(format!(

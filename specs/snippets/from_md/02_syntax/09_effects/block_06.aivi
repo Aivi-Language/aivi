@@ -1,4 +1,4 @@
 main = effect {
-  cfg <- load (file.json "config.json")
+  cfg <- load (file.read "config.json")
   print "loaded"
 }

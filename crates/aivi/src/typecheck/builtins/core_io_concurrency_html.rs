@@ -126,15 +126,18 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         )),
     );
 
-    let e = checker.fresh_var_id();
     let a = checker.fresh_var_id();
+    let k = checker.fresh_var_id();
     env.insert(
         "load".to_string(),
         Scheme {
-            vars: vec![e, a],
+            vars: vec![k, a],
             ty: Type::Func(
-                Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
-                Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
+                Box::new(Type::con("Source").app(vec![Type::Var(k), Type::Var(a)])),
+                Box::new(Type::con("Effect").app(vec![
+                    Type::con("SourceError").app(vec![Type::Var(k)]),
+                    Type::Var(a),
+                ])),
             ),
         },
     );
@@ -145,7 +148,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 "read".to_string(),
                 Type::Func(
                     Box::new(Type::con("Text")),
-                    Box::new(Type::con("Effect").app(vec![Type::con("Text"), Type::con("Text")])),
+                    Box::new(Type::con("Source").app(vec![Type::con("File"), Type::con("Text")])),
                 ),
             ),
             (

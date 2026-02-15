@@ -20,3 +20,4 @@ This document tracks features specified in the documentation but not yet impleme
 ## Other Observations
 - **Database**: `aivi.database` is implemented with a driver abstraction, but specific driver implementations (SQLite, Postgres, MySQL) rely on the runtime environment configuration.
 - **HTTP Server**: fully implemented (`aivi.net.http_server`).
+- **External Sources**: `Source`/`load` exist, but structured decoders (`file.json`/`file.csv`), streaming sources, and `env.decode` are not implemented in v0.1.

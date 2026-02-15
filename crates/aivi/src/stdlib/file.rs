@@ -25,7 +25,7 @@ close : FileHandle -> Effect Text Unit
 close = handle => file.close handle
 
 readText : Text -> Effect Text (Result Text Text)
-readText = path => attempt (file.read path)
+readText = path => attempt (load (file.read path))
 
 writeText : Text -> Text -> Effect Text (Result Text Unit)
 writeText = path contents => attempt (file.write_text path contents)

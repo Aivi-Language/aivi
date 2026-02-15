@@ -99,12 +99,12 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
     let response_ty = Type::con("Response");
     let error_ty = Type::con("Error");
     let http_result_ty = Type::con("Result").app(vec![error_ty.clone(), response_ty.clone()]);
-    let http_effect_ty = Type::con("Effect").app(vec![Type::con("Text"), http_result_ty.clone()]);
+    let http_source_ty = Type::con("Source").app(vec![Type::con("Http"), http_result_ty.clone()]);
     let http_record = Type::Record {
         fields: vec![
             (
                 "get".to_string(),
-                Type::Func(Box::new(url_ty.clone()), Box::new(http_effect_ty.clone())),
+                Type::Func(Box::new(url_ty.clone()), Box::new(http_source_ty.clone())),
             ),
             (
                 "post".to_string(),
@@ -112,16 +112,13 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(url_ty.clone()),
                     Box::new(Type::Func(
                         Box::new(text_ty.clone()),
-                        Box::new(http_effect_ty.clone()),
+                        Box::new(http_source_ty.clone()),
                     )),
                 ),
             ),
             (
                 "fetch".to_string(),
-                Type::Func(
-                    Box::new(request_ty.clone()),
-                    Box::new(http_effect_ty.clone()),
-                ),
+                Type::Func(Box::new(request_ty.clone()), Box::new(http_source_ty.clone())),
             ),
         ]
         .into_iter()
@@ -130,11 +127,13 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
     };
     env.insert("http".to_string(), Scheme::mono(http_record));
 
+    let https_source_ty =
+        Type::con("Source").app(vec![Type::con("Https"), http_result_ty.clone()]);
     let https_record = Type::Record {
         fields: vec![
             (
                 "get".to_string(),
-                Type::Func(Box::new(url_ty.clone()), Box::new(http_effect_ty.clone())),
+                Type::Func(Box::new(url_ty.clone()), Box::new(https_source_ty.clone())),
             ),
             (
                 "post".to_string(),
@@ -142,16 +141,13 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(url_ty.clone()),
                     Box::new(Type::Func(
                         Box::new(text_ty.clone()),
-                        Box::new(http_effect_ty.clone()),
+                        Box::new(https_source_ty.clone()),
                     )),
                 ),
             ),
             (
                 "fetch".to_string(),
-                Type::Func(
-                    Box::new(request_ty.clone()),
-                    Box::new(http_effect_ty.clone()),
-                ),
+                Type::Func(Box::new(request_ty.clone()), Box::new(https_source_ty.clone())),
             ),
         ]
         .into_iter()
