@@ -18,7 +18,7 @@ negateDelta = delta => delta ?
   | Hour n => Hour (-n)
 
 domain Duration over Span = {
-  type Delta = Millisecond Int | Second Int | Minute Int | Hour Int
+  Delta = Millisecond Int | Second Int | Minute Int | Hour Int
 
   (+) : Span -> Delta -> Span
   (+) = span (Millisecond n) => { millis: span.millis + n }

@@ -58,7 +58,7 @@ value ?
 *   **Tuples**: `(1, "a")`.
 *   **Unions (ADTs)**:
     ```aivi
-    type Shape = Circle Float | Rect Float Float
+    Shape = Circle Float | Rect Float Float
     ```
 
 ### 2.3 Blocks & Control Flow

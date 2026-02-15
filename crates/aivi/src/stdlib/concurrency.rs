@@ -9,8 +9,8 @@ export make, send, recv, close
 
 use aivi
 
-type Scope = Unit
-type ChannelError = Closed
+Scope = Unit
+ChannelError = Closed
 
 par : Effect e a -> Effect e b -> Effect e (a, b)
 par = left right => concurrent.par left right

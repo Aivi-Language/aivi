@@ -1,5 +1,5 @@
 domain Calendar over Date = {
-  type Delta = Day Int | Month Int | Year Int | End EndOfMonth
+  Delta = Day Int | Month Int | Year Int | End EndOfMonth
 
   // Add delta to date
   (+) : Date -> Delta -> Date

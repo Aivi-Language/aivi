@@ -10,6 +10,25 @@ impl Parser {
                 self.pos = checkpoint;
                 return self.parse_def_or_type(decorators);
             }
+            // Opaque type declarations can be written as a standalone `UpperIdent` on its own
+            // line. Treat those as type declarations, not expression statements.
+            let terminator = self.tokens.get(self.pos).map_or(true, |tok| {
+                tok.kind == TokenKind::Newline
+                    || (tok.kind == TokenKind::Symbol && tok.text == "}")
+            });
+            if terminator {
+                self.pos = checkpoint;
+                let name = self.consume_name()?;
+                if name
+                    .name
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_uppercase())
+                {
+                    self.pos = checkpoint;
+                    return self.parse_type_decl_or_alias(decorators);
+                }
+            }
             self.pos = checkpoint;
         }
         None
@@ -86,7 +105,7 @@ impl Parser {
             }
         }
         self.pos = checkpoint;
-        if let Some(alias) = self.parse_type_alias(decorators) {
+        if let Some(alias) = self.parse_type_alias(decorators.clone()) {
             if self.check_symbol("=>") {
                 self.pos = checkpoint;
                 self.diagnostics.truncate(diag_checkpoint);
@@ -94,8 +113,42 @@ impl Parser {
             }
             return Some(ModuleItem::TypeAlias(alias));
         }
+        self.pos = checkpoint;
+        if let Some(opaque) = self.parse_opaque_type_decl(decorators) {
+            return Some(ModuleItem::TypeDecl(opaque));
+        }
         self.diagnostics.truncate(diag_checkpoint);
         None
+    }
+
+    fn parse_opaque_type_decl(&mut self, decorators: Vec<Decorator>) -> Option<TypeDecl> {
+        self.reject_debug_decorators(&decorators, "type declarations");
+        let name = self.consume_ident()?;
+        if !name
+            .name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_uppercase())
+        {
+            return None;
+        }
+        let mut params = Vec::new();
+        while let Some(param) = self.consume_ident() {
+            params.push(param);
+        }
+        // `UpperIdent [Params]` on its own line declares an opaque type.
+        let end = params
+            .last()
+            .map(|p| p.span.clone())
+            .unwrap_or_else(|| name.span.clone());
+        let span = merge_span(name.span.clone(), end);
+        Some(TypeDecl {
+            decorators,
+            name,
+            params,
+            constructors: Vec::new(),
+            span,
+        })
     }
 
     fn parse_type_decl(&mut self, decorators: Vec<Decorator>) -> Option<TypeDecl> {
@@ -104,6 +157,9 @@ impl Parser {
         let mut params = Vec::new();
         while let Some(param) = self.consume_ident() {
             params.push(param);
+        }
+        if !self.check_symbol("=") {
+            return None;
         }
         self.expect_symbol("=", "expected '=' in type declaration");
 
@@ -209,6 +265,9 @@ impl Parser {
         let mut params = Vec::new();
         while let Some(param) = self.consume_ident() {
             params.push(param);
+        }
+        if !self.check_symbol("=") {
+            return None;
         }
         self.expect_symbol("=", "expected '=' in type alias");
         let aliased = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
@@ -482,10 +541,56 @@ impl Parser {
             }
             let decorators = self.consume_decorators();
             self.validate_item_decorators(&decorators);
-            if self.match_keyword("type") {
+            if self.peek_keyword("type")
+                && self.tokens.get(self.pos + 1).is_some_and(|tok| {
+                    tok.kind == TokenKind::Ident
+                        && tok
+                            .text
+                            .chars()
+                            .next()
+                            .is_some_and(|c| c.is_ascii_uppercase())
+                })
+            {
+                let _ = self.match_keyword("type");
+                let span = self.previous_span();
+                self.emit_diag(
+                    "E1542",
+                    "`type` keyword is not part of AIVI syntax; write `Name = ...` inside domains",
+                    span,
+                );
                 if let Some(type_decl) = self.parse_domain_type_decl(decorators.clone()) {
                     items.push(DomainItem::TypeAlias(type_decl));
                     continue;
+                }
+            } else if self
+                .tokens
+                .get(self.pos)
+                .is_some_and(|tok| tok.kind == TokenKind::Ident && tok.text.chars().next().is_some_and(|c| c.is_ascii_uppercase()))
+            {
+                // Domain-local type declarations (e.g. `Delta = ...`) start with `UpperIdent`.
+                // Only treat it as a type declaration when an `=` appears on the same line.
+                let mut scan = self.pos;
+                let mut saw_eq = false;
+                while scan < self.tokens.len() {
+                    let tok = &self.tokens[scan];
+                    if tok.kind == TokenKind::Newline
+                        || (tok.kind == TokenKind::Symbol && tok.text == "}")
+                    {
+                        break;
+                    }
+                    if tok.kind == TokenKind::Symbol && tok.text == "=" {
+                        saw_eq = true;
+                        break;
+                    }
+                    scan += 1;
+                }
+                if saw_eq {
+                    let checkpoint = self.pos;
+                    if let Some(type_decl) = self.parse_domain_type_decl(decorators.clone()) {
+                        items.push(DomainItem::TypeAlias(type_decl));
+                        continue;
+                    }
+                    self.pos = checkpoint;
                 }
             }
             let checkpoint = self.pos;

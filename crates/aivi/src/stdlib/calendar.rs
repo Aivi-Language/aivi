@@ -12,7 +12,7 @@ export domain Calendar
 use aivi
 
 Date = { year: Int, month: Int, day: Int }
-type EndOfMonth = EndOfMonth
+EndOfMonth = EndOfMonth
 
 isLeapYear : Date -> Bool
 isLeapYear = value => calendar.isLeapYear value
@@ -43,7 +43,7 @@ now : Effect DateTime
 now = clock.now Unit
 
 domain Calendar over Date = {
-  type Delta = Day Int | Month Int | Year Int | End EndOfMonth
+  Delta = Day Int | Month Int | Year Int | End EndOfMonth
 
   (+) : Date -> Delta -> Date
   (+) = date (Day n) => addDays date n

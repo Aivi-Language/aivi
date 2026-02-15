@@ -26,7 +26,7 @@ This chapter is intentionally pragmatic: it aims to be complete enough to build 
 
 ```text
 as class do domain effect else export generate hiding if
-instance module or over patch recurse resource then type use when with yield loop
+instance module or over patch recurse resource then use when with yield loop
 ```
 
 (`True`, `False`, `None`, `Some`, `Ok`, `Err` are ordinary constructors, not keywords.)
@@ -89,8 +89,8 @@ Definition     := ValueSig
 ValueSig       := lowerIdent ":" Type Sep
 ValueBinding   := Pattern "=" Expr Sep
 
-TypeAlias      := "type" UpperIdent [ TypeParams ] "=" TypeRhs Sep
-OpaqueType     := "type" UpperIdent [ TypeParams ] Sep
+TypeAlias      := UpperIdent [ TypeParams ] "=" TypeRhs Sep
+OpaqueType     := UpperIdent [ TypeParams ] Sep
 TypeDef        := UpperIdent [ TypeParams ] "=" TypeRhs Sep
 TypeParams     := UpperIdent { UpperIdent }
 TypeRhs        := Type

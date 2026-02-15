@@ -13,11 +13,11 @@ export tCatalog, tCatalogWithDefault
 
 use aivi
 
-type Locale = { language: Text, region: Option Text, variants: List Text, tag: Text }
-type Key = { tag: Text, body: Text, flags: Text }
-type Message = { tag: Text, body: Text, flags: Text }
-type Bundle = { locale: Locale, entries: Map Text Message }
-type Catalog = Map Text Bundle
+Locale = { language: Text, region: Option Text, variants: List Text, tag: Text }
+Key = { tag: Text, body: Text, flags: Text }
+Message = { tag: Text, body: Text, flags: Text }
+Bundle = { locale: Locale, entries: Map Text Message }
+Catalog = Map Text Bundle
 
 parseLocale : Text -> Result Text Locale
 parseLocale = tag => i18n.parseLocale tag

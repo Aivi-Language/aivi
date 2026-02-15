@@ -260,7 +260,26 @@ impl Parser {
                 continue;
             }
 
-            if self.match_keyword("type") {
+            if self.peek_keyword("type")
+                && self.tokens.get(self.pos + 1).is_some_and(|tok| {
+                    tok.kind == TokenKind::Ident
+                        && tok
+                            .text
+                            .chars()
+                            .next()
+                            .is_some_and(|c| c.is_ascii_uppercase())
+                })
+            {
+                // Legacy syntax: `type T = ...` / `type T`.
+                // `type` is not part of the language; recover by dropping it and parsing the
+                // following type declaration/alias.
+                let _ = self.match_keyword("type");
+                let span = self.previous_span();
+                self.emit_diag(
+                    "E1542",
+                    "`type` keyword is not part of AIVI syntax; write `Name = ...` (or `Name` for opaque types)",
+                    span,
+                );
                 if let Some(item) = self.parse_type_decl_or_alias(decorators) {
                     items.push(item);
                 }

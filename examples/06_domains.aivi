@@ -4,7 +4,7 @@ export Date, Calendar, addWeek, addTwoWeeks, shiftBy
 Date = { year: Int, month: Int, day: Int }
 
 domain Calendar over Date = {
-  type Delta = Day Int | Week Int
+  Delta = Day Int | Week Int
 
   (+) : Date -> Delta -> Date
   (+) = d delta => delta ?

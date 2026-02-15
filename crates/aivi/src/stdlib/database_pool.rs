@@ -13,19 +13,19 @@ use aivi
 use aivi.duration
 use aivi.database
 
-type PoolError =
+PoolError =
   | Timeout
   | Closed
   | HealthFailed
   | InvalidConfig Text
 
-type PoolStats = { size: Int, idle: Int, inUse: Int, waiters: Int, closed: Bool }
+PoolStats = { size: Int, idle: Int, inUse: Int, waiters: Int, closed: Bool }
 
-type QueuePolicy = Fifo | Lifo
+QueuePolicy = Fifo | Lifo
 
-type BackoffPolicy = Fixed Span | Exponential { base: Span, max: Span }
+BackoffPolicy = Fixed Span | Exponential { base: Span, max: Span }
 
-type Config Conn = {
+Config Conn = {
   maxSize: Int
   minIdle: Int
   acquireTimeout: Span
@@ -40,7 +40,7 @@ type Config Conn = {
 }
 
 // Pool is represented as a record of effectful operations.
-type Pool Conn = {
+Pool Conn = {
   acquire: Unit -> Effect DbError (Result PoolError Conn)
   release: Conn -> Effect DbError Unit
   stats: Unit -> Effect DbError PoolStats

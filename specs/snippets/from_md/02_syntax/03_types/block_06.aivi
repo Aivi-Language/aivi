@@ -1,1 +1,1 @@
-type User = { id: Int, name: Text, email: Option Text }
+User = { id: Int, name: Text, email: Option Text }

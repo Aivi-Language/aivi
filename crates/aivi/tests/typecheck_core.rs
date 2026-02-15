@@ -160,7 +160,7 @@ export addWeek, updated
 Date = { year: Int, month: Int, day: Int }
 
  domain Calendar over Date = {
-  type Delta = Day Int | Week Int
+  Delta = Day Int | Week Int
 
   (+) : Date -> Delta -> Date
   (+) = d delta => delta ?
@@ -311,7 +311,7 @@ module test.delta_apply
 export value
 
 domain Units over Int = {
-  type Delta = Kg Int
+  Delta = Kg Int
   1kg = Kg 1
 }
 

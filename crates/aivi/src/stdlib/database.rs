@@ -16,26 +16,26 @@ export domain Database
 
 use aivi
 
-type DbError = Text
+DbError = Text
 
 Table A = { name: Text, columns: List Column, rows: List A }
 
-type ColumnType = IntType | BoolType | TimestampType | Varchar Int
-type ColumnConstraint = AutoIncrement | NotNull
-type ColumnDefault = DefaultBool Bool | DefaultInt Int | DefaultText Text | DefaultNow
-type Column = {
+ColumnType = IntType | BoolType | TimestampType | Varchar Int
+ColumnConstraint = AutoIncrement | NotNull
+ColumnDefault = DefaultBool Bool | DefaultInt Int | DefaultText Text | DefaultNow
+Column = {
   name: Text
   type: ColumnType
   constraints: List ColumnConstraint
   default: Option ColumnDefault
 }
 
-type Pred A = A -> Bool
-type Patch A = A -> A
-type Delta A = Insert A | Update (Pred A) (Patch A) | Delete (Pred A)
+Pred A = A -> Bool
+Patch A = A -> A
+Delta A = Insert A | Update (Pred A) (Patch A) | Delete (Pred A)
 
-type Driver = Sqlite | Postgresql | Mysql
-type DbConfig = { driver: Driver, url: Text }
+Driver = Sqlite | Postgresql | Mysql
+DbConfig = { driver: Driver, url: Text }
 
 configure : DbConfig -> Effect DbError Unit
 configure = config => database.configure config

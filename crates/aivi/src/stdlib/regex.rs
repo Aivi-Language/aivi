@@ -8,8 +8,8 @@ export compile, test, match, matches, find, findAll, split, replace, replaceAll
 
 use aivi
 
-type RegexError = InvalidPattern Text
-type Match = { full: Text, groups: List (Option Text), start: Int, end: Int }
+RegexError = InvalidPattern Text
+Match = { full: Text, groups: List (Option Text), start: Int, end: Int }
 
 compile : Text -> Result RegexError Regex
 compile = pattern => regex.compile pattern

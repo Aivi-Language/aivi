@@ -286,6 +286,34 @@ fn lower_expr_inner_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, 
         Expr::Binary {
             op, left, right, ..
         } => {
+            if op == "&&" {
+                let cond = lower_expr_ctx(*left, id_gen, ctx, false);
+                let then_branch = lower_expr_ctx(*right, id_gen, ctx, false);
+                let else_branch = HirExpr::LitBool {
+                    id: id_gen.next(),
+                    value: false,
+                };
+                return HirExpr::If {
+                    id: id_gen.next(),
+                    cond: Box::new(cond),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(else_branch),
+                };
+            }
+            if op == "||" {
+                let cond = lower_expr_ctx(*left, id_gen, ctx, false);
+                let then_branch = HirExpr::LitBool {
+                    id: id_gen.next(),
+                    value: true,
+                };
+                let else_branch = lower_expr_ctx(*right, id_gen, ctx, false);
+                return HirExpr::If {
+                    id: id_gen.next(),
+                    cond: Box::new(cond),
+                    then_branch: Box::new(then_branch),
+                    else_branch: Box::new(else_branch),
+                };
+            }
             if op == "|>" {
                 let debug_pipes = ctx.debug.as_ref().is_some_and(|d| d.params.pipes);
                 if debug_pipes && !in_pipe_left {

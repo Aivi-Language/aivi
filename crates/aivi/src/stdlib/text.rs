@@ -17,8 +17,8 @@ export toBytes, fromBytes, debugText, parseInt, parseFloat
 
 use aivi
 
-type Encoding = Utf8 | Utf16 | Utf32 | Latin1
-type TextError = InvalidEncoding Encoding
+Encoding = Utf8 | Utf16 | Utf32 | Latin1
+TextError = InvalidEncoding Encoding
 
 // ------------------------------------------------------------
 // Expected-type coercions: `A` -> `Text` via instances
