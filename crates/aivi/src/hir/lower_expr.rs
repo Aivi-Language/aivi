@@ -115,9 +115,14 @@ fn lower_expr_inner_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, 
             id: id_gen.next(),
             items: items
                 .into_iter()
-                .map(|item| HirListItem {
-                    expr: lower_expr_ctx(item.expr, id_gen, ctx, false),
-                    spread: item.spread,
+                .map(|item| {
+                    // Range items like `1..3` behave like implicit list spreads in surface syntax
+                    // (i.e. `[0, 1..3, 4]` becomes `[0, 1, 2, 3, 4]`).
+                    let is_range = matches!(&item.expr, Expr::Binary { op, .. } if op == "..");
+                    HirListItem {
+                        expr: lower_expr_ctx(item.expr, id_gen, ctx, false),
+                        spread: item.spread || is_range,
+                    }
                 })
                 .collect(),
         },

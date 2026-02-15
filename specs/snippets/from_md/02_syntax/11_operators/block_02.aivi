@@ -1,0 +1,7 @@
+use aivi.duration (domain Duration)
+
+// Suffix literals apply an in-scope template function:
+tenSeconds = 10s
+
+// Suffixes also apply to parenthesized expressions (must be adjacent to `)`):
+delta = (5 + 5)s

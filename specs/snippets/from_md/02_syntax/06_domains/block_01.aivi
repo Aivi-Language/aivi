@@ -1,8 +1,8 @@
 // Bring Vector math into scope
-use aivi.vector
+use aivi.vector (domain Vector)
 
-position = (10, 20)
-velocity = (1, 0)
+position = { x: 10.0, y: 20.0 }
+velocity = { x: 1.0, y: 0.0 }
 
-// The '+' operator now knows how to add tuples as vectors
+// The '+' operator now knows how to add `Vec2` records as vectors
 new_pos = position + velocity

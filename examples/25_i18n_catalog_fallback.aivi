@@ -12,7 +12,7 @@ systemLocale : Effect Text Locale
 systemLocale = effect {
   tagOpt <- localeTag
   tag =
-  tagOpt ?
+    tagOpt ?
     | Some t => t
     | None   => defaultLocale.tag
   pure (parseLocale tag or defaultLocale)
@@ -22,7 +22,7 @@ bundleEnUsRes = bundleFromProperties defaultLocale "app.welcome = Hello, \{name:
 
 bundleEnUs : Bundle
 bundleEnUs =
-bundleEnUsRes ?
+  bundleEnUsRes ?
   | Ok b  => b
   | Err _ => { locale: defaultLocale, entries: Map.empty }
 
@@ -30,7 +30,7 @@ bundleDeDeRes = bundleFromProperties { language: "de", region: Some "DE", varian
 
 bundleDeDe : Bundle
 bundleDeDe =
-bundleDeDeRes ?
+  bundleDeDeRes ?
   | Ok b  => b
   | Err _ => { locale: { language: "de", region: Some "DE", variants: [], tag: "de-DE" }, entries: Map.empty }
 

@@ -1,0 +1,2165 @@
+{
+  "files": [
+    {
+      "byte_count": 335,
+      "diagnostics": [],
+      "line_count": 23,
+      "lines": [
+        "module test.fmt_indent_after_eq",
+        "export activeNames",
+        "",
+        "class Functor (F *) = {",
+        "  map: F A -> (A -> B) -> F B",
+        "}",
+        "",
+        "class Apply (F *) =",
+        "Functor (F *) with {",
+        "  ap: F A -> F (A -> B) -> F B",
+        "}",
+        "",
+        "users = [",
+        "  { name: \"Alice\", active: True }",
+        "  { name: \"Bob\", active: False }",
+        "]",
+        "",
+        "activeNames = users",
+        "|> filter active",
+        "|> map.name",
+        "|> sort",
+        "|> join \", \"",
+        ""
+      ],
+      "path": "crates/aivi/tests/goldens/cases/fmt_indent_after_eq/input.aivi",
+      "tokens": [
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 6,
+              "line": 1
+            },
+            "start": {
+              "column": 1,
+              "line": 1
+            }
+          },
+          "text": "module"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 1
+            },
+            "start": {
+              "column": 7,
+              "line": 1
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 11,
+              "line": 1
+            },
+            "start": {
+              "column": 8,
+              "line": 1
+            }
+          },
+          "text": "test"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 12,
+              "line": 1
+            },
+            "start": {
+              "column": 12,
+              "line": 1
+            }
+          },
+          "text": "."
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 31,
+              "line": 1
+            },
+            "start": {
+              "column": 13,
+              "line": 1
+            }
+          },
+          "text": "fmt_indent_after_eq"
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 6,
+              "line": 2
+            },
+            "start": {
+              "column": 1,
+              "line": 2
+            }
+          },
+          "text": "export"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 2
+            },
+            "start": {
+              "column": 7,
+              "line": 2
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 18,
+              "line": 2
+            },
+            "start": {
+              "column": 8,
+              "line": 2
+            }
+          },
+          "text": "activeNames"
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 5,
+              "line": 4
+            },
+            "start": {
+              "column": 1,
+              "line": 4
+            }
+          },
+          "text": "class"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 6,
+              "line": 4
+            },
+            "start": {
+              "column": 6,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 13,
+              "line": 4
+            },
+            "start": {
+              "column": 7,
+              "line": 4
+            }
+          },
+          "text": "Functor"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 14,
+              "line": 4
+            },
+            "start": {
+              "column": 14,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 15,
+              "line": 4
+            },
+            "start": {
+              "column": 15,
+              "line": 4
+            }
+          },
+          "text": "("
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 16,
+              "line": 4
+            },
+            "start": {
+              "column": 16,
+              "line": 4
+            }
+          },
+          "text": "F"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 17,
+              "line": 4
+            },
+            "start": {
+              "column": 17,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 18,
+              "line": 4
+            },
+            "start": {
+              "column": 18,
+              "line": 4
+            }
+          },
+          "text": "*"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 19,
+              "line": 4
+            },
+            "start": {
+              "column": 19,
+              "line": 4
+            }
+          },
+          "text": ")"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 20,
+              "line": 4
+            },
+            "start": {
+              "column": 20,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 21,
+              "line": 4
+            },
+            "start": {
+              "column": 21,
+              "line": 4
+            }
+          },
+          "text": "="
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 22,
+              "line": 4
+            },
+            "start": {
+              "column": 22,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 23,
+              "line": 4
+            },
+            "start": {
+              "column": 23,
+              "line": 4
+            }
+          },
+          "text": "{"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 2,
+              "line": 5
+            },
+            "start": {
+              "column": 1,
+              "line": 5
+            }
+          },
+          "text": "  "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 5,
+              "line": 5
+            },
+            "start": {
+              "column": 3,
+              "line": 5
+            }
+          },
+          "text": "map"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 6,
+              "line": 5
+            },
+            "start": {
+              "column": 6,
+              "line": 5
+            }
+          },
+          "text": ":"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 5
+            },
+            "start": {
+              "column": 7,
+              "line": 5
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 8,
+              "line": 5
+            },
+            "start": {
+              "column": 8,
+              "line": 5
+            }
+          },
+          "text": "F"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 9,
+              "line": 5
+            },
+            "start": {
+              "column": 9,
+              "line": 5
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 10,
+              "line": 5
+            },
+            "start": {
+              "column": 10,
+              "line": 5
+            }
+          },
+          "text": "A"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 11,
+              "line": 5
+            },
+            "start": {
+              "column": 11,
+              "line": 5
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 13,
+              "line": 5
+            },
+            "start": {
+              "column": 12,
+              "line": 5
+            }
+          },
+          "text": "->"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 14,
+              "line": 5
+            },
+            "start": {
+              "column": 14,
+              "line": 5
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 15,
+              "line": 5
+            },
+            "start": {
+              "column": 15,
+              "line": 5
+            }
+          },
+          "text": "("
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 16,
+              "line": 5
+            },
+            "start": {
+              "column": 16,
+              "line": 5
+            }
+          },
+          "text": "A"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 17,
+              "line": 5
+            },
+            "start": {
+              "column": 17,
+              "line": 5
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 19,
+              "line": 5
+            },
+            "start": {
+              "column": 18,
+              "line": 5
+            }
+          },
+          "text": "->"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 20,
+              "line": 5
+            },
+            "start": {
+              "column": 20,
+              "line": 5
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 21,
+              "line": 5
+            },
+            "start": {
+              "column": 21,
+              "line": 5
+            }
+          },
+          "text": "B"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 22,
+              "line": 5
+            },
+            "start": {
+              "column": 22,
+              "line": 5
+            }
+          },
+          "text": ")"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 23,
+              "line": 5
+            },
+            "start": {
+              "column": 23,
+              "line": 5
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 25,
+              "line": 5
+            },
+            "start": {
+              "column": 24,
+              "line": 5
+            }
+          },
+          "text": "->"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 26,
+              "line": 5
+            },
+            "start": {
+              "column": 26,
+              "line": 5
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 27,
+              "line": 5
+            },
+            "start": {
+              "column": 27,
+              "line": 5
+            }
+          },
+          "text": "F"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 28,
+              "line": 5
+            },
+            "start": {
+              "column": 28,
+              "line": 5
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 29,
+              "line": 5
+            },
+            "start": {
+              "column": 29,
+              "line": 5
+            }
+          },
+          "text": "B"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 1,
+              "line": 6
+            },
+            "start": {
+              "column": 1,
+              "line": 6
+            }
+          },
+          "text": "}"
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 5,
+              "line": 8
+            },
+            "start": {
+              "column": 1,
+              "line": 8
+            }
+          },
+          "text": "class"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 6,
+              "line": 8
+            },
+            "start": {
+              "column": 6,
+              "line": 8
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 11,
+              "line": 8
+            },
+            "start": {
+              "column": 7,
+              "line": 8
+            }
+          },
+          "text": "Apply"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 12,
+              "line": 8
+            },
+            "start": {
+              "column": 12,
+              "line": 8
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 13,
+              "line": 8
+            },
+            "start": {
+              "column": 13,
+              "line": 8
+            }
+          },
+          "text": "("
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 14,
+              "line": 8
+            },
+            "start": {
+              "column": 14,
+              "line": 8
+            }
+          },
+          "text": "F"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 15,
+              "line": 8
+            },
+            "start": {
+              "column": 15,
+              "line": 8
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 16,
+              "line": 8
+            },
+            "start": {
+              "column": 16,
+              "line": 8
+            }
+          },
+          "text": "*"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 17,
+              "line": 8
+            },
+            "start": {
+              "column": 17,
+              "line": 8
+            }
+          },
+          "text": ")"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 18,
+              "line": 8
+            },
+            "start": {
+              "column": 18,
+              "line": 8
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 19,
+              "line": 8
+            },
+            "start": {
+              "column": 19,
+              "line": 8
+            }
+          },
+          "text": "="
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 9
+            },
+            "start": {
+              "column": 1,
+              "line": 9
+            }
+          },
+          "text": "Functor"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 8,
+              "line": 9
+            },
+            "start": {
+              "column": 8,
+              "line": 9
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 9,
+              "line": 9
+            },
+            "start": {
+              "column": 9,
+              "line": 9
+            }
+          },
+          "text": "("
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 10,
+              "line": 9
+            },
+            "start": {
+              "column": 10,
+              "line": 9
+            }
+          },
+          "text": "F"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 11,
+              "line": 9
+            },
+            "start": {
+              "column": 11,
+              "line": 9
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 12,
+              "line": 9
+            },
+            "start": {
+              "column": 12,
+              "line": 9
+            }
+          },
+          "text": "*"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 13,
+              "line": 9
+            },
+            "start": {
+              "column": 13,
+              "line": 9
+            }
+          },
+          "text": ")"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 14,
+              "line": 9
+            },
+            "start": {
+              "column": 14,
+              "line": 9
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 18,
+              "line": 9
+            },
+            "start": {
+              "column": 15,
+              "line": 9
+            }
+          },
+          "text": "with"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 19,
+              "line": 9
+            },
+            "start": {
+              "column": 19,
+              "line": 9
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 20,
+              "line": 9
+            },
+            "start": {
+              "column": 20,
+              "line": 9
+            }
+          },
+          "text": "{"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 2,
+              "line": 10
+            },
+            "start": {
+              "column": 1,
+              "line": 10
+            }
+          },
+          "text": "  "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 4,
+              "line": 10
+            },
+            "start": {
+              "column": 3,
+              "line": 10
+            }
+          },
+          "text": "ap"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 5,
+              "line": 10
+            },
+            "start": {
+              "column": 5,
+              "line": 10
+            }
+          },
+          "text": ":"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 6,
+              "line": 10
+            },
+            "start": {
+              "column": 6,
+              "line": 10
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 10
+            },
+            "start": {
+              "column": 7,
+              "line": 10
+            }
+          },
+          "text": "F"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 8,
+              "line": 10
+            },
+            "start": {
+              "column": 8,
+              "line": 10
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 9,
+              "line": 10
+            },
+            "start": {
+              "column": 9,
+              "line": 10
+            }
+          },
+          "text": "A"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 10,
+              "line": 10
+            },
+            "start": {
+              "column": 10,
+              "line": 10
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 12,
+              "line": 10
+            },
+            "start": {
+              "column": 11,
+              "line": 10
+            }
+          },
+          "text": "->"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 13,
+              "line": 10
+            },
+            "start": {
+              "column": 13,
+              "line": 10
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 14,
+              "line": 10
+            },
+            "start": {
+              "column": 14,
+              "line": 10
+            }
+          },
+          "text": "F"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 15,
+              "line": 10
+            },
+            "start": {
+              "column": 15,
+              "line": 10
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 16,
+              "line": 10
+            },
+            "start": {
+              "column": 16,
+              "line": 10
+            }
+          },
+          "text": "("
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 17,
+              "line": 10
+            },
+            "start": {
+              "column": 17,
+              "line": 10
+            }
+          },
+          "text": "A"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 18,
+              "line": 10
+            },
+            "start": {
+              "column": 18,
+              "line": 10
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 20,
+              "line": 10
+            },
+            "start": {
+              "column": 19,
+              "line": 10
+            }
+          },
+          "text": "->"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 21,
+              "line": 10
+            },
+            "start": {
+              "column": 21,
+              "line": 10
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 22,
+              "line": 10
+            },
+            "start": {
+              "column": 22,
+              "line": 10
+            }
+          },
+          "text": "B"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 23,
+              "line": 10
+            },
+            "start": {
+              "column": 23,
+              "line": 10
+            }
+          },
+          "text": ")"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 24,
+              "line": 10
+            },
+            "start": {
+              "column": 24,
+              "line": 10
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 26,
+              "line": 10
+            },
+            "start": {
+              "column": 25,
+              "line": 10
+            }
+          },
+          "text": "->"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 27,
+              "line": 10
+            },
+            "start": {
+              "column": 27,
+              "line": 10
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 28,
+              "line": 10
+            },
+            "start": {
+              "column": 28,
+              "line": 10
+            }
+          },
+          "text": "F"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 29,
+              "line": 10
+            },
+            "start": {
+              "column": 29,
+              "line": 10
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 30,
+              "line": 10
+            },
+            "start": {
+              "column": 30,
+              "line": 10
+            }
+          },
+          "text": "B"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 1,
+              "line": 11
+            },
+            "start": {
+              "column": 1,
+              "line": 11
+            }
+          },
+          "text": "}"
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 5,
+              "line": 13
+            },
+            "start": {
+              "column": 1,
+              "line": 13
+            }
+          },
+          "text": "users"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 6,
+              "line": 13
+            },
+            "start": {
+              "column": 6,
+              "line": 13
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 13
+            },
+            "start": {
+              "column": 7,
+              "line": 13
+            }
+          },
+          "text": "="
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 8,
+              "line": 13
+            },
+            "start": {
+              "column": 8,
+              "line": 13
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 9,
+              "line": 13
+            },
+            "start": {
+              "column": 9,
+              "line": 13
+            }
+          },
+          "text": "["
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 2,
+              "line": 14
+            },
+            "start": {
+              "column": 1,
+              "line": 14
+            }
+          },
+          "text": "  "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 3,
+              "line": 14
+            },
+            "start": {
+              "column": 3,
+              "line": 14
+            }
+          },
+          "text": "{"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 4,
+              "line": 14
+            },
+            "start": {
+              "column": 4,
+              "line": 14
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 8,
+              "line": 14
+            },
+            "start": {
+              "column": 5,
+              "line": 14
+            }
+          },
+          "text": "name"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 9,
+              "line": 14
+            },
+            "start": {
+              "column": 9,
+              "line": 14
+            }
+          },
+          "text": ":"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 10,
+              "line": 14
+            },
+            "start": {
+              "column": 10,
+              "line": 14
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "string",
+          "span": {
+            "end": {
+              "column": 17,
+              "line": 14
+            },
+            "start": {
+              "column": 11,
+              "line": 14
+            }
+          },
+          "text": "\"Alice\""
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 18,
+              "line": 14
+            },
+            "start": {
+              "column": 18,
+              "line": 14
+            }
+          },
+          "text": ","
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 19,
+              "line": 14
+            },
+            "start": {
+              "column": 19,
+              "line": 14
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 25,
+              "line": 14
+            },
+            "start": {
+              "column": 20,
+              "line": 14
+            }
+          },
+          "text": "active"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 26,
+              "line": 14
+            },
+            "start": {
+              "column": 26,
+              "line": 14
+            }
+          },
+          "text": ":"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 27,
+              "line": 14
+            },
+            "start": {
+              "column": 27,
+              "line": 14
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 31,
+              "line": 14
+            },
+            "start": {
+              "column": 28,
+              "line": 14
+            }
+          },
+          "text": "True"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 32,
+              "line": 14
+            },
+            "start": {
+              "column": 32,
+              "line": 14
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 33,
+              "line": 14
+            },
+            "start": {
+              "column": 33,
+              "line": 14
+            }
+          },
+          "text": "}"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 2,
+              "line": 15
+            },
+            "start": {
+              "column": 1,
+              "line": 15
+            }
+          },
+          "text": "  "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 3,
+              "line": 15
+            },
+            "start": {
+              "column": 3,
+              "line": 15
+            }
+          },
+          "text": "{"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 4,
+              "line": 15
+            },
+            "start": {
+              "column": 4,
+              "line": 15
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 8,
+              "line": 15
+            },
+            "start": {
+              "column": 5,
+              "line": 15
+            }
+          },
+          "text": "name"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 9,
+              "line": 15
+            },
+            "start": {
+              "column": 9,
+              "line": 15
+            }
+          },
+          "text": ":"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 10,
+              "line": 15
+            },
+            "start": {
+              "column": 10,
+              "line": 15
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "string",
+          "span": {
+            "end": {
+              "column": 15,
+              "line": 15
+            },
+            "start": {
+              "column": 11,
+              "line": 15
+            }
+          },
+          "text": "\"Bob\""
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 16,
+              "line": 15
+            },
+            "start": {
+              "column": 16,
+              "line": 15
+            }
+          },
+          "text": ","
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 17,
+              "line": 15
+            },
+            "start": {
+              "column": 17,
+              "line": 15
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 23,
+              "line": 15
+            },
+            "start": {
+              "column": 18,
+              "line": 15
+            }
+          },
+          "text": "active"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 24,
+              "line": 15
+            },
+            "start": {
+              "column": 24,
+              "line": 15
+            }
+          },
+          "text": ":"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 25,
+              "line": 15
+            },
+            "start": {
+              "column": 25,
+              "line": 15
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 30,
+              "line": 15
+            },
+            "start": {
+              "column": 26,
+              "line": 15
+            }
+          },
+          "text": "False"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 31,
+              "line": 15
+            },
+            "start": {
+              "column": 31,
+              "line": 15
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 32,
+              "line": 15
+            },
+            "start": {
+              "column": 32,
+              "line": 15
+            }
+          },
+          "text": "}"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 1,
+              "line": 16
+            },
+            "start": {
+              "column": 1,
+              "line": 16
+            }
+          },
+          "text": "]"
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 11,
+              "line": 18
+            },
+            "start": {
+              "column": 1,
+              "line": 18
+            }
+          },
+          "text": "activeNames"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 12,
+              "line": 18
+            },
+            "start": {
+              "column": 12,
+              "line": 18
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 13,
+              "line": 18
+            },
+            "start": {
+              "column": 13,
+              "line": 18
+            }
+          },
+          "text": "="
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 14,
+              "line": 18
+            },
+            "start": {
+              "column": 14,
+              "line": 18
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 19,
+              "line": 18
+            },
+            "start": {
+              "column": 15,
+              "line": 18
+            }
+          },
+          "text": "users"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 2,
+              "line": 19
+            },
+            "start": {
+              "column": 1,
+              "line": 19
+            }
+          },
+          "text": "|>"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 3,
+              "line": 19
+            },
+            "start": {
+              "column": 3,
+              "line": 19
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 9,
+              "line": 19
+            },
+            "start": {
+              "column": 4,
+              "line": 19
+            }
+          },
+          "text": "filter"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 10,
+              "line": 19
+            },
+            "start": {
+              "column": 10,
+              "line": 19
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 16,
+              "line": 19
+            },
+            "start": {
+              "column": 11,
+              "line": 19
+            }
+          },
+          "text": "active"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 2,
+              "line": 20
+            },
+            "start": {
+              "column": 1,
+              "line": 20
+            }
+          },
+          "text": "|>"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 3,
+              "line": 20
+            },
+            "start": {
+              "column": 3,
+              "line": 20
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 6,
+              "line": 20
+            },
+            "start": {
+              "column": 4,
+              "line": 20
+            }
+          },
+          "text": "map"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 20
+            },
+            "start": {
+              "column": 7,
+              "line": 20
+            }
+          },
+          "text": "."
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 11,
+              "line": 20
+            },
+            "start": {
+              "column": 8,
+              "line": 20
+            }
+          },
+          "text": "name"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 2,
+              "line": 21
+            },
+            "start": {
+              "column": 1,
+              "line": 21
+            }
+          },
+          "text": "|>"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 3,
+              "line": 21
+            },
+            "start": {
+              "column": 3,
+              "line": 21
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 21
+            },
+            "start": {
+              "column": 4,
+              "line": 21
+            }
+          },
+          "text": "sort"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 2,
+              "line": 22
+            },
+            "start": {
+              "column": 1,
+              "line": 22
+            }
+          },
+          "text": "|>"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 3,
+              "line": 22
+            },
+            "start": {
+              "column": 3,
+              "line": 22
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 7,
+              "line": 22
+            },
+            "start": {
+              "column": 4,
+              "line": 22
+            }
+          },
+          "text": "join"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 8,
+              "line": 22
+            },
+            "start": {
+              "column": 8,
+              "line": 22
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "string",
+          "span": {
+            "end": {
+              "column": 12,
+              "line": 22
+            },
+            "start": {
+              "column": 9,
+              "line": 22
+            }
+          },
+          "text": "\", \""
+        }
+      ]
+    }
+  ]
+}

@@ -28,6 +28,7 @@ A high-integrity functional language targeting WebAssembly.
 - [Pattern Matching](02_syntax/08_pattern_matching.md)
 - [Effects](02_syntax/09_effects.md)
 - [Modules](02_syntax/10_modules.md)
+- [Operators and Context](02_syntax/11_operators.md)
 - [Sigils](02_syntax/13_sigils.md)
 - [External Sources](02_syntax/12_external_sources.md)
 - [Decorators](02_syntax/14_decorators.md)

@@ -230,7 +230,10 @@ ResStmt        := ValueBinding
                | "yield" Expr Sep
 
 TupleLit       := "(" Expr "," Expr { "," Expr } ")"
-ListLit        := "[" [ Expr { FieldSep Expr } | Range ] "]"
+ListLit        := "[" [ ListItem { FieldSep ListItem } ] "]"
+ListItem       := "..." Expr
+               | Range
+               | Expr
 Range          := Expr ".." Expr
 
 RecordLit      := "{" { RecordEntry } "}"

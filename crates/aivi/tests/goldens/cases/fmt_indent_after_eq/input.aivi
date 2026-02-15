@@ -1,0 +1,23 @@
+module test.fmt_indent_after_eq
+export activeNames
+
+class Functor (F *) = {
+  map: F A -> (A -> B) -> F B
+}
+
+class Apply (F *) =
+Functor (F *) with {
+  ap: F A -> F (A -> B) -> F B
+}
+
+users = [
+  { name: "Alice", active: True }
+  { name: "Bob", active: False }
+]
+
+activeNames = users
+|> filter active
+|> map.name
+|> sort
+|> join ", "
+

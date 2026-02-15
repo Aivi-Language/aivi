@@ -134,6 +134,63 @@ w = !False
 }
 
 #[test]
+fn range_operator_builds_lists_and_spreads_in_list_literals() {
+    let source = r#"
+module test.range
+
+// `..` constructs a list of Ints, inclusive.
+xs = 1..3
+
+// Inside list literals, range expressions behave like implicit spreads.
+ys = [0, 1..3, 4]
+zs = [1..3]
+"#;
+    let mut runtime = runtime_from_source(source);
+
+    let xs = runtime.ctx.globals.get("xs").unwrap();
+    let ys = runtime.ctx.globals.get("ys").unwrap();
+    let zs = runtime.ctx.globals.get("zs").unwrap();
+
+    let xs = expect_ok(runtime.force_value(xs), "failed to evaluate xs");
+    let ys = expect_ok(runtime.force_value(ys), "failed to evaluate ys");
+    let zs = expect_ok(runtime.force_value(zs), "failed to evaluate zs");
+
+    fn expect_int_list(value: Value, expected: &[i64], label: &str) {
+        let Value::List(items) = value else {
+            panic!("expected list for {label}, got {}", format_value(&value));
+        };
+        if items.len() != expected.len() {
+            panic!(
+                "expected {} items for {label}, got {} ({})",
+                expected.len(),
+                items.len(),
+                format_value(&Value::List(items))
+            );
+        }
+        for (idx, item) in items.iter().enumerate() {
+            let Value::Int(n) = item else {
+                panic!(
+                    "expected Int at {label}[{idx}], got {}",
+                    format_value(item)
+                );
+            };
+            if *n != expected[idx] {
+                panic!(
+                    "expected {label}[{idx}] = {}, got {}",
+                    expected[idx], n
+                );
+            }
+        }
+    }
+
+    expect_int_list(xs, &[1, 2, 3], "xs");
+
+    expect_int_list(ys, &[0, 1, 2, 3, 4], "ys");
+
+    expect_int_list(zs, &[1, 2, 3], "zs");
+}
+
+#[test]
 fn text_interpolation_evaluates() {
     let source = r#"
 module test.interpolation
