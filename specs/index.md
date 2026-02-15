@@ -114,6 +114,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [File](05_stdlib/03_system/20_file)
 - [Console](05_stdlib/03_system/21_console)
 - [Database](05_stdlib/03_system/23_database)
+- [Path](05_stdlib/03_system/24_path)
 - [URL](05_stdlib/03_system/25_url)
 - [Crypto](05_stdlib/03_system/22_crypto)
 - [System](05_stdlib/03_system/25_system)

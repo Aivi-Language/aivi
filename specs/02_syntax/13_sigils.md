@@ -6,6 +6,11 @@ Sigils provide custom parsing for complex literals. They start with `~` followed
 
 Domains define these sigils to validate and construct types at compile time.
 
+Some sigils are compiler-provided and backed by stdlib domains, for example:
+
+- `~u(https://example.com)` / `~url(https://example.com)` for `aivi.url.Url`
+- `~path[/usr/local/bin]` for `aivi.path.Path`
+
 ## Structured sigils
 
 Some domains parse sigils as **AIVI expressions** rather than raw text. The `Collections` domain defines:

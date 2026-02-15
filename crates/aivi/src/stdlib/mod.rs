@@ -32,6 +32,7 @@ mod network_https;
 mod network_sockets;
 mod network_streams;
 mod number_facade;
+mod path;
 mod prelude;
 mod probability;
 mod quaternion;
@@ -140,6 +141,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: url::MODULE_NAME,
         source: url::SOURCE,
+    },
+    EmbeddedModule {
+        name: path::MODULE_NAME,
+        source: path::SOURCE,
     },
     EmbeddedModule {
         name: concurrency::MODULE_NAME,

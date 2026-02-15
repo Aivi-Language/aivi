@@ -140,11 +140,49 @@ impl Runtime {
                     })?;
                     Ok(Value::Regex(Arc::new(regex)))
                 }
-                "u" => {
+                "u" | "url" => {
                     let parsed = Url::parse(body).map_err(|err| {
                         RuntimeError::Message(format!("invalid url literal: {err}"))
                     })?;
                     Ok(Value::Record(Arc::new(url_to_record(&parsed))))
+                }
+                "p" | "path" => {
+                    let cleaned = body.trim().replace('\\', "/");
+                    if cleaned.contains('\0') {
+                        return Err(RuntimeError::Message(
+                            "invalid path literal: contains NUL byte".to_string(),
+                        ));
+                    }
+                    let absolute = cleaned.starts_with('/');
+                    let mut segments: Vec<String> = Vec::new();
+                    for raw in cleaned.split('/') {
+                        if raw.is_empty() || raw == "." {
+                            continue;
+                        }
+                        if raw == ".." {
+                            if let Some(last) = segments.last() {
+                                if last != ".." {
+                                    segments.pop();
+                                    continue;
+                                }
+                            }
+                            if !absolute {
+                                segments.push("..".to_string());
+                            }
+                            continue;
+                        }
+                        segments.push(raw.to_string());
+                    }
+
+                    let mut map = HashMap::new();
+                    map.insert("absolute".to_string(), Value::Bool(absolute));
+                    map.insert(
+                        "segments".to_string(),
+                        Value::List(Arc::new(
+                            segments.into_iter().map(Value::Text).collect::<Vec<_>>(),
+                        )),
+                    );
+                    Ok(Value::Record(Arc::new(map)))
                 }
                 "d" => {
                     let date = NaiveDate::parse_from_str(body, "%Y-%m-%d").map_err(|err| {

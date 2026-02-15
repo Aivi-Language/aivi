@@ -111,6 +111,8 @@ AIVI uses **Sigils** for complex literals that are validated at compile-time by 
     *   `~d(2024-01-01)`: Date literal (Calendar domain).
     *   `~t(12:00:00)`: Time literal.
     *   `~r/[a-z]+/`: Regex literal.
+    *   `~u(https://example.com)` / `~url(https://example.com)`: URL literal.
+    *   `~path[/usr/local/bin]`: Path literal.
     *   `~json{ "x": 1 }`: JSON literal (parsed at compile time).
 *   **Structured Sigils**: `~map{ k => v }` and `~set[1, 2]` are syntactic sugar for collection construction.
 *   **UI Sigil**: `~html~> <div>{expr}</div> <~html` parses HTML-like syntax into typed `aivi.ui.VNode msg` values (not strings) and supports `{expr}` splices.

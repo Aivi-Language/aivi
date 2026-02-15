@@ -24,7 +24,8 @@ impl TypeChecker {
             Literal::String { .. } => Type::con("Text"),
             Literal::Sigil { tag, .. } => match tag.as_str() {
                 "r" => Type::con("Regex"),
-                "u" => Type::con("Url"),
+                "u" | "url" => Type::con("Url"),
+                "p" | "path" => Type::con("Path"),
                 "d" => Type::con("Date"),
                 "t" | "dt" => Type::con("DateTime"),
                 "k" => Type::con("Key"),

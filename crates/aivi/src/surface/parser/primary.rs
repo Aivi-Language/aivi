@@ -288,7 +288,7 @@ impl Parser {
                 if tag == "html" && flags.is_empty() {
                     return Some(self.parse_html_sigil(&sigil, &body));
                 }
-                if tag == "u" && !is_probably_url(&body) {
+                if (tag == "u" || tag == "url") && !is_probably_url(&body) {
                     self.emit_diag("E1510", "invalid url sigil", span.clone());
                 }
                 if (tag == "t" || tag == "dt") && !is_probably_datetime(&body) {

@@ -195,6 +195,61 @@ n = Set.size s
 }
 
 #[test]
+fn url_and_path_sigils_evaluate_to_typed_records() {
+    let source = r#"
+module test.urlAndPathSigils
+
+use aivi.path
+
+u = ~url(https://example.com/a/b?q=1#frag)
+p = ~path[/a/./b/../c]
+joined = toString (~path[/a/b] / ~path[../c])
+"#;
+    let (mut modules, diags) =
+        crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    let program = crate::hir::desugar_modules(&stdlib_modules);
+    let mut runtime = build_runtime_from_program(program).expect("runtime");
+
+    let u = runtime.ctx.globals.get("u").unwrap();
+    let u = expect_ok(runtime.force_value(u), "evaluate u");
+    let Value::Record(u_rec) = u else {
+        panic!("expected u to be a Record");
+    };
+    assert!(matches!(u_rec.get("protocol"), Some(Value::Text(t)) if t == "https"));
+    assert!(matches!(u_rec.get("host"), Some(Value::Text(t)) if t == "example.com"));
+    assert!(matches!(u_rec.get("path"), Some(Value::Text(t)) if t == "/a/b"));
+
+    let p = runtime.ctx.globals.get("p").unwrap();
+    let p = expect_ok(runtime.force_value(p), "evaluate p");
+    let Value::Record(p_rec) = p else {
+        panic!("expected p to be a Record");
+    };
+    assert!(matches!(p_rec.get("absolute"), Some(Value::Bool(true))));
+    let Some(Value::List(segments)) = p_rec.get("segments") else {
+        panic!("expected p.segments to be a List");
+    };
+    let seg_texts: Vec<String> = segments
+        .iter()
+        .map(|v| match v {
+            Value::Text(s) => s.clone(),
+            _ => panic!("expected segment to be Text"),
+        })
+        .collect();
+    assert_eq!(seg_texts, vec!["a".to_string(), "c".to_string()]);
+
+    let joined = runtime.ctx.globals.get("joined").unwrap();
+    let joined = expect_ok(runtime.force_value(joined), "evaluate joined");
+    let Value::Text(joined) = joined else {
+        panic!("expected joined to be Text");
+    };
+    assert_eq!(joined, "/a/c");
+}
+
+#[test]
 fn layout_suffix_literals_find_domain_templates_at_runtime() {
     let source = r#"
 module test.layoutSuffix

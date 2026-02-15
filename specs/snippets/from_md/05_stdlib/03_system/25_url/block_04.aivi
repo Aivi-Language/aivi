@@ -1,7 +1,7 @@
 use aivi.url
 
-// Create using the ~u sigil
-base = ~u(https://api.example.com/v1/search)
+// Create using the ~u / ~url sigil
+base = ~url(https://api.example.com/v1/search)
 
 // Add parameter: "?q=aivi"
 search = base + ("q", "aivi")

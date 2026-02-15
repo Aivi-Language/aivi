@@ -103,6 +103,7 @@ A high-integrity functional language targeting WebAssembly.
 - [File](05_stdlib/03_system/20_file.md)
 - [Console](05_stdlib/03_system/21_console.md)
 - [Database](05_stdlib/03_system/23_database.md)
+- [Path](05_stdlib/03_system/24_path.md)
 - [URL](05_stdlib/03_system/25_url.md)
 - [Crypto](05_stdlib/03_system/22_crypto.md)
 - [System](05_stdlib/03_system/25_system.md)
