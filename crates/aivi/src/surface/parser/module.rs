@@ -51,6 +51,7 @@ impl Parser {
 
     fn parse_modules(&mut self) -> Vec<Module> {
         let mut modules = Vec::new();
+        let mut reported_leading_tokens = false;
         while self.pos < self.tokens.len() {
             let annotations = self.consume_decorators();
             if self.peek_keyword("module") {
@@ -78,6 +79,24 @@ impl Parser {
                     );
                 }
                 self.recover_to_module();
+            } else if modules.is_empty() {
+                // v0.1: the file must start with `module ...` (after optional module decorators).
+                // Emit a single, clear diagnostic and then recover to the first `module`.
+                if !reported_leading_tokens {
+                    if let Some(token) = self.tokens.get(self.pos) {
+                        if token.kind != TokenKind::Newline {
+                            reported_leading_tokens = true;
+                            self.emit_diag(
+                                "E1519",
+                                "`module` declaration must be the first item in the file",
+                                token.span.clone(),
+                            );
+                            self.recover_to_module();
+                            continue;
+                        }
+                    }
+                }
+                self.pos += 1;
             } else {
                 self.pos += 1;
             }
@@ -150,17 +169,24 @@ impl Parser {
         let module_kw = self.previous_span();
         let name = self.parse_dotted_name()?;
         self.consume_newlines();
-        let mut explicit_body = false;
+        let mut legacy_braced_body = false;
         if self.consume_symbol("=") {
-            self.expect_symbol("{", "expected '{' to start module body");
-            explicit_body = true;
-        } else if self.consume_symbol("{") {
             self.emit_diag(
-                "E1509",
-                "expected '=' before '{' to start module body",
+                "E1518",
+                "braced module bodies were removed; use `module x.y.z` and put the module in its own file",
                 self.previous_span(),
             );
-            explicit_body = true;
+            self.consume_newlines();
+            if self.consume_symbol("{") {
+                legacy_braced_body = true;
+            }
+        } else if self.consume_symbol("{") {
+            self.emit_diag(
+                "E1518",
+                "braced module bodies were removed; use `module x.y.z` and put the module in its own file",
+                self.previous_span(),
+            );
+            legacy_braced_body = true;
         }
         let mut exports = Vec::new();
         let mut uses = Vec::new();
@@ -170,35 +196,27 @@ impl Parser {
                 break;
             }
             let loop_start = self.pos;
-            if explicit_body && self.check_symbol("}") {
-                break;
-            }
             self.consume_newlines();
-            if explicit_body && self.check_symbol("}") {
+            if legacy_braced_body && self.check_symbol("}") {
                 break;
             }
-            if !explicit_body && self.peek_keyword("module") {
-                let span = self.peek_span().unwrap_or_else(|| self.previous_span());
-                self.emit_diag(
-                    "E1508",
-                    "implicit module bodies must be the last top-level item in a file",
-                    span,
-                );
-                self.pos += 1;
-                continue;
+            if self.peek_keyword("module") {
+                if legacy_braced_body {
+                    let span = self.peek_span().unwrap_or_else(|| self.previous_span());
+                    self.emit_diag(
+                        "E1540",
+                        "nested `module` declarations are not supported; use one module per file with dot paths",
+                        span,
+                    );
+                    self.pos += 1;
+                    self.recover_to_item();
+                    continue;
+                }
+                // Stop the current module body so the outer loop can see the next `module`.
+                break;
             }
             let decorators = self.consume_decorators();
             self.validate_item_decorators(&decorators);
-            if !explicit_body && self.peek_keyword("module") {
-                let span = self.peek_span().unwrap_or_else(|| self.previous_span());
-                self.emit_diag(
-                    "E1508",
-                    "implicit module bodies must be the last top-level item in a file",
-                    span,
-                );
-                self.pos += 1;
-                continue;
-            }
             if self.match_keyword("export") {
                 for decorator in decorators {
                     self.emit_diag(
@@ -261,11 +279,10 @@ impl Parser {
                 self.pos += 1;
             }
         }
-        let end_span = if explicit_body {
+        let end_span = if legacy_braced_body {
             self.expect_symbol("}", "expected '}' to close module body")
                 .unwrap_or_else(|| module_kw.clone())
         } else {
-            self.pos = self.tokens.len();
             self.previous_span()
         };
         let span = merge_span(module_kw.clone(), end_span);

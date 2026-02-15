@@ -1,17 +1,16 @@
 
 fn sample_text() -> &'static str {
     r#"@no_prelude
-	module examples.compiler.math = {
-	  export add, sub, run
+module examples.compiler.math
+export add, sub, run
 
-	  add : Number -> Number -> Number
-	  sub : Number -> Number -> Number
+add : Number -> Number -> Number
+sub : Number -> Number -> Number
 
-	  add = x y => x + y
-	  sub = x y => x - y
-	  run = add 1 2
-	}
-	"#
+add = x y => x + y
+sub = x y => x - y
+run = add 1 2
+"#
 }
 
 fn sample_uri() -> Url {

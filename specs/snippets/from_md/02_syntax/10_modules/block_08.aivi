@@ -1,4 +1,4 @@
 @no_prelude
-module aivi.bootstrap = {
-  // Pure bootstrap logic
-}
+module aivi.bootstrap
+
+// Pure bootstrap logic

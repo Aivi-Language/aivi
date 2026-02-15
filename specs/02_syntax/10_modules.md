@@ -8,7 +8,7 @@ Modules can be written in a **flat** form that keeps file indentation shallow. T
 
 <<< ../snippets/from_md/02_syntax/10_modules/block_01.aivi{aivi}
 
-In v0.1, there is exactly one module per file. In the flat form, the `module` declaration must be the last top-level item in the file and its body extends to EOF. The braced form (`module path = { ... }`) is equivalent but ends at the closing `}`.
+In v0.1, there is exactly one module per file. The `module` declaration must be the first non-empty item in the file (after any module decorators), and its body extends to EOF.
 
 
 ## 10.2 Module Pathing (Dot Separator)
@@ -52,13 +52,11 @@ Modules are the primary vehicle for delivering **Domains**. Exporting a domain a
 When another module calls `use geo.vector`, it gains the ability to use `+` on `Vec2` records.
 
 
-## 10.5 First-Class Modules
+## 10.5 File-Scoped Modules (No Nesting)
 
-Modules are statically resolved but behave like first-class records within the compiler's intermediate representation. This enables powerful composition patterns.
+In v0.1, modules are **file-scoped**. There is no `{ ... }` module body syntax and no nested module declarations.
 
-### Nested Modules
-
-<<< ../snippets/from_md/02_syntax/10_modules/block_06.aivi{aivi}
+Use dot notation to define hierarchy: `module my.app.api` lives in a file such as `my/app/api.aivi` (project layout is determined by the manifest and tooling).
 
 ### Module Re-exports
 A module can aggregate other modules, acting as a facade.
@@ -95,6 +93,8 @@ Modules allow for building clean, layered architectures where complex internal i
 This pattern allows you to **statically swap** entire module implementations for different build contexts (e.g., Test vs. Prod). This is not for runtime configuration (see below), but for compile-time substitution of logic.
 
 <<< ../snippets/from_md/02_syntax/10_modules/block_11.aivi{aivi}
+
+<<< ../snippets/from_md/02_syntax/10_modules/block_11_test.aivi{aivi}
 
 To use the test environment, your test entry point (`tests/main.aivi`) simply imports the test module instead of the production one:
 
