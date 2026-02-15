@@ -7,6 +7,16 @@
 | `f a b` | `⟦f⟧ ⟦a⟧ ⟦b⟧` (left-assoc) |
 | `(e)` | `⟦e⟧` |
 
+## Pipes `|>`
+
+`|>` is just application with the operands swapped.
+
+| Surface | Desugaring |
+| :--- | :--- |
+| `x |> f` | `⟦f⟧ ⟦x⟧` |
+| `x |> f a` | `⟦f⟧ ⟦a⟧ ⟦x⟧` |
+| `x |> f a b` | `⟦f⟧ ⟦a⟧ ⟦b⟧ ⟦x⟧` |
+
 
 # Placeholder lambda `_`
 

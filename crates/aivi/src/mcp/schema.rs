@@ -18,12 +18,23 @@ fn tool_input_schema(sig: Option<&TypeSig>, def: Option<&Def>) -> serde_json::Va
         return serde_json::json!({ "type": "object" });
     }
 
+    fn def_param_patterns<'a>(def: &'a Def) -> Vec<&'a Pattern> {
+        if !def.params.is_empty() {
+            return def.params.iter().collect();
+        }
+        match &def.expr {
+            Expr::Lambda { params, .. } => params.iter().collect(),
+            _ => Vec::new(),
+        }
+    }
+
     let param_names: Vec<String> = if let Some(def) = def {
+        let patterns = def_param_patterns(def);
         param_types
             .iter()
             .enumerate()
             .map(|(idx, _ty)| {
-                def.params
+                patterns
                     .get(idx)
                     .map(|pattern| param_name(pattern, idx))
                     .unwrap_or_else(|| format!("arg{idx}"))

@@ -39,6 +39,16 @@ Structural patterns may appear in bindings.
 
 <<< ../snippets/from_md/02_syntax/01_bindings/block_04.aivi{aivi}
 
+### Record destructuring (deconstructing records)
+
+To deconstruct a record, use a record pattern on the left-hand side.
+
+```aivi
+{ name: n, age: a } = user
+```
+
+You can also destructure nested records using dot-paths (Section 1.5).
+
 * `=` may only be used where the compiler can prove the pattern is **total** (i.e., it covers all possible shapes of the data).
 * Potentially failing matches (refutable patterns) must use `?` (case analysis) or appear in a context where failure can be handled.
 

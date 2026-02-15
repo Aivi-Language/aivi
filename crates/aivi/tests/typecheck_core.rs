@@ -159,22 +159,22 @@ export addWeek, updated
 
 Date = { year: Int, month: Int, day: Int }
 
-domain Calendar over Date = {
+ domain Calendar over Date = {
   type Delta = Day Int | Week Int
 
   (+) : Date -> Delta -> Date
-  (+) d delta = delta ?
+  (+) = d delta => delta ?
     | Day n => addDays d n
     | Week n => addDays d (n * 7)
 
   1w = Week 1
 }
 
-addDays : Date -> Int -> Date
-addDays d n = d <| { day: _ + n }
+ addDays : Date -> Int -> Date
+ addDays = d n => d <| { day: _ + n }
 
-addWeek : Date -> Date
-addWeek d = d + 2w
+ addWeek : Date -> Date
+ addWeek = d => d + 2w
 
 updated = addWeek { year: 2024, month: 9, day: 1 }"#;
     check_ok(source);
@@ -251,13 +251,13 @@ export move
 
 Vec2 = { x: Int, y: Int }
 
-domain Vector over Vec2 = {
+ domain Vector over Vec2 = {
   (+) : Vec2 -> Vec2 -> Vec2
-  (+) a b = { x: a.x + b.x, y: a.y + b.y }
-}
+  (+) = a b => { x: a.x + b.x, y: a.y + b.y }
+ }
 
-move : Vec2 -> Vec2 -> Vec2
-move pos vel = pos + vel"#;
+ move : Vec2 -> Vec2 -> Vec2
+ move = pos vel => pos + vel"#;
     check_ok(source);
 }
 
@@ -499,8 +499,8 @@ fn typecheck_open_records_allow_extra_fields() {
 module test.open
 export value
 
-getName : { name: Text } -> Text
-getName user = user.name
+ getName : { name: Text } -> Text
+ getName = user => user.name
 
 value = getName { name: "Alice", id: 1 }"#;
     check_ok(source);
@@ -537,17 +537,17 @@ UserMaybe = User |> Optional (email)
 UserReq = UserMaybe |> Required (email)
 UserPublic = User |> Omit (isAdmin) |> Rename { email: email_address }
 
-getName : UserName -> Text
-getName u = u.name
+ getName : UserName -> Text
+ getName = u => u.name
 
-getEmail : UserReq -> Text
-getEmail u = u.email
+ getEmail : UserReq -> Text
+ getEmail = u => u.email
 
-publicEmail : UserPublic -> Text
-publicEmail u = u.email_address
+ publicEmail : UserPublic -> Text
+ publicEmail = u => u.email_address
 
-promote : Patch User
-promote u = u <| { isAdmin: True }"#;
+ promote : Patch User
+ promote = patch { isAdmin: True }"#;
     check_ok(source);
 }
 
@@ -610,7 +610,7 @@ instance Functor (Option *) = {
     | Some x => Some (f x)
 }
 
-inc x = x + 1
+ inc = x => x + 1
 value = map (Some 1) inc"#;
     check_ok(source);
 }

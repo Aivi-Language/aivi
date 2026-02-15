@@ -310,6 +310,35 @@ impl TypeChecker {
 
             let result: Result<(), TypeError> = (|| {
                 if def.params.is_empty() {
+                    // If the surface syntax used `name = x y => ...`, the parameters live in a
+                    // top-level lambda expression instead of `def.params`. Peel that lambda so we
+                    // can use the signature to constrain parameter types early. This avoids
+                    // incorrectly selecting domain operators when operands start as unconstrained
+                    // type variables (e.g. `a.x + b.x` inside a domain `(+)=...` implementation).
+                    if let Expr::Lambda { params, body, .. } = expr.clone() {
+                        let mut remaining = expected;
+                        for param in &params {
+                            let remaining_applied = self.apply(remaining);
+                            let remaining_norm = self.expand_alias(remaining_applied);
+                            let Type::Func(expected_param, expected_rest) = remaining_norm else {
+                                return Err(TypeError {
+                                    span: def.span.clone(),
+                                    message: format!("expected function type for '{name}'"),
+                                    expected: None,
+                                    found: None,
+                                });
+                            };
+                            let pat_ty = self.infer_pattern(param, &mut local_env)?;
+                            self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
+                            remaining = *expected_rest;
+                        }
+                        // Elaborate against the remaining expected return type so the typechecker
+                        // can apply expected-type coercions in the body.
+                        let (_elab, _ty) =
+                            self.elab_expr(*body, Some(remaining), &mut local_env)?;
+                        return Ok(());
+                    }
+
                     // Use expected-type elaboration so mismatches inside the expression (e.g. a
                     // record field) get a precise span instead of underlining the entire def.
                     let (_elab, _ty) =

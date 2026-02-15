@@ -77,14 +77,14 @@ pub fn generate_i18n_module_from_properties(
     out.push('\n');
 
     out.push_str("keyText : KeyId -> Text\n");
-    out.push_str("keyText k = k ?\n");
+    out.push_str("keyText = k => k ?\n");
     for (key, ctor) in &key_to_ctor {
         out.push_str(&format!("  | {ctor} => \"{key}\"\n"));
     }
     out.push('\n');
 
     out.push_str("key : KeyId -> { tag: Text, body: Text, flags: Text }\n");
-    out.push_str("key k = { tag: \"k\", body: keyText k, flags: \"\" }\n\n");
+    out.push_str("key = k => { tag: \"k\", body: keyText k, flags: \"\" }\n\n");
 
     out.push_str(
         "locale : { language: Text, region: Option Text, variants: List Text, tag: Text }\n",
@@ -123,7 +123,7 @@ pub fn generate_i18n_module_from_properties(
     out.push_str("}\n\n");
 
     out.push_str("t : KeyId -> {} -> Text\n");
-    out.push_str("t k args =\n");
+    out.push_str("t = k args =>\n");
     out.push_str("  Map.get (keyText k) bundle.entries ?\n");
     out.push_str("    | None => keyText k\n");
     out.push_str("    | Some msg =>\n");
