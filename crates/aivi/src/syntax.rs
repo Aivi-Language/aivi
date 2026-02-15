@@ -1,6 +1,6 @@
 pub const KEYWORDS_CONTROL: &[&str] = &[
     "do", "effect", "generate", "resource", "if", "then", "else", "when", "yield", "loop",
-    "recurse", "pure",
+    "recurse", "or",
 ];
 
 pub const KEYWORDS_OTHER: &[&str] = &[
@@ -10,7 +10,7 @@ pub const KEYWORDS_OTHER: &[&str] = &[
 
 pub const KEYWORDS_ALL: &[&str] = &[
     "do", "effect", "generate", "resource", "if", "then", "else", "when", "yield", "loop",
-    "recurse", "pure", "module", "export", "use", "as", "hiding", "domain", "class", "instance",
+    "recurse", "or", "module", "export", "use", "as", "hiding", "domain", "class", "instance",
     "type", "over", "patch", "with",
 ];
 

@@ -56,6 +56,56 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
         }
 
         // Line comments (`// ...` and `-- ...`) run to end-of-line.
+        if ch == '/' && index + 1 < chars.len() && chars[index + 1] == '*' {
+            let start = index;
+            let start_line = line;
+            let start_col = col;
+
+            index += 2; // consume `/*`
+            col += 2;
+
+            let mut closed = false;
+            while index < chars.len() {
+                let ch = chars[index];
+                if ch == '\n' {
+                    index += 1;
+                    line += 1;
+                    col = 1;
+                    continue;
+                }
+                col += 1;
+                if ch == '*' && index + 1 < chars.len() && chars[index + 1] == '/' {
+                    // Consume the `/` of the closing delimiter.
+                    index += 2;
+                    col += 1;
+                    closed = true;
+                    break;
+                }
+                index += 1;
+            }
+
+            let text: String = chars[start..index.min(chars.len())].iter().collect();
+            let end_col = col.saturating_sub(1).max(1);
+            tokens.push(CstToken {
+                kind: "comment".to_string(),
+                text,
+                span: span_multiline(start_line, start_col, line, end_col),
+            });
+            if !closed {
+                let comment_span = span_multiline(start_line, start_col, line, end_col);
+                diagnostics.push(Diagnostic {
+                    code: "E1007".to_string(),
+                    severity: DiagnosticSeverity::Error,
+                    message: "unterminated block comment".to_string(),
+                    span: comment_span.clone(),
+                    labels: vec![DiagnosticLabel {
+                        message: "block comment started here".to_string(),
+                        span: span_single(start_line, start_col, 2),
+                    }],
+                });
+            }
+            continue;
+        }
         if ch == '/' && index + 1 < chars.len() && chars[index + 1] == '/' {
             let start = index;
             let start_col = col;
@@ -585,6 +635,28 @@ mod tests {
         assert_eq!(comments.len(), 2);
         assert_eq!(comments[0].text, "// hello");
         assert_eq!(comments[1].text, "-- world");
+    }
+
+    #[test]
+    fn lex_recognizes_block_comments() {
+        let src = "x = 1 /* hello\nworld */\ny = 2\n";
+        let (tokens, diags) = lex(src);
+        assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+        let comments: Vec<&CstToken> = tokens.iter().filter(|t| t.kind == "comment").collect();
+        assert_eq!(comments.len(), 1);
+        assert!(comments[0].text.starts_with("/* hello"));
+        assert!(comments[0].text.ends_with("*/"));
+    }
+
+    #[test]
+    fn lex_unterminated_block_comment_emits_error() {
+        let src = "x = 1 /* hello\n";
+        let (_tokens, diags) = lex(src);
+        assert!(
+            diag_codes(&diags).contains(&"E1007".to_string()),
+            "expected E1007, got: {:?}",
+            diag_codes(&diags)
+        );
     }
 
     #[test]
