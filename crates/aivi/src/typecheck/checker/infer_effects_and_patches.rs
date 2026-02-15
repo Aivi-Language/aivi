@@ -24,11 +24,9 @@ impl TypeChecker {
                 BlockItem::Bind { pattern, expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let snapshot = self.subst.clone();
-                    let value_ty = match self.bind_effect_value(
-                        expr_ty.clone(),
-                        err_ty.clone(),
-                        expr_span(expr),
-                    ) {
+                    let value_ty = match self
+                        .bind_effect_value(expr_ty.clone(), err_ty.clone(), expr_span(expr))
+                    {
                         Ok(value_ty) => value_ty,
                         Err(_) => {
                             self.subst = snapshot;
@@ -482,6 +480,16 @@ impl TypeChecker {
         span: Span,
     ) -> Result<Type, TypeError> {
         let value_ty = self.fresh_var();
+        let source_kind_ty = self.fresh_var();
+        let source_ty = Type::con("Source").app(vec![source_kind_ty.clone(), value_ty.clone()]);
+        if self
+            .unify_with_span(expr_ty.clone(), source_ty, span.clone())
+            .is_ok()
+        {
+            let source_err_ty = Type::con("SourceError").app(vec![source_kind_ty]);
+            self.unify_with_span(err_ty, source_err_ty, span)?;
+            return Ok(value_ty);
+        }
         let effect_ty = Type::con("Effect").app(vec![err_ty.clone(), value_ty.clone()]);
         let resource_ty = Type::con("Resource").app(vec![err_ty, value_ty.clone()]);
         if self

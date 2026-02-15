@@ -21,6 +21,17 @@ impl TypeChecker {
             "Text",
             "Char",
             "Bytes",
+            // Source kinds (used at type-level only; v0.1 keeps SourceError as Text).
+            "File",
+            "Http",
+            "Https",
+            "Env",
+            "Db",
+            "Email",
+            "Llm",
+            "Image",
+            "S3",
+            "Static",
             "Patch",
             "Map",
             "Set",
@@ -76,6 +87,13 @@ impl TypeChecker {
             "Effect".to_string(),
             arrow(star.clone(), arrow(star.clone(), star.clone())),
         );
+        // Sources (boundaries)
+        self.builtin_types.insert(
+            "Source".to_string(),
+            arrow(star.clone(), arrow(star.clone(), star.clone())),
+        );
+        self.builtin_types
+            .insert("SourceError".to_string(), arrow(star.clone(), star.clone()));
 
         self.type_constructors = self.builtin_types.clone();
     }

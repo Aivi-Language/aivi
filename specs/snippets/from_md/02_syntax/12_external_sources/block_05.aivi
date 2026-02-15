@@ -1,12 +1,12 @@
 User = { id: Int, name: Text }
 
-// Typed GET request (inferred type)
+// GET request as a Source
 users = http.get ~u(https://api.example.com/v1/users)
 
-// Request with headers and body
-req = http.request {
-  method: Post
+// Request with headers and body (raw JSON text)
+req = http.fetch {
+  method: "POST"
   url: ~u(https://api.example.com/v1/users)
-  headers: [("Content-Type", "application/json")]
-  body: Some (Json.encode { name: "New User" })
+  headers: [{ name: "Content-Type", value: "application/json" }]
+  body: Some "{\"name\":\"New User\"}"
 }

@@ -1,8 +1,8 @@
 // Instead of hardcoding, load from environment
-config : Source Env { apiUrl: Text }
-config = env.decode { apiUrl: "https://localhost:8080" }
+config : Source Env Text
+config = env.get "API_URL"
 
 connect = effect {
-  cfg <- load config
-  // ... use cfg.apiUrl
+  apiUrl <- load config
+  // ... use apiUrl
 }

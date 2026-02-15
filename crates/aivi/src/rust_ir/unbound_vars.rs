@@ -648,6 +648,7 @@ fn resolve_builtin(name: &str) -> Option<BuiltinName> {
             | "chain"
             | "assertEq"
             | "file"
+            | "env"
             | "system"
             | "clock"
             | "random"

@@ -16,7 +16,7 @@ use super::regex::build_regex_record;
 use super::signal::build_signal_record;
 use super::system::{
     build_clock_record, build_console_record, build_file_record, build_random_record,
-    build_system_record,
+    build_env_source_record, build_system_record,
 };
 use super::text::build_text_record;
 use super::ui::build_ui_record;
@@ -276,13 +276,16 @@ pub(crate) fn register_builtins(env: &Env) {
         builtin("load", 1, |mut args, _| {
             let value = args.remove(0);
             match value {
+                Value::Source(source) => Ok(Value::Effect(source.effect.clone())),
+                // Back-compat: older code treated `load` as an `Effect`-identity.
                 Value::Effect(_) => Ok(value),
-                _ => Err(RuntimeError::Message("load expects an Effect".to_string())),
+                _ => Err(RuntimeError::Message("load expects a Source".to_string())),
             }
         }),
     );
 
     env.set("file".to_string(), build_file_record());
+    env.set("env".to_string(), build_env_source_record());
     env.set("system".to_string(), build_system_record());
     env.set("clock".to_string(), build_clock_record());
     env.set("random".to_string(), build_random_record());

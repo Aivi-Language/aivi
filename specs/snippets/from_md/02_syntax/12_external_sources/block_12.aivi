@@ -2,4 +2,4 @@
 version = file.read "./VERSION"
 
 @static
-locales = file.json "./i18n/en.json"
+locales = file.read "./i18n/en.json"

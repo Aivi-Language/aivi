@@ -36,7 +36,7 @@ bundleFromProperties = locale props => i18n.bundleFromProperties locale props
 
 bundleFromPropertiesFile : Locale -> Text -> Effect Text (Result Text Bundle)
 bundleFromPropertiesFile = locale path => effect {
-  res <- attempt (file.read path)
+  res <- attempt (load (file.read path))
   res ?
     | Err e => pure (Err e)
     | Ok txt => pure (bundleFromProperties locale txt)

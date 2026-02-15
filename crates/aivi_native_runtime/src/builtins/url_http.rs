@@ -8,7 +8,7 @@ use super::util::{
     builtin, expect_int, expect_list, expect_record, expect_text, list_value, make_err, make_none,
     make_ok, make_some,
 };
-use crate::{EffectValue, RuntimeError, Value};
+use crate::{EffectValue, RuntimeError, SourceValue, Value};
 
 fn url_from_value(value: Value, ctx: &str) -> Result<Url, RuntimeError> {
     let Value::Record(fields) = value else {
@@ -150,7 +150,13 @@ pub(super) enum HttpClientMode {
 }
 
 pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
+    let kind = match mode {
+        HttpClientMode::Http => "Http",
+        HttpClientMode::Https => "Https",
+    }
+    .to_string();
     let mut fields = HashMap::new();
+    let kind_get = kind.clone();
     fields.insert(
         "get".to_string(),
         builtin("http.get", 1, move |mut args, _| {
@@ -162,9 +168,13 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                     http_request("GET", &url, Vec::new(), None)
                 }),
             };
-            Ok(Value::Effect(Arc::new(effect)))
+            Ok(Value::Source(Arc::new(SourceValue {
+                kind: kind_get.clone(),
+                effect: Arc::new(effect),
+            })))
         }),
     );
+    let kind_post = kind.clone();
     fields.insert(
         "post".to_string(),
         builtin("http.post", 2, move |mut args, _| {
@@ -178,9 +188,13 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                     http_request("POST", &url, Vec::new(), Some(body))
                 }),
             };
-            Ok(Value::Effect(Arc::new(effect)))
+            Ok(Value::Source(Arc::new(SourceValue {
+                kind: kind_post.clone(),
+                effect: Arc::new(effect),
+            })))
         }),
     );
+    let kind_fetch = kind.clone();
     fields.insert(
         "fetch".to_string(),
         builtin("http.fetch", 1, move |mut args, _| {
@@ -212,7 +226,10 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                     http_request(&method, &url, headers, body)
                 }),
             };
-            Ok(Value::Effect(Arc::new(effect)))
+            Ok(Value::Source(Arc::new(SourceValue {
+                kind: kind_fetch.clone(),
+                effect: Arc::new(effect),
+            })))
         }),
     );
     Value::Record(Arc::new(fields))

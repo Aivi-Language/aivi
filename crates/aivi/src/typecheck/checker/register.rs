@@ -45,6 +45,17 @@ impl TypeChecker {
                 body: Type::Func(Box::new(Type::Var(a)), Box::new(Type::Var(a))),
             },
         );
+
+        // v0.1: Source errors are currently just `Text` messages.
+        // The `K` parameter exists for spec alignment and future evolution.
+        let k = self.fresh_var_id();
+        self.aliases.insert(
+            "SourceError".to_string(),
+            AliasInfo {
+                params: vec![k],
+                body: Type::con("Text"),
+            },
+        );
     }
 
     pub(super) fn collect_type_expr_diags(&mut self, module: &Module) -> Vec<FileDiagnostic> {

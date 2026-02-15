@@ -24,7 +24,7 @@ use super::sockets::build_sockets_record;
 use super::streams::build_streams_record;
 use super::system::{
     build_clock_record, build_console_record, build_file_record, build_random_record,
-    build_system_record,
+    build_env_source_record, build_system_record,
 };
 use super::text::build_text_record;
 use super::ui::build_ui_record;
@@ -281,13 +281,16 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
         builtin("load", 1, |mut args, _| {
             let value = args.remove(0);
             match value {
+                Value::Source(source) => Ok(Value::Effect(source.effect.clone())),
+                // Back-compat: older code treated `load` as an `Effect`-identity.
                 Value::Effect(_) => Ok(value),
-                _ => Err(RuntimeError::Message("load expects an Effect".to_string())),
+                _ => Err(RuntimeError::Message("load expects a Source".to_string())),
             }
         }),
     );
 
     env.insert("file".to_string(), build_file_record());
+    env.insert("env".to_string(), build_env_source_record());
     env.insert("system".to_string(), build_system_record());
     env.insert("clock".to_string(), build_clock_record());
     env.insert("random".to_string(), build_random_record());

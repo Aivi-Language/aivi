@@ -80,6 +80,8 @@ pub fn values_equal(left: &Value, right: &Value) -> bool {
                 && aa.len() == bb.len()
                 && aa.iter().zip(bb.iter()).all(|(x, y)| values_equal(x, y))
         }
+        // Sources are effectful and are not meaningfully comparable.
+        (Value::Source(_), Value::Source(_)) => false,
         _ => false,
     }
 }
@@ -288,6 +290,7 @@ fn debug_summary_json(value: &Value) -> serde_json::Value {
         Value::Closure(_) => ("Closure", None),
         Value::Builtin(_) => ("Builtin", None),
         Value::Effect(_) => ("Effect", None),
+        Value::Source(_) => ("Source", None),
         Value::Resource(_) => ("Resource", None),
         Value::Thunk(_) => ("Thunk", None),
         Value::MultiClause(_) => ("MultiClause", None),
@@ -371,6 +374,7 @@ pub fn format_value(value: &Value) -> String {
         Value::Closure(_) => "<closure>".to_string(),
         Value::Builtin(b) => format!("<builtin {}>", b.imp.name),
         Value::Effect(_) => "<effect>".to_string(),
+        Value::Source(source) => format!("<source:{}>", source.kind),
         Value::Resource(_) => "<resource>".to_string(),
         Value::Thunk(_) => "<thunk>".to_string(),
         Value::MultiClause(_) => "<multiclause>".to_string(),

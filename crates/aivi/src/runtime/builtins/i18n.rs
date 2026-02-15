@@ -305,6 +305,7 @@ fn value_type_name(value: &Value) -> &'static str {
         Value::Closure(_) => "Closure",
         Value::Builtin(_) => "Builtin",
         Value::Effect(_) => "Effect",
+        Value::Source(_) => "Source",
         Value::Resource(_) => "Resource",
         Value::Thunk(_) => "Thunk",
         Value::MultiClause(_) => "MultiClause",

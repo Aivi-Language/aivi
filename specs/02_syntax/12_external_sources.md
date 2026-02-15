@@ -1,6 +1,12 @@
 # External Sources
 
-External data enters AIVI through typed **Sources**. A source represents a persistent connection or a one-off fetch to an external system, with full type safety enforced during decoding.
+External data enters AIVI through typed **Sources**. A source represents a persistent connection or a one-off fetch to an external system, with decoding intended to be type-driven at the boundary (see the v0.1 status note below).
+
+> [!NOTE]
+> v0.1 status:
+> - Implemented: `Source K A`, `load`, `file.read`, `http.get`/`post`/`fetch` (and `https.*`), and `env.get` (single-variable reads).
+> - Not yet implemented: structured codecs like `file.json`/`file.csv`, streaming sources, and higher-level decoding helpers like `env.decode`.
+> - `SourceError K` is currently just `Text` (a message) in v0.1.
 
 ## 12.1 The Source Type
 
