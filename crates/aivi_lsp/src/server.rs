@@ -103,7 +103,9 @@ impl LanguageServer for Backend {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 signature_help_provider: Some(SignatureHelpOptions {
                     trigger_characters: Some(vec![" ".to_string()]),
-                    retrigger_characters: None,
+                    // AIVI uses whitespace application (`f x y`), so space is the natural trigger.
+                    // Also retrigger on space so editors can refresh the active-parameter highlight.
+                    retrigger_characters: Some(vec![" ".to_string()]),
                     work_done_progress_options: Default::default(),
                 }),
                 references_provider: Some(OneOf::Left(true)),
@@ -128,11 +130,6 @@ impl LanguageServer for Backend {
                 }),
                 document_formatting_provider: Some(OneOf::Right(
                     tower_lsp::lsp_types::DocumentFormattingOptions {
-                        work_done_progress_options: Default::default(),
-                    },
-                )),
-                document_range_formatting_provider: Some(OneOf::Right(
-                    tower_lsp::lsp_types::DocumentRangeFormattingOptions {
                         work_done_progress_options: Default::default(),
                     },
                 )),
@@ -502,21 +499,11 @@ impl LanguageServer for Backend {
         &self,
         params: DocumentRangeFormattingParams,
     ) -> Result<Option<Vec<TextEdit>>> {
-        let uri = params.text_document.uri;
-        let Some(source) = self
-            .with_document_text(&uri, |content| content.to_string())
-            .await
-        else {
-            return Ok(None);
-        };
-        let (mut options, from_config) = {
-            let state = self.state.lock().await;
-            (state.format_options, state.format_options_from_config)
-        };
-        if !from_config {
-            options.indent_size = params.options.tab_size as usize;
-        }
-        Ok(Some(Backend::build_formatting_edits(&source, options)))
+        // AIVI formatting is currently whole-document. Advertising range formatting while
+        // ignoring the provided range is surprising; until we have a range-aware formatter,
+        // return no edits and don't advertise range formatting capability.
+        let _ = params;
+        Ok(None)
     }
 
     async fn semantic_tokens_full(

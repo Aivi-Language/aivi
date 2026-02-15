@@ -48,8 +48,7 @@ impl Backend {
 
     pub(super) fn extract_identifier(text: &str, position: Position) -> Option<String> {
         let offset = Self::offset_at(text, position).min(text.len());
-        let bytes = text.as_bytes();
-        if bytes.is_empty() {
+        if text.is_empty() {
             return None;
         }
 
@@ -66,20 +65,17 @@ impl Backend {
         // Determine if we are on a symbol or an identifier
         // We look at the character *before* the cursor (if any) and *at* the cursor.
         // If the cursor is at offset, we might be right after the last char of interest.
-        let on_symbol = if offset < bytes.len() {
-            let ch = text[offset..].chars().next().unwrap();
-            is_symbol_char(ch)
-        } else if offset > 0 {
-            let ch = text[offset - 1..].chars().next().unwrap();
-            is_symbol_char(ch)
-        } else {
-            false
-        };
+        //
+        // NOTE: `offset` is a byte offset (computed on UTF-8 boundaries). Never slice at
+        // `offset - 1`, which may not be a valid UTF-8 boundary for non-ASCII.
+        let ch_at = (offset < text.len()).then(|| text[offset..].chars().next()).flatten();
+        let ch_before = (offset > 0).then(|| text[..offset].chars().last()).flatten();
+        let on_symbol = ch_at.is_some_and(is_symbol_char) || ch_before.is_some_and(is_symbol_char);
 
         // If we are on a symbol, scan for continuous symbol characters.
         // Note: Aivi might have multi-char operators like <|, |>, ++, etc.
         if on_symbol {
-            let mut start = offset.min(bytes.len());
+            let mut start = offset;
             // Scan backwards for symbol chars
             while start > 0 {
                 let ch = text[..start].chars().last().unwrap();
@@ -89,9 +85,9 @@ impl Backend {
                     break;
                 }
             }
-            let mut end = offset.min(bytes.len());
+            let mut end = offset;
             // Scan forwards for symbol chars
-            while end < bytes.len() {
+            while end < text.len() {
                 let ch = text[end..].chars().next().unwrap();
                 if is_symbol_char(ch) {
                     end += ch.len_utf8();
@@ -108,7 +104,7 @@ impl Backend {
             }
         } else {
             // Existing logic for alphanumeric identifiers
-            let mut start = offset.min(bytes.len());
+            let mut start = offset;
             while start > 0 {
                 let ch = text[..start].chars().last().unwrap();
                 if is_ident_char(ch) {
@@ -117,8 +113,8 @@ impl Backend {
                     break;
                 }
             }
-            let mut end = offset.min(bytes.len());
-            while end < bytes.len() {
+            let mut end = offset;
+            while end < text.len() {
                 let ch = text[end..].chars().next().unwrap();
                 if is_ident_char(ch) {
                     end += ch.len_utf8();
