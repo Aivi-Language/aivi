@@ -35,6 +35,23 @@ impl Parser {
                     span,
                 });
             }
+            let subject = self.consume_symbol("!");
+            if self.consume_symbol("@") {
+                let at_span = self.previous_span();
+                let inner = self
+                    .parse_pattern()
+                    .unwrap_or(Pattern::Wildcard(at_span.clone()));
+                let span = merge_span(ident.span.clone(), pattern_span(&inner));
+                return Some(Pattern::At {
+                    name: ident,
+                    pattern: Box::new(inner),
+                    subject,
+                    span,
+                });
+            }
+            if subject {
+                return Some(Pattern::SubjectIdent(ident));
+            }
             return Some(Pattern::Ident(ident));
         }
         if self.consume_symbol("(") {
@@ -208,6 +225,7 @@ impl Parser {
             }
         }
 
+        let shorthand_subject = self.consume_symbol("!");
         let pattern = if self.consume_symbol("@") || self.consume_symbol(":") {
             self.parse_pattern()
                 .unwrap_or(Pattern::Wildcard(self.previous_span()))
@@ -235,7 +253,11 @@ impl Parser {
             }
 
             let last = path.last().cloned().unwrap();
-            Pattern::Ident(last)
+            if shorthand_subject {
+                Pattern::SubjectIdent(last)
+            } else {
+                Pattern::Ident(last)
+            }
         };
         let span = merge_span(path.first().unwrap().span.clone(), pattern_span(&pattern));
         Some(RecordPatternField {

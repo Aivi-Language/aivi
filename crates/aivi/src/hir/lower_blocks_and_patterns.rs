@@ -56,6 +56,17 @@ fn lower_pattern(pattern: Pattern, id_gen: &mut IdGen) -> HirPattern {
             id: id_gen.next(),
             name: name.name,
         },
+        Pattern::SubjectIdent(name) => HirPattern::Var {
+            id: id_gen.next(),
+            name: name.name,
+        },
+        Pattern::At {
+            name, pattern, ..
+        } => HirPattern::At {
+            id: id_gen.next(),
+            name: name.name,
+            pattern: Box::new(lower_pattern(*pattern, id_gen)),
+        },
         Pattern::Literal(literal) => HirPattern::Literal {
             id: id_gen.next(),
             value: match literal {

@@ -337,6 +337,8 @@ fn schema_for_type(expr: &TypeExpr) -> serde_json::Value {
 fn param_name(pattern: &Pattern, index: usize) -> String {
     match pattern {
         Pattern::Ident(name) => name.name.clone(),
+        Pattern::SubjectIdent(name) => name.name.clone(),
+        Pattern::At { name, .. } => name.name.clone(),
         _ => format!("arg{index}"),
     }
 }

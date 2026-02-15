@@ -319,6 +319,23 @@ impl Backend {
                     ));
                 }
             }
+            Pattern::SubjectIdent(name) => {
+                if name.name == ident {
+                    locations.push(Location::new(
+                        uri.clone(),
+                        Self::span_to_range(name.span.clone()),
+                    ));
+                }
+            }
+            Pattern::At { name, pattern, .. } => {
+                if name.name == ident {
+                    locations.push(Location::new(
+                        uri.clone(),
+                        Self::span_to_range(name.span.clone()),
+                    ));
+                }
+                Self::collect_pattern_references(pattern, ident, text, uri, locations);
+            }
             Pattern::Constructor { name, args, .. } => {
                 if name.name == ident {
                     locations.push(Location::new(

@@ -377,7 +377,22 @@ pub enum BlockItem {
 pub enum Pattern {
     Wildcard(Span),
     Ident(SpannedName),
+    /// A value binder that is also marked as the subject for deconstructor heads (`|>` / `?`).
+    ///
+    /// This binds exactly like `Ident`, but is used by surface sugar like:
+    ///   `f = { name! } |> ...`   and   `f = { name! } ? | ...`
+    SubjectIdent(SpannedName),
     Literal(Literal),
+    /// Whole-value binding: `x@p` binds `x` to the matched value while also matching `p`.
+    ///
+    /// This is distinct from record-pattern field syntax like `{ a.b@{x} }` where `@` separates a
+    /// record field path from its subpattern.
+    At {
+        name: SpannedName,
+        pattern: Box<Pattern>,
+        subject: bool,
+        span: Span,
+    },
     Constructor {
         name: SpannedName,
         args: Vec<Pattern>,

@@ -175,6 +175,148 @@ f = { a: x b: y } => x
 }
 
 #[test]
+fn parses_deconstructor_pipe_head_with_subject_marker() {
+    let src = r#"
+module Example
+
+f = { name! } |> toUpper
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "f" => Some(def),
+            _ => None,
+        })
+        .expect("f def");
+
+    let Expr::Lambda { params, body, .. } = &def.expr else {
+        panic!("expected lambda");
+    };
+    assert_eq!(params.len(), 1);
+    match &params[0] {
+        crate::surface::Pattern::Record { fields, .. } => {
+            assert_eq!(fields.len(), 1);
+            assert_eq!(fields[0].path.len(), 1);
+            assert_eq!(fields[0].path[0].name, "name");
+            assert!(
+                matches!(
+                    &fields[0].pattern,
+                    crate::surface::Pattern::SubjectIdent(n) if n.name == "name"
+                ),
+                "expected record-pattern shorthand to bind `name` and mark it as subject"
+            );
+        }
+        other => panic!("unexpected param pattern: {other:?}"),
+    }
+
+    match &**body {
+        Expr::Binary {
+            op, left, right, ..
+        } => {
+            assert_eq!(op, "|>");
+            assert!(matches!(&**left, Expr::Ident(n) if n.name == "name"));
+            assert!(matches!(&**right, Expr::Ident(n) if n.name == "toUpper"));
+        }
+        other => panic!("unexpected body: {other:?}"),
+    }
+}
+
+#[test]
+fn parses_deconstructor_match_head_with_subject_marker() {
+    let src = r#"
+module Example
+
+g = { name! } ?
+  | "A" => 1
+  | _   => 0
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "g" => Some(def),
+            _ => None,
+        })
+        .expect("g def");
+
+    let Expr::Lambda { body, .. } = &def.expr else {
+        panic!("expected lambda");
+    };
+    let Expr::Match { scrutinee, .. } = &**body else {
+        panic!("expected match");
+    };
+    let scrutinee = scrutinee.as_ref().expect("scrutinee");
+    assert!(matches!(&**scrutinee, Expr::Ident(n) if n.name == "name"));
+}
+
+#[test]
+fn parses_at_binding_and_subject_tuple_for_deconstructor_pipe_head() {
+    let src = r#"
+module Example
+
+h = user!@{ name! } |> consume
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "h" => Some(def),
+            _ => None,
+        })
+        .expect("h def");
+
+    let Expr::Lambda { params, body, .. } = &def.expr else {
+        panic!("expected lambda");
+    };
+    assert_eq!(params.len(), 1);
+    assert!(
+        matches!(
+            &params[0],
+            crate::surface::Pattern::At { name, .. } if name.name == "user"
+        ),
+        "expected `user@...` at-binding param"
+    );
+
+    let Expr::Binary { left, .. } = &**body else {
+        panic!("expected pipe");
+    };
+    let Expr::Tuple { items, .. } = &**left else {
+        panic!("expected tuple subject");
+    };
+    assert_eq!(items.len(), 2);
+    assert!(matches!(&items[0], Expr::Ident(n) if n.name == "user"));
+    assert!(matches!(&items[1], Expr::Ident(n) if n.name == "name"));
+}
+
+#[test]
 fn rejects_missing_module_declaration() {
     let src = r#"
 x = 1

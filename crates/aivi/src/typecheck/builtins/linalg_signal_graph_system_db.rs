@@ -209,7 +209,9 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 "get".to_string(),
                 Type::Func(
                     Box::new(text_ty.clone()),
-                    Box::new(Type::con("Source").app(vec![Type::con("Env"), option_text_ty.clone()])),
+                    Box::new(
+                        Type::con("Source").app(vec![Type::con("Env"), option_text_ty.clone()]),
+                    ),
                 ),
             ),
             (

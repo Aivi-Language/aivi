@@ -57,6 +57,32 @@ f a b x
 
 This makes pipelines read left-to-right for data flow while keeping ordinary application whitespace-based.
 
+### Deconstructor pipe heads (`!` subject selection)
+
+When writing a unary function that *destructures* its argument, you can mark one or more binders in the parameter pattern with `!` and then start the body with `|>`.
+
+```aivi
+f = { name! } |> toUpper
+```
+
+is shorthand for:
+
+```aivi
+f = { name } => name |> toUpper
+```
+
+If multiple binders are marked with `!`, the pipe subject is a tuple (in left-to-right order):
+
+```aivi
+h = user!@{ name! } |> consume
+```
+
+is shorthand for:
+
+```aivi
+h = user@{ name } => (user, name) |> consume
+```
+
 Pipelines often feed directly into `?` branching:
 
 ```aivi

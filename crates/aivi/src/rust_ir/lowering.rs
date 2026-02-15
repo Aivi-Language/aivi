@@ -214,6 +214,11 @@ pub enum RustIrPattern {
         id: u32,
         name: String,
     },
+    At {
+        id: u32,
+        name: String,
+        pattern: Box<RustIrPattern>,
+    },
     Literal {
         id: u32,
         value: RustIrLiteral,

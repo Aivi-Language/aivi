@@ -411,7 +411,17 @@ impl TypeChecker {
                 env.insert(name.name.clone(), Scheme::mono(ty.clone()));
                 Ok(ty)
             }
+            Pattern::SubjectIdent(name) => {
+                let ty = self.fresh_var();
+                env.insert(name.name.clone(), Scheme::mono(ty.clone()));
+                Ok(ty)
+            }
             Pattern::Literal(literal) => Ok(self.literal_type(literal)),
+            Pattern::At { name, pattern, .. } => {
+                let ty = self.infer_pattern(pattern, env)?;
+                env.insert(name.name.clone(), Scheme::mono(ty.clone()));
+                Ok(ty)
+            }
             Pattern::Constructor { name, args, span } => {
                 let scheme = env.get(&name.name).cloned().ok_or_else(|| TypeError {
                     span: span.clone(),

@@ -150,14 +150,18 @@ IfExpr         := "if" Expr "then" Expr "else" Expr
                | LambdaExpr
 
 LambdaExpr     := LambdaArgs "=>" Expr
+               | LambdaArgs DeconstructHead   (* requires at least one `!` binder in LambdaArgs *)
                | MatchExpr
 LambdaArgs     := PatParam { PatParam }
-PatParam       := lowerIdent
+PatParam       := lowerIdent [ "!" ] [ "@" PatParam ]
                | "_"
                | RecordPat
                | TuplePat
                | ListPat
                | "(" PatParam ")"
+
+DeconstructHead := ("|>" CoalesceExpr { "|>" CoalesceExpr } [ "?" MatchArms ])
+                | ("?" MatchArms)
 
 MatchExpr      := PipeExpr [ "?" MatchArms ] [ OrFallback ]
 MatchArms      := Sep? "|" Arm { Sep "|" Arm }

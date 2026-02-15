@@ -415,6 +415,14 @@ impl TypeChecker {
         arms: &[crate::surface::MatchArm],
         match_span: &Span,
     ) {
+        fn is_catch_all_pattern(pattern: &Pattern) -> bool {
+            match pattern {
+                Pattern::Wildcard(_) | Pattern::Ident(_) | Pattern::SubjectIdent(_) => true,
+                Pattern::At { pattern, .. } => is_catch_all_pattern(pattern),
+                _ => false,
+            }
+        }
+
         // Unreachable arms: catch-all without a guard makes later arms unreachable.
         let mut has_catch_all: Option<Span> = None;
         // `covered_ctors` tracks constructors that are fully covered by a previous arm
@@ -436,7 +444,7 @@ impl TypeChecker {
             }
 
             let guarded = arm.guard.is_some();
-            if matches!(arm.pattern, Pattern::Wildcard(_) | Pattern::Ident(_)) && !guarded {
+            if is_catch_all_pattern(&arm.pattern) && !guarded {
                 has_catch_all = Some(arm.span.clone());
                 continue;
             }
@@ -451,7 +459,7 @@ impl TypeChecker {
 
                 let ctor_catch_all = args
                     .iter()
-                    .all(|arg| matches!(arg, Pattern::Wildcard(_) | Pattern::Ident(_)));
+                    .all(is_catch_all_pattern);
                 if !ctor_catch_all {
                     continue;
                 }

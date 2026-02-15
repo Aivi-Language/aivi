@@ -199,7 +199,9 @@ fn pattern_span(pattern: &Pattern) -> Span {
     match pattern {
         Pattern::Wildcard(span) => span.clone(),
         Pattern::Ident(name) => name.span.clone(),
+        Pattern::SubjectIdent(name) => name.span.clone(),
         Pattern::Literal(literal) => literal_span(literal),
+        Pattern::At { span, .. } => span.clone(),
         Pattern::Constructor { span, .. }
         | Pattern::Tuple { span, .. }
         | Pattern::List { span, .. }

@@ -28,6 +28,26 @@ input |> parse |> validate ?
   | Err e => handle e
 ```
 
+### Deconstructor match heads (`!` subject selection)
+
+For unary functions that destructure their argument, you can mark one or more binders in the parameter pattern with `!` and start the body with `?` (without writing `=> <scrutinee>` explicitly):
+
+```aivi
+g = { name! } ?
+  | "A" => 1
+  | _   => 0
+```
+
+is shorthand for:
+
+```aivi
+g = { name } => name ?
+  | "A" => 1
+  | _   => 0
+```
+
+If multiple binders are marked with `!`, the match scrutinee is a tuple (in left-to-right order).
+
 In a multi-clause unary function (Section 8.2), the subject is the function's single implicit argument.
 
 See also: [Functions and Pipes](02_functions.md) for `|>`.
@@ -72,15 +92,32 @@ For readability, nested constructor patterns can be written without parentheses 
 
 This "constructor chain" rule applies only in pattern context (after `|` and before `=>`).
 
+## 8.5 Whole-value binding `@`
 
-## 8.5 Guards
+Patterns support whole-value binding:
+
+```aivi
+user@{ name, age }
+```
+
+This binds `user` to the entire matched value while also matching the record pattern `{ name, age }`.
+
+To bind a nested value *and* destructure it, combine record-field paths with whole-value binding:
+
+```aivi
+{ profile@profile@{ name, age } }
+```
+
+Here the outer `profile@...` selects the record field, and the inner `profile@{ ... }` binds the full field value.
+
+## 8.6 Guards
 
 Patterns can have guards using `when`:
 
 <<< ../snippets/from_md/02_syntax/08_pattern_matching/block_08.aivi{aivi}
 
 
-## 8.6 Usage Examples
+## 8.7 Usage Examples
 
 ### Option Handling
 
@@ -102,7 +139,7 @@ Patterns can have guards using `when`:
 
 <<< ../snippets/from_md/02_syntax/08_pattern_matching/block_13.aivi{aivi}
 
-## 8.7 Expressive Pattern Orchestration
+## 8.8 Expressive Pattern Orchestration
 
 Pattern matching excels at simplifying complex conditional branches into readable declarations.
 
