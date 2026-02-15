@@ -1,3 +1,3 @@
-class = Foldable (F *) => {
+class Foldable (F *) = {
   reduce: (B -> A -> B) -> B -> F A -> B
 }

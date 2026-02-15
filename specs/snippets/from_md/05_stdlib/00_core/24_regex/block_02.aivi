@@ -1,4 +1,4 @@
-type RegexError = InvalidPattern Text
+RegexError = InvalidPattern Text
 
 Match = {
   full: Text,

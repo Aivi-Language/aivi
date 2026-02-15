@@ -1,3 +1,3 @@
-class = Semigroupoid (F * *) => {
+class Semigroupoid (F * *) = {
   compose: F B C -> F A B -> F A C
 }

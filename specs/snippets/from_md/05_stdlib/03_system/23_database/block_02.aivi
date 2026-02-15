@@ -1,5 +1,5 @@
 // Tables carry schema metadata and hold rows
-type Table A = {
+Table A = {
   name: Text
   columns: List Column
   rows: List A
@@ -7,23 +7,23 @@ type Table A = {
 
 // Schema definitions are regular AIVI values.
 // The row type is inferred from the table binding (e.g. Table User).
-type ColumnType =
+ColumnType =
   | IntType
   | BoolType
   | TimestampType
   | Varchar Int
 
-type ColumnConstraint =
+ColumnConstraint =
   | AutoIncrement
   | NotNull
 
-type ColumnDefault =
+ColumnDefault =
   | DefaultBool Bool
   | DefaultInt Int
   | DefaultText Text
   | DefaultNow
 
-type Column = {
+Column = {
   name: Text
   type: ColumnType
   constraints: List ColumnConstraint
@@ -31,10 +31,10 @@ type Column = {
 }
 
 // Predicate alias
-type Pred A = A => Bool
+Pred A = A => Bool
 
 // Select the runtime backend.
-type Driver
+Driver =
 | Sqlite
 | Postgresql
 | Mysql
@@ -42,13 +42,13 @@ type Driver
 // Configure the default database backend used by db.load / db.applyDelta / db.runMigrations.
 // - Sqlite: url is a filesystem path or ":memory:".
 // - Postgresql/Mysql: url is a connection string.
-type DbConfig = { driver: Driver, url: Text }
+DbConfig = { driver: Driver, url: Text }
 
 // Deltas express insert/update/delete
-type Delta A =
+Delta A =
   | Insert A
   | Update (Pred A) (Patch A)
   | Delete (Pred A)
 
 // Patch functions apply record updates
-type Patch A = A -> A
+Patch A = A -> A

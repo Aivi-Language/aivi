@@ -1,3 +1,3 @@
-class = Apply (F *) => Functor (F *) with {
+class Apply (F *) = Functor (F *) with {
   ap: F (A -> B) -> F A -> F B
 }

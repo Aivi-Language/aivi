@@ -1,1 +1,1 @@
-class = ToText A => { toText: A -> Text }
+class ToText A = { toText: A -> Text }

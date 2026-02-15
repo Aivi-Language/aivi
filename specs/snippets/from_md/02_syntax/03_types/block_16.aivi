@@ -1,4 +1,4 @@
-class = Chain (F *) =>
+class Chain (F *) =
 Apply (F *) with {
   chain: F A -> (A -> F B) -> F B
 }

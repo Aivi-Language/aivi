@@ -1,2 +1,2 @@
 type Stream A
-type StreamError = { message: Text }
+StreamError = { message: Text }

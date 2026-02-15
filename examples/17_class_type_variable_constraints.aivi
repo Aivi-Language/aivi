@@ -2,7 +2,7 @@ module examples.compiler.classTypeVariableConstraints
 export Eq, NeedsEq
 
 // A tiny typeclass, used only to demonstrate constrained member variables.
-class = Eq A => {
+class Eq A = {
   eq: A -> A -> Bool
 }
 
@@ -24,7 +24,7 @@ instance Eq (Result E X) = {
 }
 
 // `with (A: Eq)` constrains the member type variable `A`.
-class = NeedsEq => with (A: Eq) {
+class NeedsEq = with (A: Eq) {
   same: A -> Bool
 }
 
