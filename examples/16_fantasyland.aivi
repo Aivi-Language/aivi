@@ -1,23 +1,23 @@
 module examples.fantasy_land
 export Option, isNone
 
-class = Setoid A => {
+class Setoid A = {
   equals: A -> A -> Bool
 }
 
-class = Functor (F *) => {
+class Functor (F *) = {
   map: (A -> B) -> F A -> F B
 }
 
-class = Apply (F *) => {
+class Apply (F *) = {
   ap: F (A -> B) -> F A -> F B
 }
 
-class = Applicative (F *) => {
+class Applicative (F *) = {
   of: A -> F A
 }
 
-class = Chain (F *) => {
+class Chain (F *) = {
   chain: (A -> F B) -> F A -> F B
 }
 

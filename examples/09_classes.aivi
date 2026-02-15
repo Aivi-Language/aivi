@@ -3,7 +3,7 @@ export Eq, Functor, Monad, Option, isNone
 
 Option A = None | Some A
 
-class = Eq A => {
+class Eq A = {
   eq: A -> A -> Bool
 }
 
@@ -11,7 +11,7 @@ instance Eq (Bool) = {
   eq: x y => x == y
 }
 
-class = Functor (F *) => {
+class Functor (F *) = {
   map: F A -> (A -> B) -> F B
 }
 
@@ -21,7 +21,7 @@ instance Functor (Option *) = {
     | Some x => Some (f x)
 }
 
-class = Monad (M *) => Functor (M *) with {
+class Monad (M *) = Functor (M *) with {
   pure: A -> M A
   flatMap: M A -> (A -> M B) -> M B
 }

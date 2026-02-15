@@ -79,6 +79,7 @@ DecoratorArg   := Expr | RecordLit
 
 Definition     := ValueSig
                | ValueBinding
+               | OpaqueType
                | TypeAlias
                | TypeDef
                | DomainDef
@@ -89,6 +90,7 @@ ValueSig       := lowerIdent ":" Type Sep
 ValueBinding   := Pattern "=" Expr Sep
 
 TypeAlias      := "type" UpperIdent [ TypeParams ] "=" TypeRhs Sep
+OpaqueType     := "type" UpperIdent [ TypeParams ] Sep
 TypeDef        := UpperIdent [ TypeParams ] "=" TypeRhs Sep
 TypeParams     := UpperIdent { UpperIdent }
 TypeRhs        := Type
@@ -113,7 +115,7 @@ ImportList     := ImportItem { "," ImportItem }
 ImportItem     := (lowerIdent | UpperIdent | ("domain" UpperIdent)) [ "as" (lowerIdent | UpperIdent) ]
 
 DomainDef      := "domain" UpperIdent "over" Type "=" "{" { DomainItem } "}" Sep
-DomainItem     := TypeAlias | TypeDef | ValueSig | ValueBinding | OpDef | DeltaLitBinding
+DomainItem     := OpaqueType | TypeAlias | TypeDef | ValueSig | ValueBinding | OpDef | DeltaLitBinding
 OpDef          := "(" Operator ")" ":" Type Sep
                | "(" Operator ")" Pattern { Pattern } "=" Expr Sep
 Operator       := "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||" | "++" | "??"

@@ -1,3 +1,3 @@
-class = Chain (F *) => Apply (F *) with {
+class Chain (F *) = Apply (F *) with {
   chain: (A -> F B) -> F A -> F B
 }

@@ -1,33 +1,31 @@
-type Header = { name: Text, value: Text }
-
-type Request = {
+Request = {
   method: Text,
   path: Text,
-  headers: List Header,
+  headers: List { name: Text, value: Text },
   body: List Int,
   remoteAddr: Option Text
 }
 
-type Response = {
+Response = {
   status: Int,
-  headers: List Header,
+  headers: List { name: Text, value: Text },
   body: List Int
 }
 
-type ServerConfig = {
+ServerConfig = {
   address: Text
 }
 
-type HttpError = { message: Text }
-type WsError = { message: Text }
+HttpError = { message: Text }
+WsError = { message: Text }
 
-type WsMessage
+WsMessage
 = TextMsg Text
 | BinaryMsg (List Int)
 | Ping
 | Pong
 | Close
 
-type ServerReply
+ServerReply
 = Http Response
 | Ws (WebSocket -> Effect WsError Unit)

@@ -1,4 +1,4 @@
-type Request = {
+Request = {
   method: Text,
   url: Url,
   headers: List { name: Text, value: Text },

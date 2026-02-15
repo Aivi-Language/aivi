@@ -1,4 +1,4 @@
-class = Applicative (F *) =>
+class Applicative (F *) =
 Apply (F *) with {
   of: A -> F A
 }

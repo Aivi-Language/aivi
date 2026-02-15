@@ -14,75 +14,75 @@ use aivi
 
 // 1. Equality and Ordering
 
-class = Setoid A => {
+class Setoid A = {
   equals: A -> A -> Bool
 }
 
-class = Ord A => Setoid A with {
+class Ord A = Setoid A with {
   lte: A -> A -> Bool
 }
 
 // 2. Monoids and Semigroups
 
-class = Semigroup A => {
+class Semigroup A = {
   concat: A -> A -> A
 }
 
-class = Monoid A => Semigroup A with {
+class Monoid A = Semigroup A with {
   empty: A
 }
 
-class = Group A => Monoid A with {
+class Group A = Monoid A with {
   invert: A -> A
 }
 
 // 3. Categories
 
-class = Semigroupoid (F * *) => {
+class Semigroupoid (F * *) = {
   compose: F B C -> F A B -> F A C
 }
 
-class = Category (F * *) => Semigroupoid (F * *) with {
+class Category (F * *) = Semigroupoid (F * *) with {
   id: F A A
 }
 
 // 4. Functional Mappings
 
-class = Functor (F *) => {
+class Functor (F *) = {
   map: (A -> B) -> F A -> F B
 }
 
-class = Apply (F *) => Functor (F *) with {
+class Apply (F *) = Functor (F *) with {
   ap: F (A -> B) -> F A -> F B
 }
 
-class = Applicative (F *) => Apply (F *) with {
+class Applicative (F *) = Apply (F *) with {
   of: A -> F A
 }
 
-class = Chain (F *) => Apply (F *) with {
+class Chain (F *) = Apply (F *) with {
   chain: (A -> F B) -> F A -> F B
 }
 
-class = Monad (M *) => Applicative (M *) with Chain (M *) with { }
+class Monad (M *) = Applicative (M *) with Chain (M *) with {}
 
 // 5. Folds and Traversals
 
-class = Foldable (F *) => {
+class Foldable (F *) = {
   reduce: (B -> A -> B) -> B -> F A -> B
 }
 
-class = Traversable (T *) => Functor (T *) with Foldable (T *) with {
+class Traversable (T *) = Functor (T *) with Foldable (T *) with {
   traverse: (A -> F B) -> T A -> F (T B)
 }
 
 // 6. Higher-Order Mappings
 
-class = Bifunctor (F * *) => {
+class Bifunctor (F * *) = {
   bimap: (A -> C) -> (B -> D) -> F A B -> F C D
 }
 
-class = Profunctor (F * *) => {
+class Profunctor (F * *) = {
   promap: (A -> B) -> (C -> D) -> F B C -> F A D
 }
 
