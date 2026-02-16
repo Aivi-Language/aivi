@@ -305,8 +305,11 @@ impl TypeChecker {
                             expr,
                             span,
                         } => {
-                            let (expr, _ty) = self.elab_expr(expr, None, &mut local_env)?;
-                            let _ = self.infer_pattern(&pattern, &mut local_env)?;
+                            let (expr, expr_ty) = self.elab_expr(expr, None, &mut local_env)?;
+                            let pat_ty = self.infer_pattern(&pattern, &mut local_env)?;
+                            if matches!(kind, BlockKind::Plain) {
+                                self.unify_with_span(pat_ty, expr_ty, pattern_span(&pattern))?;
+                            }
                             new_items.push(BlockItem::Let {
                                 pattern,
                                 expr,
@@ -318,8 +321,11 @@ impl TypeChecker {
                             expr,
                             span,
                         } => {
-                            let (expr, _ty) = self.elab_expr(expr, None, &mut local_env)?;
-                            let _ = self.infer_pattern(&pattern, &mut local_env)?;
+                            let (expr, expr_ty) = self.elab_expr(expr, None, &mut local_env)?;
+                            let pat_ty = self.infer_pattern(&pattern, &mut local_env)?;
+                            if matches!(kind, BlockKind::Plain) {
+                                self.unify_with_span(pat_ty, expr_ty, pattern_span(&pattern))?;
+                            }
                             new_items.push(BlockItem::Bind {
                                 pattern,
                                 expr,
