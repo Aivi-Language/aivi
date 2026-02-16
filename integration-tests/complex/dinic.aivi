@@ -6,9 +6,9 @@ use aivi.testing (assert)
 
 use aivi.graph (Graph, fromWeightedEdges, edgesFrom)
 
-type Edge = { from: Int, to: Int, cap: Int }
-type ResidualKey = { from: Int, to: Int }
-type Residual =
+Edge = { from: Int, to: Int, cap: Int }
+ResidualKey = { from: Int, to: Int }
+Residual =
   { graph: Graph
   , capacities: Map ResidualKey Int
   }
@@ -18,60 +18,60 @@ getOrZero = key map =>
     | Some v => v
     | None => 0
 
-addCaps = (list, acc, zero) =>
+addCaps = list acc zero =>
   list ?
     | [] => acc
     | [edge, ...tail] =>
         updated = Map.insert { from: edge.from, to: edge.to } (if zero then 0 else edge.cap) acc
-        addCaps (tail, updated, zero)
+        addCaps tail updated zero
 
 buildResidual = edges =>
   backward = List.map edges (edge => { from: edge.to, to: edge.from, cap: 0 })
   weighted =
     List.map (edges ++ backward) (edge => (edge.from, edge.to, Float edge.cap))
   graph = fromWeightedEdges weighted
-  caps = addCaps (edges, Map.empty, False)
-  capsWithReverse = addCaps (backward, caps, True)
+  caps = addCaps edges Map.empty False
+  capsWithReverse = addCaps backward caps True
   { graph, capacities: capsWithReverse }
 
-bfsLevels = (residual, source, sink) =>
-  enqueue = (q, node) => [node, ...q]
-  visit = (queue, levels) =>
+bfsLevels = residual source sink =>
+  enqueue = q node => [node, ...q]
+  append = list value =>
+    list ?
+      | [] => [value]
+      | [h, ...t] => [h, ...append t value]
+  visit = queue levels =>
     queue ?
       | [] => (Map.has sink levels, levels)
       | [current, ...rest] =>
           neighbors = edgesFrom residual.graph current
-          explore = (list, q, accLevels) =>
+          explore = list q accLevels =>
             list ?
-              | [] => visit (q, accLevels)
+              | [] => visit q accLevels
               | [edge, ...tail] =>
                   next = edge.to
                   cap = getOrZero { from: current, to: next } residual.capacities
                   already = Map.has next accLevels
                   if cap > 0 && !already then
                     level = (Map.get current accLevels) ? | Some lvl => lvl | None => -1
-                    explore (tail, append (q, next), Map.insert next (level + 1) accLevels)
-                  else explore (tail, q, accLevels)
-          explore (neighbors, rest, levels)
-  append = (list, value) =>
-    list ?
-      | [] => [value]
-      | [h, ...t] => [h, ...append (t, value)]
-  visit ([source], Map.insert source 0 Map.empty)
+                    explore tail (append q next) (Map.insert next (level + 1) accLevels)
+                  else explore tail q accLevels
+          explore neighbors rest levels
+  visit [source] (Map.insert source 0 Map.empty)
 
-pushFlow = (residual, from, to, delta) =>
+pushFlow = residual from to delta =>
   forward = getOrZero { from, to } residual.capacities
   backward = getOrZero { from: to, to: from } residual.capacities
   caps1 = Map.insert { from, to } (forward - delta) residual.capacities
   caps2 = Map.insert { from: to, to: from } (backward + delta) caps1
   { residual with capacities: caps2 }
 
-dfsFlow = (residual, levels, node, sink, flow) =>
+dfsFlow = residual levels node sink flow =>
   if flow == 0 then (0, residual)
   else if node == sink then (flow, residual)
   else
     neighbors = edgesFrom residual.graph node
-    explore = (list, accRes) =>
+    explore = list accRes =>
       list ?
         | [] => (0, accRes)
         | [edge, ...tail] =>
@@ -80,27 +80,31 @@ dfsFlow = (residual, levels, node, sink, flow) =>
             levelNext = (Map.get edge.to levels) ? | Some lvl => lvl | None => -1
             if cap > 0 && levelNext == levelNode + 1 then
               available = if flow < cap then flow else cap
-              (pushed, after) = dfsFlow accRes levels edge.to sink available
+              res = dfsFlow accRes levels edge.to sink available
+              (pushed, after) = res
               if pushed > 0 then
-                (pushed, pushFlow (after, node, edge.to, pushed))
-              else explore (tail, accRes)
-            else explore (tail, accRes)
-    explore (neighbors, residual)
+                (pushed, pushFlow after node edge.to pushed)
+              else explore tail accRes
+            else explore tail accRes
+    explore neighbors residual
 
-blockingFlow = (residual, source, sink, levels, acc) =>
-  (pushed, updated) = dfsFlow residual levels source sink Int.max
+blockingFlow = residual source sink levels acc =>
+  res = dfsFlow residual levels source sink Int.max
+  (pushed, updated) = res
   if pushed == 0 then (acc, updated)
-  else blockingFlow (updated, source, sink, levels, acc + pushed)
+  else blockingFlow updated source sink levels (acc + pushed)
 
 maxFlow = edges source sink =>
   start = buildResidual edges
-  loop = (state, total) =>
-    (reachable, levels) = bfsLevels (state, source, sink)
+  loop = state total =>
+    res = bfsLevels state source sink
+    (reachable, levels) = res
     if !reachable then (total, state)
     else
-      (newTotal, updated) = blockingFlow (state, source, sink, levels, total)
-      loop (updated, newTotal)
-  loop (start, 0)
+      res2 = blockingFlow state source sink levels total
+      (newTotal, updated) = res2
+      loop updated newTotal
+  loop start 0
 
 @test
 flowTest = effect {
@@ -114,10 +118,12 @@ flowTest = effect {
     , { from: 3, to: 5, cap: 10 }
     , { from: 4, to: 5, cap: 10 }
     ]
-  (result, _) = maxFlow graphEdges 0 5
-  _ <- assert (result == 20)
+  res = maxFlow graphEdges 0 5
+  (result, _) = res
+  _ <- testing.assert (result == 20)
 
   empty = []
-  (zero, _) = maxFlow empty 0 1
-  _ <- assert (zero == 0)
+  res2 = maxFlow empty 0 1
+  (zero, _) = res2
+  _ <- testing.assert (zero == 0)
 }

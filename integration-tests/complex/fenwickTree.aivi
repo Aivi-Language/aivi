@@ -29,16 +29,16 @@ buildFromList = arr =>
       (List.at arr (idx - 1)) ?
         | None => buildIndex (idx + 1) tree
         | Some value =>
-            tree = addDelta size idx value tree
-            buildIndex (idx + 1) tree
+            t = addDelta size idx value tree
+            buildIndex (idx + 1) t
   { size, tree: buildIndex 1 Map.empty }
 
 prefix = fenwick idx =>
   go = i acc =>
     if i == 0 then acc
     else
-      acc = acc + getOrZero i fenwick.tree
-      go (i - lowbit i) acc
+      a = acc + getOrZero i fenwick.tree
+      go (i - lowbit i) a
   go idx 0
 
 rangeSum = fenwick l r =>
