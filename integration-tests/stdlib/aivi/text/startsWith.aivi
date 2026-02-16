@@ -10,6 +10,6 @@ subject = startsWith
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (startsWith "he" "hello" == True)
+  _ <- assert (startsWith "lo" "hello" == False)
 }

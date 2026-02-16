@@ -10,6 +10,7 @@ subject = indexOf
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (indexOf "e" "hello" == Some 1)
+  _ <- assert (indexOf "l" "hello" == Some 2)
+  _ <- assert (indexOf "z" "hello" == None)
 }

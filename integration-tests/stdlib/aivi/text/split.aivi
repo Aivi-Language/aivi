@@ -10,6 +10,6 @@ subject = split
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (split "," "a,b,c" == ["a", "b", "c"])
+  _ <- assert (split "." "a" == ["a"])
 }

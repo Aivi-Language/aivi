@@ -10,6 +10,6 @@ subject = contains
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (contains "ell" "hello" == True)
+  _ <- assert (contains "z" "hello" == False)
 }

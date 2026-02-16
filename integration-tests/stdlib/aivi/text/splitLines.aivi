@@ -10,6 +10,6 @@ subject = splitLines
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (splitLines "a\nb\nc" == ["a", "b", "c"])
+  _ <- assert (splitLines "a\r\nb" == ["a", "b"])
 }
