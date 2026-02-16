@@ -10,6 +10,6 @@ subject = count
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (count "l" "hello" == 2)
+  _ <- assert (count "z" "hello" == 0)
 }

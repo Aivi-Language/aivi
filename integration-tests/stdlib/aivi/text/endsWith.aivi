@@ -10,6 +10,6 @@ subject = endsWith
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (endsWith "lo" "hello" == True)
+  _ <- assert (endsWith "he" "hello" == False)
 }

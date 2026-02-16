@@ -10,6 +10,7 @@ subject = compare
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (compare "a" "b" < 0)
+  _ <- assert (compare "b" "a" > 0)
+  _ <- assert (compare "a" "a" == 0)
 }
