@@ -3,7 +3,7 @@
     let max_blank_lines = options.max_blank_lines.min(10);
     let (tokens, _) = lex(content);
 
-    let raw_lines: Vec<&str> = content.split('\n').collect();
+    let mut raw_lines: Vec<&str> = content.split('\n').collect();
     let mut tokens_by_line: Vec<Vec<&crate::cst::CstToken>> = vec![Vec::new(); raw_lines.len()];
     for token in &tokens {
         if token.kind == "whitespace" {
@@ -85,6 +85,17 @@
             .position(|t| t.kind != "comment" && t.text != "\n")
     }
 
+    fn last_code_token_is(tokens: &[&crate::cst::CstToken], expected: &[&str]) -> bool {
+        let Some(last) = tokens
+            .iter()
+            .rev()
+            .find(|t| t.kind != "comment" && t.text != "\n")
+        else {
+            return false;
+        };
+        expected.iter().any(|e| *e == last.text.as_str())
+    }
+
     fn find_top_level_token(
         tokens: &[&crate::cst::CstToken],
         needle: &str,
@@ -158,7 +169,10 @@
             return false;
         }
         if prev_text == "-" && curr_kind == "number" {
-            return false;
+            // Date fragments: `YYYY-MM` (no spaces) but keep binary minus spacing (`x - 1`).
+            if prevprev.is_some_and(|(k, _)| k == "number") {
+                return false;
+            }
         }
         if prev_kind == "number" && curr_text == ":" {
             return false;
@@ -198,7 +212,9 @@
             if prev_text == "set" && prevprev.map(|(_, t)| t) == Some("~") {
                 return false;
             }
-            if is_word_kind(prev_kind) || matches!(prev_text, ")" | "]" | "}") {
+            // Indexing is only when the bracket is adjacent: `arr[i]` / `(f x)[i]`.
+            if adjacent_in_input && (is_word_kind(prev_kind) || matches!(prev_text, ")" | "]" | "}"))
+            {
                 return false;
             }
             return prev_text != "." && prev_text != "@";
@@ -308,11 +324,30 @@
     }
 
     fn format_tokens_simple(tokens: &[&crate::cst::CstToken]) -> String {
+        // Prefer newline-based separators for multiline forms by stripping trailing commas.
+        // This is safe because comma is an alternative `FieldSep` to newlines in the grammar.
+        let trailing_comma_idx = {
+            let mut idx = None;
+            for (i, t) in tokens.iter().enumerate() {
+                if t.kind != "comment" && t.text != "\n" {
+                    idx = Some(i);
+                }
+            }
+            idx.filter(|&i| tokens[i].text == ",")
+        };
+
         let mut out = String::new();
         let mut prevprev: Option<(&str, &str)> = None;
         let mut prev: Option<(&str, &str)> = None;
         let mut prev_token: Option<&crate::cst::CstToken> = None;
-        for t in tokens.iter() {
+        let leading_comma_idx = first_code_index(tokens).filter(|&i| tokens[i].text == ",");
+        for (i, t) in tokens.iter().enumerate() {
+            if leading_comma_idx == Some(i) {
+                continue;
+            }
+            if trailing_comma_idx == Some(i) {
+                continue;
+            }
             if t.kind == "comment" {
                 if !out.is_empty() && !out.ends_with(' ') {
                     out.push(' ');
@@ -353,6 +388,144 @@
         (indent, len)
     }
 
+    // Pre-pass: merge "hanging" openers (`{`/`[`) that appear alone on the next line after
+    // `=` / `=>` / `<-` / `->` back onto the previous line, then drop the opener-only line.
+    //
+    // This is intentionally conservative (no comments on the opener line) to avoid surprising
+    // rewrites while still fixing the common formatter artifact in `integration-tests/complex`.
+    {
+        // Allman brace style: split trailing `{` onto its own line (best-effort).
+        if matches!(options.brace_style, BraceStyle::Allman) {
+            let mut split_raw_lines: Vec<&str> = Vec::with_capacity(raw_lines.len() + 16);
+            let mut split_tokens_by_line: Vec<Vec<&crate::cst::CstToken>> =
+                Vec::with_capacity(tokens_by_line.len() + 16);
+
+            for (line_index, raw) in raw_lines.iter().enumerate() {
+                let mut line_tokens = tokens_by_line[line_index].clone();
+                let has_comment = line_tokens.iter().any(|t| t.kind == "comment");
+                let last_is_open = last_code_token_is(&line_tokens, &["{"]);
+                if !has_comment && last_is_open && line_tokens.len() >= 2 {
+                    // Move the last `{` token to a new line.
+                    let brace = line_tokens.pop().expect("brace token");
+                    split_raw_lines.push(*raw);
+                    split_tokens_by_line.push(line_tokens);
+                    split_raw_lines.push("");
+                    split_tokens_by_line.push(vec![brace]);
+                    continue;
+                }
+                split_raw_lines.push(*raw);
+                split_tokens_by_line.push(line_tokens);
+            }
+
+            raw_lines = split_raw_lines;
+            tokens_by_line = split_tokens_by_line;
+        }
+
+        let mut merged_raw_lines: Vec<&str> = Vec::with_capacity(raw_lines.len());
+        let mut merged_tokens_by_line: Vec<Vec<&crate::cst::CstToken>> =
+            Vec::with_capacity(tokens_by_line.len());
+
+        for (line_index, raw) in raw_lines.iter().enumerate() {
+            let line_tokens = tokens_by_line[line_index].clone();
+            let opener_tok = if line_tokens.iter().any(|t| t.kind == "comment") {
+                None
+            } else {
+                if let Some(first_idx) = first_code_index(&line_tokens) {
+                    if line_tokens.len() == 1
+                        && matches!(line_tokens[first_idx].text.as_str(), "{" | "[")
+                    {
+                        Some(line_tokens[first_idx])
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            };
+
+            if matches!(options.brace_style, BraceStyle::Kr) {
+                if let Some(opener_tok) = opener_tok {
+                    if let Some(prev_tokens) = merged_tokens_by_line.last_mut() {
+                        if last_code_token_is(
+                            prev_tokens,
+                            &["=", "=>", "<-", "->", "then", "else", "?"],
+                        ) {
+                            prev_tokens.push(opener_tok);
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            merged_raw_lines.push(*raw);
+            merged_tokens_by_line.push(line_tokens);
+        }
+
+        raw_lines = merged_raw_lines;
+        tokens_by_line = merged_tokens_by_line;
+    }
+
+    // Pre-pass: merge "hanging" match subjects onto the `=>` line:
+    //
+    //   name = args =>
+    //     subject ?
+    //       | ...
+    //
+    // becomes
+    //
+    //   name = args => subject ?
+    //     | ...
+    //
+    // This is intentionally conservative (no comments on either merged line).
+    {
+        fn starts_with(tokens: &[&crate::cst::CstToken], text: &str) -> bool {
+            first_code_index(tokens).is_some_and(|i| tokens[i].text == text)
+        }
+
+        let mut merged_raw_lines: Vec<&str> = Vec::with_capacity(raw_lines.len());
+        let mut merged_tokens_by_line: Vec<Vec<&crate::cst::CstToken>> =
+            Vec::with_capacity(tokens_by_line.len());
+
+        let mut i = 0usize;
+        while i < raw_lines.len() {
+            let tokens = tokens_by_line[i].clone();
+            if tokens.is_empty() {
+                merged_raw_lines.push(raw_lines[i]);
+                merged_tokens_by_line.push(tokens);
+                i += 1;
+                continue;
+            }
+
+            let can_merge = !tokens.iter().any(|t| t.kind == "comment")
+                && last_code_token_is(&tokens, &["=>"]);
+            if can_merge && i + 2 < raw_lines.len() {
+                let next_tokens = tokens_by_line[i + 1].clone();
+                let after_tokens = tokens_by_line[i + 2].clone();
+                if !next_tokens.is_empty()
+                    && !after_tokens.is_empty()
+                    && !next_tokens.iter().any(|t| t.kind == "comment")
+                    && last_code_token_is(&next_tokens, &["?"])
+                    && !starts_with(&next_tokens, "|")
+                    && starts_with(&after_tokens, "|")
+                {
+                    let mut combined = tokens.clone();
+                    combined.extend(next_tokens);
+                    merged_raw_lines.push(raw_lines[i]);
+                    merged_tokens_by_line.push(combined);
+                    i += 2;
+                    continue;
+                }
+            }
+
+            merged_raw_lines.push(raw_lines[i]);
+            merged_tokens_by_line.push(tokens);
+            i += 1;
+        }
+
+        raw_lines = merged_raw_lines;
+        tokens_by_line = merged_tokens_by_line;
+    }
+
     // First pass: compute context per line and indentation level.
     let mut stack: Vec<OpenFrame> = Vec::new();
     let mut degraded = false;
@@ -363,7 +536,8 @@
 
     for line_index in 0..raw_lines.len() {
         let mut line_tokens = tokens_by_line[line_index].clone();
-        line_tokens.sort_by_key(|t| (t.span.start.column, t.span.end.column));
+        // Sort by original (line, column) to stay correct even after we merge tokens across lines.
+        line_tokens.sort_by_key(|t| (t.span.start.line, t.span.start.column, t.span.end.column));
 
         let (input_indent, _) = leading_indent(raw_lines[line_index]);
 
@@ -566,81 +740,204 @@
     }
 
     // Third pass: render.
+    //
+    // NOTE: The lexer/parser is not indentation-sensitive per spec, but the current compiler
+    // implementation uses newlines + indentation to disambiguate some constructs. To keep the
+    // formatter deterministic and robust even when the input indentation is inconsistent, we
+    // compute indentation from delimiter nesting (`{[(` / `}])`) plus a small set of newline
+    // continuations (`|` arms, `then`/`else`, trailing `=`/`=>`).
     let mut rendered_lines: Vec<String> = Vec::new();
     let mut blank_run = 0usize;
-    let mut pipe_block_base_indent: Option<usize> = None;
+    let mut pipe_block_stack: Vec<(usize, isize)> = Vec::new();
     let mut pipeop_block_base_indent: Option<usize> = None;
+    let mut pipeop_block_base_depth: Option<isize> = None;
     let mut rhs_next_line_indent: Option<usize> = None;
-    let mut rhs_block_active = false;
-    let mut rhs_block_depth: isize = 0;
+    let mut rhs_next_line_depth: Option<isize> = None;
+    let mut then_else_pending_depth: Option<isize> = None;
+    let mut arm_rhs_active = false;
     let mut pipeop_seed_indent: Option<usize> = None;
     let pipe_block_extra = " ".repeat(indent_size);
     let mut prev_non_blank_last_token: Option<String> = None;
+    let mut open_depth: isize = 0;
+    let mut prev_effective_indent_len: usize = 0;
+
+    fn seeds_rhs_continuation(last: Option<&str>) -> bool {
+        matches!(last, Some("=" | "=>" | "<-" | "->"))
+    }
+
+    fn seeds_then_else(last: Option<&str>) -> bool {
+        matches!(last, Some("then" | "else"))
+    }
+
+    fn last_continuation_token(tokens: &[&crate::cst::CstToken]) -> Option<String> {
+        tokens
+            .iter()
+            .rev()
+            .find(|t| {
+                if t.kind == "comment" {
+                    return false;
+                }
+                !matches!(t.text.as_str(), "{" | "[" | "(")
+            })
+            .map(|t| t.text.clone())
+    }
+
+    fn net_open_depth(tokens: &[&crate::cst::CstToken]) -> isize {
+        let mut depth = 0isize;
+        for t in tokens {
+            if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
+                continue;
+            }
+            let text = t.text.as_str();
+            if is_open_sym(text).is_some() {
+                depth += 1;
+            } else if is_close_sym(text).is_some() {
+                depth -= 1;
+            }
+        }
+        depth.max(0)
+    }
+
+    fn leading_close_count(tokens: &[&crate::cst::CstToken], first_idx: usize) -> isize {
+        let mut count = 0isize;
+        for t in tokens.iter().skip(first_idx) {
+            if t.kind == "comment" || t.text == "\n" {
+                continue;
+            }
+            if matches!(t.kind.as_str(), "string" | "sigil") {
+                break;
+            }
+            if is_close_sym(t.text.as_str()).is_some() {
+                count += 1;
+                continue;
+            }
+            break;
+        }
+        count
+    }
+
+    fn update_open_depth(open_depth: &mut isize, tokens: &[&crate::cst::CstToken]) {
+        for t in tokens {
+            if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
+                continue;
+            }
+            let text = t.text.as_str();
+            if is_open_sym(text).is_some() {
+                *open_depth += 1;
+            } else if is_close_sym(text).is_some() {
+                *open_depth -= 1;
+            }
+        }
+        if *open_depth < 0 {
+            *open_depth = 0;
+        }
+    }
+
+    fn looks_like_new_stmt(tokens: &[&crate::cst::CstToken], first_idx: usize) -> bool {
+        let first = tokens[first_idx].text.as_str();
+        if matches!(
+            first,
+            "module" | "use" | "export" | "type" | "class" | "instance" | "domain"
+        ) {
+            return true;
+        }
+        if tokens[first_idx].kind == "ident" {
+            // A definition or type signature at the same indentation likely terminates a `|` block.
+            if find_top_level_token(tokens, "=", first_idx + 1).is_some()
+                || find_top_level_token(tokens, ":", first_idx + 1).is_some()
+            {
+                return true;
+            }
+        }
+        false
+    }
+
     for (line_index, state) in lines.iter().enumerate() {
         if state.tokens.is_empty() {
+            // Keep `use` declarations grouped by removing blank lines between consecutive `use`s.
+            let between_uses = {
+                fn is_use_line(line: &LineState<'_>) -> bool {
+                    first_code_index(&line.tokens).is_some_and(|i| line.tokens[i].text == "use")
+                }
+
+                let mut prev_use = None;
+                for j in (0..line_index).rev() {
+                    if lines[j].tokens.is_empty() {
+                        continue;
+                    }
+                    prev_use = Some(is_use_line(&lines[j]));
+                    break;
+                }
+                let mut next_use = None;
+                for j in (line_index + 1)..lines.len() {
+                    if lines[j].tokens.is_empty() {
+                        continue;
+                    }
+                    next_use = Some(is_use_line(&lines[j]));
+                    break;
+                }
+                prev_use == Some(true) && next_use == Some(true)
+            };
+            if between_uses {
+                continue;
+            }
+
             blank_run += 1;
             if blank_run > max_blank_lines {
                 continue;
             }
             rendered_lines.push(String::new());
             // Blank lines end any active continuation blocks to avoid surprising indentation carry-over.
-            pipe_block_base_indent = None;
+            pipe_block_stack.clear();
             pipeop_block_base_indent = None;
+            pipeop_block_base_depth = None;
             rhs_next_line_indent = None;
-            rhs_block_active = false;
-            rhs_block_depth = 0;
+            rhs_next_line_depth = None;
             pipeop_seed_indent = None;
+            then_else_pending_depth = None;
+            arm_rhs_active = false;
             continue;
         }
 
         blank_run = 0;
 
-        let base_indent = state.indent.as_str();
         let mut out = String::new();
 
+        let then_else_active_depth = then_else_pending_depth.take();
+
         // One-shot seeds: only apply to the next non-blank line.
-        let rhs_seed_match = rhs_next_line_indent == Some(state.indent_len);
-        rhs_next_line_indent = None;
-        let pipeop_seed_match = pipeop_seed_indent == Some(state.indent_len);
-        pipeop_seed_indent = None;
-        if rhs_seed_match {
-            rhs_block_active = true;
-            rhs_block_depth = 0;
-        }
+        let rhs_seed_indent = rhs_next_line_indent.take();
+        let rhs_seed_depth = rhs_next_line_depth.take().unwrap_or(0);
+        let pipeop_seed = pipeop_seed_indent.take();
 
         if state.degraded {
-            out.push_str(base_indent);
+            out.push_str(state.indent.as_str());
             out.push_str(&format_tokens_simple(&state.tokens));
             rendered_lines.push(out);
-            pipe_block_base_indent = None;
+            pipe_block_stack.clear();
             pipeop_block_base_indent = None;
             rhs_next_line_indent = None;
-            rhs_block_active = false;
-            rhs_block_depth = 0;
             pipeop_seed_indent = None;
-            prev_non_blank_last_token = state
-                .tokens
-                .iter()
-                .rev()
-                .find(|t| t.kind != "comment")
-                .map(|t| t.text.clone());
+            prev_non_blank_last_token = last_continuation_token(&state.tokens);
+            update_open_depth(&mut open_depth, &state.tokens);
             continue;
         }
 
         let Some(first_idx) = first_code_index(&state.tokens) else {
-            out.push_str(base_indent);
+            out.push_str(state.indent.as_str());
             out.push_str(&format_tokens_simple(&state.tokens));
             rendered_lines.push(out);
-            pipe_block_base_indent = None;
+            pipe_block_stack.clear();
             pipeop_block_base_indent = None;
-            prev_non_blank_last_token = state
-                .tokens
-                .iter()
-                .rev()
-                .find(|t| t.kind != "comment")
-                .map(|t| t.text.clone());
+            prev_non_blank_last_token = last_continuation_token(&state.tokens);
+            update_open_depth(&mut open_depth, &state.tokens);
             continue;
         };
+
+        // Canonical base indentation from delimiter nesting (computed at render time).
+        let line_depth = (open_depth - leading_close_count(&state.tokens, first_idx)).max(0);
+        let line_indent_len = (line_depth as usize) * indent_size;
+        let pipeop_seed_match = pipeop_seed == Some(line_indent_len);
 
         let line_has_top_level_eq =
             find_top_level_token(&state.tokens, "=", first_idx).is_some();
@@ -653,6 +950,8 @@
         // - A single continuation line after a trailing `=` (e.g. `x =\n  expr`).
         let starts_with_pipe = state.tokens[first_idx].text == "|";
         let starts_with_pipeop = state.tokens[first_idx].text == "|>";
+        let is_arm_line =
+            starts_with_pipe && find_top_level_token(&state.tokens, "=>", first_idx + 1).is_some();
         let should_start_pipe_block =
             starts_with_pipe && matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?"));
         let should_start_pipeop_block = starts_with_pipeop
@@ -660,38 +959,89 @@
                 || matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?")));
 
         if should_start_pipe_block {
-            pipe_block_base_indent = Some(state.indent_len);
+            pipe_block_stack.push((prev_effective_indent_len, open_depth));
         }
         if should_start_pipeop_block {
-            pipeop_block_base_indent = Some(state.indent_len);
+            pipeop_block_base_indent = Some(prev_effective_indent_len);
+            pipeop_block_base_depth = Some(open_depth);
         }
 
-        // End a continuation block when we hit a line that returns to the block's base indent
-        // and doesn't start with the block operator.
-        if let Some(base) = pipe_block_base_indent {
-            if state.indent_len < base {
-                pipe_block_base_indent = None;
-            } else if state.indent_len == base && !starts_with_pipe && !starts_with_pipeop {
-                pipe_block_base_indent = None;
+        // Close any nested `|` blocks we've left by delimiter nesting.
+        while pipe_block_stack
+            .last()
+            .is_some_and(|&(_, base_depth)| line_depth < base_depth)
+        {
+            pipe_block_stack.pop();
+        }
+
+        // For `|`/`|>` lines, anchor indentation to the subject line's indent (not just delimiter nesting).
+        let mut base_indent_len_for_line = line_indent_len;
+        if starts_with_pipe {
+            if let Some(&(base, _)) = pipe_block_stack.last() {
+                base_indent_len_for_line = base;
+            }
+        } else if starts_with_pipeop {
+            if let Some(base) = pipeop_block_base_indent {
+                base_indent_len_for_line = base;
             }
         }
-        if let Some(base) = pipeop_block_base_indent {
-            if state.indent_len < base {
+        let base_indent = " ".repeat(base_indent_len_for_line);
+
+        // End a continuation block when we hit a line that clearly starts a new statement at or
+        // above the block's base indentation. Avoid ending blocks just because a line starts with
+        // a closing delimiter (`}`/`]`/`)`) which naturally decreases the computed indent.
+        if let Some(&(base_indent, base_depth)) = pipe_block_stack.last() {
+            if !starts_with_pipe
+                && !starts_with_pipeop
+                && line_depth <= base_depth
+                && line_indent_len <= base_indent
+                && looks_like_new_stmt(&state.tokens, first_idx)
+            {
+                pipe_block_stack.pop();
+                if pipe_block_stack.is_empty() {
+                    arm_rhs_active = false;
+                }
+            }
+        }
+        if let (Some(base_indent), Some(base_depth)) = (pipeop_block_base_indent, pipeop_block_base_depth)
+        {
+            if !starts_with_pipeop
+                && line_depth <= base_depth
+                && line_indent_len <= base_indent
+                && looks_like_new_stmt(&state.tokens, first_idx)
+            {
                 pipeop_block_base_indent = None;
-            } else if state.indent_len == base && !starts_with_pipeop {
-                pipeop_block_base_indent = None;
+                pipeop_block_base_depth = None;
             }
         }
 
-        let in_pipe_block = pipe_block_base_indent.is_some_and(|base| state.indent_len >= base);
-        let in_pipeop_block = pipeop_block_base_indent.is_some_and(|base| state.indent_len >= base);
+        let in_pipe_block = !pipe_block_stack.is_empty();
+        let in_pipeop_block = pipeop_block_base_indent.is_some();
 
-        let should_indent_continuation = in_pipe_block || in_pipeop_block || rhs_block_active;
-        let effective_indent = if should_indent_continuation {
-            // Avoid allocations in the hot path unless we actually need extra indentation.
-            format!("{base_indent}{pipe_block_extra}")
-        } else {
-            base_indent.to_string()
+        let mut continuation_levels = 0usize;
+        if in_pipe_block || in_pipeop_block {
+            continuation_levels += 1;
+        }
+        // If a line ended with `=`/`=>` and did not open a delimiter group, indent the next line.
+        // Avoid double-indenting `|`/`|>` continuation blocks after `=`/`?`.
+        let rhs_seed_active = rhs_seed_indent.is_some()
+            && !starts_with_pipe
+            && !starts_with_pipeop
+            && (rhs_seed_depth == 0 || prev_non_blank_last_token.as_deref() == Some("=>"));
+        if rhs_seed_active {
+            continuation_levels += 1;
+        }
+        if arm_rhs_active && !starts_with_pipe {
+            continuation_levels += 1;
+        }
+        let then_else_active = then_else_active_depth.is_some() && then_else_active_depth == Some(0);
+        if then_else_active {
+            continuation_levels += 1;
+        }
+        let effective_indent = match continuation_levels {
+            0 => base_indent,
+            1 => format!("{base_indent}{pipe_block_extra}"),
+            n => format!("{base_indent}{}", " ".repeat(n * indent_size)),
         };
 
         if let Some(max_lhs) = state.effect_align_lhs {
@@ -711,34 +1061,18 @@
                     out.push_str(&rhs);
                 }
                 rendered_lines.push(out);
-                prev_non_blank_last_token = state
-                    .tokens
-                    .iter()
-                    .rev()
-                    .find(|t| t.kind != "comment")
-                    .map(|t| t.text.clone());
+                prev_effective_indent_len = effective_indent.chars().count();
+                prev_non_blank_last_token = last_continuation_token(&state.tokens);
+                then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
+                    .then(|| net_open_depth(&state.tokens));
                 if line_has_top_level_eq {
-                    pipeop_seed_indent = Some(state.indent_len);
+                    pipeop_seed_indent = Some(line_indent_len);
                 }
-                if prev_non_blank_last_token.as_deref() == Some("=") {
-                    rhs_next_line_indent = Some(state.indent_len);
+                if seeds_rhs_continuation(prev_non_blank_last_token.as_deref()) {
+                    rhs_next_line_indent = Some(line_indent_len);
+                    rhs_next_line_depth = Some(net_open_depth(&state.tokens));
                 }
-                if rhs_block_active {
-                    for t in &state.tokens {
-                        if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
-                            continue;
-                        }
-                        let text = t.text.as_str();
-                        if is_open_sym(text).is_some() {
-                            rhs_block_depth += 1;
-                        } else if is_close_sym(text).is_some() {
-                            rhs_block_depth = (rhs_block_depth - 1).max(0);
-                        }
-                    }
-                    if rhs_block_depth == 0 {
-                        rhs_block_active = false;
-                    }
-                }
+                update_open_depth(&mut open_depth, &state.tokens);
                 continue;
             }
         }
@@ -762,34 +1096,18 @@
                         out.push_str(&rhs);
                     }
                     rendered_lines.push(out);
-                    prev_non_blank_last_token = state
-                        .tokens
-                        .iter()
-                        .rev()
-                        .find(|t| t.kind != "comment")
-                        .map(|t| t.text.clone());
+                    prev_effective_indent_len = effective_indent.chars().count();
+                    prev_non_blank_last_token = last_continuation_token(&state.tokens);
+                    then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
+                        .then(|| net_open_depth(&state.tokens));
                     if line_has_top_level_eq {
-                        pipeop_seed_indent = Some(state.indent_len);
+                        pipeop_seed_indent = Some(line_indent_len);
                     }
-                    if prev_non_blank_last_token.as_deref() == Some("=") {
-                        rhs_next_line_indent = Some(state.indent_len);
+                    if seeds_rhs_continuation(prev_non_blank_last_token.as_deref()) {
+                        rhs_next_line_indent = Some(line_indent_len);
+                        rhs_next_line_depth = Some(net_open_depth(&state.tokens));
                     }
-                    if rhs_block_active {
-                        for t in &state.tokens {
-                            if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
-                                continue;
-                            }
-                            let text = t.text.as_str();
-                            if is_open_sym(text).is_some() {
-                                rhs_block_depth += 1;
-                            } else if is_close_sym(text).is_some() {
-                                rhs_block_depth = (rhs_block_depth - 1).max(0);
-                            }
-                        }
-                        if rhs_block_depth == 0 {
-                            rhs_block_active = false;
-                        }
-                    }
+                    update_open_depth(&mut open_depth, &state.tokens);
                     continue;
                 }
             }
@@ -812,34 +1130,18 @@
                     out.push_str(&rhs);
                 }
                 rendered_lines.push(out);
-                prev_non_blank_last_token = state
-                    .tokens
-                    .iter()
-                    .rev()
-                    .find(|t| t.kind != "comment")
-                    .map(|t| t.text.clone());
+                prev_effective_indent_len = effective_indent.chars().count();
+                prev_non_blank_last_token = last_continuation_token(&state.tokens);
+                then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
+                    .then(|| net_open_depth(&state.tokens));
                 if line_has_top_level_eq {
-                    pipeop_seed_indent = Some(state.indent_len);
+                    pipeop_seed_indent = Some(line_indent_len);
                 }
-                if prev_non_blank_last_token.as_deref() == Some("=") {
-                    rhs_next_line_indent = Some(state.indent_len);
+                if seeds_rhs_continuation(prev_non_blank_last_token.as_deref()) {
+                    rhs_next_line_indent = Some(line_indent_len);
+                    rhs_next_line_depth = Some(net_open_depth(&state.tokens));
                 }
-                if rhs_block_active {
-                    for t in &state.tokens {
-                        if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
-                            continue;
-                        }
-                        let text = t.text.as_str();
-                        if is_open_sym(text).is_some() {
-                            rhs_block_depth += 1;
-                        } else if is_close_sym(text).is_some() {
-                            rhs_block_depth = (rhs_block_depth - 1).max(0);
-                        }
-                    }
-                    if rhs_block_depth == 0 {
-                        rhs_block_active = false;
-                    }
-                }
+                update_open_depth(&mut open_depth, &state.tokens);
                 continue;
             }
         }
@@ -881,34 +1183,19 @@
                             out.push_str(" : ");
                             out.push_str(format_tokens_simple(rest_tokens).trim());
                             rendered_lines.push(out);
-                            prev_non_blank_last_token = state
-                                .tokens
-                                .iter()
-                                .rev()
-                                .find(|t| t.kind != "comment")
-                                .map(|t| t.text.clone());
+                            prev_effective_indent_len = effective_indent.chars().count();
+                            prev_non_blank_last_token = last_continuation_token(&state.tokens);
+                            then_else_pending_depth =
+                                seeds_then_else(prev_non_blank_last_token.as_deref())
+                                    .then(|| net_open_depth(&state.tokens));
                             if line_has_top_level_eq {
-                                pipeop_seed_indent = Some(state.indent_len);
+                                pipeop_seed_indent = Some(line_indent_len);
                             }
-                            if prev_non_blank_last_token.as_deref() == Some("=") {
-                                rhs_next_line_indent = Some(state.indent_len);
+                            if seeds_rhs_continuation(prev_non_blank_last_token.as_deref()) {
+                                rhs_next_line_indent = Some(line_indent_len);
+                                rhs_next_line_depth = Some(net_open_depth(&state.tokens));
                             }
-                            if rhs_block_active {
-                                for t in &state.tokens {
-                                    if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
-                                        continue;
-                                    }
-                                    let text = t.text.as_str();
-                                    if is_open_sym(text).is_some() {
-                                        rhs_block_depth += 1;
-                                    } else if is_close_sym(text).is_some() {
-                                        rhs_block_depth = (rhs_block_depth - 1).max(0);
-                                    }
-                                }
-                                if rhs_block_depth == 0 {
-                                    rhs_block_active = false;
-                                }
-                            }
+                            update_open_depth(&mut open_depth, &state.tokens);
                             continue;
                         }
                     }
@@ -919,35 +1206,28 @@
         out.push_str(&effective_indent);
         out.push_str(&format_tokens_simple(&state.tokens));
         rendered_lines.push(out);
+        prev_effective_indent_len = effective_indent.chars().count();
 
-        prev_non_blank_last_token = state
-            .tokens
-            .iter()
-            .rev()
-            .find(|t| t.kind != "comment")
-            .map(|t| t.text.clone());
+        prev_non_blank_last_token = last_continuation_token(&state.tokens);
+        then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
+            .then(|| net_open_depth(&state.tokens));
 
         if line_has_top_level_eq {
-            pipeop_seed_indent = Some(state.indent_len);
+            pipeop_seed_indent = Some(line_indent_len);
         }
-        if prev_non_blank_last_token.as_deref() == Some("=") {
-            rhs_next_line_indent = Some(state.indent_len);
+        if seeds_rhs_continuation(prev_non_blank_last_token.as_deref()) {
+            rhs_next_line_indent = Some(line_indent_len);
+            rhs_next_line_depth = Some(net_open_depth(&state.tokens));
         }
-        if rhs_block_active {
-            for t in &state.tokens {
-                if matches!(t.kind.as_str(), "comment" | "string" | "sigil") {
-                    continue;
-                }
-                let text = t.text.as_str();
-                if is_open_sym(text).is_some() {
-                    rhs_block_depth += 1;
-                } else if is_close_sym(text).is_some() {
-                    rhs_block_depth = (rhs_block_depth - 1).max(0);
-                }
-            }
-            if rhs_block_depth == 0 {
-                rhs_block_active = false;
-            }
+        update_open_depth(&mut open_depth, &state.tokens);
+
+        // After rendering an arm line, keep an extra indentation level for its body until the next
+        // arm (or until we leave the surrounding `|` block).
+        if is_arm_line {
+            arm_rhs_active = true;
+        } else if starts_with_pipe {
+            // Starting a new arm resets the body indent for this line.
+            arm_rhs_active = false;
         }
     }
 
@@ -960,14 +1240,19 @@
         rendered_lines.drain(0..first_non_blank);
     }
 
-    let mut result = rendered_lines.join("\n");
-    // Ensure single trailing newline
-    if !result.ends_with('\n') {
-        result.push('\n');
+    // Final render via the `Doc` renderer. Today we mostly use hardlines, but this keeps the
+    // formatter architecture ready for width-aware grouping in future rules.
+    let mut doc_items = Vec::with_capacity(rendered_lines.len().saturating_mul(2));
+    for line in rendered_lines.into_iter() {
+        doc_items.push(super::doc::Doc::text(line));
+        doc_items.push(super::doc::Doc::hardline());
     }
-    // Respect max_blank_lines at the end of file (trim excessive)
-    while result.ends_with("\n\n") {
+    let mut result = super::doc::render(super::doc::Doc::concat(doc_items), options.max_width);
+
+    // Ensure exactly one trailing newline.
+    while result.ends_with('\n') {
         result.pop();
     }
+    result.push('\n');
     result
 }

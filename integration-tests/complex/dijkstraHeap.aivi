@@ -3,56 +3,49 @@ module integrationTests.complex.DijkstraHeap
 
 use aivi
 use aivi.testing
-
 use aivi.collections
 use aivi.graph
 
-buildGraph =
-  {
-    weighted =
-      [
-        (0, 1, 2.0),
-        (0, 2, 5.0),
-        (1, 2, 1.0),
-        (1, 3, 4.0),
-        (2, 3, 1.0),
-      ]
-    fromWeightedEdges weighted
+buildGraph = {
+  weighted = [
+    (0, 1, 2.0)
+    (0, 2, 5.0)
+    (1, 2, 1.0)
+    (1, 3, 4.0)
+    (2, 3, 1.0)
+  ]
+  fromWeightedEdges weighted
+}
+
+expandNeighbors = edges queue dist currentDist => edges ?
+  | []              => (queue, dist)
+  | [edge, ...tail] => {
+      tentative = currentDist + edge.weight
+    prev =
+      (Map.get edge.to dist) ?
+        | Some v => v
+        | None   => 1_000_000.0
+
+  res =
+    if tentative < prev then
+    (Heap.push queue (tentative, edge.to), Map.insert edge.to tentative dist)
+  else
+    (queue, dist)
+
+  (nextQueue, nextDist) = res
+  expandNeighbors tail nextQueue nextDist currentDist
+}
+
+search = queue dist visited graph => Heap.popMin queue ?
+  | None                             => dist
+  | Some ((currentDist, node), rest) =>
+    if Set.has node visited then
+    search rest dist visited graph
+  else {
+    neighbors = edgesFrom graph node
+    (nextQueue, nextDist) = expandNeighbors neighbors rest dist currentDist
+    search nextQueue nextDist (Set.insert node visited) graph
   }
-
-expandNeighbors = edges queue dist currentDist =>
-  edges ?
-    | []              => (queue, dist)
-    | [edge, ...tail] =>
-      {
-        tentative = currentDist + edge.weight
-        prev =
-          (Map.get edge.to dist) ?
-            | Some v => v
-            | None   => 1_000_000.0
-
-        res =
-          if tentative < prev then
-            (Heap.push queue (tentative, edge.to), Map.insert edge.to tentative dist)
-          else
-            (queue, dist)
-
-        (nextQueue, nextDist) = res
-        expandNeighbors tail nextQueue nextDist currentDist
-      }
-
-search = queue dist visited graph =>
-  Heap.popMin queue ?
-    | None                             => dist
-    | Some ((currentDist, node), rest) =>
-      if Set.has node visited then
-        search rest dist visited graph
-      else
-        {
-          neighbors = edgesFrom graph node
-          (nextQueue, nextDist) = expandNeighbors neighbors rest dist currentDist
-          search nextQueue nextDist (Set.insert node visited) graph
-        }
 
 resetDist = start =>
   Map.insert start 0.0 Map.empty
@@ -60,8 +53,8 @@ resetDist = start =>
 @test
 shortestPaths =
   effect {
-    graph = buildGraph
-    distances = search (Heap.push Heap.empty (0.0, 0)) (resetDist 0) Set.empty graph
-    _ <- assert (Map.get 3 distances == Some 4.0)
-    _ <- assert (Map.get 2 distances == Some 3.0)
-  }
+  graph = buildGraph
+  distances = search (Heap.push Heap.empty (0.0, 0)) (resetDist 0) Set.empty graph
+  _ <- assert (Map.get 3 distances == Some 4.0)
+  _ <- assert (Map.get 2 distances == Some 3.0)
+}

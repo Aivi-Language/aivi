@@ -1,4 +1,5 @@
 use aivi::format_text;
+use aivi::{format_text_with_options, BraceStyle, FormatOptions};
 
 #[test]
 fn test_fmt_basic_indentation() {
@@ -36,8 +37,25 @@ big = {
   b: 2,
 }
 "#;
-    let multiline_expected = "big = {\n  a: 1,\n  b: 2,\n}\n";
+    let multiline_expected = "big = {\n  a: 1\n  b: 2\n}\n";
     assert_eq!(format_text(multiline_input), multiline_expected);
+}
+
+#[test]
+fn test_fmt_merges_hanging_block_and_list_openers() {
+    let input = r#"
+buildGraph =
+  {
+    weighted =
+      [
+        (0, 1, 1.0),
+        (0, 2, 4.0),
+      ]
+    fromWeightedEdges weighted
+  }
+"#;
+    let expected = "buildGraph = {\n  weighted = [\n    (0, 1, 1.0)\n    (0, 2, 4.0)\n  ]\n  fromWeightedEdges weighted\n}\n";
+    assert_eq!(format_text(input), expected);
 }
 
 #[test]
@@ -51,6 +69,13 @@ fn test_fmt_operators_spacing() {
 fn test_fmt_remove_extra_whitespace() {
     let input = "x    =  1";
     let expected = "x = 1\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
+fn test_fmt_binary_minus_has_spaces() {
+    let input = "module demo\n\nx = y - 1\n";
+    let expected = "module demo\n\nx = y - 1\n";
     assert_eq!(format_text(input), expected);
 }
 
@@ -69,5 +94,89 @@ fn test_fmt_pipe_blocks_indent_after_equals_and_question() {
 fn test_fmt_no_space_before_index_bracket() {
     let input = "userTable = (database.table \"users\") [a]";
     let expected = "userTable = (database.table \"users\")[a]\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
+fn test_fmt_keeps_space_before_list_literal_arg() {
+    let input = "opt = Some [1,2]\n";
+    let expected = "opt = Some [1, 2]\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
+fn test_fmt_merges_hanging_opener_after_then_and_else() {
+    let input = r#"
+x =
+  if ok then
+    {
+      1
+    }
+  else
+    {
+      0
+    }
+"#;
+    let formatted = format_text(input);
+    assert!(formatted.contains("if ok then {"));
+    assert!(formatted.contains("else {"));
+}
+
+#[test]
+fn test_fmt_allman_brace_style_is_configurable() {
+    let input = "f = x => {\n  x\n}\n";
+    let formatted = format_text_with_options(
+        input,
+        FormatOptions {
+            brace_style: BraceStyle::Allman,
+            ..FormatOptions::default()
+        },
+    );
+    assert!(formatted.contains("f = x =>\n  {"));
+}
+
+#[test]
+fn test_fmt_match_subject_moves_onto_arrow_line() {
+    let input = r#"
+initialQueue = indegree graph =>
+  graph.nodes ?
+    | []        => []
+    | [h, ...t] => []
+"#;
+    let formatted = format_text(input);
+    assert!(formatted.contains("initialQueue = indegree graph => graph.nodes ?"));
+}
+
+#[test]
+fn test_fmt_drops_leading_commas_in_multiline_records() {
+    let input = r#"
+module demo
+
+State =
+  {
+    , stack: List Int
+    , onStack: Set Int
+    , nextIndex: Int
+    , components: List (List Int)
+  }
+"#;
+    let formatted = format_text(input);
+    assert!(!formatted.contains("\n    ,"));
+    assert!(!formatted.contains(",\n"));
+}
+
+#[test]
+fn test_fmt_groups_consecutive_use_statements() {
+    let input = r#"
+module demo
+
+use aivi
+
+use aivi.collections
+use aivi.testing
+
+x = 1
+"#;
+    let expected = "module demo\n\nuse aivi\nuse aivi.collections\nuse aivi.testing\n\nx = 1\n";
     assert_eq!(format_text(input), expected);
 }
