@@ -16,8 +16,11 @@ impl Parser {
         if let Some(token) = self.tokens.get(self.pos) {
             match token.kind {
                 TokenKind::Ident => {
-                    if token.text == "then" || token.text == "else" || token.text == "or" {
-                        return false;
+                    if crate::syntax::KEYWORDS_ALL.contains(&token.text.as_str()) {
+                        return matches!(
+                            token.text.as_str(),
+                            "if" | "effect" | "generate" | "resource" | "patch"
+                        );
                     }
                     return true;
                 }
@@ -31,10 +34,7 @@ impl Parser {
                 TokenKind::Newline => return false,
             }
         }
-        self.peek_keyword("if")
-            || self.peek_keyword("effect")
-            || self.peek_keyword("generate")
-            || self.peek_keyword("resource")
+        false
     }
 
     fn is_record_field_start(&self) -> bool {
@@ -144,14 +144,18 @@ impl Parser {
             let expr = self.parse_expr()?;
             if self.consume_symbol(",") {
                 let mut items = vec![expr];
+                self.consume_newlines();
                 while !self.check_symbol(")") && self.pos < self.tokens.len() {
                     if let Some(item) = self.parse_expr() {
                         items.push(item);
                     }
+                    self.consume_newlines();
                     if !self.consume_symbol(",") {
                         break;
                     }
+                    self.consume_newlines();
                 }
+                self.consume_newlines();
                 let end = self.expect_symbol(")", "expected ')' to close tuple");
                 let span = merge_span(expr_span(&items[0]), end.unwrap_or(expr_span(&items[0])));
                 return Some(Expr::Tuple { items, span });

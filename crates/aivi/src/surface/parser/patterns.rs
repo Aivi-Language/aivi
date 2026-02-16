@@ -11,6 +11,12 @@ impl Parser {
             }
         }
         if let Some(ident) = self.consume_ident() {
+            if crate::syntax::KEYWORDS_ALL.contains(&ident.name.as_str()) {
+                // Keywords can't appear as patterns. In particular, `when` must terminate
+                // constructor-arg parsing so match guards work.
+                self.pos -= 1;
+                return None;
+            }
             if ident.name == "_" {
                 return Some(Pattern::Wildcard(ident.span));
             }
@@ -66,14 +72,18 @@ impl Parser {
                 items.push(pattern);
             }
             if self.consume_symbol(",") {
+                self.consume_newlines();
                 while !self.check_symbol(")") && self.pos < self.tokens.len() {
                     if let Some(pattern) = self.parse_pattern() {
                         items.push(pattern);
                     }
+                    self.consume_newlines();
                     if !self.consume_symbol(",") {
                         break;
                     }
+                    self.consume_newlines();
                 }
+                self.consume_newlines();
                 let end = self.expect_symbol(")", "expected ')' to close tuple pattern");
                 let span = merge_span(
                     pattern_span(&items[0]),

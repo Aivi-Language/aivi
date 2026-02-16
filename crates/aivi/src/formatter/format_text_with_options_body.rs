@@ -42,6 +42,7 @@
         tokens: Vec<&'a crate::cst::CstToken>,
         indent: String,
         indent_len: usize,
+        top_delim: Option<char>,
         top_context: Option<ContextKind>,
         effect_align_lhs: Option<usize>,
         arm_align_pat: Option<usize>,
@@ -323,9 +324,11 @@
         false
     }
 
-    fn format_tokens_simple(tokens: &[&crate::cst::CstToken]) -> String {
+    fn format_tokens_simple(tokens: &[&crate::cst::CstToken], top_delim: Option<char>) -> String {
         // Prefer newline-based separators for multiline forms by stripping trailing commas.
-        // This is safe because comma is an alternative `FieldSep` to newlines in the grammar.
+        // This is safe for record/list/map/set forms where `,` is an alternative `FieldSep`,
+        // but *not* for multiline tuples, where commas are required separators.
+        let strip_commas = top_delim != Some('(');
         let trailing_comma_idx = {
             let mut idx = None;
             for (i, t) in tokens.iter().enumerate() {
@@ -333,14 +336,15 @@
                     idx = Some(i);
                 }
             }
-            idx.filter(|&i| tokens[i].text == ",")
+            idx.filter(|&i| strip_commas && tokens[i].text == ",")
         };
 
         let mut out = String::new();
         let mut prevprev: Option<(&str, &str)> = None;
         let mut prev: Option<(&str, &str)> = None;
         let mut prev_token: Option<&crate::cst::CstToken> = None;
-        let leading_comma_idx = first_code_index(tokens).filter(|&i| tokens[i].text == ",");
+        let leading_comma_idx = first_code_index(tokens)
+            .filter(|&i| strip_commas && tokens[i].text == ",");
         for (i, t) in tokens.iter().enumerate() {
             if leading_comma_idx == Some(i) {
                 continue;
@@ -565,6 +569,7 @@
             tokens: line_tokens,
             indent,
             indent_len,
+            top_delim: stack.last().map(|f| f.sym),
             top_context,
             effect_align_lhs: None,
             arm_align_pat: None,
@@ -643,7 +648,8 @@
                             break;
                         };
                         let lhs_tokens = &lines[j].tokens[first_idx_j..arrow_idx];
-                        let lhs_str = format_tokens_simple(lhs_tokens).trim().to_string();
+                        let lhs_str =
+                            format_tokens_simple(lhs_tokens, lines[j].top_delim).trim().to_string();
                         max_lhs = max_lhs.max(lhs_str.len());
                         j += 1;
                     }
@@ -683,7 +689,8 @@
                         break;
                     };
                     let pat_tokens = &lines[j].tokens[first_idx_j + 1..arrow_idx];
-                    let pat_str = format_tokens_simple(pat_tokens).trim().to_string();
+                    let pat_str =
+                        format_tokens_simple(pat_tokens, lines[j].top_delim).trim().to_string();
                     max_pat = max_pat.max(pat_str.len());
                     j += 1;
                 }
@@ -722,7 +729,8 @@
                         break;
                     };
                     let key_tokens = &lines[j].tokens[first_idx_j..arrow_idx_j];
-                    let key_str = format_tokens_simple(key_tokens).trim().to_string();
+                    let key_str =
+                        format_tokens_simple(key_tokens, lines[j].top_delim).trim().to_string();
                     max_key = max_key.max(key_str.len());
                     j += 1;
                 }
@@ -918,7 +926,7 @@
 
         if state.degraded {
             out.push_str(state.indent.as_str());
-            out.push_str(&format_tokens_simple(&state.tokens));
+            out.push_str(&format_tokens_simple(&state.tokens, state.top_delim));
             rendered_lines.push(out);
             pipe_block_stack.clear();
             pipeop_block_base_indent = None;
@@ -935,7 +943,7 @@
 
         let Some(first_idx) = first_code_index(&state.tokens) else {
             out.push_str(state.indent.as_str());
-            out.push_str(&format_tokens_simple(&state.tokens));
+            out.push_str(&format_tokens_simple(&state.tokens, state.top_delim));
             rendered_lines.push(out);
             pipe_block_stack.clear();
             pipeop_block_base_indent = None;
@@ -1081,8 +1089,12 @@
                 // `<-` alignment across consecutive effect lines.
                 let lhs_tokens = &state.tokens[first_idx..arrow_idx];
                 let rhs_tokens = &state.tokens[arrow_idx + 1..];
-                let lhs = format_tokens_simple(lhs_tokens).trim().to_string();
-                let rhs = format_tokens_simple(rhs_tokens).trim().to_string();
+                let lhs = format_tokens_simple(lhs_tokens, state.top_delim)
+                    .trim()
+                    .to_string();
+                let rhs = format_tokens_simple(rhs_tokens, state.top_delim)
+                    .trim()
+                    .to_string();
                 let spaces = (max_lhs.saturating_sub(lhs.len())) + 1;
                 out.push_str(&effective_indent);
                 out.push_str(&lhs);
@@ -1120,8 +1132,12 @@
                 if let Some(arrow_idx) = arrow_idx {
                     let pat_tokens = &state.tokens[first_idx + 1..arrow_idx];
                     let rhs_tokens = &state.tokens[arrow_idx + 1..];
-                    let pat = format_tokens_simple(pat_tokens).trim().to_string();
-                    let rhs = format_tokens_simple(rhs_tokens).trim().to_string();
+                    let pat = format_tokens_simple(pat_tokens, state.top_delim)
+                        .trim()
+                        .to_string();
+                    let rhs = format_tokens_simple(rhs_tokens, state.top_delim)
+                        .trim()
+                        .to_string();
                     let spaces = (max_pat.saturating_sub(pat.len())) + 1;
                     out.push_str(&effective_indent);
                     out.push_str("| ");
@@ -1156,12 +1172,16 @@
         }
 
         if let Some(max_key) = state.map_align_key {
-            let arrow_idx = find_top_level_token(&state.tokens, "=>", first_idx);
-            if let Some(arrow_idx) = arrow_idx {
-                let key_tokens = &state.tokens[first_idx..arrow_idx];
-                let rhs_tokens = &state.tokens[arrow_idx + 1..];
-                let key = format_tokens_simple(key_tokens).trim().to_string();
-                let rhs = format_tokens_simple(rhs_tokens).trim().to_string();
+                let arrow_idx = find_top_level_token(&state.tokens, "=>", first_idx);
+                if let Some(arrow_idx) = arrow_idx {
+                    let key_tokens = &state.tokens[first_idx..arrow_idx];
+                    let rhs_tokens = &state.tokens[arrow_idx + 1..];
+                    let key = format_tokens_simple(key_tokens, state.top_delim)
+                        .trim()
+                        .to_string();
+                    let rhs = format_tokens_simple(rhs_tokens, state.top_delim)
+                        .trim()
+                        .to_string();
                 let spaces = (max_key.saturating_sub(key.len())) + 1;
                 out.push_str(&effective_indent);
                 out.push_str(&key);
@@ -1226,9 +1246,9 @@
                                 .is_some()
                         {
                             out.push_str(&effective_indent);
-                            out.push_str(format_tokens_simple(name_tokens).trim());
+                            out.push_str(format_tokens_simple(name_tokens, state.top_delim).trim());
                             out.push_str(" : ");
-                            out.push_str(format_tokens_simple(rest_tokens).trim());
+                            out.push_str(format_tokens_simple(rest_tokens, state.top_delim).trim());
                             rendered_lines.push(out);
                             prev_effective_indent_len = effective_indent.chars().count();
                             prev_non_blank_last_token = last_continuation_token(&state.tokens);
@@ -1256,7 +1276,7 @@
         }
 
         out.push_str(&effective_indent);
-        out.push_str(&format_tokens_simple(&state.tokens));
+        out.push_str(&format_tokens_simple(&state.tokens, state.top_delim));
         rendered_lines.push(out);
         prev_effective_indent_len = effective_indent.chars().count();
 

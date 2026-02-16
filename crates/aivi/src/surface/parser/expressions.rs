@@ -231,7 +231,8 @@ impl Parser {
         while let Some(pattern) = self.parse_pattern() {
             params.push(pattern);
         }
-        if !params.is_empty() && self.consume_symbol("=>") {
+        let saw_pattern_diags = self.diagnostics.len() != diag_checkpoint;
+        if !params.is_empty() && !saw_pattern_diags && self.consume_symbol("=>") {
             let body = self.parse_expr()?;
             let span = merge_span(pattern_span(&params[0]), expr_span(&body));
             return Some(Expr::Lambda {
@@ -290,6 +291,7 @@ impl Parser {
         }
 
         if !params.is_empty()
+            && !saw_pattern_diags
             && params.iter().any(pattern_has_subject)
             && (self.check_symbol("|>") || self.check_symbol("?"))
         {

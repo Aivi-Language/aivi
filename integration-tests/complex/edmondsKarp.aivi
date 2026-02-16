@@ -61,11 +61,7 @@ bfs = residual source sink => {
           next = edge.to
           cap = getOrZero { from: current, to: next } residual.capacities
           if cap > 0.0 && !Set.has next seen then
-            explore
-          tail
-          (enqueue q next)
-          (Set.insert next seen)
-          (Map.insert next current pars)
+            explore tail (enqueue q next) (Set.insert next seen) (Map.insert next current pars)
           else
             explore tail q seen pars
         }

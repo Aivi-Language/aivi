@@ -37,10 +37,10 @@ expandNeighbors = edges queue scores parents current currentG goal heuristicFunc
   res =
     if tentative < prevScore then
       (
-        Heap.push queue (tentative + heuristicFunc goal edge.to, edge.to, tentative),
-        Map.insert edge.to tentative scores,
-        Map.insert edge.to current parents
-      )
+      Heap.push queue (tentative + heuristicFunc goal edge.to, edge.to, tentative),
+      Map.insert edge.to tentative scores,
+      Map.insert edge.to current parents
+    )
     else
       (queue, scores, parents)
 
