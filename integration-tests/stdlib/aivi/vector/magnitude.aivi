@@ -11,5 +11,5 @@ use aivi.vector
 @test
 smoke = effect {
   v = { x: 3.0, y: 4.0 }
-  _ <- testing.assert (abs (magnitude v - 5.0) < 0.0001)
+  _ <- assert (abs (magnitude v - 5.0) < 0.0001)
 }

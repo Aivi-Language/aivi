@@ -11,5 +11,5 @@ use aivi.number.bigint
 @test
 smoke = effect {
   b = 1n
-  _ <- testing.assert (toInt b == 1)
+  _ <- assert (toInt b == 1)
 }

@@ -10,6 +10,6 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (slice 0 2 "hello" == "he")
-  _ <- testing.assert (slice 1 3 "hello" == "el")
+  _ <- assert (slice 0 2 "hello" == "he")
+  _ <- assert (slice 1 3 "hello" == "el")
 }

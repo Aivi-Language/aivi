@@ -11,5 +11,5 @@ use aivi.linalg
 @test
 smoke = effect {
   v = { size: 3, data: [1.0, 2.0, 3.0] }
-  _ <- testing.assert (v.size == 3)
+  _ <- assert (v.size == 3)
 }

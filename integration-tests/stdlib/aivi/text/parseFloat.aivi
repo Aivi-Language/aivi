@@ -10,8 +10,8 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (parseFloat "123.45" == Some 123.45)
-  // _ <- testing.assert (parseFloat "abc" == None)? Not sure if it yields None or error. Assuming Option return.
+  _ <- assert (parseFloat "123.45" == Some 123.45)
+  // _ <- assert (parseFloat "abc" == None)? Not sure if it yields None or error. Assuming Option return.
   res = parseFloat "abc"
   _ <- res ?
     | Some _ => assert False

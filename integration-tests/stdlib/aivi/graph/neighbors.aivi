@@ -12,5 +12,5 @@ use aivi.graph
 smoke = effect {
   g = addEdge empty { from: 1, to: 2, weight: 1.0 }
   ns = neighbors g 1
-  _ <- testing.assert (ns == [2])
+  _ <- assert (ns == [2])
 }

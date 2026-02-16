@@ -6,20 +6,18 @@ use aivi.testing
 
 use aivi
 
-
-
 @test
 smoke = effect {
   reResult = compile "h.llo"
   r <- reResult ?
     | Ok re => effect { pure re }
     | Err e => effect { fail e }
-  _ <- testing.assert (test r "hello" == True)
-  _ <- testing.assert (test r "hxllo" == True)
-  _ <- testing.assert (test r "world" == False)
+  _ <- assert (test r "hello" == True)
+  _ <- assert (test r "hxllo" == True)
+  _ <- assert (test r "world" == False)
 
   mResult = regex.match r "hello"
   _ <- mResult ?
-    | Some matched => testing.assert (matched.full == "hello")
-    | None => assert False
+    | Some matched => assert (matched.full == "hello")
+    | None         => assert False
 }

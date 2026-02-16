@@ -10,5 +10,5 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (length (debugText "hello") > 0)
+  _ <- assert (length (debugText "hello") > 0)
 }

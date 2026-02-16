@@ -15,13 +15,13 @@ smoke = effect {
   h2 = Heap.push h1 1
   h3 = Heap.push h2 2
 
-  _ <- testing.assert (Heap.peekMin h3 == Some 1)
+  _ <- assert (Heap.peekMin h3 == Some 1)
 
   res = Heap.popMin h3
   _ <- match res with
     | Some (val, h4) => effect {
-      _ <- testing.assert (val == 1)
-      _ <- testing.assert (Heap.peekMin h4 == Some 2)
+      _ <- assert (val == 1)
+      _ <- assert (Heap.peekMin h4 == Some 2)
     }
     | None => assert False
 }

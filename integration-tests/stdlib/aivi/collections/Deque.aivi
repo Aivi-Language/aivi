@@ -14,14 +14,14 @@ smoke = effect {
   d1 = Deque.pushBack d0 1
   d2 = Deque.pushFront d1 0
 
-  _ <- testing.assert (Deque.peekFront d2 == Some 0)
-  _ <- testing.assert (Deque.peekBack d2 == Some 1)
+  _ <- assert (Deque.peekFront d2 == Some 0)
+  _ <- assert (Deque.peekBack d2 == Some 1)
 
   res = Deque.popFront d2
   _ <- match res with
     | Some (val, d3) => effect {
-      _ <- testing.assert (val == 0)
-      _ <- testing.assert (Deque.peekFront d3 == Some 1)
+      _ <- assert (val == 0)
+      _ <- assert (Deque.peekFront d3 == Some 1)
     }
     | None => assert False
 }

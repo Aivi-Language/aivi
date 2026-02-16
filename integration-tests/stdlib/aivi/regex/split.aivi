@@ -15,5 +15,5 @@ smoke = effect {
     | Ok re => effect { pure re }
     | Err _ => effect { fail "compile failed" }
 
-  _ <- testing.assert (split r "a,b,c" == ["a", "b", "c"])
+  _ <- assert (split r "a,b,c" == ["a", "b", "c"])
 }

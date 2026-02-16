@@ -6,10 +6,8 @@ use aivi.testing
 
 use aivi
 
-
-
 @test
 smoke = effect {
   c = "a"
-  _ <- testing.assert (isAlpha c == True)
+  _ <- assert (isAlpha c == True)
 }

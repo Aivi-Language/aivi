@@ -10,6 +10,6 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (lastIndexOf "l" "hello" == Some 3)
-  _ <- testing.assert (lastIndexOf "z" "hello" == None)
+  _ <- assert (lastIndexOf "l" "hello" == Some 3)
+  _ <- assert (lastIndexOf "z" "hello" == None)
 }

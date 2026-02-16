@@ -10,6 +10,6 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- testing.assert (abs (remainder 5.5 2.0- (-0.5)) < 0.0001)
+  _ <- assert (abs (remainder 5.5 2.0- (-0.5)) < 0.0001)
   // 5.5 - 6.0 = -0.5
 }

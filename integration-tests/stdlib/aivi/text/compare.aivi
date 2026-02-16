@@ -10,7 +10,7 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (compare "a" "b" < 0)
-  _ <- testing.assert (compare "b" "a" > 0)
-  _ <- testing.assert (compare "a" "a" == 0)
+  _ <- assert (compare "a" "b" < 0)
+  _ <- assert (compare "b" "a" > 0)
+  _ <- assert (compare "a" "a" == 0)
 }

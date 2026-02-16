@@ -11,5 +11,5 @@ use aivi.ui
 @test
 smoke = effect {
   node = vElement "div" [] []
-  _ <- testing.assert (renderHtml node == "<div data-aivi-node=\"root\"></div>")
+  _ <- assert (renderHtml node == "<div data-aivi-node=\"root\"></div>")
 }

@@ -12,6 +12,6 @@ use aivi.number.quaternion
 smoke = effect {
   q = { w: 1.0, x: 2.0, y: 3.0, z: 4.0 }
   c = conjugate q
-  _ <- testing.assert (c.w == 1.0)
-  _ <- testing.assert (c.x == -2.0)
+  _ <- assert (c.w == 1.0)
+  _ <- assert (c.x == -2.0)
 }

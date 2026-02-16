@@ -17,10 +17,10 @@ smoke = effect {
   m = match r "hello"
   _ <- match m {
     | Some res => effect {
-        _ <- testing.assert (res.full == "hello")
-        _ <- testing.assert (res.groups == [Some "e"])
-        _ <- testing.assert (res.start == 0)
-        _ <- testing.assert (res.end == 5)
+        _ <- assert (res.full == "hello")
+        _ <- assert (res.groups == [Some "e"])
+        _ <- assert (res.start == 0)
+        _ <- assert (res.end == 5)
       }
     | None => assert False
   }

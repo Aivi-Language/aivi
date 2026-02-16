@@ -10,6 +10,6 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- testing.assert (factorial 0 == 1)
-  _ <- testing.assert (factorial 5 == 120)
+  _ <- assert (factorial 0 == 1)
+  _ <- assert (factorial 5 == 120)
 }

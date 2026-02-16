@@ -6,11 +6,9 @@ use aivi.testing
 
 use aivi
 
-
-
 @test
 smoke = effect {
   b = toBytes "abc"
   s = fromBytes b
-  _ <- testing.assert (s == "abc")
+  _ <- assert (s == "abc")
 }

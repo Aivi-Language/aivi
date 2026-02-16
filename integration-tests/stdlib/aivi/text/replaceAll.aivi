@@ -10,5 +10,5 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (replaceAll "l" "L" "hello" == "heLLo")
+  _ <- assert (replaceAll "l" "L" "hello" == "heLLo")
 }

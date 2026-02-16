@@ -10,7 +10,7 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- testing.assert (abs (expm1 0.0) < 0.0001)
+  _ <- assert (abs (expm1 0.0) < 0.0001)
   // expm1(x) = exp(x) - 1
-  _ <- testing.assert (abs (expm1 1.0- (e -1.0)) < 0.0001)
+  _ <- assert (abs (expm1 1.0- (e -1.0)) < 0.0001)
 }

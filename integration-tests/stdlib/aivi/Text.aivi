@@ -6,15 +6,13 @@ use aivi.testing
 
 use aivi
 
-
-
 @test
 smoke = effect {
   t = "Hello"
-  _ <- testing.assert (Text.length t == 5)
-  _ <- testing.assert (Text.toUpper t == "HELLO")
-  _ <- testing.assert (Text.toLower t == "hello")
-  _ <- testing.assert (Text.slice 0 2 t == "He")
-  _ <- testing.assert (Text.isEmpty "" == True)
-  _ <- testing.assert (Text.isEmpty t == False)
+  _ <- assert (Text.length t == 5)
+  _ <- assert (Text.toUpper t == "HELLO")
+  _ <- assert (Text.toLower t == "hello")
+  _ <- assert (Text.slice 0 2 t == "He")
+  _ <- assert (Text.isEmpty "" == True)
+  _ <- assert (Text.isEmpty t == False)
 }

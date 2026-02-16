@@ -10,7 +10,7 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- testing.assert (sign 10.0 == 1.0)
-  _ <- testing.assert (sign (-10.0) == -1.0)
-  _ <- testing.assert (sign 0.0 == 0.0)
+  _ <- assert (sign 10.0 == 1.0)
+  _ <- assert (sign (-10.0) == -1.0)
+  _ <- assert (sign 0.0 == 0.0)
 }

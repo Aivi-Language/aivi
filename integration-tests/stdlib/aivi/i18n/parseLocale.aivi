@@ -14,6 +14,6 @@ smoke = effect {
   r <- res ?
     | Ok x => effect { pure x }
     | Err _ => effect { fail "parse failed" }
-  _ <- testing.assert (r.language == "en")
-  _ <- testing.assert (r.region == Some "US")
+  _ <- assert (r.language == "en")
+  _ <- assert (r.region == Some "US")
 }

@@ -11,5 +11,5 @@ use aivi.matrix
 @test
 smoke = effect {
   m = identity2
-  _ <- testing.assert (m.m00 == 1.0)
+  _ <- assert (m.m00 == 1.0)
 }

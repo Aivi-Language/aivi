@@ -10,5 +10,5 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (trimStart "  abc" == "abc")
+  _ <- assert (trimStart "  abc" == "abc")
 }

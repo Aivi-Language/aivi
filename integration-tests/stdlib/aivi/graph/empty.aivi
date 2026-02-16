@@ -11,5 +11,5 @@ use aivi.graph
 @test
 smoke = effect {
   g = empty
-  _ <- testing.assert (length g.nodes == 0)
+  _ <- assert (length g.nodes == 0)
 }

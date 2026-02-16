@@ -10,6 +10,6 @@ use aivi.graph
 smoke = effect {
   g = addEdge empty { from: 1, to: 2, weight: 1.0 }
   // addEdge ensures nodes exist
-  _ <- testing.assert (length g.nodes == 2)
-  _ <- testing.assert (length g.edges == 1)
+  _ <- assert (length g.nodes == 2)
+  _ <- assert (length g.edges == 1)
 }

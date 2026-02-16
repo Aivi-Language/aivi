@@ -10,6 +10,6 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- testing.assert (abs (sin 0.0) < 0.0001)
-  _ <- testing.assert (abs (sin (pi / 2.0) -1.0) < 0.0001)
+  _ <- assert (abs (sin 0.0) < 0.0001)
+  _ <- assert (abs (sin (pi / 2.0) -1.0) < 0.0001)
 }

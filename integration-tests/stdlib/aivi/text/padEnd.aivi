@@ -10,6 +10,6 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (padEnd 5 " " "abc" == "abc  ")
-  _ <- testing.assert (padEnd 3 " " "abc" == "abc")
+  _ <- assert (padEnd 5 " " "abc" == "abc  ")
+  _ <- assert (padEnd 3 " " "abc" == "abc")
 }

@@ -12,5 +12,5 @@ use aivi.url
 smoke = effect {
   u = { protocol: "http", host: "example.com", port: None, path: "/", query: [], hash: None }
   s = toString u
-  _ <- testing.assert (s == "http://example.com/")
+  _ <- assert (s == "http://example.com/")
 }

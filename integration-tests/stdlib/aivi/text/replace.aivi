@@ -10,5 +10,5 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (replace "l" "L" "hello" == "heLlo") // Replaces first occurrence? Assuming standard behavior for replace vs replaceAll
+  _ <- assert (replace "l" "L" "hello" == "heLlo") // Replaces first occurrence? Assuming standard behavior for replace vs replaceAll
 }

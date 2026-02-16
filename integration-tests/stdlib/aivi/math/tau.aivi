@@ -10,5 +10,5 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- testing.assert (abs (tau -6.28318) < 0.0001)
+  _ <- assert (abs (tau -6.28318) < 0.0001)
 }

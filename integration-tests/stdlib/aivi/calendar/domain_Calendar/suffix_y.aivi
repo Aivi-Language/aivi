@@ -13,5 +13,5 @@ use aivi.calendar
 @test
 smoke = effect {
   y = 1y
-  _ <- testing.assert (y == 1)
+  _ <- assert (y == 1)
 }

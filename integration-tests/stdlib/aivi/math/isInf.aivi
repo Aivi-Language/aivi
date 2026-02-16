@@ -10,7 +10,7 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- testing.assert (isInf inf == True)
-  _ <- testing.assert (isInf (- inf) == True)
-  _ <- testing.assert (isInf 1.0 == False)
+  _ <- assert (isInf inf == True)
+  _ <- assert (isInf (- inf) == True)
+  _ <- assert (isInf 1.0 == False)
 }

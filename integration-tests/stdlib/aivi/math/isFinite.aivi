@@ -10,7 +10,7 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- testing.assert (isFinite 1.0 == True)
-  _ <- testing.assert (isFinite inf == False)
-  _ <- testing.assert (isFinite nan == False)
+  _ <- assert (isFinite 1.0 == True)
+  _ <- assert (isFinite inf == False)
+  _ <- assert (isFinite nan == False)
 }

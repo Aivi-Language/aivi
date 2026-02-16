@@ -10,6 +10,6 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- testing.assert (divmod 10 3 == (3, 1))
-  _ <- testing.assert (divmod 10 (-3) == (-4, -2))
+  _ <- assert (divmod 10 3 == (3, 1))
+  _ <- assert (divmod 10 (-3) == (-4, -2))
 }

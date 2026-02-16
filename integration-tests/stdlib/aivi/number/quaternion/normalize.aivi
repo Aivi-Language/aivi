@@ -12,5 +12,5 @@ use aivi.number.quaternion
 smoke = effect {
   q = { w: 2.0, x: 0.0, y: 0.0, z: 0.0 }
   n = normalize q
-  _ <- testing.assert (n.w == 1.0)
+  _ <- assert (n.w == 1.0)
 }

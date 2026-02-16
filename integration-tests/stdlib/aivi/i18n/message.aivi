@@ -14,5 +14,5 @@ smoke = effect {
   m <- res ?
     | Ok m => effect { pure m }
     | Err e => effect { fail e }
-  _ <- testing.assert (m.body == "Hello, {name}!")
+  _ <- assert (m.body == "Hello, {name}!")
 }

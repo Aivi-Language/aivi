@@ -11,6 +11,6 @@ use aivi.number
 @test
 smoke = effect {
   r = fromInts (fromInt 1) (fromInt 2)
-  _ <- testing.assert (toInt (numerator r) == 1)
-  _ <- testing.assert (toInt (denominator r) == 2)
+  _ <- assert (toInt (numerator r) == 1)
+  _ <- assert (toInt (denominator r) == 2)
 }
