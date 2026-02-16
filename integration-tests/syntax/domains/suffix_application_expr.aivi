@@ -1,0 +1,19 @@
+@no_prelude
+module integrationTests.syntax.domains.suffixApplicationExpr
+
+use aivi
+use aivi.duration
+use aivi.duration (domain Duration)
+use aivi.testing (assertEq)
+
+span0 : Span
+span0 = { millis: 0 }
+x = 2
+delta : Delta
+delta = (x)min
+span1 = span0 + delta
+
+@test
+suffixApplicationWorks = effect {
+  _ <- assertEq span1.millis 120000
+}

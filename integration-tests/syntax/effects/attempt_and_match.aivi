@@ -1,0 +1,13 @@
+@no_prelude
+module integrationTests.syntax.effects.attemptAndMatch
+
+use aivi
+use aivi.testing (assertEq)
+
+@test
+attemptWorks = effect {
+  res <- attempt (fail "nope")
+  res ?
+    | Ok _  => fail "unexpected"
+    | Err e => assertEq e "nope"
+}

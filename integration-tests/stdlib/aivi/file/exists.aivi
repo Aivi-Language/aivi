@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.file.exists
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.file
+
+subject = exists
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.console.AnsiColor
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.console
+
+Ref = AnsiColor
+
+@test
+smoke = effect {
+  _ <- assert True
+}

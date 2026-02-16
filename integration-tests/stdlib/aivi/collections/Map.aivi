@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.collections.Map
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.collections
+
+Ref = Map
+
+@test
+smoke = effect {
+  _ <- assert True
+}

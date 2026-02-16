@@ -1,0 +1,19 @@
+@no_prelude
+module integrationTests.syntax.functions.multiArgAndSig
+
+use aivi
+use aivi.testing (assertEq)
+
+add : Int -> Int -> Int
+add = a b => a + b
+
+applyTwice : (A -> A) -> A -> A
+applyTwice = f x => f (f x)
+
+inc = n => n + 1
+
+@test
+functionsWork = effect {
+  _ <- assertEq (add 2 3) 5
+  _ <- assertEq (applyTwice inc 1) 3
+}

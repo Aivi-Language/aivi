@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.math.tan
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.math
+
+subject = tan
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

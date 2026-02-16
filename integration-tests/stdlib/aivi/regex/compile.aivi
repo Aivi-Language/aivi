@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.regex.compile
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.regex
+
+subject = compile
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

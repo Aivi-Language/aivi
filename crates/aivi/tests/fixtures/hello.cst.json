@@ -1,7 +1,7 @@
 {
   "files": [
     {
-      "path": "examples/hello.aivi",
+      "path": "integration-tests/legacy/hello.aivi",
       "byte_count": 132,
       "line_count": 9,
       "lines": [

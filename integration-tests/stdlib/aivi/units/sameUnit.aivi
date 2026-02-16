@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.units.sameUnit
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.units
+
+subject = sameUnit
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

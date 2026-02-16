@@ -1,0 +1,22 @@
+@no_prelude
+module integrationTests.syntax.operators.domainOperatorResolution
+
+use aivi
+use aivi.duration
+use aivi.duration (domain Duration)
+use aivi.testing (assertEq)
+
+span0 : Span
+span0 = { millis: 0 }
+
+spanPlusDelta = span0 + 1s
+spanMinusDelta = { millis: 1000 } - (1s)
+
+spanPlusSpan = { millis: 1000 } + { millis: 2000 }
+
+@test
+domainOperatorsResolve = effect {
+  _ <- assertEq spanPlusDelta.millis 1000
+  _ <- assertEq spanMinusDelta.millis 0
+  _ <- assertEq spanPlusSpan.millis 3000
+}

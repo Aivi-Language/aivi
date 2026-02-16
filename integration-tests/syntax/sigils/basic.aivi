@@ -1,0 +1,16 @@
+@no_prelude
+module integrationTests.syntax.sigils.basic
+
+use aivi
+use aivi.regex
+use aivi.testing (assert, assertEq)
+use aivi.url (domain Url)
+
+pattern = ~r/\w+@\w+\.\w+/
+endpoint = ~u(https://api.example.com)
+
+@test
+sigilsWork = effect {
+  _ <- assert (regex.test pattern "a@b.com")
+  _ <- assertEq endpoint.protocol "https"
+}

@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.ui.LiveConfig
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.ui
+
+Ref = LiveConfig
+
+@test
+smoke = effect {
+  _ <- assert True
+}

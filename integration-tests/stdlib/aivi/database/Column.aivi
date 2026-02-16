@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.database.Column
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.database
+
+Ref = Column
+
+@test
+smoke = effect {
+  _ <- assert True
+}

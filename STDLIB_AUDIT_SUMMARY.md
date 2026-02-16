@@ -10,14 +10,14 @@ This document summarizes:
 Repo guardrails (see `AGENTS.md`):
 - `specs/` is the source of truth; changes must be specified before (or alongside) implementation.
 - No invented syntax/features; keep APIs functional/immutable; no null/exceptions (use `Option`/`Result`).
-- Validate with `cargo test --workspace`; keep `examples/` compiling; format AIVI snippets with `aivi fmt`.
+- Validate with `cargo test --workspace`; keep `integration-tests/` compiling; format AIVI snippets with `aivi fmt`.
 
 ## Baseline (Quality Gate Status)
 
 Baseline quality gates are currently green:
 - `cargo fmt --all -- --check` passes.
 - `cargo test --workspace` passes.
-- `target/debug/aivi check examples` passes (stdlib diagnostics are suppressed by default; use `target/debug/aivi check --check-stdlib <target>` to include `<embedded:...>` typecheck errors).
+- `target/debug/aivi check integration-tests` passes (stdlib diagnostics are suppressed by default; use `target/debug/aivi check --check-stdlib <target>` to include `<embedded:...>` typecheck errors).
 
 ---
 
@@ -49,7 +49,7 @@ Runtime-provided APIs (where the “real” implementations live today):
 
 Collections:
 - Docs show `Map.empty()` in at least one snippet, but runtime defines `Map.empty` as a value (not a nullary function). Examples generally use `Map.empty` (correct).
-- No canonical `List` module/API; examples re-implement `map`/`filter`/`sum` ad-hoc (e.g. `examples/02_functions.aivi`), leading to inconsistency and duplicated code.
+- No canonical `List` module/API; integration tests re-implement `map`/`filter`/`sum` ad-hoc (e.g. `integration-tests/legacy/02_functions.aivi`), leading to inconsistency and duplicated code.
 
 Database:
 - Spec describes query planning and operations like `filter/find/sortBy/groupBy/join`, but `aivi.database` currently provides only `configure/table/load/applyDelta/runMigrations` with persisted `rows_json` per table name. This is a spec/impl gap that should be resolved explicitly in specs before expanding the runtime.
@@ -183,7 +183,7 @@ Non-negotiable behavior:
 ## 3) Implementation Task Breakdown (PR/Commit Steps)
 
 Pre-step (unblock baseline):
-1) Fix formatter idempotence for `examples/27_algorithms.aivi` and re-run `cargo test --workspace` to restore green baseline.
+1) Fix formatter idempotence for `integration-tests/legacy/27_algorithms.aivi` and re-run `cargo test --workspace` to restore green baseline.
 
 P0 Collections:
 2) Specs: update `specs/05_stdlib/00_core/28_collections.md`
@@ -207,4 +207,4 @@ P0 Database Pool:
 Quality gates (before finalizing):
 13) Run `cargo test --workspace`
 14) Run `cargo fmt --all -- --check`
-15) Run `aivi fmt` for any touched AIVI doc snippets and ensure examples still parse/build.
+15) Run `aivi fmt` for any touched AIVI doc snippets and ensure integration tests still parse/build.

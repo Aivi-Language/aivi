@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.database.configure
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.database
+
+subject = configure
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

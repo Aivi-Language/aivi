@@ -2,7 +2,7 @@
 
 This report follows `AGENTS.md` and `.gemini/skills/**` guidance:
 - Specs-first (stdlib API is documented in `specs/` and implementations must match).
-- No invented syntax/features; all examples stay purely functional with `Option`/`Result`, no loops, pipelines preferred.
+- No invented syntax/features; all integration tests stay purely functional with `Option`/`Result`, no loops, pipelines preferred.
 - Quality gates: `cargo test --workspace` must pass.
 
 ## Phase 0: Baseline
@@ -44,7 +44,7 @@ The stdlib surface is primarily specified in `specs/index.md` and `specs/05_stdl
 Implementation touchpoints:
 - Runtime builtins: `crates/aivi/src/runtime/builtins/**`
 - Embedded stdlib sources: `crates/aivi/src/stdlib/**`
-- Example programs (integration-style validation): `examples/**/*.aivi`
+- Example programs (integration-style validation): `integration-tests/**/*.aivi`
 
 ### 2) Consistency Issues / Inconsistencies Found
 
@@ -173,8 +173,8 @@ No commits were created in this workspace session. If you want a PR-ready histor
    - Expose via `crates/aivi/src/runtime/builtins/database/delta_apply.rs`
    - Add deterministic tests in `crates/aivi/src/runtime/tests.rs`
 
-5) Fix/format examples and keep quality gates green
-   - Adjust example formatting/scoping as needed (notably `examples/28_mixed_test.aivi`)
+5) Fix/format integration tests and keep quality gates green
+   - Adjust formatting/scoping as needed (notably `integration-tests/legacy/28_mixed_test.aivi`)
    - Run: `cargo test --workspace`
 
 ## Appendix A: Proposed Next P0 APIs (Detailed)
@@ -305,4 +305,3 @@ Doc/spec: `specs/05_stdlib/00_core/28_collections.md`
 2) `List.groupBy : (a -> k) -> List a -> Map k (List a)` (requires `Hash k`)
 - Behavior: stable grouping; preserves input order within each group.
 - Complexity: O(n) average with hashing.
-

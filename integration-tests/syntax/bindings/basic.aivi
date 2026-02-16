@@ -1,0 +1,16 @@
+@no_prelude
+module integrationTests.syntax.bindings.basic
+
+use aivi
+use aivi.testing (assertEq)
+
+x = 1
+y = if x < 2 then 3 else 4
+pair = (x, y)
+
+@test
+basicBindings = effect {
+  _ <- assertEq x 1
+  _ <- assertEq y 3
+  _ <- assertEq pair (1, 3)
+}

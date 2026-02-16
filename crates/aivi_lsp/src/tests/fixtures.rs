@@ -129,12 +129,15 @@ fn examples_open_without_lsp_errors() {
         .parent()
         .and_then(|p| p.parent())
         .expect("repo root");
-    let examples_dir = repo_root.join("examples");
+    let examples_dir = repo_root.join("integration-tests");
 
     let mut files = Vec::new();
     collect_aivi_files(&examples_dir, &mut files);
     files.sort();
-    assert!(!files.is_empty(), "expected examples/**/*.aivi");
+    assert!(
+        !files.is_empty(),
+        "expected integration-tests/**/*.aivi"
+    );
 
     // Build a workspace index from all example modules so `use ...` across examples resolves.
     let mut workspace = HashMap::new();
@@ -189,7 +192,7 @@ fn examples_open_without_lsp_errors() {
 
     assert!(
         failures.is_empty(),
-        "expected no ERROR diagnostics from aivi-lsp for examples; got:\n{}",
+        "expected no ERROR diagnostics from aivi-lsp for integration-tests; got:\n{}",
         failures.join("\n")
     );
 }

@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.graph.Edge
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.graph
+
+Ref = Edge
+
+@test
+smoke = effect {
+  _ <- assert True
+}

@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.concurrency.scope
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.concurrency
+
+subject = scope
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

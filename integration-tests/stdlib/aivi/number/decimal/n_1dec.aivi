@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.number.decimal.n_1dec
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.number.decimal
+
+subject = 3.14dec
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

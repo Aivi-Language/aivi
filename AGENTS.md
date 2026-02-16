@@ -4,7 +4,7 @@ apply: always
 
 # AIVI Agent Guide
 
-This document serves as the authoritative guide for AI agents working on the AIVI language project. It establishes the relationships between specifications, implementation crates, examples, and tooling, ensuring safe and consistent contributions.
+This document serves as the authoritative guide for AI agents working on the AIVI language project. It establishes the relationships between specifications, implementation crates, integration tests, and tooling, ensuring safe and consistent contributions.
 
 ## 1. Project Structure & Relationships
 
@@ -16,7 +16,7 @@ The AIVI repository is organized into distinct layers. Understanding these relat
 | :--- | :--- | :--- |
 | `specs/` | **Source of Truth** | All implementation logic MUST derive from here. If code contradicts specs, the code is wrong (or specs need updating first). |
 | `crates/` | **Implementation** | The Rust codebase implementing the compiler, LSP, and runtime. |
-| `examples/` | **Validation** | Canonical AIVI code demonstrating features. Used for integration testing and documentation. |
+| `integration-tests/` | **Validation** | Canonical AIVI code validating syntax + stdlib. Used for integration testing and documentation. |
 | `vscode/` | **Tooling** | Editor extension. Depends on `crates/aivi_lsp` and `specs/02_syntax` (grammar). |
 
 ### 1.2 Dependency Flow
@@ -24,10 +24,10 @@ The AIVI repository is organized into distinct layers. Understanding these relat
 ```mermaid
 graph TD
     Specs[specs/] -->|Defines| Crates[crates/]
-    Specs -->|Defines| Examples[examples/]
+    Specs -->|Defines| Tests[integration-tests/]
     Crates -->|Builds| Binary[aivi binary]
     Binary -->|Powers| VSCode[vscode/]
-    Examples -->|Tests| Binary
+    Tests -->|Tests| Binary
 ```
 
 ## 2. Development Workflow
@@ -51,18 +51,18 @@ Always verify against `specs/` before writing AIVI code or compiler logic. If a 
 3.  **Implement**: Make changes in small, testable units.
 4.  **Verify**:
     *   Run `cargo test` in `crates/`.
-    *   Check if `examples/` still compile/run (if applicable).
+    *   Check if `integration-tests/` still compile/run (if applicable).
     *   Ensure `specs/` are updated if the change involves a design decision.
 
 ### 2.3 Clean as You Cook
 Maintain hygiene in the codebase and documentation.
 *   **Syntax Correction**: If you see syntax that violates the specs (e.g., `let x =` instead of `x =`, or `def foo()`), fix it immediately to match `specs/02_syntax`.
-*   **Gap Filling**: If you encounter code using features not present in `specs/` or `examples/`, document them or add a test case.
+*   **Gap Filling**: If you encounter code using features not present in `specs/` or `integration-tests/`, document them or add a test case.
 *   **Refactoring**: Keep files small and readable. Propose splitting large files into logical units with good naming and subfolder structure if needed.
 
 ## 3. AIVI Language Best Practices
 
-When writing or generating AIVI code (e.g., in `examples/` or tests), adhere to these principles derived from the specs.
+When writing or generating AIVI code (e.g., in `integration-tests/` or tests), adhere to these principles derived from the specs.
 
 ### 3.1 Style & Syntax
 *   **Identifiers**: `lowerCamelCase` for values/functions, `UpperCamelCase` for types/modules.
@@ -105,7 +105,7 @@ When working on the compiler (`crates/`):
 *   **Testing**:
     *   *Unit Tests*: For individual functions.
     *   *Snapshot Tests*: For parser/codegen output (use `insta` or similar if available).
-    *   *Integration Tests*: Compile and run files from `examples/`.
+    *   *Integration Tests*: Compile and run files from `integration-tests/`.
 
 ### 4.1 Standard Library & Dependencies
 *   **Rely on Battle-Tested Libraries**: When implementing standard library features, always prioritize established Rust crates.

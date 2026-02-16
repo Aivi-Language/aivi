@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.text.TextError
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.text
+
+Ref = TextError
+
+@test
+smoke = effect {
+  _ <- assert True
+}

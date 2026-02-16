@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.syntax.sigils.collectionsStructured
+
+use aivi (Map, Set)
+use aivi.collections (domain Collections)
+use aivi.testing (assert, assertEq)
+
+users = ~map{
+  "id-1" => { name: "Alice" }
+  "id-2" => { name: "Bob" }
+}
+
+baseTags = ~set["base"]
+tags = ~set[...baseTags, "hot", "new"]
+
+@test
+structuredSigilsWork = effect {
+  _ <- assertEq (Map.size users) 2
+  _ <- assert (Set.has "hot" tags)
+}

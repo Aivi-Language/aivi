@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.number.quaternion.magnitude
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.number.quaternion
+
+subject = magnitude
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.text.Utf8
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.text
+
+subject = Utf8
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

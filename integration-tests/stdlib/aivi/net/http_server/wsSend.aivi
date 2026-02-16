@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.http_server.wsSend
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.net.http_server
+
+subject = wsSend
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

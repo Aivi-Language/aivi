@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.calendar.Date
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.calendar
+
+Ref = Date
+
+@test
+smoke = effect {
+  _ <- assert True
+}

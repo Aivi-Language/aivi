@@ -1,0 +1,19 @@
+@no_prelude
+module integrationTests.syntax.resources.basicResourceBlock
+
+export managedFile
+
+use aivi
+use aivi.testing (assert)
+
+managedFile : Text -> Resource Text FileHandle
+managedFile = path => resource {
+  handle <- file.open path
+  yield handle
+  _ <- file.close handle
+}
+
+@test
+resourcesTypecheck = effect {
+  _ <- assert True
+}

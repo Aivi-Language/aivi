@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.logic.Group
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.logic
+
+subject = Group
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

@@ -1,0 +1,17 @@
+@no_prelude
+module integrationTests.stdlib.aivi.color.domain_Color.suffix_s
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.color
+
+use aivi.color (domain Color)
+
+subject = 2s
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

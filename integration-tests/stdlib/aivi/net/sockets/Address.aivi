@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.sockets.Address
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.net.sockets
+
+Ref = Address
+
+@test
+smoke = effect {
+  _ <- assert True
+}

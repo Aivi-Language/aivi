@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.text.reverse
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.text
+
+subject = reverse
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

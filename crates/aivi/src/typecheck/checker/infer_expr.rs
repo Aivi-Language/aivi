@@ -2,6 +2,19 @@ impl TypeChecker {
     fn infer_ident(&mut self, name: &SpannedName, env: &mut TypeEnv) -> Result<Type, TypeError> {
         if let Some(scheme) = env.get(&name.name) {
             Ok(self.instantiate(scheme))
+        } else if env
+            .get_all(&name.name)
+            .is_some_and(|items| items.len() > 1)
+        {
+            Err(TypeError {
+                span: name.span.clone(),
+                message: format!(
+                    "ambiguous name '{}' (multiple type signatures in scope; add a type annotation or call it with enough arguments to disambiguate)",
+                    name.name
+                ),
+                expected: None,
+                found: None,
+            })
         } else if name.name == "_" {
             Ok(self.fresh_var())
         } else {
@@ -172,6 +185,83 @@ impl TypeChecker {
         if let Expr::Ident(name) = func {
             if env.get(&name.name).is_none() && self.method_to_classes.contains_key(&name.name) {
                 return self.infer_method_call(name, args, env);
+            }
+
+            if env
+                .get_all(&name.name)
+                .is_some_and(|items| items.len() > 1)
+            {
+                let arg_tys: Vec<Type> = args
+                    .iter()
+                    .map(|arg| self.infer_expr(arg, env))
+                    .collect::<Result<_, _>>()?;
+
+                let Some(candidates) = env.get_all(&name.name) else {
+                    return Err(TypeError {
+                        span: name.span.clone(),
+                        message: format!("unknown name '{}'", name.name),
+                        expected: None,
+                        found: None,
+                    });
+                };
+
+                let base_subst = self.subst.clone();
+                let mut selected: Option<(Type, std::collections::HashMap<TypeVarId, Type>)> =
+                    None;
+
+                for scheme in candidates {
+                    self.subst = base_subst.clone();
+                    let mut func_ty = self.instantiate(scheme);
+                    let mut ok = true;
+                    for (arg_ty, arg_expr) in arg_tys.iter().zip(args.iter()) {
+                        let result_ty = self.fresh_var();
+                        if self
+                            .unify_with_span(
+                                func_ty.clone(),
+                                Type::Func(
+                                    Box::new(arg_ty.clone()),
+                                    Box::new(result_ty.clone()),
+                                ),
+                                expr_span(arg_expr),
+                            )
+                            .is_err()
+                        {
+                            ok = false;
+                            break;
+                        }
+                        func_ty = result_ty;
+                    }
+                    if !ok {
+                        continue;
+                    }
+                    let applied = self.apply(func_ty.clone());
+                    if selected.is_some() {
+                        self.subst = base_subst;
+                        return Err(TypeError {
+                            span: expr_span(func),
+                            message: format!(
+                                "ambiguous call to '{}' (multiple overloads match)",
+                                name.name
+                            ),
+                            expected: None,
+                            found: None,
+                        });
+                    }
+                    selected = Some((applied, self.subst.clone()));
+                }
+
+                if let Some((ty, subst)) = selected {
+                    self.subst = subst;
+                    return Ok(ty);
+                }
+
+                self.subst = base_subst;
+                return Err(TypeError {
+                    span: expr_span(func),
+                    message: format!("no matching overload for '{}'", name.name),
+                    expected: None,
+                    found: None,
+                });
             }
         }
 
@@ -562,8 +652,10 @@ impl TypeChecker {
             }
         }
 
+        let subst_before_operands = self.subst.clone();
         let left_ty = self.infer_expr(left, env)?;
         let right_ty = self.infer_expr(right, env)?;
+        let subst_after_operands = self.subst.clone();
         match op {
             "&&" | "||" => {
                 self.unify_with_span(left_ty, Type::con("Bool"), expr_span(left))?;
@@ -588,25 +680,66 @@ impl TypeChecker {
                         || matches!(right_applied, Type::Var(_));
                     let concrete_non_int = matches!(left_applied, Type::Con(ref name, _) if name != "Int")
                         || matches!(right_applied, Type::Con(ref name, _) if name != "Int");
-                    if let Some(scheme) = env.get(&op_name) {
-                        let checkpoint_subst = self.subst.clone();
-                        let op_ty = self.instantiate(scheme);
-                        let result_ty = self.fresh_var();
-                        let expected = Type::Func(
-                            Box::new(left_ty.clone()),
-                            Box::new(Type::Func(
-                                Box::new(right_ty.clone()),
-                                Box::new(result_ty.clone()),
-                            )),
-                        );
-                        if self
-                            .unify_with_span(op_ty, expected, expr_span(left))
-                            .is_ok()
-                        {
-                            self.unify_with_span(result_ty, Type::con("Bool"), expr_span(left))?;
+                    if let Some(candidates) = env.get_all(&op_name) {
+                        let base_subst = self.subst.clone();
+                        let mut selected: Option<std::collections::HashMap<TypeVarId, Type>> = None;
+                        for scheme in candidates {
+                            self.subst = base_subst.clone();
+                            let op_ty = self.instantiate(scheme);
+                            let rest_ty = self.fresh_var();
+                            if self
+                                .unify_with_span(
+                                    op_ty,
+                                    Type::Func(
+                                        Box::new(left_ty.clone()),
+                                        Box::new(rest_ty.clone()),
+                                    ),
+                                    expr_span(left),
+                                )
+                                .is_err()
+                            {
+                                continue;
+                            }
+                            let result_ty = self.fresh_var();
+                            if self
+                                .unify_with_span(
+                                    rest_ty,
+                                    Type::Func(
+                                        Box::new(right_ty.clone()),
+                                        Box::new(result_ty.clone()),
+                                    ),
+                                    expr_span(right),
+                                )
+                                .is_err()
+                            {
+                                continue;
+                            }
+                            if self
+                                .unify_with_span(result_ty, Type::con("Bool"), expr_span(left))
+                                .is_err()
+                            {
+                                continue;
+                            }
+
+                            if selected.is_some() {
+                                self.subst = base_subst;
+                                return Err(TypeError {
+                                    span: expr_span(left),
+                                    message: format!(
+                                        "ambiguous domain operator '{}' for these operand types",
+                                        op
+                                    ),
+                                    expected: None,
+                                    found: None,
+                                });
+                            }
+                            selected = Some(self.subst.clone());
+                        }
+                        if let Some(subst) = selected {
+                            self.subst = subst;
                             return Ok(Type::con("Bool"));
                         }
-                        self.subst = checkpoint_subst;
+                        self.subst = base_subst;
                     }
                     if concrete_non_int && !any_var {
                         return Err(TypeError {
@@ -636,24 +769,100 @@ impl TypeChecker {
                         || matches!(right_applied, Type::Var(_));
                     let concrete_non_int = matches!(left_applied, Type::Con(ref name, _) if name != "Int")
                         || matches!(right_applied, Type::Con(ref name, _) if name != "Int");
-                    if let Some(scheme) = env.get(&op_name) {
-                        let checkpoint_subst = self.subst.clone();
-                        let op_ty = self.instantiate(scheme);
-                        let result_ty = self.fresh_var();
-                        let expected = Type::Func(
-                            Box::new(left_ty.clone()),
-                            Box::new(Type::Func(
-                                Box::new(right_ty.clone()),
-                                Box::new(result_ty.clone()),
-                            )),
-                        );
-                        if self
-                            .unify_with_span(op_ty, expected, expr_span(left))
-                            .is_ok()
-                        {
-                            return Ok(result_ty);
+                    if let Some(candidates) = env.get_all(&op_name) {
+                        let candidates: Vec<Scheme> = candidates.to_vec();
+                        let base_subst = subst_before_operands.clone();
+                        let mut selected: Option<(
+                            String,
+                            Type,
+                            std::collections::HashMap<TypeVarId, Type>,
+                        )> = None;
+                        let use_expected_rhs = candidates.len() > 1;
+
+                        for scheme in &candidates {
+                            self.subst = base_subst.clone();
+
+                            let op_ty = self.instantiate(scheme);
+                            let left_ty = self.infer_expr(left, env)?;
+
+                            let rest_ty = self.fresh_var();
+                            if self
+                                .unify_with_span(
+                                    op_ty,
+                                    Type::Func(
+                                        Box::new(left_ty),
+                                        Box::new(rest_ty.clone()),
+                                    ),
+                                    expr_span(left),
+                                )
+                                .is_err()
+                            {
+                                continue;
+                            }
+
+                            let (match_key, result_ty) = if use_expected_rhs {
+                                let rest_applied = self.apply(rest_ty);
+                                let rest_norm = self.expand_alias(rest_applied);
+                                let Type::Func(expected_rhs, expected_result) = rest_norm else {
+                                    continue;
+                                };
+                                let rhs_key = self.type_to_string(&expected_rhs);
+                                if self
+                                    .elab_expr(right.clone(), Some(*expected_rhs), env)
+                                    .is_err()
+                                {
+                                    continue;
+                                }
+                                let res_ty = self.apply(*expected_result);
+                                let res_key = self.type_to_string(&res_ty);
+                                (format!("{rhs_key} -> {res_key}"), res_ty)
+                            } else {
+                                let right_ty = self.infer_expr(right, env)?;
+                                let rhs_key = self.type_to_string(&right_ty);
+                                let result_ty = self.fresh_var();
+                                if self
+                                    .unify_with_span(
+                                        rest_ty,
+                                        Type::Func(
+                                            Box::new(right_ty),
+                                            Box::new(result_ty.clone()),
+                                        ),
+                                        expr_span(right),
+                                    )
+                                    .is_err()
+                                {
+                                    continue;
+                                }
+                                let res_ty = self.apply(result_ty);
+                                let res_key = self.type_to_string(&res_ty);
+                                (format!("{rhs_key} -> {res_key}"), res_ty)
+                            };
+
+                            if let Some((existing_key, _, _)) = &selected {
+                                if *existing_key != match_key {
+                                    self.subst = subst_after_operands.clone();
+                                    return Err(TypeError {
+                                        span: expr_span(left),
+                                        message: format!(
+                                            "ambiguous domain operator '{}' for these operand types",
+                                            op
+                                        ),
+                                        expected: None,
+                                        found: None,
+                                    });
+                                }
+                                // Duplicate overload (typically from repeated imports); ignore.
+                                continue;
+                            }
+                            selected = Some((match_key, result_ty, self.subst.clone()));
                         }
-                        self.subst = checkpoint_subst;
+
+                        if let Some((_, result, subst)) = selected {
+                            self.subst = subst;
+                            return Ok(result);
+                        }
+
+                        self.subst = subst_after_operands.clone();
                     }
                     if concrete_non_int && !any_var {
                         return Err(TypeError {

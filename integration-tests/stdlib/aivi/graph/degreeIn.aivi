@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.graph.degreeIn
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.graph
+
+subject = degreeIn
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

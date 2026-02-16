@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.prelude.toText
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.prelude
+
+subject = toText
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

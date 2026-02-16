@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.color.Rgb
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.color
+
+Ref = Rgb
+
+@test
+smoke = effect {
+  _ <- assert True
+}

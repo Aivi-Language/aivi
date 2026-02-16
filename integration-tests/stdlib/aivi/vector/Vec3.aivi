@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.vector.Vec3
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.vector
+
+Ref = Vec3
+
+@test
+smoke = effect {
+  _ <- assert True
+}

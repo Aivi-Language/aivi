@@ -1,0 +1,22 @@
+@no_prelude
+module integrationTests.syntax.types.unionsAndAliases
+
+use aivi
+use aivi.testing (assertEq)
+
+Color = Red | Green | Blue
+Pair A B = (A, B)
+
+mk : A -> B -> Pair A B
+mk = a b => (a, b)
+
+toInt = c => c ?
+  | Red   => 1
+  | Green => 2
+  | Blue  => 3
+
+@test
+typesWork = effect {
+  _ <- assertEq (mk 1 "x") (1, "x")
+  _ <- assertEq (toInt Red) 1
+}

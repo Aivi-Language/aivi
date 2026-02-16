@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.geometry.Point3
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.geometry
+
+Ref = Point3
+
+@test
+smoke = effect {
+  _ <- assert True
+}

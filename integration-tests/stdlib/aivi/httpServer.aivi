@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.httpServer
+
+use aivi
+use aivi.testing (assert)
+
+use aivi
+
+subject = httpServer
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

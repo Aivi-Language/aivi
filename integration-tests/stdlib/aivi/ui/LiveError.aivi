@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.ui.LiveError
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.ui
+
+Ref = LiveError
+
+@test
+smoke = effect {
+  _ <- assert True
+}

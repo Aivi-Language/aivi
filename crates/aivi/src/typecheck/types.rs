@@ -52,22 +52,39 @@ pub(super) struct AliasInfo {
 
 #[derive(Clone, Debug, Default)]
 pub(super) struct TypeEnv {
-    values: HashMap<String, Scheme>,
+    values: HashMap<String, Vec<Scheme>>,
 }
 
 impl TypeEnv {
     pub(super) fn insert(&mut self, name: String, scheme: Scheme) {
-        self.values.insert(name, scheme);
+        // `insert` overwrites, matching the previous single-scheme environment semantics.
+        self.values.insert(name, vec![scheme]);
     }
 
     pub(super) fn get(&self, name: &str) -> Option<&Scheme> {
-        self.values.get(name)
+        self.values.get(name).and_then(|items| {
+            if items.len() == 1 {
+                items.first()
+            } else {
+                None
+            }
+        })
+    }
+
+    pub(super) fn get_all(&self, name: &str) -> Option<&[Scheme]> {
+        self.values.get(name).map(|items| items.as_slice())
+    }
+
+    pub(super) fn insert_overloads(&mut self, name: String, schemes: Vec<Scheme>) {
+        self.values.insert(name, schemes);
     }
 
     pub(super) fn free_vars(&self, checker: &mut TypeChecker) -> HashSet<TypeVarId> {
         let mut vars = HashSet::new();
-        for scheme in self.values.values() {
-            vars.extend(checker.free_vars_scheme(scheme));
+        for schemes in self.values.values() {
+            for scheme in schemes {
+                vars.extend(checker.free_vars_scheme(scheme));
+            }
         }
         vars
     }

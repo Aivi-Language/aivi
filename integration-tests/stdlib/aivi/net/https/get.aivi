@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.https.get
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.net.https
+
+subject = get
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

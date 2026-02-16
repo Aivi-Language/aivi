@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.prelude.Float
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.prelude
+
+Ref = Float
+
+@test
+smoke = effect {
+  _ <- assert True
+}

@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.linalg.solve2x2
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.linalg
+
+subject = solve2x2
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

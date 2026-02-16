@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.generator.toList
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.generator
+
+subject = toList
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

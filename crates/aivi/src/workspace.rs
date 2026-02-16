@@ -5,9 +5,13 @@ use crate::AiviError;
 
 pub(crate) fn expand_target(target: &str) -> Result<Vec<PathBuf>, AiviError> {
     let mut paths = Vec::new();
-    let (base, recursive) = match target.strip_suffix("/...") {
-        Some(base) => (if base.is_empty() { "." } else { base }, true),
-        None => (target, false),
+    let (base, recursive) = if let Some(base) = target.strip_suffix("/...") {
+        (if base.is_empty() { "." } else { base }, true)
+    } else if let Some(base) = target.strip_suffix("/**") {
+        // Convenience alias for recursive targets (common in other tooling).
+        (if base.is_empty() { "." } else { base }, true)
+    } else {
+        (target, false)
     };
 
     let Some(path) = resolve_target_path(base) else {

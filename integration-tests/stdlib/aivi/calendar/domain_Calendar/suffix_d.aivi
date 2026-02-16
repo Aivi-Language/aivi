@@ -1,0 +1,17 @@
+@no_prelude
+module integrationTests.stdlib.aivi.calendar.domain_Calendar.suffix_d
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.calendar
+
+use aivi.calendar (domain Calendar)
+
+subject = 2d
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}
