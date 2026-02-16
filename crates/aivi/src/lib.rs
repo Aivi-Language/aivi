@@ -138,6 +138,18 @@ pub fn load_modules(target: &str) -> Result<Vec<Module>, AiviError> {
     Ok(stdlib_modules)
 }
 
+pub fn load_modules_from_paths(paths: &[PathBuf]) -> Result<Vec<Module>, AiviError> {
+    let mut modules = Vec::new();
+    for path in paths {
+        let content = fs::read_to_string(path)?;
+        let (mut file_modules, _) = parse_modules(path.as_path(), &content);
+        modules.append(&mut file_modules);
+    }
+    let mut stdlib_modules = stdlib::embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    Ok(stdlib_modules)
+}
+
 pub fn load_module_diagnostics(target: &str) -> Result<Vec<FileDiagnostic>, AiviError> {
     let paths = workspace::expand_target(target)?;
     let mut diagnostics = Vec::new();
@@ -170,16 +182,23 @@ pub fn test_target_program_and_names(
     target: &str,
     check_stdlib: bool,
 ) -> Result<(HirProgram, Vec<String>, Vec<FileDiagnostic>), AiviError> {
-    // Parse first so we can surface syntax errors before doing any test discovery.
-    let mut diagnostics = load_module_diagnostics(target)?;
-    if file_diagnostics_have_errors(&diagnostics) {
-        return Err(AiviError::Diagnostics);
+    let paths = workspace::expand_target(target)?;
+    let mut test_paths = Vec::new();
+    for path in &paths {
+        if path.extension().and_then(|s| s.to_str()) != Some("aivi") {
+            continue;
+        }
+        // Fast path: avoid pulling non-test modules (like legacy examples) into the test build.
+        // Helper modules required by tests will still be loaded via imports.
+        let content = fs::read_to_string(path)?;
+        if content.contains("@test") {
+            test_paths.push(path.clone());
+        }
     }
 
     // Discover `@test` definitions from the user-provided target sources only (exclude embedded).
-    let paths = workspace::expand_target(target)?;
     let mut test_names = Vec::new();
-    for path in &paths {
+    for path in &test_paths {
         let content = fs::read_to_string(path)?;
         let (modules, _) = parse_modules(path.as_path(), &content);
         for module in modules {
@@ -202,8 +221,20 @@ pub fn test_target_program_and_names(
         )));
     }
 
+    // Parse only the test root files so syntax errors in unrelated (non-test) files under the
+    // target do not break the suite.
+    let mut diagnostics = Vec::new();
+    for path in &test_paths {
+        let content = fs::read_to_string(path)?;
+        let (_, mut file_diags) = parse_modules(path.as_path(), &content);
+        diagnostics.append(&mut file_diags);
+    }
+    if file_diagnostics_have_errors(&diagnostics) {
+        return Err(AiviError::Diagnostics);
+    }
+
     // Typecheck like `check` does: allow callers to ignore embedded stdlib diagnostics by default.
-    let mut modules = load_modules(target)?;
+    let mut modules = load_modules_from_paths(&test_paths)?;
     let mut check_diags = check_modules(&modules);
     if !file_diagnostics_have_errors(&check_diags) {
         check_diags.extend(elaborate_expected_coercions(&mut modules));
