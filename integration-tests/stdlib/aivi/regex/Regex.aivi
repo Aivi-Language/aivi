@@ -10,8 +10,8 @@ Ref = Regex
 
 @test
 smoke = effect {
-  _ <- match compile "." {
-    | Ok re => assert True // re has type Regex
+  reResult = compile "."
+  _ <- reResult ?
+    | Ok re => assert True
     | Err _ => assert False
-  }
 }

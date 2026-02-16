@@ -10,10 +10,10 @@ subject = now
 
 @test
 smoke = effect {
-  // now yields a DateTime (Effect DateTime probably? No, builtins usually return the value if it's not a source)
+  // now yields a DateTime (Effect DateTime probably? No, builtins usually return the value if it is not a source)
   // Wait, clock.now in system.rs returns Effect(DateTime).
   // But calendar/now.aivi imports clock implicitly or is a wrapper?
-  // Let's assume it's an effect.
+  // Let's assume it is an effect.
   n <- now
   _ <- assert True // Just checking not crashing for now
 }

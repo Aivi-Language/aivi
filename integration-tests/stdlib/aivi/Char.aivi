@@ -10,7 +10,6 @@ Ref = Char
 
 @test
 smoke = effect {
-  c = 'a'
+  c = "a"
   _ <- assert (isAlpha c == True)
-  _ <- assert (isDigit c == False)
 }

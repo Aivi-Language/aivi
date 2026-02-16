@@ -10,9 +10,9 @@ subject = message
 
 @test
 smoke = effect {
-  res = message "Hello, {name}!"
-  m <- match res with
-    Ok m => pure m
-    Err e => fail e
+  res = message "hello"
+  m <- res ?
+    | Ok m => effect.pure m
+    | Err e => effect.fail e
   _ <- assert (m.body == "Hello, {name}!")
 }

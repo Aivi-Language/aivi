@@ -17,12 +17,10 @@ smoke = effect {
   _ <- assert (Queue.peek q2 == Some 1)
 
   res = Queue.dequeue q2
-  _ <- match res {
-    | Some (val, q3) => do {
+  _ <- match res with
+    | Some (val, q3) => effect {
       _ <- assert (val == 1)
       _ <- assert (Queue.peek q3 == Some 2)
-      pure Unit
     }
     | None => assert False
-  }
 }

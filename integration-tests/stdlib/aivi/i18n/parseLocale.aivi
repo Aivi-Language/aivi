@@ -11,9 +11,9 @@ subject = parseLocale
 @test
 smoke = effect {
   res = parseLocale "en-US"
-  r <- match res with
-    Ok l => pure l
-    Err e => fail e
+  r <- res ?
+    | Ok x => effect.pure x
+    | Err _ => effect.fail "parse failed"
   _ <- assert (r.language == "en")
   _ <- assert (r.region == Some "US")
 }

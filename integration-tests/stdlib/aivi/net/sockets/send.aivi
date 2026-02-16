@@ -11,6 +11,6 @@ subject = send
 @test
 smoke = effect {
   // send returns an effect yiedling Result Unit SocketError
-  // we need a connection first, which we don't have in smoke test easily without mocking
+  // we need a connection first, which we do not have in smoke test easily without mocking
   _ <- assert True
 }

@@ -10,17 +10,16 @@ subject = regex
 
 @test
 smoke = effect {
-  r <- match compile "h.llo" {
-    | Ok re => pure re
-    | Err _ => fail "compile failed"
-  }
+  reResult = compile "h.llo"
+  r <- reResult ?
+    | Ok re => effect.pure re
+    | Err e => effect.fail e
   _ <- assert (test r "hello" == True)
   _ <- assert (test r "hxllo" == True)
   _ <- assert (test r "world" == False)
   
-  m = match r "hello"
-  _ <- match m {
+  mResult = regex.match r "hello"
+  _ <- mResult ?
     | Some matched => assert (matched.full == "hello")
     | None => assert False
-  }
 }

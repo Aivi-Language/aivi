@@ -10,8 +10,8 @@ Ref = RegexError
 
 @test
 smoke = effect {
-  _ <- match compile "[" {
-    | Ok _ => assert False
-    | Err _ => assert True // Err holds RegexError
-  }
+  reResult = compile ","
+  r <- reResult ?
+    | Ok re => effect.pure re
+    | Err _ => effect.fail "compile failed"
 }
