@@ -4,5 +4,5 @@ today = { year: 2025, month: 2, day: 8 }
 
 tomorrow = today + 1d
 nextMonth = today + 1m
-lastYear = today -1y
+lastYear = today - 1y
 monthEnd = today + eom
