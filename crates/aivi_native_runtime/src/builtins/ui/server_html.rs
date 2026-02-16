@@ -1024,7 +1024,9 @@ fn server_html_diff_attrs(old: &Value, new: &Value, node_id: &str, out: &mut Vec
 #[derive(Debug)]
 struct ServerHtmlHello {
     view_id: String,
+    #[allow(dead_code)]
     url: String,
+    #[allow(dead_code)]
     online: bool,
 }
 
@@ -1055,6 +1057,7 @@ struct ServerHtmlEffectResultMsg {
 
 #[derive(Debug)]
 enum ServerHtmlClientMsg {
+    #[allow(dead_code)]
     Hello(ServerHtmlHello),
     Event(ServerHtmlEventMsg),
     Platform(ServerHtmlPlatformMsg),
