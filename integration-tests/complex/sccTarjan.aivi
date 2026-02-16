@@ -23,16 +23,16 @@ lookupOr = map key fallback => (Map.get key map) ?
   | None   => fallback
 
 popComponent = node state => {
-    pop = stack acc => stack ?
-        | []        => ([], acc)
-        | [h, ...t] =>
-        if h == node then
-          (t, [h, ...acc])
-      else
-        pop t [h, ...acc]
+  pop = stack acc => stack ?
+    | []        => ([], acc)
+    | [h, ...t] =>
+      if h == node then
+        (t, [h, ...acc])
+    else
+      pop t [h, ...acc]
 
-      (newStack, comp) = pop state.stack []
-      state <| {
+    (newStack, comp) = pop state.stack []
+    state <| {
         stack: newStack
         onStack: Set.remove node state.onStack
         components: [comp, ...state.components]
@@ -40,8 +40,8 @@ popComponent = node state => {
 }
 
 visitNode = graph node state => {
-    state1 =
-      state <| {
+  state1 =
+    state <| {
         index: Map.insert node state.nextIndex state.index
         lowlink: Map.insert node state.nextIndex state.lowlink
         stack: [node, ...state.stack]
@@ -49,41 +49,41 @@ visitNode = graph node state => {
         nextIndex: state.nextIndex + 1
     }
 
-    neighbors =
-      (Map.get node graph.adj) ?
-          | Some list => list
-          | None      => []
+  neighbors =
+    (Map.get node graph.adj) ?
+      | Some list => list
+      | None      => []
 
-      foldNeighbors = list accState => list ?
-          | []              => accState
-          | [next, ...tail] => {
-        acc =
-          if Map.has next accState.index then
-            if Set.has next accState.onStack then {
-            lowNode = lookupOr accState.lowlink node Int.max
-            lowNext = lookupOr accState.lowlink next Int.max
-            accState <| {
-              lowlink: Map.insert node (minInt lowNode lowNext) accState.lowlink
+    foldNeighbors = list accState => list ?
+      | []              => accState
+      | [next, ...tail] => {
+          acc =
+            if Map.has next accState.index then
+              if Set.has next accState.onStack then {
+                    lowNode = lookupOr accState.lowlink node Int.max
+                    lowNext = lookupOr accState.lowlink next Int.max
+                    accState <| {
+                          lowlink: Map.insert node (minInt lowNode lowNext) accState.lowlink
+                    }
+              }
+          else
+            accState
+          else {
+              nested = visitNode graph next accState
+              lowNode = lookupOr nested.lowlink node Int.max
+              lowNext = lookupOr nested.lowlink next Int.max
+              nested <| {
+                  lowlink: Map.insert node (minInt lowNode lowNext) nested.lowlink
+              }
           }
-        }
-        else
-          accState
-        else {
-          nested = visitNode graph next accState
-          lowNode = lookupOr nested.lowlink node Int.max
-          lowNext = lookupOr nested.lowlink next Int.max
-          nested <| {
-            lowlink: Map.insert node (minInt lowNode lowNext) nested.lowlink
-        }
+
+          foldNeighbors tail acc
       }
 
-        foldNeighbors tail acc
-    }
-
-      after = foldNeighbors neighbors state1
-      nodeLow = lookupOr after.lowlink node Int.max
-      nodeIdx = lookupOr after.index node Int.max
-      if nodeLow == nodeIdx then popComponent node after else after
+    after = foldNeighbors neighbors state1
+    nodeLow = lookupOr after.lowlink node Int.max
+    nodeIdx = lookupOr after.index node Int.max
+    if nodeLow == nodeIdx then popComponent node after else after
 }
 
 listAny = list pred => list ?
@@ -91,24 +91,24 @@ listAny = list pred => list ?
   | [h, ...t] => if pred h then True else listAny t pred
 
 strongComponents = graph => {
-    initial = {
-      index: Map.empty
-      lowlink: Map.empty
-      stack: []
-      onStack: Set.empty
-      nextIndex: 0
-      components: []
+  initial = {
+    index: Map.empty
+    lowlink: Map.empty
+    stack: []
+    onStack: Set.empty
+    nextIndex: 0
+    components: []
   }
 
-    foldNodes = nodes state => nodes ?
-        | []        => state
-        | [h, ...t] => {
+  foldNodes = nodes state => nodes ?
+    | []        => state
+    | [h, ...t] => {
         s = if Map.has h state.index then state else visitNode graph h state
         foldNodes t s
     }
 
-      finalState = foldNodes graph.nodes initial
-      finalState.components
+    finalState = foldNodes graph.nodes initial
+    finalState.components
 }
 
 contains = list target => list ?

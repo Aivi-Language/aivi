@@ -652,7 +652,7 @@ impl TypeChecker {
             }
         }
 
-        let subst_before_operands = self.subst.clone();
+        let _subst_before_operands = self.subst.clone();
         let left_ty = self.infer_expr(left, env)?;
         let right_ty = self.infer_expr(right, env)?;
         let subst_after_operands = self.subst.clone();
@@ -688,11 +688,13 @@ impl TypeChecker {
                             self.subst = base_subst.clone();
                             let op_ty = self.instantiate(scheme);
                             let rest_ty = self.fresh_var();
+                            // Use applied types for better disambiguation
+                            let left_ty_for_unify = self.apply(left_ty.clone());
                             if self
                                 .unify_with_span(
                                     op_ty,
                                     Type::Func(
-                                        Box::new(left_ty.clone()),
+                                        Box::new(left_ty_for_unify),
                                         Box::new(rest_ty.clone()),
                                     ),
                                     expr_span(left),
@@ -702,11 +704,12 @@ impl TypeChecker {
                                 continue;
                             }
                             let result_ty = self.fresh_var();
+                            let right_ty_for_unify = self.apply(right_ty.clone());
                             if self
                                 .unify_with_span(
                                     rest_ty,
                                     Type::Func(
-                                        Box::new(right_ty.clone()),
+                                        Box::new(right_ty_for_unify.clone()),
                                         Box::new(result_ty.clone()),
                                     ),
                                     expr_span(right),
@@ -722,17 +725,28 @@ impl TypeChecker {
                                 continue;
                             }
 
-                            let key_ty = Type::Func(Box::new(right_ty.clone()), Box::new(Type::con("Bool")));
+                            let key_ty = Type::Func(Box::new(right_ty_for_unify), Box::new(Type::con("Bool")));
                             let key = self.type_to_string(&key_ty);
                             if let Some((existing_key, _)) = &selected {
                                 if *existing_key != key {
+                                    // Check if the operand is a type variable - if so, suggest adding a type annotation
+                                    let left_ty_resolved = self.apply(left_ty.clone());
+                                    let is_type_var = matches!(left_ty_resolved, Type::Var(_));
+                                    let message = if is_type_var {
+                                        format!(
+                                            "cannot determine which domain operator '{}' to use (multiple domains define this operator); add a type annotation to disambiguate",
+                                            op
+                                        )
+                                    } else {
+                                        format!(
+                                            "ambiguous domain operator '{}' for these operand types",
+                                            op
+                                        )
+                                    };
                                     self.subst = base_subst;
                                     return Err(TypeError {
                                         span: expr_span(left),
-                                        message: format!(
-                                            "ambiguous domain operator '{}' for these operand types",
-                                            op
-                                        ),
+                                        message,
                                         expected: None,
                                         found: None,
                                     });
@@ -780,7 +794,14 @@ impl TypeChecker {
                         || matches!(right_applied, Type::Con(ref name, _) if name != "Int");
                     if let Some(candidates) = env.get_all(&op_name) {
                         let candidates: Vec<Scheme> = candidates.to_vec();
-                        let base_subst = subst_before_operands.clone();
+
+                        // Debug: show all candidates
+                        if std::env::var("AIVI_DEBUG_DOMAIN").is_ok() {
+                            eprintln!("DEBUG: {} candidates for '{}' operator", candidates.len(), op);
+                        }
+
+                        // Use subst_after_operands as base so operand types are already constrained
+                        let base_subst = subst_after_operands.clone();
                         let mut selected: Option<(
                             String,
                             Type,
@@ -792,14 +813,47 @@ impl TypeChecker {
                             self.subst = base_subst.clone();
 
                             let op_ty = self.instantiate(scheme);
-                            let left_ty = self.infer_expr(left, env)?;
+                            // Use already-inferred left_ty instead of re-inferring
+                            let left_ty_applied = self.apply(left_ty.clone());
+                            let left_ty_expanded = self.expand_alias(left_ty_applied.clone());
+
+                            // Debug: show type variable info before resolution
+                            if std::env::var("AIVI_DEBUG_DOMAIN").is_ok() {
+                                let span = expr_span(left);
+                                if span.start.line == 19 && span.start.column == 47 {
+                                    eprintln!("DEBUG: left_ty (raw) = {:?}", left_ty);
+                                    eprintln!("DEBUG: subst has {} mappings", self.subst.len());
+                                    if let Type::Var(v) = &left_ty {
+                                        let mapped = self.subst.get(v).cloned();
+                                        eprintln!("DEBUG: left_ty var {:?} maps to {:?}", v, mapped);
+                                    }
+                                }
+                            }
+
+                            // Extract the expected left operand type from the operator
+                            let op_ty_expanded = self.expand_alias(op_ty.clone());
+                            if let Type::Func(op_param, _) = &op_ty_expanded {
+                                let op_param_expanded = self.expand_alias((**op_param).clone());
+                                // Check if operator expects more fields than operand has
+                                if let (
+                                    Type::Record { fields: op_fields, .. },
+                                    Type::Record { fields: val_fields, .. }
+                                ) = (&op_param_expanded, &left_ty_expanded) {
+                                    // If operator expects fields that operand doesn't have, skip
+                                    let has_extra_fields = op_fields.keys().any(|k| !val_fields.contains_key(k));
+                                    if has_extra_fields {
+                                        continue;
+                                    }
+                                }
+                            }
+
 
                             let rest_ty = self.fresh_var();
                             if self
                                 .unify_with_span(
                                     op_ty,
                                     Type::Func(
-                                        Box::new(left_ty),
+                                        Box::new(left_ty_applied),
                                         Box::new(rest_ty.clone()),
                                     ),
                                     expr_span(left),
@@ -828,13 +882,14 @@ impl TypeChecker {
                                     Type::Func(Box::new(expected_rhs_ty), Box::new(res_ty.clone()));
                                 (self.type_to_string(&key_ty), res_ty)
                             } else {
-                                let right_ty = self.infer_expr(right, env)?;
+                                // Use already-inferred right_ty instead of re-inferring
+                                let right_ty_applied = self.apply(right_ty.clone());
                                 let result_ty = self.fresh_var();
                                 if self
                                     .unify_with_span(
                                         rest_ty.clone(),
                                         Type::Func(
-                                            Box::new(right_ty),
+                                            Box::new(right_ty_applied),
                                             Box::new(result_ty.clone()),
                                         ),
                                         expr_span(right),
@@ -856,13 +911,24 @@ impl TypeChecker {
 
                             if let Some((existing_key, _, _)) = &selected {
                                 if *existing_key != match_key {
+                                    // Check if the operand is a type variable - if so, suggest adding a type annotation
+                                    let left_ty_resolved = self.apply(left_ty.clone());
+                                    let is_type_var = matches!(left_ty_resolved, Type::Var(_));
+                                    let message = if is_type_var {
+                                        format!(
+                                            "cannot determine which domain operator '{}' to use (multiple domains define this operator); add a type annotation to disambiguate",
+                                            op
+                                        )
+                                    } else {
+                                        format!(
+                                            "ambiguous domain operator '{}' for these operand types",
+                                            op
+                                        )
+                                    };
                                     self.subst = subst_after_operands.clone();
                                     return Err(TypeError {
                                         span: expr_span(left),
-                                        message: format!(
-                                            "ambiguous domain operator '{}' for these operand types",
-                                            op
-                                        ),
+                                        message,
                                         expected: None,
                                         found: None,
                                     });

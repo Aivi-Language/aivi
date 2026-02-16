@@ -1027,6 +1027,14 @@
 
         // For `|`/`|>` lines, anchor indentation to the subject line's indent (not just delimiter nesting).
         let mut base_indent_len_for_line = line_indent_len;
+        let hang_top = hang_delim_stack.last().copied();
+        let hang_is_close = hang_top.is_some_and(|(opener, _)| {
+            matches_hang_close(opener, state.tokens[first_idx].text.as_str())
+        });
+        // Suppress extra continuation indentation inside multi-line paren/bracket groups so they
+        // format like typical "hanging" argument/tuple lists. Keep it enabled for `{ ... }`
+        // blocks because braces commonly represent statement blocks in AIVI codebases.
+        let inside_hang = hang_top.is_some_and(|(opener, _)| opener != '{') && !hang_is_close;
         if starts_with_pipe {
             if let Some(&(base, _)) = pipe_block_stack.last() {
                 // Indent arms one level relative to the match subject.
@@ -1037,11 +1045,10 @@
                 base_indent_len_for_line = base + indent_size;
             }
         }
-        if let Some(&(opener, opener_indent)) = hang_delim_stack.last() {
-            let is_matching_close =
-                matches_hang_close(opener, state.tokens[first_idx].text.as_str());
-            if is_matching_close {
-                base_indent_len_for_line = base_indent_len_for_line.max(opener_indent);
+        if let Some((_, opener_indent)) = hang_top {
+            if hang_is_close {
+                // Closers align with their opener (not with any other continuation blocks).
+                base_indent_len_for_line = opener_indent;
             } else {
                 base_indent_len_for_line = base_indent_len_for_line.max(opener_indent + indent_size);
             }
@@ -1081,10 +1088,10 @@
         let in_rhs_block = rhs_block_base_indent.is_some();
 
         let mut continuation_levels = 0usize;
-        if (in_pipe_block || in_pipeop_block) && !starts_with_pipe && !starts_with_pipeop {
+        if !inside_hang && (in_pipe_block || in_pipeop_block) && !starts_with_pipe && !starts_with_pipeop {
             continuation_levels += 1;
         }
-        if in_rhs_block && !starts_with_pipe && !starts_with_pipeop {
+        if !inside_hang && in_rhs_block && !starts_with_pipe && !starts_with_pipeop {
             continuation_levels += 1;
         }
         // If a line ended with `=`/`=>` and did not open a delimiter group, indent the next line.
@@ -1094,15 +1101,18 @@
             && !starts_with_pipeop
             && !in_rhs_block
             && (rhs_seed_depth == 0 || prev_non_blank_last_token.as_deref() == Some("=>"));
-        if rhs_seed_active {
+        if !inside_hang && rhs_seed_active {
             continuation_levels += 1;
         }
-        if arm_rhs_active && !starts_with_pipe {
+        if !inside_hang && arm_rhs_active && !starts_with_pipe {
             continuation_levels += 1;
         }
         let then_else_active = then_else_active_depth.is_some() && then_else_active_depth == Some(0);
-        if then_else_active {
+        if !inside_hang && then_else_active {
             continuation_levels += 1;
+        }
+        if hang_is_close {
+            continuation_levels = 0;
         }
         let effective_indent = match continuation_levels {
             0 => base_indent,

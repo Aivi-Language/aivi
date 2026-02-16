@@ -21,38 +21,38 @@ addDelta = size idx delta tree =>
   if idx > size then
     tree
 else {
-    cur = getOrZero idx tree
-    updated = Map.insert idx (cur + delta) tree
-    addDelta size (idx + lowbit idx) delta updated
+  cur = getOrZero idx tree
+  updated = Map.insert idx (cur + delta) tree
+  addDelta size (idx + lowbit idx) delta updated
 }
 
 buildFromList = arr => {
-    size = List.length arr
+  size = List.length arr
 
-    buildIndex = idx tree =>
-      if idx > size then
-        tree
-    else
-      (List.at arr (idx - 1)) ?
-          | None       => buildIndex (idx + 1) tree
-          | Some value => {
-        t = addDelta size idx value tree
-        buildIndex (idx + 1) t
-    }
+  buildIndex = idx tree =>
+    if idx > size then
+      tree
+  else
+    (List.at arr (idx - 1)) ?
+      | None       => buildIndex (idx + 1) tree
+      | Some value => {
+          t = addDelta size idx value tree
+          buildIndex (idx + 1) t
+      }
 
-      { size: size, tree: buildIndex 1 Map.empty }
+    { size: size, tree: buildIndex 1 Map.empty }
 }
 
 prefix = fenwick idx => {
-    go = i acc =>
-      if i == 0 then
-        acc
-    else {
-      a = acc + getOrZero i fenwick.tree
-      go (i - lowbit i) a
+  go = i acc =>
+    if i == 0 then
+      acc
+  else {
+    a = acc + getOrZero i fenwick.tree
+    go (i - lowbit i) a
   }
 
-    go idx 0
+  go idx 0
 }
 
 rangeSum = fenwick l r =>
@@ -65,13 +65,13 @@ update = fenwick idx value =>
   if idx < 1 || idx > fenwick.size then
     fenwick
 else {
-    prev = rangeSum fenwick idx idx
-    delta =
-      prev ?
-          | Some v => value - v
-          | None   => value
-        fenwick <| { tree: addDelta fenwick.size idx delta fenwick.tree }
-  }
+  prev = rangeSum fenwick idx idx
+  delta =
+    prev ?
+      | Some v => value - v
+      | None   => value
+      fenwick <| { tree: addDelta fenwick.size idx delta fenwick.tree }
+}
 
 naiveSum = arr l r => arr ?
   | []                              => 0
@@ -79,10 +79,10 @@ naiveSum = arr l r => arr ?
   | [_, ...t]                       => naiveSum t (l - 1) (r - 1)
 
 matchIndex = idx fen arr => {
-    expected = naiveSum arr idx idx
-    (rangeSum fen idx idx) ?
-        | Some got => got == expected
-        | None     => False
+  expected = naiveSum arr idx idx
+  (rangeSum fen idx idx) ?
+    | Some got => got == expected
+    | None     => False
 }
 
 verifyIndices = indices fen arr => indices ?

@@ -12,31 +12,31 @@ getOrZero = key map => (Map.get key map) ?
   | None   => 0
 
 buildIndegree = graph => {
-    init =
-      graph.nodes ?
-          | []        => Map.empty
-          | [h, ...t] => Map.insert h 0 (buildIndegree { nodes: t, adj: graph.adj })
+  init =
+    graph.nodes ?
+      | []        => Map.empty
+      | [h, ...t] => Map.insert h 0 (buildIndegree { nodes: t, adj: graph.adj })
 
-      fold = list accMap => list ?
-          | []           => accMap
-          | [n, ...tail] => {
-        newAccMap = Map.insert n (getOrZero n accMap + 1) accMap
-        fold tail newAccMap
-    }
+    fold = list accMap => list ?
+      | []           => accMap
+      | [n, ...tail] => {
+          newAccMap = Map.insert n (getOrZero n accMap + 1) accMap
+          fold tail newAccMap
+      }
 
   // increment indegree for every edge u -> v (count v)
-    countEdges = nodes acc => nodes ?
-        | []        => acc
-        | [u, ...t] => {
+  countEdges = nodes acc => nodes ?
+    | []        => acc
+    | [u, ...t] => {
         neighbors =
           (Map.get u graph.adj) ?
-              | Some ns => ns
-              | None    => []
+            | Some ns => ns
+            | None    => []
         acc2 = fold neighbors acc
         countEdges t acc2
     }
 
-      countEdges graph.nodes init
+    countEdges graph.nodes init
 }
 
 initialQueue = indegree graph => graph.nodes ?
@@ -63,28 +63,28 @@ loopSort = graph queue indegree order => queue ?
       if List.length order == List.length graph.nodes then
         Ok order
     else {
-        cycleNodesRec = nodes => nodes ?
+          cycleNodesRec = nodes => nodes ?
             | []        => []
             | [h, ...t] => {
-          rest = cycleNodesRec t
-          if getOrZero h indegree > 0 then [h, ...rest] else rest
-      }
-        Err (cycleNodesRec graph.nodes)
+                  rest = cycleNodesRec t
+                  if getOrZero h indegree > 0 then [h, ...rest] else rest
+            }
+          Err (cycleNodesRec graph.nodes)
     }
   | [current, ...restQueue] => {
         neighbors =
           (Map.get current graph.adj) ?
-              | Some list => list
-              | None      => []
+            | Some list => list
+            | None      => []
 
           (updatedIndegree, newQueue) = reduceNeighbors neighbors indegree restQueue
           loopSort graph newQueue updatedIndegree [current, ...order]
-      }
+  }
 
 topologicalSort = graph => {
-    indegree = buildIndegree graph
-    queue = initialQueue indegree graph
-    loopSort graph queue indegree []
+  indegree = buildIndegree graph
+  queue = initialQueue indegree graph
+  loopSort graph queue indegree []
 }
 
 @test
