@@ -2,134 +2,125 @@
 module integrationTests.complex.Dinic
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 use aivi.collections
 use aivi.graph (Graph, fromWeightedEdges, edgesFrom)
 
+// Edge with capacity
 Edge = { from: Int, to: Int, cap: Int }
-ResidualKey = { from: Int, to: Int }
-Residual =
-  { graph: Graph
-    capacities: Map ResidualKey Int
-  }
 
-getOrZero = key map => (Map.get key map) ?
+// Residual key for capacity lookup
+ResidualKey = { from: Int, to: Int }
+
+// Residual network state
+Residual = {
+  graph: Graph
+  capacities: Map ResidualKey Int
+}
+
+// Get capacity or 0 from map
+getOrZero = key map => Map.get key map ?
   | Some v => v
   | None   => 0
 
-addCaps = list acc zero => list ?
-  | []              => acc
-  | [edge, ...tail] => {
-      updated =
-        Map.insert
-        { from: edge.from, to: edge.to }
-        (if zero then 0 else edge.cap)
-        acc
-        addCaps tail updated zero
-  }
-
+// Build residual network from edges
+buildResidual : List Edge -> Residual
 buildResidual = edges => {
-  backward = List.map edges (edge => { from: edge.to, to: edge.from, cap: 0 })
-  weighted =
-    List.map (edges ++ backward) (edge => (edge.from, edge.to, Float edge.cap))
+  backward = List.map edges (e => { from: e.to, to: e.from, cap: 0 })
+  allEdges = edges ++ backward
+  weighted = List.map allEdges (e => (e.from, e.to, Float e.cap))
   graph = fromWeightedEdges weighted
+
+  addCaps = items acc isZero => items ?
+    | []           => acc
+    | [e, ...rest] => {
+        key = { from: e.from, to: e.to }
+        val = if isZero then 0 else e.cap
+        addCaps rest (Map.insert key val acc) isZero
+      }
+
   caps = addCaps edges Map.empty False
   capsWithReverse = addCaps backward caps True
   { graph: graph, capacities: capsWithReverse }
 }
 
+// BFS to build level graph, returns (reachable, levels)
 bfsLevels = residual source sink => {
-  append = list value => list ?
-    | []        => [value]
-    | [h, ...t] => [h, ...append t value]
+  visit = queue levels => queue ?
+    | []                 => (Map.has sink levels, levels)
+    | [current, ...rest] => {
+        neighbors = edgesFrom residual.graph current
 
-    visit = queue levels => queue ?
-      | []                 => (Map.has sink levels, levels)
-      | [current, ...rest] => {
-          neighbors = edgesFrom residual.graph current
-
-          explore = list q accLevels => list ?
-            | []              => visit q accLevels
-            | [edge, ...tail] => {
-                next = edge.to
-                cap = getOrZero { from: current, to: next } residual.capacities
-                already = Map.has next accLevels
-                if cap > 0 && !already then {
-                    level =
-                      (Map.get current accLevels) ?
-                        | Some lvl => lvl
-                        | None     => -1
-                      explore tail (append q next) (Map.insert next (level + 1) accLevels)
-                }
-                else
-                  explore tail q accLevels
+        explore = list q accLevels => list ?
+          | []              => visit q accLevels
+          | [edge, ...tail] => {
+              next = edge.to
+              cap = getOrZero { from: current, to: next } residual.capacities
+              already = Map.has next accLevels
+              if cap > 0 && !already then {
+                level = Map.get current accLevels ? | Some lvl => lvl | None => -1
+                explore tail (q ++ [next]) (Map.insert next (level + 1) accLevels)
+              }
+              else explore tail q accLevels
             }
 
-          explore neighbors rest levels
+        explore neighbors rest levels
       }
 
-    visit [source] (Map.insert source 0 Map.empty)
+  visit [source] ~map{ source => 0 }
 }
 
+// Push flow along an edge
 pushFlow = residual from to delta => {
   forward = getOrZero { from, to } residual.capacities
   backward = getOrZero { from: to, to: from } residual.capacities
-  caps1 = Map.insert { from, to } (forward - delta) residual.capacities
-  caps2 = Map.insert { from: to, to: from } (backward + delta) caps1
-  residual <| { capacities: caps2 }
+  caps = residual.capacities
+    |> Map.insert { from, to } (forward - delta)
+    |> Map.insert { from: to, to: from } (backward + delta)
+  residual <| { capacities: caps }
 }
 
+// DFS to find blocking flow
 dfsFlow = residual levels node sink flow =>
-  if flow == 0 then
-    (0, residual)
-else if node == sink then
-  (flow, residual)
-else {
-  neighbors = edgesFrom residual.graph node
+  if flow == 0 then (0, residual)
+  else if node == sink then (flow, residual)
+  else {
+    neighbors = edgesFrom residual.graph node
 
-  explore = list accRes => list ?
-    | []              => (0, accRes)
-    | [edge, ...tail] => {
-        cap = getOrZero { from: node, to: edge.to } accRes.capacities
-        levelNode =
-          (Map.get node levels) ?
-            | Some lvl => lvl
-            | None     => -1
-        levelNext =
-          (Map.get edge.to levels) ?
-            | Some lvl => lvl
-            | None     => -1
+    explore = list accRes => list ?
+      | []              => (0, accRes)
+      | [edge, ...tail] => {
+          cap = getOrZero { from: node, to: edge.to } accRes.capacities
+          levelNode = Map.get node levels ? | Some lvl => lvl | None => -1
+          levelNext = Map.get edge.to levels ? | Some lvl => lvl | None => -1
 
           if cap > 0 && levelNext == levelNode + 1 then {
-                available = if flow < cap then flow else cap
-                (pushed, after) = dfsFlow accRes levels edge.to sink available
-                if pushed > 0 then
-                  (pushed, pushFlow after node edge.to pushed)
-              else
-                explore tail accRes
+            available = Int.min flow cap
+            (pushed, after) = dfsFlow accRes levels edge.to sink available
+            if pushed > 0 then (pushed, pushFlow after node edge.to pushed)
+            else explore tail accRes
           }
-        else
-          explore tail accRes
-    }
+          else explore tail accRes
+        }
 
     explore neighbors residual
-}
+  }
 
+// Find blocking flow using repeated DFS
 blockingFlow = residual source sink levels acc => {
   (pushed, updated) = dfsFlow residual levels source sink Int.max
-  if pushed == 0 then
-    (acc, updated)
-  else
-    blockingFlow updated source sink levels (acc + pushed)
+  if pushed == 0 then (acc, updated)
+  else blockingFlow updated source sink levels (acc + pushed)
 }
 
+// Dinic's max flow algorithm
+maxFlow : List Edge -> Int -> Int -> (Int, Residual)
 maxFlow = edges source sink => {
   start = buildResidual edges
 
   go = state total => {
     (reachable, levels) = bfsLevels state source sink
-    if !reachable then
-      (total, state)
+    if !reachable then (total, state)
     else {
       (newTotal, updated) = blockingFlow state source sink levels total
       go updated newTotal
@@ -140,25 +131,21 @@ maxFlow = edges source sink => {
 }
 
 @test
-flowTest =
-  effect {
-      graphEdges = [
-        { from: 0, to: 1, cap: 10 }
-        { from: 0, to: 2, cap: 5 }
-        { from: 1, to: 2, cap: 15 }
-        { from: 1, to: 3, cap: 10 }
-        { from: 2, to: 4, cap: 10 }
-        { from: 3, to: 4, cap: 10 }
-        { from: 3, to: 5, cap: 10 }
-        { from: 4, to: 5, cap: 10 }
-      ]
+flowTest = effect {
+  edges = [
+    { from: 0, to: 1, cap: 10 }
+    { from: 0, to: 2, cap: 5 }
+    { from: 1, to: 2, cap: 15 }
+    { from: 1, to: 3, cap: 10 }
+    { from: 2, to: 4, cap: 10 }
+    { from: 3, to: 4, cap: 10 }
+    { from: 3, to: 5, cap: 10 }
+    { from: 4, to: 5, cap: 10 }
+  ]
 
-      res = maxFlow graphEdges 0 5
-      (result, _) = res
-      _ <- assert (result == 20)
+  (result, _) = maxFlow edges 0 5
+  _ <- assert (result == 20)
 
-      empty = []
-      res2 = maxFlow empty 0 1
-      (zero, _) = res2
-      _ <- assert (zero == 0)
-  }
+  (zero, _) = maxFlow [] 0 1
+  _ <- assert (zero == 0)
+}

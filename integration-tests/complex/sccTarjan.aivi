@@ -5,91 +5,85 @@ use aivi
 use aivi.testing
 use aivi.collections
 
+// Adjacency list graph
 Graph = { nodes: List Int, adj: Map Int (List Int) }
-TarjanState =
-  { index: Map Int Int
-    lowlink: Map Int Int
-    stack: List Int
-    onStack: Set Int
-    nextIndex: Int
-    components: List (List Int)
-  }
 
-minInt = a b =>
-  if a < b then a else b
+// Tarjan's algorithm state
+TarjanState = {
+  index: Map Int Int
+  lowlink: Map Int Int
+  stack: List Int
+  onStack: Set Int
+  nextIndex: Int
+  components: List (List Int)
+}
 
-lookupOr = map key fallback => (Map.get key map) ?
+// Helper to get value or fallback from map
+getOr = map key fallback => Map.get key map ?
   | Some v => v
   | None   => fallback
 
+// Pop nodes from stack until we reach the root of SCC
 popComponent = node state => {
   pop = stack acc => stack ?
-    | []        => ([], acc)
-    | [h, ...t] =>
-      if h == node then
-        (t, [h, ...acc])
-    else
-      pop t [h, ...acc]
-
-    (newStack, comp) = pop state.stack []
-    state <| {
-        stack: newStack
-        onStack: Set.remove node state.onStack
-        components: [comp, ...state.components]
-    }
+    | []                   => ([], acc)
+    | [h, ...t] when h == node => (t, [h, ...acc])
+    | [h, ...t]            => pop t [h, ...acc]
+  (newStack, comp) = pop state.stack []
+  state <| {
+    stack: newStack
+    onStack: Set.remove node state.onStack
+    components: [comp, ...state.components]
+  }
 }
 
+// Get neighbors of a node
+neighbors = node graph => Map.get node graph.adj ?
+  | Some list => list
+  | None      => []
+
+// Visit a node in DFS
 visitNode = graph node state => {
-  state1 =
-    state <| {
-        index: Map.insert node state.nextIndex state.index
-        lowlink: Map.insert node state.nextIndex state.lowlink
-        stack: [node, ...state.stack]
-        onStack: Set.insert node state.onStack
-        nextIndex: state.nextIndex + 1
+  // Initialize node's index and lowlink
+  state1 = state <| {
+    index: Map.insert node state.nextIndex state.index
+    lowlink: Map.insert node state.nextIndex state.lowlink
+    stack: [node, ...state.stack]
+    onStack: Set.insert node state.onStack
+    nextIndex: state.nextIndex + 1
+  }
+
+  // Process all neighbors
+  processNeighbors = list accState => list ?
+    | []              => accState
+    | [next, ...tail] => {
+      acc =
+        if Map.has next accState.index then
+          // Node already visited
+          if Set.has next accState.onStack then {
+            lowNode = getOr accState.lowlink node Int.max
+            lowNext = getOr accState.index next Int.max
+            accState <| { lowlink: Map.insert node (Int.min lowNode lowNext) accState.lowlink }
+          }
+          else accState
+        else {
+          // Recurse on unvisited node
+          nested = visitNode graph next accState
+          lowNode = getOr nested.lowlink node Int.max
+          lowNext = getOr nested.lowlink next Int.max
+          nested <| { lowlink: Map.insert node (Int.min lowNode lowNext) nested.lowlink }
+        }
+      processNeighbors tail acc
     }
 
-  neighbors =
-    (Map.get node graph.adj) ?
-      | Some list => list
-      | None      => []
-
-    foldNeighbors = list accState => list ?
-      | []              => accState
-      | [next, ...tail] => {
-          acc =
-            if Map.has next accState.index then
-              if Set.has next accState.onStack then {
-                    lowNode = lookupOr accState.lowlink node Int.max
-                    lowNext = lookupOr accState.lowlink next Int.max
-                    accState <| {
-                          lowlink: Map.insert node (minInt lowNode lowNext) accState.lowlink
-                    }
-              }
-          else
-            accState
-          else {
-              nested = visitNode graph next accState
-              lowNode = lookupOr nested.lowlink node Int.max
-              lowNext = lookupOr nested.lowlink next Int.max
-              nested <| {
-                  lowlink: Map.insert node (minInt lowNode lowNext) nested.lowlink
-              }
-          }
-
-          foldNeighbors tail acc
-      }
-
-    after = foldNeighbors neighbors state1
-    nodeLow = lookupOr after.lowlink node Int.max
-    nodeIdx = lookupOr after.index node Int.max
-    if nodeLow == nodeIdx then popComponent node after else after
+  after = processNeighbors (neighbors node graph) state1
+  nodeLow = getOr after.lowlink node Int.max
+  nodeIdx = getOr after.index node Int.max
+  if nodeLow == nodeIdx then popComponent node after else after
 }
 
-listAny = list pred => list ?
-  | []        => False
-  | [h, ...t] => if pred h then True else listAny t pred
-
+// Find all strongly connected components using Tarjan's algorithm
+strongComponents : Graph -> List (List Int)
 strongComponents = graph => {
   initial = {
     index: Map.empty
@@ -100,31 +94,39 @@ strongComponents = graph => {
     components: []
   }
 
-  foldNodes = nodes state => nodes ?
+  processNodes = nodes state => nodes ?
     | []        => state
     | [h, ...t] => {
-        s = if Map.has h state.index then state else visitNode graph h state
-        foldNodes t s
+      s = if Map.has h state.index then state else visitNode graph h state
+      processNodes t s
     }
 
-    finalState = foldNodes graph.nodes initial
-    finalState.components
+  finalState = processNodes graph.nodes initial
+  finalState.components
 }
 
+// Check if list contains element
 contains = list target => list ?
+  | []                   => False
+  | [h, ...t] when h == target => True
+  | [_, ...t]            => contains t target
+
+// Check if any element satisfies predicate
+listAny = list pred => list ?
   | []        => False
-  | [h, ...t] => if h == target then True else contains t target
+  | [h, ...t] => if pred h then True else listAny t pred
 
-  @test
-sccSmoke =
-  effect {
-      adj0 = Map.insert 0 [1] Map.empty
-      adj1 = Map.insert 1 [2] adj0
-      adj2 = Map.insert 2 [0, 3] adj1
-      adj3 = Map.insert 3 [] adj2
-      graph = { nodes: [0, 1, 2, 3], adj: adj3 }
-
-      comps = strongComponents graph
-      _ <- assert (List.length comps == 2)
-      _ <- assert (listAny comps (cmp => contains cmp 0))
+@test
+sccSmoke = effect {
+  adj = ~map{
+    0 => [1]
+    1 => [2]
+    2 => [0, 3]
+    3 => []
   }
+  graph = { nodes: [0, 1, 2, 3], adj: adj }
+
+  comps = strongComponents graph
+  _ <- assert (List.length comps == 2)
+  _ <- assert (listAny comps (cmp => contains cmp 0))
+}

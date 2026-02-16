@@ -6,55 +6,55 @@ use aivi.testing
 use aivi.collections
 use aivi.graph
 
-buildGraph = {
-  weighted = [
-    (0, 1, 2.0)
-    (0, 2, 5.0)
-    (1, 2, 1.0)
-    (1, 3, 4.0)
-    (2, 3, 1.0)
-  ]
-  fromWeightedEdges weighted
-}
+// Large constant for infinity
+infinity : Float
+infinity = 1000000.0
 
+// Build weighted graph from edge list
+buildGraph = fromWeightedEdges [
+  (0, 1, 2.0)
+  (0, 2, 5.0)
+  (1, 2, 1.0)
+  (1, 3, 4.0)
+  (2, 3, 1.0)
+]
+
+// Expand all neighbors, returning updated (queue, dist)
 expandNeighbors = edges queue dist currentDist => edges ?
   | []              => (queue, dist)
   | [edge, ...tail] => {
       tentative = currentDist + edge.weight
-      prev =
-        (Map.get edge.to dist) ?
-          | Some v => v
-          | None   => 1000000.0
-
-      res =
+      prev = Map.get edge.to dist ?
+        | Some v => v
+        | None   => infinity
+      (nextQueue, nextDist) =
         if tentative < prev then
-          (Heap.push queue (tentative, edge.to), Map.insert edge.to tentative dist)
-      else
-        (queue, dist)
-
-      (nextQueue, nextDist) = res
+          (Heap.push (tentative, edge.to) queue, Map.insert edge.to tentative dist)
+        else
+          (queue, dist)
       expandNeighbors tail nextQueue nextDist currentDist
-  }
+    }
 
+// Main search loop
 search = queue dist visited graph => Heap.popMin queue ?
   | None                             => dist
   | Some ((currentDist, node), rest) =>
     if Set.has node visited then
       search rest dist visited graph
-  else {
+    else {
       neighbors = edgesFrom graph node
       (nextQueue, nextDist) = expandNeighbors neighbors rest dist currentDist
       search nextQueue nextDist (Set.insert node visited) graph
-  }
+    }
 
-resetDist = start =>
-  Map.insert start 0.0 Map.empty
+// Dijkstra entry point
+dijkstra = graph start =>
+  search (Heap.push (0.0, start) Heap.empty) ~map{ start => 0.0 } Set.empty graph
 
-  @test
-shortestPaths =
-  effect {
-      graph = buildGraph
-      distances = search (Heap.push Heap.empty (0.0, 0)) (resetDist 0) Set.empty graph
-      _ <- assert (Map.get 3 distances == Some 4.0)
-      _ <- assert (Map.get 2 distances == Some 3.0)
-  }
+@test
+shortestPaths = effect {
+  graph = buildGraph
+  distances = dijkstra graph 0
+  _ <- assert (Map.get 3 distances == Some 4.0)
+  _ <- assert (Map.get 2 distances == Some 3.0)
+}
