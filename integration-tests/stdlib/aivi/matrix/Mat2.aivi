@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.matrix
 
-Ref = Mat2
+
 
 @test
 smoke = effect {

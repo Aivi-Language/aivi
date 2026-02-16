@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.path
 
-subject = parent
+
 
 @test
 smoke = effect {

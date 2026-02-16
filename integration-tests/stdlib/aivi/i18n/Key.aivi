@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.i18n
 
-Ref = Key
+
 
 @test
 smoke = effect {

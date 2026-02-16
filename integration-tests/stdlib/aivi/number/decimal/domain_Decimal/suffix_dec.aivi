@@ -8,7 +8,7 @@ use aivi.number.decimal
 
 use aivi.number.decimal
 
-subject = 3.14dec
+.14dec
 
 @test
 smoke = effect {

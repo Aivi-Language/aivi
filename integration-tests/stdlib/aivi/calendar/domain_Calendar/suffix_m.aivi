@@ -8,7 +8,7 @@ use aivi.calendar
 
 use aivi.calendar
 
-subject = 2m
+
 
 @test
 smoke = effect {

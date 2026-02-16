@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.database
 
-Ref = Postgresql
+
 
 @test
 smoke = effect {

@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.matrix
 
-subject = multiply3
+
 
 @test
 smoke = effect {

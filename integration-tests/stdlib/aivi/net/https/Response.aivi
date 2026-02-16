@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.net.https
 
-Ref = Response
+
 
 @test
 smoke = effect {

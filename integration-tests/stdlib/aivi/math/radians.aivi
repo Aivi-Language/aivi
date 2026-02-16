@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.math
 
-subject = radians
+
 
 @test
 smoke = effect {

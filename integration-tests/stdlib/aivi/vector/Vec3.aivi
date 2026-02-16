@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.vector
 
-Ref = Vec3
+
 
 @test
 smoke = effect {

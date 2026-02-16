@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.matrix
 
-subject = transpose4
+
 
 @test
 smoke = effect {

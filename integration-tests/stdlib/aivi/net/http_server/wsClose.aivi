@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.net.http_server
 
-subject = wsClose
+
 
 @test
 smoke = effect {

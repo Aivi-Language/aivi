@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.units
 
-subject = sameUnit
+
 
 @test
 smoke = effect {

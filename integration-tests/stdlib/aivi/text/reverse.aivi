@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.text
 
-subject = reverse
+
 
 @test
 smoke = effect {

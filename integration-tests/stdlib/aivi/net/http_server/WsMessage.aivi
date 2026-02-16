@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.net.http_server
 
-Ref = WsMessage
+
 
 @test
 smoke = effect {

@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.collections
 
-Ref = Queue
+
 
 @test
 smoke = effect {

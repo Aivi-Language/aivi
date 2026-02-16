@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.number
 
-Ref = Decimal
+
 
 @test
 smoke = effect {

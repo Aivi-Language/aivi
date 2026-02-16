@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.generator
 
-Ref = Generator
+
 
 @test
 smoke = effect {

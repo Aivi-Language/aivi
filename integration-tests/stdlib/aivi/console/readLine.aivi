@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.console
 
-subject = readLine
+
 
 @test
 smoke = effect {

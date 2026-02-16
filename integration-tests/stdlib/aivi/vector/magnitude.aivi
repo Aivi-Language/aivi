@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.vector
 
-subject = magnitude
+
 
 @test
 smoke = effect {

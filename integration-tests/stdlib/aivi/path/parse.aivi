@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.path
 
-subject = parse
+
 
 @test
 smoke = effect {

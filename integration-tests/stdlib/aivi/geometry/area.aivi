@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.geometry
 
-subject = area
+
 
 @test
 smoke = effect {

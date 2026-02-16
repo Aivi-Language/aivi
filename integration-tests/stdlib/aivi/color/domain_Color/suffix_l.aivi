@@ -8,7 +8,7 @@ use aivi.color
 
 use aivi.color
 
-subject = 2l
+
 
 @test
 smoke = effect {

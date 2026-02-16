@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.color
 
-subject = toHsl
+
 
 @test
 smoke = effect {

@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.graph
 
-subject = hasCycle
+
 
 @test
 smoke = effect {

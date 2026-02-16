@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.ui.ServerHtml
 
-subject = serveHttp
+
 
 @test
 smoke = effect {

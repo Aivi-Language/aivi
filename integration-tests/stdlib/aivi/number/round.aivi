@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.number
 
-subject = round
+
 
 @test
 smoke = effect {

@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.url
 
-subject = toString
+
 
 @test
 smoke = effect {

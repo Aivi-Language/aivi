@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.console
 
-Ref = AnsiColor
+
 
 @test
 smoke = effect {

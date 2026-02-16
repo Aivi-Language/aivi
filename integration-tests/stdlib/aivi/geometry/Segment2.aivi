@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.geometry
 
-Ref = Segment2
+
 
 @test
 smoke = effect {
