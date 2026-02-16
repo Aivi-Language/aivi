@@ -10,6 +10,6 @@ subject = log
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs (log e -1.0) < 0.0001)
+  _ <- assert (abs (log 1.0) < 0.0001)
 }

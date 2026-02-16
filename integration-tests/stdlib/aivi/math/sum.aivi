@@ -10,6 +10,6 @@ subject = sum
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (sum[1.0, 2.0, 3.0] == 6.0)
+  _ <- assert (sum[] == 0.0)
 }

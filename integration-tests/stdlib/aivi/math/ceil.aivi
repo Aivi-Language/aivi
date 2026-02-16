@@ -10,6 +10,7 @@ subject = ceil
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (ceil 1.2 == 2.0)
+  _ <- assert (ceil 1.9 == 2.0)
+  _ <- assert (ceil (-1.2) == -1.0)
 }

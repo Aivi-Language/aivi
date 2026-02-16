@@ -10,6 +10,6 @@ subject = lcm
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (lcm 4 6 == 12)
+  _ <- assert (lcm 3 5 == 15)
 }

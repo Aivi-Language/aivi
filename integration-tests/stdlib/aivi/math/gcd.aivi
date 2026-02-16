@@ -10,6 +10,6 @@ subject = gcd
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (gcd 12 8 == 4)
+  _ <- assert (gcd 17 5 == 1)
 }

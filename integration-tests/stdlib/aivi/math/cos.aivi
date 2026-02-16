@@ -10,6 +10,6 @@ subject = cos
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs (cos 0.0-1.0) < 0.0001)
+  _ <- assert (abs (cos (pi / 2.0)) < 0.0001)
 }

@@ -10,6 +10,7 @@ subject = isFinite
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (isFinite 1.0 == True)
+  _ <- assert (isFinite inf == False)
+  _ <- assert (isFinite nan == False)
 }

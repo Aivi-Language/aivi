@@ -10,6 +10,5 @@ subject = radians
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs (radians 180.0- pi) < 0.0001)
 }

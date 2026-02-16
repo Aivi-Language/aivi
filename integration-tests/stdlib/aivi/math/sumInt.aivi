@@ -10,6 +10,6 @@ subject = sumInt
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (sumInt[1, 2, 3] == 6)
+  _ <- assert (sumInt[] == 0)
 }

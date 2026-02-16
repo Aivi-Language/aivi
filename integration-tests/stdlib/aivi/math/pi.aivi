@@ -10,6 +10,5 @@ subject = pi
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs (pi -3.14159) < 0.0001)
 }

@@ -10,6 +10,5 @@ subject = ln10
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs (ln10 -2.30258) < 0.0001)
 }

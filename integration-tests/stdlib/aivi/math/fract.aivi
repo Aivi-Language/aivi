@@ -10,6 +10,6 @@ subject = fract
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs (fract 1.5-0.5) < 0.0001)
+  _ <- assert (abs (fract (-1.5) - (-0.5)) < 0.0001)
 }

@@ -12,14 +12,14 @@ Ref = Option
 smoke = effect {
   some = Some 1
   none = None
-  
+
   _ <- assert (some != none)
   _ <- assert (some == Some 1)
-  
+
   // Using global map which works on Option
   mapped = map some (x => x + 1)
   _ <- assert (mapped == Some 2)
-  
+
   mappedNone = map none (x => x + 1)
   _ <- assert (mappedNone == None)
 

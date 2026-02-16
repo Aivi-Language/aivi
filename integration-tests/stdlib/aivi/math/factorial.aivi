@@ -10,6 +10,6 @@ subject = factorial
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (factorial 0 == 1)
+  _ <- assert (factorial 5 == 120)
 }

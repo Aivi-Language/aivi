@@ -10,6 +10,7 @@ subject = sign
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (sign 10.0 == 1.0)
+  _ <- assert (sign (-10.0) == -1.0)
+  _ <- assert (sign 0.0 == 0.0)
 }
