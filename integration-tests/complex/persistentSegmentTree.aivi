@@ -11,14 +11,14 @@ SegmentMeta = { sum: Int, min: Int, max: Int }
 SegmentTree =
   Empty
 | Node {
-      start: Int
-      end: Int
-      sum: Int
-      min: Int
-      max: Int
-      left: SegmentTree
-      right: SegmentTree
-  }
+    start: Int
+    end: Int
+    sum: Int
+    min: Int
+    max: Int
+    left: SegmentTree
+    right: SegmentTree
+}
 
 rangeMeta = start end leftMeta rightMeta =>
 // combine two child metas safely when one side might be Empty.
@@ -28,54 +28,47 @@ rangeMeta = start end leftMeta rightMeta =>
   | (None, Some rm)    => Some rm
   | (Some lm, Some rm) => {
       combined = {
-        sum: lm.sum + rm.sum
-        min: if lm.min < rm.min then lm.min else rm.min
-        max: if lm.max > rm.max then lm.max else rm.max
-    }
+          sum: lm.sum + rm.sum
+          min: if lm.min < rm.min then lm.min else rm.min
+          max: if lm.max > rm.max then lm.max else rm.max
+      }
       Some combined
   }
 
 nodeMeta = tree => tree ?
   | Empty                  => None
-  | Node { sum, min, max } => Some { sum: sum, min: min, max: max }
+  | Node { sum, min, max } => Some { sum, min, max }
 
 nodeFromChildren = start end left right =>
 // rebuild node once child edges changed.
 {
-    meta = rangeMeta start end (nodeMeta left) (nodeMeta right)
-    meta ?
-        | None   => Empty
-        | Some m =>
-        Node {
-          start: start
-          end: end
-          sum: m.sum
-          min: m.min
-          max: m.max
-          left: left
-          right: right
+  meta = rangeMeta start end (nodeMeta left) (nodeMeta right)
+  meta ?
+    | None   => Empty
+    | Some m =>
+      Node {
+            start
+            end
+            sum: m.sum
+            min: m.min
+            max: m.max
+            left
+            right
       }
-  }
+}
 
 buildRange = arr start end =>
   if start == end then
     (List.at arr start) ?
       | Some value =>
-      Node {
-          start: start
-          end: end
-          sum: value
-          min: value
-          max: value
-          left: Empty
-          right: Empty
+      Node { start, end, sum: value, min: value, max: value, left: Empty, right: Empty
       }
       | None => Empty
     else {
-        mid = (start + end) / 2
-        left = buildRange arr start mid
-        right = buildRange arr (mid + 1) end
-        nodeFromChildren start end left right
+          mid = (start + end) / 2
+          left = buildRange arr start mid
+          right = buildRange arr (mid + 1) end
+          nodeFromChildren start end left right
     }
 
 fromList = arr =>
@@ -90,7 +83,7 @@ queryRange = tree l r => tree ?
     if r < start || end < l then
       None
   else if l <= start && end <= r then
-    Some { sum: sum, min: min, max: max }
+    Some { sum, min, max }
   else {
       leftMeta = queryRange left l r
       rightMeta = queryRange right l r
@@ -103,19 +96,19 @@ updatePoint = tree idx value => tree ?
     tree
   | Node { start, end, left, right } when start == end =>
       Node {
-          start: start
-          end: end
-          sum: value
-          min: value
-          max: value
-          left: Empty
-          right: Empty
+              start
+              end
+              sum: value
+              min: value
+              max: value
+              left: Empty
+              right: Empty
       }
   | Node { start, end, left, right } => {
           newLeft = updatePoint left idx value
           newRight = updatePoint right idx value
           nodeFromChildren start end newLeft newRight
-      }
+  }
 
       @test
 persistency =
@@ -136,4 +129,4 @@ persistency =
     _ <- assert (queryRange tree 2 2 == Some { sum: 3, min: 3, max: 3 })
 
     _ <- assert (queryRange Empty 0 0 == None)
-}
+  }

@@ -1,92 +1,97 @@
 @no_prelude
 module integrationTests.complex.AStar
-
 use aivi
 use aivi.testing
 use aivi.collections
 use aivi.graph
-use aivi.vector
-
-positions =
-  Map.insert 0 ((0.0, 0.0) v2) Map.empty
-|> Map.insert 1 ((1.0, 0.0) v2)
-|> Map.insert 2 ((2.0, 1.0) v2)
-|> Map.insert 3 ((3.0, 0.0) v2)
-
+use aivi.vector (Vec2, magnitude, domain Vector)
+// Node positions for heuristic calculation using ~map{} sigil
+positions : Map Int Vec2
+positions = ~map{
+  0 => { x: 0.0, y: 0.0 }
+  1 => { x: 1.0, y: 0.0 }
+  2 => { x: 2.0, y: 1.0 }
+  3 => { x: 3.0, y: 0.0 }
+}
+// Euclidean distance heuristic
+heuristic : Int -> Int -> Float
 heuristic = goal node => (Map.get goal positions, Map.get node positions) ?
   | (Some target, Some current) => magnitude (target - current)
   | _                           => 0.0
-
-reconstruct = came node => {
-    go = current acc => (Map.get current came) ?
-        | Some prev => go prev [current, ...acc]
-        | None      => [current, ...acc]
-
-      go node []
+// Path reconstruction helper - walks the cameFrom map backwards
+reconstructGo = cameFrom current acc => Map.get current cameFrom ?
+  | Some prev => reconstructGo cameFrom prev [current, ...acc]
+  | None      => [current, ...acc]
+reconstructPath = cameFrom goal => reconstructGo cameFrom goal []
+// State record type alias
+AStarState = {
+  queue: Heap (Float, Int, Float)
+  scores: Map Int Float
+  parents: Map Int Int
 }
-
-expandNeighbors = edges queue scores parents current currentG goal heuristicFunc => edges ?
-  | []              => (queue, scores, parents)
+// Large constant for infinity
+infinity : Float
+infinity = 1000000.0
+// Expand a single neighbor
+expandNeighbor : Int -> Float -> Int -> (Int -> Int -> Float) -> AStarState -> { to: Int, weight: Float } -> AStarState
+expandNeighbor = current currentG goal heuristicFunc state edge => {
+  tentative = currentG + edge.weight
+  prevScore = Map.get edge.to state.scores ?
+    | Some v => v
+    | None   => infinity
+    if tentative < prevScore then {
+        queue: Heap.push (tentative + heuristicFunc goal edge.to, edge.to, tentative) state.queue
+        scores: Map.insert edge.to tentative state.scores
+        parents: Map.insert edge.to current state.parents
+    }
+    else
+      state
+}
+// Expand all neighbors
+expandNeighbors = edges current currentG goal heuristicFunc state => edges ?
+  | []              => state
   | [edge, ...tail] => {
-      tentative = currentG + edge.weight
-      prevScore =
-        (Map.get edge.to scores) ?
-            | Some v => v
-            | None   => 1_000_000.0
-
-      res =
-        if tentative < prevScore then
-          (
-          Heap.push queue (tentative + heuristicFunc goal edge.to, edge.to, tentative),
-          Map.insert edge.to tentative scores,
-          Map.insert edge.to current parents
-      )
-      else
-        (queue, scores, parents)
-
-      (nextQueue, nextScores, nextParents) = res
-      expandNeighbors tail nextQueue nextScores nextParents current currentG goal heuristicFunc
+      nextState = expandNeighbor current currentG goal heuristicFunc state edge
+      expandNeighbors tail current currentG goal heuristicFunc nextState
   }
-
-search = queue scores parents graph goal heuristicFunc => Heap.popMin queue ?
+// Main search loop
+search = state graph goal heuristicFunc => Heap.popMin state.queue ?
   | None                                => None
   | Some ((_, current, currentG), rest) =>
     if current == goal then
-      Some (reconstruct parents goal)
+      Some (reconstructPath state.parents goal)
   else {
       edges = edgesFrom graph current
-      (nextQueue, nextScores, nextParents) =
-        expandNeighbors edges rest scores parents current currentG goal heuristicFunc
-        search nextQueue nextScores nextParents graph goal heuristicFunc
-    }
-
-astar = graph start goal heuristicFunc => {
-    openSet = Heap.push Heap.empty (heuristicFunc goal start, start, 0.0)
-    scores = Map.insert start 0.0 Map.empty
-    search openSet scores Map.empty graph goal heuristicFunc
-}
-
-buildGraph = {
-    weighted = [
-      (0, 1, 1.0)
-      (0, 2, 4.0)
-      (1, 2, 2.0)
-      (1, 3, 5.0)
-      (2, 3, 1.0)
-  ]
-
-    fromWeightedEdges weighted
-}
-
-@test
-astarSmoke =
-  effect {
-      graph = buildGraph
-      _ <- assert (astar graph 0 3 heuristic == Some [0, 1, 2, 3])
-
-      zeroHeuristic = _ _ => 0.0
-      _ <- assert (astar graph 0 3 zeroHeuristic == Some [0, 1, 2, 3])
-
-      bad = astar graph 3 0 zeroHeuristic
-      _ <- assert (bad == None)
+      nextState = expandNeighbors edges current currentG goal heuristicFunc {
+          queue: rest
+          scores: state.scores
+          parents: state.parents
+      }
+      search nextState graph goal heuristicFunc
   }
+// A* entry point
+astar = graph start goal heuristicFunc =>
+  search {
+      queue: Heap.push (heuristicFunc goal start, start, 0.0) Heap.empty
+      scores: ~map{ start => 0.0 }
+      parents: Map.empty
+  } graph goal heuristicFunc
+// Graph construction
+buildGraph = fromWeightedEdges [
+  (0, 1, 1.0)
+  (0, 2, 4.0)
+  (1, 2, 2.0)
+  (1, 3, 5.0)
+  (2, 3, 1.0)
+]
+@test
+astarSmoke = effect {
+  graph = buildGraph
+  result = astar graph 0 3 heuristic
+  _ <- assert (result == Some [0, 1, 2, 3])
+  zeroHeuristic = _ _ => 0.0
+  result2 = astar graph 0 3 zeroHeuristic
+  _ <- assert (result2 == Some [0, 1, 2, 3])
+  bad = astar graph 3 0 zeroHeuristic
+  _ <- assert (bad == None)
+}
