@@ -1,148 +1,147 @@
-# AIVI Language Summary (for LLM Context)
+# AIVI Language Summary (LLM Context)
 
-## 1. Core Philosophy
-AIVI is a **statically typed, purely functional language** designed for high-integrity data pipelines.
-*   **Immutable**: All bindings are immutable. No `mut`.
-*   **No Null/Exceptions**: Uses `Option` and `Result`.
-*   **Expression-Oriented**: Everything is an expression.
-*   **No Loops**: Use recursion, `fold`, or `generate` blocks.
-*   **WASM-Native**: Targets WASM/WASI.
+## 1) Core principles
+- Statically typed, purely functional, expression-oriented.
+- Immutable bindings; no mutation.
+- No null or exceptions: use Option / Result.
+- No loops: use recursion, folds, generators.
+- Pattern matches are total by default; refutable matches require `?`.
+- Records are open and structural (row polymorphism).
+- Effects are explicit: `Effect E A`.
+- Domains define operator and literal semantics.
 
-## 2. Syntax Reference
+## 2) Lexical basics
+- Line comments: `//` or `--`; block comments: `/* ... */`.
+- Identifiers: lowerIdent for values/functions/fields, UpperIdent for types/constructors/modules/domains/classes.
+- Text literals use `"..."` with `{ expr }` interpolation.
+- Literals: Int, Float, Text, Char, ISO instant, suffixed numbers (e.g. `10px`).
 
-### 2.1 Bindings & Functions
+## 3) Bindings and scope
 ```aivi
-// Value binding (immutable)
 x = 42
-
-// Function (lambda)
-inc = n => n + 1
-
-// Multi-argument function (explicit)
 add = a b => a + b
+{ name, age } = user
+user@{ name } = user
+```
+- All bindings use `=` and are lexical; shadowing is allowed.
+- Top-level bindings in a module are recursive.
+- Use `@` to bind the whole value alongside destructuring.
+- Deep path destructuring in record patterns uses dot paths.
 
-// Piping (Data-last convention)
-result = data |> filter valid |> map transform
+## 4) Functions and application
+- Functions are curried; application is whitespace.
+- Lambdas: `x => ...` or `_` for unary placeholder.
+- Pipes: `x |> f` == `f x`; `x |> f a b` == `f a b x`.
+- Deconstructor pipe heads: mark binders with `!` then start body with `|>`.
 
-// Choosing the pipe subject (argument position)
-// x |> f      == f x
-// x |> f a b  == f a b x
+```aivi
+f = { name! } |> toUpper
+```
 
-// Pattern Matching
-whatIs = 
-  | 0 => "zero"
-  | n when n < 0 => "negative"
-  | _ => "positive"
+## 5) Pattern matching and `?`
+- `?` matches the expression immediately to its left.
+- Multi-clause unary functions use leading `|` arms.
+- Guards with `when`.
+- Whole-value binders `@` work in patterns.
 
-// Choosing the match subject (scrutinee)
-// `?` matches on the expression immediately to its left.
-value = parse input
+```aivi
 value ?
   | Ok x  => x
   | Err _ => 0
-
-// Deconstructor heads (subject selection via `!`)
-// f = { name! } |> toUpper  == f = { name } => name |> toUpper
-// g = { name! } ? ...       == g = { name } => name ? ...
-
-// Whole-value binding in patterns
-// user@{ name, age } binds `user` to the full matched value.
 ```
 
-### 2.2 Data Types
-*   **Records**: Open, row-polymorphic.
-    ```aivi
-    p = { x: 1, y: 2 }
-    x = p.x            // Accessor
-    p2 = p <| { x: 3 } // Patching (Update) - NEVER use mutation or spread for updates
-    ```
+## 6) Predicates
+- Predicate expressions are Bool expressions using literals, field access, patterns, `_`.
+- Implicit binding: `_` is the current element; bare field `active` means `_.active`.
+- Predicate lifting: in predicate positions, `pred` is desugared to `_ => pred`.
+- No auto-lifting over Option/Result in predicates.
 
-    Record destructuring uses a record pattern on the left-hand side:
-    ```aivi
-    { x, y } = p
-    ```
-*   **Lists**: `[1, 2, 3]`. Spread: `[head, ...tail]`.
-*   **Tuples**: `(1, "a")`.
-*   **Unions (ADTs)**:
-    ```aivi
-    Shape = Circle Float | Rect Float Float
-    ```
+## 7) Types
+- ADTs: `Type = Con A | Con2 B C`.
+- Records are open structural types: `{ name: Text }` means at least that field.
+- Type operators: `->`, `with` (record/type composition), `|>` in types.
+- Row transforms: `Pick`, `Omit`, `Optional`, `Required`, `Rename`, `Defaulted`.
+- Classes and instances support ad-hoc polymorphism and HKTs (`*`).
+- Expected-type coercions only, via in-scope instances (e.g., `ToText`).
 
-### 2.3 Blocks & Control Flow
-*   **Block** (Sequential execution):
-    ```aivi
-    {
-      x <- computation // Bind result (monadic bind-like)
-      y = x + 1        // Plain let
-      y                // Return value
-    }
-    ```
-*   **Generators** (Streams/Iterators):
-    ```aivi
-    // Replaces loops. Uses `yield`.
-    generate {
-      loop n = 0 => {
-        yield n
-        recurse (n + 1)
-      }
-    }
-    ```
-*   **If-Then-Else**: `if cond then a else b` (Expression, must have else).
+## 8) Records, lists, tuples
+```aivi
+p = { x: 1, y: 2 }
+xs = [1, 2, 3]
+t = (1, "a")
+```
+- Record spread: `{ ...base, x: 3 }` (later fields win).
+- List spread: `[head, ...tail]`.
+- Range item: `a .. b` (inclusive), usable in list literals.
 
-## 3. Advanced Semantics: Domains & Coercion
+## 9) Patching (structural updates)
+- `<|` applies a patch: `target <| { path: value }`.
+- Patch literals are declarative, type-checked updates.
+- Paths support dot fields, traversals, predicates, and map key selectors.
+- Instructions: replace, transform, `:=` for function-as-data, `-` to remove.
 
-### 3.1 Domains & Semantic Algebra
-AIVI delegates operator semantics (`+`, `-`, `×`, etc.) to **Domains**.
-*   **Context-Aware**: `+` means addition for numbers, but "shift" for dates.
-*   **Algebraic Rules**: Domains define how types interact.
-    *   `Carrier + Delta -> Carrier` (e.g., `Date + Month -> Date`)
-    *   `Delta + Delta -> Delta` (e.g., `Month + Month -> Month`)
+```aivi
+user2 = user <| { profile.name: "Sam" }
+```
 
-### 3.2 Units & Deltas
-*   **Typed Literals**: Values like `10m`, `30s`, `100px` are **not** strings. They are typed symbols (Deltas).
-*   **Suffix Application**: You can also apply a suffix to a parenthesized expression, e.g. `(x)kg`, `(n + 5)s`.
-*   **Resolution**:
-    1.  **Lexical**: Finds the delta binding (e.g., `m` -> `Month`).
-    2.  **Carrier**: Selects the domain based on the operand type (e.g., `date + 1m` uses `Calendar` domain).
-*   **Desugaring**: `date + 1m` becomes `Calendar.addMonth date (Month 1)`.
+## 10) Domains, units, and operators
+- Domains define semantics for operators and literal templates.
+- Suffix literals (e.g. `10ms`, `(x)kg`) resolve to template functions like `1ms`.
+- Domain-resolved operators (when non-Int carrier): `+ - * × / % < <= > >=`.
+- `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..` are built-in.
+- Domains are imported explicitly: `use aivi.calendar (domain Calendar)`.
 
-### 3.3 Auto-Coercion (Instance-Driven)
-*   **Explicit**: Coercion is NOT implicit casting. It is driven by **Type Class Instances** (e.g., `ToText`).
-*   **Context-Sensitive**: Only occurs in **expected-type positions** (function args, annotated bindings).
-    *   If `func` expects `Text` but gets `Int`, and `instance ToText Int` exists, the compiler inserts `toText`.
+## 11) Generators
+- Pure, pull-based sequences: `Generator A`.
+- `generate { ... }` with `yield`, `x <- xs`, `x = e`, and guards `x -> pred`.
+- `loop state = init => { ... recurse next }` for local tail recursion.
 
-### 3.4 Sigils (Custom Literals)
-AIVI uses **Sigils** for complex literals that are validated at compile-time by domains.
-*   **Syntax**: `~tag(content)` or `~tag[content]` or `~tag{content}`.
-*   **Common Sigils**:
-    *   `~d(2024-01-01)`: Date literal (Calendar domain).
-    *   `~t(12:00:00)`: Time literal.
-    *   `~r/[a-z]+/`: Regex literal.
-    *   `~u(https://example.com)` / `~url(https://example.com)`: URL literal.
-    *   `~path[/usr/local/bin]`: Path literal.
-    *   `~json{ "x": 1 }`: JSON literal (parsed at compile time).
-*   **Structured Sigils**: `~map{ k => v }` and `~set[1, 2]` are syntactic sugar for collection construction.
-*   **UI Sigil**: `~html~> <div>{expr}</div> <~html` parses HTML-like syntax into typed `aivi.ui.VNode msg` values (not strings) and supports `{expr}` splices.
+## 12) Effects
+- `Effect E A` models typed effects with explicit error domain.
+- `effect { ... }` sequences effects using `<-` for binding.
+- `x = e` inside `effect` is pure-only; use `<-` to run effects.
+- Expression statements must be `Effect E Unit` unless bound.
+- `or` is fallback-only sugar for effects or `Result`.
 
-## 4. Kernel & Semantics (Under the Hood)
-*   **Desugaring**: Surface syntax desugars into a minimal **Kernel** (AST defined in `crates/aivi/src/kernel.rs`).
-*   **Generators**: Compiled via **CPS transformation** into generic lambdas (`\k \z -> ...`).
-*   **Modules**: `module Name { export * }`. Files are implicit modules.
-*   **Effects**: Typed effect tracking `Effect E A`.
+## 13) Resources
+- `resource { ... }` with `yield` for acquire/use/release.
+- Acquired in `effect` blocks with `<-`; released LIFO on scope exit.
 
-## 5. Rust Implementation Details (`crates/`)
-*   **Parser**: Error-tolerant, preserves whitespace in CST for LSP.
-*   **Kernel**:
-    *   `KernelExpr::Lambda`: Standard closure.
-    *   `KernelExpr::App`: Function application.
-    *   `KernelExpr::Patch`: Optimized record update.
-*   **Runtime**: Native Rust runtime executing the desugared program.
-*   **LSP**: Deeply integrated, relies on `specs/` as source of truth.
+## 14) Modules and imports
+- One module per file: `module path.name` must be first non-empty item.
+- `use` imports values/types; `use ... (domain D)` imports domain semantics.
+- `export` controls public symbols; `export domain D` exports domain members.
+- Implicit prelude: `use aivi.prelude`, disabled via `@no_prelude`.
+- Circular dependencies are forbidden.
 
-## 6. Important Rules for Code Generation
-1.  **Use `|>`**: Prefer pipelines over nested function calls.
-2.  **Use `<|`**: ALWAYS use patching for record updates.
-3.  **No `return`**: The last expression is the return value.
-4.  **No `for/while`**: Use `generate` blocks or recursion.
-5.  **Strict Identifiers**: Types/Modules MUST be `UpperCamelCase`. Variables/Functions MUST be `lowerCamelCase`.
-6.  **Imports**: `use aivi.list` or `use aivi.list (map, filter)`.
+## 15) External sources
+- `Source K A` represents typed external data.
+- `load : Source K A -> Effect (SourceError K) A`.
+- Provided sources: file, http/https, env, db, email, llm, image, s3.
+- `@static` can embed compile-time sources.
+
+## 16) Sigils
+- Custom literals: `~tag(...)`, `~tag[...]`, `~tag{...}`, `~tag/.../`.
+- Structured sigils include `~map{...}` and `~set[...]`.
+- Some compiler-provided sigils: `~u(...)`, `~url(...)`, `~path[...]`.
+
+## 17) Decorators (v0.1)
+- `@static`, `@inline`, `@deprecated`, `@debug`, `@test`, `@no_prelude`.
+- Unknown decorators are compile errors; user-defined decorators are not supported.
+
+## 18) Operator reference (selected)
+- Binding: `=`
+- Effect/generator/resource bind: `<-`
+- Guard: `->` (generators only)
+- Pipe: `|>`
+- Patch: `<|`
+- Match/refutable: `?`
+- Arms: `|`
+- Lambda/arm: `=>`
+- Spread/rest: `...`
+- Range: `..`
+- Accessor: `.` and `.field` accessor function
+
+## 19) Block forms
+- `{ ... }` is either a record literal or a block; disambiguated by first entry.
+- `effect { ... }`, `generate { ... }`, `resource { ... }` are dedicated blocks.

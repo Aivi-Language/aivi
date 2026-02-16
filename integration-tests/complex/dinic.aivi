@@ -10,8 +10,8 @@ Edge = { from: Int, to: Int, cap: Int }
 ResidualKey = { from: Int, to: Int }
 Residual =
   { graph: Graph
-  capacities: Map ResidualKey Int
-}
+    capacities: Map ResidualKey Int
+  }
 
 getOrZero = key map => (Map.get key map) ?
   | Some v => v
@@ -22,11 +22,11 @@ addCaps = list acc zero => list ?
   | [edge, ...tail] => {
       updated =
       Map.insert
-    { from: edge.from, to: edge.to }
-    (if zero then 0 else edge.cap)
-    acc
-    addCaps tail updated zero
-  }
+      { from: edge.from, to: edge.to }
+      (if zero then 0 else edge.cap)
+      acc
+      addCaps tail updated zero
+    }
 
 buildResidual = edges => {
     backward = List.map edges (edge => { from: edge.to, to: edge.from, cap: 0 })
@@ -35,7 +35,7 @@ buildResidual = edges => {
   graph = fromWeightedEdges weighted
   caps = addCaps edges Map.empty False
   capsWithReverse = addCaps backward caps True
-  { graph, capacities: capsWithReverse }
+  { graph: graph, capacities: capsWithReverse }
 }
 
 bfsLevels = residual source sink => {
@@ -59,11 +59,11 @@ bfsLevels = residual source sink => {
             (Map.get current accLevels) ?
               | Some lvl => lvl
               | None     => -1
-          explore tail (append q next) (Map.insert next (level + 1) accLevels)
+            explore tail (append q next) (Map.insert next (level + 1) accLevels)
+          }
+          else
+            explore tail q accLevels
         }
-        else
-          explore tail q accLevels
-      }
 
     explore neighbors rest levels
   }
@@ -76,22 +76,22 @@ pushFlow = residual from to delta => {
   backward = getOrZero { from: to, to: from } residual.capacities
   caps1 = Map.insert { from, to } (forward - delta) residual.capacities
   caps2 = Map.insert { from: to, to: from } (backward + delta) caps1
-  { residual with capacities: caps2 }
+  residual <| { capacities: caps2 }
 }
 
 dfsFlow = residual levels node sink flow =>
   if flow == 0 then
-  (0, residual)
-else if node == sink then
-  (flow, residual)
-else {
-  neighbors = edgesFrom residual.graph node
+    (0, residual)
+  else if node == sink then
+    (flow, residual)
+  else {
+    neighbors = edgesFrom residual.graph node
 
-  explore = list accRes => list ?
-    | []              => (0, accRes)
-    | [edge, ...tail] => {
+    explore = list accRes => list ?
+      | []              => (0, accRes)
+      | [edge, ...tail] => {
         cap = getOrZero { from: node, to: edge.to } accRes.capacities
-      levelNode =
+        levelNode =
         (Map.get node levels) ?
           | Some lvl => lvl
           | None     => -1
@@ -126,39 +126,39 @@ blockingFlow = residual source sink levels acc => {
 maxFlow = edges source sink => {
     start = buildResidual edges
 
-  loop = state total => {
+  go = state total => {
       (reachable, levels) = bfsLevels state source sink
     if !reachable then
       (total, state)
     else {
       (newTotal, updated) = blockingFlow state source sink levels total
-      loop updated newTotal
+      go updated newTotal
     }
   }
 
-  loop start 0
+  go start 0
 }
 
 @test
 flowTest =
   effect {
-  graphEdges = [
-    { from: 0, to: 1, cap: 10 }
-    { from: 0, to: 2, cap: 5 }
-    { from: 1, to: 2, cap: 15 }
-    { from: 1, to: 3, cap: 10 }
-    { from: 2, to: 4, cap: 10 }
-    { from: 3, to: 4, cap: 10 }
-    { from: 3, to: 5, cap: 10 }
-    { from: 4, to: 5, cap: 10 }
-  ]
+    graphEdges = [
+      { from: 0, to: 1, cap: 10 }
+      { from: 0, to: 2, cap: 5 }
+      { from: 1, to: 2, cap: 15 }
+      { from: 1, to: 3, cap: 10 }
+      { from: 2, to: 4, cap: 10 }
+      { from: 3, to: 4, cap: 10 }
+      { from: 3, to: 5, cap: 10 }
+      { from: 4, to: 5, cap: 10 }
+    ]
 
-  res = maxFlow graphEdges 0 5
-  (result, _) = res
-  _ <- assert (result == 20)
+    res = maxFlow graphEdges 0 5
+    (result, _) = res
+    _ <- assert (result == 20)
 
-  empty = []
-  res2 = maxFlow empty 0 1
-  (zero, _) = res2
-  _ <- assert (zero == 0)
-}
+    empty = []
+    res2 = maxFlow empty 0 1
+    (zero, _) = res2
+    _ <- assert (zero == 0)
+  }
