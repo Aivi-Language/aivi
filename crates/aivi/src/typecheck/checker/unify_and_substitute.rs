@@ -170,15 +170,24 @@ impl TypeChecker {
     }
 
     fn bind_var(&mut self, var: TypeVarId, ty: Type, span: Span) -> Result<(), TypeError> {
+        // Normalize through the current substitution before doing the occurs check.
+        // Without this, we can falsely report an occurs-check error when `ty` is a var
+        // that already resolves to `var` (via substitution), which should be a no-op.
+        let ty = self.apply(ty);
         if let Type::Var(other) = &ty {
             if *other == var {
                 return Ok(());
             }
         }
         if self.occurs(var, &ty) {
+            let mut message = "occurs check failed".to_string();
+            if std::env::var("AIVI_DEBUG_TRACE").is_ok_and(|v| v == "1") {
+                let ty_str = self.type_to_string(&ty);
+                message = format!("occurs check failed (var={:?}, ty={})", var, ty_str);
+            }
             return Err(TypeError {
                 span,
-                message: "occurs check failed".to_string(),
+                message,
                 expected: Some(Box::new(Type::Var(var))),
                 found: Some(Box::new(ty)),
             });
