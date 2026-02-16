@@ -132,6 +132,19 @@ aivi check <path|dir/...>
 
 Calculates diagnostics and performs type checking.
 
+#### `test`
+
+Runs `@test`-decorated top-level definitions as integration tests.
+
+```bash
+aivi test <path|dir/**> [--check-stdlib]
+```
+
+- Test discovery: only files under the target that contain `@test` are formatted, parsed, and typechecked.
+- Execution: each `@test` definition is executed as an `Effect`; failures are reported with the qualified name.
+- Reports: writes file lists to `target/aivi-test-passed-files.txt` and `target/aivi-test-failed-files.txt`.
+- `--check-stdlib`: include diagnostics from embedded stdlib modules (default filters them out).
+
 #### `parse`
 
 Parses a file and outputs the concrete syntax tree (CST) and any syntax errors.

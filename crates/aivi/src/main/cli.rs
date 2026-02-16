@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 use std::env;
 use std::io;
 use std::io::Write;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 use std::sync::{
@@ -141,10 +142,22 @@ fn run() -> Result<(), AiviError> {
             // Format all target files in-place before running tests so the suite is stable and
             // editor tooling doesn't surface spurious formatter diffs.
             let paths = aivi::resolve_target(target)?;
+            let mut test_paths = Vec::new();
             for path in &paths {
                 if path.extension().and_then(|s| s.to_str()) != Some("aivi") {
                     continue;
                 }
+                let content = std::fs::read_to_string(path)?;
+                if content.contains("@test") {
+                    test_paths.push(path.clone());
+                }
+            }
+            if test_paths.is_empty() {
+                return Err(AiviError::InvalidCommand(format!(
+                    "no @test definitions found under {target}"
+                )));
+            }
+            for path in &test_paths {
                 let content = std::fs::read_to_string(path)?;
                 let formatted = aivi::format_text(&content);
                 if formatted != content {
@@ -153,7 +166,12 @@ fn run() -> Result<(), AiviError> {
             }
 
             // Parse and print diagnostics first so failures aren't silent.
-            let mut diagnostics = load_module_diagnostics(target)?;
+            let mut diagnostics = Vec::new();
+            for path in &test_paths {
+                let text = std::fs::read_to_string(path)?;
+                let (_modules, mut file_diags) = aivi::parse_modules(path.as_path(), &text);
+                diagnostics.append(&mut file_diags);
+            }
             for diag in &diagnostics {
                 let rendered =
                     render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
@@ -167,7 +185,8 @@ fn run() -> Result<(), AiviError> {
 
             // Discover @test definitions from user sources only.
             let mut test_names = Vec::new();
-            for path in &paths {
+            let mut test_name_to_path = HashMap::<String, PathBuf>::new();
+            for path in &test_paths {
                 let text = std::fs::read_to_string(path)?;
                 let (modules, _diags) = aivi::parse_modules(path.as_path(), &text);
                 for module in modules {
@@ -176,21 +195,19 @@ fn run() -> Result<(), AiviError> {
                             continue;
                         };
                         if def.decorators.iter().any(|d| d.name.name == "test") {
-                            test_names.push(format!("{}.{}", module.name.name, def.name.name));
+                            let name = format!("{}.{}", module.name.name, def.name.name);
+                            test_name_to_path.insert(name.clone(), path.clone());
+                            test_names.push(name);
                         }
                     }
                 }
             }
             test_names.sort();
             test_names.dedup();
-            if test_names.is_empty() {
-                return Err(AiviError::InvalidCommand(format!(
-                    "no @test definitions found under {target}"
-                )));
-            }
+            debug_assert!(!test_names.is_empty());
 
             // Check and print module diagnostics (optionally including embedded stdlib).
-            let mut modules = load_modules(target)?;
+            let mut modules = aivi::load_modules_from_paths(&test_paths)?;
             let mut check_diags = check_modules(&modules);
             if !aivi::file_diagnostics_have_errors(&check_diags) {
                 check_diags.extend(aivi::elaborate_expected_coercions(&mut modules));
@@ -212,11 +229,51 @@ fn run() -> Result<(), AiviError> {
 
             let program = aivi::desugar_modules(&modules);
             let report = aivi::run_test_suite(program, &test_names, &modules)?;
+
+            // Write out deterministic report files for CI and tooling:
+            // - passed files: all tests in file passed
+            // - failed files: at least one test in file failed
+            let mut failed_names = HashSet::<String>::new();
+            for failure in &report.failures {
+                failed_names.insert(failure.name.clone());
+            }
+            let mut file_to_tests = BTreeMap::<PathBuf, Vec<String>>::new();
+            for name in &test_names {
+                if let Some(path) = test_name_to_path.get(name) {
+                    file_to_tests.entry(path.clone()).or_default().push(name.clone());
+                }
+            }
+            let mut passed_files = BTreeSet::<PathBuf>::new();
+            let mut failed_files = BTreeSet::<PathBuf>::new();
+            for (path, names) in file_to_tests {
+                if names.iter().any(|n| failed_names.contains(n)) {
+                    failed_files.insert(path);
+                } else {
+                    passed_files.insert(path);
+                }
+            }
+            std::fs::create_dir_all("target")?;
+            let passed_text = passed_files
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
+            let failed_text = failed_files
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join("\n");
+            std::fs::write("target/aivi-test-passed-files.txt", passed_text)?;
+            std::fs::write("target/aivi-test-failed-files.txt", failed_text)?;
+
             if report.failed == 0 {
-                println!("ok: {} passed", report.passed);
+                println!("\x1b[32m\u{2714}\x1b[0m ok: {} passed", report.passed);
                 Ok(())
             } else {
-                eprintln!("FAILED: {} failed, {} passed", report.failed, report.passed);
+                eprintln!(
+                    "\x1b[31m\u{2718}\x1b[0m FAILED: {} failed, {} passed",
+                    report.failed, report.passed
+                );
                 for failure in report.failures {
                     eprintln!("{}: {}", failure.name, failure.message);
                 }

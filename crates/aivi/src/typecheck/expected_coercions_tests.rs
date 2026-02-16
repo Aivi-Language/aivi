@@ -120,7 +120,7 @@ x = needsText { name: "A" }
 }
 
 #[test]
-fn does_not_coerce_without_instance() {
+fn inserts_to_text_for_int_when_text_expected() {
     let source = r#"
 module test.no_coerce
 
@@ -140,8 +140,22 @@ x = needsText 123
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
     let diags = crate::typecheck::elaborate_expected_coercions(&mut all_modules);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+
+    let program = crate::hir::desugar_modules(&all_modules);
+    let module = program
+        .modules
+        .iter()
+        .find(|m| m.name == "test.no_coerce")
+        .expect("expected test.no_coerce module");
+    let x_def = module
+        .defs
+        .iter()
+        .find(|d| d.name == "x")
+        .expect("expected x def");
+
     assert!(
-        !diags.is_empty(),
-        "expected a type error when coercing Int to Text"
+        hir_contains_var(&x_def.expr, "toText"),
+        "expected elaboration to insert a `toText` call"
     );
 }

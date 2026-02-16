@@ -105,6 +105,7 @@ The AIVI compiler implements a multi-stage pipeline:
 
 Additional tooling:
 - **Formatter** (`aivi fmt`)
+- **Test runner** (`aivi test`) for integration tests (`@test` definitions)
 - **LSP server** (`aivi_lsp`) for editor integration
 
 ## Feedback & Contributions
