@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.net.sockets
 
-Ref = SocketError
+
 
 @test
 smoke = effect {

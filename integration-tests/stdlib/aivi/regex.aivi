@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi
 
-subject = regex
+
 
 @test
 smoke = effect {
@@ -17,7 +17,7 @@ smoke = effect {
   _ <- testing.assert (test r "hello" == True)
   _ <- testing.assert (test r "hxllo" == True)
   _ <- testing.assert (test r "world" == False)
-  
+
   mResult = regex.match r "hello"
   _ <- mResult ?
     | Some matched => testing.assert (matched.full == "hello")

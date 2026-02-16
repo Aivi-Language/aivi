@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.number.rational
 
-subject = normalize
+
 
 @test
 smoke = effect {

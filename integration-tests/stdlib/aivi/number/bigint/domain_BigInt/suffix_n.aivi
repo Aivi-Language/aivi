@@ -8,7 +8,7 @@ use aivi.number.bigint
 
 use aivi.number.bigint
 
-subject = 2n
+
 
 @test
 smoke = effect {

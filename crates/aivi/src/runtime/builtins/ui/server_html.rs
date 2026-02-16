@@ -284,7 +284,7 @@ fn server_html_run_ws_session(
                     );
                 }
             }
-            Ok(ServerHtmlClientMsg::Hello(_)) => {
+            Ok(ServerHtmlClientMsg::Hello) => {
                 // Ignore repeated hello.
             }
             Err(_) => {
@@ -999,7 +999,6 @@ fn server_html_diff_attrs(old: &Value, new: &Value, node_id: &str, out: &mut Vec
 #[derive(Debug)]
 struct ServerHtmlHello {
     view_id: String,
-    url: String,
     online: bool,
 }
 
@@ -1030,7 +1029,7 @@ struct ServerHtmlEffectResultMsg {
 
 #[derive(Debug)]
 enum ServerHtmlClientMsg {
-    Hello(ServerHtmlHello),
+    Hello,
     Event(ServerHtmlEventMsg),
     Platform(ServerHtmlPlatformMsg),
     EffectResult(ServerHtmlEffectResultMsg),
@@ -1054,18 +1053,12 @@ fn server_html_decode_hello(text: &str) -> Result<ServerHtmlHello, String> {
         .and_then(|v| v.as_str())
         .ok_or_else(|| "hello.viewId must be a string".to_string())?
         .to_string();
-    let url = obj
-        .get("url")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
     let online = obj
         .get("online")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
     Ok(ServerHtmlHello {
         view_id,
-        url,
         online,
     })
 }
@@ -1081,7 +1074,10 @@ fn server_html_decode_client_msg(text: &str) -> Result<ServerHtmlClientMsg, Stri
         .and_then(|v| v.as_str())
         .ok_or_else(|| "message.t must be a string".to_string())?;
     match t {
-        "hello" => Ok(ServerHtmlClientMsg::Hello(server_html_decode_hello(text)?)),
+        "hello" => {
+            let _ = server_html_decode_hello(text)?;
+            Ok(ServerHtmlClientMsg::Hello)
+        }
         "event" => {
             let view_id = obj
                 .get("viewId")

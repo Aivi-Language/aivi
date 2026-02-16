@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.regex
 
-subject = findAll
+
 
 @test
 smoke = effect {

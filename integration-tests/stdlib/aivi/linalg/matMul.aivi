@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.linalg
 
-subject = matMul
+
 
 @test
 smoke = effect {

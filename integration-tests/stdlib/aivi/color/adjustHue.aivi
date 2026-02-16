@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.color
 
-subject = adjustHue
+
 
 @test
 smoke = effect {

@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.generator
 
-subject = map
+
 
 @test
 smoke = effect {

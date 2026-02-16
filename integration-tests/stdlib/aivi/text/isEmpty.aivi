@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.text
 
-subject = isEmpty
+
 
 @test
 smoke = effect {

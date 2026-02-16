@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.collections
 
-Ref = Deque
+
 
 @test
 smoke = effect {

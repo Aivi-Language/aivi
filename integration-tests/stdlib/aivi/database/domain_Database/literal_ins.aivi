@@ -8,7 +8,7 @@ use aivi.database
 
 use aivi.database
 
-subject = ins
+
 
 @test
 smoke = effect {

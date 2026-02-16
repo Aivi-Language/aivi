@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.number.quaternion
 
-subject = fromAxisAngle
+
 
 @test
 smoke = effect {

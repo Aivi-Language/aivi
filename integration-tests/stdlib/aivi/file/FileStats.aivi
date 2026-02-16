@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.file
 
-Ref = FileStats
+
 
 @test
 smoke = effect {

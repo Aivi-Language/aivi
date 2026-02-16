@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.net.http
 
-subject = get
+
 
 @test
 smoke = effect {

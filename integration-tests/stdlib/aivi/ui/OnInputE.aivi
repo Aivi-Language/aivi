@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.ui
 
-Ref = OnInputE
+
 
 @test
 smoke = effect {

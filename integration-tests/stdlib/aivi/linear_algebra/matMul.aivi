@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.linear_algebra
 
-subject = matMul
+
 
 @test
 smoke = effect {

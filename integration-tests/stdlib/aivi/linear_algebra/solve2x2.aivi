@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.linear_algebra
 
-subject = solve2x2
+
 
 @test
 smoke = effect {

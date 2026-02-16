@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.calendar
 
-Ref = Date
+
 
 @test
 smoke = effect {

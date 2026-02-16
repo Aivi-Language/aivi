@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.regex
 
-subject = find
+
 
 @test
 smoke = effect {
@@ -14,7 +14,7 @@ smoke = effect {
   r <- reResult ?
     | Ok re => effect { pure re }
     | Err _ => effect { fail "compile failed" }
-  
+
   fResult = regex.find r "hello"
   _ <- fResult ?
     | Some (s, e) => effect {

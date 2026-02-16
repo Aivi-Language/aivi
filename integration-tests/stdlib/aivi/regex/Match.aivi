@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.regex
 
-Ref = Match
+
 
 @test
 smoke = effect {
@@ -15,7 +15,7 @@ smoke = effect {
     | Ok re => effect { pure re }
     | Err _ => effect { fail "compile failed" }
   }
-  
+
   mResult = regex.match r "a"
   _ <- mResult ? {
     | Some m => testing.assert (m.full == "a")

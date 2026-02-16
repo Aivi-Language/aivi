@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi
 
-subject = ui
+
 
 @test
 smoke = effect {

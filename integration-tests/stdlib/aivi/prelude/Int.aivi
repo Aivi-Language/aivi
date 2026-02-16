@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.prelude
 
-Ref = Int
+
 
 @test
 smoke = effect {

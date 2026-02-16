@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.ui
 
-subject = vOnKeyUp
+
 
 @test
 smoke = effect {

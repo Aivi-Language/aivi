@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.net.streams
 
-Ref = Stream
+
 
 @test
 smoke = effect {

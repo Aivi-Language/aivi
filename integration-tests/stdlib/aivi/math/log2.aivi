@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.math
 
-subject = log2
+
 
 @test
 smoke = effect {

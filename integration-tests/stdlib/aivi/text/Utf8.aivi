@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.text
 
-Ref = Utf8
+
 
 @test
 smoke = effect {

@@ -6,7 +6,7 @@ use aivi.testing
 
 use aivi.number
 
-subject = fromInt
+
 
 @test
 smoke = effect {
