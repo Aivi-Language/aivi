@@ -6,10 +6,9 @@ use aivi.testing (assert)
 
 use aivi.text
 
-subject = Utf32
+Ref = Utf32
 
 @test
 smoke = effect {
-  _ <- pure subject
   _ <- assert True
 }

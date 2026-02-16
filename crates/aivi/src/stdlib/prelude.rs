@@ -20,4 +20,7 @@ use aivi.duration
 use aivi.color
 use aivi.vector
 
+toText : A -> Text
+toText = value => text.toText value
+
 Patch A = A -> A"#;

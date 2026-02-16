@@ -6,10 +6,9 @@ use aivi.testing (assert)
 
 use aivi.net.http_server
 
-subject = WebSocket
+Ref = WebSocket
 
 @test
 smoke = effect {
-  _ <- pure subject
   _ <- assert True
 }

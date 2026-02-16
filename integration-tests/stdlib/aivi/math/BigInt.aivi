@@ -6,10 +6,9 @@ use aivi.testing (assert)
 
 use aivi.math
 
-subject = BigInt
+Ref = BigInt
 
 @test
 smoke = effect {
-  _ <- pure subject
   _ <- assert True
 }

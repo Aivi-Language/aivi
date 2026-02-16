@@ -202,6 +202,42 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     };
     env.insert("console".to_string(), Scheme::mono(console_record));
 
+    // Builtin source records that are exported from `aivi` but implemented by the runtime.
+    // Keep these lightweight: they primarily exist so user code can reference them and the
+    // embedded stdlib wrappers can typecheck against field access.
+    let crypto_record = Type::Record {
+        fields: vec![
+            (
+                "sha256".to_string(),
+                Type::Func(Box::new(text_ty.clone()), Box::new(text_ty.clone())),
+            ),
+            (
+                "randomUuid".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(Type::con("Effect").app(vec![text_ty.clone(), text_ty.clone()])),
+                ),
+            ),
+            (
+                "randomBytes".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![text_ty.clone(), Type::con("Bytes")])),
+                ),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+        open: true,
+    };
+    env.insert("crypto".to_string(), Scheme::mono(crypto_record));
+
+    let i18n_record = Type::Record {
+        fields: vec![].into_iter().collect(),
+        open: true,
+    };
+    env.insert("i18n".to_string(), Scheme::mono(i18n_record));
+
     let option_text_ty = Type::con("Option").app(vec![text_ty.clone()]);
     let env_record = Type::Record {
         fields: vec![

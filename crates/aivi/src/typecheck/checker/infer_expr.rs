@@ -682,7 +682,8 @@ impl TypeChecker {
                         || matches!(right_applied, Type::Con(ref name, _) if name != "Int");
                     if let Some(candidates) = env.get_all(&op_name) {
                         let base_subst = self.subst.clone();
-                        let mut selected: Option<std::collections::HashMap<TypeVarId, Type>> = None;
+                        let mut selected: Option<(String, std::collections::HashMap<TypeVarId, Type>)> =
+                            None;
                         for scheme in candidates {
                             self.subst = base_subst.clone();
                             let op_ty = self.instantiate(scheme);
@@ -721,21 +722,27 @@ impl TypeChecker {
                                 continue;
                             }
 
-                            if selected.is_some() {
-                                self.subst = base_subst;
-                                return Err(TypeError {
-                                    span: expr_span(left),
-                                    message: format!(
-                                        "ambiguous domain operator '{}' for these operand types",
-                                        op
-                                    ),
-                                    expected: None,
-                                    found: None,
-                                });
+                            let key_ty = Type::Func(Box::new(right_ty.clone()), Box::new(Type::con("Bool")));
+                            let key = self.type_to_string(&key_ty);
+                            if let Some((existing_key, _)) = &selected {
+                                if *existing_key != key {
+                                    self.subst = base_subst;
+                                    return Err(TypeError {
+                                        span: expr_span(left),
+                                        message: format!(
+                                            "ambiguous domain operator '{}' for these operand types",
+                                            op
+                                        ),
+                                        expected: None,
+                                        found: None,
+                                    });
+                                }
+                                // Duplicate overload (typically from repeated imports); ignore.
+                                continue;
                             }
-                            selected = Some(self.subst.clone());
+                            selected = Some((key, self.subst.clone()));
                         }
-                        if let Some(subst) = selected {
+                        if let Some((_, subst)) = selected {
                             self.subst = subst;
                             return Ok(Type::con("Bool"));
                         }
@@ -755,13 +762,15 @@ impl TypeChecker {
                 self.unify_with_span(right_ty, Type::con("Int"), expr_span(right))?;
                 Ok(Type::con("Bool"))
             }
-            "+" | "-" | "*" | "×" | "/" | "%" => {
+            "++" | "+" | "-" | "*" | "×" | "/" | "%" => {
                 let op_name = format!("({})", op);
                 let left_applied = self.apply(left_ty.clone());
                 let left_applied = self.expand_alias(left_applied);
                 let right_applied = self.apply(right_ty.clone());
                 let right_applied = self.expand_alias(right_applied);
-                let both_int = matches!(left_applied, Type::Con(ref name, _) if name == "Int")
+                let allow_int_fallback = op != "++";
+                let both_int = allow_int_fallback
+                    && matches!(left_applied, Type::Con(ref name, _) if name == "Int")
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
 
                 if !both_int {
@@ -806,23 +815,24 @@ impl TypeChecker {
                                 let Type::Func(expected_rhs, expected_result) = rest_norm else {
                                     continue;
                                 };
-                                let rhs_key = self.type_to_string(&expected_rhs);
+                                let expected_rhs_ty = *expected_rhs;
+                                let expected_result_ty = *expected_result;
                                 if self
-                                    .elab_expr(right.clone(), Some(*expected_rhs), env)
+                                    .elab_expr(right.clone(), Some(expected_rhs_ty.clone()), env)
                                     .is_err()
                                 {
                                     continue;
                                 }
-                                let res_ty = self.apply(*expected_result);
-                                let res_key = self.type_to_string(&res_ty);
-                                (format!("{rhs_key} -> {res_key}"), res_ty)
+                                let res_ty = self.apply(expected_result_ty);
+                                let key_ty =
+                                    Type::Func(Box::new(expected_rhs_ty), Box::new(res_ty.clone()));
+                                (self.type_to_string(&key_ty), res_ty)
                             } else {
                                 let right_ty = self.infer_expr(right, env)?;
-                                let rhs_key = self.type_to_string(&right_ty);
                                 let result_ty = self.fresh_var();
                                 if self
                                     .unify_with_span(
-                                        rest_ty,
+                                        rest_ty.clone(),
                                         Type::Func(
                                             Box::new(right_ty),
                                             Box::new(result_ty.clone()),
@@ -834,8 +844,14 @@ impl TypeChecker {
                                     continue;
                                 }
                                 let res_ty = self.apply(result_ty);
-                                let res_key = self.type_to_string(&res_ty);
-                                (format!("{rhs_key} -> {res_key}"), res_ty)
+                                let rest_applied = self.apply(rest_ty);
+                                let rest_norm = self.expand_alias(rest_applied);
+                                let Type::Func(rhs_ty, _) = rest_norm else {
+                                    continue;
+                                };
+                                let key_ty =
+                                    Type::Func(Box::new(*rhs_ty), Box::new(res_ty.clone()));
+                                (self.type_to_string(&key_ty), res_ty)
                             };
 
                             if let Some((existing_key, _, _)) = &selected {
@@ -864,6 +880,14 @@ impl TypeChecker {
 
                         self.subst = subst_after_operands.clone();
                     }
+                    if !allow_int_fallback {
+                        return Err(TypeError {
+                            span: expr_span(left),
+                            message: format!("no domain operator '{}' for these operand types", op),
+                            expected: None,
+                            found: None,
+                        });
+                    }
                     if concrete_non_int && !any_var {
                         return Err(TypeError {
                             span: expr_span(left),
@@ -872,6 +896,15 @@ impl TypeChecker {
                             found: None,
                         });
                     }
+                }
+
+                if !allow_int_fallback {
+                    return Err(TypeError {
+                        span: expr_span(left),
+                        message: format!("no domain operator '{}' for these operand types", op),
+                        expected: None,
+                        found: None,
+                    });
                 }
 
                 self.unify_with_span(left_ty, Type::con("Int"), expr_span(left))?;

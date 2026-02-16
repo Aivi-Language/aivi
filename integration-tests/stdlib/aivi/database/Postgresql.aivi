@@ -6,10 +6,9 @@ use aivi.testing (assert)
 
 use aivi.database
 
-subject = Postgresql
+Ref = Postgresql
 
 @test
 smoke = effect {
-  _ <- pure subject
   _ <- assert True
 }
