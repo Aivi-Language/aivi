@@ -64,6 +64,8 @@ fn formatting_edits_respect_indent_size() {
     let options = FormatOptions {
         indent_size: 4,
         max_blank_lines: 1,
+        brace_style: aivi::BraceStyle::Kr,
+        max_width: 100,
     };
     let edits = Backend::build_formatting_edits(text, options);
     let formatted = &edits[0].new_text;

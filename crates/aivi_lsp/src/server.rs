@@ -30,6 +30,8 @@ use crate::strict::StrictLevel;
 struct AiviFormatConfig {
     indent_size: Option<usize>,
     max_blank_lines: Option<usize>,
+    brace_style: Option<String>,
+    max_width: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -174,6 +176,17 @@ impl LanguageServer for Backend {
             }
             if let Some(max_blank_lines) = format.max_blank_lines {
                 state.format_options.max_blank_lines = max_blank_lines;
+            }
+            if let Some(brace_style) = format.brace_style {
+                let v = brace_style.to_ascii_lowercase();
+                state.format_options.brace_style = match v.as_str() {
+                    "kr" | "k&r" | "knr" | "ts" | "java" => aivi::BraceStyle::Kr,
+                    "allman" => aivi::BraceStyle::Allman,
+                    _ => state.format_options.brace_style,
+                };
+            }
+            if let Some(max_width) = format.max_width {
+                state.format_options.max_width = max_width;
             }
         }
 

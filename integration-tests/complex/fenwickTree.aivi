@@ -3,120 +3,109 @@ module integrationTests.complex.FenwickTree
 
 use aivi
 use aivi.testing
-
 use aivi.collections
 
 Fenwick = { size: Int, tree: Map Int Int }
 
-getOrZero = idx tree =>
-  (Map.get idx tree) ?
-    | Some v => v
-    | None   => 0
+getOrZero = idx tree => (Map.get idx tree) ?
+  | Some v => v
+  | None   => 0
 
 lowbit = idx =>
   if idx % 2 == 1 then
-    1
-  else
-    2 * lowbit (idx / 2)
+  1
+else
+  2 * lowbit (idx / 2)
 
 addDelta = size idx delta tree =>
   if idx > size then
-    tree
-  else
-    {
-      cur = getOrZero idx tree
-      updated = Map.insert idx (cur + delta) tree
-      addDelta size (idx + lowbit idx) delta updated
-    }
+  tree
+else {
+  cur = getOrZero idx tree
+  updated = Map.insert idx (cur + delta) tree
+  addDelta size (idx + lowbit idx) delta updated
+}
 
-buildFromList = arr =>
-  {
+buildFromList = arr => {
     size = List.length arr
 
-    buildIndex = idx tree =>
-      if idx > size then
-        tree
-      else
-        (List.at arr (idx - 1)) ?
-          | None       => buildIndex (idx + 1) tree
-          | Some value =>
-            {
-              t = addDelta size idx value tree
-              buildIndex (idx + 1) t
-            }
+  buildIndex = idx tree =>
+    if idx > size then
+    tree
+  else
+    (List.at arr (idx - 1)) ?
+      | None       => buildIndex (idx + 1) tree
+      | Some value => {
+        t = addDelta size idx value tree
+      buildIndex (idx + 1) t
+    }
 
-    { size, tree: buildIndex 1 Map.empty }
-  }
+  { size, tree: buildIndex 1 Map.empty }
+}
 
-prefix = fenwick idx =>
-  {
+prefix = fenwick idx => {
     go = i acc =>
-      if i == 0 then
-        acc
-      else
-        {
-          a = acc + getOrZero i fenwick.tree
-          go (i - lowbit i) a
-        }
-
-    go idx 0
+    if i == 0 then
+    acc
+  else {
+    a = acc + getOrZero i fenwick.tree
+    go (i - lowbit i) a
   }
+
+  go idx 0
+}
 
 rangeSum = fenwick l r =>
   if l > r || l < 1 then
-    None
-  else
-    Some (prefix fenwick r - prefix fenwick (l - 1))
+  None
+else
+  Some (prefix fenwick r - prefix fenwick (l - 1))
 
 update = fenwick idx value =>
   if idx < 1 || idx > fenwick.size then
-    fenwick
-  else
-    {
-      prev = rangeSum fenwick idx idx
-      delta =
-        prev ?
-          | Some v => value - v
-          | None   => value
-      { fenwick with tree: addDelta fenwick.size idx delta fenwick.tree }
-    }
+  fenwick
+else {
+  prev = rangeSum fenwick idx idx
+  delta =
+    prev ?
+      | Some v => value - v
+      | None   => value
+    { fenwick with tree: addDelta fenwick.size idx delta fenwick.tree }
+}
 
-naiveSum = arr l r =>
-  arr ?
-    | []                              => 0
-    | [h, ...t] when l <= 1 && r >= 1 => h + naiveSum t (l - 1) (r - 1)
-    | [_, ...t]                       => naiveSum t (l - 1) (r - 1)
+naiveSum = arr l r => arr ?
+  | []                              => 0
+  | [h, ...t] when l <= 1 && r >= 1 => h + naiveSum t (l - 1) (r - 1)
+  | [_, ...t]                       => naiveSum t (l - 1) (r - 1)
 
-matchIndex = idx fen arr =>
-  {
+matchIndex = idx fen arr => {
     expected = naiveSum arr idx idx
-    (rangeSum fen idx idx) ?
-      | Some got => got == expected
-      | None     => False
-  }
+  (rangeSum fen idx idx) ?
+    | Some got => got == expected
+    | None     => False
+}
 
-verifyIndices = indices fen arr =>
-  indices ?
-    | []        => True
-    | [h, ...t] => matchIndex h fen arr && verifyIndices t fen arr
+verifyIndices = indices fen arr => indices ?
+  | []        => True
+  | [h, ...t] => matchIndex h fen arr && verifyIndices t fen arr
 
 @test
 behaviors =
   effect {
-    values = [3, 1, 4, 1, 5]
-    fenwick = buildFromList values
+  values = [3, 1, 4, 1, 5]
+  fenwick = buildFromList values
 
-    sum05 = rangeSum fenwick 1 5
-    _ <- assert (sum05 == Some 14)
+  sum05 = rangeSum fenwick 1 5
+  _ <- assert (sum05 == Some 14)
 
-    sum23 = rangeSum fenwick 2 3
-    _ <- assert (sum23 == Some 5)
+  sum23 = rangeSum fenwick 2 3
+  _ <- assert (sum23 == Some 5)
 
-    _ <- assert (rangeSum fenwick 6 6 == None)
+  _ <- assert (rangeSum fenwick 6 6 == None)
 
-    updated = update fenwick 3 9
-    _ <- assert (rangeSum updated 3 3 == Some 9)
-    _ <- assert (rangeSum fenwick 3 3 == Some 4)
+  updated = update fenwick 3 9
+  _ <- assert (rangeSum updated 3 3 == Some 9)
+  _ <- assert (rangeSum fenwick 3 3 == Some 4)
 
-    _ <- assert (verifyIndices [1, 2, 3, 4, 5] updated values)
-  }
+  _ <- assert (verifyIndices [1, 2, 3, 4, 5] updated values)
+}
