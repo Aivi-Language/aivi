@@ -14,9 +14,9 @@ smoke = effect {
   h1 = Heap.push h0 3
   h2 = Heap.push h1 1
   h3 = Heap.push h2 2
-  
+
   _ <- assert (Heap.peekMin h3 == Some 1)
-  
+
   res = Heap.popMin h3
   _ <- match res {
     | Some (val, h4) => do {

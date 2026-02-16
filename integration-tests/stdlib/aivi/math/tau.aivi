@@ -10,6 +10,5 @@ subject = tau
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs (tau -6.28318) < 0.0001)
 }

@@ -10,6 +10,6 @@ subject = remainder
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs (remainder 5.5 2.0- (-0.5)) < 0.0001)
+  // 5.5 - 6.0 = -0.5
 }

@@ -10,6 +10,6 @@ subject = cbrt
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs (cbrt 8.0-2.0) < 0.0001)
+  _ <- assert (abs (cbrt 27.0-3.0) < 0.0001)
 }

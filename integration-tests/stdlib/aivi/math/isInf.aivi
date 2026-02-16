@@ -10,6 +10,7 @@ subject = isInf
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (isInf inf == True)
+  _ <- assert (isInf (- inf) == True)
+  _ <- assert (isInf 1.0 == False)
 }

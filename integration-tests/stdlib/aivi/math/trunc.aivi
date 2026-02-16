@@ -10,6 +10,6 @@ subject = trunc
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (trunc 1.9 == 1.0)
+  _ <- assert (trunc (-1.9) == -1.0)
 }

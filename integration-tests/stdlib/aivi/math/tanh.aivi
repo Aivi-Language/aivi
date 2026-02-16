@@ -10,6 +10,6 @@ subject = tanh
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs (tanh 0.0) < 0.0001)
+  _ <- assert (abs (tanh 1.0-0.7615) < 0.0001)
 }

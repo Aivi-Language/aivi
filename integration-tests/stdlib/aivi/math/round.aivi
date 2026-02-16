@@ -12,7 +12,7 @@ subject = round
 smoke = effect {
   _ <- assert (round 1.2 == 1.0)
   _ <- assert (round 1.8 == 2.0)
-  _ <- assert (round 1.5 == 2.0) // Round to nearest even? Check implementation. 
+  _ <- assert (round 1.5 == 2.0) // Round to nearest even? Check implementation.
   // Rust round() rounds half-way cases away from zero. 
   // Wait, looking at math.rs: "if frac.abs() == 0.5 { let even ..." -> It implements round half to even!
   _ <- assert (round 2.5 == 2.0)

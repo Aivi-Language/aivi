@@ -10,6 +10,6 @@ subject = acos
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs (acos 1.0).radians < 0.0001)
+  _ <- assert (abs (acos 0.0).radians - (pi / 2.0) < 0.0001)
 }

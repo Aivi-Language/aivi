@@ -10,6 +10,6 @@ subject = isNaN
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (isNaN nan == True)
+  _ <- assert (isNaN 1.0 == False)
 }
