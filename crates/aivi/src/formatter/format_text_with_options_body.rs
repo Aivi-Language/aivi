@@ -768,6 +768,7 @@
     let mut pipeop_seed_indent: Option<usize> = None;
     let pipe_block_extra = " ".repeat(indent_size);
     let mut prev_non_blank_last_token: Option<String> = None;
+    let mut prev_non_blank_last_code_token: Option<String> = None;
     let mut open_depth: isize = 0;
     let mut prev_effective_indent_len: usize = 0;
 
@@ -792,6 +793,14 @@
             .map(|t| t.text.clone())
     }
 
+    fn last_code_token(tokens: &[&crate::cst::CstToken]) -> Option<String> {
+        tokens
+            .iter()
+            .rev()
+            .find(|t| t.kind != "comment")
+            .map(|t| t.text.clone())
+    }
+
     fn net_open_depth(tokens: &[&crate::cst::CstToken]) -> isize {
         let mut depth = 0isize;
         for t in tokens {
@@ -806,24 +815,6 @@
             }
         }
         depth.max(0)
-    }
-
-    fn leading_close_count(tokens: &[&crate::cst::CstToken], first_idx: usize) -> isize {
-        let mut count = 0isize;
-        for t in tokens.iter().skip(first_idx) {
-            if t.kind == "comment" || t.text == "\n" {
-                continue;
-            }
-            if matches!(t.kind.as_str(), "string" | "sigil") {
-                break;
-            }
-            if is_close_sym(t.text.as_str()).is_some() {
-                count += 1;
-                continue;
-            }
-            break;
-        }
-        count
     }
 
     fn update_open_depth(open_depth: &mut isize, tokens: &[&crate::cst::CstToken]) {
@@ -903,10 +894,8 @@
             pipeop_block_base_depth = None;
             rhs_next_line_indent = None;
             rhs_next_line_depth = None;
-            if rhs_block_base_depth.is_some_and(|base| open_depth <= base) {
-                rhs_block_base_indent = None;
-                rhs_block_base_depth = None;
-            }
+            // Keep RHS blocks across blank lines to avoid breaking indentation inside delimited
+            // expressions (the surface parser is not indentation-sensitive per spec).
             pipeop_seed_indent = None;
             then_else_pending_depth = None;
             arm_rhs_active = false;
@@ -958,9 +947,11 @@
             continue;
         };
 
-        // Canonical base indentation from delimiter nesting (computed at render time).
-        let line_depth = (open_depth - leading_close_count(&state.tokens, first_idx)).max(0);
-        let line_indent_len = (line_depth as usize) * indent_size;
+        // Canonical base indentation from delimiter nesting (computed in pass 1).
+        // This matches `stack`-based delimiter nesting, and avoids drift when heuristics for
+        // continuation blocks are active.
+        let line_indent_len = state.indent_len;
+        let line_depth = (line_indent_len / indent_size) as isize;
         let pipeop_seed_match = pipeop_seed == Some(line_indent_len);
 
         let line_has_top_level_eq =
@@ -994,11 +985,11 @@
                 || matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?")));
 
         if should_start_pipe_block {
-            pipe_block_stack.push((prev_effective_indent_len, open_depth));
+            pipe_block_stack.push((prev_effective_indent_len, line_depth));
         }
         if should_start_pipeop_block {
             pipeop_block_base_indent = Some(prev_effective_indent_len);
-            pipeop_block_base_depth = Some(open_depth);
+            pipeop_block_base_depth = Some(line_depth);
         }
 
         // Close any nested `|` blocks we've left by delimiter nesting.
@@ -1061,6 +1052,13 @@
         if in_rhs_block && !starts_with_pipe && !starts_with_pipeop {
             continuation_levels += 1;
         }
+        let prev_opener_seed = matches!(
+            prev_non_blank_last_code_token.as_deref(),
+            Some("{" | "[" | "(")
+        );
+        if prev_opener_seed && is_close_sym(state.tokens[first_idx].text.as_str()).is_none() {
+            continuation_levels += 1;
+        }
         // If a line ended with `=`/`=>` and did not open a delimiter group, indent the next line.
         // Avoid double-indenting `|`/`|>` continuation blocks after `=`/`?`.
         let rhs_seed_active = rhs_seed_indent.is_some()
@@ -1107,6 +1105,7 @@
                 rendered_lines.push(out);
                 prev_effective_indent_len = effective_indent.chars().count();
                 prev_non_blank_last_token = last_continuation_token(&state.tokens);
+                prev_non_blank_last_code_token = last_code_token(&state.tokens);
                 then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
                     .then(|| net_open_depth(&state.tokens));
                 if line_has_top_level_eq {
@@ -1151,6 +1150,7 @@
                     rendered_lines.push(out);
                     prev_effective_indent_len = effective_indent.chars().count();
                     prev_non_blank_last_token = last_continuation_token(&state.tokens);
+                    prev_non_blank_last_code_token = last_code_token(&state.tokens);
                     then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
                         .then(|| net_open_depth(&state.tokens));
                     if line_has_top_level_eq {
@@ -1194,6 +1194,7 @@
                 rendered_lines.push(out);
                 prev_effective_indent_len = effective_indent.chars().count();
                 prev_non_blank_last_token = last_continuation_token(&state.tokens);
+                prev_non_blank_last_code_token = last_code_token(&state.tokens);
                 then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
                     .then(|| net_open_depth(&state.tokens));
                 if line_has_top_level_eq {
@@ -1252,6 +1253,7 @@
                             rendered_lines.push(out);
                             prev_effective_indent_len = effective_indent.chars().count();
                             prev_non_blank_last_token = last_continuation_token(&state.tokens);
+                            prev_non_blank_last_code_token = last_code_token(&state.tokens);
                             then_else_pending_depth =
                                 seeds_then_else(prev_non_blank_last_token.as_deref())
                                     .then(|| net_open_depth(&state.tokens));
@@ -1281,6 +1283,7 @@
         prev_effective_indent_len = effective_indent.chars().count();
 
         prev_non_blank_last_token = last_continuation_token(&state.tokens);
+        prev_non_blank_last_code_token = last_code_token(&state.tokens);
         then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
             .then(|| net_open_depth(&state.tokens));
 
