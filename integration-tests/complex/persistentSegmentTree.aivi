@@ -11,13 +11,13 @@ SegmentMeta = { sum: Int, min: Int, max: Int }
 SegmentTree =
   Empty
 | Node {
-    start: Int
-    end: Int
-    sum: Int
-    min: Int
-    max: Int
-    left: SegmentTree
-    right: SegmentTree
+      start: Int
+      end: Int
+      sum: Int
+      min: Int
+      max: Int
+      left: SegmentTree
+      right: SegmentTree
   }
 
 rangeMeta = start end leftMeta rightMeta =>
@@ -28,11 +28,11 @@ rangeMeta = start end leftMeta rightMeta =>
   | (None, Some rm)    => Some rm
   | (Some lm, Some rm) => {
       combined = {
-      sum: lm.sum + rm.sum
-      min: if lm.min < rm.min then lm.min else rm.min
-      max: if lm.max > rm.max then lm.max else rm.max
+        sum: lm.sum + rm.sum
+        min: if lm.min < rm.min then lm.min else rm.min
+        max: if lm.max > rm.max then lm.max else rm.max
     }
-    Some combined
+      Some combined
   }
 
 nodeMeta = tree => tree ?
@@ -42,18 +42,18 @@ nodeMeta = tree => tree ?
 nodeFromChildren = start end left right =>
 // rebuild node once child edges changed.
 {
-  meta = rangeMeta start end (nodeMeta left) (nodeMeta right)
-  meta ?
-    | None   => Empty
-    | Some m =>
-      Node {
-        start: start
-        end: end
-        sum: m.sum
-        min: m.min
-        max: m.max
-        left: left
-        right: right
+    meta = rangeMeta start end (nodeMeta left) (nodeMeta right)
+    meta ?
+        | None   => Empty
+        | Some m =>
+        Node {
+          start: start
+          end: end
+          sum: m.sum
+          min: m.min
+          max: m.max
+          left: left
+          right: right
       }
   }
 
@@ -62,40 +62,40 @@ buildRange = arr start end =>
     (List.at arr start) ?
       | Some value =>
       Node {
-        start: start
-        end: end
-        sum: value
-        min: value
-        max: value
-        left: Empty
-        right: Empty
+          start: start
+          end: end
+          sum: value
+          min: value
+          max: value
+          left: Empty
+          right: Empty
       }
       | None => Empty
-      else {
+    else {
         mid = (start + end) / 2
         left = buildRange arr start mid
         right = buildRange arr (mid + 1) end
         nodeFromChildren start end left right
-      }
+    }
 
 fromList = arr =>
   if List.isEmpty arr then
     Empty
-  else
-    buildRange arr 0 (List.length arr - 1)
+else
+  buildRange arr 0 (List.length arr - 1)
 
 queryRange = tree l r => tree ?
   | Empty                                           => None
   | Node { start, end, sum, min, max, left, right } =>
     if r < start || end < l then
       None
-    else if l <= start && end <= r then
-      Some { sum: sum, min: min, max: max }
-    else {
+  else if l <= start && end <= r then
+    Some { sum: sum, min: min, max: max }
+  else {
       leftMeta = queryRange left l r
       rightMeta = queryRange right l r
       rangeMeta start end leftMeta rightMeta
-    }
+  }
 
 updatePoint = tree idx value => tree ?
   | Empty                                                              => Empty
@@ -103,37 +103,37 @@ updatePoint = tree idx value => tree ?
     tree
   | Node { start, end, left, right } when start == end =>
       Node {
-        start: start
-        end: end
-        sum: value
-        min: value
-        max: value
-        left: Empty
-        right: Empty
+          start: start
+          end: end
+          sum: value
+          min: value
+          max: value
+          left: Empty
+          right: Empty
       }
   | Node { start, end, left, right } => {
-        newLeft = updatePoint left idx value
-        newRight = updatePoint right idx value
-        nodeFromChildren start end newLeft newRight
+          newLeft = updatePoint left idx value
+          newRight = updatePoint right idx value
+          nodeFromChildren start end newLeft newRight
       }
 
-@test
+      @test
 persistency =
   effect {
-    arr = [1, 2, 3, 4]
-    tree = fromList arr
+      arr = [1, 2, 3, 4]
+      tree = fromList arr
 
-    queryAll = queryRange tree 0 3
-    _ <- assert (queryAll == Some { sum: 10, min: 1, max: 4 })
+      queryAll = queryRange tree 0 3
+      _ <- assert (queryAll == Some { sum: 10, min: 1, max: 4 })
 
-    querySlice = queryRange tree 1 2
-    _ <- assert (querySlice == Some { sum: 5, min: 2, max: 3 })
+      querySlice = queryRange tree 1 2
+      _ <- assert (querySlice == Some { sum: 5, min: 2, max: 3 })
 
-    updated = updatePoint tree 2 7
-    _ <- assert (queryRange updated 2 2 == Some { sum: 7, min: 7, max: 7 })
+      updated = updatePoint tree 2 7
+      _ <- assert (queryRange updated 2 2 == Some { sum: 7, min: 7, max: 7 })
 
   // original stays intact even after updates.
-  _ <- assert (queryRange tree 2 2 == Some { sum: 3, min: 3, max: 3 })
+    _ <- assert (queryRange tree 2 2 == Some { sum: 3, min: 3, max: 3 })
 
-  _ <- assert (queryRange Empty 0 0 == None)
+    _ <- assert (queryRange Empty 0 0 == None)
 }
