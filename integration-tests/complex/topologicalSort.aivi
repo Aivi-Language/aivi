@@ -18,7 +18,8 @@ buildIndegree = graph =>
     list ?
       | [] => accMap
       | [n, ...tail] =>
-          newAccMap = Map.insert n (getOrZero n accMap + 1) accMap
+          res = Map.insert n (getOrZero n accMap + 1) accMap
+          newAccMap = res
           fold tail newAccMap
   
   init
