@@ -10,6 +10,6 @@ subject = i
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (i.re == 0.0)
+  _ <- assert (i.im == 1.0)
 }

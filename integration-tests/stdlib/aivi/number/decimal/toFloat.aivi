@@ -10,6 +10,6 @@ subject = toFloat
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  d = fromFloat 123.456
+  _ <- assert (toFloat d == 123.456)
 }

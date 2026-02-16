@@ -10,6 +10,17 @@ subject = regex
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  r <- match compile "h.llo" {
+    | Ok re => pure re
+    | Err _ => fail "compile failed"
+  }
+  _ <- assert (test r "hello" == True)
+  _ <- assert (test r "hxllo" == True)
+  _ <- assert (test r "world" == False)
+  
+  m = match r "hello"
+  _ <- match m {
+    | Some matched => assert (matched.full == "hello")
+    | None => assert False
+  }
 }

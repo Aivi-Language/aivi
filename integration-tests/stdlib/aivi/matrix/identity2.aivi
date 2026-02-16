@@ -10,6 +10,6 @@ subject = identity2
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (identity2.m00 == 1.0)
+  _ <- assert (identity2.m01 == 0.0)
 }

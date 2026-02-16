@@ -12,6 +12,6 @@ subject = 2n
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  b = 10n
+  _ <- assert (toInt b == 10)
 }

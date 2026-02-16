@@ -10,6 +10,9 @@ subject = load
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- configure Sqlite ":memory:"
+  // load returns a source yielding Result (Option Table) DbError
+  src = load "users"
+  res <- src
   _ <- assert True
 }

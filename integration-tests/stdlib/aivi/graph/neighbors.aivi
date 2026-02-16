@@ -10,6 +10,7 @@ subject = neighbors
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  g = addEdge empty { from: 1, to: 2, weight: 1.0 }
+  ns = neighbors g 1
+  _ <- assert (ns == [2])
 }

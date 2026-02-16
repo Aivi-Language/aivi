@@ -10,6 +10,7 @@ subject = configure
 
 @test
 smoke = effect {
-  _ <- pure subject
+  // configure returns an effect yielding Result Unit DbError
+  _ <- configure Sqlite ":memory:"
   _ <- assert True
 }

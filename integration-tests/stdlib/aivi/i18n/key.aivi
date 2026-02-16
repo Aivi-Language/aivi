@@ -10,6 +10,9 @@ subject = key
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  res = key "greeting"
+  k <- match res with
+    Ok k => pure k
+    Err e => fail e
+  _ <- assert (k.body == "greeting")
 }

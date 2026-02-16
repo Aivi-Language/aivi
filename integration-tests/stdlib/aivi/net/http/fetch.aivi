@@ -10,6 +10,8 @@ subject = fetch
 
 @test
 smoke = effect {
-  _ <- pure subject
+  req = { method: "GET", url: "http://example.com", headers: [], body: None }
+  src = fetch req
+  res <- src
   _ <- assert True
 }

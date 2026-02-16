@@ -10,6 +10,6 @@ subject = empty
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  g = empty
+  _ <- assert (length g.nodes == 0)
 }

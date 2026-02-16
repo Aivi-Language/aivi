@@ -10,5 +10,8 @@ Ref = RegexError
 
 @test
 smoke = effect {
-  _ <- assert True
+  _ <- match compile "[" {
+    | Ok _ => assert False
+    | Err _ => assert True // Err holds RegexError
+  }
 }

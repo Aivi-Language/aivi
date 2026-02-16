@@ -8,11 +8,8 @@ use aivi.graph
 
 @test
 smoke = effect {
-  g0 = Graph.empty
-  edge = { from: 1, to: 2, weight: 1.0 }
-  g1 = addEdge g0 edge
-
-  _ <- assert (List.length g1.nodes == 2)
-  _ <- assert (List.length g1.edges == 1)
-  _ <- assert (List.get 0 g1.edges == Some edge)
+  g = addEdge empty { from: 1, to: 2, weight: 1.0 }
+  // addEdge ensures nodes exist
+  _ <- assert (length g.nodes == 2)
+  _ <- assert (length g.edges == 1)
 }

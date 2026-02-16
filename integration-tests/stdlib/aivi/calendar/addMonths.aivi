@@ -10,6 +10,7 @@ subject = addMonths
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  d = addMonths 1 { year: 2024, month: 1, day: 31 }
+  _ <- assert (d.month == 2)
+  _ <- assert (d.day == 29) // 2024 is leap year, 29th is max
 }

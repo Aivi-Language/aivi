@@ -10,6 +10,6 @@ subject = endOfMonth
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  d = endOfMonth { year: 2024, month: 2, day: 1 }
+  _ <- assert (d.day == 29)
 }

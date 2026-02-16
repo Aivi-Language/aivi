@@ -10,6 +10,6 @@ subject = numerator
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  r = fromInts (fromInt 1) (fromInt 2)
+  _ <- assert (toInt (numerator r) == 1)
 }

@@ -10,5 +10,6 @@ Ref = Column
 
 @test
 smoke = effect {
-  _ <- assert True
+  c = { name: "id", type: IntType, constraints: [NotNull, AutoIncrement], default: None }
+  _ <- assert (c.name == "id")
 }

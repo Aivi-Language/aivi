@@ -10,6 +10,5 @@ subject = multiply2
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (multiply2 identity2 identity2 == identity2)
 }

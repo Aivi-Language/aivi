@@ -10,6 +10,7 @@ subject = vAttr
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  attr = vAttr "id" "foo"
+  node = vElement "div" [attr] []
+  _ <- assert (renderHtml node == "<div data-aivi-node=\"root\" id=\"foo\"></div>")
 }

@@ -10,6 +10,6 @@ subject = randomUuid
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  u <- randomUuid
+  _ <- assert (length u == 36)
 }

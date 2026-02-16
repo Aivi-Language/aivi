@@ -10,6 +10,5 @@ subject = multiply3
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (multiply3 identity3 identity3 == identity3)
 }

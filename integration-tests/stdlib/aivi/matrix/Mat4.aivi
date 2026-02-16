@@ -10,5 +10,6 @@ Ref = Mat4
 
 @test
 smoke = effect {
-  _ <- assert True
+  m = identity4
+  _ <- assert (m.m00 == 1.0)
 }

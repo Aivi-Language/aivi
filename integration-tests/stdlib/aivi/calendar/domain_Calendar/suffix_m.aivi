@@ -12,6 +12,6 @@ subject = 2m
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  m = 1m
+  _ <- assert (m == 1)
 }

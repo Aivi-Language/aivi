@@ -10,6 +10,7 @@ subject = get
 
 @test
 smoke = effect {
-  _ <- pure subject
+  src = get "https://example.com"
+  res <- src
   _ <- assert True
 }

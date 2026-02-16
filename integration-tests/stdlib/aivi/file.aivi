@@ -10,6 +10,7 @@ subject = file
 
 @test
 smoke = effect {
-  _ <- pure subject
+  // read is a source
+  src = file.read "README.md"
   _ <- assert True
 }

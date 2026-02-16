@@ -10,6 +10,9 @@ subject = replace
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  r <- match compile "l" {
+    | Ok re => pure re
+    | Err _ => fail "compile failed"
+  }
+  _ <- assert (replace r "hello" "L" == "heLlo")
 }

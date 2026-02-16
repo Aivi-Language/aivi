@@ -10,5 +10,12 @@ Ref = Match
 
 @test
 smoke = effect {
-  _ <- assert True
+  r <- match compile "." {
+    | Ok re => pure re
+    | Err _ => fail "compile failed"
+  }
+  _ <- match match r "a" {
+    | Some m => assert (m.full == "a") // m has type Match
+    | None => assert False
+  }
 }

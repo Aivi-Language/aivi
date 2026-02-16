@@ -10,6 +10,8 @@ subject = compile
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- match compile "abc" {
+    | Ok _ => assert True
+    | Err _ => assert False
+  }
 }

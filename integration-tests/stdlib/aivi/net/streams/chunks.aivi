@@ -10,6 +10,6 @@ subject = chunks
 
 @test
 smoke = effect {
-  _ <- pure subject
+  // chunks returns a source yielding chunks of data
   _ <- assert True
 }

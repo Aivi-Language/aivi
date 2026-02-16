@@ -10,5 +10,6 @@ Ref = Table
 
 @test
 smoke = effect {
-  _ <- assert True
+  t = { name: "users", columns: [], rows: [] }
+  _ <- assert (t.name == "users")
 }
