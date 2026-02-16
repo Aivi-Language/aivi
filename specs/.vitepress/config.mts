@@ -204,7 +204,25 @@ export default defineConfig({
           }
         ]
       },
-
+      {
+        text: 'Execution & Concurrency',
+        collapsed: true,
+        items: [
+          { text: 'Concurrency', link: '/06_runtime/01_concurrency' },
+          { text: 'Memory Management', link: '/06_runtime/02_memory_management' },
+          { text: 'Package Manager (Cargo-backed)', link: '/06_runtime/03_package_manager' },
+        ]
+      },
+      {
+        text: 'Tools & Ecosystem',
+        collapsed: true,
+        items: [
+          { text: 'CLI', link: '/07_tools/01_cli' },
+          { text: 'LSP Server', link: '/07_tools/02_lsp_server' },
+          { text: 'VSCode Extension', link: '/07_tools/03_vscode_extension' },
+          { text: 'Packaging', link: '/07_tools/04_packaging' },
+        ]
+      },
       {
         text: 'Kernel (Core Calculus)',
         collapsed: true,
@@ -237,25 +255,6 @@ export default defineConfig({
           { text: 'Classes', link: '/04_desugaring/08_classes' },
           { text: 'Domains and Operators', link: '/04_desugaring/09_domains' },
           { text: 'Patching', link: '/04_desugaring/10_patching' },
-        ]
-      },
-      {
-        text: 'Execution & Concurrency',
-        collapsed: true,
-        items: [
-          { text: 'Concurrency', link: '/06_runtime/01_concurrency' },
-          { text: 'Memory Management', link: '/06_runtime/02_memory_management' },
-          { text: 'Package Manager (Cargo-backed)', link: '/06_runtime/03_package_manager' },
-        ]
-      },
-      {
-        text: 'Tools & Ecosystem',
-        collapsed: true,
-        items: [
-          { text: 'CLI', link: '/07_tools/01_cli' },
-          { text: 'LSP Server', link: '/07_tools/02_lsp_server' },
-          { text: 'VSCode Extension', link: '/07_tools/03_vscode_extension' },
-          { text: 'Packaging', link: '/07_tools/04_packaging' },
         ]
       }
     ]

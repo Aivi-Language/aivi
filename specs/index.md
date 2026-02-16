@@ -22,13 +22,8 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 
 - [Introduction](01_introduction)
 
-### Roadmap
-
-- [Missing Features & Gap Analysis (v0.1)](missing_features_v0.1.md)
-
 ### Syntax
 
-- [Concrete Syntax (EBNF draft)](02_syntax/00_grammar)
 - [Bindings and Scope](02_syntax/01_bindings)
 - [Functions and Pipes](02_syntax/02_functions)
 - [The Type System](02_syntax/03_types)
@@ -43,34 +38,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [External Sources](02_syntax/12_external_sources)
 - [Decorators](02_syntax/14_decorators)
 - [Resources](02_syntax/15_resources)
-
-### Kernel (Core Calculus)
-
-- [Core Terms](03_kernel/01_core_terms)
-- [Types](03_kernel/02_types)
-- [Records](03_kernel/03_records)
-- [Patterns](03_kernel/04_patterns)
-- [Predicates](03_kernel/05_predicates)
-- [Traversals](03_kernel/06_traversals)
-- [Generators](03_kernel/07_generators)
-- [Effects](03_kernel/08_effects)
-- [Classes](03_kernel/09_classes)
-- [Domains](03_kernel/10_domains)
-- [Patching](03_kernel/11_patching)
-- [Minimality Proof](03_kernel/12_minimality)
-
-### Desugaring (Syntax → Kernel)
-
-- [Bindings](04_desugaring/01_bindings)
-- [Functions](04_desugaring/02_functions)
-- [Records](04_desugaring/03_records)
-- [Patterns](04_desugaring/04_patterns)
-- [Predicates](04_desugaring/05_predicates)
-- [Generators](04_desugaring/06_generators)
-- [Effects](04_desugaring/07_effects)
-- [Classes](04_desugaring/08_classes)
-- [Domains and Operators](04_desugaring/09_domains)
-- [Patching](04_desugaring/10_patching)
+- [Concrete Syntax (EBNF draft)](02_syntax/00_grammar)
 
 ### Standard Library
 
@@ -139,3 +107,31 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [LSP Server](07_tools/02_lsp_server)
 - [VSCode Extension](07_tools/03_vscode_extension)
 - [Packaging](07_tools/04_packaging)
+
+### Kernel (Core Calculus)
+
+- [Core Terms](03_kernel/01_core_terms)
+- [Types](03_kernel/02_types)
+- [Records](03_kernel/03_records)
+- [Patterns](03_kernel/04_patterns)
+- [Predicates](03_kernel/05_predicates)
+- [Traversals](03_kernel/06_traversals)
+- [Generators](03_kernel/07_generators)
+- [Effects](03_kernel/08_effects)
+- [Classes](03_kernel/09_classes)
+- [Domains](03_kernel/10_domains)
+- [Patching](03_kernel/11_patching)
+- [Minimality Proof](03_kernel/12_minimality)
+
+### Desugaring (Syntax → Kernel)
+
+- [Bindings](04_desugaring/01_bindings)
+- [Functions](04_desugaring/02_functions)
+- [Records](04_desugaring/03_records)
+- [Patterns](04_desugaring/04_patterns)
+- [Predicates](04_desugaring/05_predicates)
+- [Generators](04_desugaring/06_generators)
+- [Effects](04_desugaring/07_effects)
+- [Classes](04_desugaring/08_classes)
+- [Domains and Operators](04_desugaring/09_domains)
+- [Patching](04_desugaring/10_patching)
