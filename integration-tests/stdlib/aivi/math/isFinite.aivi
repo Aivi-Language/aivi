@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.isFinite
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,7 +10,7 @@ subject = isFinite
 
 @test
 smoke = effect {
-  _ <- assert (isFinite 1.0 == True)
-  _ <- assert (isFinite inf == False)
-  _ <- assert (isFinite nan == False)
+  _ <- testing.assert (isFinite 1.0 == True)
+  _ <- testing.assert (isFinite inf == False)
+  _ <- testing.assert (isFinite nan == False)
 }

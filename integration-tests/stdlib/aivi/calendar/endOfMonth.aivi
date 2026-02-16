@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.calendar.endOfMonth
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.calendar
 
@@ -11,5 +11,5 @@ subject = endOfMonth
 @test
 smoke = effect {
   d = endOfMonth { year: 2024, month: 2, day: 1 }
-  _ <- assert (d.day == 29)
+  _ <- testing.assert (d.day == 29)
 }

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.repeat
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = repeat
 
 @test
 smoke = effect {
-  _ <- assert (repeat 3 "a" == "aaa")
-  _ <- assert (repeat 0 "a" == "")
+  _ <- testing.assert (repeat 3 "a" == "aaa")
+  _ <- testing.assert (repeat 0 "a" == "")
 }

@@ -2,9 +2,9 @@ module examples.i18nSystemLocale
 export main
 
 use aivi
-use aivi.file (open, readAll)
+use aivi.file
 use aivi.i18n
-use aivi.system (localeTag)
+use aivi.system
 
 defaultLocale : Locale
 defaultLocale = { language: "en", region: Some "US", variants: [], tag: "en-US" }

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.isAlnum
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,7 +10,7 @@ subject = isAlnum
 
 @test
 smoke = effect {
-  _ <- assert (isAlnum "a" == True)
-  _ <- assert (isAlnum "1" == True)
-  _ <- assert (isAlnum "!" == False)
+  _ <- testing.assert (isAlnum "a" == True)
+  _ <- testing.assert (isAlnum "1" == True)
+  _ <- testing.assert (isAlnum "!" == False)
 }

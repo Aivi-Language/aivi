@@ -2,11 +2,11 @@
 module integrationTests.stdlib.aivi.database.domain_Database.literal_upd
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.database
 
-use aivi.database (domain Database)
+use aivi.database
 
 subject = upd
 

@@ -2,7 +2,7 @@
 module integrationTests.syntax.bindings.recursion
 
 use aivi
-use aivi.testing (assertEq)
+use aivi.testing
 
 sum = xs => xs ?
   | []           => 0

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.gcd
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,6 +10,6 @@ subject = gcd
 
 @test
 smoke = effect {
-  _ <- assert (gcd 12 8 == 4)
-  _ <- assert (gcd 17 5 == 1)
+  _ <- testing.assert (gcd 12 8 == 4)
+  _ <- testing.assert (gcd 17 5 == 1)
 }

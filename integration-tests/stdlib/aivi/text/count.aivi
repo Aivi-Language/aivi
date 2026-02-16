@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.count
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = count
 
 @test
 smoke = effect {
-  _ <- assert (count "l" "hello" == 2)
-  _ <- assert (count "z" "hello" == 0)
+  _ <- testing.assert (count "l" "hello" == 2)
+  _ <- testing.assert (count "z" "hello" == 0)
 }

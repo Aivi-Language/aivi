@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.matrix.identity2
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.matrix
 
@@ -10,6 +10,6 @@ subject = identity2
 
 @test
 smoke = effect {
-  _ <- assert (identity2.m00 == 1.0)
-  _ <- assert (identity2.m01 == 0.0)
+  _ <- testing.assert (identity2.m00 == 1.0)
+  _ <- testing.assert (identity2.m01 == 0.0)
 }

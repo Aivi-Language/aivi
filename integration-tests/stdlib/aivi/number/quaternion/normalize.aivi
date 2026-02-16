@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.number.quaternion.normalize
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.number.quaternion
 
@@ -12,5 +12,5 @@ subject = normalize
 smoke = effect {
   q = { w: 2.0, x: 0.0, y: 0.0, z: 0.0 }
   n = normalize q
-  _ <- assert (n.w == 1.0)
+  _ <- testing.assert (n.w == 1.0)
 }

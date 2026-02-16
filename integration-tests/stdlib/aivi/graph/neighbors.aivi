@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.graph.neighbors
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.graph
 
@@ -12,5 +12,5 @@ subject = neighbors
 smoke = effect {
   g = addEdge empty { from: 1, to: 2, weight: 1.0 }
   ns = neighbors g 1
-  _ <- assert (ns == [2])
+  _ <- testing.assert (ns == [2])
 }

@@ -2,16 +2,16 @@
 module integrationTests.stdlib.aivi.number.decimal.domain_Decimal.suffix_dec
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.number.decimal
 
-use aivi.number.decimal (domain Decimal)
+use aivi.number.decimal
 
 subject = 3.14dec
 
 @test
 smoke = effect {
   d = 1.5dec
-  _ <- assert (toFloat d == 1.5)
+  _ <- testing.assert (toFloat d == 1.5)
 }

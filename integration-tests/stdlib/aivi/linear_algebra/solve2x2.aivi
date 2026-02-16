@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.linear_algebra.solve2x2
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.linear_algebra
 
@@ -13,5 +13,5 @@ smoke = effect {
   m = { rows: 2, cols: 2, data: [1.0, 1.0, 1.0, -1.0] }
   v = { size: 2, data: [3.0, 1.0] }
   res = solve2x2 m v
-  _ <- assert (res.data == [2.0, 1.0])
+  _ <- testing.assert (res.data == [2.0, 1.0])
 }

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.titleCase
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,5 +10,5 @@ subject = titleCase
 
 @test
 smoke = effect {
-  _ <- assert (titleCase "hello world" == "Hello World")
+  _ <- testing.assert (titleCase "hello world" == "Hello World")
 }

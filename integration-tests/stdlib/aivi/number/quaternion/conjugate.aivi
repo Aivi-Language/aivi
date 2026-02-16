@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.number.quaternion.conjugate
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.number.quaternion
 
@@ -12,6 +12,6 @@ subject = conjugate
 smoke = effect {
   q = { w: 1.0, x: 2.0, y: 3.0, z: 4.0 }
   c = conjugate q
-  _ <- assert (c.w == 1.0)
-  _ <- assert (c.x == -2.0)
+  _ <- testing.assert (c.w == 1.0)
+  _ <- testing.assert (c.x == -2.0)
 }

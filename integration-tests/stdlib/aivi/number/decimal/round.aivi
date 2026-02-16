@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.number.decimal.round
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.number.decimal
 
@@ -12,5 +12,5 @@ subject = round
 smoke = effect {
   d = fromFloat 1.235
   r = round 2 d
-  _ <- assert (toFloat r == 1.24)
+  _ <- testing.assert (toFloat r == 1.24)
 }

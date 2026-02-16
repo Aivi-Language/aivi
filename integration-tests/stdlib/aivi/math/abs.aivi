@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.abs
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,8 +10,8 @@ subject = abs
 
 @test
 smoke = effect {
-  _ <- assert (abs 1 == 1)
-  _ <- assert (abs (-1) == 1)
-  _ <- assert (abs 1.5 == 1.5)
-  _ <- assert (abs (-1.5) == 1.5)
+  _ <- testing.assert (abs 1 == 1)
+  _ <- testing.assert (abs (-1) == 1)
+  _ <- testing.assert (abs 1.5 == 1.5)
+  _ <- testing.assert (abs (-1.5) == 1.5)
 }

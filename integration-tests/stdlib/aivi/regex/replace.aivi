@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.regex.replace
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.regex
 
@@ -10,9 +10,9 @@ subject = replace
 
 @test
 smoke = effect {
-  r <- match compile "l" {
-    | Ok re => pure re
-    | Err _ => fail "compile failed"
-  }
-  _ <- assert (replace r "hello" "L" == "heLlo")
+  reResult = compile "l"
+  r <- reResult ?
+    | Ok re => effect { pure re }
+    | Err _ => effect { fail "compile failed" }
+  _ <- testing.assert (replace r "hello" "L" == "heLlo")
 }

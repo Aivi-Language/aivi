@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.ceil
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,7 +10,7 @@ subject = ceil
 
 @test
 smoke = effect {
-  _ <- assert (ceil 1.2 == 2.0)
-  _ <- assert (ceil 1.9 == 2.0)
-  _ <- assert (ceil (-1.2) == -1.0)
+  _ <- testing.assert (ceil 1.2 == 2.0)
+  _ <- testing.assert (ceil 1.9 == 2.0)
+  _ <- testing.assert (ceil (-1.2) == -1.0)
 }

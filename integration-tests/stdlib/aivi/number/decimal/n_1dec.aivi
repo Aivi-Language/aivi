@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.number.decimal.n_1dec
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.number.decimal
 
@@ -11,5 +11,5 @@ subject = 3.14dec
 @test
 smoke = effect {
   d = 1.0dec
-  _ <- assert (toFloat d == 1.0)
+  _ <- testing.assert (toFloat d == 1.0)
 }

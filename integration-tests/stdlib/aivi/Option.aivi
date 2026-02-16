@@ -7,5 +7,8 @@ use aivi.logic
 
 @test
 smoke = effect {
-  testing.assert True
+  val = Some 1
+  _ <- val ?
+    | Some _ => testing.assert True
+    | None => testing.assert False
 }

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.replace
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,5 +10,5 @@ subject = replace
 
 @test
 smoke = effect {
-  _ <- assert (replace "l" "L" "hello" == "heLlo") // Replaces first occurrence? Assuming standard behavior for replace vs replaceAll
+  _ <- testing.assert (replace "l" "L" "hello" == "heLlo") // Replaces first occurrence? Assuming standard behavior for replace vs replaceAll
 }

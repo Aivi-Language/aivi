@@ -1,7 +1,7 @@
 module examples.stdlib_quaternion
 export main
 
-use aivi.console (print)
+use aivi.console
 use aivi.number.quaternion
 
 main : Effect Text Unit

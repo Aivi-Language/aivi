@@ -21,7 +21,7 @@ instance Eq (Result E X) = {
     | _              => False
 }
 
-// `with (A: Eq)` constrains the member type variable `A`.
+// `with (A: Eq)` constrains the member variable `A`.
 class NeedsEq = with (A: Eq) {
   same: A -> Bool
 }

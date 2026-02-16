@@ -2,11 +2,11 @@
 module integrationTests.stdlib.aivi.duration.domain_Duration.suffix_ms
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.duration
 
-use aivi.duration (domain Duration)
+use aivi.duration
 
 subject = 2ms
 

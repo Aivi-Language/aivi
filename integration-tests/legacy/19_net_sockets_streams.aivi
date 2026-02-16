@@ -1,7 +1,7 @@
 module examples.net_sockets_streams
 export main, echoServer
 
-use aivi.net.sockets (SocketError, Connection, listen, accept, recv, send)
+use aivi.net.sockets
 
 main : Effect SocketError Unit
 main = effect {

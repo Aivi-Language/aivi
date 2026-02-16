@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.Map
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi
 
@@ -13,12 +13,12 @@ smoke = effect {
   m0 = Map.empty
   m1 = Map.insert 1 "one" m0
 
-  _ <- assert (Map.size m0 == 0)
-  _ <- assert (Map.size m1 == 1)
-  _ <- assert (Map.get 1 m1 == Some "one")
-  _ <- assert (Map.get 2 m1 == None)
+  _ <- testing.assert (Map.size m0 == 0)
+  _ <- testing.assert (Map.size m1 == 1)
+  _ <- testing.assert (Map.get 1 m1 == Some "one")
+  _ <- testing.assert (Map.get 2 m1 == None)
 
   m2 = Map.remove 1 m1
-  _ <- assert (Map.size m2 == 0)
-  _ <- assert (Map.get 1 m2 == None)
+  _ <- testing.assert (Map.size m2 == 0)
+  _ <- testing.assert (Map.get 1 m2 == None)
 }

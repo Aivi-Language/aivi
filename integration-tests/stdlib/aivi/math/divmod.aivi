@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.divmod
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,6 +10,6 @@ subject = divmod
 
 @test
 smoke = effect {
-  _ <- assert (divmod 10 3 == (3, 1))
-  _ <- assert (divmod 10 (-3) == (-4, -2))
+  _ <- testing.assert (divmod 10 3 == (3, 1))
+  _ <- testing.assert (divmod 10 (-3) == (-4, -2))
 }

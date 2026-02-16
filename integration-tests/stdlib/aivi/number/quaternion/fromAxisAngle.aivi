@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.number.quaternion.fromAxisAngle
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.number.quaternion
 
@@ -11,5 +11,5 @@ subject = fromAxisAngle
 @test
 smoke = effect {
   q = fromAxisAngle { x: 1.0, y: 0.0, z: 0.0 } 90.0
-  _ <- assert (q.w > 0.707) // approx cos(45)
+  _ <- testing.assert (q.w > 0.707) // approx cos(45)
 }

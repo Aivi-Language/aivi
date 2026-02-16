@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.graph
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.graph
 
@@ -10,6 +10,6 @@ use aivi.graph
 smoke = effect {
   g = addEdge empty { from: 1, to: 2, weight: 1.0 }
   // addEdge ensures nodes exist
-  _ <- assert (length g.nodes == 2)
-  _ <- assert (length g.edges == 1)
+  _ <- testing.assert (length g.nodes == 2)
+  _ <- testing.assert (length g.edges == 1)
 }

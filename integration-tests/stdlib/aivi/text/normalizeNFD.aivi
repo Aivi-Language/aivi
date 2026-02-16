@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.normalizeNFD
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,5 +10,5 @@ subject = normalizeNFD
 
 @test
 smoke = effect {
-  _ <- assert (length (normalizeNFD "hello") == 5)
+  _ <- testing.assert (length (normalizeNFD "hello") == 5)
 }

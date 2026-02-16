@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.trimEnd
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,5 +10,5 @@ subject = trimEnd
 
 @test
 smoke = effect {
-  _ <- assert (trimEnd "abc  " == "abc")
+  _ <- testing.assert (trimEnd "abc  " == "abc")
 }

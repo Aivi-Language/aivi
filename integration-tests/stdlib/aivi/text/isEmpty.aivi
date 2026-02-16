@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.isEmpty
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = isEmpty
 
 @test
 smoke = effect {
-  _ <- assert (isEmpty "" == True)
-  _ <- assert (isEmpty "a" == False)
+  _ <- testing.assert (isEmpty "" == True)
+  _ <- testing.assert (isEmpty "a" == False)
 }

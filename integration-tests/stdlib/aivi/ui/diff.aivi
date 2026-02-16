@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.ui.diff
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.ui
 
@@ -14,5 +14,5 @@ smoke = effect {
   new = vText "b"
   ops = diff old new
   // SetText "root" "b"
-  _ <- assert (length ops == 1)
+  _ <- testing.assert (length ops == 1)
 }

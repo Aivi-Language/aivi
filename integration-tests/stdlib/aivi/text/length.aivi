@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.length
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = length
 
 @test
 smoke = effect {
-  _ <- assert (length "hello" == 5)
-  _ <- assert (length "" == 0)
+  _ <- testing.assert (length "hello" == 5)
+  _ <- testing.assert (length "" == 0)
 }

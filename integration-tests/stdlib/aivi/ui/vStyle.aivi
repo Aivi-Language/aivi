@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.ui.vStyle
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.ui
 
@@ -12,5 +12,5 @@ subject = vStyle
 smoke = effect {
   style = vStyle { color: "red" }
   node = vElement "div" [style] []
-  _ <- assert (renderHtml node == "<div data-aivi-node=\"root\" style=\"color: red\"></div>")
+  _ <- testing.assert (renderHtml node == "<div data-aivi-node=\"root\" style=\"color: red\"></div>")
 }

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.i18n.Bundle
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.i18n
 

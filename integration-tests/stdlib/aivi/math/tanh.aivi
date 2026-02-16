@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.tanh
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,6 +10,6 @@ subject = tanh
 
 @test
 smoke = effect {
-  _ <- assert (abs (tanh 0.0) < 0.0001)
-  _ <- assert (abs (tanh 1.0-0.7615) < 0.0001)
+  _ <- testing.assert (abs (tanh 0.0) < 0.0001)
+  _ <- testing.assert (abs (tanh 1.0-0.7615) < 0.0001)
 }

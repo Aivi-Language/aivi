@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.pi
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,5 +10,5 @@ subject = pi
 
 @test
 smoke = effect {
-  _ <- assert (abs (pi -3.14159) < 0.0001)
+  _ <- testing.assert (abs (pi -3.14159) < 0.0001)
 }

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.Tuple
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi
 
@@ -16,5 +16,5 @@ smoke = effect {
     | (a, b) => if a == 1 && b == "two" then True else False
     | _      => False
 
-  _ <- assert (res == True)
+  _ <- testing.assert (res == True)
 }

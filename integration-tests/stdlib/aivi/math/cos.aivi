@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.cos
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,6 +10,6 @@ subject = cos
 
 @test
 smoke = effect {
-  _ <- assert (abs (cos 0.0-1.0) < 0.0001)
-  _ <- assert (abs (cos (pi / 2.0)) < 0.0001)
+  _ <- testing.assert (abs (cos 0.0-1.0) < 0.0001)
+  _ <- testing.assert (abs (cos (pi / 2.0)) < 0.0001)
 }

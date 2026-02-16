@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.matrix.Mat2
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.matrix
 
@@ -11,5 +11,5 @@ Ref = Mat2
 @test
 smoke = effect {
   m = identity2
-  _ <- assert (m.m00 == 1.0)
+  _ <- testing.assert (m.m00 == 1.0)
 }

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.caseFold
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,5 +10,5 @@ subject = caseFold
 
 @test
 smoke = effect {
-  _ <- assert (caseFold "Hello" == "hello")
+  _ <- testing.assert (caseFold "Hello" == "hello")
 }

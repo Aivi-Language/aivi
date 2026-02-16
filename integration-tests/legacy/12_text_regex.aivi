@@ -1,9 +1,9 @@
 module examples.stdlib_text_regex
 export main
 
-use aivi.console (print)
+use aivi.console
 use aivi.text
-use aivi.regex (compile, test)
+use aivi.regex
 
 main : Effect Text Unit
 main = effect {

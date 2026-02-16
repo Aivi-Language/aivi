@@ -2,7 +2,7 @@
 module integrationTests.syntax.predicates.implicitAndExplicit
 
 use aivi
-use aivi.testing (assertEq)
+use aivi.testing
 
 filter = pred xs => xs ?
   | []           => []

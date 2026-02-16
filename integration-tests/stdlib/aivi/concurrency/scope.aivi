@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.concurrency.scope
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.concurrency
 

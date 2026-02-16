@@ -2,7 +2,7 @@
 module integrationTests.syntax.functions.multiArgAndSig
 
 use aivi
-use aivi.testing (assertEq)
+use aivi.testing
 
 add : Int -> Int -> Int
 add = a b => a + b

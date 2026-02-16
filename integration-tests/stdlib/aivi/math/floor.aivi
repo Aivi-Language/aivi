@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.floor
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,7 +10,7 @@ subject = floor
 
 @test
 smoke = effect {
-  _ <- assert (floor 1.2 == 1.0)
-  _ <- assert (floor 1.9 == 1.0)
-  _ <- assert (floor (-1.2) == -2.0)
+  _ <- testing.assert (floor 1.2 == 1.0)
+  _ <- testing.assert (floor 1.9 == 1.0)
+  _ <- testing.assert (floor (-1.2) == -2.0)
 }

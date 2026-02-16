@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.remove
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,5 +10,5 @@ subject = remove
 
 @test
 smoke = effect {
-  _ <- assert (remove "l" "hello" == "heo")
+  _ <- testing.assert (remove "l" "hello" == "heo")
 }

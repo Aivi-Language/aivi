@@ -1,9 +1,9 @@
 module examples.algorithms
 export main, quicksort, aStar
 
-use aivi (Map, Set, Heap)
-use aivi.math (divmod)
-use aivi.testing (assertEq)
+use aivi
+use aivi.math
+use aivi.testing
 
 algo_append = left right => left ?
   | []        => right

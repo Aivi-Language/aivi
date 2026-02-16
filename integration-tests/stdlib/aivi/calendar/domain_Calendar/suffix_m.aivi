@@ -2,16 +2,16 @@
 module integrationTests.stdlib.aivi.calendar.domain_Calendar.suffix_m
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.calendar
 
-use aivi.calendar (domain Calendar)
+use aivi.calendar
 
 subject = 2m
 
 @test
 smoke = effect {
   m = 1m
-  _ <- assert (m == 1)
+  _ <- testing.assert (m == 1)
 }

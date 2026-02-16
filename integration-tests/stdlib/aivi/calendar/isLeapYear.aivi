@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.calendar.isLeapYear
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.calendar
 
@@ -10,6 +10,6 @@ subject = isLeapYear
 
 @test
 smoke = effect {
-  _ <- assert (isLeapYear { year: 2024, month: 1, day: 1 } == True)
-  _ <- assert (isLeapYear { year: 2023, month: 1, day: 1 } == False)
+  _ <- testing.assert (isLeapYear { year: 2024, month: 1, day: 1 } == True)
+  _ <- testing.assert (isLeapYear { year: 2023, month: 1, day: 1 } == False)
 }
