@@ -7,7 +7,7 @@ head =
 take = (n, xs) => (n, xs) ?
   | (n, _) when n <= 0 => []
   | (_, [])            => []
-  | (n, [x, ...xs])    => [x, ...take (n -1, xs)]
+  | (n, [x, ...xs])    => [x, ...take (n - 1, xs)]
 
 // Zip two lists
 zip =

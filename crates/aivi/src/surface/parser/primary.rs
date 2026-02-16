@@ -1,4 +1,17 @@
 impl Parser {
+    fn is_negative_number_literal_start(&self) -> bool {
+        let Some(token) = self.tokens.get(self.pos) else {
+            return false;
+        };
+        if token.kind != TokenKind::Symbol || token.text != "-" {
+            return false;
+        }
+        let Some(next) = self.tokens.get(self.pos + 1) else {
+            return false;
+        };
+        next.kind == TokenKind::Number && is_adjacent(&token.span, &next.span)
+    }
+
     fn is_expr_start(&self) -> bool {
         if let Some(token) = self.tokens.get(self.pos) {
             match token.kind {

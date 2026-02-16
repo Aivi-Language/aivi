@@ -458,7 +458,7 @@ impl Parser {
     fn parse_application(&mut self) -> Option<Expr> {
         let mut expr = self.parse_postfix()?;
         let mut args = Vec::new();
-        while self.is_expr_start() {
+        while self.is_expr_start() || self.is_negative_number_literal_start() {
             let arg = self.parse_postfix()?;
             args.push(arg);
         }
