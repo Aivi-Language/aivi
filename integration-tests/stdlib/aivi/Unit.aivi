@@ -10,5 +10,6 @@ Ref = Unit
 
 @test
 smoke = effect {
-  _ <- assert True
+  u = Unit
+  _ <- assert (u == Unit)
 }

@@ -10,5 +10,17 @@ Ref = Set
 
 @test
 smoke = effect {
-  _ <- assert True
+  s0 = Set.empty
+  s1 = Set.insert 1 s0
+  s2 = Set.insert 2 s1
+  
+  _ <- assert (Set.size s0 == 0)
+  _ <- assert (Set.size s1 == 1)
+  _ <- assert (Set.size s2 == 2)
+  
+  _ <- assert (Set.has 1 s1 == True)
+  _ <- assert (Set.has 3 s1 == False)
+  
+  s3 = Set.union s1 s2
+  _ <- assert (Set.size s3 == 2)
 }

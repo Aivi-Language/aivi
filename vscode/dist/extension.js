@@ -18017,8 +18017,30 @@ var fs = __toESM(require("node:fs"));
 var import_node_child_process = require("node:child_process");
 var import_node = __toESM(require_node3());
 var client;
+function getCliCommand() {
+  const config = vscode.workspace.getConfiguration("aivi");
+  const cmd = config.get("cli.command");
+  return cmd && cmd.trim().length > 0 ? cmd : "aivi";
+}
+function docHasTests(doc) {
+  return /(^|\n)\s*@test\b/.test(doc.getText());
+}
+async function runAiviTest(target) {
+  const cli = getCliCommand();
+  const task = new vscode.Task(
+    { type: "aivi", task: "test" },
+    vscode.TaskScope.Workspace,
+    "AIVI: test",
+    "aivi",
+    new vscode.ShellExecution(`${cli} test "${target}"`)
+  );
+  task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, clear: true };
+  await vscode.tasks.executeTask(task);
+}
 function activate(context) {
   const outputChannel = vscode.window.createOutputChannel("AIVI Language Server");
+  const testOutput = vscode.window.createOutputChannel("AIVI Tests");
+  context.subscriptions.push(testOutput);
   const isWindows = process.platform === "win32";
   const serverExe = isWindows ? "aivi-lsp.exe" : "aivi-lsp";
   const bundledServerPath = context.asAbsolutePath(`bin/${serverExe}`);
@@ -18082,6 +18104,22 @@ function activate(context) {
   };
   client = new import_node.LanguageClient("aivi", "Aivi Language Server", serverOptions, clientOptions);
   client.start();
+  const runStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 50);
+  runStatus.text = "$(run) AIVI Tests";
+  runStatus.tooltip = "Run AIVI integration tests";
+  runStatus.color = new vscode.ThemeColor("terminal.ansiGreen");
+  runStatus.command = "aivi.runTests";
+  context.subscriptions.push(runStatus);
+  const updateStatusVisibility = () => {
+    const doc = vscode.window.activeTextEditor?.document;
+    if (!doc || doc.languageId !== "aivi") {
+      runStatus.hide();
+      return;
+    }
+    runStatus.show();
+  };
+  updateStatusVisibility();
+  context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(updateStatusVisibility));
   context.subscriptions.push(
     vscode.commands.registerCommand("aivi.restartServer", async () => {
       outputChannel.appendLine("Restarting AIVI Language Server...");
@@ -18090,6 +18128,59 @@ function activate(context) {
       await prev?.stop();
       client = new import_node.LanguageClient("aivi", "Aivi Language Server", serverOptions, clientOptions);
       client.start();
+    })
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand("aivi.runTests", async () => {
+      const doc = vscode.window.activeTextEditor?.document;
+      if (doc && doc.languageId === "aivi" && docHasTests(doc)) {
+        await runAiviTest(doc.uri.fsPath);
+      } else {
+        await runAiviTest("integration-tests/**");
+      }
+    })
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand("aivi.runTestsFile", async () => {
+      const doc = vscode.window.activeTextEditor?.document;
+      if (!doc || doc.languageId !== "aivi") {
+        return;
+      }
+      await runAiviTest(doc.uri.fsPath);
+    })
+  );
+  context.subscriptions.push(
+    vscode.tasks.onDidEndTaskProcess((e) => {
+      if (e.execution.task.source !== "aivi" || e.execution.task.name !== "AIVI: test") {
+        return;
+      }
+      const ws = vscode.workspace.workspaceFolders?.[0];
+      if (!ws) {
+        return;
+      }
+      const failedPath = vscode.Uri.joinPath(ws.uri, "target", "aivi-test-failed-files.txt").fsPath;
+      const passedPath = vscode.Uri.joinPath(ws.uri, "target", "aivi-test-passed-files.txt").fsPath;
+      const failedFiles = fs.existsSync(failedPath) ? fs.readFileSync(failedPath, "utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0) : [];
+      const passedFiles = fs.existsSync(passedPath) ? fs.readFileSync(passedPath, "utf8").split(/\r?\n/).map((s) => s.trim()).filter((s) => s.length > 0) : [];
+      testOutput.clear();
+      testOutput.appendLine(`exitCode: ${String(e.exitCode)}`);
+      testOutput.appendLine(`passedFiles: ${passedFiles.length}`);
+      testOutput.appendLine(`failedFiles: ${failedFiles.length}`);
+      if (failedFiles.length > 0) {
+        testOutput.appendLine("");
+        testOutput.appendLine("Failed files:");
+        for (const f of failedFiles) {
+          testOutput.appendLine(`- ${f}`);
+        }
+      }
+      if (e.exitCode === 0) {
+        void vscode.window.showInformationMessage(`AIVI tests passed (${passedFiles.length} files).`);
+      } else {
+        void vscode.window.showErrorMessage(
+          `AIVI tests failed (${failedFiles.length} files). See "AIVI Tests" output.`
+        );
+        testOutput.show(true);
+      }
     })
   );
   context.subscriptions.push(

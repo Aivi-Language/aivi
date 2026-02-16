@@ -36,8 +36,25 @@
       {
         "command": "aivi.restartServer",
         "title": "AIVI: Restart Language Server"
+      },
+      {
+        "command": "aivi.runTests",
+        "title": "AIVI: Run Tests"
+      },
+      {
+        "command": "aivi.runTestsFile",
+        "title": "AIVI: Run Tests (Current File)"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "aivi.runTestsFile",
+          "when": "resourceLangId == aivi",
+          "group": "navigation@5"
+        }
+      ]
+    },
     "languages": [
       {
         "id": "aivi",
@@ -121,6 +138,11 @@
           "minimum": 0,
           "maximum": 5,
           "description": "Maximum number of consecutive blank lines produced by the formatter."
+        },
+        "aivi.cli.command": {
+          "type": "string",
+          "default": "aivi",
+          "description": "Command used to invoke the AIVI CLI (used for running tests)."
         }
       }
     },

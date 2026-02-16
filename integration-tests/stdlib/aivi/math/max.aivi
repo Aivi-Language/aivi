@@ -10,6 +10,6 @@ subject = max
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (max 1.0 2.0 == 2.0)
+  _ <- assert (max 2.0 1.0 == 2.0)
 }

@@ -10,5 +10,16 @@ Ref = Result
 
 @test
 smoke = effect {
-  _ <- assert True
+  ok = Ok 1
+  err = Err "oops"
+  
+  _ <- assert (ok != err)
+  _ <- assert (ok == Ok 1)
+  
+  // Using global map which works on Result
+  mapped = map ok (x => x + 1)
+  _ <- assert (mapped == Ok 2)
+  
+  mappedErr = map err (x => x + 1)
+  _ <- assert (mappedErr == Err "oops")
 }

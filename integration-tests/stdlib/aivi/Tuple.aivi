@@ -10,5 +10,11 @@ Ref = Tuple
 
 @test
 smoke = effect {
-  _ <- assert True
+  t = (1, "two")
+  
+  res = t ?
+    | (a, b) => if a == 1 && b == "two" then True else False
+    | _ => False
+    
+  _ <- assert (res == True)
 }

@@ -10,6 +10,6 @@ subject = isEmpty
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (isEmpty "" == True)
+  _ <- assert (isEmpty "a" == False)
 }

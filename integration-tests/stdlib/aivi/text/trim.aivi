@@ -10,6 +10,5 @@ subject = trim
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (trim "  hello  " == "hello")
 }
