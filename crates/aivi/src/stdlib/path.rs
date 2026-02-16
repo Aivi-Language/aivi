@@ -35,7 +35,7 @@ isEmpty = xs => xs ?
 normalizeAcc : Bool -> List Text -> List Text -> List Text
 normalizeAcc = absolute acc segments => segments ?
   | [] => acc
-  | [s, ...rest] => if s == "" || s == "." then normalizeAcc absolute acc rest else if s == ".." then (acc ? | [] => if absolute then normalizeAcc absolute [] rest else normalizeAcc absolute ["..", ...acc] rest | [a, ...as] => if a == ".." then normalizeAcc absolute ["..", ...acc] rest else normalizeAcc absolute as rest) else normalizeAcc absolute [s, ...acc] rest
+  | [s, ...rest] => if s == "" || s == "." then normalizeAcc absolute acc rest else if s == ".." then (acc ? | [] => if absolute then normalizeAcc absolute [] rest else normalizeAcc absolute ["..", ...acc] rest | [a, ...accTail] => if a == ".." then normalizeAcc absolute ["..", ...acc] rest else normalizeAcc absolute accTail rest) else normalizeAcc absolute [s, ...acc] rest
 
 normalizeSegments : Bool -> List Text -> List Text
 normalizeSegments = absolute segments => reverse (normalizeAcc absolute [] segments)
