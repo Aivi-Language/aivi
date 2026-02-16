@@ -1,20 +1,22 @@
-# HTML Sigil (`~html{ ... }`)
+# HTML Sigil (`~<html>...</html>`)
 
 <!-- quick-info: {"kind":"module","name":"aivi.ui"} -->
-The `~html~> ... <~html` sigil allows embedding HTML inside Aivi code:syntax and lowers it to `aivi.ui.VNode msg` constructors.
+The `~<html>...</html>` sigil allows embedding HTML inside Aivi code:syntax and lowers it to `aivi.ui.VNode msg` constructors.
 
-`~html{ ... }` is **typed templating**: it produces `VNode` values, not HTML strings.
+`~<html>...</html>` is **typed templating**: it produces `VNode` values, not HTML strings.
 
 <!-- /quick-info -->
 ## Splices
 
 Use `{ expr }` inode =
-  ~html~>
+  ~<html>
     <div class="card">
       <h1>Hello</h1>
       <p>{ TextNode text }</p>
     </div>
-  <~htmltype is `VNode msg`. If the splice is `Text` (or implements `ToText`), it is coerced by wrapping with `TextNode` (and inserting `toText` when needed).
+  </html>
+  type is `VNode msg`. If the splice is `Text` (or implements `ToText`), it is coerced by wrapping with `TextNode` (and inserting `toText` when needed).
+
 - In attribute position, `...={expr}` is type-checked against the attribute's expected type (e.g. `style` expects a record).
 
 <<< ../../snippets/from_md/05_stdlib/04_ui/03_html/block_01.aivi{aivi}
@@ -46,4 +48,4 @@ Whitespace-only text between tags (indentation/newlines) is ignored so templates
 
 ## Multiple Roots
 
-If a `~html{ ... }` sigil contains multiple top-level nodes, it is wrapped in a synthetic `<div>...</div>` to produce a single `VNode`.
+If a `~<html>...</html>` sigil contains multiple top-level nodes, compilation fails with an error. Wrap your nodes in a single root element (usually a `<div>`).

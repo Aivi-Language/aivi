@@ -579,11 +579,11 @@ fn parses_structured_sigil_html_literal() {
 module Example
 
 x =
-  ~html~>
+  ~<html>
     <div class="card">
       <span>{ 1 }</span>
     </div>
-  <~html
+  </html>
 "#;
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(
@@ -604,12 +604,12 @@ x =
 
     assert!(
         !matches!(&def.expr, Expr::Literal(Literal::Sigil { tag, .. }) if tag == "html"),
-        "expected ~html~> to parse as a structured literal, not a sigil literal"
+        "expected ~<html> to parse as a structured literal, not a sigil literal"
     );
 
     assert!(
         expr_contains_ident(&def.expr, "vElement") && expr_contains_ident(&def.expr, "vClass"),
-        "expected ~html~> to lower into UI helpers"
+        "expected ~<html> to lower into UI helpers"
     );
 }
 
@@ -618,7 +618,7 @@ fn parses_html_sigil_key_attribute() {
     let src = r#"
 module Example
 
-x = ~html{ <div key="k">Hi</div> }
+x = ~<html><div key="k">Hi</div></html>
 "#;
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(
@@ -640,6 +640,26 @@ x = ~html{ <div key="k">Hi</div> }
     assert!(
         expr_contains_ident(&def.expr, "vKeyed"),
         "expected key= to lower into `vKeyed`"
+    );
+}
+
+#[test]
+fn html_sigil_multiple_roots_is_error() {
+    let src = r#"
+module Example
+
+x =
+  ~<html>
+    <div>One</div>
+    <div>Two</div>
+  </html>
+"#;
+
+    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    let codes = diag_codes(&diags);
+    assert!(
+        codes.iter().any(|code| code == "E1601"),
+        "expected E1601 for multiple roots, got: {codes:?}"
     );
 }
 

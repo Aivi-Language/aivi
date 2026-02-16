@@ -70,8 +70,8 @@ suite('LSP: completions inside ~html regions', () => {
     assert.ok(attrLabels.length > 0, 'Expected non-empty completions inside attribute name');
 
     // The current AIVI LSP returns AIVI keywords/sigils broadly, even in ~html.
-    assert.ok(tagLabels.includes('~html~><~html'), 'Expected AIVI sigil completion inside ~html');
-    assert.ok(attrLabels.includes('~html~><~html'), 'Expected AIVI sigil completion inside ~html');
+    assert.ok(tagLabels.includes('~<html></html>'), 'Expected AIVI sigil completion inside ~html');
+    assert.ok(attrLabels.includes('~<html></html>'), 'Expected AIVI sigil completion inside ~html');
   });
 
   test('completions include in-file symbols inside `{...}` attribute values', async () => {
@@ -111,4 +111,3 @@ suite('LSP: completions inside ~html regions', () => {
     assert.ok(Array.isArray(labels), 'Expected a completion label array');
   });
 });
-

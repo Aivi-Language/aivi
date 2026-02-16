@@ -208,7 +208,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > handles self-closing tag
         "start": 46,
       },
       {
-        "end": 53,
+        "end": 54,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
           "storage.type.sigil.aivi",
@@ -386,7 +386,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes a simple HTML 
         "start": 38,
       },
       {
-        "end": 45,
+        "end": 46,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
           "storage.type.sigil.aivi",
@@ -663,7 +663,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes nested tags an
         "start": 76,
       },
       {
-        "end": 83,
+        "end": 84,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
           "storage.type.sigil.aivi",
@@ -671,28 +671,28 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > tokenizes nested tags an
         "start": 77,
       },
       {
-        "end": 87,
-        "scopes": [],
-        "start": 83,
-      },
-      {
         "end": 88,
-        "scopes": [
-          "keyword.operator.comparison.aivi",
-        ],
-        "start": 87,
+        "scopes": [],
+        "start": 84,
       },
       {
         "end": 89,
-        "scopes": [],
+        "scopes": [
+          "keyword.operator.comparison.aivi",
+        ],
         "start": 88,
       },
       {
         "end": 90,
+        "scopes": [],
+        "start": 89,
+      },
+      {
+        "end": 91,
         "scopes": [
           "constant.numeric.aivi",
         ],
-        "start": 89,
+        "start": 90,
       },
     ],
   },
@@ -867,7 +867,7 @@ exports[`TextMate: AIVI + injected HTML (~html sigil) > treats event handler att
         "start": 74,
       },
       {
-        "end": 81,
+        "end": 82,
         "scopes": [
           "string.quoted.other.sigil.html.aivi",
           "storage.type.sigil.aivi",

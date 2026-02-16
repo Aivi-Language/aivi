@@ -216,14 +216,14 @@ fn aivi_tmlanguage() -> serde_json::Value {
         "sigil": {
           "patterns": [
             {
-              // Special-case: `~html~> ... <~html` is an HTML sigil. We give it a distinct scope
+              // Special-case: `~<html> ... </html>` is an HTML sigil. We give it a distinct scope
               // so VS Code can inject HTML highlighting and treat `{ ... }` as embedded AIVI.
               "name": "string.quoted.other.sigil.html.aivi",
-              "begin": "(~html~>)",
+              "begin": "(~<html>)",
               "beginCaptures": {
                 "1": { "name": "storage.type.sigil.aivi" }
               },
-              "end": "(<~html)",
+              "end": "(</html>)",
               "endCaptures": {
                 "1": { "name": "storage.type.sigil.aivi" }
               }

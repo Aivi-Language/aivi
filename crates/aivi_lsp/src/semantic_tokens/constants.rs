@@ -1,6 +1,6 @@
 impl Backend {
     pub(super) const KEYWORDS: &'static [&'static str] = syntax::KEYWORDS_ALL;
-    pub(super) const SIGILS: [&'static str; 5] = ["~r//", "~u()", "~d()", "~dt()", "~html~><~html"];
+    pub(super) const SIGILS: [&'static str; 5] = ["~r//", "~u()", "~d()", "~dt()", "~<html></html>"];
 
     pub(super) const SEM_TOKEN_KEYWORD: u32 = 0;
     pub(super) const SEM_TOKEN_TYPE: u32 = 1;

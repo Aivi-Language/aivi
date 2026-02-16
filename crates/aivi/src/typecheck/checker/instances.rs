@@ -380,7 +380,7 @@ impl TypeChecker {
             let placeholder = self.fresh_var();
             local_env.insert(name.clone(), Scheme::mono(placeholder.clone()));
             // Even without an explicit signature, run expected-type elaboration so argument/field
-            // positions can insert coercions (e.g. spliced `Text` in `~html~>` children).
+            // positions can insert coercions (e.g. spliced `Text` in `~<html>` children).
             let inferred = if def.params.is_empty() {
                 self.elab_expr(expr.clone(), None, &mut local_env)
                     .map(|(_elab, ty)| ty)

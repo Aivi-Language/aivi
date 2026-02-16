@@ -148,7 +148,7 @@ describe('TextMate: AIVI + injected HTML (~html sigil)', () => {
   });
 
   it('tokenizes a simple HTML tag with attribute and string value', () => {
-    const line = 'x = ~html~> <div class="a">hello</div> <~html';
+    const line = 'x = ~<html> <div class="a">hello</div> </html>';
     const tok = tokenizeText(grammar, line);
     expect(tok).toMatchSnapshot();
 
@@ -164,7 +164,7 @@ describe('TextMate: AIVI + injected HTML (~html sigil)', () => {
   });
 
   it('tokenizes nested tags and returns to AIVI scopes outside the sigil', () => {
-    const line = 'use aivi.ui (TextNode)  y = ~html~> <section><span id="x">t</span></section> <~html  z = 1';
+    const line = 'use aivi.ui (TextNode)  y = ~<html> <section><span id="x">t</span></section> </html>  z = 1';
     const tok = tokenizeText(grammar, line);
     expect(tok).toMatchSnapshot();
 
@@ -181,7 +181,7 @@ describe('TextMate: AIVI + injected HTML (~html sigil)', () => {
   });
 
   it('treats event handler attributes as HTML (no JS parsing required)', () => {
-    const line = 'doAiviFn = pure Unit  btn = ~html~> <button onClick={doAiviFn}>ok</button> <~html';
+    const line = 'doAiviFn = pure Unit  btn = ~<html> <button onClick={doAiviFn}>ok</button> </html>';
     const tok = tokenizeText(grammar, line);
     expect(tok).toMatchSnapshot();
 
@@ -196,7 +196,7 @@ describe('TextMate: AIVI + injected HTML (~html sigil)', () => {
   });
 
   it('handles self-closing tags and `<` that is not a tag', () => {
-    const line = 'img = ~html~> <img alt="x" /> <div>2 < 3</div> <~html';
+    const line = 'img = ~<html> <img alt="x" /> <div>2 < 3</div> </html>';
     const tok = tokenizeText(grammar, line);
     expect(tok).toMatchSnapshot();
 

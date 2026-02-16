@@ -346,11 +346,17 @@ impl Parser {
 
         // Lower parsed HTML nodes to `aivi.ui` constructors.
         fn lower_attr(_this: &mut Parser, attr: HtmlAttr, span: &Span) -> Option<Expr> {
-            let mk_ident = |name: &str| {
-                Expr::Ident(SpannedName {
-                    name: name.to_string(),
+            // `use aivi.ui` binds the module alias `ui`, not its exports. Emit `ui.v*` helpers.
+            let mk_ui = |field: &str| Expr::FieldAccess {
+                base: Box::new(Expr::Ident(SpannedName {
+                    name: "ui".to_string(),
                     span: span.clone(),
-                })
+                })),
+                field: SpannedName {
+                    name: field.to_string(),
+                    span: span.clone(),
+                },
+                span: span.clone(),
             };
             let mk_string = |value: &str| {
                 Expr::Literal(Literal::String {
@@ -359,45 +365,58 @@ impl Parser {
                 })
             };
             let call1 = |fname: &str, arg: Expr| Expr::Call {
-                func: Box::new(mk_ident(fname)),
+                func: Box::new(mk_ui(fname)),
                 args: vec![arg],
                 span: span.clone(),
             };
             let call2 = |fname: &str, a: Expr, b: Expr| Expr::Call {
-                func: Box::new(mk_ident(fname)),
+                func: Box::new(mk_ui(fname)),
                 args: vec![a, b],
                 span: span.clone(),
             };
 
             let name = attr.name;
             match (name.as_str(), attr.value) {
-                ("class", HtmlAttrValue::Text(v)) => Some(call1("Class", mk_string(&v))),
-                ("id", HtmlAttrValue::Text(v)) => Some(call1("Id", mk_string(&v))),
-                ("style", HtmlAttrValue::Splice(expr)) => Some(call1("Style", expr)),
-                ("onClick", HtmlAttrValue::Splice(expr)) => Some(call1("OnClick", expr)),
-                ("onClickE", HtmlAttrValue::Splice(expr)) => Some(call1("OnClickE", expr)),
-                ("onInput", HtmlAttrValue::Splice(expr)) => Some(call1("OnInput", expr)),
-                ("onInputE", HtmlAttrValue::Splice(expr)) => Some(call1("OnInputE", expr)),
-                ("onKeyDown", HtmlAttrValue::Splice(expr)) => Some(call1("OnKeyDown", expr)),
-                ("onKeyUp", HtmlAttrValue::Splice(expr)) => Some(call1("OnKeyUp", expr)),
-                ("onPointerDown", HtmlAttrValue::Splice(expr)) => Some(call1("OnPointerDown", expr)),
-                ("onPointerUp", HtmlAttrValue::Splice(expr)) => Some(call1("OnPointerUp", expr)),
-                ("onPointerMove", HtmlAttrValue::Splice(expr)) => Some(call1("OnPointerMove", expr)),
-                ("onFocus", HtmlAttrValue::Splice(expr)) => Some(call1("OnFocus", expr)),
-                ("onBlur", HtmlAttrValue::Splice(expr)) => Some(call1("OnBlur", expr)),
+                ("class", HtmlAttrValue::Text(v)) => Some(call1("vClass", mk_string(&v))),
+                ("id", HtmlAttrValue::Text(v)) => Some(call1("vId", mk_string(&v))),
+                ("style", HtmlAttrValue::Splice(expr)) => Some(call1("vStyle", expr)),
+                ("onClick", HtmlAttrValue::Splice(expr)) => Some(call1("vOnClick", expr)),
+                ("onClickE", HtmlAttrValue::Splice(expr)) => Some(call1("vOnClickE", expr)),
+                ("onInput", HtmlAttrValue::Splice(expr)) => Some(call1("vOnInput", expr)),
+                ("onInputE", HtmlAttrValue::Splice(expr)) => Some(call1("vOnInputE", expr)),
+                ("onKeyDown", HtmlAttrValue::Splice(expr)) => Some(call1("vOnKeyDown", expr)),
+                ("onKeyUp", HtmlAttrValue::Splice(expr)) => Some(call1("vOnKeyUp", expr)),
+                ("onPointerDown", HtmlAttrValue::Splice(expr)) => {
+                    Some(call1("vOnPointerDown", expr))
+                }
+                ("onPointerUp", HtmlAttrValue::Splice(expr)) => Some(call1("vOnPointerUp", expr)),
+                ("onPointerMove", HtmlAttrValue::Splice(expr)) => {
+                    Some(call1("vOnPointerMove", expr))
+                }
+                ("onFocus", HtmlAttrValue::Splice(expr)) => Some(call1("vOnFocus", expr)),
+                ("onBlur", HtmlAttrValue::Splice(expr)) => Some(call1("vOnBlur", expr)),
                 ("key", _) => None, // handled separately
-                (_other, HtmlAttrValue::Text(v)) => Some(call2("Attr", mk_string(&name), mk_string(&v))),
-                (_other, HtmlAttrValue::Splice(expr)) => Some(call2("Attr", mk_string(&name), expr)),
-                (_other, HtmlAttrValue::Bare) => Some(call2("Attr", mk_string(&name), mk_string("true"))),
+                (_other, HtmlAttrValue::Text(v)) => {
+                    Some(call2("vAttr", mk_string(&name), mk_string(&v)))
+                }
+                (_other, HtmlAttrValue::Splice(expr)) => Some(call2("vAttr", mk_string(&name), expr)),
+                (_other, HtmlAttrValue::Bare) => {
+                    Some(call2("vAttr", mk_string(&name), mk_string("true")))
+                }
             }
         }
 
         fn lower_node(this: &mut Parser, node: HtmlNode, span: &Span) -> Expr {
-            let mk_ident = |name: &str| {
-                Expr::Ident(SpannedName {
-                    name: name.to_string(),
+            let mk_ui = |field: &str| Expr::FieldAccess {
+                base: Box::new(Expr::Ident(SpannedName {
+                    name: "ui".to_string(),
                     span: span.clone(),
-                })
+                })),
+                field: SpannedName {
+                    name: field.to_string(),
+                    span: span.clone(),
+                },
+                span: span.clone(),
             };
             let mk_string = |value: &str| {
                 Expr::Literal(Literal::String {
@@ -419,7 +438,7 @@ impl Parser {
 
             match node {
                 HtmlNode::Text(t) => Expr::Call {
-                    func: Box::new(mk_ident("TextNode")),
+                    func: Box::new(mk_ui("vText")),
                     args: vec![mk_string(&t)],
                     span: span.clone(),
                 },
@@ -451,13 +470,13 @@ impl Parser {
                         .collect();
 
                     let element_expr = Expr::Call {
-                        func: Box::new(mk_ident("Element")),
+                        func: Box::new(mk_ui("vElement")),
                         args: vec![mk_string(&tag), list(lowered_attrs), list(lowered_children)],
                         span: span.clone(),
                     };
                     if let Some(key_expr) = key_expr {
                         Expr::Call {
-                            func: Box::new(mk_ident("Keyed")),
+                            func: Box::new(mk_ui("vKeyed")),
                             args: vec![key_expr, element_expr],
                             span: span.clone(),
                         }
@@ -472,8 +491,13 @@ impl Parser {
         if nodes.len() == 1 {
             return lower_node(self, nodes.remove(0), &root_span);
         }
+        self.emit_diag(
+            "E1601",
+            "html sigil must have a single root element",
+            root_span.clone(),
+        );
 
-        // Multiple top-level nodes: wrap in a synthetic <div>.
+        // Keep a synthetic wrapper for error recovery so downstream passes can continue.
         let wrapper = HtmlNode::Element {
             tag: "div".to_string(),
             attrs: Vec::new(),

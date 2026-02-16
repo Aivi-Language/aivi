@@ -184,7 +184,8 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
 
         if ch == '~' {
             if let Some((text, end_line, end_col, closed)) =
-                lex_sigil_multiline(&chars, index, line, col)
+                lex_html_angle_sigil(&chars, index, line, col)
+                    .or_else(|| lex_sigil_multiline(&chars, index, line, col))
             {
                 let len_chars = text.chars().count();
                 tokens.push(CstToken {
@@ -317,6 +318,96 @@ fn is_ident_start(ch: char) -> bool {
 
 fn is_ident_continue(ch: char) -> bool {
     is_ident_start(ch) || ch.is_ascii_digit()
+}
+
+fn lex_html_angle_sigil(
+    chars: &[char],
+    start: usize,
+    start_line: usize,
+    start_col: usize,
+) -> Option<(String, usize, usize, bool)> {
+    // New HTML sigil syntax: `~<html> ... </html>`
+    // This is multiline and can contain `{ ... }` splices.
+    if chars.get(start) != Some(&'~') || chars.get(start + 1) != Some(&'<') {
+        return None;
+    }
+    let mut index = start + 2;
+    if index + 4 >= chars.len() {
+        return None;
+    }
+    if chars.get(index) != Some(&'h')
+        || chars.get(index + 1) != Some(&'t')
+        || chars.get(index + 2) != Some(&'m')
+        || chars.get(index + 3) != Some(&'l')
+        || chars.get(index + 4) != Some(&'>')
+    {
+        return None;
+    }
+    index += 5; // consume `html>`
+
+    let mut line = start_line;
+    let mut col = start_col + (index - start);
+    let mut in_quote: Option<char> = None;
+    let mut escaped = false;
+    let mut closed = false;
+
+    while index < chars.len() {
+        let ch = chars[index];
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+
+        if escaped {
+            escaped = false;
+            index += 1;
+            continue;
+        }
+
+        if ch == '\\' {
+            escaped = true;
+            index += 1;
+            continue;
+        }
+
+        if let Some(quote_char) = in_quote {
+            if ch == quote_char {
+                in_quote = None;
+            }
+            index += 1;
+            continue;
+        }
+
+        if ch == '"' || ch == '\'' {
+            in_quote = Some(ch);
+            index += 1;
+            continue;
+        }
+
+        // Scan for closing delimiter `</html>`.
+        if ch == '<'
+            && index + 6 < chars.len()
+            && chars[index + 1] == '/'
+            && chars[index + 2] == 'h'
+            && chars[index + 3] == 't'
+            && chars[index + 4] == 'm'
+            && chars[index + 5] == 'l'
+            && chars[index + 6] == '>'
+        {
+            closed = true;
+            index += 7; // consume `</html>`
+            col += 6; // advance to the last char of the delimiter
+            break;
+        }
+
+        index += 1;
+    }
+
+    let text: String = chars[start..index.min(chars.len())].iter().collect();
+    let end_col = col.saturating_sub(1).max(1);
+    Some((text, line, end_col, closed))
 }
 
 fn match_symbol(chars: &[char], index: usize) -> Option<(String, usize)> {
