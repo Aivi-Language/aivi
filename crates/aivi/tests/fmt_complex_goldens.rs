@@ -78,4 +78,3 @@ fn complex_examples_match_formatter_output() {
     }
     panic!("complex examples are not formatter-idempotent:\n{report}");
 }
-

@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.math";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.math
-export pi, tau, e, inf, nan, phi, sqrt2, ln2, ln10
+export pi, tau, e, inf, negInf, nan, phi, sqrt2, ln2, ln10
 export Angle, radians, degrees, toRadians, toDegrees
 export abs, sign, copysign, min, max, minAll, maxAll, clamp, sum, sumInt
 export floor, ceil, trunc, round, fract, modf, frexp, ldexp
@@ -23,6 +23,7 @@ pi = math.pi
 tau = math.tau
 e = math.e
 inf = math.inf
+negInf = math.negInf
 nan = math.nan
 phi = math.phi
 sqrt2 = math.sqrt2

@@ -122,7 +122,11 @@ pub fn render(doc: Doc, max_width: usize) -> String {
             Doc::Group(doc) => {
                 let doc = *doc;
                 let fits_flat = fits(max_width.saturating_sub(col), indent, &doc, &stack);
-                stack.push((indent, if fits_flat { Mode::Flat } else { Mode::Break }, doc));
+                stack.push((
+                    indent,
+                    if fits_flat { Mode::Flat } else { Mode::Break },
+                    doc,
+                ));
             }
         }
     }

@@ -18,4 +18,3 @@ fn test_pipe_preserved_with_alignment() {
     assert!(formatted.contains("| a"), "Pipe should be preserved");
     assert!(formatted.contains("| c"), "Pipe should be preserved");
 }
-

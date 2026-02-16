@@ -14,6 +14,7 @@ pub(super) fn build_math_record() -> Value {
     fields.insert("tau".to_string(), Value::Float(std::f64::consts::TAU));
     fields.insert("e".to_string(), Value::Float(std::f64::consts::E));
     fields.insert("inf".to_string(), Value::Float(f64::INFINITY));
+    fields.insert("negInf".to_string(), Value::Float(f64::NEG_INFINITY));
     fields.insert("nan".to_string(), Value::Float(f64::NAN));
     fields.insert(
         "phi".to_string(),

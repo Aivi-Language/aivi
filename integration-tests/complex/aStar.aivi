@@ -5,6 +5,7 @@ use aivi.testing
 use aivi.collections
 use aivi.graph
 use aivi.vector (Vec2, magnitude, domain Vector)
+
 // Node positions for heuristic calculation using ~map{} sigil
 positions : Map Int Vec2
 positions = ~map{
@@ -13,25 +14,30 @@ positions = ~map{
   2 => { x: 2.0, y: 1.0 }
   3 => { x: 3.0, y: 0.0 }
 }
+
 // Euclidean distance heuristic
 heuristic : Int -> Int -> Float
 heuristic = goal node => (Map.get goal positions, Map.get node positions) ?
   | (Some target, Some current) => magnitude (target - current)
   | _                           => 0.0
+
 // Path reconstruction helper - walks the cameFrom map backwards
 reconstructGo = cameFrom current acc => Map.get current cameFrom ?
   | Some prev => reconstructGo cameFrom prev [current, ...acc]
   | None      => [current, ...acc]
 reconstructPath = cameFrom goal => reconstructGo cameFrom goal []
+
 // State record type alias
 AStarState = {
   queue: Heap (Float, Int, Float)
   scores: Map Int Float
   parents: Map Int Int
 }
+
 // Large constant for infinity
 infinity : Float
 infinity = 1000000.0
+
 // Expand a single neighbor
 expandNeighbor : Int -> Float -> Int -> (Int -> Int -> Float) -> AStarState -> { to: Int, weight: Float } -> AStarState
 expandNeighbor = current currentG goal heuristicFunc state edge => {
@@ -47,6 +53,7 @@ expandNeighbor = current currentG goal heuristicFunc state edge => {
     else
       state
 }
+
 // Expand all neighbors
 expandNeighbors = edges current currentG goal heuristicFunc state => edges ?
   | []              => state
@@ -54,6 +61,7 @@ expandNeighbors = edges current currentG goal heuristicFunc state => edges ?
       nextState = expandNeighbor current currentG goal heuristicFunc state edge
       expandNeighbors tail current currentG goal heuristicFunc nextState
   }
+
 // Main search loop
 search = state graph goal heuristicFunc => Heap.popMin state.queue ?
   | None                                => None
@@ -69,6 +77,7 @@ search = state graph goal heuristicFunc => Heap.popMin state.queue ?
       }
       search nextState graph goal heuristicFunc
   }
+
 // A* entry point
 astar = graph start goal heuristicFunc =>
   search {
@@ -76,6 +85,7 @@ astar = graph start goal heuristicFunc =>
       scores: ~map{ start => 0.0 }
       parents: Map.empty
   } graph goal heuristicFunc
+
 // Graph construction
 buildGraph = fromWeightedEdges [
   (0, 1, 1.0)

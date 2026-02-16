@@ -674,6 +674,13 @@ impl TypeChecker {
                 let right_applied = self.expand_alias(right_applied);
                 let both_int = matches!(left_applied, Type::Con(ref name, _) if name == "Int")
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
+                let both_float = matches!(left_applied, Type::Con(ref name, _) if name == "Float")
+                    && matches!(right_applied, Type::Con(ref name, _) if name == "Float");
+
+                // Float comparison is built-in like Int
+                if both_float {
+                    return Ok(Type::con("Bool"));
+                }
 
                 if !both_int {
                     let any_var = matches!(left_applied, Type::Var(_))
@@ -782,10 +789,30 @@ impl TypeChecker {
                 let left_applied = self.expand_alias(left_applied);
                 let right_applied = self.apply(right_ty.clone());
                 let right_applied = self.expand_alias(right_applied);
+
                 let allow_int_fallback = op != "++";
                 let both_int = allow_int_fallback
                     && matches!(left_applied, Type::Con(ref name, _) if name == "Int")
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
+                let both_float = allow_int_fallback
+                    && matches!(left_applied, Type::Con(ref name, _) if name == "Float")
+                    && matches!(right_applied, Type::Con(ref name, _) if name == "Float");
+                // Check if either operand is Float (the other might be a type variable)
+                let left_is_float = matches!(left_applied, Type::Con(ref name, _) if name == "Float");
+                let right_is_float = matches!(right_applied, Type::Con(ref name, _) if name == "Float");
+                let either_float = allow_int_fallback && (left_is_float || right_is_float);
+
+                // Float arithmetic is built-in like Int
+                if both_float {
+                    return Ok(Type::con("Float"));
+                }
+
+                // If one operand is Float and the other is a type variable, unify with Float
+                if either_float && !both_int {
+                    self.unify_with_span(left_ty, Type::con("Float"), expr_span(left))?;
+                    self.unify_with_span(right_ty, Type::con("Float"), expr_span(right))?;
+                    return Ok(Type::con("Float"));
+                }
 
                 if !both_int {
                     let any_var = matches!(left_applied, Type::Var(_))
