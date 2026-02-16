@@ -10,15 +10,16 @@ subject = find
 
 @test
 smoke = effect {
-  r <- match compile "e" {
-    | Ok re => pure re
-    | Err _ => fail "compile failed"
-  }
-  _ <- match find r "hello" {
+  reResult = compile "e"
+  r <- reResult ?
+    | Ok re => effect.pure re
+    | Err _ => effect.fail "compile failed"
+  
+  fResult = regex.find r "hello"
+  _ <- fResult ?
     | Some (s, e) => effect {
         _ <- assert (s == 1)
         _ <- assert (e == 2)
       }
     | None => assert False
-  }
 }

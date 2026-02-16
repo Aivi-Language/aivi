@@ -10,12 +10,15 @@ Ref = Match
 
 @test
 smoke = effect {
-  r <- match compile "." {
-    | Ok re => pure re
-    | Err _ => fail "compile failed"
+  reResult = compile "."
+  r <- reResult ? {
+    | Ok re => effect.pure re
+    | Err _ => effect.fail "compile failed"
   }
-  _ <- match match r "a" {
-    | Some m => assert (m.full == "a") // m has type Match
+  
+  mResult = regex.match r "a"
+  _ <- mResult ? {
+    | Some m => assert (m.full == "a")
     | None => assert False
   }
 }

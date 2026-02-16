@@ -18,12 +18,10 @@ smoke = effect {
   _ <- assert (Deque.peekBack d2 == Some 1)
 
   res = Deque.popFront d2
-  _ <- match res {
-    | Some (val, d3) => do {
+  _ <- match res with
+    | Some (val, d3) => effect {
       _ <- assert (val == 0)
       _ <- assert (Deque.peekFront d3 == Some 1)
-      pure Unit
     }
     | None => assert False
-  }
 }

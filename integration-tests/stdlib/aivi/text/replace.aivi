@@ -10,5 +10,5 @@ subject = replace
 
 @test
 smoke = effect {
-  _ <- assert (replace "l" "L" "hello" == "heLlo") // Replaces first occurrence? Assuming standard behavior for 'replace' vs 'replaceAll'
+  _ <- assert (replace "l" "L" "hello" == "heLlo") // Replaces first occurrence? Assuming standard behavior for replace vs replaceAll
 }

@@ -19,7 +19,7 @@ type SegmentTree =
       right: SegmentTree
     }
 
-rangeMeta = leftMeta rightMeta =>
+rangeMeta = start end leftMeta rightMeta =>
   // combine two child metas safely when one side might be Empty.
   (leftMeta, rightMeta) ?
     | (None, None) => None

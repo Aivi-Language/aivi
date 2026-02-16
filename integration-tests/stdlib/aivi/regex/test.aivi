@@ -10,10 +10,11 @@ subject = test
 
 @test
 smoke = effect {
-  r <- match compile "abc" {
-    | Ok re => pure re
-    | Err _ => fail "compile failed"
-  }
+  reResult = compile "abc"
+  r <- reResult ?
+    | Ok re => effect.pure re
+    | Err _ => effect.fail "compile failed"
+
   _ <- assert (test r "abc" == True)
   _ <- assert (test r "123" == False)
 }

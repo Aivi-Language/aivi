@@ -1,0 +1,77 @@
+@no_prelude
+module integrationTests.complex.DijkstraHeap
+
+use aivi
+use aivi.testing (assert)
+
+type Edge = { to: Int, cost: Int }
+type Graph = Map Int (List Edge)
+type Heap =
+  Empty
+  | Node { rank: Int, value: { dist: Int, node: Int }, left: Heap, right: Heap }
+
+rank = heap =>
+  heap ?
+    | Empty => 0
+    | Node { rank } => rank
+
+makeNode = value left right =>
+  leftRank = rank left
+  rightRank = rank right
+  if leftRank >= rightRank then
+    Node { rank: rightRank + 1, value, left, right }
+  else
+    Node { rank: leftRank + 1, value, right, left }
+
+mergeHeaps = (a, b) =>
+  match (a, b)
+    | (Empty, _) => b
+    | (_, Empty) => a
+    | (Node { value: va, left: la, right: ra }, Node { value: vb, left: lb, right: rb }) =>
+        if va.dist <= vb.dist then
+          makeNode va la (mergeHeaps (ra, b))
+        else
+          makeNode vb lb (mergeHeaps (rb, a))
+
+emptyHeap = Empty
+insertHeap = (heap, value) => mergeHeaps (heap, Node { rank: 1, value, left: Empty, right: Empty })
+popMin = heap =>
+  heap ?
+    | Empty => None
+    | Node { value, left, right } => Some (value, mergeHeaps (left, right))
+
+dijkstra = (graph, start) =>
+  processNeighbors = (edges, queue, dist, current) =>
+    edges ?
+      | [] => (queue, dist)
+      | [edge, ...tail] =>
+          tentative = current.dist + edge.cost
+          old = (Map.get edge.to dist) ? | Some v => v | None => 1_000_000
+          if tentative < old then
+            (insertHeap queue { dist: tentative, node: edge.to }, Map.insert edge.to tentative dist)
+          else
+            processNeighbors (tail, queue, dist, current)
+  go = (queue, dist, visited) =>
+    queue ?
+      | Empty => dist
+      | _ =>
+          (current, rest) = popMin queue ?
+            | Some tuple => tuple
+            | None => ({ dist: 0, node: 0 }, Empty)
+          if Set.has current.node visited then go (rest, dist, visited)
+          else
+            neighbors = (Map.get current.node graph) ? | Some list => list | None => []
+            (nextQueue, nextDist) = processNeighbors (neighbors, rest, dist, current)
+            go (nextQueue, nextDist, Set.insert current.node visited)
+  go (insertHeap emptyHeap { dist: 0, node: start }, Map.insert start 0 Map.empty, Set.empty)
+
+@test
+shortestPaths = effect {
+  graph =
+    Map.insert 0 [{ to: 1, cost: 2 }, { to: 2, cost: 5 }] Map.empty
+    |> Map.insert 1 [{ to: 2, cost: 1 }, { to: 3, cost: 4 }] Map.empty
+    |> Map.insert 2 [{ to: 3, cost: 1 }] Map.empty
+  dist = dijkstra graph 0
+  _ <- assert (Map.get 3 dist == Some 4)
+  _ <- assert (Map.get 2 dist == Some 3)
+}

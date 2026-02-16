@@ -1,0 +1,144 @@
+@no_prelude
+module integrationTests.complex.MinCostMaxFlow
+
+use aivi
+use aivi.testing (assert)
+
+type Edge = { from: Int, to: Int, cap: Int, cost: Int }
+type ResidualKey = { from: Int, to: Int }
+type Residual =
+  { caps: Map ResidualKey Int
+  , costs: Map ResidualKey Int
+  , neighbors: Map Int (List Int)
+  , keys: List ResidualKey
+  }
+
+INF = 1_000_000
+
+getOrZero = key map =>
+  (Map.get key map) ?
+    | Some v => v
+    | None => 0
+
+addNeighbor = (src, dst, adj) =>
+  (Map.get src adj) ?
+    | Some existing => Map.insert src ([dst, ...existing]) adj
+    | None => Map.insert src [dst] adj
+
+buildResidual = edges =>
+  build = (remaining, caps, costs, adj, keys) =>
+    remaining ?
+      | [] => { caps, costs, neighbors: adj, keys }
+      | [edge, ...rest] =>
+          forward = { from: edge.from, to: edge.to }
+          backward = { from: edge.to, to: edge.from }
+          caps' = Map.insert forward edge.cap caps
+          caps'' = Map.insert backward 0 caps'
+          costs' = Map.insert forward edge.cost costs
+          costs'' = Map.insert backward (-edge.cost) costs'
+          adj' = addNeighbor edge.from edge.to adj
+          adj'' = addNeighbor edge.to edge.from adj'
+          build (rest, caps'', costs'', adj'', [forward, backward, ...keys])
+  build (edges, Map.empty, Map.empty, Map.empty, [])
+
+relaxEdge = (residual, key, dist, parents) =>
+  cap = getOrZero key residual.caps
+  fromDist = (Map.get key.from dist) ? | Some v => v | None => INF
+  alt = fromDist + getOrZero key residual.costs
+  toDist = (Map.get key.to dist) ? | Some v => v | None => INF
+  if cap > 0 && alt < toDist then
+    (Map.insert key.to alt dist, Map.insert key.to key.from parents)
+  else
+    (dist, parents)
+
+relaxAll = (residual, keys, dist, parents) =>
+  keys ?
+    | [] => (dist, parents)
+    | [key, ...rest] =>
+        (nextDist, nextParents) = relaxEdge (residual, key, dist, parents)
+        relaxAll (residual, rest, nextDist, nextParents)
+
+repeatRelax = (count, residual, keys, dist, parents) =>
+  if count == 0 then (dist, parents)
+  else
+    (newDist, newParents) = relaxAll (residual, keys, dist, parents)
+    repeatRelax (count - 1, residual, keys, newDist, newParents)
+
+shortestPath = (residual, source, sink) =>
+  dist = Map.insert source 0 Map.empty
+  parents = Map.empty
+  keys = residual.keys
+  iterations = List.length keys
+  (finalDist, finalParents) = repeatRelax (iterations, residual, keys, dist, parents)
+  result = (Map.get sink finalDist) ?
+    | Some value when value < INF => Some (finalDist, finalParents)
+    | _ => None
+  result
+
+buildPath = (parents, sink, source) =>
+  go = (current, acc) =>
+    if current == source then [source, ...acc]
+    else
+      (Map.get current parents) ?
+        | Some prev => go prev [current, ...acc]
+        | None => acc
+  go sink []
+
+pathCapacity = (residual, path) =>
+  path ?
+    | [] => 0
+    | [_] => INF
+    | [a, b, ...rest] =>
+        cap = getOrZero { from: a, to: b } residual.caps
+        min cap (pathCapacity (residual, [b, ...rest]))
+
+pathCost = (residual, path) =>
+  path ?
+    | [] => 0
+    | [_] => 0
+    | [a, b, ...rest] =>
+        cost = getOrZero { from: a, to: b } residual.costs
+        cost + pathCost (residual, [b, ...rest])
+
+applyPath = (residual, path, delta) =>
+  go = (nodes, caps) =>
+    nodes ?
+      | [] => caps
+      | [_] => caps
+      | [a, b, ...rest] =>
+          forward = getOrZero { from: a, to: b } caps
+          backward = getOrZero { from: b, to: a } caps
+          caps' = Map.insert { from: a, to: b } (forward - delta) caps
+          caps'' = Map.insert { from: b, to: a } (backward + delta) caps'
+          go ([b, ...rest], caps'')
+  { residual with caps: go path residual.caps }
+
+minCostMaxFlow = (edges, source, sink) =>
+  start = buildResidual edges
+  loop = (state, flow, cost) =>
+    pathInfo = shortestPath (state, source, sink)
+    pathInfo ?
+      | None => (flow, cost)
+      | Some (_, parents) =>
+          path = buildPath (parents, sink, source)
+          delta = pathCapacity (state, path)
+          if delta == 0 then (flow, cost)
+          else
+            updated = applyPath (state, path, delta)
+            routeCost = pathCost (state, path)
+            loop (updated, flow + delta, cost + delta * routeCost)
+  loop (start, 0, 0)
+
+@test
+minCostFlowSmoke = effect {
+  edges =
+    [ { from: 0, to: 1, cap: 2, cost: 2 }
+    , { from: 0, to: 2, cap: 1, cost: 6 }
+    , { from: 1, to: 2, cap: 1, cost: 1 }
+    , { from: 1, to: 3, cap: 1, cost: 3 }
+    , { from: 2, to: 3, cap: 1, cost: 2 }
+    ]
+  (flow, totalCost) = minCostMaxFlow edges 0 3
+  _ <- assert (flow == 3)
+  _ <- assert (totalCost == 12)
+}

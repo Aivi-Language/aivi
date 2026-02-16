@@ -1,0 +1,124 @@
+@no_prelude
+module integrationTests.complex.Dinic
+
+use aivi
+use aivi.testing (assert)
+
+Record = { from: Int, to: Int, cap: Int }
+
+type Residual =
+  { capacities: Map { from: Int, to: Int } Int
+  , neighbors: Map Int (List Int)
+  }
+
+append = (list, tail) =>
+  list ?
+    | [] => tail
+    | [h, ...t] => [h, ...append (t, tail)]
+
+getOrZero = key map =>
+  (Map.get key map) ?
+    | Some value => value
+    | None => 0
+
+addNeighbors = (node, targets, adj) =>
+  (Map.get node adj) ?
+    | Some existing => Map.insert node (append (targets, existing)) adj
+    | None => Map.insert node targets adj
+
+buildResidual = edges =>
+  build = (remaining, caps, adj) =>
+    remaining ?
+      | [] => { capacities: caps, neighbors: adj }
+      | [edge, ...rest] =>
+          { from, to, cap } = edge
+          caps1 = Map.insert { from, to } cap caps
+          caps2 = Map.insert { from: to, to: from } (getOrZero { from: to, to: from } caps1) caps1
+          adj' = addNeighbors from [to] adj
+          adj'' = addNeighbors to [from] adj'
+          build (rest, caps2, adj'')
+  build (edges, Map.empty, Map.empty)
+
+bfsLevels = residual source sink =>
+  visit = (queue, levels) =>
+    queue ?
+      | [] => levels
+      | [current, ...restQueue] =>
+          currentLevel = (Map.get current levels) ? | Some lvl => lvl | None => -1
+          neighbors = (Map.get current residual.neighbors) ? | Some list => list | None => []
+          explore = (targets, q, accLevels) =>
+            targets ?
+              | [] => visit (q, accLevels)
+              | [next, ...tail] =>
+                  cap = getOrZero { from: current, to: next } residual.capacities
+                  already = Map.get next accLevels
+                  if cap > 0 && already == None then
+                    visit (append (q, [next]), Map.insert next (currentLevel + 1) accLevels)
+                  else explore (tail, q, accLevels)
+          explore (neighbors, restQueue, levels)
+  finalLevels = visit ([source], Map.insert source 0 Map.empty)
+  (Map.has sink finalLevels, finalLevels)
+
+pushFlow = residual from to delta =>
+  forward = getOrZero { from, to } residual.capacities
+  backward = getOrZero { from: to, to: from } residual.capacities
+  caps1 = Map.insert { from, to } (forward - delta) residual.capacities
+  caps2 = Map.insert { from: to, to: from } (backward + delta) caps1
+  { residual with capacities: caps2 }
+
+dfsFlow = residual node sink level flow =>
+  if flow == 0 then (0, residual)
+  else if node == sink then (flow, residual)
+  else
+    neighbors = (Map.get node residual.neighbors) ? | Some list => list | None => []
+    tryNext = (targets, accRes) =>
+      targets ?
+        | [] => (0, accRes)
+        | [next, ...tail] =>
+            cap = getOrZero { from: node, to: next } accRes.capacities
+            levelNext = (Map.get next level) ? | Some lvl => lvl | None => -1
+            levelNode = (Map.get node level) ? | Some lvl => lvl | None => -1
+            canGo = cap > 0 && levelNext == levelNode + 1
+            if canGo then
+              (minFlow, resAfter) = dfsFlow accRes next sink level (if cap < flow then cap else flow)
+              if minFlow > 0 then
+                updated = pushFlow resAfter node next minFlow
+                (minFlow, updated)
+              else tryNext (tail, accRes)
+            else tryNext (tail, accRes)
+    tryNext (neighbors, residual)
+
+blockingFlow = residual source sink level total =>
+  (pushed, updated) = dfsFlow residual source sink level Int.max
+  if pushed == 0 then (total, updated)
+  else blockingFlow updated source sink level (total + pushed)
+
+maxFlow = edges source sink =>
+  start = buildResidual edges
+  loop = (residual, acc) =>
+    (reachable, levels) = bfsLevels residual source sink
+    if !reachable then (acc, residual)
+    else
+      (newAcc, nextRes) = blockingFlow residual source sink levels acc
+      loop (nextRes, newAcc)
+  loop (start, 0)
+
+@test
+flowTest = effect {
+  edgeList =
+    [ { from: 0, to: 1, cap: 10 }
+    , { from: 0, to: 2, cap: 5 }
+    , { from: 1, to: 2, cap: 15 }
+    , { from: 1, to: 3, cap: 10 }
+    , { from: 2, to: 4, cap: 10 }
+    , { from: 3, to: 4, cap: 10 }
+    , { from: 3, to: 5, cap: 10 }
+    , { from: 4, to: 5, cap: 10 }
+    ]
+  (result, _) = maxFlow edgeList 0 5
+  _ <- assert (result == 20)
+
+  noPath = []
+  (zero, _) = maxFlow noPath 0 1
+  _ <- assert (zero == 0)
+}
