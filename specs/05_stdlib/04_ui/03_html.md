@@ -8,14 +8,21 @@ The `~<html>...</html>` sigil allows embedding HTML inside Aivi code:syntax and 
 <!-- /quick-info -->
 ## Splices
 
-Use `{ expr }` inode =
+Use `{ expr }` inline:
+
+```aivi
+node =
   ~<html>
     <div class="card">
       <h1>Hello</h1>
       <p>{ TextNode text }</p>
     </div>
   </html>
-  type is `VNode msg`. If the splice is `Text` (or implements `ToText`), it is coerced by wrapping with `TextNode` (and inserting `toText` when needed).
+
+type is `VNode msg`.
+```
+
+If the splice is `Text` (or implements `ToText`), it is coerced by wrapping with `TextNode` (and inserting `toText` when needed).
 
 - In attribute position, `...={expr}` is type-checked against the attribute's expected type (e.g. `style` expects a record).
 

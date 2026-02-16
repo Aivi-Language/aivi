@@ -1,0 +1,16 @@
+module examples.runtime_math_infinities
+export main
+
+use aivi.console
+use aivi.math
+
+main : Effect Text Unit
+main = effect {
+  _ <- if isInf inf then pure Unit else fail "expected inf to be infinite"
+  _ <- if isInf negInf then pure Unit else fail "expected negInf to be infinite"
+
+  _ <- if min inf negInf == negInf then pure Unit else fail "min inf negInf should be negInf"
+  _ <- if max inf negInf == inf then pure Unit else fail "max inf negInf should be inf"
+
+  print "ok"
+}
