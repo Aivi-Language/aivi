@@ -20,7 +20,14 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 
 ### Syntax
 
-- (add items; start at `specs/02_syntax/`)
+- **`do M { ... }` — Generic Monadic Blocks** (Future consideration)
+  - Status: Not specified, not implemented
+  - Proposal: Introduce `do M { ... }` as general monadic do-notation where `M` is any type with a `Monad` instance.
+  - `effect { ... }` would become sugar for `do (Effect E) { ... }` (with special features like `or` fallback, resource acquisition).
+  - `generate { ... }` stays separate (different semantics: `yield`, guards, `recurse`).
+  - Enables: `do Option { x <- someOpt; y <- anotherOpt; pure (x + y) }`
+  - Trade-offs: Requires explicit monad annotation to avoid inference ambiguity; adds surface syntax complexity.
+  - Decision: Defer to post-v0.1; current `?` pattern matching and `flatMap`/`chain` suffice for `Option`/`Result`.
 
 ### Kernel & Desugaring
 
