@@ -15,5 +15,5 @@ smoke = effect {
   props = "greet = Hello, {name}!\nval = 123"
   b_res = bundleFromProperties l props
   b <- match b_res with Ok b => pure b Err e => fail e
-  _ <- testing.assert (b.locale.language == "en")
+  _ <- assert (b.locale.language == "en")
 }

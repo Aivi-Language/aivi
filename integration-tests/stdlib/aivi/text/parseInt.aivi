@@ -10,6 +10,6 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (parseInt "123" == Some 123)
-  _ <- testing.assert (parseInt "abc" == None)
+  _ <- assert (parseInt "123" == Some 123)
+  _ <- assert (parseInt "abc" == None)
 }

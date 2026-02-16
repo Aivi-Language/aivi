@@ -11,6 +11,6 @@ use aivi.calendar
 @test
 smoke = effect {
   d = addMonths 1 { year: 2024, month: 1, day: 31 }
-  _ <- testing.assert (d.month == 2)
-  _ <- testing.assert (d.day == 29) // 2024 is leap year, 29th is max
+  _ <- assert (d.month == 2)
+  _ <- assert (d.day == 29) // 2024 is leap year, 29th is max
 }

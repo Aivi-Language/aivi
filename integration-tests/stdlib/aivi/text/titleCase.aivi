@@ -10,5 +10,5 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (titleCase "hello world" == "Hello World")
+  _ <- assert (titleCase "hello world" == "Hello World")
 }

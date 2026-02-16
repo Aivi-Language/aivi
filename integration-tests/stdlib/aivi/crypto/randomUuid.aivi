@@ -11,5 +11,5 @@ use aivi.crypto
 @test
 smoke = effect {
   u <- randomUuid
-  _ <- testing.assert (length u == 36)
+  _ <- assert (length u == 36)
 }

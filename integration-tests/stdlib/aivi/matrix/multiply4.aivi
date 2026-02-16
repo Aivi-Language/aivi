@@ -10,5 +10,5 @@ use aivi.matrix
 
 @test
 smoke = effect {
-  _ <- testing.assert (multiply4 identity4 identity4 == identity4)
+  _ <- assert (multiply4 identity4 identity4 == identity4)
 }

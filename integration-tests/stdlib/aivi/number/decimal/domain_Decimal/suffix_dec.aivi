@@ -13,5 +13,5 @@ use aivi.number.decimal
 @test
 smoke = effect {
   d = 1.5dec
-  _ <- testing.assert (toFloat d == 1.5)
+  _ <- assert (toFloat d == 1.5)
 }

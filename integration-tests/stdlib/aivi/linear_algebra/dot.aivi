@@ -12,5 +12,5 @@ use aivi.linear_algebra
 smoke = effect {
   v1 = { size: 2, data: [1.0, 2.0] }
   v2 = { size: 2, data: [3.0, 4.0] }
-  _ <- testing.assert (dot v1 v2 == 11.0)
+  _ <- assert (dot v1 v2 == 11.0)
 }

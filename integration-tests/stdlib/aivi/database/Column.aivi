@@ -11,5 +11,5 @@ use aivi.database
 @test
 smoke = effect {
   c = { name: "id", colType: IntType, constraints: [NotNull, AutoIncrement], default: None }
-  _ <- testing.assert (c.name == "id")
+  _ <- assert (c.name == "id")
 }

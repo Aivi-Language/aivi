@@ -13,5 +13,5 @@ use aivi.calendar
 @test
 smoke = effect {
   d = 5d
-  _ <- testing.assert (d == 5) // Duration in days?
+  _ <- assert (d == 5) // Duration in days?
 }

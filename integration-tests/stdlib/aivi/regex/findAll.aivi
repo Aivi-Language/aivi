@@ -15,11 +15,11 @@ smoke = effect {
     | Ok re => effect { pure re }
     | Err _ => effect { fail "compile failed" }
   ms = findAll r "hello"
-  _ <- testing.assert (length ms == 2)
+  _ <- assert (length ms == 2)
   _ <- match ms {
     | [(s1, e1), (s2, e2)] => effect {
-        _ <- testing.assert (s1 == 2)
-        _ <- testing.assert (s2 == 3)
+        _ <- assert (s1 == 2)
+        _ <- assert (s2 == 3)
       }
     | _ => assert False
   }

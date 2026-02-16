@@ -10,5 +10,5 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (reverse "abc" == "cba")
+  _ <- assert (reverse "abc" == "cba")
 }

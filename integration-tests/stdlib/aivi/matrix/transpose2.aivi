@@ -12,6 +12,6 @@ use aivi.matrix
 smoke = effect {
   m = { m00: 1.0, m01: 2.0, m10: 3.0, m11: 4.0 }
   t = transpose2 m
-  _ <- testing.assert (t.m01 == 3.0)
-  _ <- testing.assert (t.m10 == 2.0)
+  _ <- assert (t.m01 == 3.0)
+  _ <- assert (t.m10 == 2.0)
 }

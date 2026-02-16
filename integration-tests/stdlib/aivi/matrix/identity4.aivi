@@ -10,6 +10,6 @@ use aivi.matrix
 
 @test
 smoke = effect {
-  _ <- testing.assert (identity4.m00 == 1.0)
-  _ <- testing.assert (identity4.m33 == 1.0)
+  _ <- assert (identity4.m00 == 1.0)
+  _ <- assert (identity4.m33 == 1.0)
 }

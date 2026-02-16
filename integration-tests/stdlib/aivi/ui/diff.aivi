@@ -14,5 +14,5 @@ smoke = effect {
   new = vText "b"
   ops = diff old new
   // SetText "root" "b"
-  _ <- testing.assert (length ops == 1)
+  _ <- assert (length ops == 1)
 }

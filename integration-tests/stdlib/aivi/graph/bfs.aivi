@@ -12,5 +12,5 @@ use aivi.graph
 smoke = effect {
   g = addEdge empty { from: 1, to: 2, weight: 1.0 }
   path = bfs g { start: 1, end: 2 }
-  _ <- testing.assert (path == [1, 2])
+  _ <- assert (path == [1, 2])
 }

@@ -11,5 +11,5 @@ cfgSource = file.read "integration-tests/legacy/i18n/app.en-US.properties"
 @test
 fileSourceLoads = effect {
   txt <- load cfgSource
-  _   <- testing.assert (text.length txt > 0)
+  _   <- assert (text.length txt > 0)
 }

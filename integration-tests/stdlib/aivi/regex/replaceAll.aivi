@@ -14,5 +14,5 @@ smoke = effect {
   r <- reResult ?
     | Ok re => effect { pure re }
     | Err _ => effect { fail "compile failed" }
-  _ <- testing.assert (replaceAll r "hello" "L" == "heLLo")
+  _ <- assert (replaceAll r "hello" "L" == "heLLo")
 }

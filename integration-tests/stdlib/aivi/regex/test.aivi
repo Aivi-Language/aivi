@@ -15,6 +15,6 @@ smoke = effect {
     | Ok re => effect { pure re }
     | Err _ => effect { fail "compile failed" }
 
-  _ <- testing.assert (test r "abc" == True)
-  _ <- testing.assert (test r "123" == False)
+  _ <- assert (test r "abc" == True)
+  _ <- assert (test r "123" == False)
 }

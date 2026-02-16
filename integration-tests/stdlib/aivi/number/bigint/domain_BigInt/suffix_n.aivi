@@ -13,5 +13,5 @@ use aivi.number.bigint
 @test
 smoke = effect {
   b = 10n
-  _ <- testing.assert (toInt b == 10)
+  _ <- assert (toInt b == 10)
 }

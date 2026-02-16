@@ -11,5 +11,5 @@ use aivi.database
 @test
 smoke = effect {
   t = { name: "users", columns: [], rows: [] }
-  _ <- testing.assert (t.name == "users")
+  _ <- assert (t.name == "users")
 }

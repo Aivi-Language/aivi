@@ -11,10 +11,10 @@ use aivi.calendar
 @test
 smoke = effect {
   d = addDays 1 { year: 2024, month: 2, day: 28 }
-  _ <- testing.assert (d.day == 29)
-  _ <- testing.assert (d.month == 2)
+  _ <- assert (d.day == 29)
+  _ <- assert (d.month == 2)
 
   d2 = addDays 2 { year: 2024, month: 2, day: 28 }
-  _ <- testing.assert (d2.day == 1)
-  _ <- testing.assert (d2.month == 3)
+  _ <- assert (d2.day == 1)
+  _ <- assert (d2.month == 3)
 }

@@ -11,5 +11,5 @@ use aivi.number.quaternion
 @test
 smoke = effect {
   q = { w: 1.0, x: 0.0, y: 0.0, z: 0.0 }
-  _ <- testing.assert (magnitude q == 1.0)
+  _ <- assert (magnitude q == 1.0)
 }

@@ -6,15 +6,13 @@ use aivi.testing
 
 use aivi
 
-
-
 @test
 smoke = effect {
-  _ <- testing.assert (True && True)
-  _ <- testing.assert (True || False)
-  _ <- testing.assert (False || True)
-  _ <- testing.assert (not False)
-  _ <- testing.assert (not (True && False))
-  _ <- testing.assert (True != False)
-  _ <- testing.assert (True == True)
+  _ <- assert (True && True)
+  _ <- assert (True || False)
+  _ <- assert (False || True)
+  _ <- assert (not False)
+  _ <- assert (not (True && False))
+  _ <- assert (True != False)
+  _ <- assert (True == True)
 }

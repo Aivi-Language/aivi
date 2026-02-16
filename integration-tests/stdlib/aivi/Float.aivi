@@ -6,16 +6,14 @@ use aivi.testing
 
 use aivi
 
-
-
 @test
 smoke = effect {
-  _ <- testing.assert (1.0 + 2.0 == 3.0)
-  _ <- testing.assert (2.0 * 3.0 == 6.0)
-  _ <- testing.assert (4.0 / 2.0 == 2.0)
-  _ <- testing.assert (5.0-3.0 == 2.0)
-  _ <- testing.assert (1.0 < 2.0)
-  _ <- testing.assert (2.0 > 1.0)
-  _ <- testing.assert (1.0 <= 1.0)
-  _ <- testing.assert (1.0 >= 1.0)
+  _ <- assert (1.0 + 2.0 == 3.0)
+  _ <- assert (2.0 * 3.0 == 6.0)
+  _ <- assert (4.0 / 2.0 == 2.0)
+  _ <- assert (5.0-3.0 == 2.0)
+  _ <- assert (1.0 < 2.0)
+  _ <- assert (2.0 > 1.0)
+  _ <- assert (1.0 <= 1.0)
+  _ <- assert (1.0 >= 1.0)
 }

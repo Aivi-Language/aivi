@@ -12,5 +12,5 @@ use aivi.ui
 smoke = effect {
   style = vStyle { color: "red" }
   node = vElement "div" [style] []
-  _ <- testing.assert (renderHtml node == "<div data-aivi-node=\"root\" style=\"color: red\"></div>")
+  _ <- assert (renderHtml node == "<div data-aivi-node=\"root\" style=\"color: red\"></div>")
 }

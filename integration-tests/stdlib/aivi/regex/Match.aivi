@@ -18,7 +18,7 @@ smoke = effect {
 
   mResult = regex.match r "a"
   _ <- mResult ? {
-    | Some m => testing.assert (m.full == "a")
+    | Some m => assert (m.full == "a")
     | None => assert False
   }
 }

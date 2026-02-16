@@ -10,5 +10,5 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (length (normalizeNFC "hello") == 5)
+  _ <- assert (length (normalizeNFC "hello") == 5)
 }

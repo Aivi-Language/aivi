@@ -6,8 +6,6 @@ use aivi.testing
 
 use aivi
 
-
-
 @test
 smoke = effect {
   t = (1, "two")
@@ -16,5 +14,5 @@ smoke = effect {
     | (a, b) => if a == 1 && b == "two" then True else False
     | _      => False
 
-  _ <- testing.assert (res == True)
+  _ <- assert (res == True)
 }

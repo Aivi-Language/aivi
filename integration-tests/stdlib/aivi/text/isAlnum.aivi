@@ -10,7 +10,7 @@ use aivi.text
 
 @test
 smoke = effect {
-  _ <- testing.assert (isAlnum "a" == True)
-  _ <- testing.assert (isAlnum "1" == True)
-  _ <- testing.assert (isAlnum "!" == False)
+  _ <- assert (isAlnum "a" == True)
+  _ <- assert (isAlnum "1" == True)
+  _ <- assert (isAlnum "!" == False)
 }

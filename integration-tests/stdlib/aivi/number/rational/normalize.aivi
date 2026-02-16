@@ -12,6 +12,6 @@ use aivi.number.rational
 smoke = effect {
   r = fromInts (fromInt 2) (fromInt 4)
   n = normalize r
-  _ <- testing.assert (toInt (numerator n) == 1)
-  _ <- testing.assert (toInt (denominator n) == 2)
+  _ <- assert (toInt (numerator n) == 1)
+  _ <- assert (toInt (denominator n) == 2)
 }

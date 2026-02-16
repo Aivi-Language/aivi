@@ -11,5 +11,5 @@ use aivi.ui
 @test
 smoke = effect {
   node = vText "hello"
-  _ <- testing.assert (renderHtml node == "<span data-aivi-node=\"root\">hello</span>")
+  _ <- assert (renderHtml node == "<span data-aivi-node=\"root\">hello</span>")
 }

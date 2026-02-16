@@ -4,77 +4,120 @@ module integrationTests.complex.TopologicalSort
 use aivi
 use aivi.testing
 
+use aivi.collections
+
+Graph = { nodes: List Int, adj: Map Int (List Int) }
+
 getOrZero = key map =>
   (Map.get key map) ?
     | Some v => v
-    | None => 0
+    | None   => 0
 
 buildIndegree = graph =>
-  init = graph.nodes ?
-    | [] => Map.empty
-    | [h, ...t] => Map.insert h 0 (buildIndegree { nodes: t, adj: graph.adj })
-  
-  fold = list accMap =>
-    list ?
-      | [] => accMap
-      | [n, ...tail] =>
-          res = Map.insert n (getOrZero n accMap + 1) accMap
-          newAccMap = res
-          fold tail newAccMap
-  
-  init
+  {
+    init =
+      graph.nodes ?
+        | []        => Map.empty
+        | [h, ...t] => Map.insert h 0 (buildIndegree { nodes: t, adj: graph.adj })
+
+    fold = list accMap =>
+      list ?
+        | []           => accMap
+        | [n, ...tail] =>
+          {
+            newAccMap = Map.insert n (getOrZero n accMap + 1) accMap
+            fold tail newAccMap
+          }
+
+    // increment indegree for every edge u -> v (count v)
+    countEdges = nodes acc =>
+      nodes ?
+        | []        => acc
+        | [u, ...t] =>
+          {
+            neighbors =
+              (Map.get u graph.adj) ?
+                | Some ns => ns
+                | None    => []
+            acc2 = fold neighbors acc
+            countEdges t acc2
+          }
+
+    countEdges graph.nodes init
+  }
 
 initialQueue = indegree graph =>
   graph.nodes ?
-    | [] => []
+    | []        => []
     | [h, ...t] =>
+      {
         rest = initialQueue indegree { nodes: t, adj: graph.adj }
-        if getOrZero h indegree == 0 then [h, ...rest] else rest
+        if getOrZero h indegree == 0 then
+          [h, ...rest]
+        else
+          rest
+      }
 
 reduceNeighbors = neighbors indegree queue =>
   neighbors ?
-    | [] => (indegree, queue)
+    | []           => (indegree, queue)
     | [n, ...tail] =>
+      {
         remaining = getOrZero n indegree - 1
         updated = Map.insert n remaining indegree
         newQueue = if remaining == 0 then [n, ...queue] else queue
         reduceNeighbors tail updated newQueue
+      }
 
 loopSort = graph queue indegree order =>
   queue ?
     | [] =>
-        if List.length order == List.length graph.nodes then Ok order
-        else
+      if List.length order == List.length graph.nodes then
+        Ok order
+      else
+        {
           cycleNodesRec = nodes =>
             nodes ?
-              | [] => []
+              | []        => []
               | [h, ...t] =>
+                {
                   rest = cycleNodesRec t
                   if getOrZero h indegree > 0 then [h, ...rest] else rest
+                }
           Err (cycleNodesRec graph.nodes)
+        }
     | [current, ...restQueue] =>
-        neighbors = (Map.get current graph.adj) ? | Some list => list | None => []
-        res = reduceNeighbors neighbors indegree restQueue
-        (updatedIndegree, newQueue) = res
+      {
+        neighbors =
+          (Map.get current graph.adj) ?
+            | Some list => list
+            | None      => []
+
+        (updatedIndegree, newQueue) = reduceNeighbors neighbors indegree restQueue
         loopSort graph newQueue updatedIndegree [current, ...order]
+      }
 
 topologicalSort = graph =>
-  indegree = buildIndegree graph
-  queue = initialQueue indegree graph
-  loopSort graph queue indegree []
+  {
+    indegree = buildIndegree graph
+    queue = initialQueue indegree graph
+    loopSort graph queue indegree []
+  }
 
 @test
-topoSmoke = effect {
-  adj0 = Map.insert 0 [1, 2] Map.empty
-  adj1 = Map.insert 1 [3] adj0
-  adj2 = Map.insert 2 [3] adj1
-  adj3 = Map.insert 3 [] adj2
-  graph = { nodes: [0, 1, 2, 3], adj: adj3 }
-  result = topologicalSort graph
-  _ <- testing.assert (result == Ok [3, 2, 1, 0] || result == Ok [3, 1, 2, 0])
+topoSmoke =
+  effect {
+    adj0 = Map.insert 0 [1, 2] Map.empty
+    adj1 = Map.insert 1 [3] adj0
+    adj2 = Map.insert 2 [3] adj1
+    adj3 = Map.insert 3 [] adj2
+    graph = { nodes: [0, 1, 2, 3], adj: adj3 }
 
-  cyclicAdj = Map.insert 0 [1] Map.empty |> Map.insert 1 [0]
-  cyclicGraph = { nodes: [0, 1], adj: cyclicAdj }
-  cycle = topologicalSort cyclicGraph
-  _ <- testing.assert (cycle == Err [0, 1] || cycle == Err [1, 0])
-}
+    result = topologicalSort graph
+    _ <- assert (result == Ok [3, 2, 1, 0] || result == Ok [3, 1, 2, 0])
+
+    cyclicAdj = Map.insert 0 [1] Map.empty |> Map.insert 1 [0]
+    cyclicGraph = { nodes: [0, 1], adj: cyclicAdj }
+    cycle = topologicalSort cyclicGraph
+    _ <- assert (cycle == Err [0, 1] || cycle == Err [1, 0])
+  }

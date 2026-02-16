@@ -10,6 +10,6 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- testing.assert (gcd 12 8 == 4)
-  _ <- testing.assert (gcd 17 5 == 1)
+  _ <- assert (gcd 12 8 == 4)
+  _ <- assert (gcd 17 5 == 1)
 }

@@ -7,5 +7,5 @@ use aivi.logic
 
 @test
 smoke = effect {
-  testing.assert True
+  assert True
 }

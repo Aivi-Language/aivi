@@ -18,8 +18,8 @@ smoke = effect {
   fResult = regex.find r "hello"
   _ <- fResult ?
     | Some (s, e) => effect {
-        _ <- testing.assert (s == 1)
-        _ <- testing.assert (e == 2)
+        _ <- assert (s == 1)
+        _ <- assert (e == 2)
       }
     | None => assert False
 }

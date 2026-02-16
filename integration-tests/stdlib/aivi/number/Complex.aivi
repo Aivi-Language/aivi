@@ -11,5 +11,5 @@ use aivi.number
 @test
 smoke = effect {
   z = { re: 1.0, im: 2.0 }
-  _ <- testing.assert (z.re == 1.0)
+  _ <- assert (z.re == 1.0)
 }
