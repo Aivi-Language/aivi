@@ -430,8 +430,6 @@ impl Parser {
                 "static"
                     | "inline"
                     | "deprecated"
-                    | "mcp_tool"
-                    | "mcp_resource"
                     | "test"
                     | "debug"
             ) {

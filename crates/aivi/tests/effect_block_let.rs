@@ -17,7 +17,8 @@ main = effect {
 
     let (modules, diags) = parse_modules(Path::new("<test>"), src);
     assert!(
-        diags.iter()
+        diags
+            .iter()
             .all(|d| d.diagnostic.severity != DiagnosticSeverity::Error),
         "unexpected parse diagnostics: {diags:?}"
     );
@@ -45,7 +46,10 @@ main = effect {
     assert!(matches!(kind, BlockKind::Effect));
 
     let Some(BlockItem::Let { expr, .. }) = items.first() else {
-        panic!("expected first block item to be Let, got: {:?}", items.first());
+        panic!(
+            "expected first block item to be Let, got: {:?}",
+            items.first()
+        );
     };
     assert!(
         matches!(expr, Expr::Literal(Literal::Number { .. })),

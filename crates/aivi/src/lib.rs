@@ -39,7 +39,7 @@ pub use kernel::{
     KernelProgram, KernelRecordField, KernelRecordPatternField, KernelTextPart,
 };
 pub use mcp::{
-    collect_mcp_manifest, serve_mcp_stdio, serve_mcp_stdio_with_policy, McpManifest, McpPolicy,
+    bundled_specs_manifest, serve_mcp_stdio, serve_mcp_stdio_with_policy, McpManifest, McpPolicy,
     McpResource, McpTool,
 };
 pub use native_rust_backend::{emit_native_rust_source, emit_native_rust_source_lib};

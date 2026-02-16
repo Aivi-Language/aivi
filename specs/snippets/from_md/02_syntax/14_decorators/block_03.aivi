@@ -1,7 +1,0 @@
-@mcp_tool
-searchDocs : Url -> Effect Text (Result Error Response)
-searchDocs = url => load (http.get url)
-
-@mcp_resource
-appConfig : Source File Text
-appConfig = file.read "./config.json"

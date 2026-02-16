@@ -31,10 +31,7 @@ Decorators appear before the binding they annotate.
 
 ### Tooling (MCP)
 
-| Decorator | Usage | Meaning |
-| :--- | :--- | :--- |
-| `@mcp_tool` | `@mcp_tool fetchData = ...` | Expose as MCP tool |
-| `@mcp_resource` | `@mcp_resource config = ...` | Expose as MCP resource |
+MCP decorators are not supported in v0.1.
 
 ### Testing
 
@@ -53,7 +50,7 @@ Decorators desugar to compile-time metadata:
 | Surface | Desugared |
 | :--- | :--- |
 | `@static x = file.read ...` | Compile-time evaluation |
-| `@mcp_tool f = ...` | Register in MCP manifest |
+| (none) | (none) |
 
 
 ## 14.4 Usage Examples
@@ -61,10 +58,6 @@ Decorators desugar to compile-time metadata:
 ### Compile-Time Embedding
 
 <<< ../snippets/from_md/02_syntax/14_decorators/block_02.aivi{aivi}
-
-### MCP Tools
-
-<<< ../snippets/from_md/02_syntax/14_decorators/block_03.aivi{aivi}
 
 ### Debug Tracing
 

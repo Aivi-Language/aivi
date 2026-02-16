@@ -28,6 +28,7 @@ unicode-normalization = "0.1.24"
 unicode-segmentation = "1.11.0"
 url = "2.5.2"
 ureq = "2.10.1"
+include_dir = "0.7.4"
 rusqlite = { version = "0.31.0", features = ["bundled"] }
 postgres = "0.19.9"
 mysql = "24.0.0"
