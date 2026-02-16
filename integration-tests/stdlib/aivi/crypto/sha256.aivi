@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.crypto.sha256
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.crypto
+
+subject = sha256
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

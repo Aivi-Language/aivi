@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.text.replaceAll
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.text
+
+subject = replaceAll
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

@@ -115,15 +115,15 @@ If you’re developing from this repo, `cargo install --path crates/aivi_lsp` is
 
 ## Compiler/introspection commands
 
-These operate on a file or on a directory target like `examples/...` (recursive):
+These operate on a file or on a directory target like `integration-tests/...` (recursive):
 
 ```bash
-aivi parse examples/hello.aivi
-aivi check examples/...
-aivi fmt examples/hello.aivi
-aivi desugar examples/...
-aivi kernel examples/hello.aivi
-aivi rust-ir examples/hello.aivi
+aivi parse integration-tests/legacy/hello.aivi
+aivi check integration-tests/...
+aivi fmt integration-tests/legacy/hello.aivi
+aivi desugar integration-tests/...
+aivi kernel integration-tests/legacy/hello.aivi
+aivi rust-ir integration-tests/legacy/hello.aivi
 ```
 
 ## Notes / current limitations

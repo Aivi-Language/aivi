@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.syntax.bindings.recursion
+
+use aivi
+use aivi.testing (assertEq)
+
+sum = xs => xs ?
+  | []           => 0
+  | [x, ...rest] => x + sum rest
+
+@test
+recursionWorks = effect {
+  _ <- assertEq (sum[1, 2, 3]) 6
+}

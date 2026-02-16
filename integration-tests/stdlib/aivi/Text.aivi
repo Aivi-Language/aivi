@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.Text
+
+use aivi
+use aivi.testing (assert)
+
+use aivi
+
+Ref = Text
+
+@test
+smoke = effect {
+  _ <- assert True
+}

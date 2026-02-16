@@ -296,14 +296,15 @@ impl TypeChecker {
     fn check_def(
         &mut self,
         def: &Def,
-        sigs: &HashMap<String, Scheme>,
+        sigs: &HashMap<String, Vec<Scheme>>,
         env: &mut TypeEnv,
         module: &Module,
         diagnostics: &mut Vec<FileDiagnostic>,
     ) {
         let name = def.name.name.clone();
         let expr = crate::surface::desugar_effect_sugars(desugar_holes(def.expr.clone()));
-        if let Some(sig) = sigs.get(&name) {
+        if let Some(sig) = sigs.get(&name).and_then(|items| (items.len() == 1).then(|| &items[0]))
+        {
             let mut local_env = env.clone();
             let expected = self.instantiate(sig);
             local_env.insert(name.clone(), Scheme::mono(expected.clone()));

@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.number.bigint.n_1n
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.number.bigint
+
+subject = 2n
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

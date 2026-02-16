@@ -100,18 +100,18 @@ impl TypeChecker {
         AliasInfo { params, body }
     }
 
-    pub(super) fn collect_type_sigs(&mut self, module: &Module) -> HashMap<String, Scheme> {
-        let mut sigs = HashMap::new();
+    pub(super) fn collect_type_sigs(&mut self, module: &Module) -> HashMap<String, Vec<Scheme>> {
+        let mut sigs: HashMap<String, Vec<Scheme>> = HashMap::new();
         for item in &module.items {
             if let ModuleItem::TypeSig(sig) = item {
                 let scheme = self.scheme_from_sig(sig);
-                sigs.insert(sig.name.name.clone(), scheme);
+                sigs.entry(sig.name.name.clone()).or_default().push(scheme);
             }
             if let ModuleItem::DomainDecl(domain) = item {
                 for domain_item in &domain.items {
                     if let DomainItem::TypeSig(sig) = domain_item {
                         let scheme = self.scheme_from_sig(sig);
-                        sigs.insert(sig.name.name.clone(), scheme);
+                        sigs.entry(sig.name.name.clone()).or_default().push(scheme);
                     }
                 }
             }
@@ -195,7 +195,7 @@ impl TypeChecker {
     pub(super) fn register_imports(
         &mut self,
         module: &Module,
-        module_exports: &HashMap<String, HashMap<String, Scheme>>,
+        module_exports: &HashMap<String, HashMap<String, Vec<Scheme>>>,
         module_domain_exports: &HashMap<String, HashMap<String, Vec<String>>>,
         env: &mut TypeEnv,
     ) {
@@ -204,25 +204,47 @@ impl TypeChecker {
                 let qualify = use_decl.alias.is_some();
                 if use_decl.wildcard {
                     for (name, scheme) in exports {
-                        env.insert(name.clone(), scheme.clone());
+                        if scheme.len() == 1 {
+                            env.insert(name.clone(), scheme[0].clone());
+                        } else {
+                            env.insert_overloads(name.clone(), scheme.clone());
+                        }
                         if qualify {
-                            env.insert(
-                                format!("{}.{}", use_decl.module.name, name),
-                                scheme.clone(),
-                            );
+                            if scheme.len() == 1 {
+                                env.insert(
+                                    format!("{}.{}", use_decl.module.name, name),
+                                    scheme[0].clone(),
+                                );
+                            } else {
+                                env.insert_overloads(
+                                    format!("{}.{}", use_decl.module.name, name),
+                                    scheme.clone(),
+                                );
+                            }
                         }
                     }
                 } else {
                     for item in &use_decl.items {
                         match item.kind {
                             crate::surface::ScopeItemKind::Value => {
-                                if let Some(scheme) = exports.get(&item.name.name) {
-                                    env.insert(item.name.name.clone(), scheme.clone());
+                                if let Some(schemes) = exports.get(&item.name.name) {
+                                    if schemes.len() == 1 {
+                                        env.insert(item.name.name.clone(), schemes[0].clone());
+                                    } else {
+                                        env.insert_overloads(item.name.name.clone(), schemes.clone());
+                                    }
                                     if qualify {
-                                        env.insert(
-                                            format!("{}.{}", use_decl.module.name, item.name.name),
-                                            scheme.clone(),
-                                        );
+                                        if schemes.len() == 1 {
+                                            env.insert(
+                                                format!("{}.{}", use_decl.module.name, item.name.name),
+                                                schemes[0].clone(),
+                                            );
+                                        } else {
+                                            env.insert_overloads(
+                                                format!("{}.{}", use_decl.module.name, item.name.name),
+                                                schemes.clone(),
+                                            );
+                                        }
                                     }
                                 }
                             }
@@ -235,13 +257,24 @@ impl TypeChecker {
                                     continue;
                                 };
                                 for member in members {
-                                    if let Some(scheme) = exports.get(member) {
-                                        env.insert(member.clone(), scheme.clone());
+                                    if let Some(schemes) = exports.get(member) {
+                                        if schemes.len() == 1 {
+                                            env.insert(member.clone(), schemes[0].clone());
+                                        } else {
+                                            env.insert_overloads(member.clone(), schemes.clone());
+                                        }
                                         if qualify {
-                                            env.insert(
-                                                format!("{}.{}", use_decl.module.name, member),
-                                                scheme.clone(),
-                                            );
+                                            if schemes.len() == 1 {
+                                                env.insert(
+                                                    format!("{}.{}", use_decl.module.name, member),
+                                                    schemes[0].clone(),
+                                                );
+                                            } else {
+                                                env.insert_overloads(
+                                                    format!("{}.{}", use_decl.module.name, member),
+                                                    schemes.clone(),
+                                                );
+                                            }
                                         }
                                     }
                                 }
@@ -256,27 +289,41 @@ impl TypeChecker {
     pub(super) fn register_module_defs(
         &mut self,
         module: &Module,
-        sigs: &HashMap<String, Scheme>,
+        sigs: &HashMap<String, Vec<Scheme>>,
         env: &mut TypeEnv,
     ) {
         for item in &module.items {
             match item {
                 ModuleItem::Def(def) => {
-                    let scheme = sigs
-                        .get(&def.name.name)
-                        .cloned()
-                        .unwrap_or_else(|| Scheme::mono(self.fresh_var()));
-                    env.insert(def.name.name.clone(), scheme);
+                    let name = def.name.name.clone();
+                    match sigs.get(&name) {
+                        Some(candidates) if candidates.len() == 1 => {
+                            env.insert(name, candidates[0].clone());
+                        }
+                        Some(candidates) => {
+                            env.insert_overloads(name, candidates.clone());
+                        }
+                        None => {
+                            env.insert(name, Scheme::mono(self.fresh_var()));
+                        }
+                    }
                 }
                 ModuleItem::DomainDecl(domain) => {
                     for domain_item in &domain.items {
                         match domain_item {
                             DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                                let scheme = sigs
-                                    .get(&def.name.name)
-                                    .cloned()
-                                    .unwrap_or_else(|| Scheme::mono(self.fresh_var()));
-                                env.insert(def.name.name.clone(), scheme);
+                                let name = def.name.name.clone();
+                                match sigs.get(&name) {
+                                    Some(candidates) if candidates.len() == 1 => {
+                                        env.insert(name, candidates[0].clone());
+                                    }
+                                    Some(candidates) => {
+                                        env.insert_overloads(name, candidates.clone());
+                                    }
+                                    None => {
+                                        env.insert(name, Scheme::mono(self.fresh_var()));
+                                    }
+                                }
                             }
                             DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                         }
@@ -290,7 +337,7 @@ impl TypeChecker {
     pub(super) fn check_module_defs(
         &mut self,
         module: &Module,
-        sigs: &HashMap<String, Scheme>,
+        sigs: &HashMap<String, Vec<Scheme>>,
         env: &mut TypeEnv,
     ) -> Vec<FileDiagnostic> {
         let mut diagnostics = Vec::new();

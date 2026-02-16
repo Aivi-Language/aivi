@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.matrix.multiply4
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.matrix
+
+subject = multiply4
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.math.Angle
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.math
+
+Ref = Angle
+
+@test
+smoke = effect {
+  _ <- assert True
+}

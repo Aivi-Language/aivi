@@ -43,8 +43,11 @@ fn extract_builtin_names(rust: &str) -> Vec<String> {
 #[ignore = "native codegen is experimental; run with `cargo test -p aivi --test native_codegen_examples -- --ignored`"]
 fn native_codegen_examples_emit_rust_and_check_builtins() {
     let root = set_workspace_root();
-    let examples_dir = root.join("examples");
-    assert!(examples_dir.exists(), "missing examples/ directory");
+    let examples_dir = root.join("integration-tests");
+    assert!(
+        examples_dir.exists(),
+        "missing integration-tests/ directory"
+    );
 
     let mut failures = Vec::new();
     let mut compiled = 0usize;
@@ -108,8 +111,11 @@ fn native_codegen_examples_emit_rust_and_check_builtins() {
 #[ignore = "native codegen is experimental; run with `cargo test -p aivi --test native_codegen_examples -- --ignored`"]
 fn native_codegen_examples_compile_with_rustc() {
     let root = set_workspace_root();
-    let examples_dir = root.join("examples");
-    assert!(examples_dir.exists(), "missing examples/ directory");
+    let examples_dir = root.join("integration-tests");
+    assert!(
+        examples_dir.exists(),
+        "missing integration-tests/ directory"
+    );
 
     let mut failures = Vec::new();
     let mut compiled = 0usize;

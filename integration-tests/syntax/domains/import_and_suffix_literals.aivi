@@ -1,0 +1,18 @@
+@no_prelude
+module integrationTests.syntax.domains.importAndSuffixLiterals
+
+use aivi
+use aivi.duration
+use aivi.duration (domain Duration)
+use aivi.testing (assertEq)
+
+span0 : Span
+span0 = { millis: 0 }
+span1 = span0 + 30s
+span2 = span0 + 1min
+
+@test
+suffixLiteralsWork = effect {
+  _ <- assertEq span1.millis 30000
+  _ <- assertEq span2.millis 60000
+}

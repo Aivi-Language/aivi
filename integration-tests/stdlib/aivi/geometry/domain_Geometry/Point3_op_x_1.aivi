@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.stdlib.aivi.geometry.domain_Geometry.Point3_op_x_1
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.geometry
+
+use aivi.geometry (domain Geometry)
+
+left = { x: 1.0, y: 1.0, z: 1.0 }
+right = { x: 1.0, y: 1.0, z: 1.0 }
+
+subject = left + right
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

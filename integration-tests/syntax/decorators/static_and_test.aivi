@@ -1,0 +1,13 @@
+@no_prelude
+module integrationTests.syntax.decorators.staticAndTest
+
+use aivi
+use aivi.testing (assertEq)
+
+@static
+embedded = "ok"
+
+@test
+staticIsAvailable = effect {
+  _ <- assertEq embedded "ok"
+}

@@ -136,11 +136,11 @@ aivi package && aivi publish --dry-run
 
 ### Compiler introspection
 ```sh
-aivi kernel examples/10_wasm.aivi    # Dump Kernel IR (JSON)
-aivi rust-ir examples/10_wasm.aivi   # Dump Rust IR (JSON)
+aivi kernel integration-tests/syntax/ir_dump_minimal.aivi    # Dump Kernel IR (JSON)
+aivi rust-ir integration-tests/syntax/ir_dump_minimal.aivi   # Dump Rust IR (JSON)
 
 # Direct rustc invocation with custom flags
-aivi build examples/10_wasm.aivi --target rustc \
+aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
   --out target/aivi-rustc/hello_bin -- -C opt-level=3
 ```
 

@@ -112,7 +112,7 @@ impl TypeChecker {
     pub(super) fn elaborate_def_expr(
         &mut self,
         def: &mut Def,
-        sigs: &HashMap<String, Scheme>,
+        sigs: &HashMap<String, Vec<Scheme>>,
         env: &TypeEnv,
     ) -> Result<(), TypeError> {
         let base_subst = self.subst.clone();
@@ -122,7 +122,8 @@ impl TypeChecker {
 
             let mut local_env = env.clone();
             // Ensure self-recursion sees the expected scheme when available.
-            if let Some(sig) = sigs.get(&name) {
+            if let Some(sig) = sigs.get(&name).and_then(|items| (items.len() == 1).then(|| &items[0]))
+            {
                 let expected = self.instantiate(sig);
                 local_env.insert(name.clone(), Scheme::mono(expected));
             }
@@ -134,6 +135,9 @@ impl TypeChecker {
 
             // If a signature exists, propagate the expected result type into the body.
             let expected_body = sigs.get(&name).map(|sig| {
+                let Some(sig) = (sig.len() == 1).then(|| &sig[0]) else {
+                    return self.fresh_var();
+                };
                 let mut expected = self.instantiate(sig);
                 for _ in &def.params {
                     let applied = self.apply(expected);
@@ -446,6 +450,42 @@ impl TypeChecker {
         expected: Option<Type>,
         env: &mut TypeEnv,
     ) -> Result<(Expr, Type), TypeError> {
+        if let (Some(expected_ty), Expr::Ident(name)) = (expected.clone(), &expr) {
+            if let Some(candidates) = env.get_all(&name.name) {
+                if candidates.len() > 1 {
+                    let base_subst = self.subst.clone();
+                    let mut selected: Option<std::collections::HashMap<TypeVarId, Type>> = None;
+                    for scheme in candidates {
+                        self.subst = base_subst.clone();
+                        let candidate_ty = self.instantiate(scheme);
+                        if self
+                            .unify_with_span(candidate_ty, expected_ty.clone(), expr_span(&expr))
+                            .is_ok()
+                        {
+                            if selected.is_some() {
+                                self.subst = base_subst;
+                                return Err(TypeError {
+                                    span: expr_span(&expr),
+                                    message: format!(
+                                        "ambiguous name '{}' (multiple overloads match)",
+                                        name.name
+                                    ),
+                                    expected: None,
+                                    found: None,
+                                });
+                            }
+                            selected = Some(self.subst.clone());
+                        }
+                    }
+                    if let Some(subst) = selected {
+                        self.subst = subst;
+                        return Ok((expr, self.apply(expected_ty)));
+                    }
+                    self.subst = base_subst;
+                }
+            }
+        }
+
         let inferred = self.infer_expr(&expr, env)?;
         let Some(expected) = expected else {
             return Ok((expr, inferred));

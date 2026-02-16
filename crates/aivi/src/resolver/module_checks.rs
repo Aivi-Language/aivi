@@ -98,6 +98,11 @@ fn check_unused_imports_and_bindings(module: &Module, diagnostics: &mut Vec<File
             if exported.contains(def.name.name.as_str()) {
                 continue;
             }
+            if def.decorators.iter().any(|d| d.name.name == "test") {
+                // `@test` bindings are entrypoints discovered by the test runner, so they are
+                // intentionally "unused" from the perspective of normal reference tracking.
+                continue;
+            }
             if used.contains(def.name.name.as_str()) {
                 continue;
             }

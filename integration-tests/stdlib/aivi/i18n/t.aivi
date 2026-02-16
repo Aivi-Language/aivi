@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.i18n.t
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.i18n
+
+subject = t
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

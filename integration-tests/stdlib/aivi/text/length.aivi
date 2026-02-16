@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.text.length
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.text
+
+subject = length
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

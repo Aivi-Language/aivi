@@ -1,0 +1,19 @@
+@no_prelude
+module integrationTests.syntax.patternMatching.guardsWhen
+
+use aivi
+use aivi.testing (assertEq)
+
+classify =
+  | n when n < 0   => "negative"
+  | 0              => "zero"
+  | n when n < 10  => "small"
+  | n when n < 100 => "medium"
+  | _              => "large"
+
+@test
+guardsWork = effect {
+  _ <- assertEq (classify (-1)) "negative"
+  _ <- assertEq (classify 0) "zero"
+  _ <- assertEq (classify 42) "medium"
+}

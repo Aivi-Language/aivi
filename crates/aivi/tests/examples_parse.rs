@@ -10,23 +10,36 @@ fn examples_parse_without_diagnostics() {
         .parent()
         .and_then(|path| path.parent())
         .expect("workspace root");
-    let examples_dir = workspace_root.join("examples");
+    let examples_dir = workspace_root.join("integration-tests");
 
     let mut failures: Vec<(PathBuf, Vec<String>)> = Vec::new();
 
-    for entry in fs::read_dir(&examples_dir).expect("read examples") {
-        let entry = entry.expect("example entry");
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("aivi") {
-            continue;
+    fn collect_aivi_files(dir: &std::path::Path, out: &mut Vec<PathBuf>) {
+        let mut entries: Vec<PathBuf> = fs::read_dir(dir)
+            .unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
+            .map(|e| e.expect("dir entry").path())
+            .collect();
+        entries.sort();
+        for path in entries {
+            if path.is_dir() {
+                collect_aivi_files(&path, out);
+                continue;
+            }
+            if path.extension().and_then(|ext| ext.to_str()) == Some("aivi") {
+                out.push(path);
+            }
         }
-        println!("DEBUG: testing file: {}", path.display());
-        let content = fs::read_to_string(&path).expect("read content");
-        println!(
-            "DEBUG: content snippet: {:?}",
-            &content[0..50.min(content.len())]
-        );
-        let file = parse_file(&path).expect("parse example");
+    }
+
+    let mut files = Vec::new();
+    collect_aivi_files(&examples_dir, &mut files);
+    assert!(
+        !files.is_empty(),
+        "no .aivi files found under integration-tests/"
+    );
+
+    for path in files {
+        let file = parse_file(&path).expect("parse integration test");
         if file.diagnostics.is_empty() {
             continue;
         }
@@ -50,5 +63,5 @@ fn examples_parse_without_diagnostics() {
             report.push_str(&format!("  {message}\n"));
         }
     }
-    panic!("examples contain diagnostics:\n{report}");
+    panic!("integration-tests contain diagnostics:\n{report}");
 }

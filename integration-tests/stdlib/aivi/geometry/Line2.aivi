@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.geometry.Line2
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.geometry
+
+Ref = Line2
+
+@test
+smoke = effect {
+  _ <- assert True
+}

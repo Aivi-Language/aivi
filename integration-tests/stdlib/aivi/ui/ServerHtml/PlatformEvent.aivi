@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.ui.ServerHtml.PlatformEvent
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.ui.ServerHtml
+
+Ref = PlatformEvent
+
+@test
+smoke = effect {
+  _ <- assert True
+}

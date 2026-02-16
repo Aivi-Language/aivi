@@ -5,7 +5,7 @@ This crate implements the AIVI Language Server Protocol (LSP) server on top of
 reference for building alternate LSP implementations.
 
 If you are adding language behavior, check `specs/` first and keep changes in
-sync with the compiler and examples.
+sync with the compiler and integration tests.
 
 ## Quick start
 

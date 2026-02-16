@@ -32,29 +32,29 @@ fn run_native_via_cli(input: &str) {
 
 #[test]
 fn run_native_concurrency_example() {
-    run_native_via_cli("examples/11_concurrency.aivi");
+    run_native_via_cli("integration-tests/legacy/11_concurrency.aivi");
 }
 
 #[test]
 fn run_native_effects_core_ops_example() {
-    run_native_via_cli("examples/08_effects_core_ops.aivi");
+    run_native_via_cli("integration-tests/legacy/08_effects_core_ops.aivi");
 }
 
 #[test]
 fn run_native_system_log_database_example() {
-    run_native_via_cli("examples/18_system_log_database.aivi");
+    run_native_via_cli("integration-tests/legacy/18_system_log_database.aivi");
 }
 
 #[test]
 fn run_native_crypto_example() {
-    run_native_via_cli("examples/20_crypto.aivi");
+    run_native_via_cli("integration-tests/legacy/20_crypto.aivi");
 }
 
 #[test]
 fn run_native_quaternion_example() {
     eprintln!("[DEBUG_LOG] quaternion: run start");
     let t0 = Instant::now();
-    run_native_via_cli("examples/21_quaternion.aivi");
+    run_native_via_cli("integration-tests/legacy/21_quaternion.aivi");
     eprintln!("[DEBUG_LOG] quaternion: run done in {:?}", t0.elapsed());
 }
 
@@ -62,7 +62,7 @@ fn run_native_quaternion_example() {
 fn run_native_fantasyland_law_tests() {
     eprintln!("[DEBUG_LOG] fantasyland laws: run start");
     let t0 = Instant::now();
-    run_native_via_cli("examples/22_fantasyland_laws.aivi");
+    run_native_via_cli("integration-tests/legacy/22_fantasyland_laws.aivi");
     eprintln!(
         "[DEBUG_LOG] fantasyland laws: run done in {:?}",
         t0.elapsed()
@@ -71,15 +71,15 @@ fn run_native_fantasyland_law_tests() {
 
 #[test]
 fn run_native_i18n_example() {
-    run_native_via_cli("examples/23_i18n.aivi");
+    run_native_via_cli("integration-tests/legacy/23_i18n.aivi");
 }
 
 #[test]
 fn run_native_i18n_catalog_fallback_example() {
-    run_native_via_cli("examples/25_i18n_catalog_fallback.aivi");
+    run_native_via_cli("integration-tests/legacy/25_i18n_catalog_fallback.aivi");
 }
 
 #[test]
 fn run_native_algorithms_example() {
-    run_native_via_cli("examples/27_algorithms.aivi");
+    run_native_via_cli("integration-tests/legacy/27_algorithms.aivi");
 }

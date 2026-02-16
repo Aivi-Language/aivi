@@ -1,0 +1,11 @@
+@no_prelude
+module integrationTests.syntax.externalSources.envGetAndDefault
+
+use aivi
+use aivi.testing (assertEq)
+
+@test
+envDefaultWorks = effect {
+  port <- load (env.get "AIVI__MISSING_TEST_PORT__") or "3000"
+  _    <- assertEq port "3000"
+}

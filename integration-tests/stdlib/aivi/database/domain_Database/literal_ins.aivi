@@ -1,0 +1,17 @@
+@no_prelude
+module integrationTests.stdlib.aivi.database.domain_Database.literal_ins
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.database
+
+use aivi.database (domain Database)
+
+subject = ins
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

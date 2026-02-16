@@ -10,7 +10,7 @@ This document tracks features specified in the documentation but not yet impleme
 - **LSP Server**: Comprehensive functional tests in `crates/aivi_lsp/src/tests.rs` covering completion, hover, definition, and diagnostics.
 
 ### Moderate Coverage
-- **Runtime**: Smoke tests in `crates/aivi/tests/runtime_smoke.rs` run key examples to verify end-to-end execution.
+- **Runtime**: Smoke tests in `crates/aivi/tests/runtime_smoke.rs` run key integration tests to verify end-to-end execution.
 - **VSCode Extension**: `vitest` configuration exists, but specific test files need verification (pending scan of `src/test/`).
 
 ### Missing / Weak Coverage

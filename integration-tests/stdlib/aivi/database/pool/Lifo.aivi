@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.database.pool.Lifo
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.database.pool
+
+subject = Lifo
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

@@ -32,6 +32,11 @@ domain Duration over Span = {
   (+) : Span -> Span -> Span
   (+) = s1 s2 => { millis: s1.millis + s2.millis }
 
+  1ms : Int -> Delta
+  1s : Int -> Delta
+  1min : Int -> Delta
+  1h : Int -> Delta
+
   1ms = Millisecond 1
   1s = Second 1
   1min = Minute 1

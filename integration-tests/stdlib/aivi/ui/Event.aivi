@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.ui.Event
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.ui
+
+Ref = Event
+
+@test
+smoke = effect {
+  _ <- assert True
+}

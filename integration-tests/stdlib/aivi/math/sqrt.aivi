@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.math.sqrt
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.math
+
+subject = sqrt
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

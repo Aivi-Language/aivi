@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.i18n.render
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.i18n
+
+subject = render
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

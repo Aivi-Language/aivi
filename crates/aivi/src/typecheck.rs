@@ -384,7 +384,7 @@ fn ordered_module_indices(modules: &[Module]) -> Vec<usize> {
 pub fn check_types(modules: &[Module]) -> Vec<FileDiagnostic> {
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
-    let mut module_exports: HashMap<String, HashMap<String, Scheme>> = HashMap::new();
+    let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
     let mut module_domain_exports: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
     let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
@@ -424,8 +424,10 @@ pub fn check_types(modules: &[Module]) -> Vec<FileDiagnostic> {
             if export.kind != crate::surface::ScopeItemKind::Value {
                 continue;
             }
-            if let Some(scheme) = env.get(&export.name.name) {
-                exports.insert(export.name.name.clone(), scheme.clone());
+            if let Some(schemes) = sigs.get(&export.name.name) {
+                exports.insert(export.name.name.clone(), schemes.clone());
+            } else if let Some(schemes) = env.get_all(&export.name.name) {
+                exports.insert(export.name.name.clone(), schemes.to_vec());
             }
         }
         module_exports.insert(module.name.name.clone(), exports);
@@ -468,7 +470,7 @@ pub fn check_types(modules: &[Module]) -> Vec<FileDiagnostic> {
 pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnostic> {
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
-    let mut module_exports: HashMap<String, HashMap<String, Scheme>> = HashMap::new();
+    let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
     let mut module_domain_exports: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
     let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
@@ -547,8 +549,10 @@ pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnosti
             if export.kind != crate::surface::ScopeItemKind::Value {
                 continue;
             }
-            if let Some(scheme) = env.get(&export.name.name) {
-                exports.insert(export.name.name.clone(), scheme.clone());
+            if let Some(schemes) = sigs.get(&export.name.name) {
+                exports.insert(export.name.name.clone(), schemes.clone());
+            } else if let Some(schemes) = env.get_all(&export.name.name) {
+                exports.insert(export.name.name.clone(), schemes.to_vec());
             }
         }
         module_exports.insert(module.name.name.clone(), exports);
@@ -596,7 +600,7 @@ pub fn infer_value_types(
 ) {
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
-    let mut module_exports: HashMap<String, HashMap<String, Scheme>> = HashMap::new();
+    let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
     let mut module_domain_exports: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
     let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
@@ -660,8 +664,19 @@ pub fn infer_value_types(
 
         let mut module_types = HashMap::new();
         for name in local_names {
-            if let Some(scheme) = env.get(&name) {
-                module_types.insert(name, checker.type_to_string(&scheme.ty));
+            if let Some(schemes) = env.get_all(&name) {
+                if schemes.len() == 1 {
+                    module_types.insert(name, checker.type_to_string(&schemes[0].ty));
+                } else {
+                    let mut rendered = String::new();
+                    for (idx, scheme) in schemes.iter().enumerate() {
+                        if idx > 0 {
+                            rendered.push_str(" | ");
+                        }
+                        rendered.push_str(&checker.type_to_string(&scheme.ty));
+                    }
+                    module_types.insert(name, rendered);
+                }
             }
         }
         inferred.insert(module.name.name.clone(), module_types);
@@ -671,8 +686,10 @@ pub fn infer_value_types(
             if export.kind != crate::surface::ScopeItemKind::Value {
                 continue;
             }
-            if let Some(scheme) = env.get(&export.name.name) {
-                exports.insert(export.name.name.clone(), scheme.clone());
+            if let Some(schemes) = sigs.get(&export.name.name) {
+                exports.insert(export.name.name.clone(), schemes.clone());
+            } else if let Some(schemes) = env.get_all(&export.name.name) {
+                exports.insert(export.name.name.clone(), schemes.to_vec());
             }
         }
         module_exports.insert(module.name.name.clone(), exports);

@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.streams.fromSocket
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.net.streams
+
+subject = fromSocket
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

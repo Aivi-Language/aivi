@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.graph.empty
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.graph
+
+subject = empty
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

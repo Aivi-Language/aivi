@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.stdlib.aivi.graph.domain_Graph.Graph_op_x_1
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.graph
+
+use aivi.graph (domain Graph)
+
+left = { nodes: [], edges: [] }
+right = { nodes: [], edges: [] }
+
+subject = left + right
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

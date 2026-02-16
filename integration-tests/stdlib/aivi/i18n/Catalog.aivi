@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.i18n.Catalog
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.i18n
+
+Ref = Catalog
+
+@test
+smoke = effect {
+  _ <- assert True
+}

@@ -165,8 +165,12 @@ pub fn run_native_with_fuel(program: HirProgram, fuel: u64) -> Result<(), AiviEr
     }
 }
 
-pub fn run_test_suite(program: HirProgram, test_names: &[String]) -> Result<TestReport, AiviError> {
-    let mut runtime = build_runtime_from_program(program)?;
+pub fn run_test_suite(
+    program: HirProgram,
+    test_names: &[String],
+    surface_modules: &[crate::surface::Module],
+) -> Result<TestReport, AiviError> {
+    let mut runtime = build_runtime_from_program_scoped(program, surface_modules)?;
     let mut report = TestReport {
         passed: 0,
         failed: 0,
@@ -276,6 +280,179 @@ fn build_runtime_from_program(program: HirProgram) -> Result<Runtime, AiviError>
                 clauses.push(Value::Thunk(Arc::new(thunk)));
             }
             globals.set(name, Value::MultiClause(clauses));
+        }
+    }
+
+    let ctx = Arc::new(RuntimeContext::new(globals));
+    let cancel = CancelToken::root();
+    Ok(Runtime::new(ctx, cancel))
+}
+
+fn build_runtime_from_program_scoped(
+    program: HirProgram,
+    surface_modules: &[crate::surface::Module],
+) -> Result<Runtime, AiviError> {
+    if program.modules.is_empty() {
+        return Err(AiviError::Runtime("no modules to run".to_string()));
+    }
+
+    let globals = Env::new(None);
+    register_builtins(&globals);
+
+    // Build a map of surface module metadata for import scoping.
+    let mut surface_by_name: HashMap<String, &crate::surface::Module> = HashMap::new();
+    for module in surface_modules {
+        surface_by_name.insert(module.name.name.clone(), module);
+    }
+    let mut value_exports: HashMap<String, Vec<String>> = HashMap::new();
+    let mut domain_members: HashMap<(String, String), Vec<String>> = HashMap::new();
+    for module in surface_modules {
+        value_exports.insert(
+            module.name.name.clone(),
+            module
+                .exports
+                .iter()
+                .filter(|e| e.kind == crate::surface::ScopeItemKind::Value)
+                .map(|e| e.name.name.clone())
+                .collect(),
+        );
+        for export in &module.exports {
+            if export.kind != crate::surface::ScopeItemKind::Domain {
+                continue;
+            }
+            let domain_name = export.name.name.clone();
+            let mut members = Vec::new();
+            for item in &module.items {
+                let crate::surface::ModuleItem::DomainDecl(domain) = item else {
+                    continue;
+                };
+                if domain.name.name != domain_name {
+                    continue;
+                }
+                for domain_item in &domain.items {
+                    match domain_item {
+                        crate::surface::DomainItem::Def(def)
+                        | crate::surface::DomainItem::LiteralDef(def) => {
+                            members.push(def.name.name.clone());
+                        }
+                        crate::surface::DomainItem::TypeAlias(_)
+                        | crate::surface::DomainItem::TypeSig(_) => {}
+                    }
+                }
+            }
+            domain_members.insert((module.name.name.clone(), domain_name), members);
+        }
+    }
+
+    // Create a per-module environment rooted at the global environment. Each top-level def thunk
+    // captures its module env so runtime evaluation respects lexical imports and avoids global
+    // collisions (especially for operator names like `(+)`).
+    let mut module_envs: HashMap<String, Env> = HashMap::new();
+    for module in &program.modules {
+        module_envs.insert(module.name.clone(), Env::new(Some(globals.clone())));
+    }
+
+    // First pass: register qualified globals for every definition, preserving multi-clause
+    // functions (same qualified name defined multiple times).
+    let mut grouped: HashMap<String, (Env, Vec<HirExpr>)> = HashMap::new();
+    for module in &program.modules {
+        let module_name = module.name.clone();
+        let module_env = module_envs
+            .get(&module_name)
+            .cloned()
+            .unwrap_or_else(|| Env::new(Some(globals.clone())));
+        for def in &module.defs {
+            let name = format!("{module_name}.{}", def.name);
+            grouped
+                .entry(name)
+                .or_insert_with(|| (module_env.clone(), Vec::new()))
+                .1
+                .push(def.expr.clone());
+        }
+    }
+    for (name, (module_env, exprs)) in grouped {
+        if globals.get(&name).is_some() {
+            continue;
+        }
+        if exprs.len() == 1 {
+            let thunk = ThunkValue {
+                expr: Arc::new(exprs.into_iter().next().unwrap()),
+                env: module_env,
+                cached: Mutex::new(None),
+                in_progress: AtomicBool::new(false),
+            };
+            globals.set(name, Value::Thunk(Arc::new(thunk)));
+        } else {
+            let mut clauses = Vec::new();
+            for expr in exprs {
+                let thunk = ThunkValue {
+                    expr: Arc::new(expr),
+                    env: module_env.clone(),
+                    cached: Mutex::new(None),
+                    in_progress: AtomicBool::new(false),
+                };
+                clauses.push(Value::Thunk(Arc::new(thunk)));
+            }
+            globals.set(name, Value::MultiClause(clauses));
+        }
+    }
+
+    // Second pass: populate each module env with its local defs and imports.
+    for module in &program.modules {
+        let module_name = module.name.clone();
+        let module_env = module_envs
+            .get(&module_name)
+            .cloned()
+            .unwrap_or_else(|| Env::new(Some(globals.clone())));
+
+        // Local defs in the module are always in scope unqualified.
+        for def in &module.defs {
+            let qualified = format!("{module_name}.{}", def.name);
+            if let Some(value) = globals.get(&qualified) {
+                module_env.set(def.name.clone(), value);
+            }
+        }
+
+        // Import exported values and domain members.
+        let Some(surface_module) = surface_by_name.get(&module_name).copied() else {
+            continue;
+        };
+        for use_decl in &surface_module.uses {
+            let imported_mod = use_decl.module.name.clone();
+            if use_decl.wildcard {
+                if let Some(names) = value_exports.get(&imported_mod) {
+                    for name in names {
+                        let qualified = format!("{imported_mod}.{name}");
+                        if let Some(value) = globals.get(&qualified) {
+                            module_env.set(name.clone(), value);
+                        }
+                    }
+                }
+                continue;
+            }
+            for item in &use_decl.items {
+                match item.kind {
+                    crate::surface::ScopeItemKind::Value => {
+                        let name = item.name.name.clone();
+                        let qualified = format!("{imported_mod}.{name}");
+                        if let Some(value) = globals.get(&qualified) {
+                            module_env.set(name, value);
+                        }
+                    }
+                    crate::surface::ScopeItemKind::Domain => {
+                        let domain_name = item.name.name.clone();
+                        let key = (imported_mod.clone(), domain_name);
+                        if let Some(members) = domain_members.get(&key) {
+                            for member in members {
+                                let qualified = format!("{imported_mod}.{member}");
+                                if let Some(value) = globals.get(&qualified) {
+                                    module_env.set(member.clone(), value);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

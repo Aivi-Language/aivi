@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.http_server.Request
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.net.http_server
+
+Ref = Request
+
+@test
+smoke = effect {
+  _ <- assert True
+}

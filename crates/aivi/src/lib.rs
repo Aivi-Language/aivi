@@ -166,6 +166,60 @@ pub fn desugar_target(target: &str) -> Result<HirProgram, AiviError> {
     Ok(hir::desugar_modules(&stdlib_modules))
 }
 
+pub fn test_target_program_and_names(
+    target: &str,
+    check_stdlib: bool,
+) -> Result<(HirProgram, Vec<String>, Vec<FileDiagnostic>), AiviError> {
+    // Parse first so we can surface syntax errors before doing any test discovery.
+    let mut diagnostics = load_module_diagnostics(target)?;
+    if file_diagnostics_have_errors(&diagnostics) {
+        return Err(AiviError::Diagnostics);
+    }
+
+    // Discover `@test` definitions from the user-provided target sources only (exclude embedded).
+    let paths = workspace::expand_target(target)?;
+    let mut test_names = Vec::new();
+    for path in &paths {
+        let content = fs::read_to_string(path)?;
+        let (modules, _) = parse_modules(path.as_path(), &content);
+        for module in modules {
+            for item in module.items {
+                let ModuleItem::Def(def) = item else {
+                    continue;
+                };
+                if def.decorators.iter().any(|d| d.name.name == "test") {
+                    // Use the qualified binding name to avoid collisions across files/modules.
+                    test_names.push(format!("{}.{}", module.name.name, def.name.name));
+                }
+            }
+        }
+    }
+    test_names.sort();
+    test_names.dedup();
+    if test_names.is_empty() {
+        return Err(AiviError::InvalidCommand(format!(
+            "no @test definitions found under {target}"
+        )));
+    }
+
+    // Typecheck like `check` does: allow callers to ignore embedded stdlib diagnostics by default.
+    let mut modules = load_modules(target)?;
+    let mut check_diags = check_modules(&modules);
+    if !file_diagnostics_have_errors(&check_diags) {
+        check_diags.extend(elaborate_expected_coercions(&mut modules));
+    }
+    if !check_stdlib {
+        check_diags.retain(|diag| !diag.path.starts_with("<embedded:"));
+    }
+    diagnostics.extend(check_diags);
+    if file_diagnostics_have_errors(&diagnostics) {
+        return Err(AiviError::Diagnostics);
+    }
+
+    let program = hir::desugar_modules(&modules);
+    Ok((program, test_names, diagnostics))
+}
+
 pub fn desugar_target_typed(target: &str) -> Result<HirProgram, AiviError> {
     let diagnostics = load_module_diagnostics(target)?;
     if file_diagnostics_have_errors(&diagnostics) {

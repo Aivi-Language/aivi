@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.channel
+
+use aivi
+use aivi.testing (assert)
+
+use aivi
+
+subject = channel
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

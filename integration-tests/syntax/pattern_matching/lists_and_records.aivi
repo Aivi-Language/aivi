@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.syntax.patternMatching.listsAndRecords
+
+use aivi
+use aivi.testing (assertEq)
+
+head = xs => xs ?
+  | []           => None
+  | [x, ...rest] => Some x
+
+getName = user => user ?
+  | { name } => Some name
+  | _        => None
+
+@test
+patternsWork = effect {
+  _ <- assertEq (head([1, 2])) (Some 1)
+  _ <- assertEq (head([])) None
+  _ <- assertEq (getName { name: "A", age: 1 }) (Some "A")
+}

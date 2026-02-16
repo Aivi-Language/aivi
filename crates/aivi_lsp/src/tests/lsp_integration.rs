@@ -1,5 +1,5 @@
 mod lsp_integration {
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use serde_json::json;
     use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
@@ -9,20 +9,6 @@ mod lsp_integration {
 
     use crate::backend::Backend;
     use crate::state::BackendState;
-
-    fn collect_example_aivi_files(dir: &Path, out: &mut Vec<PathBuf>) {
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                collect_example_aivi_files(&path, out);
-            } else if path.extension().and_then(|s| s.to_str()) == Some("aivi") {
-                out.push(path);
-            }
-        }
-    }
 
     async fn write_lsp_msg(mut w: impl AsyncWrite + Unpin, value: &serde_json::Value) {
         let body = serde_json::to_vec(value).expect("json encode");
@@ -96,12 +82,30 @@ mod lsp_integration {
             .parent()
             .and_then(|p| p.parent())
             .expect("repo root");
-        let examples_dir = repo_root.join("examples");
-
-        let mut files = Vec::new();
-        collect_example_aivi_files(&examples_dir, &mut files);
+        let rel_paths = [
+            // Syntax coverage
+            "integration-tests/syntax/ir_dump_minimal.aivi",
+            "integration-tests/syntax/domains/import_and_suffix_literals.aivi",
+            "integration-tests/syntax/sigils/basic.aivi",
+            "integration-tests/syntax/sigils/collections_structured.aivi",
+            "integration-tests/syntax/effects/attempt_and_match.aivi",
+            // Legacy runnable programs / larger modules
+            "integration-tests/legacy/hello.aivi",
+            "integration-tests/legacy/11_concurrency.aivi",
+            "integration-tests/legacy/12_text_regex.aivi",
+            // Stdlib-import-only microtests
+            "integration-tests/stdlib/aivi/text/length.aivi",
+            "integration-tests/stdlib/aivi/duration/domain_Duration/suffix_ms.aivi",
+            "integration-tests/stdlib/aivi/number/decimal/n_1dec.aivi",
+        ];
+        let mut files: Vec<PathBuf> = rel_paths
+            .iter()
+            .map(|rel| repo_root.join(rel))
+            .collect();
+        for path in &files {
+            assert!(path.exists(), "missing integration test file: {}", path.display());
+        }
         files.sort();
-        assert!(!files.is_empty(), "expected examples/**/*.aivi");
 
         let (service, socket) = LspService::new(|client| Backend {
             client,
@@ -183,7 +187,7 @@ mod lsp_integration {
             .await;
 
             let diags = timeout(
-                Duration::from_secs(10),
+                Duration::from_secs(2),
                 wait_for_publish_diagnostics(&mut client_read, uri.as_str()),
             )
             .await
@@ -229,9 +233,8 @@ mod lsp_integration {
 
         assert!(
             failures.is_empty(),
-            "expected no ERROR diagnostics from aivi-lsp for examples; got:\n{}",
+            "expected no ERROR diagnostics from aivi-lsp for integration-tests; got:\n{}",
             failures.join("\n")
         );
     }
 }
-

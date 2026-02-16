@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.sockets.Connection
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.net.sockets
+
+subject = Connection
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

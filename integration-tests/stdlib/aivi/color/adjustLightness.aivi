@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.color.adjustLightness
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.color
+
+subject = adjustLightness
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

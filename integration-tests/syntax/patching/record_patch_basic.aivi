@@ -1,0 +1,13 @@
+@no_prelude
+module integrationTests.syntax.patching.recordPatchBasic
+
+use aivi
+use aivi.testing (assertEq)
+
+user = { name: "A", age: 30 }
+older = user <| { age: _ + 1 }
+
+@test
+patchingWorks = effect {
+  _ <- assertEq older.age 31
+}

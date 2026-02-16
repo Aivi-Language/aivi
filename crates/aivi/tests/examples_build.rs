@@ -15,10 +15,10 @@ fn examples_build() {
 
     let output = Command::new(exe)
         .arg("build")
-        .arg("examples")
+        .arg("integration-tests")
         .current_dir(workspace_root)
         .output()
-        .expect("run aivi build examples");
+        .expect("run aivi build integration-tests");
 
     if output.status.success() {
         return;
@@ -26,5 +26,5 @@ fn examples_build() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    panic!("aivi build examples failed\nstdout:\n{stdout}\nstderr:\n{stderr}");
+    panic!("aivi build integration-tests failed\nstdout:\n{stdout}\nstderr:\n{stderr}");
 }

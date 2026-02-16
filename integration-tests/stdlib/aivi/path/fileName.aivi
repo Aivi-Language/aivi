@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.path.fileName
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.path
+
+subject = fileName
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

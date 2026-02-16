@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.http_server.HttpError
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.net.http_server
+
+Ref = HttpError
+
+@test
+smoke = effect {
+  _ <- assert True
+}

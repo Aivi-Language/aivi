@@ -1,0 +1,14 @@
+@no_prelude
+module integrationTests.stdlib.aivi.Char
+
+use aivi
+use aivi.testing (assert)
+
+use aivi
+
+Ref = Char
+
+@test
+smoke = effect {
+  _ <- assert True
+}

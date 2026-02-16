@@ -453,6 +453,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "signal"
             | "graph"
             | "console"
+            | "crypto"
             | "clock"
             | "random"
             | "channel"
@@ -461,6 +462,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "ui"
             | "sockets"
             | "streams"
+            | "i18n"
     )
 }
 

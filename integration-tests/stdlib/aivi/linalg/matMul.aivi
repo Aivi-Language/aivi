@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.linalg.matMul
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.linalg
+
+subject = matMul
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

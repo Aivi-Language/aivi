@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.signal.normalize
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.signal
+
+subject = normalize
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

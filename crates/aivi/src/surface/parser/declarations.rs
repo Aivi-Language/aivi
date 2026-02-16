@@ -598,6 +598,12 @@ impl Parser {
                 }
             }
             let checkpoint = self.pos;
+            if let Some(sig) = self.parse_literal_type_sig(decorators.clone()) {
+                items.push(DomainItem::TypeSig(sig));
+                continue;
+            }
+            self.pos = checkpoint;
+            let checkpoint = self.pos;
             if self.consume_name().is_some() {
                 if self.check_symbol(":") {
                     self.pos = checkpoint;

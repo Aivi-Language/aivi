@@ -68,7 +68,11 @@ fn kernel_dump_examples_10_wasm_is_valid_json() {
     };
     let root = workspace_root();
 
-    let value = run_aivi_json(&exe, &root, &["kernel", "examples/10_wasm.aivi"]);
+    let value = run_aivi_json(
+        &exe,
+        &root,
+        &["kernel", "integration-tests/syntax/ir_dump_minimal.aivi"],
+    );
     assert!(
         value.is_object() || value.is_array(),
         "expected JSON object/array, got {}",
@@ -84,7 +88,11 @@ fn rust_ir_dump_examples_10_wasm_is_valid_json() {
     };
     let root = workspace_root();
 
-    let value = run_aivi_json(&exe, &root, &["rust-ir", "examples/10_wasm.aivi"]);
+    let value = run_aivi_json(
+        &exe,
+        &root,
+        &["rust-ir", "integration-tests/syntax/ir_dump_minimal.aivi"],
+    );
     assert!(
         value.is_object() || value.is_array(),
         "expected JSON object/array, got {}",

@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.stdlib.aivi.duration.domain_Duration.Span_op_x_1
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.duration
+
+use aivi.duration (domain Duration)
+
+left = { millis: 1 }
+right = 2ms
+
+subject = left + right
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

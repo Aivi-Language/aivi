@@ -1,0 +1,19 @@
+@no_prelude
+module integrationTests.syntax.predicates.implicitAndExplicit
+
+use aivi
+use aivi.testing (assertEq)
+
+filter = pred xs => xs ?
+  | []           => []
+  | [x, ...rest] =>
+if pred x then[x, ...(filter pred rest)] else filter pred rest
+
+values = [1, 2, 3, 4, 5]
+gt2 = values |> filter (_ > 2)
+expected = [3, 4, 5]
+
+@test
+predicatesWork = effect {
+  _ <- assertEq gt2 expected
+}

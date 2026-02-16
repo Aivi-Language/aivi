@@ -1,0 +1,17 @@
+@no_prelude
+module integrationTests.syntax.generators.basicYield
+
+use aivi
+use aivi.testing (assert)
+
+gen = generate {
+  yield 1
+  yield 2
+  yield 3
+}
+
+@test
+generatorsExist = effect {
+  _ = text.toText gen
+  _ <- assert True
+}

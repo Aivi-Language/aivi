@@ -1,4 +1,73 @@
 impl Parser {
+    fn parse_literal_type_sig(&mut self, decorators: Vec<Decorator>) -> Option<TypeSig> {
+        self.reject_debug_decorators(&decorators, "type signatures");
+        let start = self.pos;
+        let number = self.consume_number()?;
+        let suffix = if let Some(suffix) = self.consume_ident() {
+            Some(suffix)
+        } else if self.check_symbol("%") {
+            let token = self.tokens.get(self.pos)?.clone();
+            self.pos += 1;
+            Some(SpannedName {
+                name: "%".to_string(),
+                span: token.span,
+            })
+        } else {
+            None
+        };
+        let Some(suffix) = suffix else {
+            self.pos = start;
+            return None;
+        };
+        if !self.consume_symbol(":") {
+            self.pos = start;
+            return None;
+        }
+
+        let name_span = merge_span(number.span.clone(), suffix.span.clone());
+        let name = SpannedName {
+            name: format!("{}{}", number.text, suffix.name),
+            span: name_span.clone(),
+        };
+        let ty = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
+            span: name_span.clone(),
+        });
+        let span = merge_span(name_span, type_span(&ty));
+
+        // Same rule as `parse_type_sig`: signatures must be standalone.
+        if let Some(next) = self.tokens.get(self.pos) {
+            let same_line = next.span.start.line == span.end.line;
+            let allowed_terminator = next.kind == TokenKind::Newline
+                || (next.kind == TokenKind::Symbol && next.text == "}");
+            if same_line && !allowed_terminator {
+                let next_span = next.span.clone();
+                let line = next.span.start.line;
+                self.emit_diag(
+                    "E1528",
+                    "type signatures must be written on their own line (write `name = ...` on the next line)",
+                    merge_span(span.clone(), next_span.clone()),
+                );
+                while self.pos < self.tokens.len() {
+                    let tok = &self.tokens[self.pos];
+                    if tok.kind == TokenKind::Newline
+                        || (tok.kind == TokenKind::Symbol && tok.text == "}")
+                        || tok.span.start.line != line
+                    {
+                        break;
+                    }
+                    self.pos += 1;
+                }
+            }
+        }
+
+        Some(TypeSig {
+            decorators,
+            name,
+            ty,
+            span,
+        })
+    }
+
     fn parse_literal_def(&mut self, decorators: Vec<Decorator>) -> Option<Def> {
         let start = self.pos;
         let number = self.consume_number()?;

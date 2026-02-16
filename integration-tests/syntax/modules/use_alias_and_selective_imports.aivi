@@ -1,0 +1,17 @@
+@no_prelude
+module integrationTests.syntax.modules.useAliasAndSelectiveImports
+
+use aivi.text as text
+use aivi.text (length, toUpper)
+use aivi.testing (assertEq)
+
+len = length
+upper = toUpper
+qualifiedLen = text.length
+
+@test
+importsWork = effect {
+  _ <- assertEq (len "abc") 3
+  _ <- assertEq (upper "ab") "AB"
+  _ <- assertEq (qualifiedLen "abcd") 4
+}

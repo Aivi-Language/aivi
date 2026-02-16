@@ -1,0 +1,29 @@
+@no_prelude
+module integrationTests.syntax.irDumpMinimal
+
+use aivi
+use aivi.testing (assertEq)
+
+value = 1 + 2
+pair = (value, "ok")
+
+map = f xs => xs ?
+  | []           => []
+  | [x, ...rest] => [f x, ...(map f rest)]
+
+maybeInc = opt => opt ?
+  | Some n => n + 1
+  | None   => 0
+
+result =
+  [Some 1, None, Some 41] |> map maybeInc
+
+expected = [2, 0, 42]
+
+@test
+irDumpMinimalRuns = effect {
+  _ <- assertEq value 3
+  _ <- assertEq pair (3, "ok")
+  _ <- assertEq (maybeInc (Some 1)) 2
+  _ <- assertEq result expected
+}

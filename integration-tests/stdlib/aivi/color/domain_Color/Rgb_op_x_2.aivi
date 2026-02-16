@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.stdlib.aivi.color.domain_Color.Rgb_op_x_2
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.color
+
+use aivi.color (domain Color)
+
+left = { r: 1, g: 1, b: 1 }
+right = 2l
+
+subject = left - right
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

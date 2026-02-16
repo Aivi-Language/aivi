@@ -12,7 +12,7 @@ fn parse_hello_world_matches_golden() {
         .expect("workspace root");
     std::env::set_current_dir(workspace_root).expect("set cwd");
 
-    let bundle = parse_target("examples/hello.aivi").expect("parse hello");
+    let bundle = parse_target("integration-tests/legacy/hello.aivi").expect("parse hello");
     let actual = serde_json::to_string_pretty(&bundle).expect("serialize");
 
     let golden_path = workspace_root.join("crates/aivi/tests/fixtures/hello.cst.json");

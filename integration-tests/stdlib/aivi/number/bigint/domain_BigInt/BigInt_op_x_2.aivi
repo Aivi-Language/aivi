@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.stdlib.aivi.number.bigint.domain_BigInt.BigInt_op_x_2
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.number.bigint
+
+use aivi.number.bigint (domain BigInt)
+
+left = Unit
+right = Unit
+
+subject = left - right
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

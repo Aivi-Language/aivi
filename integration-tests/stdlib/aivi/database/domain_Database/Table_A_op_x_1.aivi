@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.stdlib.aivi.database.domain_Database.Table_A_op_x_1
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.database
+
+use aivi.database (domain Database)
+
+left = Unit
+right = Unit
+
+subject = left + right
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}

@@ -108,13 +108,120 @@ fn run() -> Result<(), AiviError> {
             }
         }
         "fmt" => {
+            let (write, rest) = consume_flag("--write", &rest);
             let Some(target) = rest.first() else {
                 print_help();
                 return Ok(());
             };
-            let formatted = format_target(target)?;
-            print!("{formatted}");
+            if write {
+                let paths = aivi::resolve_target(target)?;
+                for path in paths {
+                    if path.extension().and_then(|s| s.to_str()) != Some("aivi") {
+                        continue;
+                    }
+                    let content = std::fs::read_to_string(&path)?;
+                    let formatted = aivi::format_text(&content);
+                    if formatted != content {
+                        std::fs::write(&path, formatted)?;
+                    }
+                }
+            } else {
+                let formatted = format_target(target)?;
+                print!("{formatted}");
+            }
             Ok(())
+        }
+        "test" => {
+            let (check_stdlib, rest) = consume_check_stdlib_flag(&rest);
+            let Some(target) = rest.first() else {
+                print_help();
+                return Ok(());
+            };
+
+            // Format all target files in-place before running tests so the suite is stable and
+            // editor tooling doesn't surface spurious formatter diffs.
+            let paths = aivi::resolve_target(target)?;
+            for path in &paths {
+                if path.extension().and_then(|s| s.to_str()) != Some("aivi") {
+                    continue;
+                }
+                let content = std::fs::read_to_string(path)?;
+                let formatted = aivi::format_text(&content);
+                if formatted != content {
+                    std::fs::write(path, formatted)?;
+                }
+            }
+
+            // Parse and print diagnostics first so failures aren't silent.
+            let mut diagnostics = load_module_diagnostics(target)?;
+            for diag in &diagnostics {
+                let rendered =
+                    render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+                if !rendered.is_empty() {
+                    eprintln!("{rendered}");
+                }
+            }
+            if aivi::file_diagnostics_have_errors(&diagnostics) {
+                return Err(AiviError::Diagnostics);
+            }
+
+            // Discover @test definitions from user sources only.
+            let mut test_names = Vec::new();
+            for path in &paths {
+                let text = std::fs::read_to_string(path)?;
+                let (modules, _diags) = aivi::parse_modules(path.as_path(), &text);
+                for module in modules {
+                    for item in module.items {
+                        let aivi::ModuleItem::Def(def) = item else {
+                            continue;
+                        };
+                        if def.decorators.iter().any(|d| d.name.name == "test") {
+                            test_names.push(format!("{}.{}", module.name.name, def.name.name));
+                        }
+                    }
+                }
+            }
+            test_names.sort();
+            test_names.dedup();
+            if test_names.is_empty() {
+                return Err(AiviError::InvalidCommand(format!(
+                    "no @test definitions found under {target}"
+                )));
+            }
+
+            // Check and print module diagnostics (optionally including embedded stdlib).
+            let mut modules = load_modules(target)?;
+            let mut check_diags = check_modules(&modules);
+            if !aivi::file_diagnostics_have_errors(&check_diags) {
+                check_diags.extend(aivi::elaborate_expected_coercions(&mut modules));
+            }
+            if !check_stdlib {
+                check_diags.retain(|diag| !diag.path.starts_with("<embedded:"));
+            }
+            for diag in &check_diags {
+                let rendered =
+                    render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+                if !rendered.is_empty() {
+                    eprintln!("{rendered}");
+                }
+            }
+            diagnostics.extend(check_diags);
+            if aivi::file_diagnostics_have_errors(&diagnostics) {
+                return Err(AiviError::Diagnostics);
+            }
+
+            let program = aivi::desugar_modules(&modules);
+            let report = aivi::run_test_suite(program, &test_names, &modules)?;
+            if report.failed == 0 {
+                println!("ok: {} passed", report.passed);
+                Ok(())
+            } else {
+                eprintln!("FAILED: {} failed, {} passed", report.failed, report.passed);
+                for failure in report.failures {
+                    eprintln!("{}: {}", failure.name, failure.message);
+                }
+                Err(AiviError::Diagnostics)
+            }
         }
         "desugar" => {
             let (debug_trace, rest) = consume_debug_trace_flag(&rest);
@@ -308,7 +415,7 @@ Fix:\n\
 
 fn print_help() {
     println!(
-        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] [--check-stdlib] <path|dir/...>\n  fmt <path>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--target rust|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--debug-trace] [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
+        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] [--check-stdlib] <path|dir/...>\n  fmt [--write] <path|dir/...>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  test [--check-stdlib] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--target rust|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--debug-trace] [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
     );
 }
 
@@ -525,6 +632,19 @@ fn consume_check_stdlib_flag(args: &[String]) -> (bool, Vec<String>) {
     let mut out = Vec::new();
     for arg in args {
         if arg == "--check-stdlib" {
+            enabled = true;
+        } else {
+            out.push(arg.clone());
+        }
+    }
+    (enabled, out)
+}
+
+fn consume_flag(flag: &str, args: &[String]) -> (bool, Vec<String>) {
+    let mut enabled = false;
+    let mut out = Vec::new();
+    for arg in args {
+        if arg == flag {
             enabled = true;
         } else {
             out.push(arg.clone());

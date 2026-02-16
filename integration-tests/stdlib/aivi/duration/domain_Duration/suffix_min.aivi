@@ -1,0 +1,17 @@
+@no_prelude
+module integrationTests.stdlib.aivi.duration.domain_Duration.suffix_min
+
+use aivi
+use aivi.testing (assert)
+
+use aivi.duration
+
+use aivi.duration (domain Duration)
+
+subject = 2min
+
+@test
+smoke = effect {
+  _ <- pure subject
+  _ <- assert True
+}
