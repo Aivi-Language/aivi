@@ -10,6 +10,6 @@ subject = randomBytes
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  b <- randomBytes 16
+  _ <- assert (length b == 16)
 }

@@ -10,5 +10,6 @@ Ref = Vec
 
 @test
 smoke = effect {
-  _ <- assert True
+  v = { size: 3, data: [1.0, 2.0, 3.0] }
+  _ <- assert (v.size == 3)
 }

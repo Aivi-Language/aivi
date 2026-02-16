@@ -10,6 +10,7 @@ subject = addYears
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  d = addYears 1 { year: 2024, month: 2, day: 29 }
+  _ <- assert (d.year == 2025)
+  _ <- assert (d.day == 28) // 2025 is not leap, clamps to 28
 }

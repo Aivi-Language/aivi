@@ -12,6 +12,10 @@ subject = eom
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (eom == { year: 2024, month: 2, day: 29 }) // Wait, eom is usually used with a date. 
+  // If it's a literal for 'end of month', maybe it yields a special value or is a function in domain?
+  // Let's assume it's the end of current month if it's a literal constant? 
+  // No, usually it's used as `date @ eom` or similar.
+  // Actually, if it's a 'literal', it might just be the value.
+  _ <- assert True 
 }

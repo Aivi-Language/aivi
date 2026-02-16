@@ -10,5 +10,7 @@ Ref = Bytes
 
 @test
 smoke = effect {
-  _ <- assert True
+  b = toBytes "abc"
+  s = fromBytes b
+  _ <- assert (s == "abc")
 }

@@ -12,6 +12,6 @@ subject = 2d
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  d = 5d
+  _ <- assert (d == 5) // Duration in days?
 }

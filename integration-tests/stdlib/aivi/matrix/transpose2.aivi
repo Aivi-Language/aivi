@@ -10,6 +10,8 @@ subject = transpose2
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  m = { m00: 1.0, m01: 2.0, m10: 3.0, m11: 4.0 }
+  t = transpose2 m
+  _ <- assert (t.m01 == 3.0)
+  _ <- assert (t.m10 == 2.0)
 }

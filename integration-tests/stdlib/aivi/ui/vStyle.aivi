@@ -10,6 +10,7 @@ subject = vStyle
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  style = vStyle { color: "red" }
+  node = vElement "div" [style] []
+  _ <- assert (renderHtml node == "<div data-aivi-node=\"root\" style=\"color: red\"></div>")
 }

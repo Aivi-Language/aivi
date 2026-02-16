@@ -10,6 +10,6 @@ subject = vText
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  node = vText "hello"
+  _ <- assert (renderHtml node == "<span data-aivi-node=\"root\">hello</span>")
 }

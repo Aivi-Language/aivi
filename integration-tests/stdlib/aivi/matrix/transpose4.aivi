@@ -10,6 +10,5 @@ subject = transpose4
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (transpose4 identity4 == identity4)
 }

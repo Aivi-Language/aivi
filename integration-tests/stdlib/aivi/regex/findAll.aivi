@@ -10,6 +10,17 @@ subject = findAll
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  r <- match compile "l" {
+    | Ok re => pure re
+    | Err _ => fail "compile failed"
+  }
+  ms = findAll r "hello"
+  _ <- assert (length ms == 2)
+  _ <- match ms {
+    | [(s1, e1), (s2, e2)] => effect {
+        _ <- assert (s1 == 2)
+        _ <- assert (s2 == 3)
+      }
+    | _ => assert False
+  }
 }

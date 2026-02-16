@@ -10,6 +10,8 @@ subject = normalize
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  r = fromInts (fromInt 2) (fromInt 4)
+  n = normalize r
+  _ <- assert (toInt (numerator n) == 1)
+  _ <- assert (toInt (denominator n) == 2)
 }

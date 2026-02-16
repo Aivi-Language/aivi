@@ -10,6 +10,18 @@ subject = match
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  r <- match compile "h(e)llo" {
+    | Ok re => pure re
+    | Err _ => fail "compile failed"
+  }
+  m = match r "hello"
+  _ <- match m {
+    | Some res => effect {
+        _ <- assert (res.full == "hello")
+        _ <- assert (res.groups == [Some "e"])
+        _ <- assert (res.start == 0)
+        _ <- assert (res.end == 5)
+      }
+    | None => assert False
+  }
 }

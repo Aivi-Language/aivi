@@ -10,6 +10,8 @@ subject = solve2x2
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  m = { rows: 2, cols: 2, data: [1.0, 1.0, 1.0, -1.0] }
+  v = { size: 2, data: [3.0, 1.0] }
+  res = solve2x2 m v
+  _ <- assert (res.data == [2.0, 1.0])
 }

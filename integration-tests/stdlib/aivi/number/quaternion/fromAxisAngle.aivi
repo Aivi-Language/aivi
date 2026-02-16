@@ -10,6 +10,6 @@ subject = fromAxisAngle
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  q = fromAxisAngle { x: 1.0, y: 0.0, z: 0.0 } 90.0
+  _ <- assert (q.w > 0.707) // approx cos(45)
 }

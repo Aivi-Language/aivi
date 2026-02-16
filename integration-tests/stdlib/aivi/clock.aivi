@@ -10,6 +10,6 @@ subject = clock
 
 @test
 smoke = effect {
-  _ <- pure subject
+  t <- clock.now
   _ <- assert True
 }

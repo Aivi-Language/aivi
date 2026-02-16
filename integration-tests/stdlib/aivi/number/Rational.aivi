@@ -10,5 +10,7 @@ Ref = Rational
 
 @test
 smoke = effect {
-  _ <- assert True
+  r = fromInts (fromInt 1) (fromInt 2)
+  _ <- assert (toInt (numerator r) == 1)
+  _ <- assert (toInt (denominator r) == 2)
 }

@@ -10,5 +10,6 @@ Ref = Sqlite
 
 @test
 smoke = effect {
+  // Sqlite is likely a constructor or tag
   _ <- assert True
 }

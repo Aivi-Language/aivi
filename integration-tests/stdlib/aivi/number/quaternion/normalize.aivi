@@ -10,6 +10,7 @@ subject = normalize
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  q = { w: 2.0, x: 0.0, y: 0.0, z: 0.0 }
+  n = normalize q
+  _ <- assert (n.w == 1.0)
 }

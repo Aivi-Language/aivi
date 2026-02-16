@@ -10,6 +10,6 @@ subject = vElement
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  node = vElement "div" [] []
+  _ <- assert (renderHtml node == "<div data-aivi-node=\"root\"></div>")
 }

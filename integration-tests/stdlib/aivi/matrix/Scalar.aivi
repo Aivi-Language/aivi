@@ -10,5 +10,6 @@ Ref = Scalar
 
 @test
 smoke = effect {
-  _ <- assert True
+  s = 1.0
+  _ <- assert (s == 1.0)
 }

@@ -10,6 +10,9 @@ subject = diff
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  old = vText "a"
+  new = vText "b"
+  ops = diff old new
+  // SetText "root" "b"
+  _ <- assert (length ops == 1)
 }

@@ -10,6 +10,9 @@ subject = split
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  r <- match compile "," {
+    | Ok re => pure re
+    | Err _ => fail "compile failed"
+  }
+  _ <- assert (split r "a,b,c" == ["a", "b", "c"])
 }

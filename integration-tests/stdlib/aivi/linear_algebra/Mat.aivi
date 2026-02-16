@@ -10,5 +10,6 @@ Ref = Mat
 
 @test
 smoke = effect {
-  _ <- assert True
+  m = { rows: 2, cols: 2, data: [1.0, 0.0, 0.0, 1.0] }
+  _ <- assert (m.rows == 2)
 }

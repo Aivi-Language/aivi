@@ -10,6 +10,7 @@ subject = post
 
 @test
 smoke = effect {
-  _ <- pure subject
+  src = post "http://example.com" "body"
+  res <- src
   _ <- assert True
 }

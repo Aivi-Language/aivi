@@ -10,6 +10,6 @@ subject = daysInMonth
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (daysInMonth { year: 2024, month: 2, day: 1 } == 29)
+  _ <- assert (daysInMonth { year: 2023, month: 2, day: 1 } == 28)
 }

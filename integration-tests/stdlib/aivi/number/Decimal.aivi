@@ -10,5 +10,6 @@ Ref = Decimal
 
 @test
 smoke = effect {
-  _ <- assert True
+  d = fromFloat 12.34
+  _ <- assert (toFloat d == 12.34)
 }

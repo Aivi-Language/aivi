@@ -10,6 +10,9 @@ subject = get
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  // get returns a source
+  src = get "http://example.com"
+  // src yield a Result Response Error
+  res <- src
+  _ <- assert True // Just checking not crashing for now without real network
 }

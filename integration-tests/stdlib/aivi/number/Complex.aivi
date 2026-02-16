@@ -10,5 +10,6 @@ Ref = Complex
 
 @test
 smoke = effect {
-  _ <- assert True
+  z = { re: 1.0, im: 2.0 }
+  _ <- assert (z.re == 1.0)
 }

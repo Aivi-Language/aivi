@@ -10,6 +10,9 @@ subject = render
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  m_res = message "Hello, {name}!"
+  m <- match m_res with Ok m => pure m Err e => fail e
+  r_res = render m { name: "Antigravity" }
+  r <- match r_res with Ok r => pure r Err e => fail e
+  _ <- assert (r == "Hello, Antigravity!")
 }

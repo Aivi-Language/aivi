@@ -10,6 +10,6 @@ subject = toInt
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  b = fromInt 123
+  _ <- assert (toInt b == 123)
 }

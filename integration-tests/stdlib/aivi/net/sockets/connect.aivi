@@ -10,6 +10,8 @@ subject = connect
 
 @test
 smoke = effect {
-  _ <- pure subject
+  // connect returns a source yielding Result Connection SocketError
+  src = connect "localhost" 8080
+  res <- src
   _ <- assert True
 }
