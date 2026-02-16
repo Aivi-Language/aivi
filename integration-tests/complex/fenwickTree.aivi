@@ -13,65 +13,65 @@ getOrZero = idx tree => (Map.get idx tree) ?
 
 lowbit = idx =>
   if idx % 2 == 1 then
-  1
-else
-  2 * lowbit (idx / 2)
+    1
+  else
+    2 * lowbit (idx / 2)
 
 addDelta = size idx delta tree =>
   if idx > size then
-  tree
-else {
-  cur = getOrZero idx tree
-  updated = Map.insert idx (cur + delta) tree
-  addDelta size (idx + lowbit idx) delta updated
-}
+    tree
+  else {
+    cur = getOrZero idx tree
+    updated = Map.insert idx (cur + delta) tree
+    addDelta size (idx + lowbit idx) delta updated
+  }
 
 buildFromList = arr => {
     size = List.length arr
 
   buildIndex = idx tree =>
     if idx > size then
-    tree
-  else
-    (List.at arr (idx - 1)) ?
-      | None       => buildIndex (idx + 1) tree
-      | Some value => {
+      tree
+    else
+      (List.at arr (idx - 1)) ?
+        | None       => buildIndex (idx + 1) tree
+        | Some value => {
         t = addDelta size idx value tree
-      buildIndex (idx + 1) t
-    }
+        buildIndex (idx + 1) t
+      }
 
-  { size, tree: buildIndex 1 Map.empty }
+  { size: size, tree: buildIndex 1 Map.empty }
 }
 
 prefix = fenwick idx => {
     go = i acc =>
     if i == 0 then
-    acc
-  else {
-    a = acc + getOrZero i fenwick.tree
-    go (i - lowbit i) a
-  }
+      acc
+    else {
+      a = acc + getOrZero i fenwick.tree
+      go (i - lowbit i) a
+    }
 
   go idx 0
 }
 
 rangeSum = fenwick l r =>
   if l > r || l < 1 then
-  None
-else
-  Some (prefix fenwick r - prefix fenwick (l - 1))
+    None
+  else
+    Some (prefix fenwick r - prefix fenwick (l - 1))
 
 update = fenwick idx value =>
   if idx < 1 || idx > fenwick.size then
-  fenwick
-else {
-  prev = rangeSum fenwick idx idx
-  delta =
+    fenwick
+  else {
+    prev = rangeSum fenwick idx idx
+    delta =
     prev ?
       | Some v => value - v
       | None   => value
-    { fenwick with tree: addDelta fenwick.size idx delta fenwick.tree }
-}
+      fenwick <| { tree: addDelta fenwick.size idx delta fenwick.tree }
+  }
 
 naiveSum = arr l r => arr ?
   | []                              => 0
@@ -92,20 +92,20 @@ verifyIndices = indices fen arr => indices ?
 @test
 behaviors =
   effect {
-  values = [3, 1, 4, 1, 5]
-  fenwick = buildFromList values
+    values = [3, 1, 4, 1, 5]
+    fenwick = buildFromList values
 
-  sum05 = rangeSum fenwick 1 5
-  _ <- assert (sum05 == Some 14)
+    sum05 = rangeSum fenwick 1 5
+    _ <- assert (sum05 == Some 14)
 
-  sum23 = rangeSum fenwick 2 3
-  _ <- assert (sum23 == Some 5)
+    sum23 = rangeSum fenwick 2 3
+    _ <- assert (sum23 == Some 5)
 
-  _ <- assert (rangeSum fenwick 6 6 == None)
+    _ <- assert (rangeSum fenwick 6 6 == None)
 
-  updated = update fenwick 3 9
-  _ <- assert (rangeSum updated 3 3 == Some 9)
-  _ <- assert (rangeSum fenwick 3 3 == Some 4)
+    updated = update fenwick 3 9
+    _ <- assert (rangeSum updated 3 3 == Some 9)
+    _ <- assert (rangeSum fenwick 3 3 == Some 4)
 
-  _ <- assert (verifyIndices [1, 2, 3, 4, 5] updated values)
-}
+    _ <- assert (verifyIndices [1, 2, 3, 4, 5] updated values)
+  }

@@ -753,6 +753,8 @@
     let mut pipeop_block_base_depth: Option<isize> = None;
     let mut rhs_next_line_indent: Option<usize> = None;
     let mut rhs_next_line_depth: Option<isize> = None;
+    let mut rhs_block_base_indent: Option<usize> = None;
+    let mut rhs_block_base_depth: Option<isize> = None;
     let mut then_else_pending_depth: Option<isize> = None;
     let mut arm_rhs_active = false;
     let mut pipeop_seed_indent: Option<usize> = None;
@@ -893,6 +895,10 @@
             pipeop_block_base_depth = None;
             rhs_next_line_indent = None;
             rhs_next_line_depth = None;
+            if rhs_block_base_depth.is_some_and(|base| open_depth <= base) {
+                rhs_block_base_indent = None;
+                rhs_block_base_depth = None;
+            }
             pipeop_seed_indent = None;
             then_else_pending_depth = None;
             arm_rhs_active = false;
@@ -916,7 +922,11 @@
             rendered_lines.push(out);
             pipe_block_stack.clear();
             pipeop_block_base_indent = None;
+            pipeop_block_base_depth = None;
             rhs_next_line_indent = None;
+            rhs_next_line_depth = None;
+            rhs_block_base_indent = None;
+            rhs_block_base_depth = None;
             pipeop_seed_indent = None;
             prev_non_blank_last_token = last_continuation_token(&state.tokens);
             update_open_depth(&mut open_depth, &state.tokens);
@@ -929,6 +939,12 @@
             rendered_lines.push(out);
             pipe_block_stack.clear();
             pipeop_block_base_indent = None;
+            pipeop_block_base_depth = None;
+            rhs_next_line_indent = None;
+            rhs_next_line_depth = None;
+            rhs_block_base_indent = None;
+            rhs_block_base_depth = None;
+            pipeop_seed_indent = None;
             prev_non_blank_last_token = last_continuation_token(&state.tokens);
             update_open_depth(&mut open_depth, &state.tokens);
             continue;
@@ -941,6 +957,17 @@
 
         let line_has_top_level_eq =
             find_top_level_token(&state.tokens, "=", first_idx).is_some();
+
+        if let (Some(base_indent), Some(base_depth)) = (rhs_block_base_indent, rhs_block_base_depth)
+        {
+            if line_depth <= base_depth
+                && line_indent_len <= base_indent
+                && looks_like_new_stmt(&state.tokens, first_idx)
+            {
+                rhs_block_base_indent = None;
+                rhs_block_base_depth = None;
+            }
+        }
 
         // Continuation blocks:
         // - Multi-line `| ...` blocks (multi-clause functions and `?` matches).
@@ -1017,9 +1044,13 @@
 
         let in_pipe_block = !pipe_block_stack.is_empty();
         let in_pipeop_block = pipeop_block_base_indent.is_some();
+        let in_rhs_block = rhs_block_base_indent.is_some();
 
         let mut continuation_levels = 0usize;
         if in_pipe_block || in_pipeop_block {
+            continuation_levels += 1;
+        }
+        if in_rhs_block && !starts_with_pipe && !starts_with_pipeop {
             continuation_levels += 1;
         }
         // If a line ended with `=`/`=>` and did not open a delimiter group, indent the next line.
@@ -1027,6 +1058,7 @@
         let rhs_seed_active = rhs_seed_indent.is_some()
             && !starts_with_pipe
             && !starts_with_pipeop
+            && !in_rhs_block
             && (rhs_seed_depth == 0 || prev_non_blank_last_token.as_deref() == Some("=>"));
         if rhs_seed_active {
             continuation_levels += 1;
@@ -1069,8 +1101,13 @@
                     pipeop_seed_indent = Some(line_indent_len);
                 }
                 if seeds_rhs_continuation(prev_non_blank_last_token.as_deref()) {
+                    let depth = net_open_depth(&state.tokens);
                     rhs_next_line_indent = Some(line_indent_len);
-                    rhs_next_line_depth = Some(net_open_depth(&state.tokens));
+                    rhs_next_line_depth = Some(depth);
+                    if depth == 0 {
+                        rhs_block_base_indent = Some(line_indent_len);
+                        rhs_block_base_depth = Some(line_depth);
+                    }
                 }
                 update_open_depth(&mut open_depth, &state.tokens);
                 continue;
@@ -1104,8 +1141,13 @@
                         pipeop_seed_indent = Some(line_indent_len);
                     }
                     if seeds_rhs_continuation(prev_non_blank_last_token.as_deref()) {
+                        let depth = net_open_depth(&state.tokens);
                         rhs_next_line_indent = Some(line_indent_len);
-                        rhs_next_line_depth = Some(net_open_depth(&state.tokens));
+                        rhs_next_line_depth = Some(depth);
+                        if depth == 0 {
+                            rhs_block_base_indent = Some(line_indent_len);
+                            rhs_block_base_depth = Some(line_depth);
+                        }
                     }
                     update_open_depth(&mut open_depth, &state.tokens);
                     continue;
@@ -1138,8 +1180,13 @@
                     pipeop_seed_indent = Some(line_indent_len);
                 }
                 if seeds_rhs_continuation(prev_non_blank_last_token.as_deref()) {
+                    let depth = net_open_depth(&state.tokens);
                     rhs_next_line_indent = Some(line_indent_len);
-                    rhs_next_line_depth = Some(net_open_depth(&state.tokens));
+                    rhs_next_line_depth = Some(depth);
+                    if depth == 0 {
+                        rhs_block_base_indent = Some(line_indent_len);
+                        rhs_block_base_depth = Some(line_depth);
+                    }
                 }
                 update_open_depth(&mut open_depth, &state.tokens);
                 continue;
@@ -1192,8 +1239,13 @@
                                 pipeop_seed_indent = Some(line_indent_len);
                             }
                             if seeds_rhs_continuation(prev_non_blank_last_token.as_deref()) {
+                                let depth = net_open_depth(&state.tokens);
                                 rhs_next_line_indent = Some(line_indent_len);
-                                rhs_next_line_depth = Some(net_open_depth(&state.tokens));
+                                rhs_next_line_depth = Some(depth);
+                                if depth == 0 {
+                                    rhs_block_base_indent = Some(line_indent_len);
+                                    rhs_block_base_depth = Some(line_depth);
+                                }
                             }
                             update_open_depth(&mut open_depth, &state.tokens);
                             continue;
@@ -1216,8 +1268,13 @@
             pipeop_seed_indent = Some(line_indent_len);
         }
         if seeds_rhs_continuation(prev_non_blank_last_token.as_deref()) {
+            let depth = net_open_depth(&state.tokens);
             rhs_next_line_indent = Some(line_indent_len);
-            rhs_next_line_depth = Some(net_open_depth(&state.tokens));
+            rhs_next_line_depth = Some(depth);
+            if depth == 0 {
+                rhs_block_base_indent = Some(line_indent_len);
+                rhs_block_base_depth = Some(line_depth);
+            }
         }
         update_open_depth(&mut open_depth, &state.tokens);
 

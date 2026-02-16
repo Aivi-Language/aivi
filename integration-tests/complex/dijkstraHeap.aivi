@@ -24,13 +24,13 @@ expandNeighbors = edges queue dist currentDist => edges ?
     prev =
       (Map.get edge.to dist) ?
         | Some v => v
-        | None   => 1_000_000.0
+        | None   => 1000000.0
 
   res =
     if tentative < prev then
-    (Heap.push queue (tentative, edge.to), Map.insert edge.to tentative dist)
-  else
-    (queue, dist)
+      (Heap.push queue (tentative, edge.to), Map.insert edge.to tentative dist)
+    else
+      (queue, dist)
 
   (nextQueue, nextDist) = res
   expandNeighbors tail nextQueue nextDist currentDist
@@ -40,12 +40,12 @@ search = queue dist visited graph => Heap.popMin queue ?
   | None                             => dist
   | Some ((currentDist, node), rest) =>
     if Set.has node visited then
-    search rest dist visited graph
-  else {
-    neighbors = edgesFrom graph node
-    (nextQueue, nextDist) = expandNeighbors neighbors rest dist currentDist
-    search nextQueue nextDist (Set.insert node visited) graph
-  }
+      search rest dist visited graph
+    else {
+      neighbors = edgesFrom graph node
+      (nextQueue, nextDist) = expandNeighbors neighbors rest dist currentDist
+      search nextQueue nextDist (Set.insert node visited) graph
+    }
 
 resetDist = start =>
   Map.insert start 0.0 Map.empty
@@ -53,8 +53,8 @@ resetDist = start =>
 @test
 shortestPaths =
   effect {
-  graph = buildGraph
-  distances = search (Heap.push Heap.empty (0.0, 0)) (resetDist 0) Set.empty graph
-  _ <- assert (Map.get 3 distances == Some 4.0)
-  _ <- assert (Map.get 2 distances == Some 3.0)
-}
+    graph = buildGraph
+    distances = search (Heap.push Heap.empty (0.0, 0)) (resetDist 0) Set.empty graph
+    _ <- assert (Map.get 3 distances == Some 4.0)
+    _ <- assert (Map.get 2 distances == Some 3.0)
+  }

@@ -36,15 +36,13 @@ expandNeighbors = edges queue scores parents current currentG goal heuristicFunc
 
   res =
     if tentative < prevScore then
-    (
-    Heap.push
-    queue
-    (tentative + heuristicFunc goal edge.to, edge.to, tentative)
-    Map.insert edge.to tentative scores
-    Map.insert edge.to current parents
-  )
-  else
-    (queue, scores, parents)
+      (
+        Heap.push queue (tentative + heuristicFunc goal edge.to, edge.to, tentative),
+        Map.insert edge.to tentative scores,
+        Map.insert edge.to current parents
+      )
+    else
+      (queue, scores, parents)
 
   (nextQueue, nextScores, nextParents) = res
   expandNeighbors tail nextQueue nextScores nextParents current currentG goal heuristicFunc
@@ -54,13 +52,13 @@ search = queue scores parents graph goal heuristicFunc => Heap.popMin queue ?
   | None                                => None
   | Some ((_, current, currentG), rest) =>
     if current == goal then
-    Some (reconstruct parents goal)
-  else {
-    edges = edgesFrom graph current
-    (nextQueue, nextScores, nextParents) =
+      Some (reconstruct parents goal)
+    else {
+      edges = edgesFrom graph current
+      (nextQueue, nextScores, nextParents) =
       expandNeighbors edges rest scores parents current currentG goal heuristicFunc
-    search nextQueue nextScores nextParents graph goal heuristicFunc
-  }
+      search nextQueue nextScores nextParents graph goal heuristicFunc
+    }
 
 astar = graph start goal heuristicFunc => {
     openSet = Heap.push Heap.empty (heuristicFunc goal start, start, 0.0)
@@ -83,12 +81,12 @@ buildGraph = {
 @test
 astarSmoke =
   effect {
-  graph = buildGraph
-  _ <- assert (astar graph 0 3 heuristic == Some [0, 1, 2, 3])
+    graph = buildGraph
+    _ <- assert (astar graph 0 3 heuristic == Some [0, 1, 2, 3])
 
-  zeroHeuristic = _ _ => 0.0
-  _ <- assert (astar graph 0 3 zeroHeuristic == Some [0, 1, 2, 3])
+    zeroHeuristic = _ _ => 0.0
+    _ <- assert (astar graph 0 3 zeroHeuristic == Some [0, 1, 2, 3])
 
-  bad = astar graph 3 0 zeroHeuristic
-  _ <- assert (bad == None)
-}
+    bad = astar graph 3 0 zeroHeuristic
+    _ <- assert (bad == None)
+  }

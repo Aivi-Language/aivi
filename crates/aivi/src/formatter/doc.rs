@@ -10,31 +10,26 @@ pub enum Doc {
     Text(String),
     Line(LineKind),
     Concat(Vec<Doc>),
+    #[allow(dead_code)]
     Indent(usize, Box<Doc>),
+    #[allow(dead_code)]
     Group(Box<Doc>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LineKind {
     Hard,
+    #[allow(dead_code)]
     Soft,
 }
 
 impl Doc {
-    pub fn nil() -> Self {
-        Doc::Nil
-    }
-
     pub fn text<T: Into<String>>(text: T) -> Self {
         Doc::Text(text.into())
     }
 
     pub fn hardline() -> Self {
         Doc::Line(LineKind::Hard)
-    }
-
-    pub fn softline() -> Self {
-        Doc::Line(LineKind::Soft)
     }
 
     pub fn concat(items: Vec<Doc>) -> Self {
@@ -53,18 +48,6 @@ impl Doc {
         } else {
             Doc::Concat(out)
         }
-    }
-
-    pub fn indent(self, spaces: usize) -> Self {
-        if spaces == 0 {
-            self
-        } else {
-            Doc::Indent(spaces, Box::new(self))
-        }
-    }
-
-    pub fn group(self) -> Self {
-        Doc::Group(Box::new(self))
     }
 }
 
@@ -183,4 +166,3 @@ fn fits(remaining: usize, indent: usize, doc: &Doc, rest: &[(usize, Mode, Doc)])
 
     false
 }
-

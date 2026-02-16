@@ -276,8 +276,10 @@ impl Parser {
 
         if self.match_keyword("if") {
             let cond = self.parse_expr()?;
+            self.consume_newlines();
             self.expect_keyword("then", "expected 'then' in if expression");
             let then_branch = self.parse_expr()?;
+            self.consume_newlines();
             self.expect_keyword("else", "expected 'else' in if expression");
             let else_branch = self.parse_expr()?;
             let span = merge_span(expr_span(&cond), expr_span(&else_branch));
