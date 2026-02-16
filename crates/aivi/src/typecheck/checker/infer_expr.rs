@@ -676,9 +676,20 @@ impl TypeChecker {
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Int");
                 let both_float = matches!(left_applied, Type::Con(ref name, _) if name == "Float")
                     && matches!(right_applied, Type::Con(ref name, _) if name == "Float");
+                // Check if either operand is Float (the other might be a type variable)
+                let left_is_float = matches!(left_applied, Type::Con(ref name, _) if name == "Float");
+                let right_is_float = matches!(right_applied, Type::Con(ref name, _) if name == "Float");
+                let either_float = left_is_float || right_is_float;
 
                 // Float comparison is built-in like Int
                 if both_float {
+                    return Ok(Type::con("Bool"));
+                }
+
+                // If one operand is Float and the other is a type variable, unify with Float
+                if either_float && !both_int {
+                    self.unify_with_span(left_ty, Type::con("Float"), expr_span(left))?;
+                    self.unify_with_span(right_ty, Type::con("Float"), expr_span(right))?;
                     return Ok(Type::con("Bool"));
                 }
 
