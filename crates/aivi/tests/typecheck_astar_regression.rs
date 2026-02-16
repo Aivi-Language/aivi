@@ -1,6 +1,9 @@
 use std::path::Path;
 
-use aivi::{check_modules, check_types, file_diagnostics_have_errors, parse_modules};
+use aivi::{
+    check_modules, check_types, file_diagnostics_have_errors, load_module_diagnostics, load_modules,
+    parse_modules,
+};
 
 fn check_ok(source: &str) {
     let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
@@ -14,6 +17,26 @@ fn check_ok(source: &str) {
     assert!(
         !file_diagnostics_have_errors(&module_diags),
         "unexpected errors: {module_diags:?}"
+    );
+}
+
+fn check_target_ok(target: &str) {
+    let mut diagnostics =
+        load_module_diagnostics(target).unwrap_or_else(|e| panic!("load diags: {e}"));
+    let modules = load_modules(target).unwrap_or_else(|e| panic!("load modules: {e}"));
+
+    diagnostics.extend(check_modules(&modules));
+    if !file_diagnostics_have_errors(&diagnostics) {
+        diagnostics.extend(check_types(&modules));
+    }
+
+    // Match `aivi check` behavior: ignore embedded stdlib errors (v0.1 stdlib is allowed to be
+    // incomplete), but ensure the user file has no type errors.
+    diagnostics.retain(|diag| !diag.path.starts_with("<embedded:"));
+
+    assert!(
+        !file_diagnostics_have_errors(&diagnostics),
+        "unexpected errors: {diagnostics:?}"
     );
 }
 
@@ -50,4 +73,11 @@ step = state edge => {
 }
 "#;
     check_ok(source);
+}
+
+#[test]
+fn typecheck_astar_no_ambiguous_vec2_minus() {
+    // Regression for `integration-tests/complex/aStar.aivi`:
+    // `magnitude (target - current)` used to fail with an ambiguous `(-)` inside a match arm.
+    check_target_ok("integration-tests/complex/aStar.aivi");
 }

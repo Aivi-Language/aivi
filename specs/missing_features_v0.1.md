@@ -35,7 +35,7 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 
 ### Standard Library
 
-- (add items; start at `specs/05_stdlib/`)
+- a calculus module
 
 ### Runtime
 
