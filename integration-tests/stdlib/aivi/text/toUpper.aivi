@@ -10,6 +10,5 @@ subject = toUpper
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (toUpper "hello" == "HELLO")
 }

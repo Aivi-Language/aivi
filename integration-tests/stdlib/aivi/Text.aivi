@@ -10,5 +10,11 @@ Ref = Text
 
 @test
 smoke = effect {
-  _ <- assert True
+  t = "Hello"
+  _ <- assert (Text.length t == 5)
+  _ <- assert (Text.toUpper t == "HELLO")
+  _ <- assert (Text.toLower t == "hello")
+  _ <- assert (Text.slice 0 2 t == "He")
+  _ <- assert (Text.isEmpty "" == True)
+  _ <- assert (Text.isEmpty t == False)
 }

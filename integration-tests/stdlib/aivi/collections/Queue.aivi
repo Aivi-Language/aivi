@@ -10,5 +10,19 @@ Ref = Queue
 
 @test
 smoke = effect {
-  _ <- assert True
+  q0 = Queue.empty
+  q1 = Queue.enqueue q0 1
+  q2 = Queue.enqueue q1 2
+  
+  _ <- assert (Queue.peek q2 == Some 1)
+  
+  res = Queue.dequeue q2
+  _ <- match res {
+    | Some (val, q3) => do {
+      _ <- assert (val == 1)
+      _ <- assert (Queue.peek q3 == Some 2)
+      pure Unit
+    }
+    | None => assert False
+  }
 }

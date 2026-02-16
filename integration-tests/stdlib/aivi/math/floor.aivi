@@ -10,6 +10,7 @@ subject = floor
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (floor 1.2 == 1.0)
+  _ <- assert (floor 1.9 == 1.0)
+  _ <- assert (floor (-1.2) == -2.0)
 }

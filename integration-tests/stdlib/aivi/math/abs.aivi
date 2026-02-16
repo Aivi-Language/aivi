@@ -10,6 +10,8 @@ subject = abs
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (abs 1 == 1)
+  _ <- assert (abs (-1) == 1)
+  _ <- assert (abs 1.5 == 1.5)
+  _ <- assert (abs (-1.5) == 1.5)
 }

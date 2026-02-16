@@ -10,6 +10,6 @@ subject = min
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (min 1.0 2.0 == 1.0)
+  _ <- assert (min 2.0 1.0 == 1.0)
 }
