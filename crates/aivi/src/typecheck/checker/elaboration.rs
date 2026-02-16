@@ -266,10 +266,24 @@ impl TypeChecker {
                 } else {
                     None
                 };
+
+                // Constrain arm-local bindings before elaborating arm bodies.
+                //
+                // Expected-type elaboration inside an arm body (e.g. operator overload selection)
+                // needs the types induced by the scrutinee/pattern unification. Without this,
+                // pattern-bound names start as unconstrained type variables and can trigger
+                // spurious "ambiguous domain operator" errors.
+                let scrutinee_ty = if let Some(scrutinee) = &scrutinee {
+                    self.infer_expr(scrutinee, env)?
+                } else {
+                    self.fresh_var()
+                };
+
                 let mut new_arms = Vec::new();
                 for arm in arms {
                     let mut arm_env = env.clone();
-                    let _ = self.infer_pattern(&arm.pattern, &mut arm_env)?;
+                    let pat_ty = self.infer_pattern(&arm.pattern, &mut arm_env)?;
+                    self.unify_with_span(pat_ty, scrutinee_ty.clone(), arm.span.clone())?;
                     let guard = if let Some(guard) = arm.guard {
                         let (guard, _ty) = self.elab_expr(guard, None, &mut arm_env)?;
                         Some(guard)
