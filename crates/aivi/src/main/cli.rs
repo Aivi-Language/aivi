@@ -1,5 +1,5 @@
 use aivi::{
-    check_modules, check_types, collect_mcp_manifest, compile_rust_native, compile_rust_native_lib,
+    check_modules, check_types, compile_rust_native, compile_rust_native_lib,
     desugar_target, embedded_stdlib_source, ensure_aivi_dependency,
     format_target, kernel_target, load_module_diagnostics, load_modules, parse_target,
     render_diagnostics, run_native,
@@ -417,24 +417,10 @@ fn cmd_i18n_gen(args: &[String]) -> Result<(), AiviError> {
 }
 
 fn cmd_mcp_serve(target: &str, allow_effects: bool) -> Result<(), AiviError> {
-    let mut diagnostics = load_module_diagnostics(target)?;
-    let modules = load_modules(target)?;
-    diagnostics.extend(check_modules(&modules));
-    if !aivi::file_diagnostics_have_errors(&diagnostics) {
-        diagnostics.extend(check_types(&modules));
-    }
-    diagnostics.retain(|diag| !diag.path.starts_with("<embedded:"));
-    if aivi::file_diagnostics_have_errors(&diagnostics) {
-        for diag in diagnostics {
-            let rendered = render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
-            if !rendered.is_empty() {
-                eprintln!("{rendered}");
-            }
-        }
-        return Err(AiviError::Diagnostics);
-    }
-
-    let manifest = collect_mcp_manifest(&modules);
+    // `aivi mcp serve` is meant to work even outside of a project checkout. In v0.1 it exposes
+    // the bundled language specifications and does not depend on project code.
+    let _ = target;
+    let manifest = aivi::bundled_specs_manifest();
     serve_mcp_stdio_with_policy(
         &manifest,
         McpPolicy {

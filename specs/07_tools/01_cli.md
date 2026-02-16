@@ -183,3 +183,5 @@ aivi mcp serve <path|dir/...> [--allow-effects]
 ```
 
 - `--allow-effects`: Allows the MCP server to execute tools that have side effects.
+
+In v0.1, `aivi mcp serve` exposes the bundled language specifications (`specs/`) as MCP resources.
