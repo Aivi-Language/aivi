@@ -5,9 +5,8 @@ doAiviFn : Effect Text Unit
 doAiviFn = pure Unit
 
 main =
-  ~html~>
+  ~<html>
     <div class="a">
       <button onClick={doAiviFn}>ok</button>
     </div>
-  <~html
-
+  </html>

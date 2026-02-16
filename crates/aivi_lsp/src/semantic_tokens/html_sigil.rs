@@ -8,11 +8,11 @@ impl Backend {
         if token.kind != "sigil" {
             return false;
         }
-        if !token.text.starts_with("~html~>") || !token.text.ends_with("<~html") {
+        if !token.text.starts_with("~<html>") || !token.text.ends_with("</html>") {
             return false;
         }
         let chars: Vec<char> = token.text.chars().collect();
-        if chars.len() < "~html~><~html".chars().count() {
+        if chars.len() < "~<html></html>".chars().count() {
             return false;
         }
 
@@ -87,8 +87,8 @@ impl Backend {
         };
 
         // Emit the sigil delimiters as `aivi.sigil`, then highlight HTML-ish tokens inside.
-        let prefix_len = "~html~>".chars().count();
-        let suffix_len = "<~html".chars().count();
+        let prefix_len = "~<html>".chars().count();
+        let suffix_len = "</html>".chars().count();
         push(
             data,
             last_line,
@@ -193,7 +193,7 @@ impl Backend {
         };
 
         let mut i = prefix_len;
-        let end_limit = chars.len().saturating_sub(1);
+        let end_limit = chars.len().saturating_sub(suffix_len);
 
         while i < end_limit {
             // Skip AIVI interpolation blocks in HTML attributes/content: `{ ... }`.

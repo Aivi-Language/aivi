@@ -304,7 +304,7 @@ y = ~m"Hello, {name:Text}!"
 #[test]
 fn semantic_tokens_highlight_html_inside_html_sigil() {
     let text = r#"module Test.html
-x = ~html~> <div class="a">{ foo }</div> <~html
+x = ~<html><div class="a">{ foo }</div></html>
 "#;
 
     let tokens = collect_semantic_token_texts(text);

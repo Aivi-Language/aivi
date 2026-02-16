@@ -317,8 +317,18 @@ impl Parser {
 
         if let Some(sigil) = self.consume_sigil() {
             let span = sigil.span.clone();
+            if let Some(body) = parse_html_angle_sigil_text(&sigil.text) {
+                return Some(self.parse_html_sigil(&sigil, &body));
+            }
             if let Some((tag, body, flags)) = parse_sigil_text(&sigil.text) {
                 if tag == "html" && flags.is_empty() {
+                    // Legacy HTML sigil syntax (~html~> ... <~html). Keep parsing for recovery,
+                    // but emit an error so compilation fails and users migrate to ~<html>.
+                    self.emit_diag(
+                        "E1602",
+                        "legacy html sigil syntax; use `~<html>...</html>`",
+                        span.clone(),
+                    );
                     return Some(self.parse_html_sigil(&sigil, &body));
                 }
                 if (tag == "u" || tag == "url") && !is_probably_url(&body) {

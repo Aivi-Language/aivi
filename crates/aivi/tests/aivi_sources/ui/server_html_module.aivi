@@ -13,11 +13,11 @@ main = effect {
     { init: _ => 0
     , update: _ model => (model, [])
     , view: _ =>
-        ~html~>
+        ~<html>
           <button onClickE={ ce => Clicked ce.button } onKeyDown={ _ => Noop }>
             { TextNode "ok" }
           </button>
-        <~html
+        </html>
     , onPlatform: _ => None
     }
 
@@ -33,4 +33,3 @@ main = effect {
   _ <- assert (resp.status == 200)
   pure Unit
 }
-

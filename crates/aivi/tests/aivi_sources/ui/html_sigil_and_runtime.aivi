@@ -9,11 +9,11 @@ use aivi.ui.layout
 main : Effect Text Unit
 main = effect {
   node =
-    ~html~>
+    ~<html>
       <div class="card" style={ { width: 10px, gap: 2em } }>
         <span>{ TextNode "1" }</span>
       </div>
-    <~html
+    </html>
 
   html = renderHtml node
 
@@ -25,8 +25,8 @@ main = effect {
   _ <- assert (contains "10px" html)
   _ <- assert (contains ">1</span>" html)
 
-  old = ~html~> <div>{ TextNode "1" }</div> <~html
-  new = ~html~> <div>{ TextNode "2" }</div> <~html
+  old = ~<html><div>{ TextNode "1" }</div></html>
+  new = ~<html><div>{ TextNode "2" }</div></html>
   ops = diff old new
   json = patchToJson ops
 

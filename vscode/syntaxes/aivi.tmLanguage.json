@@ -211,13 +211,13 @@
     "sigil": {
       "patterns": [
         {
-          "begin": "(~html~>)",
+          "begin": "(~<html>)",
           "beginCaptures": {
             "1": {
               "name": "storage.type.sigil.aivi"
             }
           },
-          "end": "(<~html)",
+          "end": "(</html>)",
           "endCaptures": {
             "1": {
               "name": "storage.type.sigil.aivi"

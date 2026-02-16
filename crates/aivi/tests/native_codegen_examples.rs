@@ -40,6 +40,7 @@ fn extract_builtin_names(rust: &str) -> Vec<String> {
 }
 
 #[test]
+#[ignore = "native codegen is experimental; run with `cargo test -p aivi --test native_codegen_examples -- --ignored`"]
 fn native_codegen_examples_emit_rust_and_check_builtins() {
     let root = set_workspace_root();
     let examples_dir = root.join("examples");

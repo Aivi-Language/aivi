@@ -14,7 +14,7 @@ pnpm run test:unit
 
 ## Integration (VS Code + bundled LSP)
 
-Launches VS Code with the extension under test and exercises LSP completions inside `~html` regions.
+Launches VS Code with the extension under test and exercises LSP completions inside `~<html>...</html>` regions.
 
 ```bash
 cd vscode

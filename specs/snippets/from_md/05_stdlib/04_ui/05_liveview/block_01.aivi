@@ -5,13 +5,13 @@ Model = { count: Int }
 Msg = Inc | Dec
 
 view = model =>
-  ~html{
+  ~<html>
     <div style={ { width: 240px } }>
       <button onClick={ Dec }>-</button>
       <span>{ model.count }</span>
       <button onClick={ Inc }>+</button>
     </div>
-  }
+  </html>
 
 update = msg => model =>
   msg ?
@@ -25,4 +25,3 @@ main =
     { count: 0 }
     view
     update
-
