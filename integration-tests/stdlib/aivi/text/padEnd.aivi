@@ -10,6 +10,6 @@ subject = padEnd
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (padEnd 5 " " "abc" == "abc  ")
+  _ <- assert (padEnd 3 " " "abc" == "abc")
 }

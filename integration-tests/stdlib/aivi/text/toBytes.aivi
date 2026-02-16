@@ -10,6 +10,8 @@ subject = toBytes
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  // Assuming Bytes type or list of ints/bytes
+  bytes = toBytes "abc"
+  // Just checking not crashing for now, until Bytes type is explored
+  _ <- assert True 
 }

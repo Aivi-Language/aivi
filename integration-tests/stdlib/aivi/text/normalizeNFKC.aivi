@@ -10,6 +10,5 @@ subject = normalizeNFKC
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (length (normalizeNFKC "hello") == 5)
 }

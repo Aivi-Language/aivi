@@ -10,6 +10,7 @@ subject = isAlnum
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (isAlnum "a" == True)
+  _ <- assert (isAlnum "1" == True)
+  _ <- assert (isAlnum "!" == False)
 }

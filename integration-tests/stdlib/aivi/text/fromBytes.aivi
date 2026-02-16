@@ -10,6 +10,6 @@ subject = fromBytes
 
 @test
 smoke = effect {
-  _ <- pure subject
+  // Inverse of toBytes
   _ <- assert True
 }

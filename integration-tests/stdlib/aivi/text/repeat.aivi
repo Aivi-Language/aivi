@@ -10,6 +10,6 @@ subject = repeat
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (repeat 3 "a" == "aaa")
+  _ <- assert (repeat 0 "a" == "")
 }

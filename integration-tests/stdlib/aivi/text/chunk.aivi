@@ -10,6 +10,5 @@ subject = chunk
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (chunk 2 "abcde" == ["ab", "cd", "e"])
 }
