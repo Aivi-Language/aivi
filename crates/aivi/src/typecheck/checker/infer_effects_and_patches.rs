@@ -40,21 +40,56 @@ impl TypeChecker {
                     // `x = expr` inside `effect { ... }` is a pure let-binding and must not run
                     // effects. Reject effect-typed expressions (including `Resource`).
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
-                    let snapshot = self.subst.clone();
-                    let let_err_ty = self.fresh_var();
-                    if self
-                        .bind_effect_value(expr_ty.clone(), let_err_ty, expr_span(expr))
-                        .is_ok()
-                    {
+                    let expr_ty_applied = self.apply(expr_ty.clone());
+                    let expr_ty_applied = self.expand_alias(expr_ty_applied);
+
+                    fn is_effect_like(ty: &Type) -> bool {
+                        match ty {
+                            Type::Con(name, args) => match name.as_str() {
+                                "Effect" | "Resource" | "Source" => args.len() == 2,
+                                _ => false,
+                            },
+                            Type::App(base, args) => {
+                                if let Type::Con(name, existing) = &**base {
+                                    if name == "Effect" || name == "Resource" || name == "Source" {
+                                        let mut combined = existing.clone();
+                                        combined.extend(args.iter().cloned());
+                                        return combined.len() == 2;
+                                    }
+                                }
+                                false
+                            }
+                            _ => false,
+                        }
+                    }
+
+                    let mut is_impure = is_effect_like(&expr_ty_applied);
+                    if !is_impure && matches!(expr_ty_applied, Type::Var(_)) {
+                        // If we still don't know the type, fall back to a unification-based check.
+                        // This ensures we reject effectful expressions even when they haven't been
+                        // forced by later constraints yet.
+                        let snapshot = self.subst.clone();
+                        let let_err_ty = self.fresh_var();
+                        is_impure = self
+                            .bind_effect_value(expr_ty.clone(), let_err_ty, expr_span(expr))
+                            .is_ok();
                         self.subst = snapshot;
+                    }
+
+                    if is_impure {
+                        let mut message =
+                            "use `<-` to run effects; `=` binds pure values".to_string();
+                        if std::env::var("AIVI_DEBUG_TRACE").is_ok_and(|v| v == "1") {
+                            let ty_str = self.type_to_string(&expr_ty);
+                            message = format!("{message} (expr_ty={ty_str}, expr_ty_dbg={expr_ty:?})");
+                        }
                         return Err(TypeError {
                             span: expr_span(expr),
-                            message: "use `<-` to run effects; `=` binds pure values".to_string(),
+                            message,
                             expected: None,
                             found: None,
                         });
                     }
-                    self.subst = snapshot;
 
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
@@ -603,5 +638,28 @@ impl TypeChecker {
                 Ok(self.apply(left_clone))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::diagnostics::{Position, Span};
+    use crate::typecheck::checker::TypeChecker;
+    use crate::typecheck::types::Type;
+
+    fn dummy_span() -> Span {
+        Span {
+            start: Position { line: 1, column: 1 },
+            end: Position { line: 1, column: 1 },
+        }
+    }
+
+    #[test]
+    fn bind_effect_value_rejects_pure_int() {
+        let mut checker = TypeChecker::new();
+        let span = dummy_span();
+        let err_ty = checker.fresh_var();
+        let res = checker.bind_effect_value(Type::con("Int"), err_ty, span);
+        assert!(res.is_err(), "expected Err, got: {res:?}");
     }
 }

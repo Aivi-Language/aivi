@@ -179,8 +179,12 @@ impl Parser {
                 break;
             }
             if token.kind == TokenKind::Newline {
-                // If the next non-newline token isn't a `|`, assume the type
-                // declaration ends here (and thus has no constructor bars).
+                // If the next non-newline token looks like it starts a new *top-level* item,
+                // assume the type declaration ends here (and thus has no constructor bars).
+                //
+                // Constructor lists are typically indented, and the first constructor may omit a
+                // leading `|` (e.g. `Attr msg =\n  Class Text\n  | Id Text`), so we only stop the
+                // scan when the next token is at column 1 (or EOF) and isn't a `|`.
                 let mut lookahead = scan + 1;
                 while lookahead < self.tokens.len()
                     && self.tokens[lookahead].kind == TokenKind::Newline
@@ -190,9 +194,9 @@ impl Parser {
                 if lookahead >= self.tokens.len() {
                     break;
                 }
-                if !(self.tokens[lookahead].kind == TokenKind::Symbol
-                    && self.tokens[lookahead].text == "|")
-                {
+                let next = &self.tokens[lookahead];
+                let next_is_bar = next.kind == TokenKind::Symbol && next.text == "|";
+                if !next_is_bar && next.span.start.column == 1 {
                     break;
                 }
             }

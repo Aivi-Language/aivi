@@ -346,18 +346,12 @@ impl Parser {
 
         // Lower parsed HTML nodes to `aivi.ui` constructors.
         fn lower_attr(_this: &mut Parser, attr: HtmlAttr, span: &Span) -> Option<Expr> {
-            // `use aivi.ui` binds the module alias `ui`, not its exports. Emit `ui.v*` helpers.
-            let mk_ui = |field: &str| Expr::FieldAccess {
-                base: Box::new(Expr::Ident(SpannedName {
-                    name: "ui".to_string(),
-                    span: span.clone(),
-                })),
-                field: SpannedName {
-                    name: field.to_string(),
-                    span: span.clone(),
-                },
+            // Lower into the public `aivi.ui` helper functions (e.g. `vElement`, `vClass`).
+            // Users are expected to `use aivi.ui` (or selectively import these helpers).
+            let mk_ui = |name: &str| Expr::Ident(SpannedName {
+                name: name.to_string(),
                 span: span.clone(),
-            };
+            });
             let mk_string = |value: &str| {
                 Expr::Literal(Literal::String {
                     text: value.to_string(),
@@ -407,17 +401,10 @@ impl Parser {
         }
 
         fn lower_node(this: &mut Parser, node: HtmlNode, span: &Span) -> Expr {
-            let mk_ui = |field: &str| Expr::FieldAccess {
-                base: Box::new(Expr::Ident(SpannedName {
-                    name: "ui".to_string(),
-                    span: span.clone(),
-                })),
-                field: SpannedName {
-                    name: field.to_string(),
-                    span: span.clone(),
-                },
+            let mk_ui = |name: &str| Expr::Ident(SpannedName {
+                name: name.to_string(),
                 span: span.clone(),
-            };
+            });
             let mk_string = |value: &str| {
                 Expr::Literal(Literal::String {
                     text: value.to_string(),
