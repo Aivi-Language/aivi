@@ -10,6 +10,6 @@ subject = parseInt
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (parseInt "123" == Some 123)
+  _ <- assert (parseInt "abc" == None)
 }

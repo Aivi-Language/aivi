@@ -10,6 +10,5 @@ subject = replaceAll
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (replaceAll "l" "L" "hello" == "heLLo")
 }

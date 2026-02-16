@@ -10,6 +10,6 @@ subject = isUpper
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (isUpper "A" == True)
+  _ <- assert (isUpper "a" == False)
 }

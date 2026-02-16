@@ -10,6 +10,5 @@ subject = padStart
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (padStart 5 " " "abc" == "  abc")
 }

@@ -10,6 +10,6 @@ subject = isSpace
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (isSpace " " == True)
+  _ <- assert (isSpace "a" == False)
 }

@@ -10,6 +10,6 @@ subject = capitalize
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (capitalize "hello" == "Hello")
+  _ <- assert (capitalize "Hello" == "Hello")
 }

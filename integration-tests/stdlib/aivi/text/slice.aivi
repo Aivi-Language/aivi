@@ -10,6 +10,6 @@ subject = slice
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (slice 0 2 "hello" == "he")
+  _ <- assert (slice 1 3 "hello" == "el")
 }
