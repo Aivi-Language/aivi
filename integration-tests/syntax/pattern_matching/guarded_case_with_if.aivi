@@ -2,7 +2,7 @@
 module integrationTests.syntax.patternMatching.guardedCaseWithIf
 
 use aivi
-use aivi.testing (assertEq)
+use aivi.testing
 
 clamp01 = x =>
 if x < 0 then 0 else if x > 1 then 1 else x

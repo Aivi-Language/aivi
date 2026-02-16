@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.cosh
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,6 +10,6 @@ subject = cosh
 
 @test
 smoke = effect {
-  _ <- assert (abs (cosh 0.0-1.0) < 0.0001)
-  _ <- assert (abs (cosh 1.0-1.5430) < 0.0001)
+  _ <- testing.assert (abs (cosh 0.0-1.0) < 0.0001)
+  _ <- testing.assert (abs (cosh 1.0-1.5430) < 0.0001)
 }

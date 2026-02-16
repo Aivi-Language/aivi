@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.database.pool.Config
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.database.pool
 

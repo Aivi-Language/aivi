@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.endsWith
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = endsWith
 
 @test
 smoke = effect {
-  _ <- assert (endsWith "lo" "hello" == True)
-  _ <- assert (endsWith "he" "hello" == False)
+  _ <- testing.assert (endsWith "lo" "hello" == True)
+  _ <- testing.assert (endsWith "he" "hello" == False)
 }

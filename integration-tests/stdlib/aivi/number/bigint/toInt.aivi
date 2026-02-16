@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.number.bigint.toInt
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.number.bigint
 
@@ -11,5 +11,5 @@ subject = toInt
 @test
 smoke = effect {
   b = fromInt 123
-  _ <- assert (toInt b == 123)
+  _ <- testing.assert (toInt b == 123)
 }

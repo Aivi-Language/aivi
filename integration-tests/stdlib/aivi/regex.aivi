@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.regex
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi
 
@@ -12,14 +12,14 @@ subject = regex
 smoke = effect {
   reResult = compile "h.llo"
   r <- reResult ?
-    | Ok re => effect.pure re
-    | Err e => effect.fail e
-  _ <- assert (test r "hello" == True)
-  _ <- assert (test r "hxllo" == True)
-  _ <- assert (test r "world" == False)
+    | Ok re => effect { pure re }
+    | Err e => effect { fail e }
+  _ <- testing.assert (test r "hello" == True)
+  _ <- testing.assert (test r "hxllo" == True)
+  _ <- testing.assert (test r "world" == False)
   
   mResult = regex.match r "hello"
   _ <- mResult ?
-    | Some matched => assert (matched.full == "hello")
+    | Some matched => testing.assert (matched.full == "hello")
     | None => assert False
 }

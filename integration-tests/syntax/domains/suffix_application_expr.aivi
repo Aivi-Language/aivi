@@ -3,8 +3,8 @@ module integrationTests.syntax.domains.suffixApplicationExpr
 
 use aivi
 use aivi.duration
-use aivi.duration (domain Duration)
-use aivi.testing (assertEq)
+use aivi.duration
+use aivi.testing
 
 span0 : Span
 span0 = { millis: 0 }

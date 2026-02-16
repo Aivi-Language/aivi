@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.lastIndexOf
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = lastIndexOf
 
 @test
 smoke = effect {
-  _ <- assert (lastIndexOf "l" "hello" == Some 3)
-  _ <- assert (lastIndexOf "z" "hello" == None)
+  _ <- testing.assert (lastIndexOf "l" "hello" == Some 3)
+  _ <- testing.assert (lastIndexOf "z" "hello" == None)
 }

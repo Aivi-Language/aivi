@@ -2,11 +2,11 @@
 module integrationTests.stdlib.aivi.color.domain_Color.suffix_s
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.color
 
-use aivi.color (domain Color)
+use aivi.color
 
 subject = 2s
 

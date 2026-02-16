@@ -2,12 +2,12 @@
 module integrationTests.complex.PersistentSegmentTree
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 // Segment metadata carries sum/min/max so queries can satisfy all three in one walk.
-type SegmentMeta = { sum: Int, min: Int, max: Int }
+SegmentMeta = { sum: Int, min: Int, max: Int }
 
-type SegmentTree =
+SegmentTree =
   Empty
   | Node {
       start: Int,
@@ -103,9 +103,9 @@ updatePoint = tree idx value =>
           right: Empty
         }
     | Node { start, end, left, right } =>
-        left' = updatePoint left idx value
-        right' = updatePoint right idx value
-        nodeFromChildren start end left' right'
+        left = updatePoint left idx value
+        right = updatePoint right idx value
+        nodeFromChildren start end left right
 
 @test
 persistency = effect {
@@ -113,16 +113,16 @@ persistency = effect {
   tree = fromList arr
 
   queryAll = queryRange tree 0 3
-  _ <- assert (queryAll == Some { sum: 10, min: 1, max: 4 })
+  _ <- testing.assert (queryAll == Some { sum: 10, min: 1, max: 4 })
 
   querySlice = queryRange tree 1 2
-  _ <- assert (querySlice == Some { sum: 5, min: 2, max: 3 })
+  _ <- testing.assert (querySlice == Some { sum: 5, min: 2, max: 3 })
 
   updated = updatePoint tree 2 7
-  _ <- assert (queryRange updated 2 2 == Some { sum: 7, min: 7, max: 7 })
+  _ <- testing.assert (queryRange updated 2 2 == Some { sum: 7, min: 7, max: 7 })
 
   // original stays intact even after updates.
-  _ <- assert (queryRange tree 2 2 == Some { sum: 3, min: 3, max: 3 })
+  _ <- testing.assert (queryRange tree 2 2 == Some { sum: 3, min: 3, max: 3 })
 
-  _ <- assert (queryRange Empty 0 0 == None)
+  _ <- testing.assert (queryRange Empty 0 0 == None)
 }

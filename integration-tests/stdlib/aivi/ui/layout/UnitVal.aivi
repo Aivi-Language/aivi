@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.ui.layout.UnitVal
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.ui.layout
 

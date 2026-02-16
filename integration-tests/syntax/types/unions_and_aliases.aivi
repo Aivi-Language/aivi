@@ -2,7 +2,7 @@
 module integrationTests.syntax.types.unionsAndAliases
 
 use aivi
-use aivi.testing (assertEq)
+use aivi.testing
 
 Color = Red | Green | Blue
 Pair A B = (A, B)

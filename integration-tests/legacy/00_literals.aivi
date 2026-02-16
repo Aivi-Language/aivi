@@ -1,7 +1,7 @@
 module examples.compiler.literals
 export ints, floats, texts, suffixes, instant, tuple, records, nested, palette
 
-use aivi.duration (domain Duration)
+use aivi.duration
 use aivi.number.bigint
 use aivi.number.decimal
 

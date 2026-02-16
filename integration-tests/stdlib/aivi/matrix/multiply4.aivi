@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.matrix.multiply4
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.matrix
 
@@ -10,5 +10,5 @@ subject = multiply4
 
 @test
 smoke = effect {
-  _ <- assert (multiply4 identity4 identity4 == identity4)
+  _ <- testing.assert (multiply4 identity4 identity4 == identity4)
 }

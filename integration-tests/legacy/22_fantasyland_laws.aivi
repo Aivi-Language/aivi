@@ -1,7 +1,7 @@
 module examples.logic.fantasyland_laws
 export main
 
-use aivi.testing (assertEq)
+use aivi.testing
 use aivi.logic
 
 id = x => x

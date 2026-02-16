@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.collections.Set
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.collections
 
@@ -12,7 +12,7 @@ Ref = Set
 smoke = effect {
   s0 = Set.empty
   s1 = Set.insert 1 s0
-  _ <- assert (Set.size s0 == 0)
-  _ <- assert (Set.size s1 == 1)
-  _ <- assert (Set.has 1 s1 == True)
+  _ <- testing.assert (Set.size s0 == 0)
+  _ <- testing.assert (Set.size s1 == 1)
+  _ <- testing.assert (Set.has 1 s1 == True)
 }

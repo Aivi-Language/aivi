@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.indexOf
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,7 +10,7 @@ subject = indexOf
 
 @test
 smoke = effect {
-  _ <- assert (indexOf "e" "hello" == Some 1)
-  _ <- assert (indexOf "l" "hello" == Some 2)
-  _ <- assert (indexOf "z" "hello" == None)
+  _ <- testing.assert (indexOf "e" "hello" == Some 1)
+  _ <- testing.assert (indexOf "l" "hello" == Some 2)
+  _ <- testing.assert (indexOf "z" "hello" == None)
 }

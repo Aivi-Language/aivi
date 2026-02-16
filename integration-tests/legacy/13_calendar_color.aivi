@@ -1,9 +1,9 @@
 module examples.stdlib_calendar_color
 export main
 
-use aivi.console (print)
-use aivi.calendar (addDays)
-use aivi.color (adjustLightness, toHex)
+use aivi.console
+use aivi.calendar
+use aivi.color
 
 main : Effect Text Unit
 main = effect {

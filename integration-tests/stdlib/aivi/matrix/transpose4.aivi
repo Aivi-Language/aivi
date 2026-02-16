@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.matrix.transpose4
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.matrix
 
@@ -10,5 +10,5 @@ subject = transpose4
 
 @test
 smoke = effect {
-  _ <- assert (transpose4 identity4 == identity4)
+  _ <- testing.assert (transpose4 identity4 == identity4)
 }

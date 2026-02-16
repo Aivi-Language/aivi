@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.i18n.render
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.i18n
 
@@ -12,11 +12,11 @@ subject = render
 smoke = effect {
   m_res = message "Hello, {name}!"
   m <- m_res ?
-    | Ok m => effect.pure m
-    | Err e => effect.fail e
+    | Ok m => effect { pure m }
+    | Err e => effect { fail e }
   r_res = render m { name: "Antigravity" }
   r <- r_res ?
-    | Ok r => effect.pure r
-    | Err e => effect.fail e
-  _ <- assert (r == "Hello, Antigravity!")
+    | Ok r => effect { pure r }
+    | Err e => effect { fail e }
+  _ <- testing.testing.assert (r == "Hello, Antigravity!")
 }

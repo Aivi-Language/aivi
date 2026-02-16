@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.isLower
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = isLower
 
 @test
 smoke = effect {
-  _ <- assert (isLower "a" == True)
-  _ <- assert (isLower "A" == False)
+  _ <- testing.assert (isLower "a" == True)
+  _ <- testing.assert (isLower "A" == False)
 }

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.List
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi
 
@@ -11,16 +11,16 @@ Ref = List
 @test
 smoke = effect {
   l = [1, 2, 3]
-  _ <- assert (List.length l == 3)
-  _ <- assert (List.at l 0 == Some 1)
-  _ <- assert (List.at l 3 == None)
+  _ <- testing.assert (List.length l == 3)
+  _ <- testing.assert (List.at l 0 == Some 1)
+  _ <- testing.assert (List.at l 3 == None)
 
   l2 = List.map l (x => x + 1)
-  _ <- assert (l2 == [2, 3, 4])
+  _ <- testing.assert (l2 == [2, 3, 4])
 
   l3 = List.filter l (x => x > 1)
-  _ <- assert (l3 == [2, 3])
+  _ <- testing.assert (l3 == [2, 3])
 
-  _ <- assert (List.isEmpty[] == True)
-  _ <- assert (List.isEmpty l == False)
+  _ <- testing.assert (List.isEmpty[] == True)
+  _ <- testing.assert (List.isEmpty l == False)
 }

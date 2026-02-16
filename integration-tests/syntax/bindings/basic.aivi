@@ -2,7 +2,7 @@
 module integrationTests.syntax.bindings.basic
 
 use aivi
-use aivi.testing (assertEq)
+use aivi.testing
 
 x = 1
 y = if x < 2 then 3 else 4

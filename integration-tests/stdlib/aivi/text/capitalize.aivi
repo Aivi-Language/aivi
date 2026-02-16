@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.capitalize
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = capitalize
 
 @test
 smoke = effect {
-  _ <- assert (capitalize "hello" == "Hello")
-  _ <- assert (capitalize "Hello" == "Hello")
+  _ <- testing.assert (capitalize "hello" == "Hello")
+  _ <- testing.assert (capitalize "Hello" == "Hello")
 }

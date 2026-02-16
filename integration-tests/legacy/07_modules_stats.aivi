@@ -2,7 +2,7 @@
 module examples.compiler.stats
 export sum, mean
 
-use examples.compiler.math (add)
+use examples.compiler.math
 
 sum =
   | []        => 0

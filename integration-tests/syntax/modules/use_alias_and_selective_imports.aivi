@@ -2,8 +2,8 @@
 module integrationTests.syntax.modules.useAliasAndSelectiveImports
 
 use aivi.text as text
-use aivi.text (length, toUpper)
-use aivi.testing (assertEq)
+use aivi.text
+use aivi.testing
 
 len = length
 upper = toUpper

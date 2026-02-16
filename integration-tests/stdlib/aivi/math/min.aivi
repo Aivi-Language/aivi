@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.min
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,6 +10,6 @@ subject = min
 
 @test
 smoke = effect {
-  _ <- assert (min 1.0 2.0 == 1.0)
-  _ <- assert (min 2.0 1.0 == 1.0)
+  _ <- testing.assert (min 1.0 2.0 == 1.0)
+  _ <- testing.assert (min 2.0 1.0 == 1.0)
 }

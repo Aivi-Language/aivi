@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.random
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi
 
@@ -11,5 +11,5 @@ subject = random
 @test
 smoke = effect {
   n <- random.int 1 10
-  _ <- assert (n >= 1 && n <= 10)
+  _ <- testing.assert (n >= 1 && n <= 10)
 }

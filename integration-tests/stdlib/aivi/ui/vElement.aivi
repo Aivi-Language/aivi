@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.ui.vElement
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.ui
 
@@ -11,5 +11,5 @@ subject = vElement
 @test
 smoke = effect {
   node = vElement "div" [] []
-  _ <- assert (renderHtml node == "<div data-aivi-node=\"root\"></div>")
+  _ <- testing.assert (renderHtml node == "<div data-aivi-node=\"root\"></div>")
 }

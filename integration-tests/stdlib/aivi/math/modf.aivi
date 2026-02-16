@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.modf
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -11,6 +11,6 @@ subject = modf
 @test
 smoke = effect {
   (i, f) = modf 1.5
-  _ <- assert (i == 1.0)
-  _ <- assert (abs (f -0.5) < 0.0001)
+  _ <- testing.assert (i == 1.0)
+  _ <- testing.assert (abs (f -0.5) < 0.0001)
 }

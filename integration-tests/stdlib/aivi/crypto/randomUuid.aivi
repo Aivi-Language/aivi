@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.crypto.randomUuid
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.crypto
 
@@ -11,5 +11,5 @@ subject = randomUuid
 @test
 smoke = effect {
   u <- randomUuid
-  _ <- assert (length u == 36)
+  _ <- testing.assert (length u == 36)
 }

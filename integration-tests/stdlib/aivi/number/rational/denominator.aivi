@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.number.rational.denominator
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.number.rational
 
@@ -11,5 +11,5 @@ subject = denominator
 @test
 smoke = effect {
   r = fromInts (fromInt 1) (fromInt 2)
-  _ <- assert (toInt (denominator r) == 2)
+  _ <- testing.assert (toInt (denominator r) == 2)
 }

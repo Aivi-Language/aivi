@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.toLower
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,5 +10,5 @@ subject = toLower
 
 @test
 smoke = effect {
-  _ <- assert (toLower "HELLO" == "hello")
+  _ <- testing.assert (toLower "HELLO" == "hello")
 }

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.number.bigint.n_1n
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.number.bigint
 
@@ -11,5 +11,5 @@ subject = 2n
 @test
 smoke = effect {
   b = 1n
-  _ <- assert (toInt b == 1)
+  _ <- testing.assert (toInt b == 1)
 }

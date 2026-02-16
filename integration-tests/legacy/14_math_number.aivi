@@ -1,9 +1,9 @@
 module examples.stdlib_math_number
 export main
 
-use aivi.console (print)
+use aivi.console
 use aivi.math
-use aivi.number.decimal (fromFloat, domain Decimal)
+use aivi.number.decimal
 
 main : Effect Text Unit
 main = effect {

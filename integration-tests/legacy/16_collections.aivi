@@ -1,8 +1,8 @@
 module examples.stdlib_collections
 export main
 
-use aivi.console (print)
-use aivi (Map, Set, Queue, Deque, Heap)
+use aivi.console
+use aivi
 
 main : Effect Text Unit
 main = effect {

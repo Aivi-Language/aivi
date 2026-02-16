@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.crypto.randomBytes
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.crypto
 
@@ -11,5 +11,5 @@ subject = randomBytes
 @test
 smoke = effect {
   b <- randomBytes 16
-  _ <- assert (length b == 16)
+  _ <- testing.assert (length b == 16)
 }

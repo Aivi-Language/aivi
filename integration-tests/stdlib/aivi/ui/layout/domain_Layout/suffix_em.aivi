@@ -2,11 +2,11 @@
 module integrationTests.stdlib.aivi.ui.layout.domain_Layout.suffix_em
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.ui.layout
 
-use aivi.ui.layout (domain Layout)
+use aivi.ui.layout
 
 subject = 2em
 

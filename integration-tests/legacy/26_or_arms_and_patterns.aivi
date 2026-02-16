@@ -1,7 +1,7 @@
 module examples.orArmsAndPatterns
 export main, messageFrom
 
-use aivi.console (println)
+use aivi.console
 
 Result E A = Err E | Ok A
 

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.Unit
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi
 
@@ -11,5 +11,5 @@ Ref = Unit
 @test
 smoke = effect {
   u = Unit
-  _ <- assert (u == Unit)
+  _ <- testing.assert (u == Unit)
 }

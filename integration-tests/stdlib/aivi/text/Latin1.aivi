@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.Latin1
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 

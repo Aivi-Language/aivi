@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.sumInt
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,6 +10,6 @@ subject = sumInt
 
 @test
 smoke = effect {
-  _ <- assert (sumInt [1, 2, 3] == 6)
-  _ <- assert (sumInt [] == 0)
+  _ <- testing.assert (sumInt [1, 2, 3] == 6)
+  _ <- testing.assert (sumInt [] == 0)
 }

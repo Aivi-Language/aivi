@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.isUpper
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = isUpper
 
 @test
 smoke = effect {
-  _ <- assert (isUpper "A" == True)
-  _ <- assert (isUpper "a" == False)
+  _ <- testing.assert (isUpper "A" == True)
+  _ <- testing.assert (isUpper "a" == False)
 }

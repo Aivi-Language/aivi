@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.isAlpha
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = isAlpha
 
 @test
 smoke = effect {
-  _ <- assert (isAlpha "a" == True)
-  _ <- assert (isAlpha "1" == False)
+  _ <- testing.assert (isAlpha "a" == True)
+  _ <- testing.assert (isAlpha "1" == False)
 }

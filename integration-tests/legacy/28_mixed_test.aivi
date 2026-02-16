@@ -1,7 +1,7 @@
 module App
 
-use aivi.ui (VNode, vElement, vText, vClass, vStyle)
-use aivi.ui.layout (domain Layout)
+use aivi.ui
+use aivi.ui.layout
 use aivi.i18n
 
 export Model, Msg, init, update, view

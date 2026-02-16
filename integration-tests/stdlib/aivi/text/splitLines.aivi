@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.splitLines
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = splitLines
 
 @test
 smoke = effect {
-  _ <- assert (splitLines "a\nb\nc" == ["a", "b", "c"])
-  _ <- assert (splitLines "a\r\nb" == ["a", "b"])
+  _ <- testing.assert (splitLines "a\nb\nc" == ["a", "b", "c"])
+  _ <- testing.assert (splitLines "a\r\nb" == ["a", "b"])
 }

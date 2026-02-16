@@ -3,7 +3,7 @@ module integrationTests.syntax.externalSources.fileReadSourceValue
 
 use aivi
 use aivi.text
-use aivi.testing (assert)
+use aivi.testing
 
 cfgSource : Source File Text
 cfgSource = file.read "integration-tests/legacy/i18n/app.en-US.properties"
@@ -11,5 +11,5 @@ cfgSource = file.read "integration-tests/legacy/i18n/app.en-US.properties"
 @test
 fileSourceLoads = effect {
   txt <- load cfgSource
-  _   <- assert (text.length txt > 0)
+  _   <- testing.assert (text.length txt > 0)
 }

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.i18n.parseLocale
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.i18n
 
@@ -12,8 +12,8 @@ subject = parseLocale
 smoke = effect {
   res = parseLocale "en-US"
   r <- res ?
-    | Ok x => effect.pure x
-    | Err _ => effect.fail "parse failed"
-  _ <- assert (r.language == "en")
-  _ <- assert (r.region == Some "US")
+    | Ok x => effect { pure x }
+    | Err _ => effect { fail "parse failed" }
+  _ <- testing.assert (r.language == "en")
+  _ <- testing.assert (r.region == Some "US")
 }

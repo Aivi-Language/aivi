@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.parseFloat
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,10 +10,10 @@ subject = parseFloat
 
 @test
 smoke = effect {
-  _ <- assert (parseFloat "123.45" == Some 123.45)
-  // _ <- assert (parseFloat "abc" == None)? Not sure if it yields None or error. Assuming Option return.
-  _ <- match parseFloat "abc" {
+  _ <- testing.assert (parseFloat "123.45" == Some 123.45)
+  // _ <- testing.assert (parseFloat "abc" == None)? Not sure if it yields None or error. Assuming Option return.
+  res = parseFloat "abc"
+  _ <- res ?
+    | Some _ => assert False
     | None => assert True
-    | _ => assert False
-  }
 }

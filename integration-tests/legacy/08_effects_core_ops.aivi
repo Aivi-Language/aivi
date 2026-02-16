@@ -1,7 +1,7 @@
 module examples.runtime_effects_core_ops
 export main
 
-use aivi.console (print)
+use aivi.console
 
 main : Effect Text Unit
 main = effect {

@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.matrix.Scalar
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.matrix
 
@@ -11,5 +11,5 @@ Ref = Scalar
 @test
 smoke = effect {
   s = 1.0
-  _ <- assert (s == 1.0)
+  _ <- testing.assert (s == 1.0)
 }

@@ -4,78 +4,61 @@ module integrationTests.complex.EdmondsKarp
 use aivi
 use aivi.testing (assert)
 
+use aivi.graph (Graph, fromWeightedEdges, edgesFrom)
+
+type Edge = { from: Int, to: Int, cap: Float }
+type ResidualKey = { from: Int, to: Int }
 type Residual =
-  { capacities: Map { from: Int, to: Int } Int
-  , neighbors: Map Int (List Int)
+  { graph: Graph
+  , capacities: Map ResidualKey Float
   }
 
-type Edge = { from: Int, to: Int, cap: Int }
-
-append = left right =>
-  left ?
-    | [] => right
-    | [h, ...t] => [h, ...append t right]
-
-member = (value, list) =>
+appendEnd = (list, value) =>
   list ?
-    | [] => False
-    | [h, ...t] => if h == value then True else member (value, t)
-
-foldList = (items, acc, fn) =>
-  items ?
-    | [] => acc
-    | [h, ...t] => foldList (t, fn (acc, h), fn)
+    | [] => [value]
+    | [h, ...t] => [h, ...appendEnd (t, value)]
 
 getOrZero = key map =>
   (Map.get key map) ?
-    | Some value => value
+    | Some v => v
     | None => 0
 
-addNeighbor = node dest adj =>
-  (Map.get node adj) ?
-    | None => Map.insert node [dest] adj
-    | Some existing => Map.insert node ([dest, ...existing]) adj
-
 buildResidual = edges =>
-  build = (remaining, caps, adj) =>
-    remaining ?
-      | [] => { capacities: caps, neighbors: adj }
+  forward = edges
+  backward = List.map edges (edge => { from: edge.to, to: edge.from, cap: 0 })
+  weighted =
+    List.map (forward ++ backward) (edge => (edge.from, edge.to, Float edge.cap))
+  graph = fromWeightedEdges weighted
+  addCaps = (items, acc, zero) =>
+    items ?
+      | [] => acc
       | [edge, ...rest] =>
-          { from, to, cap } = edge
-          caps1 = Map.insert { from, to } cap caps
-          caps2 = Map.insert { from: to, to: from } (getOrZero { from: to, to: from } caps1) caps1
-          adj1 = addNeighbor from to adj
-          adj2 = addNeighbor to from adj1
-          build (rest, caps2, adj2)
-  build (edges, Map.empty, Map.empty)
+          updated = Map.insert { from: edge.from, to: edge.to } (if zero then 0 else edge.cap) acc
+          addCaps (rest, updated, zero)
+  caps = addCaps (forward, Map.empty, False)
+  capsWithReverse = addCaps (backward, caps, True)
+  { graph, capacities: capsWithReverse }
 
 bfs = residual source sink =>
+  enqueue = (queue, node) => appendEnd (queue, node)
   visit = (queue, visited, parents) =>
     queue ?
       | [] => None
-      | [current, ...restQueue] =>
+      | [current, ...rest] =>
           if current == sink then Some parents
           else
-            neighbors = (Map.get current residual.neighbors) ?
-              | Some list => list
-              | None => []
-            explore = (nList, q, seen, pars) =>
-              nList ?
+            edges = edgesFrom residual.graph current
+            explore = (list, q, seen, pars) =>
+              list ?
                 | [] => visit (q, seen, pars)
-                | [next, ...tail] =>
+                | [edge, ...tail] =>
+                    next = edge.to
                     cap = getOrZero { from: current, to: next } residual.capacities
-                    if cap > 0 && !member (next, seen) then
-                      visit (append (q, [next]), [next, ...seen], Map.insert next current pars)
+                    if cap > 0 && !Set.has next seen then
+                      explore (tail, enqueue (q, next), Set.insert next seen, Map.insert next current pars)
                     else explore (tail, q, seen, pars)
-            explore (neighbors, restQueue, visited, parents)
-  visit ([source], [source], Map.empty)
-
-reconstruct = parents sink source acc =>
-  if sink == source then [source, ...acc]
-  else
-    (Map.get sink parents) ?
-      | Some prev => reconstruct parents prev source [sink, ...acc]
-      | None => []
+            explore (edges, rest, visited, parents)
+  visit ([source], Set.insert source Set.empty, Map.empty)
 
 pathCapacity = residual path =>
   path ?
@@ -95,29 +78,31 @@ updateCaps = residual path delta =>
     nodes ?
       | [] => caps
       | [_] => caps
-      | [a, b, ...rest] => go ([b, ...rest]) (apply (a, b, caps))
-  { residual with capacities: go path residual.capacities }
+      | [a, b, ...rest] => go ([b, ...rest], apply (a, b, caps))
+  { residual with capacities: go (path, residual.capacities) }
+
+reconstruct = parents sink source acc =>
+  if sink == source then [source, ...acc]
+  else
+    (Map.get sink parents) ?
+      | Some prev => reconstruct parents prev source [sink, ...acc]
+      | None => []
 
 augment = residual source sink parents total =>
   path = reconstruct parents sink source []
-  path ?
-    | [] => (total, residual)
-    | _ =>
-        delta = pathCapacity residual path
-        if delta == 0 then (total, residual)
-        else
-          residual' = updateCaps residual path delta
-          augment residual' source sink Map.empty (total + delta)
+  delta = pathCapacity residual path
+  if delta == 0 then (total, residual)
+  else augment (updateCaps residual path delta) source sink Map.empty (total + delta)
 
 maxFlow = edges source sink =>
-  start = buildResidual edges
-  loop = (currentResidual, total) =>
-    bfs currentResidual source sink ?
-      | None => (total, currentResidual)
+  residual = buildResidual edges
+  loop = (state, total) =>
+    bfs state source sink ?
+      | None => (total, state)
       | Some parents =>
-          (newTotal, updatedResidual) = augment currentResidual source sink parents total
-          loop (updatedResidual, newTotal)
-  loop (start, 0)
+          (newTotal, updated) = augment state source sink parents total
+          loop (updated, newTotal)
+  loop (residual, 0)
 
 @test
 maxFlowTest = effect {
@@ -133,10 +118,10 @@ maxFlowTest = effect {
     , { from: 3, to: 5, cap: 20 }
     , { from: 4, to: 5, cap: 4 }
     ]
-  (result, _) = maxFlow exampleEdges 0 5
-  _ <- assert (result == 23)
+  (flow, _) = maxFlow exampleEdges 0 5
+  _ <- testing.assert (flow == 23)
 
-  emptyEdges = []
-  (zeroResult, _) = maxFlow emptyEdges 0 1
-  _ <- assert (zeroResult == 0)
+  zeroEdges = []
+  (zeroFlow, _) = maxFlow zeroEdges 0 1
+  _ <- testing.assert (zeroFlow == 0)
 }

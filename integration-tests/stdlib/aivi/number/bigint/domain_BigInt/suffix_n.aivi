@@ -2,16 +2,16 @@
 module integrationTests.stdlib.aivi.number.bigint.domain_BigInt.suffix_n
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.number.bigint
 
-use aivi.number.bigint (domain BigInt)
+use aivi.number.bigint
 
 subject = 2n
 
 @test
 smoke = effect {
   b = 10n
-  _ <- assert (toInt b == 10)
+  _ <- testing.assert (toInt b == 10)
 }

@@ -1,7 +1,7 @@
 module examples.hello
 export main
 
-use aivi.console (print)
+use aivi.console
 
 main : Effect Text Unit
 main = effect {

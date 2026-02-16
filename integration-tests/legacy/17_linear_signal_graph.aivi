@@ -1,7 +1,7 @@
 module examples.stdlib_linear_signal_graph
 export main
 
-use aivi.console (print)
+use aivi.console
 use aivi.linear_algebra
 use aivi.signal
 use aivi.graph

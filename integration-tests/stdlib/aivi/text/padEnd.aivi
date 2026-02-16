@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.text.padEnd
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.text
 
@@ -10,6 +10,6 @@ subject = padEnd
 
 @test
 smoke = effect {
-  _ <- assert (padEnd 5 " " "abc" == "abc  ")
-  _ <- assert (padEnd 3 " " "abc" == "abc")
+  _ <- testing.assert (padEnd 5 " " "abc" == "abc  ")
+  _ <- testing.assert (padEnd 3 " " "abc" == "abc")
 }

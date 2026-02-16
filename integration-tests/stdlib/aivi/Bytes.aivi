@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.Bytes
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi
 
@@ -12,5 +12,5 @@ Ref = Bytes
 smoke = effect {
   b = toBytes "abc"
   s = fromBytes b
-  _ <- assert (s == "abc")
+  _ <- testing.assert (s == "abc")
 }

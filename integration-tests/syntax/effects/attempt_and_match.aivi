@@ -2,7 +2,7 @@
 module integrationTests.syntax.effects.attemptAndMatch
 
 use aivi
-use aivi.testing (assertEq)
+use aivi.testing
 
 @test
 attemptWorks = effect {

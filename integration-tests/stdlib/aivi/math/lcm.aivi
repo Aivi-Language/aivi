@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.lcm
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,6 +10,6 @@ subject = lcm
 
 @test
 smoke = effect {
-  _ <- assert (lcm 4 6 == 12)
-  _ <- assert (lcm 3 5 == 15)
+  _ <- testing.assert (lcm 4 6 == 12)
+  _ <- testing.assert (lcm 3 5 == 15)
 }

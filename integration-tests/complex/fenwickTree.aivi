@@ -2,9 +2,9 @@
 module integrationTests.complex.FenwickTree
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
-type Fenwick = { size: Int, tree: Map Int Int }
+Fenwick = { size: Int, tree: Map Int Int }
 
 getOrZero = idx tree =>
   (Map.get idx tree) ?
@@ -29,16 +29,16 @@ buildFromList = arr =>
       (List.at arr (idx - 1)) ?
         | None => buildIndex (idx + 1) tree
         | Some value =>
-            tree' = addDelta size idx value tree
-            buildIndex (idx + 1) tree'
+            tree = addDelta size idx value tree
+            buildIndex (idx + 1) tree
   { size, tree: buildIndex 1 Map.empty }
 
 prefix = fenwick idx =>
   go = i acc =>
     if i == 0 then acc
     else
-      acc' = acc + getOrZero i fenwick.tree
-      go (i - lowbit i) acc'
+      acc = acc + getOrZero i fenwick.tree
+      go (i - lowbit i) acc
   go idx 0
 
 rangeSum = fenwick l r =>
@@ -75,15 +75,15 @@ behaviors = effect {
   fenwick = buildFromList values
 
   sum05 = rangeSum fenwick 1 5
-  _ <- assert (sum05 == Some 14)
+  _ <- testing.assert (sum05 == Some 14)
   sum23 = rangeSum fenwick 2 3
-  _ <- assert (sum23 == Some 5)
+  _ <- testing.assert (sum23 == Some 5)
 
-  _ <- assert (rangeSum fenwick 6 6 == None)
+  _ <- testing.assert (rangeSum fenwick 6 6 == None)
 
   updated = update fenwick 3 9
-  _ <- assert (rangeSum updated 3 3 == Some 9)
-  _ <- assert (rangeSum fenwick 3 3 == Some 4)
+  _ <- testing.assert (rangeSum updated 3 3 == Some 9)
+  _ <- testing.assert (rangeSum fenwick 3 3 == Some 4)
 
-  _ <- assert (verifyIndices [1, 2, 3, 4, 5] updated values)
+  _ <- testing.assert (verifyIndices [1, 2, 3, 4, 5] updated values)
 }

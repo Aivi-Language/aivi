@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.graph.NodeId
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.graph
 

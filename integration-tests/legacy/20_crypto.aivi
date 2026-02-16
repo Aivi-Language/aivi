@@ -1,7 +1,7 @@
 module examples.stdlib_crypto
 export main
 
-use aivi.console (print)
+use aivi.console
 use aivi.crypto
 
 main : Effect Text Unit

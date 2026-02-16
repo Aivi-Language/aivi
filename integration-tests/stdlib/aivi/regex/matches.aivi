@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.regex.matches
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.regex
 
@@ -10,10 +10,10 @@ subject = matches
 
 @test
 smoke = effect {
-  r <- match compile "l" {
-    | Ok re => pure re
-    | Err _ => fail "compile failed"
-  }
+  reResult = compile "l"
+  r <- reResult ?
+    | Ok re => effect { pure re }
+    | Err _ => effect { fail "compile failed" }
   ms = matches r "hello"
-  _ <- assert (length ms == 2)
+  _ <- testing.assert (length ms == 2)
 }

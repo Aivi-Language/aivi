@@ -2,7 +2,7 @@
 module integrationTests.stdlib.aivi.math.isNaN
 
 use aivi
-use aivi.testing (assert)
+use aivi.testing
 
 use aivi.math
 
@@ -10,6 +10,6 @@ subject = isNaN
 
 @test
 smoke = effect {
-  _ <- assert (isNaN nan == True)
-  _ <- assert (isNaN 1.0 == False)
+  _ <- testing.assert (isNaN nan == True)
+  _ <- testing.assert (isNaN 1.0 == False)
 }

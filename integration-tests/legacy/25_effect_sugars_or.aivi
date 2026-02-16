@@ -1,8 +1,8 @@
 module examples.effectSugarsOr
 export main, loadOrDefault
 
-use aivi (load)
-use aivi.console (print, println)
+use aivi
+use aivi.console
 
 Result E A = Err E | Ok A
 
