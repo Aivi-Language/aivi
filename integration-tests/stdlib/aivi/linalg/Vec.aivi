@@ -6,10 +6,9 @@ use aivi.testing (assert)
 
 use aivi.linalg
 
-subject = Vec
+Ref = Vec
 
 @test
 smoke = effect {
-  _ <- pure subject
   _ <- assert True
 }

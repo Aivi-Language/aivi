@@ -6,10 +6,9 @@ use aivi.testing (assert)
 
 use aivi.text
 
-subject = Latin1
+Ref = Latin1
 
 @test
 smoke = effect {
-  _ <- pure subject
   _ <- assert True
 }

@@ -6,10 +6,9 @@ use aivi.testing (assert)
 
 use aivi.ui
 
-subject = Attr
+Ref = Attr
 
 @test
 smoke = effect {
-  _ <- pure subject
   _ <- assert True
 }

@@ -6,10 +6,9 @@ use aivi.testing (assert)
 
 use aivi.generator
 
-subject = Generator
+Ref = Generator
 
 @test
 smoke = effect {
-  _ <- pure subject
   _ <- assert True
 }

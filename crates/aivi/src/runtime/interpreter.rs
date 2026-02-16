@@ -454,6 +454,24 @@ fn build_runtime_from_program_scoped(
                 }
             }
         }
+
+        // Re-export forwarding: a module can `export x` where `x` is brought into scope via `use`
+        // (e.g. facade modules like `aivi.linalg`). Ensure qualified access `Module.x` resolves by
+        // registering exported bindings that exist in the module env, even when they aren't local
+        // definitions.
+        for export in &surface_module.exports {
+            if export.kind != crate::surface::ScopeItemKind::Value {
+                continue;
+            }
+            let name = export.name.name.clone();
+            let qualified = format!("{module_name}.{name}");
+            if globals.get(&qualified).is_some() {
+                continue;
+            }
+            if let Some(value) = module_env.get(&name) {
+                globals.set(qualified, value);
+            }
+        }
     }
 
     let ctx = Arc::new(RuntimeContext::new(globals));

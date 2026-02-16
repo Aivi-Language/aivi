@@ -6,10 +6,9 @@ use aivi.testing (assert)
 
 use aivi.net.http_server
 
-subject = Server
+Ref = Server
 
 @test
 smoke = effect {
-  _ <- pure subject
   _ <- assert True
 }

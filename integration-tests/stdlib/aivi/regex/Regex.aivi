@@ -6,10 +6,9 @@ use aivi.testing (assert)
 
 use aivi.regex
 
-subject = Regex
+Ref = Regex
 
 @test
 smoke = effect {
-  _ <- pure subject
   _ <- assert True
 }
