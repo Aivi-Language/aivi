@@ -11,6 +11,8 @@ It is intentionally small, predictable, and aligned with common math libraries a
 
 ## Constants
 
+`inf` is positive infinity and `negInf` is negative infinity.
+
 <<< ../../snippets/from_md/05_stdlib/01_math/01_math/block_02.aivi{aivi}
 
 ## Angles

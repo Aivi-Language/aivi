@@ -83,3 +83,8 @@ fn run_native_i18n_catalog_fallback_example() {
 fn run_native_algorithms_example() {
     run_native_via_cli("integration-tests/legacy/27_algorithms.aivi");
 }
+
+#[test]
+fn run_native_math_infinities_example() {
+    run_native_via_cli("integration-tests/legacy/28_math_infinities.aivi");
+}

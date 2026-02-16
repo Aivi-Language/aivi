@@ -46,4 +46,3 @@ f = x =>
         "expected lambda body to be an if expression, got: {body:?}"
     );
 }
-
