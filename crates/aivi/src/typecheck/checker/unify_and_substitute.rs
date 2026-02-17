@@ -197,15 +197,52 @@ impl TypeChecker {
     }
 
     fn occurs(&mut self, var: TypeVarId, ty: &Type) -> bool {
-        match self.apply(ty.clone()) {
-            Type::Var(id) => id == var,
-            Type::Con(_, args) => args.iter().any(|arg| self.occurs(var, arg)),
-            Type::App(base, args) => {
-                self.occurs(var, &base) || args.iter().any(|arg| self.occurs(var, arg))
+        // Cyclic substitutions should never be introduced (occurs check), but if they appear,
+        // we must not recurse indefinitely while detecting them.
+        let mut visiting = HashSet::new();
+        self.occurs_with_visiting(var, ty, &mut visiting)
+    }
+
+    fn occurs_with_visiting(
+        &mut self,
+        needle: TypeVarId,
+        ty: &Type,
+        visiting: &mut HashSet<TypeVarId>,
+    ) -> bool {
+        match ty {
+            Type::Var(id) => {
+                if *id == needle {
+                    return true;
+                }
+                // Follow substitutions, but guard against cycles like a ~ b, b ~ a.
+                if !visiting.insert(*id) {
+                    return false;
+                }
+                if let Some(next) = self.subst.get(id).cloned() {
+                    self.occurs_with_visiting(needle, &next, visiting)
+                } else {
+                    false
+                }
             }
-            Type::Func(a, b) => self.occurs(var, &a) || self.occurs(var, &b),
-            Type::Tuple(items) => items.iter().any(|item| self.occurs(var, item)),
-            Type::Record { fields, .. } => fields.values().any(|field| self.occurs(var, field)),
+            Type::Con(_, args) => args
+                .iter()
+                .any(|arg| self.occurs_with_visiting(needle, arg, visiting)),
+            Type::App(base, args) => {
+                self.occurs_with_visiting(needle, base, visiting)
+                    || args
+                        .iter()
+                        .any(|arg| self.occurs_with_visiting(needle, arg, visiting))
+            }
+            Type::Func(a, b) => {
+                self.occurs_with_visiting(needle, a, visiting)
+                    || self.occurs_with_visiting(needle, b, visiting)
+            }
+            Type::Tuple(items) => items
+                .iter()
+                .any(|item| self.occurs_with_visiting(needle, item, visiting)),
+            Type::Record { fields, .. } => fields
+                .values()
+                .any(|field| self.occurs_with_visiting(needle, field, visiting)),
         }
     }
 
@@ -293,31 +330,56 @@ impl TypeChecker {
     }
 
     fn apply(&mut self, ty: Type) -> Type {
+        // Substitution application must be cycle-safe. Even with an occurs check, inference bugs or
+        // recursive aliases can temporarily create substitution cycles. Guard to avoid Rust stack
+        // overflow and keep typechecking deterministic.
+        let mut visiting = HashSet::new();
+        self.apply_with_visiting(ty, &mut visiting)
+    }
+
+    fn apply_with_visiting(&mut self, ty: Type, visiting: &mut HashSet<TypeVarId>) -> Type {
         match ty {
             Type::Var(id) => {
+                if !visiting.insert(id) {
+                    // Cycle: stop expanding.
+                    return Type::Var(id);
+                }
                 if let Some(replacement) = self.subst.get(&id).cloned() {
-                    let applied = self.apply(replacement);
+                    let applied = self.apply_with_visiting(replacement, visiting);
                     self.subst.insert(id, applied.clone());
+                    visiting.remove(&id);
                     applied
                 } else {
+                    visiting.remove(&id);
                     Type::Var(id)
                 }
             }
-            Type::Con(name, args) => {
-                Type::Con(name, args.into_iter().map(|arg| self.apply(arg)).collect())
-            }
-            Type::App(base, args) => Type::App(
-                Box::new(self.apply(*base)),
-                args.into_iter().map(|arg| self.apply(arg)).collect(),
+            Type::Con(name, args) => Type::Con(
+                name,
+                args.into_iter()
+                    .map(|arg| self.apply_with_visiting(arg, visiting))
+                    .collect(),
             ),
-            Type::Func(a, b) => Type::Func(Box::new(self.apply(*a)), Box::new(self.apply(*b))),
-            Type::Tuple(items) => {
-                Type::Tuple(items.into_iter().map(|item| self.apply(item)).collect())
-            }
+            Type::App(base, args) => Type::App(
+                Box::new(self.apply_with_visiting(*base, visiting)),
+                args.into_iter()
+                    .map(|arg| self.apply_with_visiting(arg, visiting))
+                    .collect(),
+            ),
+            Type::Func(a, b) => Type::Func(
+                Box::new(self.apply_with_visiting(*a, visiting)),
+                Box::new(self.apply_with_visiting(*b, visiting)),
+            ),
+            Type::Tuple(items) => Type::Tuple(
+                items
+                    .into_iter()
+                    .map(|item| self.apply_with_visiting(item, visiting))
+                    .collect(),
+            ),
             Type::Record { fields, open } => Type::Record {
                 fields: fields
                     .into_iter()
-                    .map(|(k, v)| (k, self.apply(v)))
+                    .map(|(k, v)| (k, self.apply_with_visiting(v, visiting)))
                     .collect(),
                 open,
             },
@@ -325,15 +387,66 @@ impl TypeChecker {
     }
 
     fn expand_alias(&mut self, ty: Type) -> Type {
-        if let Type::Con(name, args) = &ty {
-            if let Some(alias) = self.aliases.get(name).cloned() {
+        // Expands type aliases while guarding against recursive (or mutually-recursive) aliases.
+        // A recursive alias should behave like an opaque constructor during unification,
+        // otherwise we can infinitely unfold it and blow the Rust stack.
+        let mut visiting = HashSet::new();
+        self.expand_alias_with_visiting(ty, &mut visiting)
+    }
+
+    fn expand_alias_with_visiting(&mut self, ty: Type, visiting: &mut HashSet<String>) -> Type {
+        match ty {
+            Type::Var(id) => Type::Var(id),
+            Type::Con(name, args) => {
+                let args = args
+                    .into_iter()
+                    .map(|arg| self.expand_alias_with_visiting(arg, visiting))
+                    .collect::<Vec<_>>();
+
+                let Some(alias) = self.aliases.get(&name).cloned() else {
+                    return Type::Con(name, args);
+                };
+
+                if visiting.contains(&name) {
+                    // Recursive reference; stop expanding and treat as nominal.
+                    return Type::Con(name, args);
+                }
+
+                visiting.insert(name.clone());
+
                 let mut mapping = HashMap::new();
                 for (param, arg) in alias.params.iter().zip(args.iter()) {
                     mapping.insert(*param, arg.clone());
                 }
-                return Self::substitute(&alias.body, &mapping);
+                let body = Self::substitute(&alias.body, &mapping);
+                let expanded = self.expand_alias_with_visiting(body, visiting);
+
+                visiting.remove(&name);
+                expanded
             }
+            Type::App(base, args) => Type::App(
+                Box::new(self.expand_alias_with_visiting(*base, visiting)),
+                args.into_iter()
+                    .map(|arg| self.expand_alias_with_visiting(arg, visiting))
+                    .collect(),
+            ),
+            Type::Func(a, b) => Type::Func(
+                Box::new(self.expand_alias_with_visiting(*a, visiting)),
+                Box::new(self.expand_alias_with_visiting(*b, visiting)),
+            ),
+            Type::Tuple(items) => Type::Tuple(
+                items
+                    .into_iter()
+                    .map(|item| self.expand_alias_with_visiting(item, visiting))
+                    .collect(),
+            ),
+            Type::Record { fields, open } => Type::Record {
+                fields: fields
+                    .into_iter()
+                    .map(|(k, v)| (k, self.expand_alias_with_visiting(v, visiting)))
+                    .collect(),
+                open,
+            },
         }
-        ty
     }
 }

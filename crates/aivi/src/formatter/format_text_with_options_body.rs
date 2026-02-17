@@ -1032,6 +1032,11 @@
                 rhs_block_base_depth = None;
             }
         }
+        let is_decorator_line = state.tokens[first_idx].text == "@";
+        let is_decorator_only_line = is_decorator_line
+            && find_top_level_token(&state.tokens, "=", first_idx).is_none()
+            && find_top_level_token(&state.tokens, ":", first_idx).is_none();
+
         // Continuation blocks:
         // - Multi-line `| ...` blocks (multi-clause functions and `?` matches).
         //   These blocks can contain continuation lines (e.g. multi-line patterns/bodies), so we
@@ -1130,7 +1135,15 @@
         let in_rhs_block = rhs_block_base_indent.is_some();
 
         let mut continuation_levels = 0usize;
-        if !inside_hang && (in_pipe_block || in_pipeop_block) && !starts_with_pipe && !starts_with_pipeop {
+        // A decorator on its own line conceptually belongs to the following item; it should align
+        // with that item's indentation boundary instead of inheriting indentation from a preceding
+        // `|`/`|>` continuation block.
+        if !inside_hang
+            && (in_pipe_block || in_pipeop_block)
+            && !starts_with_pipe
+            && !starts_with_pipeop
+            && !is_decorator_only_line
+        {
             continuation_levels += 1;
         }
         if !inside_hang && in_rhs_block && !starts_with_pipe && !starts_with_pipeop {
@@ -1146,7 +1159,7 @@
         if !inside_hang && rhs_seed_active {
             continuation_levels += 1;
         }
-        if !inside_hang && arm_rhs_active && !starts_with_pipe {
+        if !inside_hang && arm_rhs_active && !starts_with_pipe && !is_decorator_only_line {
             continuation_levels += 1;
         }
         if hang_is_close {
@@ -1211,11 +1224,6 @@
                 effective_indent_len = effective_indent_len.max(min_indent);
             }
         }
-
-        let is_decorator_line = state.tokens[first_idx].text == "@";
-        let is_decorator_only_line = is_decorator_line
-            && find_top_level_token(&state.tokens, "=", first_idx).is_none()
-            && find_top_level_token(&state.tokens, ":", first_idx).is_none();
 
         let effective_indent = " ".repeat(effective_indent_len);
 
