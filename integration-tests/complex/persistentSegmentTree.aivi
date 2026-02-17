@@ -108,7 +108,7 @@ buildRange = arr start end => {
       nodeFromChildren start end newLeft newRight
     }
 
-    @test
+@test
 persistency = effect {
   arr = [1, 2, 3, 4]
   tree <- pure (fromList arr)

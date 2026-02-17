@@ -111,7 +111,7 @@ processNodes = graph nodes state => nodes ?
     processNodes graph t nextState
   }
 
-  @test
+@test
 sccSmoke = effect {
   adj = ~map{
     0 => [1]
