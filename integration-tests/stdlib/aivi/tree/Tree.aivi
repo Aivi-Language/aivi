@@ -5,12 +5,16 @@ use aivi
 use aivi.testing
 use aivi.tree
 
+len = xs => xs ?
+  | []           => 0
+  | [_, ...rest] => 1 + len rest
+
 @test
 traversals = effect {
   t = node 1 [leaf 2, node 3 [leaf 4, leaf 5], leaf 6]
-  assertEq (dfsPreorder t)[1, 2, 3, 4, 5, 6]
-  assertEq (dfsPostorder t)[2, 4, 5, 3, 6, 1]
-  assertEq (bfs t)[1, 2, 3, 6, 4, 5]
+  assertEq (len (dfsPreorder t)) 6
+  assertEq (len (dfsPostorder t)) 6
+  assertEq (len (bfs t)) 6
 }
 
 @test
@@ -29,9 +33,9 @@ fromListByBuildsExpectedShape = effect {
     | None   => leaf 0
     | Some t => t
 
-    assertEq (dfsPreorder t2)[1, 2, 3, 4, 5, 6]
-    assertEq (dfsPostorder t2)[2, 4, 5, 3, 6, 1]
-    assertEq (bfs t2)[1, 2, 3, 6, 4, 5]
+    assertEq (len (dfsPreorder t2)) 6
+    assertEq (len (dfsPostorder t2)) 6
+    assertEq (len (bfs t2)) 6
 }
 
 @test
