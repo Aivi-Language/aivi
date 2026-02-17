@@ -1,0 +1,15 @@
+@no_prelude
+module integrationTests.stdlib.aivi.duration.domain_Duration.tests
+
+use aivi
+use aivi.testing
+use aivi.duration
+use aivi.duration (domain Duration)
+
+@test
+literals_smoke = effect {
+  _ms <- 1ms
+  _s  <- 1s
+  _m  <- 1min
+  assert True
+}
