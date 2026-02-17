@@ -10,6 +10,13 @@
 
 <!-- /quick-info -->
 
+`aivi.ui.ServerHtml` is the recommended v0.1 backend bootstrap for server-driven UIs.
+It includes a higher-level server helper (`serve`) that:
+
+- serves the initial page for each route,
+- hosts the matching WebSocket endpoints, and
+- keeps typed event payloads end-to-end.
+
 ## Goals (v0.1)
 
 - Stable node ids in HTML: `data-aivi-node="<id>"`.
@@ -119,3 +126,27 @@ On error:
 - `ViewId` must be unguessable (UUID).
 - Production deployments should bind `ViewId` to an additional secret/token (out of scope here).
 
+## Server Bootstrap (Routing)
+
+`aivi.ui.ServerHtml` can bootstrap an HTTP + WebSocket server via `aivi.net.http_server.listen`.
+
+### API Shape
+
+```aivi
+Route model msg =
+  { path: Text
+  , app: ServerHtmlApp model msg
+  }
+
+serve
+  : aivi.net.http_server.ServerConfig
+  -> List (Route model msg)
+  -> Resource aivi.net.http_server.HttpError aivi.net.http_server.Server
+```
+
+Routing is path-based:
+
+- HTTP requests to `route.path` serve the initial HTML page.
+- WebSocket upgrades at `wsPath(route.path)` serve the matching live session.
+
+Where `wsPath("/") == "/ws"` and otherwise `wsPath("/x") == "/x/ws"` (with trailing slashes normalized).
