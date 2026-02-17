@@ -6,6 +6,12 @@ use aivi.testing
 use aivi.prelude
 
 @test
-smoke = effect {
-  _ <- assert True
+textFns = effect {
+  t = "Hello"
+  _ <- assertEq (Text.length t) 5
+  _ <- assertEq (Text.toUpper t) "HELLO"
+  _ <- assertEq (Text.toLower t) "hello"
+  _ <- assertEq (Text.slice 0 2 t) "He"
+  _ <- assert (Text.isEmpty "" == True)
+  _ <- assert (Text.isEmpty t == False)
 }

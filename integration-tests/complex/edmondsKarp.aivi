@@ -9,27 +9,27 @@ use aivi.graph (Graph, fromEdges, edgesFrom)
 // Edge with capacity
 Edge = { from: Int, to: Int, cap: Float }
 
+// Residual key for capacity lookup
+ResidualKey = { from: Int, to: Int }
+
 // Residual network state
 Residual = {
   graph: Graph
-  capacities: Map Text Float
+  capacities: Map ResidualKey Float
 }
 
-edgeKey = from to => "{from}:{to}"
-
-getCap = from to caps => Map.getOrElse (edgeKey from to) 0.0 caps
-
-setCap = from to value caps => Map.insert (edgeKey from to) value caps
+// Get capacity or 0 from map
+getOrZero = key map => Map.getOrElse key 0.0 map
 
 append = xs ys => xs ?
   | []        => ys
   | [h, ...t] => [h, ...append t ys]
 
-backwardEdges = edges => edges ?
+backwardEdges = _ ?
   | []           => []
   | [e, ...rest] => [{ from: e.to, to: e.from, cap: 0.0 }, ...backwardEdges rest]
 
-edgePairs = edges => edges ?
+edgePairs = _ ?
   | []           => []
   | [e, ...rest] => [(e.from, e.to), ...edgePairs rest]
 
@@ -43,16 +43,16 @@ buildResidual = edges => {
   allEdges = append edges backward
   graph = fromEdges (edgePairs allEdges)
 
-  { graph: graph, capacities: insertCaps allEdges (Map.empty) }
+  { graph: graph, capacities: insertCaps allEdges Map.empty }
 }
 
 insertCaps = items caps => items ?
   | []           => caps
-  | [e, ...rest] => insertCaps rest (setCap e.from e.to e.cap caps)
+  | [e, ...rest] => insertCaps rest (Map.insert { from: e.from, to: e.to } e.cap caps)
 
 // BFS to find augmenting path
 bfs = residual source sink =>
-  bfsVisit residual sink (Queue.enqueue source (Queue.empty)) (Set.insert source (Set.empty)) (Map.empty)
+  bfsVisit residual sink (Queue.enqueue source Queue.empty) (Set.insert source Set.empty) Map.empty
 
 bfsVisit = residual sink q visited parents => (Queue.dequeue q) ?
   | None               => None
@@ -60,8 +60,7 @@ bfsVisit = residual sink q visited parents => (Queue.dequeue q) ?
     if current == sink then
       Some parents
     else {
-      graph = residual.graph
-      edges = edgesFrom graph current
+      edges = edgesFrom residual.graph current
       (q3, visited3, parents3) = bfsExplore residual current edges q2 visited parents
       bfsVisit residual sink q3 visited3 parents3
     }
@@ -70,8 +69,7 @@ bfsExplore = residual current edges q visited parents => edges ?
   | []              => (q, visited, parents)
   | [edge, ...tail] => {
     next = edge.to
-    caps = residual.capacities
-    cap = getCap current next caps
+    cap = getOrZero { from: current, to: next } residual.capacities
     if cap > 0.0 && Set.has next visited == False then
       bfsExplore residual current tail (Queue.enqueue next q) (Set.insert next visited) (Map.insert next current parents)
     else
@@ -98,16 +96,14 @@ pathCapacityGo = residual path => path ?
   | []              => 0.0
   | [_]             => bigCap
   | [a, b, ...rest] => {
-    caps = residual.capacities
-    cap = getCap a b caps
+    cap = getOrZero { from: a, to: b } residual.capacities
     restCap = pathCapacityGo residual [b, ...rest]
     if cap < restCap then cap else restCap
   }
 
 // Update capacities along path
 updatePath = residual path delta => {
-  caps = residual.capacities
-  residual <| { capacities: updatePathGo delta path caps }
+  residual <| { capacities: updatePathGo delta path residual.capacities }
 }
 
 updatePathGo = delta nodes caps => nodes ?
@@ -116,11 +112,11 @@ updatePathGo = delta nodes caps => nodes ?
   | [a, b, ...rest] => updatePathGo delta [b, ...rest] (updatePathApply delta a b caps)
 
 updatePathApply = delta from to caps => {
-  forward = getCap from to caps
-  backward = getCap to from caps
+  forward = getOrZero { from: from, to: to } caps
+  backward = getOrZero { from: to, to: from } caps
   caps
-  |> setCap from to (forward - delta)
-  |> setCap to from (backward + delta)
+  |> Map.insert { from: from, to: to } (forward - delta)
+  |> Map.insert { from: to, to: from } (backward + delta)
 }
 
 // Main augmenting path loop
@@ -157,9 +153,9 @@ maxFlowTest = effect {
     { from: 4, to: 5, cap: 4.0 }
   ]
 
-  (flow, _) <- pure (maxFlow edges 0 5)
-  _         <- assert (flow == 23.0)
+  (flow, _) = maxFlow edges 0 5
+  _ <- assert (flow == 23.0)
 
-  (zeroFlow, _) <- pure (maxFlow [] 0 1)
-  _             <- assert (zeroFlow == 0.0)
+  (zeroFlow, _) = maxFlow [] 0 1
+  _ <- assert (zeroFlow == 0.0)
 }

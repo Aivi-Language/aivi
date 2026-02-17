@@ -6,6 +6,8 @@ use aivi.testing
 use aivi.prelude
 
 @test
-smoke = effect {
-  _ <- assert True
+recordPatchingWorks = effect {
+  user = { name: "A", age: 30 }
+  older = user <| { age: _ + 1 }
+  _ <- assertEq older.age 31
 }

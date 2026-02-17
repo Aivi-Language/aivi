@@ -6,6 +6,10 @@ use aivi.testing
 use aivi.prelude
 
 @test
-smoke = effect {
-  _ <- assert True
+tupleMatches = effect {
+  t = (1, "two")
+  res = t ?
+    | (a, b) => if a == 1 && b == "two" then True else False
+    | _      => False
+  _ <- assert (res == True)
 }

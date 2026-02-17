@@ -6,6 +6,8 @@ use aivi.testing
 use aivi
 
 @test
-smoke = effect {
+trueBehavesLikeBool = effect {
   _ <- assert True
+  _ <- assert (True && True)
+  _ <- assert (True || False)
 }

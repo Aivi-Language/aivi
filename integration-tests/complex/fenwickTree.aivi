@@ -8,18 +8,19 @@ use aivi.collections
 // Fenwick tree (Binary Indexed Tree) for efficient prefix sums
 Fenwick = { size: Int, tree: Map Int Int }
 
+listLength = xs => xs ?
+  | []        => 0
+  | [_, ...t] => 1 + listLength t
+
+at = xs idx => xs ?
+  | []        => None
+  | [h, ...t] => if idx == 0 then Some h else at t (idx - 1)
+
 // Extract lowest set bit
 lowbit : Int -> Int
-lowbit = idx =>
-  if idx == 0 then
-    0
-  else {
-    half = idx / 2
-    if half * 2 == idx then
-      2 * lowbit half
-    else
-      1
-  }
+lowbit = idx => idx ?
+  | _ when idx % 2 == 1 => 1
+  | _                   => 2 * lowbit (idx / 2)
 
 // Add delta to all affected indices
 addDelta = size idx delta tree =>
@@ -33,15 +34,15 @@ addDelta = size idx delta tree =>
 // Build Fenwick tree from list
 buildFromList : List Int -> Fenwick
 buildFromList = arr => {
-  size = List.length arr
-  { size: size, tree: buildTree arr size 1 (Map.empty) }
+  size = listLength arr
+  { size: size, tree: buildTree arr size 1 Map.empty }
 }
 
 buildTree = arr size idx tree => {
   if idx > size then
     tree
   else
-    List.at arr (idx - 1) ?
+    at arr (idx - 1) ?
       | None       => buildTree arr size (idx + 1) tree
       | Some value => buildTree arr size (idx + 1) (addDelta size idx value tree)
 }
@@ -96,20 +97,19 @@ verifyIndices = indices fen arr => indices ?
   @test
 behaviors = effect {
   values = [3, 1, 4, 1, 5]
-  fenwick <- pure (buildFromList values)
+  fenwick = buildFromList values
 
-  sum05 <- pure (rangeSum fenwick 1 5)
-  _     <- assert (sum05 == Some 14)
+  sum05 = rangeSum fenwick 1 5
+  _ <- assert (sum05 == Some 14)
 
-  sum23 <- pure (rangeSum fenwick 2 3)
-  _     <- assert (sum23 == Some 5)
+  sum23 = rangeSum fenwick 2 3
+  _ <- assert (sum23 == Some 5)
 
   _ <- assert (rangeSum fenwick 6 6 == None)
 
-  updated <- pure (update fenwick 3 9)
-  _       <- assert (rangeSum updated 3 3 == Some 9)
-  _       <- assert (rangeSum fenwick 3 3 == Some 4)
+  updated = update fenwick 3 9
+  _ <- assert (rangeSum updated 3 3 == Some 9)
+  _ <- assert (rangeSum fenwick 3 3 == Some 4)
 
-  updatedValues = [3, 1, 9, 1, 5]
-  _ <- assert (verifyIndices [1, 2, 3, 4, 5] updated updatedValues)
+  _ <- assert (verifyIndices [1, 2, 3, 4, 5] updated values)
 }

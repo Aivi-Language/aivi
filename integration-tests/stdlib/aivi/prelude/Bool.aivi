@@ -6,6 +6,12 @@ use aivi.testing
 use aivi.prelude
 
 @test
-smoke = effect {
-  _ <- assert True
+boolOps = effect {
+  _ <- assert (True && True)
+  _ <- assert (True || False)
+  _ <- assert (False || True)
+  _ <- assert (not False)
+  _ <- assert (not (True && False))
+  _ <- assert (True != False)
+  _ <- assert (True == True)
 }
