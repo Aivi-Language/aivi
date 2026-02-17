@@ -53,10 +53,17 @@ domain Color over Rgb = {
   (-) : Rgb -> Delta -> Rgb
   (-) = col delta => col + (negateDelta delta)
 
-  1l = Lightness 1
-  1s = Saturation 1
-  1h = Hue 1
-  1r = { r: 1, g: 0, b: 0 }
-  1g = { r: 0, g: 1, b: 0 }
-  1b = { r: 0, g: 0, b: 1 }
+  1l : Int -> Delta
+  1s : Int -> Delta
+  1h : Int -> Delta
+  1r : Int -> Rgb
+  1g : Int -> Rgb
+  1b : Int -> Rgb
+
+  1l = n => Lightness n
+  1s = n => Saturation n
+  1h = n => Hue n
+  1r = n => { r: n, g: 0, b: 0 }
+  1g = n => { r: 0, g: n, b: 0 }
+  1b = n => { r: 0, g: 0, b: n }
 }"#;

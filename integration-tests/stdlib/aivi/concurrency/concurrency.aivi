@@ -5,16 +5,10 @@ use aivi
 use aivi.testing
 use aivi.concurrency
 
-channelError_touch : ChannelError -> Unit
-channelError_touch = _ => Unit
-
 @test
 channelError_smoke = effect {
   assertEq (1 + 1) 2
 }
-
-scope_touch : Scope -> Unit
-scope_touch = _ => Unit
 
 @test
 scope_smoke = effect {
