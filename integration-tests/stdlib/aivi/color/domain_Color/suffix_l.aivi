@@ -4,10 +4,10 @@ module integrationTests.stdlib.aivi.color.domain_Color.suffix_l
 use aivi
 use aivi.testing
 use aivi.color
-use aivi.color
 
 @test
 smoke = effect {
-  _ <- pure suffix_l
-  _ <- assert True
+  rgb = { r: 20, g: 20, b: 20 }
+  adjusted = rgb + suffix_l
+  _ <- assert (toHex adjusted != toHex rgb)
 }

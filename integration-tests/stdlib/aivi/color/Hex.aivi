@@ -4,8 +4,12 @@ module integrationTests.stdlib.aivi.color.Hex
 use aivi
 use aivi.testing
 use aivi.color
+use aivi.text
 
 @test
 smoke = effect {
-  _ <- assert True
+  rgb = { r: 255, g: 0, b: 0 }
+  hex = toHex rgb
+  _ <- assert (text.startsWith hex "#")
+  _ <- assert (text.length hex == 7)
 }
