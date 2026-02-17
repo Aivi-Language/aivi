@@ -66,6 +66,7 @@ When writing or generating AIVI code (e.g., in `integration-tests/` or tests), a
 *   **Identifiers**: `lowerCamelCase` for values/functions, `UpperCamelCase` for types/modules.
 *   **Immutability**: Bindings are immutable. Use recursion or generators instead of loops.
 *   **Destilled language syntax** at ./AIVI_LANGUAGE.md
+*   **When writing AIVI code**: make sure to pick the right tools: sigils, generators, pattern matching, record patching, domain units are all available, stdlib modules and so on.
 
 ### 3.2 Safety & Robustness
 *   **No Nulls**: Always use `Option` or `Result`.
@@ -104,7 +105,6 @@ When working on the compiler (`crates/`):
     *   *Example*: Use `rustfft` instead of implementing your own FFT.
 *   Before implementing a new standard library feature, check that it has all the necessary primitives in the documentation. We want to keep it simple but not too limited.
 
-
 ## 5. Documentation Maintenance
 
 *   **Specs**: Update `specs/` *before* or *alongside* code changes.
@@ -122,7 +122,7 @@ To validate the project end-to-end, run these from the repo root:
 2.  **Build all crates**: `cargo build --workspace`
 3.  **Build VSCode extension**: `cd vscode && pnpm install && pnpm build`
 4.  **Build docs site**: `cd specs && pnpm install && pnpm docs:build`
-5. On test failure run `cargo test -vv -- --nocapture --show-output` to see the output.
+5.  On test failure run `cargo test -vv -- --nocapture --show-output` to see the output.
 
 ## 7. Safety Checklist
 

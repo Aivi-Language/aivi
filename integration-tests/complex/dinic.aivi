@@ -9,17 +9,17 @@ use aivi.graph (Graph, fromEdges, edgesFrom)
 // Edge with capacity
 Edge = { from: Int, to: Int, cap: Int }
 
-// Residual key for capacity lookup
-ResidualKey = { from: Int, to: Int }
-
 // Residual network state
 Residual = {
   graph: Graph
-  capacities: Map ResidualKey Int
+  capacities: Map Text Int
 }
 
-// Get capacity or 0 from map
-getOrZero = key map => Map.getOrElse key 0 map
+edgeKey = from to => "{from}:{to}"
+
+getCap = from to caps => Map.getOrElse (edgeKey from to) 0 caps
+
+setCap = from to value caps => Map.insert (edgeKey from to) value caps
 
 append = xs ys => xs ?
   | []        => ys
@@ -45,16 +45,16 @@ buildResidual = edges => {
   allEdges = append edges backward
   graph = fromEdges (edgePairs allEdges)
 
-  { graph: graph, capacities: insertCaps allEdges Map.empty }
+  { graph: graph, capacities: insertCaps allEdges (Map.empty) }
 }
 
 insertCaps = items caps => items ?
   | []           => caps
-  | [e, ...rest] => insertCaps rest (Map.insert { from: e.from, to: e.to } e.cap caps)
+  | [e, ...rest] => insertCaps rest (setCap e.from e.to e.cap caps)
 
 // BFS to build level graph, returns (reachable, levels)
 bfsLevels = residual source sink => {
-  q0 = Queue.enqueue source Queue.empty
+  q0 = Queue.enqueue source (Queue.empty)
   levels0 = ~map{ source => 0 }
   levels = bfsVisit residual sink q0 levels0
   (Map.has sink levels, levels)
@@ -64,7 +64,8 @@ bfsVisit = residual sink q levels => (Queue.dequeue q) ?
   | None               => levels
   | Some (current, q2) => {
     levelCurrent = Map.getOrElse current (-1) levels
-    neighbors = edgesFrom residual.graph current
+    graph = residual.graph
+    neighbors = edgesFrom graph current
     (q3, levels3) = bfsExplore residual current levelCurrent neighbors q2 levels
     bfsVisit residual sink q3 levels3
   }
@@ -73,7 +74,8 @@ bfsExplore = residual current levelCurrent edges q levels => edges ?
   | []              => (q, levels)
   | [edge, ...tail] => {
     next = edge.to
-    cap = getOrZero { from: current, to: next } residual.capacities
+    caps = residual.capacities
+    cap = getCap current next caps
     already = Map.has next levels
     if cap > 0 && already == False then
       bfsExplore residual current levelCurrent tail (Queue.enqueue next q) (Map.insert next (levelCurrent + 1) levels)
@@ -83,11 +85,13 @@ bfsExplore = residual current levelCurrent edges q levels => edges ?
 
 // Push flow along an edge
 pushFlow = residual from to delta => {
-  forward = getOrZero { from: from, to: to } residual.capacities
-  backward = getOrZero { from: to, to: from } residual.capacities
-  caps = residual.capacities
-    |> Map.insert { from: from, to: to } (forward - delta)
-    |> Map.insert { from: to, to: from } (backward + delta)
+  caps0 = residual.capacities
+  forward = getCap from to caps0
+  backward = getCap to from caps0
+  caps =
+    caps0
+  |> setCap from to (forward - delta)
+  |> setCap to from (backward + delta)
     residual <| { capacities: caps }
 }
 
@@ -97,14 +101,16 @@ dfsFlow = residual levels node sink flow =>
   else
   if node == sink then (flow, residual)
   else {
-    neighbors = edgesFrom residual.graph node
+    graph = residual.graph
+    neighbors = edgesFrom graph node
     dfsExplore residual levels node sink flow neighbors
   }
 
 dfsExplore = residual levels node sink flow edges => edges ?
   | []              => (0, residual)
   | [edge, ...tail] => {
-    cap = getOrZero { from: node, to: edge.to } residual.capacities
+    caps = residual.capacities
+    cap = getCap node edge.to caps
     levelNode = Map.getOrElse node (-1) levels
     levelNext = Map.getOrElse edge.to (-1) levels
 

@@ -38,7 +38,7 @@ addIncoming = ns indeg => ns ?
 
 buildIndegree : Graph -> Map Int Int
 buildIndegree = graph => {
-  start = initIndegree graph.nodes Map.empty
+  start = initIndegree graph.nodes (Map.empty)
   buildIndegreeNodes graph graph.nodes start
 }
 
@@ -85,7 +85,7 @@ sortLoop = graph indeg q outRev => (Queue.dequeue q) ?
 topologicalSort : Graph -> Result (List Int) (List Int)
 topologicalSort = graph => {
   indeg = buildIndegree graph
-  q0 = enqueueZero graph.nodes indeg Queue.empty
+  q0 = enqueueZero graph.nodes indeg (Queue.empty)
   sortLoop graph indeg q0 []
 }
 
