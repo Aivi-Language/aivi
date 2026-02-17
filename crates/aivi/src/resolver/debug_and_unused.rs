@@ -10,7 +10,8 @@ fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, modu
                 | Literal::Bool { span, .. }
                 | Literal::DateTime { span, .. } => span.clone(),
             },
-            Expr::TextInterpolate { span, .. }
+            Expr::UnaryNeg { span, .. }
+            | Expr::TextInterpolate { span, .. }
             | Expr::List { span, .. }
             | Expr::Tuple { span, .. }
             | Expr::Record { span, .. }
@@ -117,6 +118,9 @@ fn check_expr(
     allow_unknown: bool,
 ) {
     match expr {
+        Expr::UnaryNeg { expr, .. } => {
+            check_expr(expr, scope, diagnostics, module, allow_unknown);
+        }
         Expr::Suffixed { base, .. } => {
             check_expr(base, scope, diagnostics, module, allow_unknown);
         }

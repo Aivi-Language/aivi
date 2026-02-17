@@ -35,6 +35,37 @@ impl TypeChecker {
                 },
                 _ => Ok(self.literal_type(literal)),
             },
+            Expr::UnaryNeg { expr, span } => {
+                let inner_ty = self.infer_expr(expr, env)?;
+
+                // Try Int first; if that fails, backtrack and try Float.
+                let base_subst = self.subst.clone();
+                let int_ty = Type::con("Int");
+                if self
+                    .unify_with_span(inner_ty.clone(), int_ty.clone(), span.clone())
+                    .is_ok()
+                {
+                    return Ok(int_ty);
+                }
+
+                self.subst = base_subst;
+                let float_ty = Type::con("Float");
+                if self
+                    .unify_with_span(inner_ty.clone(), float_ty.clone(), span.clone())
+                    .is_ok()
+                {
+                    return Ok(float_ty);
+                }
+
+                let applied = self.apply(inner_ty);
+                let found = self.type_to_string(&applied);
+                Err(TypeError {
+                    span: span.clone(),
+                    message: format!("unary '-' expects Int or Float (found {found})"),
+                    expected: None,
+                    found: None,
+                })
+            }
             Expr::Suffixed { base, suffix, span } => {
                 let arg_ty = self.infer_expr(base, env)?;
                 let template_name = format!("1{}", suffix.name);
@@ -165,6 +196,38 @@ impl TypeChecker {
     ) -> Result<(Expr, Type), TypeError> {
         match expr {
             Expr::Call { func, args, span } => self.elab_call(*func, args, span, expected, env),
+            Expr::UnaryNeg { expr, span } => {
+                let (inner, inner_ty) = self.elab_expr(*expr, None, env)?;
+
+                // Choose Int vs Float using the same backtracking strategy as inference.
+                let base_subst = self.subst.clone();
+                let mut zero_text = "0".to_string();
+                let int_ty = Type::con("Int");
+                let float_ty = Type::con("Float");
+                let chosen = if self
+                    .unify_with_span(inner_ty.clone(), int_ty.clone(), span.clone())
+                    .is_ok()
+                {
+                    int_ty
+                } else {
+                    self.subst = base_subst;
+                    zero_text = "0.0".to_string();
+                    self.unify_with_span(inner_ty.clone(), float_ty.clone(), span.clone())?;
+                    float_ty
+                };
+
+                let zero = Expr::Literal(Literal::Number {
+                    text: zero_text,
+                    span: span.clone(),
+                });
+                let out = Expr::Binary {
+                    op: "-".to_string(),
+                    left: Box::new(zero),
+                    right: Box::new(inner),
+                    span,
+                };
+                self.check_or_coerce(out, expected.or(Some(chosen)), env)
+            }
             Expr::Suffixed { base, suffix, span } => {
                 let (base, _base_ty) = self.elab_expr(*base, None, env)?;
                 let out = Expr::Suffixed {

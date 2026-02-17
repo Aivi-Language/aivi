@@ -2,6 +2,7 @@ fn expr_span(expr: &Expr) -> Span {
     match expr {
         Expr::Ident(name) => name.span.clone(),
         Expr::Literal(literal) => literal_span(literal),
+        Expr::UnaryNeg { span, .. } => span.clone(),
         Expr::Suffixed { span, .. } => span.clone(),
         Expr::TextInterpolate { span, .. } => span.clone(),
         Expr::List { span, .. }
@@ -55,6 +56,10 @@ fn desugar_holes(expr: Expr) -> Expr {
 
 fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
     let expr = match expr {
+        Expr::UnaryNeg { expr, span } => Expr::UnaryNeg {
+            expr: Box::new(desugar_holes_inner(*expr, false)),
+            span,
+        },
         Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
             base: Box::new(desugar_holes_inner(*base, false)),
             suffix,
@@ -249,6 +254,7 @@ fn contains_hole(expr: &Expr) -> bool {
     match expr {
         Expr::Ident(name) => name.name == "_",
         Expr::Literal(_) => false,
+        Expr::UnaryNeg { expr, .. } => contains_hole(expr),
         Expr::Suffixed { base, .. } => contains_hole(base),
         Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
             TextPart::Text { .. } => false,
@@ -309,6 +315,10 @@ fn replace_holes(expr: Expr) -> (Expr, Vec<String>) {
 
 fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) -> Expr {
     match expr {
+        Expr::UnaryNeg { expr, span } => Expr::UnaryNeg {
+            expr: Box::new(replace_holes_inner(*expr, counter, params)),
+            span,
+        },
         Expr::Ident(name) if name.name == "_" => {
             let param = format!("_arg{}", counter);
             *counter += 1;

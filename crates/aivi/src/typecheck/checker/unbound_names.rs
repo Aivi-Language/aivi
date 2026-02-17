@@ -133,6 +133,9 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
                 collect_expr(left, env, bound, out);
                 collect_expr(right, env, bound, out);
             }
+            Expr::UnaryNeg { expr, .. } => {
+                collect_expr(expr, env, bound, out);
+            }
             Expr::Block { items, .. } => {
                 let before = bound.len();
                 for item in items {
@@ -165,6 +168,10 @@ fn rewrite_implicit_field_vars(
     unbound: &HashSet<String>,
 ) -> Expr {
     match expr {
+        Expr::UnaryNeg { expr, span } => Expr::UnaryNeg {
+            expr: Box::new(rewrite_implicit_field_vars(*expr, implicit_param, unbound)),
+            span,
+        },
         Expr::Ident(name) if unbound.contains(&name.name) => {
             let param = SpannedName {
                 name: implicit_param.to_string(),

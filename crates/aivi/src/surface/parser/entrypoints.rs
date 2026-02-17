@@ -179,6 +179,10 @@ fn expand_module_aliases(modules: &mut [Module]) {
 
     fn rewrite_expr(expr: Expr, aliases: &HashMap<String, String>) -> Expr {
         match expr {
+            Expr::UnaryNeg { expr, span } => Expr::UnaryNeg {
+                expr: Box::new(rewrite_expr(*expr, aliases)),
+                span,
+            },
             Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
                 base: Box::new(rewrite_expr(*base, aliases)),
                 suffix,

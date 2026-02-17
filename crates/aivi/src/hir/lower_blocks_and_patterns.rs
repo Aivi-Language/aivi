@@ -119,6 +119,7 @@ fn contains_placeholder(expr: &Expr) -> bool {
     match expr {
         Expr::Ident(name) => name.name == "_",
         Expr::Literal(_) => false,
+        Expr::UnaryNeg { expr, .. } => contains_placeholder(expr),
         Expr::Suffixed { base, .. } => contains_placeholder(base),
         Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
             TextPart::Text { .. } => false,
@@ -188,6 +189,10 @@ fn contains_placeholder(expr: &Expr) -> bool {
 
 fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
     let expr = match expr {
+        Expr::UnaryNeg { expr, span } => Expr::UnaryNeg {
+            expr: Box::new(desugar_placeholder_lambdas(*expr)),
+            span,
+        },
         Expr::Ident(name) => {
             // Don't desugar a placeholder `_` at the leaf; let the smallest
             // enclosing expression scope capture it. A bare `_` is handled in
@@ -407,7 +412,8 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
             | crate::surface::Literal::Bool { span, .. }
             | crate::surface::Literal::DateTime { span, .. } => span.clone(),
         },
-        Expr::TextInterpolate { span, .. }
+        Expr::UnaryNeg { span, .. }
+        | Expr::TextInterpolate { span, .. }
         | Expr::List { span, .. }
         | Expr::Tuple { span, .. }
         | Expr::Record { span, .. }
@@ -449,6 +455,10 @@ fn replace_holes(expr: Expr) -> (Expr, Vec<String>) {
 
 fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) -> Expr {
     match expr {
+        Expr::UnaryNeg { expr, span } => Expr::UnaryNeg {
+            expr: Box::new(replace_holes_inner(*expr, counter, params)),
+            span,
+        },
         Expr::Ident(name) if name.name == "_" => {
             let param = format!("_arg{}", counter);
             *counter += 1;

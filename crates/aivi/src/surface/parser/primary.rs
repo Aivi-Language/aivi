@@ -117,15 +117,9 @@ impl Parser {
                     return None;
                 }
             };
-            let zero = Expr::Literal(Literal::Number {
-                text: "0".to_string(),
-                span: minus_span.clone(),
-            });
             let span = merge_span(minus_span, expr_span(&rhs));
-            return Some(Expr::Binary {
-                op: "-".to_string(),
-                left: Box::new(zero),
-                right: Box::new(rhs),
+            return Some(Expr::UnaryNeg {
+                expr: Box::new(rhs),
                 span,
             });
         }

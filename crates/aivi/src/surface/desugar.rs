@@ -14,7 +14,8 @@ fn wrap_in_pure(expr: Expr) -> Expr {
             | super::Literal::Bool { span, .. }
             | super::Literal::DateTime { span, .. } => span.clone(),
         },
-        Expr::TextInterpolate { span, .. }
+        Expr::UnaryNeg { span, .. }
+        | Expr::TextInterpolate { span, .. }
         | Expr::List { span, .. }
         | Expr::Tuple { span, .. }
         | Expr::Record { span, .. }
@@ -81,6 +82,10 @@ fn desugar_effect_stmt_expr(expr: Expr) -> Expr {
 fn desugar_expr(expr: Expr) -> Expr {
     match expr {
         Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => expr,
+        Expr::UnaryNeg { expr, span } => Expr::UnaryNeg {
+            expr: Box::new(desugar_expr(*expr)),
+            span,
+        },
         Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
             base: Box::new(desugar_expr(*base)),
             suffix,
