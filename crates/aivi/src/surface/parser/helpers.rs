@@ -177,6 +177,7 @@ fn expr_span(expr: &Expr) -> Span {
     match expr {
         Expr::Ident(name) => name.span.clone(),
         Expr::Literal(literal) => literal_span(literal),
+        Expr::UnaryNeg { span, .. } => span.clone(),
         Expr::Suffixed { span, .. } => span.clone(),
         Expr::TextInterpolate { span, .. } => span.clone(),
         Expr::List { span, .. }

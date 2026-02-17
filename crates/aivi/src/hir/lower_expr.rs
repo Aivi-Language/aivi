@@ -5,6 +5,15 @@ fn lower_expr_inner_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, 
             id: id_gen.next(),
             name: name.name,
         },
+        Expr::UnaryNeg { expr, .. } => HirExpr::Binary {
+            id: id_gen.next(),
+            op: "-".to_string(),
+            left: Box::new(HirExpr::LitNumber {
+                id: id_gen.next(),
+                text: "0".to_string(),
+            }),
+            right: Box::new(lower_expr_ctx(*expr, id_gen, ctx, false)),
+        },
         Expr::TextInterpolate { parts, .. } => HirExpr::TextInterpolate {
             id: id_gen.next(),
             parts: parts
@@ -395,7 +404,8 @@ fn surface_expr_span(expr: &Expr) -> crate::diagnostics::Span {
             | crate::surface::Literal::Bool { span, .. }
             | crate::surface::Literal::DateTime { span, .. } => span.clone(),
         },
-        Expr::TextInterpolate { span, .. }
+        Expr::UnaryNeg { span, .. }
+        | Expr::TextInterpolate { span, .. }
         | Expr::List { span, .. }
         | Expr::Tuple { span, .. }
         | Expr::Record { span, .. }

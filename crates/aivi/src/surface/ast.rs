@@ -224,6 +224,14 @@ pub enum TextPart {
 pub enum Expr {
     Ident(SpannedName),
     Literal(Literal),
+    /// Prefix unary negation: `-expr` (when not a negative numeric literal like `-1`).
+    ///
+    /// This is kept as a distinct node so elaboration can pick the right numeric zero
+    /// (Int vs Float) without relying on implicit numeric promotions.
+    UnaryNeg {
+        expr: Box<Expr>,
+        span: Span,
+    },
     /// Postfix domain literal application: `(expr)suffix`.
     ///
     /// This is the generalization of numeric suffix literals like `10px`.

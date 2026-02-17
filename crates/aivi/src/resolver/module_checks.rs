@@ -191,6 +191,9 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
             Expr::Ident(name) => {
                 out.insert(name.name.clone());
             }
+            Expr::UnaryNeg { expr, .. } => {
+                collect_expr(expr, out);
+            }
             Expr::Suffixed { base, .. } => {
                 collect_expr(base, out);
             }
