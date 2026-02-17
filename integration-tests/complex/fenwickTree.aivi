@@ -17,11 +17,11 @@ lowbit = idx => idx ?
 // Add delta to all affected indices
 addDelta = size idx delta tree =>
   if idx > size then tree
-else {
-  cur = Map.get idx tree ? | Some v => v | None => 0
-  updated = Map.insert idx (cur + delta) tree
-  addDelta size (idx + lowbit idx) delta updated
-}
+  else {
+    cur = Map.get idx tree ? | Some v => v | None => 0
+    updated = Map.insert idx (cur + delta) tree
+    addDelta size (idx + lowbit idx) delta updated
+  }
 
 // Build Fenwick tree from list
 buildFromList : List Int -> Fenwick
@@ -29,10 +29,10 @@ buildFromList = arr => {
   size = List.length arr
   buildLoop = idx tree =>
     if idx > size then tree
-  else List.at arr (idx - 1) ?
-    | None       => buildLoop (idx + 1) tree
-    | Some value => buildLoop (idx + 1) (addDelta size idx value tree)
-    { size: size, tree: buildLoop 1 Map.empty }
+    else List.at arr (idx - 1) ?
+      | None       => buildLoop (idx + 1) tree
+      | Some value => buildLoop (idx + 1) (addDelta size idx value tree)
+      { size: size, tree: buildLoop 1 Map.empty }
 }
 
 // Query prefix sum [1..idx]
@@ -40,28 +40,28 @@ prefix : Fenwick -> Int -> Int
 prefix = fenwick idx => {
   go = i acc =>
     if i == 0 then acc
-  else {
-    val = Map.get i fenwick.tree ? | Some v => v | None => 0
-    go (i - lowbit i) (acc + val)
-  }
-  go idx 0
+    else {
+      val = Map.get i fenwick.tree ? | Some v => v | None => 0
+      go (i - lowbit i) (acc + val)
+    }
+    go idx 0
 }
 
 // Query range sum [l..r]
 rangeSum : Fenwick -> Int -> Int -> Option Int
 rangeSum = fenwick l r =>
   if l > r || l < 1 then None
-else Some (prefix fenwick r - prefix fenwick (l - 1))
+  else Some (prefix fenwick r - prefix fenwick (l - 1))
 
 // Point update at index
 update : Fenwick -> Int -> Int -> Fenwick
 update = fenwick idx value =>
   if idx < 1 || idx > fenwick.size then fenwick
-else {
-  prev = rangeSum fenwick idx idx
-  delta = prev ? | Some v => value - v | None => value
-  fenwick <| { tree: addDelta fenwick.size idx delta fenwick.tree }
-}
+  else {
+    prev = rangeSum fenwick idx idx
+    delta = prev ? | Some v => value - v | None => value
+    fenwick <| { tree: addDelta fenwick.size idx delta fenwick.tree }
+  }
 
 // Naive sum for verification
 naiveSum : List Int -> Int -> Int -> Int
@@ -74,11 +74,11 @@ naiveSum = arr l r => arr ?
 verifyIndices = indices fen arr => indices ?
   | []        => True
   | [h, ...t] => {
-      expected = naiveSum arr h h
-      matches = rangeSum fen h h ?
-        | Some got => got == expected
-        | None     => False
-      matches && verifyIndices t fen arr
+    expected = naiveSum arr h h
+    matches = rangeSum fen h h ?
+      | Some got => got == expected
+      | None     => False
+    matches && verifyIndices t fen arr
   }
 
   @test

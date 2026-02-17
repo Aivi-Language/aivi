@@ -123,6 +123,63 @@ x =
 }
 
 #[test]
+fn test_fmt_if_else_multiline_indents_bodies_and_nested_ifs() {
+    let input = r#"
+module demo
+
+n =
+  if x then
+    if y then
+      1
+    else
+      2
+  else
+    3
+"#;
+    let expected = "module demo\n\nn =\n  if x then\n    if y then\n      1\n    else\n      2\n  else\n    3\n";
+    assert_eq!(format_text(input), expected);
+
+    let input = r#"
+module demo
+
+n =
+  if x then
+    1
+  else if y then
+    2
+  else
+    3
+"#;
+    let expected =
+        "module demo\n\nn =\n  if x then\n    1\n  else if y then\n    2\n  else\n    3\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
+fn test_fmt_decorator_aligns_with_following_binding_in_rhs_block() {
+    let input = r#"
+module demo
+
+bar =
+  @test
+  baz = 2
+"#;
+    let expected = "module demo\n\nbar =\n  @test\n  baz = 2\n";
+    assert_eq!(format_text(input), expected);
+
+    let input = r#"
+module demo
+
+bar =
+  @static
+  @test
+  baz = 2
+"#;
+    let expected = "module demo\n\nbar =\n  @static\n  @test\n  baz = 2\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
 fn test_fmt_allman_brace_style_is_configurable() {
     let input = "f = x => {\n  x\n}\n";
     let formatted = format_text_with_options(

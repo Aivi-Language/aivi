@@ -770,10 +770,9 @@
     let mut rhs_next_line_depth: Option<isize> = None;
     let mut rhs_block_base_indent: Option<usize> = None;
     let mut rhs_block_base_depth: Option<isize> = None;
-    let mut then_else_pending_depth: Option<isize> = None;
+    let mut rhs_decorator_pending: bool = false;
     let mut arm_rhs_active = false;
     let mut pipeop_seed_indent: Option<usize> = None;
-    let pipe_block_extra = " ".repeat(indent_size);
     let mut prev_non_blank_last_token: Option<String> = None;
     // Delimiter groups opened at end-of-line (`{`/`(`/`[`) that should cause a hanging indent
     // until the matching close delimiter starts a line. We also keep the opener line's effective
@@ -782,12 +781,24 @@
     let mut open_depth: isize = 0;
     let mut prev_effective_indent_len: usize = 0;
 
-    fn seeds_rhs_continuation(last: Option<&str>) -> bool {
-        matches!(last, Some("=" | "=>" | "<-" | "->"))
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum IfPhase {
+        Then,
+        Else,
     }
 
-    fn seeds_then_else(last: Option<&str>) -> bool {
-        matches!(last, Some("then" | "else"))
+    #[derive(Debug, Clone, Copy)]
+    struct IfFrame {
+        if_indent: usize,
+        phase: IfPhase,
+        active_indent: bool,
+    }
+
+    // Tracks multiline `if ... then ... else ...` indentation so nested `if`s format correctly.
+    let mut if_stack: Vec<IfFrame> = Vec::new();
+
+    fn seeds_rhs_continuation(last: Option<&str>) -> bool {
+        matches!(last, Some("=" | "=>" | "<-" | "->"))
     }
 
     fn last_continuation_token(tokens: &[&crate::cst::CstToken]) -> Option<String> {
@@ -872,6 +883,32 @@
         false
     }
 
+    fn find_top_level_token_clamped(
+        tokens: &[&crate::cst::CstToken],
+        needle: &str,
+        start: usize,
+    ) -> Option<usize> {
+        let mut depth = 0isize;
+        for (i, t) in tokens.iter().enumerate().skip(start) {
+            let text = t.text.as_str();
+            if t.kind == "string" || t.kind == "comment" {
+                continue;
+            }
+            if is_open_sym(text).is_some() {
+                depth += 1;
+                continue;
+            }
+            if is_close_sym(text).is_some() {
+                depth = (depth - 1).max(0);
+                continue;
+            }
+            if depth == 0 && text == needle {
+                return Some(i);
+            }
+        }
+        None
+    }
+
     for (line_index, state) in lines.iter().enumerate() {
         if state.tokens.is_empty() {
             // Keep `use` declarations grouped by removing blank lines between consecutive `use`s.
@@ -912,15 +949,12 @@
             rhs_next_line_indent = None;
             rhs_next_line_depth = None;
             pipeop_seed_indent = None;
-            then_else_pending_depth = None;
             continue;
         }
 
         blank_run = 0;
 
         let mut out = String::new();
-
-        let then_else_active_depth = then_else_pending_depth.take();
 
         // One-shot seeds: only apply to the next non-blank line.
         let rhs_seed_indent = rhs_next_line_indent.take();
@@ -939,6 +973,8 @@
             rhs_block_base_indent = None;
             rhs_block_base_depth = None;
             pipeop_seed_indent = None;
+            if_stack.clear();
+            rhs_decorator_pending = false;
             prev_non_blank_last_token = last_continuation_token(&state.tokens);
             update_open_depth(&mut open_depth, &state.tokens);
             continue;
@@ -956,10 +992,15 @@
             rhs_block_base_indent = None;
             rhs_block_base_depth = None;
             pipeop_seed_indent = None;
+            if_stack.clear();
+            rhs_decorator_pending = false;
             prev_non_blank_last_token = last_continuation_token(&state.tokens);
             update_open_depth(&mut open_depth, &state.tokens);
             continue;
         };
+
+        let rhs_decorator_pending_for_this_line = rhs_decorator_pending;
+        rhs_decorator_pending = false;
 
         // Canonical base indentation from delimiter nesting (computed in pass 1).
         // This matches `stack`-based delimiter nesting, and avoids drift when heuristics for
@@ -979,6 +1020,7 @@
             if line_depth <= base_depth
                 && line_indent_len <= base_indent
                 && looks_like_new_stmt(&state.tokens, first_idx)
+                && !rhs_decorator_pending_for_this_line
             {
                 rhs_block_base_indent = None;
                 rhs_block_base_depth = None;
@@ -1028,7 +1070,9 @@
         // The hang stack already aligns contents to the opener's *effective* indentation (which
         // includes any continuation indentation on the opener line), so adding continuation
         // levels again would double-indent.
-        let inside_hang = hang_top.is_some() && !hang_is_close;
+        let inside_hang = hang_top.is_some_and(|(_, opener_indent)| {
+            !hang_is_close && (opener_indent + indent_size) > line_indent_len
+        });
         if starts_with_pipe {
             if let Some(&(base, _)) = pipe_block_stack.last() {
                 // Indent arms one level relative to the match subject.
@@ -1047,8 +1091,6 @@
                 base_indent_len_for_line = base_indent_len_for_line.max(opener_indent + indent_size);
             }
         }
-        let base_indent = " ".repeat(base_indent_len_for_line);
-
         // End a continuation block when we hit a line that clearly starts a new statement at or
         // above the block's base indentation. Avoid ending blocks just because a line starts with
         // a closing delimiter (`}`/`]`/`)`) which naturally decreases the computed indent.
@@ -1101,18 +1143,70 @@
         if !inside_hang && arm_rhs_active && !starts_with_pipe {
             continuation_levels += 1;
         }
-        let then_else_active = then_else_active_depth.is_some() && then_else_active_depth == Some(0);
-        if !inside_hang && then_else_active {
-            continuation_levels += 1;
-        }
         if hang_is_close {
-            continuation_levels = 0;
+            // Standalone closers align with their opener and should not inherit continuation
+            // indentation. Exceptions like `} } => ...` inside match arms should keep the arm
+            // indentation so `=>` stays aligned.
+            let has_arrow = find_top_level_token_clamped(&state.tokens, "=>", first_idx).is_some();
+            let has_else = find_top_level_token_clamped(&state.tokens, "else", first_idx).is_some();
+            if !(has_arrow && !has_else) {
+                continuation_levels = 0;
+            }
         }
-        let effective_indent = match continuation_levels {
-            0 => base_indent,
-            1 => format!("{base_indent}{pipe_block_extra}"),
-            n => format!("{base_indent}{}", " ".repeat(n * indent_size)),
-        };
+
+        // Base indentation including continuation blocks, but excluding multiline `if` handling.
+        let effective_indent_len_pre_if =
+            base_indent_len_for_line + (continuation_levels * indent_size);
+
+        // If we start a new statement at or above an `if`'s indentation, we left that `if`.
+        // This is intentionally conservative to avoid popping while still inside branch bodies.
+        if looks_like_new_stmt(&state.tokens, first_idx) {
+            while if_stack
+                .last()
+                .is_some_and(|f| effective_indent_len_pre_if <= f.if_indent)
+            {
+                if_stack.pop();
+            }
+        }
+
+        let mut effective_indent_len = effective_indent_len_pre_if;
+
+        // Persistent `if`/`then`/`else` indentation (fixes nested ifs).
+        //
+        // - Body lines are indented one level relative to their `if` header.
+        // - `else` header lines align with their matching `if`.
+        // - `} else {` is handled by delimiter/hang indentation; we only update stack state.
+        if !hang_is_close {
+            let first_text = state.tokens[first_idx].text.as_str();
+            let is_else_line = first_text == "else";
+
+            if is_else_line {
+                // We're starting an `else` header; any completed inner `else` branches end here.
+                while if_stack.last().is_some_and(|f| f.phase == IfPhase::Else) {
+                    if_stack.pop();
+                }
+
+                if let Some(idx) = if_stack.iter().rposition(|f| f.phase == IfPhase::Then) {
+                    let outer_body_indent = if_stack
+                        .iter()
+                        .take(idx)
+                        .filter(|f| f.active_indent)
+                        .map(|f| f.if_indent + indent_size)
+                        .max()
+                        .unwrap_or(0);
+                    effective_indent_len = outer_body_indent.max(if_stack[idx].if_indent);
+                }
+            } else if let Some(min_indent) = if_stack
+                .iter()
+                .filter(|f| f.active_indent)
+                .map(|f| f.if_indent + indent_size)
+                .max()
+            {
+                effective_indent_len = effective_indent_len.max(min_indent);
+            }
+        }
+
+        let effective_indent = " ".repeat(effective_indent_len);
 
         if let Some(max_lhs) = state.effect_align_lhs {
             if let Some(arrow_idx) = find_top_level_token(&state.tokens, "<-", first_idx) {
@@ -1135,7 +1229,7 @@
                     out.push_str(&rhs);
                 }
                 rendered_lines.push(out);
-                prev_effective_indent_len = effective_indent.chars().count();
+                prev_effective_indent_len = effective_indent_len;
                 prev_non_blank_last_token = last_continuation_token(&state.tokens);
                 if should_pop_hang {
                     hang_delim_stack.pop();
@@ -1145,8 +1239,24 @@
                         hang_delim_stack.push((open, prev_effective_indent_len));
                     }
                 }
-                then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
-                    .then(|| net_open_depth(&state.tokens));
+                if let Some(else_idx) =
+                    find_top_level_token_clamped(&state.tokens, "else", first_idx)
+                {
+                    if let Some(idx) = if_stack.iter().rposition(|f| f.phase == IfPhase::Then) {
+                        let else_inline = state.tokens.iter().skip(else_idx + 1).any(|t| {
+                            t.kind != "comment" && t.text != "\n"
+                        });
+                        if_stack[idx].phase = IfPhase::Else;
+                        if_stack[idx].active_indent = !else_inline;
+                    }
+                }
+                if prev_non_blank_last_token.as_deref() == Some("then") {
+                    if_stack.push(IfFrame {
+                        if_indent: prev_effective_indent_len,
+                        phase: IfPhase::Then,
+                        active_indent: true,
+                    });
+                }
                 if line_has_top_level_eq {
                     pipeop_seed_indent = Some(line_indent_len);
                 }
@@ -1189,7 +1299,7 @@
                         out.push_str(&rhs);
                     }
                     rendered_lines.push(out);
-                    prev_effective_indent_len = effective_indent.chars().count();
+                    prev_effective_indent_len = effective_indent_len;
                     prev_non_blank_last_token = last_continuation_token(&state.tokens);
                     if should_pop_hang {
                         hang_delim_stack.pop();
@@ -1199,8 +1309,24 @@
                             hang_delim_stack.push((open, prev_effective_indent_len));
                         }
                     }
-                    then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
-                        .then(|| net_open_depth(&state.tokens));
+                    if let Some(else_idx) =
+                        find_top_level_token_clamped(&state.tokens, "else", first_idx)
+                    {
+                        if let Some(idx) = if_stack.iter().rposition(|f| f.phase == IfPhase::Then) {
+                            let else_inline = state.tokens.iter().skip(else_idx + 1).any(|t| {
+                                t.kind != "comment" && t.text != "\n"
+                            });
+                            if_stack[idx].phase = IfPhase::Else;
+                            if_stack[idx].active_indent = !else_inline;
+                        }
+                    }
+                    if prev_non_blank_last_token.as_deref() == Some("then") {
+                        if_stack.push(IfFrame {
+                            if_indent: prev_effective_indent_len,
+                            phase: IfPhase::Then,
+                            active_indent: true,
+                        });
+                    }
                     if line_has_top_level_eq {
                         pipeop_seed_indent = Some(line_indent_len);
                     }
@@ -1240,7 +1366,7 @@
                     out.push_str(&rhs);
                 }
                 rendered_lines.push(out);
-                prev_effective_indent_len = effective_indent.chars().count();
+                prev_effective_indent_len = effective_indent_len;
                 prev_non_blank_last_token = last_continuation_token(&state.tokens);
                 if should_pop_hang {
                     hang_delim_stack.pop();
@@ -1250,8 +1376,24 @@
                         hang_delim_stack.push((open, prev_effective_indent_len));
                     }
                 }
-                then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
-                    .then(|| net_open_depth(&state.tokens));
+                if let Some(else_idx) =
+                    find_top_level_token_clamped(&state.tokens, "else", first_idx)
+                {
+                    if let Some(idx) = if_stack.iter().rposition(|f| f.phase == IfPhase::Then) {
+                        let else_inline = state.tokens.iter().skip(else_idx + 1).any(|t| {
+                            t.kind != "comment" && t.text != "\n"
+                        });
+                        if_stack[idx].phase = IfPhase::Else;
+                        if_stack[idx].active_indent = !else_inline;
+                    }
+                }
+                if prev_non_blank_last_token.as_deref() == Some("then") {
+                    if_stack.push(IfFrame {
+                        if_indent: prev_effective_indent_len,
+                        phase: IfPhase::Then,
+                        active_indent: true,
+                    });
+                }
                 if line_has_top_level_eq {
                     pipeop_seed_indent = Some(line_indent_len);
                 }
@@ -1306,7 +1448,7 @@
                             out.push_str(" : ");
                             out.push_str(format_tokens_simple(rest_tokens, state.top_delim).trim());
                             rendered_lines.push(out);
-                            prev_effective_indent_len = effective_indent.chars().count();
+                            prev_effective_indent_len = effective_indent_len;
                             prev_non_blank_last_token = last_continuation_token(&state.tokens);
                             if should_pop_hang {
                                 hang_delim_stack.pop();
@@ -1316,9 +1458,26 @@
                                     hang_delim_stack.push((open, prev_effective_indent_len));
                                 }
                             }
-                            then_else_pending_depth =
-                                seeds_then_else(prev_non_blank_last_token.as_deref())
-                                    .then(|| net_open_depth(&state.tokens));
+                            if let Some(else_idx) =
+                                find_top_level_token_clamped(&state.tokens, "else", first_idx)
+                            {
+                                if let Some(idx) =
+                                    if_stack.iter().rposition(|f| f.phase == IfPhase::Then)
+                                {
+                                    let else_inline = state.tokens.iter().skip(else_idx + 1).any(|t| {
+                                        t.kind != "comment" && t.text != "\n"
+                                    });
+                                    if_stack[idx].phase = IfPhase::Else;
+                                    if_stack[idx].active_indent = !else_inline;
+                                }
+                            }
+                            if prev_non_blank_last_token.as_deref() == Some("then") {
+                                if_stack.push(IfFrame {
+                                    if_indent: prev_effective_indent_len,
+                                    phase: IfPhase::Then,
+                                    active_indent: true,
+                                });
+                            }
                             if line_has_top_level_eq {
                                 pipeop_seed_indent = Some(line_indent_len);
                             }
@@ -1342,7 +1501,7 @@
         out.push_str(&effective_indent);
         out.push_str(&format_tokens_simple(&state.tokens, state.top_delim));
         rendered_lines.push(out);
-        prev_effective_indent_len = effective_indent.chars().count();
+        prev_effective_indent_len = effective_indent_len;
 
         prev_non_blank_last_token = last_continuation_token(&state.tokens);
         if should_pop_hang {
@@ -1353,9 +1512,22 @@
                 hang_delim_stack.push((open, prev_effective_indent_len));
             }
         }
-        then_else_pending_depth = seeds_then_else(prev_non_blank_last_token.as_deref())
-            .then(|| net_open_depth(&state.tokens));
-
+        if let Some(else_idx) = find_top_level_token_clamped(&state.tokens, "else", first_idx) {
+            if let Some(idx) = if_stack.iter().rposition(|f| f.phase == IfPhase::Then) {
+                let else_inline = state.tokens.iter().skip(else_idx + 1).any(|t| {
+                    t.kind != "comment" && t.text != "\n"
+                });
+                if_stack[idx].phase = IfPhase::Else;
+                if_stack[idx].active_indent = !else_inline;
+            }
+        }
+        if prev_non_blank_last_token.as_deref() == Some("then") {
+            if_stack.push(IfFrame {
+                if_indent: prev_effective_indent_len,
+                phase: IfPhase::Then,
+                active_indent: true,
+            });
+        }
         if line_has_top_level_eq {
             pipeop_seed_indent = Some(line_indent_len);
         }
@@ -1369,6 +1541,16 @@
             }
         }
         update_open_depth(&mut open_depth, &state.tokens);
+
+        // Decorators on their own line are part of the following definition/type-sig, even in
+        // RHS continuation blocks (e.g. `x =\n  @test\n  foo = ...`). Keep the RHS block alive
+        // for the next non-blank line so the binding doesn't accidentally dedent.
+        let is_decorator_only_line = state.tokens[first_idx].text == "@"
+            && find_top_level_token(&state.tokens, "=", first_idx).is_none()
+            && find_top_level_token(&state.tokens, ":", first_idx).is_none();
+        if rhs_block_base_indent.is_some() && is_decorator_only_line {
+            rhs_decorator_pending = true;
+        }
 
         // After rendering an arm line, keep an extra indentation level for its body until the next
         // arm (or until we leave the surrounding `|` block).
