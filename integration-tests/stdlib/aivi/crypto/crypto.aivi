@@ -4,6 +4,7 @@ module integrationTests.stdlib.aivi.crypto.tests
 use aivi
 use aivi.testing
 use aivi.crypto
+use aivi.text
 
 @test
 randomBytes_smoke = effect {
@@ -15,7 +16,7 @@ randomBytes_smoke = effect {
 @test
 randomUuid_smoke = effect {
   u <- randomUuid
-  assert (Text.length u == 36)
+  assert (length u == 36)
 }
 
 @test

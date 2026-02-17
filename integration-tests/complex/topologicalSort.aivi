@@ -5,6 +5,10 @@ use aivi
 use aivi.testing
 use aivi.collections
 
+len = xs => xs ?
+  | []           => 0
+  | [_, ...rest] => 1 + len rest
+
 // Type alias for adjacency list graph
 Graph = { nodes: List Int, adj: Map Int (List Int) }
 
@@ -71,7 +75,7 @@ cycleNodes = nodes indeg acc => nodes ?
 sortLoop = graph indeg q outRev => (Queue.dequeue q) ?
   | None => {
     out = reverseList outRev
-    if List.length out == List.length graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg [])
+    if len out == len graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg [])
   }
   | Some (node, q2) => {
     res = relax (neighbors node graph) indeg q2

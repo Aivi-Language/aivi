@@ -4,7 +4,7 @@ module integrationTests.stdlib.aivi.units.tests
 use aivi
 use aivi.testing
 use aivi.math
-use aivi.units
+use aivi.units (Unit, Quantity, defineUnit, convert, sameUnit)
 
 @test
 quantity_smoke = effect {

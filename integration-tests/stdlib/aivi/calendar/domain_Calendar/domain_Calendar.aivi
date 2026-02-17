@@ -4,26 +4,28 @@ module integrationTests.stdlib.aivi.calendar.domain_Calendar.tests
 use aivi
 use aivi.testing
 use aivi.calendar
+use aivi.calendar (domain Calendar)
 
 @test
 literal_eom_smoke = effect {
-  assert (eom == { year: 2024, month: 2, day: 29 }) // Wait, eom is usually used with a date.
+  d = { year: 2024, month: 2, day: 1 }
+  assert ((d + eom).day == 29)
 }
 
 @test
 suffix_d_smoke = effect {
-  d = 5d
-  assert (d == 5) // Duration in days?
+  d = { year: 2024, month: 2, day: 28 }
+  assert ((d + 1d).day == 29)
 }
 
 @test
 suffix_m_smoke = effect {
-  m = 1m
-  assert (m == 1)
+  d = { year: 2024, month: 1, day: 31 }
+  assert ((d + 1m).month == 2)
 }
 
 @test
 suffix_y_smoke = effect {
-  y = 1y
-  assert (y == 1)
+  d = { year: 2024, month: 2, day: 29 }
+  assert ((d + 1y).year == 2025)
 }

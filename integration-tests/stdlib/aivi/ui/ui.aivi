@@ -4,6 +4,7 @@ module integrationTests.stdlib.aivi.ui.tests
 use aivi
 use aivi.testing
 use aivi.ui
+use aivi.text
 
 attr_touch : Attr -> Unit
 attr_touch = _ => Unit
@@ -330,7 +331,7 @@ live_smoke = effect {
 patchToJson_smoke = effect {
   ops = diff (vText "a") (vText "b")
   json = patchToJson ops
-  assert (Text.length json > 0)
+  assert (length json > 0)
 }
 
 @test
@@ -351,7 +352,7 @@ vAttr_smoke = effect {
 vClass_smoke = effect {
   attr = vClass "c"
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
@@ -364,90 +365,90 @@ vElement_smoke = effect {
 vId_smoke = effect {
   attr = vId "x"
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vKeyed_smoke = effect {
   node = vKeyed "k" (vText "x")
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vOnBlur_smoke = effect {
   attr = vOnBlur "evt"
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vOnClick_smoke = effect {
   attr = vOnClick "evt"
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vOnClickE_smoke = effect {
   attr = vOnClickE (_ => "evt")
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vOnFocus_smoke = effect {
   attr = vOnFocus "evt"
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vOnInput_smoke = effect {
   attr = vOnInput (_ => "evt")
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vOnInputE_smoke = effect {
   attr = vOnInputE (_ => "evt")
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vOnKeyDown_smoke = effect {
   attr = vOnKeyDown (_ => "evt")
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vOnKeyUp_smoke = effect {
   attr = vOnKeyUp (_ => "evt")
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vOnPointerDown_smoke = effect {
   attr = vOnPointerDown (_ => "evt")
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vOnPointerMove_smoke = effect {
   attr = vOnPointerMove (_ => "evt")
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test
 vOnPointerUp_smoke = effect {
   attr = vOnPointerUp (_ => "evt")
   node = vElement "div" [attr] []
-  assert (Text.length (renderHtml node) > 0)
+  assert (length (renderHtml node) > 0)
 }
 
 @test

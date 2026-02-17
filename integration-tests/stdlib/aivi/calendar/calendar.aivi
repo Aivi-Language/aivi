@@ -17,7 +17,6 @@ dateTime_touch = _ => Unit
 
 @test
 dateTime_smoke = effect {
-  pure dateTime_touch
   assertEq (1 + 1) 2
 }
 
@@ -26,7 +25,6 @@ endOfMonth_touch = _ => Unit
 
 @test
 endOfMonth_smoke = effect {
-  pure endOfMonth_touch
   assertEq (1 + 1) 2
 }
 
@@ -75,14 +73,20 @@ isLeapYear_smoke = effect {
 
 @test
 negateDelta_smoke = effect {
-  assertEq (negateDelta (Day 3)) (Day (-3))
-  assertEq (negateDelta (Month 2)) (Month (-2))
-  assertEq (negateDelta (Year 1)) (Year (-1))
-  assertEq (negateDelta End) End
+  useDate = { year: 2024, month: 2, day: 10 }
+  d1 <- 1d
+  m1 <- 1m
+  y1 <- 1y
+
+  assertEq ((useDate + d1) + (negateDelta d1)) useDate
+  assertEq ((useDate + m1) + (negateDelta m1)) useDate
+  assertEq ((useDate + y1) + (negateDelta y1)) useDate
+  e <- eom
+  assertEq (negateDelta e) e
 }
 
 @test
 now_smoke = effect {
-  now
+  _t <- now
   assert True
 }

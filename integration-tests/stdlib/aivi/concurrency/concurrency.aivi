@@ -10,7 +10,6 @@ channelError_touch = _ => Unit
 
 @test
 channelError_smoke = effect {
-  pure channelError_touch
   assertEq (1 + 1) 2
 }
 
@@ -19,7 +18,6 @@ scope_touch = _ => Unit
 
 @test
 scope_smoke = effect {
-  pure scope_touch
   assertEq (1 + 1) 2
 }
 
