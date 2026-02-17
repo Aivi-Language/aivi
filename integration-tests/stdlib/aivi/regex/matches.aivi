@@ -9,8 +9,8 @@ use aivi.regex
 smoke = effect {
   reResult = compile "l"
   r <- reResult ?
-    | Ok re => effect { pure re }
-    | Err _ => effect { fail "compile failed" }
+    | Ok re => pure re
+    | Err _ => fail "compile failed"
     ms = matches r "hello"
-    _ <- assert (length ms == 2)
+    _ <- assert (List.length ms == 2)
 }

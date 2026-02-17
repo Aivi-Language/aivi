@@ -9,5 +9,5 @@ use aivi.ui
 smoke = effect {
   ops = diff (vText "a") (vText "b")
   json = patchToJson ops
-  _ <- assert (length json > 0)
+  _ <- assert (Text.length json > 0)
 }

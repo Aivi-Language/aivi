@@ -8,5 +8,5 @@ use aivi.graph
 @test
 smoke = effect {
   g = empty
-  _ <- assert (length g.nodes == 0)
+  _ <- assert (List.length g.nodes == 0)
 }

@@ -9,5 +9,5 @@ use aivi.ui
 smoke = effect {
   attr = vId "x"
   node = vElement "div" [attr] []
-  _ <- assert (length (renderHtml node) > 0)
+  _ <- assert (Text.length (renderHtml node) > 0)
 }

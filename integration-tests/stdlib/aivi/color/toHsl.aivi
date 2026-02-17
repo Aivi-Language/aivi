@@ -4,6 +4,7 @@ module integrationTests.stdlib.aivi.color.toHsl
 use aivi
 use aivi.testing
 use aivi.color
+use aivi.math
 
 @test
 smoke = effect {

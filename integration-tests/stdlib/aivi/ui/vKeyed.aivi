@@ -7,7 +7,6 @@ use aivi.ui
 
 @test
 smoke = effect {
-  attr = vKeyed "k"
-  node = vElement "div" [attr] []
-  _ <- assert (length (renderHtml node) > 0)
+  node = vKeyed "k" (vText "x")
+  _ <- assert (Text.length (renderHtml node) > 0)
 }
