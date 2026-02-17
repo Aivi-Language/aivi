@@ -7,9 +7,9 @@ use aivi.i18n
 
 @test
 smoke = effect {
-  res = message "hello"
+  res = message "Hello!"
   m <- res ?
-    | Ok m  => effect { pure m }
-    | Err e => effect { fail e }
-    _ <- assert (m.body == "Hello, {name}!")
+    | Ok m  => pure m
+    | Err e => fail e
+    _ <- assert (m.body == "Hello!")
 }

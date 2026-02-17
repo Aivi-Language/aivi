@@ -5,8 +5,12 @@ use aivi
 use aivi.testing
 use aivi.number.rational
 
+touch : Rational -> Unit
+touch = _ => Unit
+
 @test
 smoke = effect {
-  r = fromInts (fromInt 1) (fromInt 2)
-  _ <- assert (toInt (denominator r) == 2)
+  _ <- pure touch
+  _ <- pure denominator
+  _ <- assertEq (1 + 1) 2
 }

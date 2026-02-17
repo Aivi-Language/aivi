@@ -4,10 +4,14 @@ module integrationTests.stdlib.aivi.database.domain_Database.literal_del
 use aivi
 use aivi.testing
 use aivi.database
-use aivi.database
+use aivi.database (domain Database)
 
 @test
 smoke = effect {
-  _ <- pure literal_del
-  _ <- assertEq (1 + 1) 2
+  User = { id: Int }
+  users0 = table "users"[]
+  users1 <- users0 + ins { id: 1 }
+  users2 <- users1 + del (u => u.id == 1)
+  rows   <- load users2
+  _      <- assert (List.length rows == 0)
 }

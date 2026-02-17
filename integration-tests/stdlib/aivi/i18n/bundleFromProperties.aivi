@@ -11,7 +11,7 @@ smoke = effect {
   l <- l_res ?
     | Ok l  => pure l
     | Err e => fail e
-    props = "greet = Hello, {name}!\nval = 123"
+    props = "greet = Hello!\nval = 123"
     b_res = bundleFromProperties l props
     b <- b_res ?
       | Ok b  => pure b
