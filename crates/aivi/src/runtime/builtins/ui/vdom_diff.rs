@@ -240,58 +240,6 @@ fn patch_ops_to_json_value(value: &Value) -> Result<serde_json::Value, RuntimeEr
     Ok(serde_json::Value::Array(out))
 }
 
-enum DecodedEvent {
-    Click(i64),
-    Input(i64, String),
-}
-
-fn decode_event(text: &str) -> Result<Value, String> {
-    let event = decode_event_raw(text)?;
-    Ok(match event {
-        DecodedEvent::Click(id) => Value::Constructor {
-            name: "Click".to_string(),
-            args: vec![Value::Int(id)],
-        },
-        DecodedEvent::Input(id, value) => Value::Constructor {
-            name: "Input".to_string(),
-            args: vec![Value::Int(id), Value::Text(value)],
-        },
-    })
-}
-
-fn decode_event_raw(text: &str) -> Result<DecodedEvent, String> {
-    let value: serde_json::Value =
-        serde_json::from_str(text).map_err(|e| format!("invalid json: {e}"))?;
-    let obj = value
-        .as_object()
-        .ok_or_else(|| "event must be an object".to_string())?;
-    let t = obj
-        .get("t")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "event.t must be a string".to_string())?;
-    let id = obj
-        .get("id")
-        .and_then(|v| v.as_i64())
-        .ok_or_else(|| "event.id must be an int".to_string())?;
-    match t {
-        "click" => Ok(DecodedEvent::Click(id)),
-        "input" => {
-            let value = obj
-                .get("value")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| "event.value must be a string".to_string())?;
-            Ok(DecodedEvent::Input(id, value.to_string()))
-        }
-        _ => Err("unknown event type".to_string()),
-    }
-}
-
-fn live_error_value(message: &str) -> Value {
-    let mut fields = HashMap::new();
-    fields.insert("message".to_string(), Value::Text(message.to_string()));
-    Value::Record(Arc::new(fields))
-}
-
 fn runtime_error_to_text(err: RuntimeError) -> String {
     match err {
         RuntimeError::Message(message) => message,
