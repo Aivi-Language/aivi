@@ -9,7 +9,6 @@ use aivi.text
 @test
 randomBytes_smoke = effect {
   b <- randomBytes 16
-  pure b
   assertEq (1 + 1) 2
 }
 

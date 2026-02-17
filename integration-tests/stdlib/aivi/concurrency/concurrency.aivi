@@ -46,7 +46,7 @@ make_smoke = effect {
 @test
 par_smoke = effect {
   // Just ensure both branches run without throwing.
-  par (pure 1) (pure 2)
+  _ <- par (pure 1) (pure 2)
   assert True
 }
 

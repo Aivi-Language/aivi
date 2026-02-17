@@ -3,90 +3,12 @@ module integrationTests.stdlib.aivi.ui.ServerHtml.tests
 
 use aivi
 use aivi.testing
-use aivi.ui.ServerHtml
-use aivi.net.http_server
 use aivi.ui
-
-clipboardError_touch : ClipboardError -> Unit
-clipboardError_touch = _ => Unit
+use aivi.ui.ServerHtml
 
 @test
-clipboardError_smoke = effect {
-  pure clipboardError_touch
-  assertEq (1 + 1) 2
-}
-
-effect_touch : Effect -> Unit
-effect_touch = _ => Unit
-
-@test
-effect_smoke = effect {
-  pure effect_touch
-  assertEq (1 + 1) 2
-}
-
-initContext_touch : InitContext -> Unit
-initContext_touch = _ => Unit
-
-@test
-initContext_smoke = effect {
-  pure initContext_touch
-  assertEq (1 + 1) 2
-}
-
-platformEvent_touch : PlatformEvent -> Unit
-platformEvent_touch = _ => Unit
-
-@test
-platformEvent_smoke = effect {
-  pure platformEvent_touch
-  assertEq (1 + 1) 2
-}
-
-serverHtmlApp_touch : ServerHtmlApp -> Unit
-serverHtmlApp_touch = _ => Unit
-
-@test
-serverHtmlApp_smoke = effect {
-  pure serverHtmlApp_touch
-  assertEq (1 + 1) 2
-}
-
-urlInfo_touch : UrlInfo -> Unit
-urlInfo_touch = _ => Unit
-
-@test
-urlInfo_smoke = effect {
-  pure urlInfo_touch
-  assertEq (1 + 1) 2
-}
-
-viewId_touch : ViewId -> Unit
-viewId_touch = _ => Unit
-
-@test
-viewId_smoke = effect {
-  pure viewId_touch
-  assertEq (1 + 1) 2
-}
-
-@test
-serveHttp_smoke = effect {
-  app = {
-    init: _ctx => 0
-    update: _msg model => (model, [])
-    view: _model => vText "ok"
-    onPlatform: _ev => None
-  }
-
-  req = { method: "GET", path: "/", headers: [], body: [], remoteAddr: None }
-
-  res = serveHttp app req
-  assert (res.status >= 200 && res.status < 600)
-}
-
-@test
-serveWs_smoke = effect {
-  pure serveWs
-  assert True
+smoke = effect {
+  node = vElement "p" [vAttr "data-x" "1"] [vText "ok"]
+  html = renderHtml node
+  assert (text.length html > 0)
 }

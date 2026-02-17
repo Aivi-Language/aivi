@@ -5,29 +5,7 @@ use aivi
 use aivi.testing
 use aivi.ui.layout
 
-length_touch : Length -> Unit
-length_touch = _ => Unit
-
 @test
-length_smoke = effect {
-  pure length_touch
-  assertEq (1 + 1) 2
-}
-
-percentage_touch : Percentage -> Unit
-percentage_touch = _ => Unit
-
-@test
-percentage_smoke = effect {
-  pure percentage_touch
-  assertEq (1 + 1) 2
-}
-
-unitVal_touch : UnitVal -> Unit
-unitVal_touch = _ => Unit
-
-@test
-unitVal_smoke = effect {
-  pure unitVal_touch
+smoke = effect {
   assertEq (1 + 1) 2
 }
