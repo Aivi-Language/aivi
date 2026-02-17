@@ -99,12 +99,12 @@ topoSmoke = effect {
   }
   graph = { nodes: [0, 1, 2, 3], adj: adj }
 
-  result = topologicalSort graph
-  _ <- assert (result == Ok [0, 1, 2, 3] || result == Ok [0, 2, 1, 3])
+  result <- pure (topologicalSort graph)
+  _      <- assert (result == Ok [0, 1, 2, 3] || result == Ok [0, 2, 1, 3])
 
   // Test cyclic graph detection
   cyclicAdj = ~map{ 0 => [1], 1 => [0] }
   cyclicGraph = { nodes: [0, 1], adj: cyclicAdj }
-  cycle = topologicalSort cyclicGraph
-  _ <- assert (cycle == Err [0, 1] || cycle == Err [1, 0])
+  cycle <- pure (topologicalSort cyclicGraph)
+  _     <- assert (cycle == Err [0, 1] || cycle == Err [1, 0])
 }

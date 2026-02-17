@@ -33,8 +33,6 @@ edgePairs = edges => edges ?
   | []           => []
   | [e, ...rest] => [(e.from, e.to), ...edgePairs rest]
 
-minFloat = a b => if a < b then a else b
-
 bigCap : Float
 bigCap = 1000000000.0
 
@@ -79,6 +77,7 @@ bfsExplore = residual current edges q visited parents => edges ?
   }
 
 // Reconstruct path from parents map
+reconstruct : Map Int Int -> Int -> Int -> List Int -> List Int
 reconstruct = parents sink source acc => {
   if sink == source then
     [source, ...acc]
@@ -89,12 +88,17 @@ reconstruct = parents sink source acc => {
 }
 
 // Calculate bottleneck capacity along path
-pathCapacity = residual path => path ?
+pathCapacity : Residual -> List Int -> Float
+pathCapacity = residual path => pathCapacityGo residual path
+
+pathCapacityGo : Residual -> List Int -> Float
+pathCapacityGo = residual path => path ?
   | []              => 0.0
   | [_]             => bigCap
   | [a, b, ...rest] => {
     cap = getOrZero { from: a, to: b } residual.capacities
-    minFloat cap (pathCapacity residual [b, ...rest])
+    restCap = pathCapacityGo residual [b, ...rest]
+    if cap < restCap then cap else restCap
   }
 
 // Update capacities along path
@@ -149,9 +153,9 @@ maxFlowTest = effect {
     { from: 4, to: 5, cap: 4.0 }
   ]
 
-  (flow, _) = maxFlow edges 0 5
-  _ <- assert (flow == 23.0)
+  (flow, _) <- pure (maxFlow edges 0 5)
+  _         <- assert (flow == 23.0)
 
-  (zeroFlow, _) = maxFlow [] 0 1
-  _ <- assert (zeroFlow == 0.0)
+  (zeroFlow, _) <- pure (maxFlow [] 0 1)
+  _             <- assert (zeroFlow == 0.0)
 }

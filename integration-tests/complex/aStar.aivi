@@ -4,6 +4,7 @@ use aivi
 use aivi.testing
 use aivi.collections
 use aivi.graph
+use aivi.math (sum)
 use aivi.vector (Vec2, magnitude, domain Vector)
 
 // Node positions for heuristic calculation using ~map{} sigil
@@ -41,12 +42,12 @@ infinity = 1000000.0
 // Expand a single neighbor
 expandNeighbor : Int -> Float -> Int -> (Int -> Int -> Float) -> AStarState -> { to: Int, weight: Float } -> AStarState
 expandNeighbor = current currentG goal heuristicFunc state edge => {
-  tentative = currentG + edge.weight
+  tentative = sum [currentG, edge.weight]
   prevScore = Map.get edge.to state.scores ?
     | Some v => v
     | None   => infinity
     if tentative < prevScore then {
-      queue: Heap.push (tentative + heuristicFunc goal edge.to, edge.to, tentative) state.queue
+      queue: Heap.push (sum [tentative, heuristicFunc goal edge.to], edge.to, tentative) state.queue
       scores: Map.insert edge.to tentative state.scores
       parents: Map.insert edge.to current state.parents
     }
@@ -97,12 +98,12 @@ buildGraph = fromWeightedEdges [
 
 @test
 astarSmoke = effect {
-  graph = buildGraph
-  result = astar graph 0 3 heuristic
-  _ <- assert (result == Some [0, 1, 2, 3])
+  graph  <- pure buildGraph
+  result <- pure (astar graph 0 3 heuristic)
+  _      <- assert (result == Some [0, 1, 2, 3])
   zeroHeuristic = _ _ => 0.0
-  result2 = astar graph 0 3 zeroHeuristic
-  _ <- assert (result2 == Some [0, 1, 2, 3])
-  bad = astar graph 3 0 zeroHeuristic
-  _ <- assert (bad == None)
+  result2 <- pure (astar graph 0 3 zeroHeuristic)
+  _       <- assert (result2 == Some [0, 1, 2, 3])
+  bad     <- pure (astar graph 3 0 zeroHeuristic)
+  _       <- assert (bad == None)
 }
