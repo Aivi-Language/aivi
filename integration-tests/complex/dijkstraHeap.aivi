@@ -4,7 +4,8 @@ module integrationTests.complex.DijkstraHeap
 use aivi
 use aivi.testing
 use aivi.collections
-use aivi.graph
+use aivi.math (sum)
+use aivi.graph (Graph, fromWeightedEdges, edgesFrom)
 
 // Large constant for infinity
 infinity : Float
@@ -20,10 +21,11 @@ buildGraph = fromWeightedEdges [
 ]
 
 // Expand all neighbors, returning updated (queue, dist)
+expandNeighbors : List { to: Int, weight: Float } -> Heap (Float, Int) -> Map Int Float -> Float -> (Heap (Float, Int), Map Int Float)
 expandNeighbors = edges queue dist currentDist => edges ?
   | []              => (queue, dist)
   | [edge, ...tail] => {
-    tentative = currentDist + edge.weight
+    tentative = sum [currentDist, edge.weight]
     prev = Map.getOrElse edge.to infinity dist
     if tentative < prev then
       expandNeighbors tail (Heap.push (tentative, edge.to) queue) (Map.insert edge.to tentative dist) currentDist
@@ -32,6 +34,7 @@ expandNeighbors = edges queue dist currentDist => edges ?
   }
 
 // Main search loop
+search : Heap (Float, Int) -> Map Int Float -> Set Int -> Graph -> Map Int Float
 search = queue dist visited graph => (Heap.popMin queue) ?
   | None                             => dist
   | Some ((currentDist, node), rest) =>
@@ -44,13 +47,14 @@ search = queue dist visited graph => (Heap.popMin queue) ?
     }
 
 // Dijkstra entry point
+dijkstra : Graph -> Int -> Map Int Float
 dijkstra = graph start =>
   search (Heap.push (0.0, start) Heap.empty) (~map{ start => 0.0 }) Set.empty graph
 
   @test
   shortestPaths = effect {
-    graph = buildGraph
-    distances = dijkstra graph 0
-    _ <- assert (Map.get 3 distances == Some 4.0)
-    _ <- assert (Map.get 2 distances == Some 3.0)
+    graph     <- pure buildGraph
+    distances <- pure (dijkstra graph 0)
+    _         <- assert (Map.get 3 distances == Some 4.0)
+    _         <- assert (Map.get 2 distances == Some 3.0)
   }

@@ -38,9 +38,9 @@ SegmentTree =
 
 // Extract metadata from a tree node
 nodeMeta : SegmentTree -> Option SegmentMeta
-nodeMeta =
+nodeMeta = tree => tree ?
   | Empty                  => None
-  | Node { sum, min, max } => Some { sum, min, max }
+  | Node { sum, min, max } => Some { sum: sum, min: min, max: max }
 
 // Combine two child metas
 combineMeta = leftMeta rightMeta => (leftMeta, rightMeta) ?
@@ -89,10 +89,10 @@ buildRange = arr start end => {
 }
 
 // Create tree from list
-fromList : List Int -> SegmentTree
-fromList = arr =>
-  if isEmpty arr then Empty
-  else buildRange arr 0 (listLength arr - 1)
+  fromList : List Int -> SegmentTree
+  fromList = arr =>
+    if isEmpty arr then Empty
+    else buildRange arr 0 (listLength arr - 1)
 
 // Query range [l..r] for metadata
   queryRange : SegmentTree -> Int -> Int -> Option SegmentMeta
@@ -100,7 +100,7 @@ fromList = arr =>
     | Empty                                           => None
     | Node { start, end, sum, min, max, left, right } =>
       if r < start || end < l then None
-      else if l <= start && end <= r then Some { sum, min, max }
+      else if l <= start && end <= r then Some { sum: sum, min: min, max: max }
       else combineMeta (queryRange left l r) (queryRange right l r)
 
 // Point update at index (returns new tree, old is unchanged)
@@ -126,16 +126,16 @@ fromList = arr =>
     @test
 persistency = effect {
   arr = [1, 2, 3, 4]
-  tree = fromList arr
+  tree <- pure (fromList arr)
 
-  queryAll = queryRange tree 0 3
-  _ <- assert (queryAll == Some { sum: 10, min: 1, max: 4 })
+  queryAll <- pure (queryRange tree 0 3)
+  _        <- assert (queryAll == Some { sum: 10, min: 1, max: 4 })
 
-  querySlice = queryRange tree 1 2
-  _ <- assert (querySlice == Some { sum: 5, min: 2, max: 3 })
+  querySlice <- pure (queryRange tree 1 2)
+  _          <- assert (querySlice == Some { sum: 5, min: 2, max: 3 })
 
-  updated = updatePoint tree 2 7
-  _ <- assert (queryRange updated 2 2 == Some { sum: 7, min: 7, max: 7 })
+  updated <- pure (updatePoint tree 2 7)
+  _       <- assert (queryRange updated 2 2 == Some { sum: 7, min: 7, max: 7 })
 
   // Original tree stays intact (persistence)
   _ <- assert (queryRange tree 2 2 == Some { sum: 3, min: 3, max: 3 })

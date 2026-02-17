@@ -77,20 +77,20 @@ processNeighbors = graph node nexts state => nexts ?
   | []              => state
   | [next, ...tail] => {
     acc =
-      if Map.has next state.index then
-        if Set.has next state.onStack then {
-          lowNode = getOr state.lowlink node bigInt
-          idxNext = getOr state.index next bigInt
-          state <| { lowlink: Map.insert node (minInt lowNode idxNext) state.lowlink }
-        }
-        else
-          state
-      else {
-        nested = visitNode graph next state
-        lowNode = getOr nested.lowlink node bigInt
-        lowNext = getOr nested.lowlink next bigInt
-        nested <| { lowlink: Map.insert node (minInt lowNode lowNext) nested.lowlink }
+    if Map.has next state.index then
+      if Set.has next state.onStack then {
+        lowNode = getOr state.lowlink node bigInt
+        idxNext = getOr state.index next bigInt
+        state <| { lowlink: Map.insert node (minInt lowNode idxNext) state.lowlink }
       }
+      else
+        state
+    else {
+      nested = visitNode graph next state
+      lowNode = getOr nested.lowlink node bigInt
+      lowNext = getOr nested.lowlink next bigInt
+      nested <| { lowlink: Map.insert node (minInt lowNode lowNext) nested.lowlink }
+    }
     processNeighbors graph node tail acc
   }
 
@@ -128,7 +128,7 @@ listAny = list pred => list ?
   | []        => False
   | [h, ...t] => if pred h then True else listAny t pred
 
-@test
+  @test
 sccSmoke = effect {
   adj = ~map{
     0 => [1]
@@ -138,7 +138,7 @@ sccSmoke = effect {
   }
   graph = { nodes: [0, 1, 2, 3], adj: adj }
 
-  comps = strongComponents graph
-  _ <- assert (listLength comps == 2)
-  _ <- assert (listAny comps (cmp => contains cmp 0))
+  comps <- pure (strongComponents graph)
+  _     <- assert (listLength comps == 2)
+  _     <- assert (listAny comps (cmp => contains cmp 0))
 }

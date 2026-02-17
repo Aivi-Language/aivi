@@ -39,13 +39,13 @@ buildFromList = arr => {
 }
 
 buildTree = arr size idx tree => {
-    if idx > size then
-      tree
-    else
-      at arr (idx - 1) ?
-        | None       => buildTree arr size (idx + 1) tree
-        | Some value => buildTree arr size (idx + 1) (addDelta size idx value tree)
-  }
+  if idx > size then
+    tree
+  else
+    at arr (idx - 1) ?
+      | None       => buildTree arr size (idx + 1) tree
+      | Some value => buildTree arr size (idx + 1) (addDelta size idx value tree)
+}
 
 // Query prefix sum [1..idx]
 prefix : Fenwick -> Int -> Int
@@ -97,19 +97,19 @@ verifyIndices = indices fen arr => indices ?
   @test
 behaviors = effect {
   values = [3, 1, 4, 1, 5]
-  fenwick = buildFromList values
+  fenwick <- pure (buildFromList values)
 
-  sum05 = rangeSum fenwick 1 5
-  _ <- assert (sum05 == Some 14)
+  sum05 <- pure (rangeSum fenwick 1 5)
+  _     <- assert (sum05 == Some 14)
 
-  sum23 = rangeSum fenwick 2 3
-  _ <- assert (sum23 == Some 5)
+  sum23 <- pure (rangeSum fenwick 2 3)
+  _     <- assert (sum23 == Some 5)
 
   _ <- assert (rangeSum fenwick 6 6 == None)
 
-  updated = update fenwick 3 9
-  _ <- assert (rangeSum updated 3 3 == Some 9)
-  _ <- assert (rangeSum fenwick 3 3 == Some 4)
+  updated <- pure (update fenwick 3 9)
+  _       <- assert (rangeSum updated 3 3 == Some 9)
+  _       <- assert (rangeSum fenwick 3 3 == Some 4)
 
   _ <- assert (verifyIndices [1, 2, 3, 4, 5] updated values)
 }

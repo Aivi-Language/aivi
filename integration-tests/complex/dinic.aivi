@@ -88,7 +88,7 @@ pushFlow = residual from to delta => {
   caps = residual.capacities
     |> Map.insert { from: from, to: to } (forward - delta)
     |> Map.insert { from: to, to: from } (backward + delta)
-  residual <| { capacities: caps }
+    residual <| { capacities: caps }
 }
 
 // DFS to find blocking flow
@@ -157,9 +157,9 @@ flowTest = effect {
     { from: 4, to: 5, cap: 10 }
   ]
 
-  (result, _) = maxFlow edges 0 5
-  _ <- assert (result == 20)
+  (result, _) <- pure (maxFlow edges 0 5)
+  _           <- assert (result == 20)
 
-  (zero, _) = maxFlow [] 0 1
-  _ <- assert (zero == 0)
+  (zero, _) <- pure (maxFlow [] 0 1)
+  _         <- assert (zero == 0)
 }
