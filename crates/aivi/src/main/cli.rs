@@ -405,11 +405,19 @@ fn run() -> Result<(), AiviError> {
                     let _modules = load_checked_modules_with_progress(&opts.input)?;
                     let program = aivi::desugar_target_typed(&opts.input)?;
                     if opts.target == "rust" || opts.target == "rust-native" {
-                        let rust = compile_rust_native(program)?;
+                        let rust = if opts.target == "rust" {
+                            compile_rust_native_lib(program)?
+                        } else {
+                            compile_rust_native(program)?
+                        };
                         let out_dir = opts
                             .output
                             .unwrap_or_else(|| PathBuf::from("target/aivi-gen"));
-                        write_rust_project_native(&out_dir, &rust)?;
+                        if opts.target == "rust" {
+                            write_rust_project_native_lib(&out_dir, &rust)?;
+                        } else {
+                            write_rust_project_native(&out_dir, &rust)?;
+                        }
                         println!("{}", out_dir.display());
                     } else {
                         let out = opts
@@ -847,6 +855,20 @@ fn write_rust_project_native(out_dir: &Path, main_rs: &str) -> Result<(), AiviEr
     std::fs::create_dir_all(&src_dir)?;
     std::fs::write(out_dir.join("Cargo.toml"), cargo_toml)?;
     std::fs::write(src_dir.join("main.rs"), main_rs)?;
+    Ok(())
+}
+
+fn write_rust_project_native_lib(out_dir: &Path, lib_rs: &str) -> Result<(), AiviError> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let rt_path = normalize_path(&manifest_dir.join("../aivi_native_runtime"));
+    let cargo_toml = format!(
+        "[package]\nname = \"aivi-gen\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\naivi_native_runtime = {{ path = \"{}\" }}\n",
+        rt_path
+    );
+    let src_dir = out_dir.join("src");
+    std::fs::create_dir_all(&src_dir)?;
+    std::fs::write(out_dir.join("Cargo.toml"), cargo_toml)?;
+    std::fs::write(src_dir.join("lib.rs"), lib_rs)?;
     Ok(())
 }
 

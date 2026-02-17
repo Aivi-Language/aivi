@@ -4,7 +4,6 @@ module integrationTests.stdlib.aivi.calendar.tests
 use aivi
 use aivi.testing
 use aivi.calendar
-use aivi.calendar (domain Calendar)
 
 @test
 date_smoke = effect {
@@ -12,16 +11,10 @@ date_smoke = effect {
   assert (d.year == 2024)
 }
 
-dateTime_touch : DateTime -> Unit
-dateTime_touch = _ => Unit
-
 @test
 dateTime_smoke = effect {
   assertEq (1 + 1) 2
 }
-
-endOfMonth_touch : EndOfMonth -> Unit
-endOfMonth_touch = _ => Unit
 
 @test
 endOfMonth_smoke = effect {
