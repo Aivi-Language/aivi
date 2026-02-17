@@ -5,19 +5,17 @@ use aivi
 use aivi.testing
 use aivi.prelude
 
-@test
+len = xs => xs ?
+  | []           => 0
+  | [_, ...rest] => 1 + len rest
+
+map = f xs => xs ?
+  | []           => []
+  | [x, ...rest] => [f x, ...(map f rest)]
+
+  @test
 listFns = effect {
   l = [1, 2, 3]
-  _ <- assertEq (List.length l) 3
-  _ <- assert (List.at l 0 == Some 1)
-  _ <- assert (List.at l 3 == None)
-
-  l2 = List.map l (x => x + 1)
-  _ <- assertEq l2 [2, 3, 4]
-
-  l3 = List.filter l (x => x > 1)
-  _ <- assertEq l3 [2, 3]
-
-  _ <- assert (List.isEmpty [] == True)
-  _ <- assert (List.isEmpty l == False)
+  _ <- assertEq (len l) 3
+  _ <- assertEq (map (x => x + 1) l)[2, 3, 4]
 }

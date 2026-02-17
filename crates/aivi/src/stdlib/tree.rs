@@ -11,13 +11,21 @@ export fromListBy
 use aivi
 use aivi.collections (Queue)
 
-Tree A = { value: A, children: List (Tree A) }
+Tree A = Node A (List (Tree A))
 
 node : A -> List (Tree A) -> Tree A
-node = value children => { value: value, children: children }
+node = value children => Node value children
 
 leaf : A -> Tree A
-leaf = value => { value: value, children: [] }
+leaf = value => Node value []
+
+valueOf : Tree A -> A
+valueOf = t => t ?
+  | Node v _ => v
+
+childrenOf : Tree A -> List (Tree A)
+childrenOf = t => t ?
+  | Node _ cs => cs
 
 append : List A -> List A -> List A
 append = xs ys => xs ?
@@ -41,9 +49,9 @@ dfsPreorderGo = stack outRev => stack ?
   | [] => reverse outRev
   | [t, ...rest] => {
     // push children in reverse so leftmost is visited first
-    childrenRev = reverse t.children
+    childrenRev = reverse (childrenOf t)
     stack2 = append childrenRev rest
-    dfsPreorderGo stack2 [t.value, ...outRev]
+    dfsPreorderGo stack2 [valueOf t, ...outRev]
   }
 
 // Depth-first postorder traversal
@@ -66,7 +74,7 @@ dfsPostorderGo = work outStack outRev => work ?
 dfsPostorderDrain : List (Tree A) -> List A -> List A
 dfsPostorderDrain = outStack outRev => outStack ?
   | [] => reverse outRev
-  | [t, ...rest] => dfsPostorderDrain rest [t.value, ...outRev]
+  | [t, ...rest] => dfsPostorderDrain rest [valueOf t, ...outRev]
 
 // Breadth-first traversal
 bfs : Tree A -> List A
@@ -76,8 +84,8 @@ bfsLoop : Queue (Tree A) -> List A -> List A
 bfsLoop = q outRev => (Queue.dequeue q) ?
   | None => reverse outRev
   | Some (t, q2) => {
-    q3 = bfsEnqueueChildren t.children q2
-    bfsLoop q3 [t.value, ...outRev]
+    q3 = bfsEnqueueChildren (childrenOf t) q2
+    bfsLoop q3 [valueOf t, ...outRev]
   }
 
 bfsEnqueueChildren : List (Tree A) -> Queue (Tree A) -> Queue (Tree A)
@@ -93,7 +101,7 @@ bfsEnqueueChildren = children q => children ?
 // Returns:
 // - None if no root exists or multiple roots exist.
 // - Some tree if exactly one root exists.
-fromListBy : (A -> Id) -> (A -> Option Id) -> List A -> Option (Tree A)
+fromListBy : (A -> K) -> (A -> Option K) -> List A -> Option (Tree A)
 fromListBy = idFn parentIdFn items => {
   // Build children map: parentId -> List A (children)
   childrenMap = fromListChildrenMap idFn parentIdFn items Map.empty
@@ -104,7 +112,7 @@ fromListBy = idFn parentIdFn items => {
     | _ => None
 }
 
-fromListChildrenMap : (A -> Id) -> (A -> Option Id) -> List A -> Map Id (List A) -> Map Id (List A)
+fromListChildrenMap : (A -> K) -> (A -> Option K) -> List A -> Map K (List A) -> Map K (List A)
 fromListChildrenMap = idFn parentIdFn items acc => items ?
   | [] => acc
   | [x, ...rest] => {
@@ -115,12 +123,12 @@ fromListChildrenMap = idFn parentIdFn items acc => items ?
     fromListChildrenMap idFn parentIdFn rest acc2
   }
 
-mapPush : Id -> A -> Map Id (List A) -> Map Id (List A)
+mapPush : K -> A -> Map K (List A) -> Map K (List A)
 mapPush = key value m => (Map.get key m) ?
   | None => Map.insert key [value] m
   | Some xs => Map.insert key [value, ...xs] m
 
-rootsFromList : (A -> Id) -> (A -> Option Id) -> List A -> List A -> List A
+rootsFromList : (A -> K) -> (A -> Option K) -> List A -> List A -> List A
 rootsFromList = idFn parentIdFn items accRev => items ?
   | [] => reverse accRev
   | [x, ...rest] =>
@@ -128,14 +136,14 @@ rootsFromList = idFn parentIdFn items accRev => items ?
       | None => rootsFromList idFn parentIdFn rest [x, ...accRev]
       | Some _ => rootsFromList idFn parentIdFn rest accRev
 
-buildTree : (A -> Id) -> Id -> A -> Map Id (List A) -> Tree A
+buildTree : (A -> K) -> K -> A -> Map K (List A) -> Tree A
 buildTree = idFn id item childrenMap => {
   // preserve original list order by reversing once (since we pushed-front)
   children = reverse (Map.getOrElse id [] childrenMap)
-  { value: item, children: buildForest idFn children childrenMap [] }
+  Node item (buildForest idFn children childrenMap [])
 }
 
-buildForest : (A -> Id) -> List A -> Map Id (List A) -> List (Tree A) -> List (Tree A)
+buildForest : (A -> K) -> List A -> Map K (List A) -> List (Tree A) -> List (Tree A)
 buildForest = idFn items childrenMap accRev => items ?
   | [] => reverse accRev
   | [x, ...rest] => {

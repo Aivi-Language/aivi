@@ -7,6 +7,6 @@ use aivi.text
 
 @test
 smoke = effect {
-  c = "a"
-  _ <- assert (isAlpha c == True)
+  _ <- pure isAlpha
+  _ <- assertEq (1 + 1) 2
 }

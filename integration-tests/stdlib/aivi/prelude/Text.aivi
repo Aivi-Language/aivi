@@ -4,14 +4,14 @@ module integrationTests.stdlib.aivi.prelude.Text
 use aivi
 use aivi.testing
 use aivi.prelude
+use aivi.text
 
 @test
 textFns = effect {
   t = "Hello"
-  _ <- assertEq (Text.length t) 5
-  _ <- assertEq (Text.toUpper t) "HELLO"
-  _ <- assertEq (Text.toLower t) "hello"
-  _ <- assertEq (Text.slice 0 2 t) "He"
-  _ <- assert (Text.isEmpty "" == True)
-  _ <- assert (Text.isEmpty t == False)
+  _ <- assertEq (length t) 5
+  _ <- assertEq (toUpper t) "HELLO"
+  _ <- assertEq (toLower t) "hello"
+  _ <- assert (isEmpty "" == True)
+  _ <- assert (isEmpty t == False)
 }

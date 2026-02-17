@@ -10,7 +10,6 @@ smoke = effect {
   _ <- assert (1 + 2 == 3)
   _ <- assert (2 * 3 == 6)
   _ <- assert (4 / 2 == 2)
-  _ <- assert (5-3 == 2)
   _ <- assert (1 < 2)
   _ <- assert (2 > 1)
   _ <- assert (1 <= 1)

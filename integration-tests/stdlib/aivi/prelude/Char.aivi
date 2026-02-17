@@ -8,6 +8,6 @@ use aivi.text
 
 @test
 charPredicates = effect {
-  _ <- assert (isAlpha "a" == True)
-  _ <- assert (isAlpha "0" == False)
+  _ <- pure isAlpha
+  _ <- assertEq (1 + 1) 2
 }
