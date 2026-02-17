@@ -262,6 +262,7 @@ impl TypeChecker {
         Scheme {
             vars: ty_vars.into_iter().collect(),
             ty,
+            origin: None,
         }
     }
 

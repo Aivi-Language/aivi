@@ -104,13 +104,20 @@ impl TypeChecker {
         let mut sigs: HashMap<String, Vec<Scheme>> = HashMap::new();
         for item in &module.items {
             if let ModuleItem::TypeSig(sig) = item {
-                let scheme = self.scheme_from_sig(sig);
+                let scheme =
+                    self.scheme_from_sig(sig, SchemeOrigin::new(module.name.name.clone(), None));
                 sigs.entry(sig.name.name.clone()).or_default().push(scheme);
             }
             if let ModuleItem::DomainDecl(domain) = item {
                 for domain_item in &domain.items {
                     if let DomainItem::TypeSig(sig) = domain_item {
-                        let scheme = self.scheme_from_sig(sig);
+                        let scheme = self.scheme_from_sig(
+                            sig,
+                            SchemeOrigin::new(
+                                module.name.name.clone(),
+                                Some(domain.name.name.clone()),
+                            ),
+                        );
                         sigs.entry(sig.name.name.clone()).or_default().push(scheme);
                     }
                 }
@@ -119,11 +126,15 @@ impl TypeChecker {
         sigs
     }
 
-    fn scheme_from_sig(&mut self, sig: &TypeSig) -> Scheme {
+    fn scheme_from_sig(&mut self, sig: &TypeSig, origin: SchemeOrigin) -> Scheme {
         let mut ctx = TypeContext::new(&self.type_constructors);
         let ty = self.type_from_expr(&sig.ty, &mut ctx);
         let vars: Vec<TypeVarId> = ctx.type_vars.values().cloned().collect();
-        Scheme { vars, ty }
+        Scheme {
+            vars,
+            ty,
+            origin: Some(origin),
+        }
     }
 
     pub(super) fn register_module_constructors(&mut self, module: &Module, env: &mut TypeEnv) {
@@ -187,6 +198,7 @@ impl TypeChecker {
             let scheme = Scheme {
                 vars: params.clone(),
                 ty: ctor_type,
+                origin: None,
             };
             env.insert(ctor.name.name.clone(), scheme);
         }
@@ -298,13 +310,22 @@ impl TypeChecker {
                     let name = def.name.name.clone();
                     match sigs.get(&name) {
                         Some(candidates) if candidates.len() == 1 => {
-                            env.insert(name, candidates[0].clone());
+                            let mut scheme = candidates[0].clone();
+                            scheme.origin = Some(SchemeOrigin::new(module.name.name.clone(), None));
+                            env.insert(name, scheme);
                         }
                         Some(candidates) => {
-                            env.insert_overloads(name, candidates.clone());
+                            let mut schemes = candidates.clone();
+                            for scheme in &mut schemes {
+                                scheme.origin =
+                                    Some(SchemeOrigin::new(module.name.name.clone(), None));
+                            }
+                            env.insert_overloads(name, schemes);
                         }
                         None => {
-                            env.insert(name, Scheme::mono(self.fresh_var()));
+                            let mut scheme = Scheme::mono(self.fresh_var());
+                            scheme.origin = Some(SchemeOrigin::new(module.name.name.clone(), None));
+                            env.insert(name, scheme);
                         }
                     }
                 }
@@ -315,13 +336,30 @@ impl TypeChecker {
                                 let name = def.name.name.clone();
                                 match sigs.get(&name) {
                                     Some(candidates) if candidates.len() == 1 => {
-                                        env.insert(name, candidates[0].clone());
+                                        let mut scheme = candidates[0].clone();
+                                        scheme.origin = Some(SchemeOrigin::new(
+                                            module.name.name.clone(),
+                                            Some(domain.name.name.clone()),
+                                        ));
+                                        env.insert(name, scheme);
                                     }
                                     Some(candidates) => {
-                                        env.insert_overloads(name, candidates.clone());
+                                        let mut schemes = candidates.clone();
+                                        for scheme in &mut schemes {
+                                            scheme.origin = Some(SchemeOrigin::new(
+                                                module.name.name.clone(),
+                                                Some(domain.name.name.clone()),
+                                            ));
+                                        }
+                                        env.insert_overloads(name, schemes);
                                     }
                                     None => {
-                                        env.insert(name, Scheme::mono(self.fresh_var()));
+                                        let mut scheme = Scheme::mono(self.fresh_var());
+                                        scheme.origin = Some(SchemeOrigin::new(
+                                            module.name.name.clone(),
+                                            Some(domain.name.name.clone()),
+                                        ));
+                                        env.insert(name, scheme);
                                     }
                                 }
                             }
