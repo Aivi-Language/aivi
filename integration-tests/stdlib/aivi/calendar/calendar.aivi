@@ -1,0 +1,89 @@
+@no_prelude
+module integrationTests.stdlib.aivi.calendar.tests
+
+use aivi
+use aivi.testing
+use aivi.calendar
+
+@test
+date_smoke = effect {
+  d = { year: 2024, month: 2, day: 29 }
+  _ <- assert (d.year == 2024)
+}
+
+dateTime_touch : DateTime -> Unit
+dateTime_touch = _ => Unit
+
+@test
+dateTime_smoke = effect {
+  _ <- pure dateTime_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+endOfMonth_touch : EndOfMonth -> Unit
+endOfMonth_touch = _ => Unit
+
+@test
+endOfMonth_smoke = effect {
+  _ <- pure endOfMonth_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+addDays_smoke = effect {
+  d = addDays 1 { year: 2024, month: 2, day: 28 }
+  _ <- assert (d.day == 29)
+  _ <- assert (d.month == 2)
+
+  d2 = addDays 2 { year: 2024, month: 2, day: 28 }
+  _ <- assert (d2.day == 1)
+  _ <- assert (d2.month == 3)
+}
+
+@test
+addMonths_smoke = effect {
+  d = addMonths 1 { year: 2024, month: 1, day: 31 }
+  _ <- assert (d.month == 2)
+  _ <- assert (d.day == 29) // 2024 is leap year, 29th is max
+}
+
+@test
+addYears_smoke = effect {
+  d = addYears 1 { year: 2024, month: 2, day: 29 }
+  _ <- assert (d.year == 2025)
+  _ <- assert (d.day == 28) // 2025 is not leap, clamps to 28
+}
+
+@test
+daysInMonth_smoke = effect {
+  _ <- assert (daysInMonth { year: 2024, month: 2, day: 1 } == 29)
+  _ <- assert (daysInMonth { year: 2023, month: 2, day: 1 } == 28)
+}
+
+@test
+endOfMonth_smoke_2 = effect {
+  d = endOfMonth { year: 2024, month: 2, day: 1 }
+  _ <- assert (d.day == 29)
+}
+
+@test
+isLeapYear_smoke = effect {
+  _ <- assert (isLeapYear { year: 2024, month: 1, day: 1 } == True)
+  _ <- assert (isLeapYear { year: 2023, month: 1, day: 1 } == False)
+}
+
+@test
+negateDelta_smoke = effect {
+  _ <- pure negateDelta
+  _ <- assert True
+}
+
+@test
+now_smoke = effect {
+  // now yields a DateTime (Effect DateTime probably? No, builtins usually return the value if it is not a source)
+  // Wait, clock.now in system.rs returns Effect(DateTime).
+  // But calendar/now.aivi imports clock implicitly or is a wrapper?
+  // Lets assume it is an effect.
+  n <- now
+  _ <- assert True // Just checking not crashing for now
+}

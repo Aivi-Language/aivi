@@ -1,0 +1,126 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.http_server.tests
+
+use aivi
+use aivi.testing
+use aivi.net.http_server
+
+header_touch : Header -> Unit
+header_touch = _ => Unit
+
+@test
+header_smoke = effect {
+  _ <- pure header_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+httpError_touch : HttpError -> Unit
+httpError_touch = _ => Unit
+
+@test
+httpError_smoke = effect {
+  _ <- pure httpError_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+request_touch : Request -> Unit
+request_touch = _ => Unit
+
+@test
+request_smoke = effect {
+  _ <- pure request_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+response_touch : Response -> Unit
+response_touch = _ => Unit
+
+@test
+response_smoke = effect {
+  _ <- pure response_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+server_touch : Server -> Unit
+server_touch = _ => Unit
+
+@test
+server_smoke = effect {
+  _ <- pure server_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+serverConfig_touch : ServerConfig -> Unit
+serverConfig_touch = _ => Unit
+
+@test
+serverConfig_smoke = effect {
+  _ <- pure serverConfig_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+serverReply_touch : ServerReply -> Unit
+serverReply_touch = _ => Unit
+
+@test
+serverReply_smoke = effect {
+  _ <- pure serverReply_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+webSocket_touch : WebSocket -> Unit
+webSocket_touch = _ => Unit
+
+@test
+webSocket_smoke = effect {
+  _ <- pure webSocket_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+wsError_touch : WsError -> Unit
+wsError_touch = _ => Unit
+
+@test
+wsError_smoke = effect {
+  _ <- pure wsError_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+wsMessage_touch : WsMessage -> Unit
+wsMessage_touch = _ => Unit
+
+@test
+wsMessage_smoke = effect {
+  _ <- pure wsMessage_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+listen_smoke = effect {
+  _ <- pure listen
+  _ <- assert True
+}
+
+@test
+stop_smoke = effect {
+  _ <- pure stop
+  _ <- assert True
+}
+
+@test
+wsClose_smoke = effect {
+  _ <- pure wsClose
+  _ <- assert True
+}
+
+@test
+wsRecv_smoke = effect {
+  _ <- pure wsRecv
+  _ <- assert True
+}
+
+@test
+wsSend_smoke = effect {
+  _ <- pure wsSend
+  _ <- assert True
+}

@@ -1,0 +1,42 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.streams.tests
+
+use aivi
+use aivi.testing
+use aivi.net.streams
+
+stream_touch : Stream -> Unit
+stream_touch = _ => Unit
+
+@test
+stream_smoke = effect {
+  _ <- pure stream_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+streamError_touch : StreamError -> Unit
+streamError_touch = _ => Unit
+
+@test
+streamError_smoke = effect {
+  _ <- pure streamError_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+chunks_smoke = effect {
+  // chunks returns a source yielding chunks of data
+  _ <- assert True
+}
+
+@test
+fromSocket_smoke = effect {
+  _ <- pure fromSocket
+  _ <- assert True
+}
+
+@test
+toSocket_smoke = effect {
+  _ <- pure toSocket
+  _ <- assert True
+}

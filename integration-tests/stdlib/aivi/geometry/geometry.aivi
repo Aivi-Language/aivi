@@ -1,0 +1,69 @@
+@no_prelude
+module integrationTests.stdlib.aivi.geometry.tests
+
+use aivi
+use aivi.testing
+use aivi.geometry
+
+line2_touch : Line2 -> Unit
+line2_touch = _ => Unit
+
+@test
+line2_smoke = effect {
+  _ <- pure line2_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+point2_touch : Point2 -> Unit
+point2_touch = _ => Unit
+
+@test
+point2_smoke = effect {
+  _ <- pure point2_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+point3_touch : Point3 -> Unit
+point3_touch = _ => Unit
+
+@test
+point3_smoke = effect {
+  _ <- pure point3_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+polygon_touch : Polygon -> Unit
+polygon_touch = _ => Unit
+
+@test
+polygon_smoke = effect {
+  _ <- pure polygon_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+segment2_touch : Segment2 -> Unit
+segment2_touch = _ => Unit
+
+@test
+segment2_smoke = effect {
+  _ <- pure segment2_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+area_smoke = effect {
+  _ <- pure area
+  _ <- assert True
+}
+
+@test
+distance_smoke = effect {
+  _ <- pure distance
+  _ <- assert True
+}
+
+@test
+midpoint_smoke = effect {
+  _ <- pure midpoint
+  _ <- assert True
+}

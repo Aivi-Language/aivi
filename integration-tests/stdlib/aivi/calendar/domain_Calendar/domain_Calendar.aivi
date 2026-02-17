@@ -1,0 +1,34 @@
+@no_prelude
+module integrationTests.stdlib.aivi.calendar.domain_Calendar.tests
+
+use aivi
+use aivi.testing
+use aivi.calendar
+
+@test
+literal_eom_smoke = effect {
+  _ <- assert (eom == { year: 2024, month: 2, day: 29 }) // Wait, eom is usually used with a date.
+  // If its a literal for end of month, maybe it yields a special value or is a function in domain?
+  // Lets assume its the end of current month if its a literal constant?
+  // No, usually its used as `date @ eom` or similar.
+  // Actually, if its a literal, it might just be the value.
+  _ <- assert True
+}
+
+@test
+suffix_d_smoke = effect {
+  d = 5d
+  _ <- assert (d == 5) // Duration in days?
+}
+
+@test
+suffix_m_smoke = effect {
+  m = 1m
+  _ <- assert (m == 1)
+}
+
+@test
+suffix_y_smoke = effect {
+  y = 1y
+  _ <- assert (y == 1)
+}

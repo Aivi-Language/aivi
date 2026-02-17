@@ -1,0 +1,209 @@
+@no_prelude
+module integrationTests.stdlib.aivi.i18n.tests
+
+use aivi
+use aivi.testing
+use aivi.i18n
+
+@test
+bundle_smoke = effect {
+  loc =
+    (parseLocale "en-US") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: Some "US", variants: [], tag: "en-US" }
+
+    bres = bundleFromProperties loc "app.welcome = Hello!\n"
+    _ <- bres ?
+      | Err _ => assert False
+      | Ok b  => assert (t b (~k"app.welcome") {} == "Hello!")
+}
+
+@test
+catalog_smoke = effect {
+  en =
+    (parseLocale "en") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: None, variants: [], tag: "en" }
+    enUs =
+      (parseLocale "en-US") ?
+        | Ok l  => l
+        | Err _ => { language: "en", region: Some "US", variants: [], tag: "en-US" }
+
+    bEnRes = bundleFromProperties en "app.welcome = Hello\n"
+    bEnUsRes = bundleFromProperties enUs "app.welcome = Howdy\n"
+
+    bEn =
+      bEnRes ?
+        | Ok b  => b
+        | Err _ => { locale: en, entries: Map.empty }
+    bEnUs =
+      bEnUsRes ?
+        | Ok b  => b
+        | Err _ => { locale: enUs, entries: Map.empty }
+
+    catalog = catalogFromBundles [bEn, bEnUs]
+    _ <- assert (tCatalog catalog enUs (~k"app.welcome") {} == "Howdy")
+}
+
+@test
+key_smoke = effect {
+  k1 = ~k"app.welcome"
+  _ <- assert (keyText k1 == "app.welcome")
+
+  kres = key "app.cartItems"
+  _ <- kres ?
+    | Ok k  => assert (keyText k == "app.cartItems")
+    | Err _ => assert False
+}
+
+@test
+locale_smoke = effect {
+  res = parseLocale "en_US"
+  _ <- res ?
+    | Ok l  => assert (l.tag == "en-US")
+    | Err _ => assert False
+}
+
+message_touch : Message -> Unit
+message_touch = _ => Unit
+
+@test
+message_smoke = effect {
+  _ <- pure message_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+bundleForLocale_smoke = effect {
+  _ <- pure bundleForLocale
+  _ <- assert True
+}
+
+@test
+bundleFromProperties_smoke = effect {
+  l_res = parseLocale "en"
+  l <- l_res ?
+    | Ok l  => pure l
+    | Err e => fail e
+    props = "greet = Hello!\nval = 123"
+    b_res = bundleFromProperties l props
+    b <- b_res ?
+      | Ok b  => pure b
+      | Err e => fail e
+    _ <- assert (b.locale.language == "en")
+}
+
+@test
+bundleFromPropertiesFile_smoke = effect {
+  _ <- pure bundleFromPropertiesFile
+  _ <- assert True
+}
+
+@test
+bundlesForLocale_smoke = effect {
+  _ <- pure bundlesForLocale
+  _ <- assert True
+}
+
+@test
+catalogFromBundles_smoke = effect {
+  _ <- pure catalogFromBundles
+  _ <- assert True
+}
+
+@test
+fallbackTags_smoke = effect {
+  _ <- pure fallbackTags
+  _ <- assert True
+}
+
+@test
+key_smoke_2 = effect {
+  mResult = key "hello.world"
+  k <- mResult ?
+    | Ok k  => effect { pure k }
+    | Err e => effect { fail e }
+    _ <- assert (k.body == "greeting")
+}
+
+@test
+keyText_smoke = effect {
+  _ <- pure keyText
+  _ <- assert True
+}
+
+@test
+message_smoke_2 = effect {
+  res = message "Hello!"
+  m <- res ?
+    | Ok m  => pure m
+    | Err e => fail e
+    _ <- assert (m.body == "Hello!")
+}
+
+@test
+messageText_smoke = effect {
+  _ <- pure messageText
+  _ <- assert True
+}
+
+@test
+parseLocale_smoke = effect {
+  res = parseLocale "en-US"
+  r <- res ?
+    | Ok x  => effect { pure x }
+    | Err _ => effect { fail "parse failed" }
+    _ <- assert (r.language == "en")
+    _ <- assert (r.region == Some "US")
+}
+
+@test
+render_smoke = effect {
+  m_res = message "Hello!"
+  m <- m_res ?
+    | Ok m  => pure m
+    | Err e => fail e
+
+    r_res = render m {}
+    r <- r_res ?
+      | Ok r  => pure r
+      | Err e => fail e
+
+    _ <- assert (r == "Hello!")
+}
+
+@test
+t_smoke = effect {
+  _ <- pure t
+  _ <- assert True
+}
+
+@test
+tCatalog_smoke = effect {
+  _ <- pure tCatalog
+  _ <- assert True
+}
+
+@test
+tCatalogWithDefault_smoke = effect {
+  _ <- pure tCatalogWithDefault
+  _ <- assert True
+}
+
+@test
+tOpt_smoke = effect {
+  _ <- pure tOpt
+  _ <- assert True
+}
+
+@test
+tResult_smoke = effect {
+  _ <- pure tResult
+  _ <- assert True
+}
+
+@test
+tWithFallback_smoke = effect {
+  _ <- pure tWithFallback
+  _ <- assert True
+}

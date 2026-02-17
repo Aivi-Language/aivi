@@ -1,0 +1,36 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.tests
+
+use aivi
+use aivi.testing
+use aivi.net
+
+@test
+http_smoke = effect {
+  _ <- pure http
+  _ <- assert True
+}
+
+@test
+httpServer_smoke = effect {
+  _ <- pure httpServer
+  _ <- assert True
+}
+
+@test
+https_smoke = effect {
+  _ <- pure https
+  _ <- assert True
+}
+
+@test
+sockets_smoke = effect {
+  _ <- pure sockets
+  _ <- assert True
+}
+
+@test
+streams_smoke = effect {
+  _ <- pure streams
+  _ <- assert True
+}

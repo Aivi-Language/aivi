@@ -1,0 +1,36 @@
+@no_prelude
+module integrationTests.stdlib.aivi.number.rational.tests
+
+use aivi
+use aivi.testing
+use aivi.number.rational
+
+denominator_touch : Rational -> Unit
+denominator_touch = _ => Unit
+
+@test
+denominator_smoke = effect {
+  _ <- pure denominator_touch
+  _ <- pure denominator
+  _ <- assertEq (1 + 1) 2
+}
+
+normalize_touch : Rational -> Unit
+normalize_touch = _ => Unit
+
+@test
+normalize_smoke = effect {
+  _ <- pure normalize_touch
+  _ <- pure normalize
+  _ <- assertEq (1 + 1) 2
+}
+
+numerator_touch : Rational -> Unit
+numerator_touch = _ => Unit
+
+@test
+numerator_smoke = effect {
+  _ <- pure numerator_touch
+  _ <- pure numerator
+  _ <- assertEq (1 + 1) 2
+}

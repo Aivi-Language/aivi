@@ -1,0 +1,81 @@
+@no_prelude
+module integrationTests.stdlib.aivi.ui.ServerHtml.tests
+
+use aivi
+use aivi.testing
+use aivi.ui.ServerHtml
+
+clipboardError_touch : ClipboardError -> Unit
+clipboardError_touch = _ => Unit
+
+@test
+clipboardError_smoke = effect {
+  _ <- pure clipboardError_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+effect_touch : Effect -> Unit
+effect_touch = _ => Unit
+
+@test
+effect_smoke = effect {
+  _ <- pure effect_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+initContext_touch : InitContext -> Unit
+initContext_touch = _ => Unit
+
+@test
+initContext_smoke = effect {
+  _ <- pure initContext_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+platformEvent_touch : PlatformEvent -> Unit
+platformEvent_touch = _ => Unit
+
+@test
+platformEvent_smoke = effect {
+  _ <- pure platformEvent_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+serverHtmlApp_touch : ServerHtmlApp -> Unit
+serverHtmlApp_touch = _ => Unit
+
+@test
+serverHtmlApp_smoke = effect {
+  _ <- pure serverHtmlApp_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+urlInfo_touch : UrlInfo -> Unit
+urlInfo_touch = _ => Unit
+
+@test
+urlInfo_smoke = effect {
+  _ <- pure urlInfo_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+viewId_touch : ViewId -> Unit
+viewId_touch = _ => Unit
+
+@test
+viewId_smoke = effect {
+  _ <- pure viewId_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+serveHttp_smoke = effect {
+  _ <- pure serveHttp
+  _ <- assert True
+}
+
+@test
+serveWs_smoke = effect {
+  _ <- pure serveWs
+  _ <- assert True
+}

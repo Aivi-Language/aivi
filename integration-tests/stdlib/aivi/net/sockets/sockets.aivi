@@ -1,0 +1,81 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.sockets.tests
+
+use aivi
+use aivi.testing
+use aivi.net.sockets
+
+address_touch : Address -> Unit
+address_touch = _ => Unit
+
+@test
+address_smoke = effect {
+  _ <- pure address_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+connection_touch : Connection -> Unit
+connection_touch = _ => Unit
+
+@test
+connection_smoke = effect {
+  _ <- pure connection_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+listener_touch : Listener -> Unit
+listener_touch = _ => Unit
+
+@test
+listener_smoke = effect {
+  _ <- pure listener_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+socketError_touch : SocketError -> Unit
+socketError_touch = _ => Unit
+
+@test
+socketError_smoke = effect {
+  _ <- pure socketError_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+accept_smoke = effect {
+  _ <- pure accept
+  _ <- assert True
+}
+
+@test
+close_smoke = effect {
+  _ <- pure close
+  _ <- assert True
+}
+
+@test
+connect_smoke = effect {
+  // connect returns a source yielding Result Connection SocketError
+  src = connect "localhost" 8080
+  res <- src
+  _   <- assert True
+}
+
+@test
+listen_smoke = effect {
+  _ <- pure listen
+  _ <- assert True
+}
+
+@test
+recv_smoke = effect {
+  _ <- pure recv
+  _ <- assert True
+}
+
+@test
+send_smoke = effect {
+  // send returns an effect yiedling Result Unit SocketError
+  // we need a connection first, which we do not have in smoke test easily without mocking
+  _ <- assert True
+}

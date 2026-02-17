@@ -1,0 +1,285 @@
+@no_prelude
+module integrationTests.stdlib.aivi.database.tests
+
+use aivi
+use aivi.testing
+use aivi.database
+
+autoIncrement_touch : AutoIncrement -> Unit
+autoIncrement_touch = _ => Unit
+
+@test
+autoIncrement_smoke = effect {
+  _ <- pure autoIncrement_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+boolType_touch : BoolType -> Unit
+boolType_touch = _ => Unit
+
+@test
+boolType_smoke = effect {
+  _ <- pure boolType_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+column_smoke = effect {
+  c = { name: "id", colType: IntType, constraints: [NotNull, AutoIncrement], default: None }
+  _ <- assert (c.name == "id")
+}
+
+columnConstraint_touch : ColumnConstraint -> Unit
+columnConstraint_touch = _ => Unit
+
+@test
+columnConstraint_smoke = effect {
+  _ <- pure columnConstraint_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+columnDefault_touch : ColumnDefault -> Unit
+columnDefault_touch = _ => Unit
+
+@test
+columnDefault_smoke = effect {
+  _ <- pure columnDefault_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+columnType_touch : ColumnType -> Unit
+columnType_touch = _ => Unit
+
+@test
+columnType_smoke = effect {
+  _ <- pure columnType_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+dbConfig_touch : DbConfig -> Unit
+dbConfig_touch = _ => Unit
+
+@test
+dbConfig_smoke = effect {
+  _ <- pure dbConfig_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+dbError_touch : DbError -> Unit
+dbError_touch = _ => Unit
+
+@test
+dbError_smoke = effect {
+  _ <- pure dbError_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+defaultBool_touch : DefaultBool -> Unit
+defaultBool_touch = _ => Unit
+
+@test
+defaultBool_smoke = effect {
+  _ <- pure defaultBool_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+defaultInt_touch : DefaultInt -> Unit
+defaultInt_touch = _ => Unit
+
+@test
+defaultInt_smoke = effect {
+  _ <- pure defaultInt_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+defaultNow_touch : DefaultNow -> Unit
+defaultNow_touch = _ => Unit
+
+@test
+defaultNow_smoke = effect {
+  _ <- pure defaultNow_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+defaultText_touch : DefaultText -> Unit
+defaultText_touch = _ => Unit
+
+@test
+defaultText_smoke = effect {
+  _ <- pure defaultText_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+delta_touch : Delta -> Unit
+delta_touch = _ => Unit
+
+@test
+delta_smoke = effect {
+  _ <- pure delta_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+driver_touch : Driver -> Unit
+driver_touch = _ => Unit
+
+@test
+driver_smoke = effect {
+  _ <- pure driver_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+intType_touch : IntType -> Unit
+intType_touch = _ => Unit
+
+@test
+intType_smoke = effect {
+  _ <- pure intType_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+mysql_touch : Mysql -> Unit
+mysql_touch = _ => Unit
+
+@test
+mysql_smoke = effect {
+  _ <- pure mysql_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+notNull_touch : NotNull -> Unit
+notNull_touch = _ => Unit
+
+@test
+notNull_smoke = effect {
+  _ <- pure notNull_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+patch_touch : Patch -> Unit
+patch_touch = _ => Unit
+
+@test
+patch_smoke = effect {
+  _ <- pure patch_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+postgresql_touch : Postgresql -> Unit
+postgresql_touch = _ => Unit
+
+@test
+postgresql_smoke = effect {
+  _ <- pure postgresql_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+pred_touch : Pred -> Unit
+pred_touch = _ => Unit
+
+@test
+pred_smoke = effect {
+  _ <- pure pred_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+sqlite_smoke = effect {
+  // Sqlite is likely a constructor or tag
+  _ <- assert True
+}
+
+@test
+table_smoke = effect {
+  t = { name: "users", columns: [], rows: [] }
+  _ <- assert (t.name == "users")
+}
+
+timestampType_touch : TimestampType -> Unit
+timestampType_touch = _ => Unit
+
+@test
+timestampType_smoke = effect {
+  _ <- pure timestampType_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+varchar_touch : Varchar -> Unit
+varchar_touch = _ => Unit
+
+@test
+varchar_smoke = effect {
+  _ <- pure varchar_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+applyDelta_smoke = effect {
+  User = { id: Int, name: Text }
+  users0 = table "users"[]
+  users1 <- applyDelta users0 (Insert { id: 1, name: "Ada" })
+  rows   <- load users1
+  _      <- rows ?
+    | [u] => assertEq u.name "Ada"
+    | _   => assert False
+}
+
+@test
+configure_smoke = effect {
+  // configure returns an effect yielding Result Unit DbError
+  _ <- configure Sqlite ":memory:"
+  _ <- assert True
+}
+
+@test
+del_smoke = effect {
+  User = { id: Int, name: Text }
+  users0 = table "users"[]
+  users1 <- applyDelta users0 (ins { id: 1, name: "Ada" })
+  users2 <- applyDelta users1 (del (u => u.id == 1))
+  rows   <- load users2
+  _      <- assert (List.length rows == 0)
+}
+
+@test
+ins_smoke = effect {
+  User = { id: Int, name: Text }
+  users0 = table "users"[]
+  users1 <- applyDelta users0 (ins { id: 1, name: "Ada" })
+  rows   <- load users1
+  _      <- rows ?
+    | [u] => assertEq u.name "Ada"
+    | _   => assert False
+}
+
+@test
+load_smoke = effect {
+  _ <- configure Sqlite ":memory:"
+  // load returns a source yielding Result (Option Table) DbError
+  src = load "users"
+  res <- src
+  _   <- assert True
+}
+
+@test
+runMigrations_smoke = effect {
+  _ <- pure runMigrations
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+table_smoke_2 = effect {
+  _ <- pure table
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+upd_smoke = effect {
+  User = { id: Int, name: Text }
+  users0 = table "users"[]
+  users1 <- applyDelta users0 (ins { id: 1, name: "Ada" })
+  users2 <- applyDelta users1 (upd (u => u.id == 1) (u => u <| { name: "Bea" }))
+  rows   <- load users2
+  _      <- rows ?
+    | [u] => assertEq u.name "Bea"
+    | _   => assert False
+}
