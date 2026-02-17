@@ -8,5 +8,6 @@ use aivi.database
 
 @test
 smoke = effect {
-  _ <- assert True
+  _ <- pure literal_ins
+  _ <- assertEq (1 + 1) 2
 }

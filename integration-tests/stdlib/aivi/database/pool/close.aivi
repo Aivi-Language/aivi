@@ -7,5 +7,6 @@ use aivi.database.pool
 
 @test
 smoke = effect {
-  _ <- assert True
+  _ <- pure close
+  _ <- assertEq (1 + 1) 2
 }
