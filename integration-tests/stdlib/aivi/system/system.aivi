@@ -4,17 +4,29 @@ module integrationTests.stdlib.aivi.system.tests
 use aivi
 use aivi.testing
 use aivi.system
+use aivi.text
 
 @test
 args_smoke = effect {
-  pure args
-  assert True
+  xs <- args
+  assert (List.length xs >= 1)
+  xs ?
+    | [] => assert False
+    | [x, ..._rest] => assert (text.isEmpty x == False)
 }
 
 @test
 env_smoke = effect {
-  pure env
-  assert True
+  key = "AIVI_SYSTEM_ENV_TEST"
+  _ <- env.remove key
+  v0 <- env.get key
+  assertEq v0 None
+  _ <- env.set key "ok"
+  v1 <- env.get key
+  assertEq v1 (Some "ok")
+  _ <- env.remove key
+  v2 <- env.get key
+  assertEq v2 None
 }
 
 @test
@@ -25,6 +37,20 @@ exit_smoke = effect {
 
 @test
 localeTag_smoke = effect {
-  pure localeTag
+  tagOpt <- localeTag
+  tagOpt ?
+    | None => assert True
+    | Some t => assert (text.isEmpty t == False)
+}
+
+@test
+clockNow_smoke = effect {
+  _ <- clock.now Unit
   assert True
+}
+
+@test
+randomInt_smoke = effect {
+  n <- random.int 1 10
+  assert (n >= 1 && n <= 10)
 }

@@ -14,6 +14,8 @@ Screens think in Red, Green, and Blue, but people think in **Hue**, **Saturation
 
 <<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_02.aivi{aivi}
 
+For direct channel edits, prefer record patching instead of deltas (e.g., `color <| { r: 30 }`). Deltas are primarily intended for perceptual adjustments like hue, saturation, and lightness.
+
 ## Domain Definition
 
 <<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_03.aivi{aivi}

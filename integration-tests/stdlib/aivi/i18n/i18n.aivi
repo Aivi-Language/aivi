@@ -75,8 +75,32 @@ message_smoke = effect {
 
 @test
 bundleForLocale_smoke = effect {
-  pure bundleForLocale
-  assert True
+  en =
+    (parseLocale "en") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: None, variants: [], tag: "en" }
+  enUs =
+    (parseLocale "en-US") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: Some "US", variants: [], tag: "en-US" }
+
+  bEnRes = bundleFromProperties en "k = Hello\n"
+  bEnUsRes = bundleFromProperties enUs "k = Howdy\n"
+
+  bEn =
+    bEnRes ?
+      | Ok b  => b
+      | Err _ => { locale: en, entries: Map.empty }
+  bEnUs =
+    bEnUsRes ?
+      | Ok b  => b
+      | Err _ => { locale: enUs, entries: Map.empty }
+
+  catalog = catalogFromBundles [bEn, bEnUs]
+  got = bundleForLocale catalog enUs
+  got ?
+    | None => assert False
+    | Some b => assert (b.locale.tag == "en-US")
 }
 
 @test
@@ -101,20 +125,50 @@ bundleFromPropertiesFile_smoke = effect {
 
 @test
 bundlesForLocale_smoke = effect {
-  pure bundlesForLocale
-  assert True
+  en =
+    (parseLocale "en") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: None, variants: [], tag: "en" }
+  enUs =
+    (parseLocale "en-US") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: Some "US", variants: [], tag: "en-US" }
+
+  bEn =
+    (bundleFromProperties en "k = Hello\n") ?
+      | Ok b  => b
+      | Err _ => { locale: en, entries: Map.empty }
+  bEnUs =
+    (bundleFromProperties enUs "k = Howdy\n") ?
+      | Ok b  => b
+      | Err _ => { locale: enUs, entries: Map.empty }
+
+  catalog = catalogFromBundles [bEn, bEnUs]
+  bs = bundlesForLocale catalog enUs
+  assertEq (List.length bs) 2
 }
 
 @test
 catalogFromBundles_smoke = effect {
-  pure catalogFromBundles
-  assert True
+  en =
+    (parseLocale "en") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: None, variants: [], tag: "en" }
+  b =
+    (bundleFromProperties en "k = Hello\n") ?
+      | Ok b  => b
+      | Err _ => { locale: en, entries: Map.empty }
+  catalog = catalogFromBundles [b]
+  assert (Map.get "en" catalog != None)
 }
 
 @test
 fallbackTags_smoke = effect {
-  pure fallbackTags
-  assert True
+  loc =
+    (parseLocale "zh-Hant-TW") ?
+      | Ok l  => l
+      | Err _ => { language: "zh", region: Some "TW", variants: ["Hant"], tag: "zh-Hant-TW" }
+  assertEq (fallbackTags loc) ["zh-Hant-TW", "zh-Hant", "zh"]
 }
 
 @test
@@ -123,13 +177,15 @@ key_smoke_2 = effect {
   k <- mResult ?
     | Ok k  => effect { pure k }
     | Err e => effect { fail e }
-    assert (k.body == "greeting")
+    assert (k.body == "hello.world")
 }
 
 @test
 keyText_smoke = effect {
-  pure keyText
-  assert True
+  k <- (key "app.welcome") ?
+    | Ok k  => pure k
+    | Err e => fail e
+  assertEq (keyText k) "app.welcome"
 }
 
 @test
@@ -143,8 +199,10 @@ message_smoke_2 = effect {
 
 @test
 messageText_smoke = effect {
-  pure messageText
-  assert True
+  m <- (message "Hello!") ?
+    | Ok m  => pure m
+    | Err e => fail e
+  assertEq (messageText m) "Hello!"
 }
 
 @test
@@ -174,36 +232,115 @@ render_smoke = effect {
 
 @test
 t_smoke = effect {
-  pure t
-  assert True
+  en =
+    (parseLocale "en") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: None, variants: [], tag: "en" }
+  b <- (bundleFromProperties en "k = Hello\n") ?
+    | Ok b  => pure b
+    | Err e => fail e
+  k <- (key "k") ?
+    | Ok k  => pure k
+    | Err e => fail e
+  assertEq (t b k {}) "Hello"
+  missing <- (key "missing") ?
+    | Ok k  => pure k
+    | Err e => fail e
+  assertEq (t b missing {}) "missing"
 }
 
 @test
 tCatalog_smoke = effect {
-  pure tCatalog
-  assert True
+  en =
+    (parseLocale "en") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: None, variants: [], tag: "en" }
+  enUs =
+    (parseLocale "en-US") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: Some "US", variants: [], tag: "en-US" }
+  bEn <- (bundleFromProperties en "k = Hello\n") ?
+    | Ok b  => pure b
+    | Err e => fail e
+  bEnUs <- (bundleFromProperties enUs "k = Howdy\n") ?
+    | Ok b  => pure b
+    | Err e => fail e
+  catalog = catalogFromBundles [bEn, bEnUs]
+  k <- (key "k") ?
+    | Ok k  => pure k
+    | Err e => fail e
+  assertEq (tCatalog catalog enUs k {}) "Howdy"
 }
 
 @test
 tCatalogWithDefault_smoke = effect {
-  pure tCatalogWithDefault
-  assert True
+  en =
+    (parseLocale "en") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: None, variants: [], tag: "en" }
+  fr =
+    (parseLocale "fr") ?
+      | Ok l  => l
+      | Err _ => { language: "fr", region: None, variants: [], tag: "fr" }
+
+  catalog = Map.empty
+  defaultBundle <- (bundleFromProperties en "k = Hello\n") ?
+    | Ok b  => pure b
+    | Err e => fail e
+  k <- (key "k") ?
+    | Ok k  => pure k
+    | Err e => fail e
+  assertEq (tCatalogWithDefault catalog fr defaultBundle k {}) "Hello"
 }
 
 @test
 tOpt_smoke = effect {
-  pure tOpt
-  assert True
+  en =
+    (parseLocale "en") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: None, variants: [], tag: "en" }
+  b <- (bundleFromProperties en "k = Hello\n") ?
+    | Ok b  => pure b
+    | Err e => fail e
+  k <- (key "k") ?
+    | Ok k  => pure k
+    | Err e => fail e
+  assertEq (tOpt b k {}) (Some "Hello")
 }
 
 @test
 tResult_smoke = effect {
-  pure tResult
-  assert True
+  en =
+    (parseLocale "en") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: None, variants: [], tag: "en" }
+  b <- (bundleFromProperties en "k = Hello\n") ?
+    | Ok b  => pure b
+    | Err e => fail e
+  k <- (key "k") ?
+    | Ok k  => pure k
+    | Err e => fail e
+  assertEq (tResult b k {}) (Ok "Hello")
 }
 
 @test
 tWithFallback_smoke = effect {
-  pure tWithFallback
-  assert True
+  en =
+    (parseLocale "en") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: None, variants: [], tag: "en" }
+  enUs =
+    (parseLocale "en-US") ?
+      | Ok l  => l
+      | Err _ => { language: "en", region: Some "US", variants: [], tag: "en-US" }
+  bEn <- (bundleFromProperties en "k = Hello\n") ?
+    | Ok b  => pure b
+    | Err e => fail e
+  bEnUs <- (bundleFromProperties enUs "k = Howdy\n") ?
+    | Ok b  => pure b
+    | Err e => fail e
+  k <- (key "k") ?
+    | Ok k  => pure k
+    | Err e => fail e
+  assertEq (tWithFallback [bEnUs, bEn] k {}) "Howdy"
 }
