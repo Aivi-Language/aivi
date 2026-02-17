@@ -79,7 +79,6 @@ serveHttp_smoke = effect {
     onPlatform: _ev => None
   }
 
-  req : Request
   req = { method: "GET", path: "/", headers: [], body: [], remoteAddr: None }
 
   res = serveHttp app req

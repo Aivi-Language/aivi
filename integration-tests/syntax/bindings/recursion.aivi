@@ -10,5 +10,5 @@ sum = xs => xs ?
 
 @test
 recursionWorks = effect {
-  assertEq (sum[1, 2, 3]) 6
+  assertEq (sum [1, 2, 3]) 6
 }
