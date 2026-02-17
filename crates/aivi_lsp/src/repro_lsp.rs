@@ -108,7 +108,7 @@ main = [1] ++ [2]
 
         let refs = Backend::build_references(text, &uri, position, true);
         assert!(!refs.is_empty(), "Should find references for '++'");
-        // Should find definition and usage (2 refs)
-        assert_eq!(refs.len(), 2);
+        // Should find type signature, definition, and usage.
+        assert_eq!(refs.len(), 3);
     }
 }

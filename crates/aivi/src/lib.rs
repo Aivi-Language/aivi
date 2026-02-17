@@ -60,7 +60,9 @@ pub use surface::{
     PathSegment, Pattern, RecordField, RecordPatternField, SpannedName, TextPart, TypeAlias,
     TypeCtor, TypeDecl, TypeExpr, TypeSig, UseDecl,
 };
-pub use typecheck::{check_types, elaborate_expected_coercions, infer_value_types};
+pub use typecheck::{
+    check_types, check_types_including_stdlib, elaborate_expected_coercions, infer_value_types,
+};
 
 // Expose a small, deterministic building block for tests and fuzzers without forcing callers
 // through the filesystem/stdlib-loading CLI entrypoints.

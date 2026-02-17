@@ -60,29 +60,38 @@ impl Backend {
             )
         }
 
-        fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-            let Ok(entries) = fs::read_dir(dir) else {
-                return;
+        let mut out = Vec::new();
+        // Use an explicit stack (vs recursion) so very deep trees or symlink cycles can't
+        // overflow the stack in tests / large workspaces.
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = fs::read_dir(&dir) else {
+                continue;
             };
             for entry in entries.flatten() {
+                let Ok(file_type) = entry.file_type() else {
+                    continue;
+                };
+                // Avoid following symlinked directories (can introduce cycles).
+                if file_type.is_symlink() {
+                    continue;
+                }
                 let path = entry.path();
-                if path.is_dir() {
+                if file_type.is_dir() {
                     if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
                         if should_skip_dir(name) {
                             continue;
                         }
                     }
-                    walk(&path, out);
+                    stack.push(path);
                     continue;
                 }
-                if path.extension().and_then(|e| e.to_str()) == Some("aivi") {
+                if file_type.is_file() && path.extension().and_then(|e| e.to_str()) == Some("aivi")
+                {
                     out.push(path);
                 }
             }
         }
-
-        let mut out = Vec::new();
-        walk(root, &mut out);
         out.sort();
         out
     }

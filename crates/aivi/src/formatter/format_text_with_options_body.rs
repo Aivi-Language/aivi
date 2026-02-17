@@ -140,6 +140,11 @@
             return false;
         }
 
+        // Preserve negative numeric literals (`-1`) when authored adjacent.
+        if adjacent_in_input && prev_text == "-" && curr_kind == "number" {
+            return false;
+        }
+
         // Keep indexing tight after a closed group, even if the input had whitespace:
         // `(f x) [i]` should format to `(f x)[i]`, not a list-literal argument.
         if curr_text == "[" && prev_text == ")" {

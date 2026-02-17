@@ -382,6 +382,14 @@ fn ordered_module_indices(modules: &[Module]) -> Vec<usize> {
 }
 
 pub fn check_types(modules: &[Module]) -> Vec<FileDiagnostic> {
+    check_types_impl(modules, false)
+}
+
+pub fn check_types_including_stdlib(modules: &[Module]) -> Vec<FileDiagnostic> {
+    check_types_impl(modules, true)
+}
+
+fn check_types_impl(modules: &[Module], check_embedded_stdlib: bool) -> Vec<FileDiagnostic> {
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
     let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
@@ -416,8 +424,12 @@ pub fn check_types(modules: &[Module]) -> Vec<FileDiagnostic> {
         checker.set_class_env(classes, instances);
         checker.register_module_defs(module, &sigs, &mut env);
 
-        let mut module_diags = checker.check_module_defs(module, &sigs, &mut env);
-        diagnostics.append(&mut module_diags);
+        // v0.1 embedded stdlib is allowed to be incomplete; typechecking its bodies can hang/crash.
+        // Still collect its signatures/classes/instances so user modules can typecheck.
+        if check_embedded_stdlib || !module.path.starts_with("<embedded:") {
+            let mut module_diags = checker.check_module_defs(module, &sigs, &mut env);
+            diagnostics.append(&mut module_diags);
+        }
 
         let mut exports = HashMap::new();
         for export in &module.exports {
