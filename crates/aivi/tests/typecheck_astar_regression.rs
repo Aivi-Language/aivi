@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use aivi::{
-    check_modules, check_types, file_diagnostics_have_errors, load_module_diagnostics, load_modules,
-    parse_modules,
+    check_modules, check_types, file_diagnostics_have_errors, load_module_diagnostics,
+    load_modules, parse_modules,
 };
 
 fn check_ok(source: &str) {

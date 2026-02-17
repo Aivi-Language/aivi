@@ -19,7 +19,7 @@ SegmentTree =
     max: Int
     left: SegmentTree
     right: SegmentTree
-  }
+}
 
 // Extract metadata from a tree node
 nodeMeta : SegmentTree -> Option SegmentMeta
@@ -33,38 +33,37 @@ combineMeta = leftMeta rightMeta => (leftMeta, rightMeta) ?
   | (Some lm, None)    => Some lm
   | (None, Some rm)    => Some rm
   | (Some lm, Some rm) => Some {
-      sum: lm.sum + rm.sum
-      min: Int.min lm.min rm.min
-      max: Int.max lm.max rm.max
-    }
+    sum: lm.sum + rm.sum
+    min: Int.min lm.min rm.min
+    max: Int.max lm.max rm.max
+  }
 
 // Rebuild node from children
-nodeFromChildren = start end left right =>
-  combineMeta (nodeMeta left) (nodeMeta right) ?
-    | None   => Empty
-    | Some m => Node {
-        start
-        end
-        sum: m.sum
-        min: m.min
-        max: m.max
-        left
-        right
-      }
+nodeFromChildren = start end left right => combineMeta (nodeMeta left) (nodeMeta right) ?
+  | None   => Empty
+  | Some m => Node {
+    start
+    end
+    sum: m.sum
+    min: m.min
+    max: m.max
+    left
+    right
+  }
 
 // Build tree from a range of the array
 buildRange = arr start end =>
   if start == end then
     List.at arr start ?
       | Some value => Node {
-          start
-          end
-          sum: value
-          min: value
-          max: value
-          left: Empty
-          right: Empty
-        }
+        start
+        end
+        sum: value
+        min: value
+        max: value
+        left: Empty
+        right: Empty
+      }
       | None => Empty
   else {
     mid = (start + end) / 2
@@ -74,26 +73,26 @@ buildRange = arr start end =>
   }
 
 // Create tree from list
-fromList : List Int -> SegmentTree
-fromList = arr =>
-  if List.isEmpty arr then Empty
-  else buildRange arr 0 (List.length arr - 1)
+  fromList : List Int -> SegmentTree
+  fromList = arr =>
+    if List.isEmpty arr then Empty
+    else buildRange arr 0 (List.length arr - 1)
 
 // Query range [l..r] for metadata
-queryRange : SegmentTree -> Int -> Int -> Option SegmentMeta
-queryRange = tree l r => tree ?
-  | Empty => None
-  | Node { start, end, sum, min, max, left, right } =>
-    if r < start || end < l then None
-    else if l <= start && end <= r then Some { sum, min, max }
-    else combineMeta (queryRange left l r) (queryRange right l r)
+  queryRange : SegmentTree -> Int -> Int -> Option SegmentMeta
+  queryRange = tree l r => tree ?
+    | Empty                                           => None
+    | Node { start, end, sum, min, max, left, right } =>
+      if r < start || end < l then None
+      else if l <= start && end <= r then Some { sum, min, max }
+      else combineMeta (queryRange left l r) (queryRange right l r)
 
 // Point update at index (returns new tree, old is unchanged)
-updatePoint : SegmentTree -> Int -> Int -> SegmentTree
-updatePoint = tree idx value => tree ?
-  | Empty => Empty
-  | Node { start, end, left, right } when idx < start || idx > end => tree
-  | Node { start, end } when start == end => Node {
+  updatePoint : SegmentTree -> Int -> Int -> SegmentTree
+  updatePoint = tree idx value => tree ?
+    | Empty                                                          => Empty
+    | Node { start, end, left, right } when idx < start || idx > end => tree
+    | Node { start, end } when start == end                          => Node {
       start
       end
       sum: value
@@ -102,13 +101,13 @@ updatePoint = tree idx value => tree ?
       left: Empty
       right: Empty
     }
-  | Node { start, end, left, right } => {
+    | Node { start, end, left, right } => {
       newLeft = updatePoint left idx value
       newRight = updatePoint right idx value
       nodeFromChildren start end newLeft newRight
     }
 
-@test
+    @test
 persistency = effect {
   arr = [1, 2, 3, 4]
   tree = fromList arr

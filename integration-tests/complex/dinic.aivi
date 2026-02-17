@@ -34,14 +34,14 @@ buildResidual = edges => {
   addCaps = items acc isZero => items ?
     | []           => acc
     | [e, ...rest] => {
-        key = { from: e.from, to: e.to }
-        val = if isZero then 0 else e.cap
-        addCaps rest (Map.insert key val acc) isZero
-      }
+      key = { from: e.from, to: e.to }
+      val = if isZero then 0 else e.cap
+      addCaps rest (Map.insert key val acc) isZero
+    }
 
-  caps = addCaps edges Map.empty False
-  capsWithReverse = addCaps backward caps True
-  { graph: graph, capacities: capsWithReverse }
+    caps = addCaps edges Map.empty False
+    capsWithReverse = addCaps backward caps True
+    { graph: graph, capacities: capsWithReverse }
 }
 
 // BFS to build level graph, returns (reachable, levels)
@@ -49,25 +49,25 @@ bfsLevels = residual source sink => {
   visit = queue levels => queue ?
     | []                 => (Map.has sink levels, levels)
     | [current, ...rest] => {
-        neighbors = edgesFrom residual.graph current
+      neighbors = edgesFrom residual.graph current
 
-        explore = list q accLevels => list ?
-          | []              => visit q accLevels
-          | [edge, ...tail] => {
-              next = edge.to
-              cap = getOrZero { from: current, to: next } residual.capacities
-              already = Map.has next accLevels
-              if cap > 0 && !already then {
-                level = Map.get current accLevels ? | Some lvl => lvl | None => -1
-                explore tail (q ++ [next]) (Map.insert next (level + 1) accLevels)
-              }
-              else explore tail q accLevels
-            }
+      explore = list q accLevels => list ?
+        | []              => visit q accLevels
+        | [edge, ...tail] => {
+          next = edge.to
+          cap = getOrZero { from: current, to: next } residual.capacities
+          already = Map.has next accLevels
+          if cap > 0 && !already then {
+            level = Map.get current accLevels ? | Some lvl => lvl | None => -1
+            explore tail (q ++ [next]) (Map.insert next (level + 1) accLevels)
+          }
+          else explore tail q accLevels
+        }
 
-        explore neighbors rest levels
-      }
+      explore neighbors rest levels
+    }
 
-  visit [source] ~map{ source => 0 }
+    visit [source]~map{ source => 0 }
 }
 
 // Push flow along an edge
@@ -77,31 +77,32 @@ pushFlow = residual from to delta => {
   caps = residual.capacities
     |> Map.insert { from, to } (forward - delta)
     |> Map.insert { from: to, to: from } (backward + delta)
-  residual <| { capacities: caps }
+    residual <| { capacities: caps }
 }
 
 // DFS to find blocking flow
 dfsFlow = residual levels node sink flow =>
   if flow == 0 then (0, residual)
-  else if node == sink then (flow, residual)
+  else
+  if node == sink then (flow, residual)
   else {
     neighbors = edgesFrom residual.graph node
 
     explore = list accRes => list ?
       | []              => (0, accRes)
       | [edge, ...tail] => {
-          cap = getOrZero { from: node, to: edge.to } accRes.capacities
-          levelNode = Map.get node levels ? | Some lvl => lvl | None => -1
-          levelNext = Map.get edge.to levels ? | Some lvl => lvl | None => -1
+        cap = getOrZero { from: node, to: edge.to } accRes.capacities
+        levelNode = Map.get node levels ? | Some lvl => lvl | None => -1
+        levelNext = Map.get edge.to levels ? | Some lvl => lvl | None => -1
 
-          if cap > 0 && levelNext == levelNode + 1 then {
-            available = Int.min flow cap
-            (pushed, after) = dfsFlow accRes levels edge.to sink available
-            if pushed > 0 then (pushed, pushFlow after node edge.to pushed)
-            else explore tail accRes
-          }
-          else explore tail accRes
+        if cap > 0 && levelNext == levelNode + 1 then {
+          available = Int.min flow cap
+          (pushed, after) = dfsFlow accRes levels edge.to sink available
+          if pushed > 0 then (pushed, pushFlow after node edge.to pushed)
+        else explore tail accRes
         }
+        else explore tail accRes
+      }
 
     explore neighbors residual
   }

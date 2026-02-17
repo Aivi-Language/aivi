@@ -23,17 +23,17 @@ buildGraph = fromWeightedEdges [
 expandNeighbors = edges queue dist currentDist => edges ?
   | []              => (queue, dist)
   | [edge, ...tail] => {
-      tentative = currentDist + edge.weight
-      prev = Map.get edge.to dist ?
-        | Some v => v
-        | None   => infinity
-      (nextQueue, nextDist) =
-        if tentative < prev then
-          (Heap.push (tentative, edge.to) queue, Map.insert edge.to tentative dist)
-        else
-          (queue, dist)
+    tentative = currentDist + edge.weight
+    prev = Map.get edge.to dist ?
+      | Some v => v
+      | None   => infinity
+    (nextQueue, nextDist) =
+    if tentative < prev then
+      (Heap.push (tentative, edge.to) queue, Map.insert edge.to tentative dist)
+    else
+      (queue, dist)
       expandNeighbors tail nextQueue nextDist currentDist
-    }
+  }
 
 // Main search loop
 search = queue dist visited graph => Heap.popMin queue ?
@@ -49,9 +49,9 @@ search = queue dist visited graph => Heap.popMin queue ?
 
 // Dijkstra entry point
 dijkstra = graph start =>
-  search (Heap.push (0.0, start) Heap.empty) ~map{ start => 0.0 } Set.empty graph
+  search (Heap.push (0.0, start) Heap.empty)~map{ start => 0.0 } Set.empty graph
 
-@test
+  @test
 shortestPaths = effect {
   graph = buildGraph
   distances = dijkstra graph 0

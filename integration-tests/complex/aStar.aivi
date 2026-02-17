@@ -46,9 +46,9 @@ expandNeighbor = current currentG goal heuristicFunc state edge => {
     | Some v => v
     | None   => infinity
     if tentative < prevScore then {
-        queue: Heap.push (tentative + heuristicFunc goal edge.to, edge.to, tentative) state.queue
-        scores: Map.insert edge.to tentative state.scores
-        parents: Map.insert edge.to current state.parents
+      queue: Heap.push (tentative + heuristicFunc goal edge.to, edge.to, tentative) state.queue
+      scores: Map.insert edge.to tentative state.scores
+      parents: Map.insert edge.to current state.parents
     }
     else
       state
@@ -58,8 +58,8 @@ expandNeighbor = current currentG goal heuristicFunc state edge => {
 expandNeighbors = edges current currentG goal heuristicFunc state => edges ?
   | []              => state
   | [edge, ...tail] => {
-      nextState = expandNeighbor current currentG goal heuristicFunc state edge
-      expandNeighbors tail current currentG goal heuristicFunc nextState
+    nextState = expandNeighbor current currentG goal heuristicFunc state edge
+    expandNeighbors tail current currentG goal heuristicFunc nextState
   }
 
 // Main search loop
@@ -68,22 +68,22 @@ search = state graph goal heuristicFunc => Heap.popMin state.queue ?
   | Some ((_, current, currentG), rest) =>
     if current == goal then
       Some (reconstructPath state.parents goal)
-  else {
+    else {
       edges = edgesFrom graph current
       nextState = expandNeighbors edges current currentG goal heuristicFunc {
-          queue: rest
-          scores: state.scores
-          parents: state.parents
+        queue: rest
+        scores: state.scores
+        parents: state.parents
       }
       search nextState graph goal heuristicFunc
-  }
+    }
 
 // A* entry point
 astar = graph start goal heuristicFunc =>
   search {
-      queue: Heap.push (heuristicFunc goal start, start, 0.0) Heap.empty
-      scores: ~map{ start => 0.0 }
-      parents: Map.empty
+    queue: Heap.push (heuristicFunc goal start, start, 0.0) Heap.empty
+    scores: ~map{ start => 0.0 }
+    parents: Map.empty
   } graph goal heuristicFunc
 
 // Graph construction

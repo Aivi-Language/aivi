@@ -26,15 +26,15 @@ getOr = map key fallback => Map.get key map ?
 // Pop nodes from stack until we reach the root of SCC
 popComponent = node state => {
   pop = stack acc => stack ?
-    | []                   => ([], acc)
+    | []                       => ([], acc)
     | [h, ...t] when h == node => (t, [h, ...acc])
-    | [h, ...t]            => pop t [h, ...acc]
-  (newStack, comp) = pop state.stack []
-  state <| {
-    stack: newStack
-    onStack: Set.remove node state.onStack
-    components: [comp, ...state.components]
-  }
+    | [h, ...t]                => pop t [h, ...acc]
+    (newStack, comp) = pop state.stack []
+    state <| {
+      stack: newStack
+      onStack: Set.remove node state.onStack
+      components: [comp, ...state.components]
+    }
 }
 
 // Get neighbors of a node
@@ -58,21 +58,21 @@ visitNode = graph node state => {
     | []              => accState
     | [next, ...tail] => {
       acc =
-        if Map.has next accState.index then
-          // Node already visited
-          if Set.has next accState.onStack then {
-            lowNode = getOr accState.lowlink node Int.max
-            lowNext = getOr accState.index next Int.max
-            accState <| { lowlink: Map.insert node (Int.min lowNode lowNext) accState.lowlink }
-          }
-          else accState
-        else {
-          // Recurse on unvisited node
-          nested = visitNode graph next accState
-          lowNode = getOr nested.lowlink node Int.max
-          lowNext = getOr nested.lowlink next Int.max
-          nested <| { lowlink: Map.insert node (Int.min lowNode lowNext) nested.lowlink }
-        }
+      if Map.has next accState.index then
+    // Node already visited
+      if Set.has next accState.onStack then {
+        lowNode = getOr accState.lowlink node Int.max
+        lowNext = getOr accState.index next Int.max
+        accState <| { lowlink: Map.insert node (Int.min lowNode lowNext) accState.lowlink }
+      }
+      else accState
+      else {
+      // Recurse on unvisited node
+        nested = visitNode graph next accState
+        lowNode = getOr nested.lowlink node Int.max
+        lowNext = getOr nested.lowlink next Int.max
+        nested <| { lowlink: Map.insert node (Int.min lowNode lowNext) nested.lowlink }
+      }
       processNeighbors tail acc
     }
 
@@ -101,22 +101,22 @@ strongComponents = graph => {
       processNodes t s
     }
 
-  finalState = processNodes graph.nodes initial
-  finalState.components
+    finalState = processNodes graph.nodes initial
+    finalState.components
 }
 
 // Check if list contains element
 contains = list target => list ?
-  | []                   => False
+  | []                         => False
   | [h, ...t] when h == target => True
-  | [_, ...t]            => contains t target
+  | [_, ...t]                  => contains t target
 
 // Check if any element satisfies predicate
 listAny = list pred => list ?
   | []        => False
   | [h, ...t] => if pred h then True else listAny t pred
 
-@test
+  @test
 sccSmoke = effect {
   adj = ~map{
     0 => [1]
