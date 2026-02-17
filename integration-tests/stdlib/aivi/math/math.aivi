@@ -177,7 +177,7 @@ fract_smoke = effect {
 @test
 frexp_smoke = effect {
   (m, e) = frexp 8.0
-  _ <- assert (abs (ldexp m e - 8.0) < 1e -10)
+  _ <- assert (abs (ldexp m e - 8.0) < 0.0000000001)
 }
 
 @test
@@ -422,7 +422,7 @@ tau_smoke = effect {
 @test
 toDegrees_smoke = effect {
   a = { radians: pi }
-  _ <- assert (abs (toDegrees a - 180.0) < 1e -10)
+  _ <- assert (abs (toDegrees a - 180.0) < 0.0000000001)
 }
 
 @test

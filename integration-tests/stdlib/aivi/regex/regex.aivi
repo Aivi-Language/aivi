@@ -62,11 +62,11 @@ find_smoke = effect {
 }
 
 @test
-findAll_smoke = effect {
-  reResult = compile "l"
-  r <- reResult ?
-    | Ok re => pure re
-    | Err _ => fail "compile failed"
+  findAll_smoke = effect {
+    reResult = compile "l"
+    r <- reResult ?
+      | Ok re => pure re
+      | Err _ => fail "compile failed"
     ms = findAll r "hello"
     _ <- assert (List.length ms == 2)
     _ <- ms ?
@@ -75,71 +75,71 @@ findAll_smoke = effect {
         _ <- assertEq s2 3
       }
       | _ => assert False
-}
+  }
 
 @test
-match_smoke_2 = effect {
-  r <- match compile "h(e)llo" {
-    | Ok re => pure re
-    | Err _ => fail "compile failed"
-  }
-  m = match r "hello"
-  _ <- match m {
-    | Some res => effect {
+  match_smoke_2 = effect {
+    r <- match compile "h(e)llo" {
+      | Ok re => pure re
+      | Err _ => fail "compile failed"
+    }
+    m = match r "hello"
+    _ <- match m {
+      | Some res => effect {
         _ <- assert (res.full == "hello")
         _ <- assert (res.groups == [Some "e"])
         _ <- assert (res.start == 0)
         _ <- assert (res.end == 5)
+      }
+      | None => assert False
     }
-    | None => assert False
   }
-}
 
 @test
-matches_smoke = effect {
-  reResult = compile "l"
-  r <- reResult ?
-    | Ok re => pure re
-    | Err _ => fail "compile failed"
+  matches_smoke = effect {
+    reResult = compile "l"
+    r <- reResult ?
+      | Ok re => pure re
+      | Err _ => fail "compile failed"
     ms = matches r "hello"
     _ <- assert (List.length ms == 2)
-}
+  }
 
 @test
-replace_smoke = effect {
-  reResult = compile "l"
-  r <- reResult ?
-    | Ok re => effect { pure re }
-    | Err _ => effect { fail "compile failed" }
+  replace_smoke = effect {
+    reResult = compile "l"
+    r <- reResult ?
+      | Ok re => effect { pure re }
+      | Err _ => effect { fail "compile failed" }
     _ <- assert (replace r "hello" "L" == "heLlo")
-}
+  }
 
 @test
-replaceAll_smoke = effect {
-  reResult = compile "l"
-  r <- reResult ?
-    | Ok re => effect { pure re }
-    | Err _ => effect { fail "compile failed" }
+  replaceAll_smoke = effect {
+    reResult = compile "l"
+    r <- reResult ?
+      | Ok re => effect { pure re }
+      | Err _ => effect { fail "compile failed" }
     _ <- assert (replaceAll r "hello" "L" == "heLLo")
-}
+  }
 
 @test
-split_smoke = effect {
-  reResult = compile ","
-  r <- reResult ?
-    | Ok re => effect { pure re }
-    | Err _ => effect { fail "compile failed" }
+  split_smoke = effect {
+    reResult = compile ","
+    r <- reResult ?
+      | Ok re => effect { pure re }
+      | Err _ => effect { fail "compile failed" }
 
     _ <- assert (split r "a,b,c" == ["a", "b", "c"])
-}
+  }
 
 @test
-test_smoke = effect {
-  reResult = compile "abc"
-  r <- reResult ?
-    | Ok re => effect { pure re }
-    | Err _ => effect { fail "compile failed" }
+  test_smoke = effect {
+    reResult = compile "abc"
+    r <- reResult ?
+      | Ok re => effect { pure re }
+      | Err _ => effect { fail "compile failed" }
 
     _ <- assert (test r "abc" == True)
     _ <- assert (test r "123" == False)
-}
+  }

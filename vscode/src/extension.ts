@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   LanguageClient,
   LanguageClientOptions,
@@ -18,6 +18,41 @@ function getCliCommand(): string {
 
 function docHasTests(doc: vscode.TextDocument): boolean {
   return /(^|\n)\s*@test\b/.test(doc.getText());
+}
+
+type DiscoveredTest = {
+  moduleName: string;
+  defName: string;
+  fullName: string;
+  decoratorLine: number; // 0-based
+};
+
+function discoverTestsFromText(text: string): { moduleName: string; tests: DiscoveredTest[] } {
+  const moduleMatch = /^\s*module\s+([A-Za-z0-9_.]+)\b/m.exec(text);
+  const moduleName = moduleMatch?.[1] ?? "<unknown>";
+
+  const tests: DiscoveredTest[] = [];
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*@test\b/.test(lines[i])) {
+      continue;
+    }
+
+    // Find the next binding name: `foo = ...` (skip blank lines).
+    let j = i + 1;
+    while (j < lines.length && /^\s*$/.test(lines[j])) {
+      j++;
+    }
+    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(lines[j] ?? "");
+    if (!m) {
+      continue;
+    }
+    const defName = m[1];
+    const fullName = `${moduleName}.${defName}`;
+    tests.push({ moduleName, defName, fullName, decoratorLine: i });
+  }
+
+  return { moduleName, tests };
 }
 
 function toCliPath(uri: vscode.Uri): string {
@@ -55,10 +90,241 @@ async function runAiviTest(target: string, ws?: vscode.WorkspaceFolder): Promise
   await vscode.tasks.executeTask(task);
 }
 
+async function runAiviTestProcess(
+  args: string[],
+  cwd: string | undefined,
+  token: vscode.CancellationToken | undefined,
+  onStdout: (chunk: string) => void,
+  onStderr: (chunk: string) => void
+): Promise<number> {
+  const cli = getCliCommand();
+  return await new Promise<number>((resolve) => {
+    const child = spawn(cli, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+
+    const cancel = token?.onCancellationRequested(() => {
+      try {
+        child.kill();
+      } catch {
+        // ignore
+      }
+    });
+
+    child.stdout.on("data", (buf) => onStdout(buf.toString("utf8")));
+    child.stderr.on("data", (buf) => onStderr(buf.toString("utf8")));
+    child.on("close", (code) => {
+      cancel?.dispose();
+      resolve(typeof code === "number" ? code : 1);
+    });
+  });
+}
+
+function parseFailureNamesFromStderr(stderr: string): Set<string> {
+  const out = new Set<string>();
+  for (const line of stderr.split(/\r?\n/)) {
+    // CLI prints failures as: `<qualified.name>: <message>`
+    const m = /^([A-Za-z0-9_.]+):\s+/.exec(line);
+    if (m) {
+      out.add(m[1]);
+    }
+  }
+  return out;
+}
+
 export function activate(context: vscode.ExtensionContext) {
   const outputChannel = vscode.window.createOutputChannel("AIVI Language Server");
   const testOutput = vscode.window.createOutputChannel("AIVI Tests");
   context.subscriptions.push(testOutput);
+
+  // VS Code Testing API integration (gutter run arrows + Testing view tree).
+  const testController = vscode.tests.createTestController("aiviTests", "AIVI Tests");
+  context.subscriptions.push(testController);
+
+  const itemMeta = new Map<string, { kind: "folder" | "file" | "test"; uri?: vscode.Uri; fullName?: string }>();
+
+  const upsertWorkspaceTests = async (): Promise<void> => {
+    testController.items.replace([]);
+    const wsFolders = vscode.workspace.workspaceFolders ?? [];
+    for (const ws of wsFolders) {
+      const root = testController.createTestItem(`aiviWs:${ws.uri.toString()}`, ws.name, ws.uri);
+      itemMeta.set(root.id, { kind: "folder", uri: ws.uri });
+      testController.items.add(root);
+
+      const integrationFolderUri = vscode.Uri.joinPath(ws.uri, "integration-tests");
+      try {
+        const stat = await vscode.workspace.fs.stat(integrationFolderUri);
+        if (stat.type !== vscode.FileType.Directory) {
+          continue;
+        }
+      } catch {
+        continue;
+      }
+
+      const integration = testController.createTestItem(
+        `aiviFolder:${integrationFolderUri.toString()}`,
+        "integration-tests",
+        integrationFolderUri
+      );
+      integration.canResolveChildren = true;
+      itemMeta.set(integration.id, { kind: "folder", uri: integrationFolderUri });
+      root.children.add(integration);
+
+      // Eager discovery so editor gutter icons work immediately.
+      await resolveFolderChildren(integration);
+    }
+  };
+
+  const resolveFolderChildren = async (folderItem: vscode.TestItem): Promise<void> => {
+    const meta = itemMeta.get(folderItem.id);
+    if (!meta?.uri) {
+      return;
+    }
+    folderItem.children.replace([]);
+    const ws = vscode.workspace.getWorkspaceFolder(meta.uri) ?? vscode.workspace.workspaceFolders?.[0];
+    if (!ws) {
+      return;
+    }
+
+    const rel = path.relative(ws.uri.fsPath, meta.uri.fsPath).replace(/\\/g, "/");
+    const pattern = new vscode.RelativePattern(ws, `${rel}/**/*.aivi`);
+    const files = await vscode.workspace.findFiles(pattern, "**/target/**");
+
+    for (const uri of files) {
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      const text = Buffer.from(bytes).toString("utf8");
+      if (!/(^|\n)\s*@test\b/.test(text)) {
+        continue;
+      }
+      const discovered = discoverTestsFromText(text);
+      if (discovered.tests.length === 0) {
+        continue;
+      }
+
+      const label = path.posix.basename(toCliPath(uri));
+      const fileItem = testController.createTestItem(`aiviFile:${uri.toString()}`, label, uri);
+      fileItem.canResolveChildren = false;
+      fileItem.description = discovered.moduleName;
+      itemMeta.set(fileItem.id, { kind: "file", uri });
+      folderItem.children.add(fileItem);
+
+      for (const t of discovered.tests) {
+        const testId = `aiviTest:${uri.toString()}::${t.fullName}`;
+        const testItem = testController.createTestItem(testId, t.defName, uri);
+        testItem.range = new vscode.Range(
+          new vscode.Position(t.decoratorLine, 0),
+          new vscode.Position(t.decoratorLine, linesAt(text, t.decoratorLine).length)
+        );
+        testItem.description = t.moduleName;
+        itemMeta.set(testItem.id, { kind: "test", uri, fullName: t.fullName });
+        fileItem.children.add(testItem);
+      }
+    }
+  };
+
+  function linesAt(text: string, line: number): string {
+    const lines = text.split(/\r?\n/);
+    return lines[line] ?? "";
+  }
+
+  const collectLeafTests = (item: vscode.TestItem, out: vscode.TestItem[]): void => {
+    const meta = itemMeta.get(item.id);
+    if (meta?.kind === "test") {
+      out.push(item);
+      return;
+    }
+    item.children.forEach((child) => collectLeafTests(child, out));
+  };
+
+  const runHandler = async (
+    request: vscode.TestRunRequest,
+    token: vscode.CancellationToken
+  ): Promise<void> => {
+    const run = testController.createTestRun(request);
+    const includedRoots = request.include ?? (() => {
+      const all: vscode.TestItem[] = [];
+      testController.items.forEach((i) => all.push(i));
+      return all;
+    })();
+
+    const leafTests: vscode.TestItem[] = [];
+    for (const root of includedRoots) {
+      collectLeafTests(root, leafTests);
+    }
+
+    const toRun = leafTests.filter((t) => !(request.exclude?.includes(t) ?? false));
+    const byFile = new Map<string, { uri: vscode.Uri; tests: { item: vscode.TestItem; fullName: string }[] }>();
+    for (const t of toRun) {
+      const meta = itemMeta.get(t.id);
+      if (!meta?.uri || !meta.fullName) {
+        continue;
+      }
+      const key = meta.uri.toString();
+      const entry = byFile.get(key) ?? { uri: meta.uri, tests: [] };
+      entry.tests.push({ item: t, fullName: meta.fullName });
+      byFile.set(key, entry);
+    }
+
+    for (const { uri, tests } of byFile.values()) {
+      if (token.isCancellationRequested) {
+        break;
+      }
+
+      for (const { item } of tests) {
+        run.enqueued(item);
+        run.started(item);
+      }
+
+      const ws = vscode.workspace.getWorkspaceFolder(uri) ?? vscode.workspace.workspaceFolders?.[0];
+      const cwd = ws?.uri.fsPath;
+      const args = ["test", ...tests.flatMap((t) => ["--only", t.fullName]), toCliPath(uri)];
+
+      let stderr = "";
+      run.appendOutput(`[RUN] ${toCliPath(uri)}\n`);
+      const exitCode = await runAiviTestProcess(
+        args,
+        cwd,
+        token,
+        (s) => run.appendOutput(s),
+        (s) => {
+          stderr += s;
+          run.appendOutput(s);
+        }
+      );
+
+      const failures = parseFailureNamesFromStderr(stderr);
+      for (const { item, fullName } of tests) {
+        if (exitCode === 0) {
+          run.passed(item);
+        } else if (failures.has(fullName)) {
+          run.failed(item, new vscode.TestMessage("failed"));
+        } else {
+          // If the file failed but this test wasn't listed, mark as failed conservatively.
+          run.failed(item, new vscode.TestMessage("failed"));
+        }
+      }
+
+      run.appendOutput(exitCode === 0 ? `[OK ] ${toCliPath(uri)}\n` : `[FAIL] ${toCliPath(uri)}\n`);
+    }
+
+    run.end();
+  };
+
+  testController.resolveHandler = async (item) => {
+    if (!item) {
+      await upsertWorkspaceTests();
+      return;
+    }
+    const meta = itemMeta.get(item.id);
+    if (meta?.kind === "folder") {
+      await resolveFolderChildren(item);
+    }
+  };
+
+  testController.createRunProfile(
+    "Run",
+    vscode.TestRunProfileKind.Run,
+    (request, token) => void runHandler(request, token),
+    true
+  );
 
   const isWindows = process.platform === "win32";
   const serverExe = isWindows ? "aivi-lsp.exe" : "aivi-lsp";
