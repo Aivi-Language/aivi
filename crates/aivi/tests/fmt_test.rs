@@ -180,6 +180,24 @@ bar =
 }
 
 #[test]
+fn test_fmt_decorator_does_not_inherit_pipe_block_indent() {
+    let input = r#"
+module demo
+
+sum = xs => xs ?
+  | []           => 0
+  | [x, ...rest] => x + sum rest
+
+@test
+recursionWorks = effect {
+  _ <- assertEq (sum[1, 2, 3]) 6
+}
+"#;
+    let expected = "module demo\n\nsum = xs => xs ?\n  | []           => 0\n  | [x, ...rest] => x + sum rest\n\n@test\nrecursionWorks = effect {\n  _ <- assertEq (sum[1, 2, 3]) 6\n}\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
 fn test_fmt_allman_brace_style_is_configurable() {
     let input = "f = x => {\n  x\n}\n";
     let formatted = format_text_with_options(
