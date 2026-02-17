@@ -40,7 +40,6 @@ Attributes are typed values, not raw strings:
 - `renderHtml : VNode msg -> Text` renders a `VNode` tree to HTML (including stable `data-aivi-node` ids).
 - `diff : VNode msg -> VNode msg -> List PatchOp` computes a patch stream between trees.
 - `patchToJson : List PatchOp -> Text` encodes patch ops to JSON for the browser client.
-- `eventFromJson : Text -> Result LiveError Event` decodes browser events.
 
 ## Style Records (Typed CSS Data)
 

@@ -1,32 +1,25 @@
 # LiveView-Style Server-Driven UI
 
 <!-- quick-info: {"kind":"module","name":"aivi.ui"} -->
-`aivi.ui.live` starts an HTTP server that:
+LiveView-style server-driven UI in v0.1 is provided by `aivi.ui.ServerHtml`:
 
-- serves an initial HTML page rendered from `view : model -> VNode msg`, and
-- accepts browser events over a WebSocket and responds with VDOM diffs as patches.
+- server renders initial HTML from `VNode msg`
+- browser forwards delegated DOM/platform events over WebSocket
+- server updates the model and streams DOM patch ops
 
 <!-- /quick-info -->
 
-Note: `aivi.ui.live` is the minimal v0.1 LiveView runtime. For typed event payloads, platform signals, IntersectionObserver subscriptions, and clipboard effects, use `aivi.ui.ServerHtml`.
+Note: older docs referenced a minimal `aivi.ui.live`. That API has been removed; use `aivi.ui.ServerHtml.serve` instead.
 <<< ../../snippets/from_md/05_stdlib/04_ui/05_liveview/block_01.aivi{aivi}
 
 ## API Shape
 
 ```aivi
-live
-  : LiveConfig
-  -> model
-  -> (model -> VNode msg)
-  -> (msg -> model -> model)
-  -> Effect LiveError Server
+serve
+  : aivi.net.http_server.ServerConfig
+  -> List (aivi.ui.ServerHtml.Route model msg)
+  -> Resource aivi.net.http_server.HttpError aivi.net.http_server.Server
 ```
-
-`LiveConfig` is a record:
-
-- `address : Text` (e.g. `"127.0.0.1:3000"`)
-- `path : Text` (e.g. `"/"`)
-- `title : Text` (HTML `<title>`)
 
 ## Protocol (Browser <-> Server)
 

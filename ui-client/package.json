@@ -1,0 +1,16 @@
+{
+  "name": "@aivi/server-html-client",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "sync:rust": "node ./scripts/sync-to-rust.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vite": "^6.0.0"
+  }
+}
+

@@ -1,5 +1,7 @@
 use aivi.ui
 use aivi.ui.layout
+use aivi.net.http_server
+use aivi.ui.ServerHtml
 
 Model = { count: Int }
 Msg = Inc | Dec
@@ -18,10 +20,16 @@ update = msg => model =>
     | Inc => model <| { count: _ + 1 }
     | Dec => model <| { count: _ - 1 }
 
-main : Effect LiveError Server
+app : ServerHtmlApp Model Msg
+app =
+  { init: _ => { count: 0 }
+    update: msg model => (update msg model, [])
+    view: view
+    onPlatform: _ => None
+  }
+
+main : Resource http_server.HttpError http_server.Server
 main =
-  ui.live
-    { address: "127.0.0.1:3000", path: "/", title: "Counter" }
-    { count: 0 }
-    view
-    update
+  ServerHtml.serve
+    { address: "127.0.0.1:3000" }
+    [{ path: "/", app: app }]

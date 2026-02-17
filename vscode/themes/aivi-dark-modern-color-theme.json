@@ -257,9 +257,19 @@
       "settings": { "foreground": "#D7BA7D" }
     },
     {
+      "name": "AIVI Identifiers",
+      "scope": ["variable.other.readwrite.aivi"],
+      "settings": { "foreground": "#DCDCAA" }
+    },
+    {
       "name": "AIVI Properties",
       "scope": ["variable.other.property.aivi"],
       "settings": { "foreground": "#9CDCFE" }
+    },
+    {
+      "name": "AIVI Accessors",
+      "scope": ["punctuation.accessor.aivi"],
+      "settings": { "foreground": "#5A5A5A" }
     },
     {
       "name": "AIVI Types",

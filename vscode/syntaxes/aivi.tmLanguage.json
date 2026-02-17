@@ -42,6 +42,12 @@
       "include": "#constructor"
     },
     {
+      "include": "#member_access"
+    },
+    {
+      "include": "#identifier"
+    },
+    {
       "include": "#type"
     },
     {
@@ -136,11 +142,34 @@
         }
       ]
     },
+    "identifier": {
+      "patterns": [
+        {
+          "match": "\\b[a-z][A-Za-z0-9_]*\\b(?!\\s*:)",
+          "name": "variable.other.readwrite.aivi"
+        }
+      ]
+    },
     "field": {
       "patterns": [
         {
           "match": "\\b[a-z][A-Za-z0-9_]*\\b(?=\\s*:)",
           "name": "variable.other.property.aivi"
+        }
+      ]
+    },
+    "member_access": {
+      "patterns": [
+        {
+          "match": "(\\.)([a-z][A-Za-z0-9_]*)\\b",
+          "captures": {
+            "1": {
+              "name": "punctuation.accessor.aivi"
+            },
+            "2": {
+              "name": "variable.other.property.aivi"
+            }
+          }
         }
       ]
     },
@@ -408,6 +437,12 @@
                 },
                 {
                   "include": "#constructor"
+                },
+                {
+                  "include": "#member_access"
+                },
+                {
+                  "include": "#identifier"
                 },
                 {
                   "include": "#type"

@@ -3,8 +3,21 @@ module integrationTests.stdlib.aivi.ui.ServerHtml.tests
 
 use aivi
 use aivi.testing
+use aivi.net.http_server (ServerConfig, HttpError, Server)
 use aivi.ui
 use aivi.ui.ServerHtml
+
+// Typecheck-only: ensures the routing/bootstrap API is in the stdlib surface.
+dummyApp : ServerHtmlApp Unit Unit
+dummyApp =
+  { init: _ => Unit
+    update: _ m => (m, [])
+    view: _ => vElement "div" [] []
+    onPlatform: _ => None
+  }
+
+typecheckServe : ServerConfig -> Resource HttpError Server
+typecheckServe = cfg => serve cfg [{ path: "/", app: dummyApp }]
 
 @test
 smoke = effect {

@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.ui";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.ui
-export VNode, Attr, PatchOp, Event, LiveConfig, LiveError
+export VNode, Attr, PatchOp
 export Element, TextNode, Keyed
 export Class, Id, Style, OnClick, OnInput
 export ClickEvent, InputEvent, KeyboardEvent, PointerEvent
@@ -17,8 +17,7 @@ export vClass, vId, vStyle, vAttr, vOnClick, vOnInput
 export vOnClickE, vOnInputE, vOnKeyDown, vOnKeyUp
 export vOnPointerDown, vOnPointerUp, vOnPointerMove
 export vOnFocus, vOnBlur
-export renderHtml, diff, patchToJson, eventFromJson
-export live
+export renderHtml, diff, patchToJson
 
 use aivi
 
@@ -112,11 +111,6 @@ vOnBlur = msg => OnBlur msg
 // Patch operations for LiveView-like updates.
 PatchOp = Replace Text Text | SetText Text Text | SetAttr Text Text Text | RemoveAttr Text Text
 
-Event = Click Int | Input Int Text
-
-LiveConfig = { address: Text, path: Text, title: Text }
-LiveError = { message: Text }
-
 renderHtml : VNode msg -> Text
 renderHtml = node => ui.renderHtml node
 
@@ -125,12 +119,4 @@ diff = old new => ui.diff old new
 
 patchToJson : List PatchOp -> Text
 patchToJson = ops => ui.patchToJson ops
-
-eventFromJson : Text -> Result LiveError Event
-eventFromJson = text => ui.eventFromJson text
-
-// Live server: serves initial HTML and streams patches over WebSocket.
-// The client protocol is implemented by the runtime's embedded JS snippet.
-live : LiveConfig -> model -> (model -> VNode msg) -> (msg -> model -> model) -> Effect LiveError Server
-live = cfg initialModel view update => ui.live cfg initialModel view update
 "#;
