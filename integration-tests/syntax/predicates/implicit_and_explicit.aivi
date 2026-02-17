@@ -7,7 +7,7 @@ use aivi.testing
 filter = pred xs => xs ?
   | []           => []
   | [x, ...rest] =>
-    if pred x then[x, ...(filter pred rest)] else filter pred rest
+    if pred x then [x, ...(filter pred rest)] else filter pred rest
 
 values = [1, 2, 3, 4, 5]
 gt2 = values |> filter (_ > 2)
