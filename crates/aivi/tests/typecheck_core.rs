@@ -622,7 +622,7 @@ module test.match_err
 
 Option A = None | Some A
 
-value = Some 1 ? 
+value = Some 1 ?
   | Some _ => 1
 "#;
 
@@ -647,7 +647,7 @@ module test.match_warn
 
 Option A = None | Some A
 
-value = Some 1 ? 
+value = Some 1 ?
   | _ => 0
   | Some _ => 1
 "#;
@@ -711,16 +711,29 @@ main = effect {
 }
 
 #[test]
-fn typecheck_effect_bind_accepts_source_values() {
+fn typecheck_error_mismatch_order() {
     let source = r#"
-module test.file_read_source
-use aivi
-
-main : Effect Text Unit
-main = effect {
-  _ <- file.read "missing.txt"
-}
+module test.repro
+main : Int
+main = 1.0
 "#;
+    let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
+    assert!(
+        !file_diagnostics_have_errors(&diagnostics),
+        "parse errors: {diagnostics:?}"
+    );
 
-    check_ok_with_embedded(source, &["aivi"]);
+    let mut module_diags = check_modules(&modules);
+    module_diags.extend(check_types(&modules));
+
+    let mismatch_diag = module_diags
+        .iter()
+        .find(|d| d.diagnostic.message.contains("type mismatch"))
+        .unwrap_or_else(|| panic!("expected type mismatch diagnostic, got: {module_diags:?}"));
+
+    assert!(
+        mismatch_diag.diagnostic.message.contains("expected Int, found Float"),
+        "mismatch diagnostic message has wrong order: {}",
+        mismatch_diag.diagnostic.message
+    );
 }

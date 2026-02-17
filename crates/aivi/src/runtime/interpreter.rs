@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -306,6 +306,7 @@ fn build_runtime_from_program_scoped(
     }
     let mut value_exports: HashMap<String, Vec<String>> = HashMap::new();
     let mut domain_members: HashMap<(String, String), Vec<String>> = HashMap::new();
+    let mut method_names: HashSet<String> = HashSet::new();
     for module in surface_modules {
         value_exports.insert(
             module.name.name.clone(),
@@ -342,6 +343,32 @@ fn build_runtime_from_program_scoped(
             }
             domain_members.insert((module.name.name.clone(), domain_name), members);
         }
+
+        // Methods (class members) behave like open multi-clause functions at runtime: instances can
+        // add new clauses. When importing, we merge method bindings instead of overwriting locals.
+        for item in &module.items {
+            let crate::surface::ModuleItem::ClassDecl(class_decl) = item else {
+                continue;
+            };
+            for member in &class_decl.members {
+                method_names.insert(member.name.name.clone());
+            }
+        }
+    }
+
+    fn merge_method_binding(existing: Value, imported: Value) -> Value {
+        fn flatten(value: Value, out: &mut Vec<Value>) {
+            match value {
+                Value::MultiClause(clauses) => out.extend(clauses),
+                other => out.push(other),
+            }
+        }
+
+        let mut clauses = Vec::new();
+        // Keep local clauses first so user-defined instances override defaults.
+        flatten(existing, &mut clauses);
+        flatten(imported, &mut clauses);
+        Value::MultiClause(clauses)
     }
 
     // Create a per-module environment rooted at the global environment. Each top-level def thunk
@@ -424,6 +451,15 @@ fn build_runtime_from_program_scoped(
                     for name in names {
                         let qualified = format!("{imported_mod}.{name}");
                         if let Some(value) = globals.get(&qualified) {
+                            if let Some(existing) = module_env.get(name) {
+                                if method_names.contains(name) {
+                                    module_env.set(
+                                        name.clone(),
+                                        merge_method_binding(existing, value),
+                                    );
+                                }
+                                continue;
+                            }
                             module_env.set(name.clone(), value);
                         }
                     }
@@ -436,6 +472,15 @@ fn build_runtime_from_program_scoped(
                         let name = item.name.name.clone();
                         let qualified = format!("{imported_mod}.{name}");
                         if let Some(value) = globals.get(&qualified) {
+                            if let Some(existing) = module_env.get(&name) {
+                                if method_names.contains(&name) {
+                                    module_env.set(
+                                        name.clone(),
+                                        merge_method_binding(existing, value),
+                                    );
+                                }
+                                continue;
+                            }
                             module_env.set(name, value);
                         }
                     }
@@ -446,6 +491,15 @@ fn build_runtime_from_program_scoped(
                             for member in members {
                                 let qualified = format!("{imported_mod}.{member}");
                                 if let Some(value) = globals.get(&qualified) {
+                                    if let Some(existing) = module_env.get(member) {
+                                        if method_names.contains(member) {
+                                            module_env.set(
+                                                member.clone(),
+                                                merge_method_binding(existing, value),
+                                            );
+                                        }
+                                        continue;
+                                    }
                                     module_env.set(member.clone(), value);
                                 }
                             }

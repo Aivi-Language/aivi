@@ -237,6 +237,30 @@ impl TypeChecker {
                 };
                 self.check_or_coerce(out, expected, env)
             }
+            Expr::TextInterpolate { parts, span } => {
+                // Each splice `{ expr }` behaves like an expected-`Text` position.
+                // Elaborate splice expressions against `Text` so expected-type coercions
+                // (notably `toText`) can be inserted.
+                let mut new_parts = Vec::with_capacity(parts.len());
+                for part in parts {
+                    match part {
+                        TextPart::Text { .. } => new_parts.push(part),
+                        TextPart::Expr { expr, span: part_span } => {
+                            let (expr, _ty) =
+                                self.elab_expr(*expr, Some(Type::con("Text")), env)?;
+                            new_parts.push(TextPart::Expr {
+                                expr: Box::new(expr),
+                                span: part_span,
+                            });
+                        }
+                    }
+                }
+                let out = Expr::TextInterpolate {
+                    parts: new_parts,
+                    span,
+                };
+                self.check_or_coerce(out, expected, env)
+            }
             Expr::Record { fields, span } => self.elab_record(fields, span, expected, env),
             Expr::If {
                 cond,

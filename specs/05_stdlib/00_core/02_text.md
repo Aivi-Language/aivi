@@ -115,7 +115,7 @@ Notes:
 
 | Function | Explanation |
 | --- | --- |
-| **toText** value<br><pre><code>`Show a => a -> Text`</code></pre> | Formats any `Show` instance into `Text`. |
+| **toText** value<br><pre><code>`A -> Text`</code></pre> | Converts `value` to `Text` (via in-scope `ToText` instances; otherwise uses the default debug formatter). |
 | **parseInt** text<br><pre><code>`Text -> Option Int`</code></pre> | Parses a decimal integer, returning `None` on failure. |
 | **parseFloat** text<br><pre><code>`Text -> Option Float`</code></pre> | Parses a decimal float, returning `None` on failure. |
 
