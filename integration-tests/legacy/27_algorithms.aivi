@@ -5,7 +5,6 @@ use aivi
 use aivi.math
 use aivi.testing
 
-
 algo_append = left right => left ?
   | []        => right
   | [h, ...t] => [h, ...algo_append t right]

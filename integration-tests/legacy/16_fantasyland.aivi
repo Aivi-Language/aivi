@@ -2,7 +2,6 @@ module examples.fantasy_land
 export Option, isNone
 use aivi.testing
 
-
 class Setoid A = {
   equals: A -> A -> Bool
 }

@@ -6,7 +6,6 @@ use examples.compiler.math
 use aivi.testing
 use aivi
 
-
 sum =
   | []        => 0
   | [h, ...t] => add h (sum t)
@@ -20,9 +19,9 @@ sumCount =
     | (_, n) when n == 0 => 0
     | (s, n)             => s / n
 
-__test_sentinel = 0
+  __test_sentinel = 0
 
-@test
+  @test
 smoke = effect {
   _ <- assert (sum [1, 2, 3] == 6)
   _ <- assert (mean [1, 2, 3, 4] == 2.5)

@@ -3,7 +3,6 @@ export gen, evens, grid, fibs, pairs, squares
 use aivi.testing
 use aivi.generator
 
-
 gen = generate {
   yield 1
   yield 2

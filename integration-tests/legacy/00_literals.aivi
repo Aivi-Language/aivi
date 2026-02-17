@@ -6,7 +6,6 @@ use aivi.number.bigint
 use aivi.number.decimal
 use aivi.testing
 
-
 ints = [0, 1, -1, 42]
 floats = [0.0, 3.14, -2.5]
 texts = ["hello", "world"]

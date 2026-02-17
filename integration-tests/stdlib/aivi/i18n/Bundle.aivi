@@ -12,9 +12,9 @@ smoke = effect {
       | Ok l  => l
       | Err _ => { language: "en", region: Some "US", variants: [], tag: "en-US" }
 
-  bres = bundleFromProperties loc "app.welcome = Hello, \\{name:Text\\}!\\n"
-  _ <- bres ?
-    | Err _ => assert False
-    | Ok b  =>
+    bres = bundleFromProperties loc "app.welcome = Hello, \\{name:Text\\}!\\n"
+    _ <- bres ?
+      | Err _ => assert False
+      | Ok b  =>
       _ <- assert (t b (~k\"app.welcome\") { name: \"Ada\" } == \"Hello, Ada!\")
 }

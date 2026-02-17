@@ -4,7 +4,6 @@ export main
 use aivi.testing
 use aivi.logic
 
-
 id = x => x
 
 compose = f g => x => g (f x)

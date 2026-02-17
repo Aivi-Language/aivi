@@ -5,7 +5,6 @@ use aivi.console
 use aivi.number.quaternion
 use aivi.testing
 
-
 main : Effect Text Unit
 main = effect {
   axis = { x: 0.0, y: 1.0, z: 0.0 }

@@ -7,7 +7,6 @@ use examples.compiler.stats as stats
 use aivi.testing
 use aivi
 
-
 run = [1, 2, 3, 4]
   |> stats.mean
   |> math.add (math.square 2)

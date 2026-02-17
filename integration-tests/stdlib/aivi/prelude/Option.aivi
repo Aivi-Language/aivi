@@ -12,8 +12,8 @@ optionMatches = effect {
     | Some n => assertEq n 1
     | None   => assert False
 
-  none = None
-  _ <- none ?
-    | Some _ => assert False
-    | None   => assert True
+    none = None
+    _ <- none ?
+      | Some _ => assert False
+      | None   => assert True
 }

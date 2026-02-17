@@ -2,7 +2,6 @@ module examples.compiler.functions
 export inc, add, compose, pipeline, getName, pairSum, twice, map, filter, sum, processed
 use aivi.testing
 
-
 inc = _ + 1
 add = x y => x + y
 compose = f g => x => f (g x)

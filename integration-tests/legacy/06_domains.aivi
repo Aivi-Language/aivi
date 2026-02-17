@@ -2,7 +2,6 @@ module examples.compiler.domains
 export Date, Calendar, addWeek, addTwoWeeks, shiftBy
 use aivi.testing
 
-
 Date = { year: Int, month: Int, day: Int }
 
 domain Calendar over Date = {

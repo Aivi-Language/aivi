@@ -6,7 +6,6 @@ use aivi.math
 use aivi.number.decimal
 use aivi.testing
 
-
 main : Effect Text Unit
 main = effect {
   g = gcd 54 24

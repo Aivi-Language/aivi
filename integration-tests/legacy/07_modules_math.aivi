@@ -4,7 +4,6 @@ export add, sub, mul, square
 use aivi.testing
 use aivi
 
-
 add = x y => x + y
 sub = x y => x - y
 mul = x y => x * y

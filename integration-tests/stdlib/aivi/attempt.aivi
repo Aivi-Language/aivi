@@ -8,12 +8,12 @@ use aivi
 @test
 attemptCapturesFailure = effect {
   ok <- attempt (pure 42)
-  _ <- ok ?
+  _  <- ok ?
     | Ok n  => assertEq n 42
     | Err _ => assert False
 
-  bad <- attempt (fail "boom")
-  _ <- bad ?
-    | Ok _  => assert False
-    | Err e => assertEq e "boom"
+    bad <- attempt (fail "boom")
+    _   <- bad ?
+      | Ok _  => assert False
+      | Err e => assertEq e "boom"
 }

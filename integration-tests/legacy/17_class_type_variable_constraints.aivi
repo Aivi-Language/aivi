@@ -2,7 +2,6 @@ module examples.compiler.classTypeVariableConstraints
 export Eq, NeedsEq
 use aivi.testing
 
-
 // A tiny typeclass, used only to demonstrate constrained member variables.
 class Eq A = {
   eq: A -> A -> Bool

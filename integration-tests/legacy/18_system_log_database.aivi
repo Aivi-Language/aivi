@@ -1,4 +1,3 @@
-
 module examples.system_log_database
 export main
 
@@ -6,7 +5,6 @@ use aivi
 use aivi.database as db
 use aivi.system
 use aivi.testing
-
 
 User = { id: Int, name: Text, active: Bool }
 
@@ -38,10 +36,10 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
-  _ <- db.configure { driver: db.Sqlite, url: ":memory:" }
-  _ <- db.runMigrations[userTable]
-  _ <- userTable + db.ins { id: 1, name: "Ada", active: False }
+  _    <- db.configure { driver: db.Sqlite, url: ":memory:" }
+  _    <- db.runMigrations[userTable]
+  _    <- userTable + db.ins { id: 1, name: "Ada", active: False }
   rows <- db.load userTable
-  _ <- assert (length rows == 1)
-  _ <- assert (rows[0].name == "Ada")
+  _    <- assert (length rows == 1)
+  _    <- assert (rows[0].name == "Ada")
 }

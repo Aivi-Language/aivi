@@ -8,10 +8,10 @@ use aivi.file
 @test
 smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
-  _ <- writeText p "hello"
-  ok <- exists p
-  _ <- assert ok
+  _   <- writeText p "hello"
+  ok  <- exists p
+  _   <- assert ok
   txt <- readText p
-  _ <- assert (txt == "hello")
-  _ <- delete p
+  _   <- assert (txt == "hello")
+  _   <- delete p
 }

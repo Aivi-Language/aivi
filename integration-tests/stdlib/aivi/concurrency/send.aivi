@@ -8,10 +8,10 @@ use aivi.concurrency
 @test
 smoke = effect {
   (tx, rx) <- make Unit
-  _ <- send tx Unit
-  res <- recv rx
-  _ <- res ?
-    | Ok _    => assert True
-    | Err _   => assert False
-  _ <- close tx
+  _        <- send tx Unit
+  res      <- recv rx
+  _        <- res ?
+    | Ok _  => assert True
+    | Err _ => assert False
+    _ <- close tx
 }

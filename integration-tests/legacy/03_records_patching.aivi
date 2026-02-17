@@ -2,7 +2,6 @@ module examples.compiler.records_patching
 export User, user1, user2, user3, store2, store3, promote
 use aivi.testing
 
-
 User = { name: Text, age: Int, tags: List Text }
 
 append = xs ys => xs ?

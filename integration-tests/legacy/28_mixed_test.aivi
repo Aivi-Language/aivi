@@ -5,7 +5,6 @@ use aivi.ui.layout
 use aivi.i18n
 use aivi.testing
 
-
 export Model, Msg, init, update, view
 
 Model = { count: Int, step: Int }

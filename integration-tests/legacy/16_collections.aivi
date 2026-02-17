@@ -5,7 +5,6 @@ use aivi.console
 use aivi
 use aivi.testing
 
-
 main : Effect Text Unit
 main = effect {
   base = ~map{

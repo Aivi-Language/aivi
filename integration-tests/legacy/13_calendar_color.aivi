@@ -7,7 +7,6 @@ use aivi.color
 use aivi.text
 use aivi.testing
 
-
 main : Effect Text Unit
 main = effect {
   today = { year: 2025, month: 2, day: 8 }

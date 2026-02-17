@@ -8,5 +8,5 @@ use aivi.math
 @test
 smoke = effect {
   a = { radians: pi }
-  _ <- assert (abs (toDegrees a - 180.0) < 1e-10)
+  _ <- assert (abs (toDegrees a - 180.0) < 1e -10)
 }

@@ -4,7 +4,6 @@ export main
 use aivi.console
 use aivi.testing
 
-
 main : Effect Text Unit
 main = effect {
   n <- pure 41
@@ -28,7 +27,7 @@ __test_sentinel = 0
 @test
 smoke = effect {
   res <- attempt (fail "boom")
-  _ <- res ?
+  _   <- res ?
     | Ok _  => assert False
     | Err _ => assert True
 }

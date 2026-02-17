@@ -2,7 +2,6 @@ module examples.runtime
 export main
 use aivi.testing
 
-
 main : Effect Text Unit
 main = effect {
   _        <- concurrent.par (print "left\n") (print "right\n")
@@ -21,9 +20,9 @@ __test_sentinel = 0
 @test
 smoke = effect {
   (tx, rx) <- channel.make Text
-  _ <- channel.send tx "ping"
-  res <- channel.recv rx
-  _ <- res ?
-    | Ok msg  => assert (msg == "ping")
-    | Err _   => assert False
+  _        <- channel.send tx "ping"
+  res      <- channel.recv rx
+  _        <- res ?
+    | Ok msg => assert (msg == "ping")
+    | Err _  => assert False
 }
