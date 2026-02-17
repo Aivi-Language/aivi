@@ -57,8 +57,7 @@ impl TypeChecker {
                     return Ok(float_ty);
                 }
 
-                let applied = self.apply(inner_ty);
-                let found = self.type_to_string(&applied);
+                let found = self.type_to_string(&self.apply(inner_ty));
                 Err(TypeError {
                     span: span.clone(),
                     message: format!("unary '-' expects Int or Float (found {found})"),
