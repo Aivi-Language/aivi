@@ -13,74 +13,94 @@ neighbors = node graph => Map.get node graph.adj ?
   | Some ns => ns
   | None    => []
 
-// Build initial indegree map
+reverseList = xs => reverseGo xs []
+
+reverseGo = list acc => list ?
+  | []        => acc
+  | [h, ...t] => reverseGo t [h, ...acc]
+
+initIndegree = nodes acc => nodes ?
+  | []        => acc
+  | [n, ...t] => initIndegree t (Map.insert n 0 acc)
+
+incIndegree = node indeg => {
+  cur = Map.getOrElse node 0 indeg
+  Map.insert node (cur + 1) indeg
+}
+
+addIncoming = ns indeg => ns ?
+  | []        => indeg
+  | [n, ...t] => addIncoming t (incIndegree n indeg)
+
+buildIndegree : Graph -> Map Int Int
 buildIndegree = graph => {
-  // Start with all nodes having 0 indegree
-  init = List.foldl graph.nodes Map.empty (acc node => Map.insert node 0 acc)
-  // Count incoming edges for each node
-  List.foldl graph.nodes init (acc u =>
-    List.foldl (neighbors u graph) acc (acc2 v =>
-      Map.insert v ((Map.get v acc2 ? | Some n => n | None => 0) + 1) acc2
-    )
-  )
+  start = initIndegree graph.nodes Map.empty
+  buildIndegreeNodes graph graph.nodes start
 }
 
-// Get initial queue of nodes with indegree 0
-initialQueue = indegree graph =>
-  List.filter graph.nodes (node => (Map.get node indegree ? | Some 0 => True | _ => False))
+buildIndegreeNodes = graph nodes indeg => nodes ?
+  | []        => indeg
+  | [u, ...t] => buildIndegreeNodes graph t (addIncoming (neighbors u graph) indeg)
 
-// Process neighbors, reducing their indegree
-processNeighbors = neighbors indegree queue => neighbors ?
-  | []           => (indegree, queue)
-  | [n, ...tail] => {
-    remaining = (Map.get n indegree ? | Some v => v - 1 | None => 0)
-    updated = Map.insert n remaining indegree
-    newQueue = if remaining == 0 then [n, ...queue] else queue
-    processNeighbors tail updated newQueue
+enqueueZero = nodes indeg q => nodes ?
+  | []        => q
+  | [n, ...t] =>
+    if Map.getOrElse n 0 indeg == 0 then
+      enqueueZero t indeg (Queue.enqueue q n)
+    else
+      enqueueZero t indeg q
+
+relax = ns indeg q => ns ?
+  | []        => { indeg: indeg, q: q }
+  | [n, ...t] => {
+    cur = Map.getOrElse n 0 indeg
+    next = cur - 1
+    indeg2 = Map.insert n next indeg
+    q2 = if next == 0 then Queue.enqueue q n else q
+    relax t indeg2 q2
   }
 
-// Main sorting loop using Kahn's algorithm
-sortLoop = graph queue indegree order => queue ?
-  | [] =>
-      if List.length order == List.length graph.nodes then
-        Ok order
-      else {
-  // Find nodes still with positive indegree (cycle)
-        cycleNodes = List.filter graph.nodes (n =>
-        (Map.get n indegree ? | Some d when d > 0 => True | _ => False)
-        )
-        Err cycleNodes
-      }
-| [current, ...rest] => {
-    edges = neighbors current graph
-    (nextIndegree, nextQueue) = processNeighbors edges indegree rest
-    sortLoop graph nextQueue nextIndegree [current, ...order]
+cycleNodes = nodes indeg acc => nodes ?
+  | []        => reverseList acc
+  | [n, ...t] =>
+    if Map.getOrElse n 0 indeg > 0 then
+      cycleNodes t indeg [n, ...acc]
+    else
+      cycleNodes t indeg acc
+
+sortLoop = graph indeg q outRev => (Queue.dequeue q) ?
+  | None => {
+    out = reverseList outRev
+    if List.length out == List.length graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg [])
+  }
+  | Some (node, q2) => {
+    res = relax (neighbors node graph) indeg q2
+    sortLoop graph res.indeg res.q [node, ...outRev]
+  }
+
+topologicalSort : Graph -> Result (List Int) (List Int)
+topologicalSort = graph => {
+  indeg = buildIndegree graph
+  q0 = enqueueZero graph.nodes indeg Queue.empty
+  sortLoop graph indeg q0 []
 }
 
-// Topological sort entry point
-  topologicalSort : Graph -> Result (List Int) (List Int)
-  topologicalSort = graph => {
-    indegree = buildIndegree graph
-    queue = initialQueue indegree graph
-    sortLoop graph queue indegree []
+@test
+topoSmoke = effect {
+  adj = ~map{
+    0 => [1, 2]
+    1 => [3]
+    2 => [3]
+    3 => []
   }
+  graph = { nodes: [0, 1, 2, 3], adj: adj }
 
-  @test
-  topoSmoke = effect {
-    adj = ~map{
-      0 => [1, 2]
-      1 => [3]
-      2 => [3]
-      3 => []
-    }
-    graph = { nodes: [0, 1, 2, 3], adj: adj }
-
-    result = topologicalSort graph
-    _ <- assert (result == Ok [3, 2, 1, 0] || result == Ok [3, 1, 2, 0])
+  result = topologicalSort graph
+  _ <- assert (result == Ok [0, 1, 2, 3] || result == Ok [0, 2, 1, 3])
 
   // Test cyclic graph detection
-    cyclicAdj = ~map{ 0 => [1], 1 => [0] }
-    cyclicGraph = { nodes: [0, 1], adj: cyclicAdj }
-    cycle = topologicalSort cyclicGraph
-    _ <- assert (cycle == Err [0, 1] || cycle == Err [1, 0])
-  }
+  cyclicAdj = ~map{ 0 => [1], 1 => [0] }
+  cyclicGraph = { nodes: [0, 1], adj: cyclicAdj }
+  cycle = topologicalSort cyclicGraph
+  _ <- assert (cycle == Err [0, 1] || cycle == Err [1, 0])
+}
