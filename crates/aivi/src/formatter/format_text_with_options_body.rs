@@ -984,13 +984,6 @@
                 rhs_block_base_depth = None;
             }
         }
-        // `else`/`then` lines are structural join points; don't keep a preceding `=`/`=>` RHS
-        // continuation indentation active across them.
-        if matches!(state.tokens[first_idx].text.as_str(), "else" | "then") {
-            rhs_block_base_indent = None;
-            rhs_block_base_depth = None;
-        }
-
         // Continuation blocks:
         // - Multi-line `| ...` blocks (multi-clause functions and `?` matches).
         //   These blocks can contain continuation lines (e.g. multi-line patterns/bodies), so we
@@ -1031,10 +1024,11 @@
         let hang_is_close = hang_top.is_some_and(|(opener, _)| {
             matches_hang_close(opener, state.tokens[first_idx].text.as_str())
         });
-        // Suppress extra continuation indentation inside multi-line paren/bracket groups so they
-        // format like typical "hanging" argument/tuple lists. Keep it enabled for `{ ... }`
-        // blocks because braces commonly represent statement blocks in AIVI codebases.
-        let inside_hang = hang_top.is_some_and(|(opener, _)| opener != '{') && !hang_is_close;
+        // Suppress extra continuation indentation inside multi-line "hanging" delimiter groups.
+        // The hang stack already aligns contents to the opener's *effective* indentation (which
+        // includes any continuation indentation on the opener line), so adding continuation
+        // levels again would double-indent.
+        let inside_hang = hang_top.is_some() && !hang_is_close;
         if starts_with_pipe {
             if let Some(&(base, _)) = pipe_block_stack.last() {
                 // Indent arms one level relative to the match subject.
