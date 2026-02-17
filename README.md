@@ -108,6 +108,11 @@ Additional tooling:
 - **Test runner** (`aivi test`) for integration tests (`@test` definitions)
 - **LSP server** (`aivi_lsp`) for editor integration
 
+## Development
+
+- **Run workspace tests**: `cargo test --workspace`
+- **Check GitHub Actions health (via gh)**: `scripts/gh-actions-check.sh`
+
 ## Feedback & Contributions
 
 If you identify:
