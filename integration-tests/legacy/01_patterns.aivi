@@ -58,8 +58,7 @@ evalExpr =
 
 __test_sentinel = 0
 
-@test
-smoke = effect {
+@test smoke = effect {
   _ <- assert (head [1, 2, 3] == Some 1)
   _ <- assert (head [] == None)
   _ <- assert (classify 0 == "zero")
