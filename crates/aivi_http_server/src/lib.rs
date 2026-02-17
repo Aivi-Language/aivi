@@ -341,8 +341,12 @@ fn convert_response(response: AiviResponse) -> Result<Response<Full<Bytes>>, Aiv
 
 fn map_ws_message(msg: hyper_tungstenite::tungstenite::Message) -> AiviWsMessage {
     match msg {
-        hyper_tungstenite::tungstenite::Message::Text(text) => AiviWsMessage::TextMsg(text),
-        hyper_tungstenite::tungstenite::Message::Binary(data) => AiviWsMessage::BinaryMsg(data),
+        hyper_tungstenite::tungstenite::Message::Text(text) => {
+            AiviWsMessage::TextMsg(text.to_string())
+        }
+        hyper_tungstenite::tungstenite::Message::Binary(data) => {
+            AiviWsMessage::BinaryMsg(data.to_vec())
+        }
         hyper_tungstenite::tungstenite::Message::Ping(_) => AiviWsMessage::Ping,
         hyper_tungstenite::tungstenite::Message::Pong(_) => AiviWsMessage::Pong,
         hyper_tungstenite::tungstenite::Message::Close(_) => AiviWsMessage::Close,
@@ -352,10 +356,12 @@ fn map_ws_message(msg: hyper_tungstenite::tungstenite::Message) -> AiviWsMessage
 
 fn to_ws_message(msg: AiviWsMessage) -> hyper_tungstenite::tungstenite::Message {
     match msg {
-        AiviWsMessage::TextMsg(text) => hyper_tungstenite::tungstenite::Message::Text(text),
-        AiviWsMessage::BinaryMsg(data) => hyper_tungstenite::tungstenite::Message::Binary(data),
-        AiviWsMessage::Ping => hyper_tungstenite::tungstenite::Message::Ping(Vec::new()),
-        AiviWsMessage::Pong => hyper_tungstenite::tungstenite::Message::Pong(Vec::new()),
+        AiviWsMessage::TextMsg(text) => hyper_tungstenite::tungstenite::Message::Text(text.into()),
+        AiviWsMessage::BinaryMsg(data) => {
+            hyper_tungstenite::tungstenite::Message::Binary(data.into())
+        }
+        AiviWsMessage::Ping => hyper_tungstenite::tungstenite::Message::Ping(Bytes::new()),
+        AiviWsMessage::Pong => hyper_tungstenite::tungstenite::Message::Pong(Bytes::new()),
         AiviWsMessage::Close => hyper_tungstenite::tungstenite::Message::Close(None),
     }
 }

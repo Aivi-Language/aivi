@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use getrandom::getrandom;
+use getrandom::fill as getrandom_fill;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -24,7 +24,7 @@ pub(super) fn build_crypto_record() -> Value {
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
                     let mut bytes = [0u8; 16];
-                    getrandom(&mut bytes)
+                    getrandom_fill(&mut bytes)
                         .map_err(|err| format!("crypto.randomUuid failed: {err}"))?;
                     bytes[6] = (bytes[6] & 0x0f) | 0x40;
                     bytes[8] = (bytes[8] & 0x3f) | 0x80;
@@ -50,7 +50,7 @@ pub(super) fn build_crypto_record() -> Value {
                 func: Arc::new(move |_| {
                     let mut buffer = vec![0u8; count];
                     if count > 0 {
-                        getrandom(&mut buffer)
+                        getrandom_fill(&mut buffer)
                             .map_err(|err| format!("crypto.randomBytes failed: {err}"))?;
                     }
                     Ok(Value::Bytes(Arc::new(buffer)))
