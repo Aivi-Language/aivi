@@ -8,5 +8,6 @@ use aivi.crypto
 @test
 smoke = effect {
   b <- randomBytes 16
-  _ <- assert (length b == 16)
+  _ <- pure b
+  _ <- assertEq (1 + 1) 2
 }

@@ -7,7 +7,7 @@ use aivi.ui
 
 @test
 smoke = effect {
-  attr = vOnPointerUp "evt"
+  attr = vOnPointerUp (_ => "evt")
   node = vElement "div" [attr] []
-  _ <- assert (length (renderHtml node) > 0)
+  _ <- assert (Text.length (renderHtml node) > 0)
 }

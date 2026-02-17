@@ -4,12 +4,13 @@ module integrationTests.stdlib.aivi.duration.domain_Duration.suffix_h
 use aivi
 use aivi.testing
 use aivi.duration
-use aivi.duration
+use aivi.duration (domain Duration)
 
 subject = 1h
 
 @test
 smoke = effect {
-  _ <- pure suffix_h
-  _ <- assert True
+  base = { millis: 0 }
+  res = base + subject
+  _ <- assertEq res.millis 3600000
 }
