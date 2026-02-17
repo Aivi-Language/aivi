@@ -1,0 +1,6 @@
+@no_prelude
+module integrationTests.complex.TopologicalSort
+
+use aivi
+
+touch = Unit

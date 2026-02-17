@@ -412,6 +412,9 @@ impl Backend {
                 }
             }
             Expr::Literal(_) => {}
+            Expr::UnaryNeg { expr, .. } => {
+                Self::collect_expr_references(expr, ident, text, uri, locations);
+            }
             Expr::Suffixed { base, .. } => {
                 Self::collect_expr_references(base, ident, text, uri, locations);
             }
