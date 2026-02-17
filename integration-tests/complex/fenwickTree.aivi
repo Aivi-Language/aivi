@@ -18,7 +18,7 @@ lowbit = idx => idx ?
 addDelta = size idx delta tree =>
   if idx > size then tree
   else {
-    cur = Map.get idx tree ? | Some v => v | None => 0
+    cur = Map.getOrElse idx 0 tree
     updated = Map.insert idx (cur + delta) tree
     addDelta size (idx + lowbit idx) delta updated
   }
@@ -27,24 +27,29 @@ addDelta = size idx delta tree =>
 buildFromList : List Int -> Fenwick
 buildFromList = arr => {
   size = List.length arr
-  buildLoop = idx tree =>
-    if idx > size then tree
-    else List.at arr (idx - 1) ?
-      | None       => buildLoop (idx + 1) tree
-      | Some value => buildLoop (idx + 1) (addDelta size idx value tree)
-      { size: size, tree: buildLoop 1 Map.empty }
+  { size: size, tree: buildTree arr size 1 Map.empty }
+}
+
+buildTree = arr size idx tree => {
+  if idx > size then
+    tree
+  else
+    List.at arr (idx - 1) ?
+      | None       => buildTree arr size (idx + 1) tree
+      | Some value => buildTree arr size (idx + 1) (addDelta size idx value tree)
 }
 
 // Query prefix sum [1..idx]
 prefix : Fenwick -> Int -> Int
-prefix = fenwick idx => {
-  go = i acc =>
-    if i == 0 then acc
-    else {
-      val = Map.get i fenwick.tree ? | Some v => v | None => 0
-      go (i - lowbit i) (acc + val)
-    }
-    go idx 0
+prefix = fenwick idx => prefixGo fenwick idx 0
+
+prefixGo = fenwick i acc => {
+  if i == 0 then
+    acc
+  else {
+    val = Map.getOrElse i 0 fenwick.tree
+    prefixGo fenwick (i - lowbit i) (acc + val)
+  }
 }
 
 // Query range sum [l..r]

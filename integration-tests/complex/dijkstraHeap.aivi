@@ -24,19 +24,15 @@ expandNeighbors = edges queue dist currentDist => edges ?
   | []              => (queue, dist)
   | [edge, ...tail] => {
     tentative = currentDist + edge.weight
-    prev = Map.get edge.to dist ?
-      | Some v => v
-      | None   => infinity
-    (nextQueue, nextDist) =
+    prev = Map.getOrElse edge.to infinity dist
     if tentative < prev then
-      (Heap.push (tentative, edge.to) queue, Map.insert edge.to tentative dist)
+      expandNeighbors tail (Heap.push (tentative, edge.to) queue) (Map.insert edge.to tentative dist) currentDist
     else
-      (queue, dist)
-      expandNeighbors tail nextQueue nextDist currentDist
+      expandNeighbors tail queue dist currentDist
   }
 
 // Main search loop
-search = queue dist visited graph => Heap.popMin queue ?
+search = queue dist visited graph => (Heap.popMin queue) ?
   | None                             => dist
   | Some ((currentDist, node), rest) =>
     if Set.has node visited then
@@ -49,7 +45,7 @@ search = queue dist visited graph => Heap.popMin queue ?
 
 // Dijkstra entry point
 dijkstra = graph start =>
-  search (Heap.push (0.0, start) Heap.empty)~map{ start => 0.0 } Set.empty graph
+  search (Heap.push (0.0, start) Heap.empty) (~map{ start => 0.0 }) Set.empty graph
 
   @test
   shortestPaths = effect {

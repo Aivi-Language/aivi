@@ -42,22 +42,22 @@ combineMeta = leftMeta rightMeta => (leftMeta, rightMeta) ?
 nodeFromChildren = start end left right => combineMeta (nodeMeta left) (nodeMeta right) ?
   | None   => Empty
   | Some m => Node {
-    start
-    end
+    start: start
+    end: end
     sum: m.sum
     min: m.min
     max: m.max
-    left
-    right
+    left: left
+    right: right
   }
 
 // Build tree from a range of the array
-buildRange = arr start end =>
+buildRange = arr start end => {
   if start == end then
     List.at arr start ?
       | Some value => Node {
-        start
-        end
+        start: start
+        end: end
         sum: value
         min: value
         max: value
@@ -66,11 +66,12 @@ buildRange = arr start end =>
       }
       | None => Empty
   else {
-    mid = (start + end) / 2
-    left = buildRange arr start mid
-    right = buildRange arr (mid + 1) end
-    nodeFromChildren start end left right
+        mid = (start + end) / 2
+        left = buildRange arr start mid
+        right = buildRange arr (mid + 1) end
+        nodeFromChildren start end left right
   }
+}
 
 // Create tree from list
   fromList : List Int -> SegmentTree
@@ -90,11 +91,11 @@ buildRange = arr start end =>
 // Point update at index (returns new tree, old is unchanged)
   updatePoint : SegmentTree -> Int -> Int -> SegmentTree
   updatePoint = tree idx value => tree ?
-    | Empty                                                          => Empty
-    | Node { start, end, left, right } when idx < start || idx > end => tree
-    | Node { start, end } when start == end                          => Node {
-      start
-      end
+    | Empty                                             => Empty
+    | Node { start, end } when idx < start || idx > end => tree
+    | Node { start, end } when start == end             => Node {
+      start: start
+      end: end
       sum: value
       min: value
       max: value

@@ -19,9 +19,7 @@ Residual = {
 }
 
 // Get capacity or 0 from map
-getOrZero = key map => Map.get key map ?
-  | Some v => v
-  | None   => 0.0
+getOrZero = key map => Map.getOrElse key 0.0 map
 
 // Build residual network from edges
 buildResidual : List Edge -> Residual
@@ -31,52 +29,48 @@ buildResidual = edges => {
   weighted = List.map allEdges (e => (e.from, e.to, e.cap))
   graph = fromWeightedEdges weighted
 
-  // Build capacity map
-  addCaps = items acc isZero => items ?
-    | []           => acc
-    | [e, ...rest] => {
-      key = { from: e.from, to: e.to }
-      val = if isZero then 0.0 else e.cap
-      addCaps rest (Map.insert key val acc) isZero
-    }
-
-    caps = addCaps edges Map.empty False
-    capsWithReverse = addCaps backward caps True
-    { graph: graph, capacities: capsWithReverse }
+  { graph: graph, capacities: insertCaps allEdges Map.empty }
 }
+
+insertCaps = items caps => items ?
+  | []           => caps
+  | [e, ...rest] => insertCaps rest (Map.insert { from: e.from, to: e.to } e.cap caps)
 
 // BFS to find augmenting path
-bfs = residual source sink => {
-  visit = queue visited parents => queue ?
-    | []                 => None
-    | [current, ...rest] =>
-      if current == sink then Some parents
-      else {
-        edges = edgesFrom residual.graph current
+bfs = residual source sink =>
+  bfsVisit residual sink (Queue.enqueue Queue.empty source) (Set.insert source Set.empty) Map.empty
 
-        explore = list q seen pars => list ?
-          | []              => visit q seen pars
-          | [edge, ...tail] => {
-            next = edge.to
-            cap = getOrZero { from: current, to: next } residual.capacities
-            if cap > 0.0 && !Set.has next seen then
-              explore tail (q ++ [next]) (Set.insert next seen) (Map.insert next current pars)
-            else
-              explore tail q seen pars
-          }
+bfsVisit = residual sink q visited parents => (Queue.dequeue q) ?
+  | None               => None
+  | Some (current, q2) =>
+    if current == sink then
+      Some parents
+    else {
+      edges = edgesFrom residual.graph current
+      (q3, visited3, parents3) = bfsExplore residual current edges q2 visited parents
+      bfsVisit residual sink q3 visited3 parents3
+    }
 
-              explore edges rest visited parents
-      }
-
-              visit [source] (Set.insert source Set.empty) Map.empty
-}
+bfsExplore = residual current edges q visited parents => edges ?
+  | []              => (q, visited, parents)
+  | [edge, ...tail] => {
+    next = edge.to
+    cap = getOrZero { from: current, to: next } residual.capacities
+    if cap > 0.0 && !Set.has next visited then
+      bfsExplore residual current tail (Queue.enqueue q next) (Set.insert next visited) (Map.insert next current parents)
+    else
+      bfsExplore residual current tail q visited parents
+  }
 
 // Reconstruct path from parents map
-reconstruct = parents sink source acc =>
-  if sink == source then [source, ...acc]
-  else Map.get sink parents ?
-    | Some prev => reconstruct parents prev source [sink, ...acc]
-    | None      => []
+reconstruct = parents sink source acc => {
+  if sink == source then
+    [source, ...acc]
+  else
+    (Map.get sink parents) ?
+      | Some prev => reconstruct parents prev source [sink, ...acc]
+      | None      => []
+}
 
 // Calculate bottleneck capacity along path
 pathCapacity = residual path => path ?
@@ -89,20 +83,20 @@ pathCapacity = residual path => path ?
 
 // Update capacities along path
 updatePath = residual path delta => {
-  apply = from to caps => {
-    forward = getOrZero { from, to } caps
-    backward = getOrZero { from: to, to: from } caps
-    caps
-    |> Map.insert { from, to } (forward - delta)
-    |> Map.insert { from: to, to: from } (backward + delta)
-  }
+  residual <| { capacities: updatePathGo delta path residual.capacities }
+}
 
-  go = nodes caps => nodes ?
-    | []              => caps
-    | [_]             => caps
-    | [a, b, ...rest] => go [b, ...rest] (apply a b caps)
+updatePathGo = delta nodes caps => nodes ?
+  | []              => caps
+  | [_]             => caps
+  | [a, b, ...rest] => updatePathGo delta [b, ...rest] (updatePathApply delta a b caps)
 
-    residual <| { capacities: go path residual.capacities }
+updatePathApply = delta from to caps => {
+  forward = getOrZero { from: from, to: to } caps
+  backward = getOrZero { from: to, to: from } caps
+  caps
+  |> Map.insert { from: from, to: to } (forward - delta)
+  |> Map.insert { from: to, to: from } (backward + delta)
 }
 
 // Main augmenting path loop
@@ -110,25 +104,21 @@ augment = residual source sink parents total => {
   path = reconstruct parents sink source []
   delta = pathCapacity residual path
   if delta == 0.0 then (total, residual)
-  else augment (updatePath residual path delta) source sink Map.empty (total + delta)
+  else (total + delta, updatePath residual path delta)
 }
 
 // Edmonds-Karp max flow algorithm
 maxFlow : List Edge -> Int -> Int -> (Float, Residual)
-maxFlow = edges source sink => {
-  residual = buildResidual edges
+maxFlow = edges source sink => maxFlowGo (buildResidual edges) source sink 0.0
 
-  go = state total => bfs state source sink ?
-    | None         => (total, state)
-    | Some parents => {
-      (newTotal, updated) = augment state source sink parents total
-      go updated newTotal
-    }
+maxFlowGo = state source sink total => bfs state source sink ?
+  | None         => (total, state)
+  | Some parents => {
+    (newTotal, updated) = augment state source sink parents total
+    maxFlowGo updated source sink newTotal
+  }
 
-    go residual 0.0
-}
-
-@test
+  @test
 maxFlowTest = effect {
   edges = [
     { from: 0, to: 1, cap: 16.0 }
