@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use aivi_http_server::{AiviWsMessage, WebSocketHandle};
 
-use super::util::builtin;
+use super::util::{builtin, expect_record};
 use crate::{format_value, EffectValue, Runtime, RuntimeError, Value};
 
 pub(super) fn build_ui_record() -> Value {
@@ -39,6 +39,14 @@ pub(super) fn build_ui_record() -> Value {
         build_server_html_record(),
     );
     Value::Record(Arc::new(fields))
+}
+
+fn runtime_error_to_text(err: RuntimeError) -> String {
+    match err {
+        RuntimeError::Cancelled => "cancelled".to_string(),
+        RuntimeError::Message(m) => m,
+        RuntimeError::Error(v) => format_value(&v),
+    }
 }
 
 fn normalize_path(path: &str) -> String {
