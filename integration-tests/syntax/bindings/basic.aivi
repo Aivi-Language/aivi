@@ -10,7 +10,7 @@ pair = (x, y)
 
 @test
 basicBindings = effect {
-  _ <- assertEq x 1
-  _ <- assertEq y 3
-  _ <- assertEq pair (1, 3)
+  assertEq x 1
+  assertEq y 3
+  assertEq pair (1, 3)
 }

@@ -13,6 +13,6 @@ span2 = span0 + 1min
 
 @test
 suffixLiteralsWork = effect {
-  _ <- assertEq span1.millis 30000
-  _ <- assertEq span2.millis 60000
+  assertEq span1.millis 30000
+  assertEq span2.millis 60000
 }

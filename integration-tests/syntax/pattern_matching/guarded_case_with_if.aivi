@@ -9,7 +9,7 @@ clamp01 = x =>
 
   @test
   ifsWork = effect {
-    _ <- assertEq (clamp01 (-1)) 0
-    _ <- assertEq (clamp01 0) 0
-    _ <- assertEq (clamp01 2) 1
+    assertEq (clamp01 (-1)) 0
+    assertEq (clamp01 0) 0
+    assertEq (clamp01 2) 1
   }

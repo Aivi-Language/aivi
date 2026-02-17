@@ -55,15 +55,17 @@ close_smoke = effect {
 
 @test
 connect_smoke = effect {
-  // connect returns a source yielding Result Connection SocketError
-  src = connect "localhost" 8080
-  res <- src
-  assert True
+  // Try a port that is very likely closed to ensure we get a typed error.
+  res <- attempt (connect { host: "127.0.0.1", port: 1 })
+  res ?
+    | Ok _conn => assert True
+    | Err _e => assert True
 }
 
 @test
 listen_smoke = effect {
-  pure listen
+  // Bind an ephemeral port; listener is closed when the test scope ends.
+  _listener <- listen { host: "127.0.0.1", port: 0 }
   assert True
 }
 

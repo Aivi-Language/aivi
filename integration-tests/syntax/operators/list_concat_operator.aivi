@@ -14,6 +14,6 @@ out2 = emptyInts ++ [1] ++ [2, 3]
 
 @test
 listConcatWorks = effect {
-  _ <- assertEq out1 [1, 2, 3]
-  _ <- assertEq out2 [1, 2, 3]
+  assertEq out1 [1, 2, 3]
+  assertEq out2 [1, 2, 3]
 }

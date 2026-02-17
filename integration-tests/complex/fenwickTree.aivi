@@ -100,16 +100,16 @@ behaviors = effect {
   fenwick = buildFromList values
 
   sum05 = rangeSum fenwick 1 5
-  _ <- assert (sum05 == Some 14)
+  assert (sum05 == Some 14)
 
   sum23 = rangeSum fenwick 2 3
-  _ <- assert (sum23 == Some 5)
+  assert (sum23 == Some 5)
 
-  _ <- assert (rangeSum fenwick 6 6 == None)
+  assert (rangeSum fenwick 6 6 == None)
 
   updated = update fenwick 3 9
-  _ <- assert (rangeSum updated 3 3 == Some 9)
-  _ <- assert (rangeSum fenwick 3 3 == Some 4)
+  assert (rangeSum updated 3 3 == Some 9)
+  assert (rangeSum fenwick 3 3 == Some 4)
 
-  _ <- assert (verifyIndices [1, 2, 3, 4, 5] updated values)
+  assert (verifyIndices [1, 2, 3, 4, 5] updated values)
 }

@@ -9,5 +9,5 @@ embedded = "ok"
 
 @test
 staticIsAvailable = effect {
-  _ <- assertEq embedded "ok"
+  assertEq embedded "ok"
 }

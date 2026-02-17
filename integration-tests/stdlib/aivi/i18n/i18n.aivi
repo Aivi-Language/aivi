@@ -119,8 +119,16 @@ bundleFromProperties_smoke = effect {
 
 @test
 bundleFromPropertiesFile_smoke = effect {
-  pure bundleFromPropertiesFile
-  assert True
+  l_res = parseLocale "en"
+  l <- l_res ?
+    | Ok l  => pure l
+    | Err e => fail e
+
+  res <- attempt (bundleFromPropertiesFile l "this-file-should-not-exist.aivi.i18n.properties")
+  res ?
+    | Ok (Ok _b) => assert False
+    | Ok (Err _e) => assert True
+    | Err _e => assert True
 }
 
 @test

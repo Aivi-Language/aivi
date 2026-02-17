@@ -4,6 +4,8 @@ module integrationTests.stdlib.aivi.ui.ServerHtml.tests
 use aivi
 use aivi.testing
 use aivi.ui.ServerHtml
+use aivi.net.http_server
+use aivi.ui
 
 clipboardError_touch : ClipboardError -> Unit
 clipboardError_touch = _ => Unit
@@ -70,8 +72,18 @@ viewId_smoke = effect {
 
 @test
 serveHttp_smoke = effect {
-  pure serveHttp
-  assert True
+  app =
+    { init: _ctx => 0
+    , update: _msg model => (model, [])
+    , view: _model => vText "ok"
+    , onPlatform: _ev => None
+    }
+
+  req : http_server.Request
+  req = { method: "GET", path: "/", headers: [], body: [], remoteAddr: None }
+
+  res = serveHttp app req
+  assert (res.status >= 200 && res.status < 600)
 }
 
 @test

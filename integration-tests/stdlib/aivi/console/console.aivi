@@ -35,25 +35,25 @@ color_smoke = effect {
 
 @test
 error_smoke = effect {
-  pure error
+  error "err"
   assert True
 }
 
 @test
 log_smoke = effect {
-  pure log
+  log "log"
   assert True
 }
 
 @test
 print_smoke = effect {
-  pure print
+  print "p"
   assert True
 }
 
 @test
 println_smoke = effect {
-  pure println
+  println "pl"
   assert True
 }
 

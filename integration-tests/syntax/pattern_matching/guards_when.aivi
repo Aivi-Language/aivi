@@ -13,7 +13,7 @@ classify =
 
   @test
   guardsWork = effect {
-    _ <- assertEq (classify (-1)) "negative"
-    _ <- assertEq (classify 0) "zero"
-    _ <- assertEq (classify 42) "medium"
+    assertEq (classify (-1)) "negative"
+    assertEq (classify 0) "zero"
+    assertEq (classify 42) "medium"
   }

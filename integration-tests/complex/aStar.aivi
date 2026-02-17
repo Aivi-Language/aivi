@@ -117,10 +117,10 @@ buildGraph = fromWeightedEdges [
 astarSmoke = effect {
   graph  <- pure buildGraph
   result <- pure (astar graph 0 3 heuristic)
-  _      <- assert (result == Some [0, 1, 2, 3])
+  assert (result == Some [0, 1, 2, 3])
   zeroHeuristic = _ _ => 0.0
   result2 <- pure (astar graph 0 3 zeroHeuristic)
-  _       <- assert (result2 == Some [0, 1, 2, 3])
+  assert (result2 == Some [0, 1, 2, 3])
   bad     <- pure (astar graph 3 0 zeroHeuristic)
-  _       <- assert (bad == None)
+  assert (bad == None)
 }

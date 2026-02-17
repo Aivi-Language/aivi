@@ -11,7 +11,7 @@ qualifiedLen = text.length
 
 @test
 importsWork = effect {
-  _ <- assertEq (len "abc") 3
-  _ <- assertEq (upper "ab") "AB"
-  _ <- assertEq (qualifiedLen "abcd") 4
+  assertEq (len "abc") 3
+  assertEq (upper "ab") "AB"
+  assertEq (qualifiedLen "abcd") 4
 }

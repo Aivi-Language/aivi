@@ -114,16 +114,16 @@ persistency = effect {
   tree <- pure (fromList arr)
 
   queryAll <- pure (queryRange tree 0 3)
-  _        <- assert (queryAll == Some { sum: 10, min: 1, max: 4 })
+  assert (queryAll == Some { sum: 10, min: 1, max: 4 })
 
   querySlice <- pure (queryRange tree 1 2)
-  _          <- assert (querySlice == Some { sum: 5, min: 2, max: 3 })
+  assert (querySlice == Some { sum: 5, min: 2, max: 3 })
 
   updated <- pure (updatePoint tree 2 7)
-  _       <- assert (queryRange updated 2 2 == Some { sum: 7, min: 7, max: 7 })
+  assert (queryRange updated 2 2 == Some { sum: 7, min: 7, max: 7 })
 
   // Original tree stays intact (persistence)
-  _ <- assert (queryRange tree 2 2 == Some { sum: 3, min: 3, max: 3 })
+  assert (queryRange tree 2 2 == Some { sum: 3, min: 3, max: 3 })
 
-  _ <- assert (queryRange Empty 0 0 == None)
+  assert (queryRange Empty 0 0 == None)
 }

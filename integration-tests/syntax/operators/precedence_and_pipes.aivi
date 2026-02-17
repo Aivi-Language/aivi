@@ -14,5 +14,5 @@ expected = [3, 5, 7]
 
 @test
 operatorsWork = effect {
-  _ <- assertEq out expected
+  assertEq out expected
 }

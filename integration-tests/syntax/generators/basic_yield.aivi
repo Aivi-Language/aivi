@@ -13,5 +13,5 @@ gen = generate {
 
 @test
 generatorsExist = effect {
-  _ <- assert (toList gen == [1, 2, 3])
+  assert (toList gen == [1, 2, 3])
 }

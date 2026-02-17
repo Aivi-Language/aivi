@@ -315,7 +315,9 @@ diff_smoke = effect {
 eventFromJson_smoke = effect {
   // Unknown JSON details; just ensure decoder accepts something simple.
   ev = eventFromJson "{}"
-  assert True
+  ev ?
+    | Ok _ => assert False
+    | Err _ => assert True
 }
 
 @test

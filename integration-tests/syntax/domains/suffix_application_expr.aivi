@@ -15,5 +15,5 @@ span1 = span0 + delta
 
 @test
 suffixApplicationWorks = effect {
-  _ <- assertEq span1.millis 120000
+  assertEq span1.millis 120000
 }

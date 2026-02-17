@@ -97,7 +97,11 @@ wsMessage_smoke = effect {
 
 @test
 listen_smoke = effect {
-  pure listen
+  handler = _req => effect {
+    pure (Http { status: 200, headers: [], body: [] })
+  }
+
+  _server <- listen { address: "127.0.0.1:0" } handler
   assert True
 }
 

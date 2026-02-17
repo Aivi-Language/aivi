@@ -7,5 +7,5 @@ use aivi.testing
 @test
 orSugarWorks = effect {
   txt <- load (env.get "AIVI__MISSING_TEST__") or "fallback"
-  _   <- assertEq txt "fallback"
+  assertEq txt "fallback"
 }
