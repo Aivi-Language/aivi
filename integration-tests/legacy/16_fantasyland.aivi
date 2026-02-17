@@ -64,6 +64,12 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
-  _ <- pure Option
-  _ <- assert True
+  a = Some 3
+  b = Some 3
+  _ <- assert (Setoid.equals a b == True)
+  _ <- assert (Functor.map (_ + 1) a == Some 4)
+  _ <- assert (Apply.ap (Some (_ + 2)) (Some 1) == Some 3)
+  _ <- assert (Applicative.of 5 == Some 5)
+  _ <- assert (Chain.chain (x => Some (x * 2)) (Some 2) == Some 4)
+  _ <- assert (isNone None == True)
 }

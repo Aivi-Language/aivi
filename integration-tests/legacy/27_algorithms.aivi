@@ -123,6 +123,8 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
-  _ <- pure main
-  _ <- assert True
+  _ <- assertEq (quicksort ([3, 1, 2, 1, 0])) ([0, 1, 1, 2, 3])
+  _ <- assertEq (algo_mergeSort ([3, 1, 2, 1, 0])) ([0, 1, 1, 2, 3])
+  path = aStar gridEdges Map.empty 0 22
+  _ <- assertEq path (Some ([0, 1, 2, 12, 22]))
 }

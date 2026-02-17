@@ -36,6 +36,7 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
-  _ <- pure Eq
-  _ <- assert True
+  _ <- assert (Super.foo 7 == 7)
+  _ <- assert (Sub.bar 5 == 5)
+  _ <- assert (NeedsEq.same (Some 5) == True)
 }

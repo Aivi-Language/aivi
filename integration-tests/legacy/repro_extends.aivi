@@ -27,5 +27,6 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
-  _ <- assert True
+  _ <- assert (Super.foo 7 == 7)
+  _ <- assert (Sub.bar 5 == 5)
 }

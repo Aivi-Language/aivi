@@ -1,6 +1,7 @@
 module repro_generators.main
 
 export main, printGen
+use aivi.generator
 use aivi.testing
 
 
@@ -23,6 +24,11 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
-  _ <- pure main
-  _ <- assert True
+  gen1 = generate {
+    yield 1
+    yield 2
+    yield 3
+  }
+  nums = generator.toList gen1
+  _ <- assert (nums == [1, 2, 3])
 }

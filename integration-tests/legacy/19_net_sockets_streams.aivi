@@ -28,6 +28,9 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
-  _ <- pure main
-  _ <- assert True
+  port = 8080
+  _ <- assert (port > 0)
+  _ <- assert (port < 65535)
+  _ <- pure echoServer
+  _ <- pure handle
 }
