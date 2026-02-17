@@ -236,6 +236,7 @@ pub(crate) fn build_strict_diagnostics(
 
         if config.level as u8 >= StrictLevel::LexicalStructural as u8 {
             strict_lexical_and_structural(text, &cst_tokens, &mut out);
+            strict_record_syntax_cst(&cst_tokens, &mut out);
             strict_tuple_intent(&file_modules, &mut out);
             strict_block_shape(&file_modules, &mut out);
             strict_record_field_access(&file_modules, &mut out);
