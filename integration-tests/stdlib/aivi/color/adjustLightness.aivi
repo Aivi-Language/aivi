@@ -7,6 +7,9 @@ use aivi.color
 
 @test
 smoke = effect {
-  _ <- pure adjustLightness
-  _ <- assert True
+  rgb = { r: 20, g: 40, b: 60 }
+  lighter = adjustLightness rgb 10
+  darker = adjustLightness rgb (-10)
+  _ <- assert (lighter.r >= rgb.r)
+  _ <- assert (darker.r <= rgb.r)
 }

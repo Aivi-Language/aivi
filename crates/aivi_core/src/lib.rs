@@ -8,10 +8,13 @@
 mod cst;
 #[path = "../../aivi/src/diagnostics.rs"]
 mod diagnostics;
-#[path = "../../aivi/src/formatter.rs"]
 mod formatter;
 #[path = "../../aivi/src/hir.rs"]
 mod hir;
+#[path = "../../aivi/src/i18n.rs"]
+mod i18n;
+#[path = "../../aivi/src/i18n_codegen.rs"]
+mod i18n_codegen;
 #[path = "../../aivi/src/kernel.rs"]
 mod kernel;
 #[path = "../../aivi/src/lexer.rs"]

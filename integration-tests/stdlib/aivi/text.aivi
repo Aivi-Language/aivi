@@ -1,11 +1,17 @@
 @no_prelude
+@no_prelude
 module integrationTests.stdlib.aivi.text
 
 use aivi
 use aivi.testing
-use aivi
+use aivi.text
 
 @test
 smoke = effect {
-  _ <- assert True
+  txt = "Hello, Test"
+  _ <- assert (length txt == 11)
+  _ <- assert (toLower txt == "hello, test")
+  _ <- assert (contains txt "Test")
+  _ <- assert (startsWith txt "Hello")
+  _ <- assert (titleCase txt == "Hello, Test")
 }

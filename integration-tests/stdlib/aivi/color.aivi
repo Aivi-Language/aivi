@@ -3,9 +3,17 @@ module integrationTests.stdlib.aivi.color
 
 use aivi
 use aivi.testing
-use aivi
+use aivi.color
+use aivi.text
 
 @test
 smoke = effect {
-  _ <- assert True
+  base = { r: 0.2, g: 0.4, b: 0.6 }
+  lighter = adjustLightness base 20
+  saturated = adjustSaturation base 10
+  hueShift = adjustHue base 30
+  _ <- assert (toHex lighter != toHex base)
+  _ <- assert (toHsl saturated.g > 10.0)
+  _ <- assert (toRgb (toHsl hueShift) .r >= 0.0)
+  _ <- assert (text.startsWith (toHex base) "#")
 }

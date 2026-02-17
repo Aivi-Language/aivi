@@ -7,5 +7,7 @@ use aivi.color
 
 @test
 smoke = effect {
-  _ <- assert True
+  rgb = { r: 10, g: 20, b: 30 }
+  _ <- assert (rgb.g > rgb.r)
+  _ <- assert (rgb.b > rgb.g)
 }

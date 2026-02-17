@@ -7,6 +7,10 @@ use aivi.color
 
 @test
 smoke = effect {
-  _ <- pure negateDelta
-  _ <- assert True
+  light = negateDelta (Lightness 5)
+  sat = negateDelta (Saturation 10)
+  hue = negateDelta (Hue 15)
+  _ <- assert (light == Lightness (-5))
+  _ <- assert (sat == Saturation (-10))
+  _ <- assert (hue == Hue (-15))
 }

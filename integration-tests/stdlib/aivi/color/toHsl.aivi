@@ -7,6 +7,10 @@ use aivi.color
 
 @test
 smoke = effect {
-  _ <- pure toHsl
-  _ <- assert True
+  rgb = { r: 100, g: 150, b: 200 }
+  hsl = toHsl rgb
+  recon = toRgb hsl
+  _ <- assert (abs (recon.r - rgb.r) < 10)
+  _ <- assert (abs (recon.g - rgb.g) < 10)
+  _ <- assert (abs (recon.b - rgb.b) < 10)
 }
