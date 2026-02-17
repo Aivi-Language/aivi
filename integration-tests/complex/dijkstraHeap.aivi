@@ -11,6 +11,23 @@ use aivi.graph (Graph, fromWeightedEdges, edgesFrom)
 infinity : Float
 infinity = 1000000.0
 
+priority2 = item => item ? | (p, _) => p
+
+popMin2 = items => items ?
+  | []        => None
+  | [h, ...t] => Some (popMin2Go h [] t)
+
+popMin2Go = best restAcc items => items ?
+  | []        => (best, restAcc)
+  | [x, ...t] => {
+    bestP = priority2 best
+    xP = priority2 x
+    if xP < bestP then
+      popMin2Go x [best, ...restAcc] t
+    else
+      popMin2Go best [x, ...restAcc] t
+  }
+
 // Build weighted graph from edge list
 buildGraph = fromWeightedEdges [
   (0, 1, 2.0)
@@ -21,21 +38,21 @@ buildGraph = fromWeightedEdges [
 ]
 
 // Expand all neighbors, returning updated (queue, dist)
-expandNeighbors : List { to: Int, weight: Float } -> Heap (Float, Int) -> Map Int Float -> Float -> (Heap (Float, Int), Map Int Float)
+expandNeighbors : List { to: Int, weight: Float } -> List (Float, Int) -> Map Int Float -> Float -> (List (Float, Int), Map Int Float)
 expandNeighbors = edges queue dist currentDist => edges ?
   | []              => (queue, dist)
   | [edge, ...tail] => {
     tentative = sum [currentDist, edge.weight]
     prev = Map.getOrElse edge.to infinity dist
     if tentative < prev then
-      expandNeighbors tail (Heap.push (tentative, edge.to) queue) (Map.insert edge.to tentative dist) currentDist
+      expandNeighbors tail [(tentative, edge.to), ...queue] (Map.insert edge.to tentative dist) currentDist
     else
       expandNeighbors tail queue dist currentDist
   }
 
 // Main search loop
-search : Heap (Float, Int) -> Map Int Float -> Set Int -> Graph -> Map Int Float
-search = queue dist visited graph => (Heap.popMin queue) ?
+search : List (Float, Int) -> Map Int Float -> Set Int -> Graph -> Map Int Float
+search = queue dist visited graph => popMin2 queue ?
   | None                             => dist
   | Some ((currentDist, node), rest) =>
     if Set.has node visited then
@@ -49,7 +66,7 @@ search = queue dist visited graph => (Heap.popMin queue) ?
 // Dijkstra entry point
 dijkstra : Graph -> Int -> Map Int Float
 dijkstra = graph start =>
-  search (Heap.push (0.0, start) Heap.empty) (~map{ start => 0.0 }) Set.empty graph
+  search [(0.0, start)] (~map{ start => 0.0 }) (Set.empty) graph
 
   @test
   shortestPaths = effect {

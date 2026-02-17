@@ -18,9 +18,16 @@ at = xs idx => xs ?
 
 // Extract lowest set bit
 lowbit : Int -> Int
-lowbit = idx => idx ?
-  | _ when idx % 2 == 1 => 1
-  | _                   => 2 * lowbit (idx / 2)
+lowbit = idx =>
+  if idx == 0 then
+    0
+  else {
+    half = idx / 2
+    if half * 2 == idx then
+      2 * lowbit half
+    else
+      1
+  }
 
 // Add delta to all affected indices
 addDelta = size idx delta tree =>
@@ -35,7 +42,7 @@ addDelta = size idx delta tree =>
 buildFromList : List Int -> Fenwick
 buildFromList = arr => {
   size = listLength arr
-  { size: size, tree: buildTree arr size 1 Map.empty }
+  { size: size, tree: buildTree arr size 1 (Map.empty) }
 }
 
 buildTree = arr size idx tree => {
@@ -111,5 +118,6 @@ behaviors = effect {
   _       <- assert (rangeSum updated 3 3 == Some 9)
   _       <- assert (rangeSum fenwick 3 3 == Some 4)
 
-  _ <- assert (verifyIndices [1, 2, 3, 4, 5] updated values)
+  updatedValues = [3, 1, 9, 1, 5]
+  _ <- assert (verifyIndices [1, 2, 3, 4, 5] updated updatedValues)
 }

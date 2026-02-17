@@ -9,17 +9,17 @@ use aivi.graph (Graph, fromEdges, edgesFrom)
 // Edge with capacity
 Edge = { from: Int, to: Int, cap: Float }
 
-// Residual key for capacity lookup
-ResidualKey = { from: Int, to: Int }
-
 // Residual network state
 Residual = {
   graph: Graph
-  capacities: Map ResidualKey Float
+  capacities: Map Text Float
 }
 
-// Get capacity or 0 from map
-getOrZero = key map => Map.getOrElse key 0.0 map
+edgeKey = from to => "{from}:{to}"
+
+getCap = from to caps => Map.getOrElse (edgeKey from to) 0.0 caps
+
+setCap = from to value caps => Map.insert (edgeKey from to) value caps
 
 append = xs ys => xs ?
   | []        => ys
@@ -43,16 +43,16 @@ buildResidual = edges => {
   allEdges = append edges backward
   graph = fromEdges (edgePairs allEdges)
 
-  { graph: graph, capacities: insertCaps allEdges Map.empty }
+  { graph: graph, capacities: insertCaps allEdges (Map.empty) }
 }
 
 insertCaps = items caps => items ?
   | []           => caps
-  | [e, ...rest] => insertCaps rest (Map.insert { from: e.from, to: e.to } e.cap caps)
+  | [e, ...rest] => insertCaps rest (setCap e.from e.to e.cap caps)
 
 // BFS to find augmenting path
 bfs = residual source sink =>
-  bfsVisit residual sink (Queue.enqueue source Queue.empty) (Set.insert source Set.empty) Map.empty
+  bfsVisit residual sink (Queue.enqueue source (Queue.empty)) (Set.insert source (Set.empty)) (Map.empty)
 
 bfsVisit = residual sink q visited parents => (Queue.dequeue q) ?
   | None               => None
@@ -60,7 +60,8 @@ bfsVisit = residual sink q visited parents => (Queue.dequeue q) ?
     if current == sink then
       Some parents
     else {
-      edges = edgesFrom residual.graph current
+      graph = residual.graph
+      edges = edgesFrom graph current
       (q3, visited3, parents3) = bfsExplore residual current edges q2 visited parents
       bfsVisit residual sink q3 visited3 parents3
     }
@@ -69,7 +70,8 @@ bfsExplore = residual current edges q visited parents => edges ?
   | []              => (q, visited, parents)
   | [edge, ...tail] => {
     next = edge.to
-    cap = getOrZero { from: current, to: next } residual.capacities
+    caps = residual.capacities
+    cap = getCap current next caps
     if cap > 0.0 && Set.has next visited == False then
       bfsExplore residual current tail (Queue.enqueue next q) (Set.insert next visited) (Map.insert next current parents)
     else
@@ -96,14 +98,16 @@ pathCapacityGo = residual path => path ?
   | []              => 0.0
   | [_]             => bigCap
   | [a, b, ...rest] => {
-    cap = getOrZero { from: a, to: b } residual.capacities
+    caps = residual.capacities
+    cap = getCap a b caps
     restCap = pathCapacityGo residual [b, ...rest]
     if cap < restCap then cap else restCap
   }
 
 // Update capacities along path
 updatePath = residual path delta => {
-  residual <| { capacities: updatePathGo delta path residual.capacities }
+  caps = residual.capacities
+  residual <| { capacities: updatePathGo delta path caps }
 }
 
 updatePathGo = delta nodes caps => nodes ?
@@ -112,11 +116,11 @@ updatePathGo = delta nodes caps => nodes ?
   | [a, b, ...rest] => updatePathGo delta [b, ...rest] (updatePathApply delta a b caps)
 
 updatePathApply = delta from to caps => {
-  forward = getOrZero { from: from, to: to } caps
-  backward = getOrZero { from: to, to: from } caps
+  forward = getCap from to caps
+  backward = getCap to from caps
   caps
-  |> Map.insert { from: from, to: to } (forward - delta)
-  |> Map.insert { from: to, to: from } (backward + delta)
+  |> setCap from to (forward - delta)
+  |> setCap to from (backward + delta)
 }
 
 // Main augmenting path loop

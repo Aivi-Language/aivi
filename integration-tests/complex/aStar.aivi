@@ -28,9 +28,26 @@ reconstructGo = cameFrom current acc => Map.get current cameFrom ?
   | None      => [current, ...acc]
 reconstructPath = cameFrom goal => reconstructGo cameFrom goal []
 
+priority3 = item => item ? | (p, _, _) => p
+
+popMin3 = items => items ?
+  | []        => None
+  | [h, ...t] => Some (popMin3Go h [] t)
+
+popMin3Go = best restAcc items => items ?
+  | []        => (best, restAcc)
+  | [x, ...t] => {
+    bestP = priority3 best
+    xP = priority3 x
+    if xP < bestP then
+      popMin3Go x [best, ...restAcc] t
+    else
+      popMin3Go best [x, ...restAcc] t
+  }
+
 // State record type alias
 AStarState = {
-  queue: Heap (Float, Int, Float)
+  queue: List (Float, Int, Float)
   scores: Map Int Float
   parents: Map Int Int
 }
@@ -47,7 +64,7 @@ expandNeighbor = current currentG goal heuristicFunc state edge => {
     | Some v => v
     | None   => infinity
     if tentative < prevScore then {
-      queue: Heap.push (sum [tentative, heuristicFunc goal edge.to], edge.to, tentative) state.queue
+      queue: [(sum [tentative, heuristicFunc goal edge.to], edge.to, tentative), ...state.queue]
       scores: Map.insert edge.to tentative state.scores
       parents: Map.insert edge.to current state.parents
     }
@@ -64,7 +81,7 @@ expandNeighbors = edges current currentG goal heuristicFunc state => edges ?
   }
 
 // Main search loop
-search = state graph goal heuristicFunc => Heap.popMin state.queue ?
+search = state graph goal heuristicFunc => popMin3 state.queue ?
   | None                                => None
   | Some ((_, current, currentG), rest) =>
     if current == goal then
@@ -82,7 +99,7 @@ search = state graph goal heuristicFunc => Heap.popMin state.queue ?
 // A* entry point
 astar = graph start goal heuristicFunc =>
   search {
-    queue: Heap.push (heuristicFunc goal start, start, 0.0) Heap.empty
+    queue: [(heuristicFunc goal start, start, 0.0)]
     scores: ~map{ start => 0.0 }
     parents: Map.empty
   } graph goal heuristicFunc
