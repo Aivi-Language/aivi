@@ -3098,7 +3098,7 @@ var require_main = __commonJS({
     exports2.createMessageConnection = exports2.createServerSocketTransport = exports2.createClientSocketTransport = exports2.createServerPipeTransport = exports2.createClientPipeTransport = exports2.generateRandomPipeName = exports2.StreamMessageWriter = exports2.StreamMessageReader = exports2.SocketMessageWriter = exports2.SocketMessageReader = exports2.PortMessageWriter = exports2.PortMessageReader = exports2.IPCMessageWriter = exports2.IPCMessageReader = void 0;
     var ril_1 = require_ril();
     ril_1.default.install();
-    var path = require("path");
+    var path2 = require("path");
     var os = require("os");
     var crypto_1 = require("crypto");
     var net_1 = require("net");
@@ -3234,9 +3234,9 @@ var require_main = __commonJS({
       }
       let result;
       if (XDG_RUNTIME_DIR) {
-        result = path.join(XDG_RUNTIME_DIR, `vscode-ipc-${randomSuffix}.sock`);
+        result = path2.join(XDG_RUNTIME_DIR, `vscode-ipc-${randomSuffix}.sock`);
       } else {
-        result = path.join(os.tmpdir(), `vscode-${randomSuffix}.sock`);
+        result = path2.join(os.tmpdir(), `vscode-${randomSuffix}.sock`);
       }
       const limit = safeIpcPathLengths.get(process.platform);
       if (limit !== void 0 && result.length > limit) {
@@ -9417,8 +9417,8 @@ var require_minimatch = __commonJS({
       return new Minimatch(pattern, options).match(p);
     };
     module2.exports = minimatch;
-    var path = require_path();
-    minimatch.sep = path.sep;
+    var path2 = require_path();
+    minimatch.sep = path2.sep;
     var GLOBSTAR = Symbol("globstar **");
     minimatch.GLOBSTAR = GLOBSTAR;
     var expand = require_brace_expansion();
@@ -9927,8 +9927,8 @@ var require_minimatch = __commonJS({
         if (this.empty) return f === "";
         if (f === "/" && partial) return true;
         const options = this.options;
-        if (path.sep !== "/") {
-          f = f.split(path.sep).join("/");
+        if (path2.sep !== "/") {
+          f = f.split(path2.sep).join("/");
         }
         f = f.split(slashSplit);
         this.debug(this.pattern, "split", f);
@@ -11653,13 +11653,13 @@ var require_configuration = __commonJS({
         });
       }
       extractSettingsInformation(keys) {
-        function ensurePath(config, path) {
+        function ensurePath(config, path2) {
           let current = config;
-          for (let i = 0; i < path.length - 1; i++) {
-            let obj = current[path[i]];
+          for (let i = 0; i < path2.length - 1; i++) {
+            let obj = current[path2[i]];
             if (!obj) {
               obj = /* @__PURE__ */ Object.create(null);
-              current[path[i]] = obj;
+              current[path2[i]] = obj;
             }
             current = obj;
           }
@@ -11677,8 +11677,8 @@ var require_configuration = __commonJS({
             config = vscode_1.workspace.getConfiguration(void 0, resource).get(key);
           }
           if (config) {
-            let path = keys[i].split(".");
-            ensurePath(result, path)[path[path.length - 1]] = toJSONObject(config);
+            let path2 = keys[i].split(".");
+            ensurePath(result, path2)[path2[path2.length - 1]] = toJSONObject(config);
           }
         }
         return result;
@@ -14245,13 +14245,13 @@ var require_fileOperations = __commonJS({
       async filter(event, prop) {
         const fileMatches = await Promise.all(event.files.map(async (item) => {
           const uri = prop(item);
-          const path = uri.fsPath.replace(/\\/g, "/");
+          const path2 = uri.fsPath.replace(/\\/g, "/");
           for (const filters of this._filters.values()) {
             for (const filter of filters) {
               if (filter.scheme !== void 0 && filter.scheme !== uri.scheme) {
                 continue;
               }
-              if (filter.matcher.match(path)) {
+              if (filter.matcher.match(path2)) {
                 if (filter.kind === void 0) {
                   return true;
                 }
@@ -14265,7 +14265,7 @@ var require_fileOperations = __commonJS({
                 }
               } else if (filter.kind === proto.FileOperationPatternKind.folder) {
                 const fileType = await _FileOperationFeature.getFileType(uri);
-                if (fileType === code.FileType.Directory && filter.matcher.match(`${path}/`)) {
+                if (fileType === code.FileType.Directory && filter.matcher.match(`${path2}/`)) {
                   return true;
                 }
               }
@@ -17492,7 +17492,7 @@ var require_main4 = __commonJS({
     exports2.SettingMonitor = exports2.LanguageClient = exports2.TransportKind = void 0;
     var cp = require("child_process");
     var fs2 = require("fs");
-    var path = require("path");
+    var path2 = require("path");
     var vscode_1 = require("vscode");
     var Is = require_is();
     var client_1 = require_client();
@@ -17910,18 +17910,18 @@ var require_main4 = __commonJS({
         });
       }
       _getRuntimePath(runtime, serverWorkingDirectory) {
-        if (path.isAbsolute(runtime)) {
+        if (path2.isAbsolute(runtime)) {
           return runtime;
         }
         const mainRootPath = this._mainGetRootPath();
         if (mainRootPath !== void 0) {
-          const result = path.join(mainRootPath, runtime);
+          const result = path2.join(mainRootPath, runtime);
           if (fs2.existsSync(result)) {
             return result;
           }
         }
         if (serverWorkingDirectory !== void 0) {
-          const result = path.join(serverWorkingDirectory, runtime);
+          const result = path2.join(serverWorkingDirectory, runtime);
           if (fs2.existsSync(result)) {
             return result;
           }
@@ -18014,6 +18014,7 @@ __export(extension_exports, {
 module.exports = __toCommonJS(extension_exports);
 var vscode = __toESM(require("vscode"));
 var fs = __toESM(require("node:fs"));
+var path = __toESM(require("node:path"));
 var import_node_child_process = require("node:child_process");
 var import_node = __toESM(require_node3());
 var client;
@@ -18025,14 +18026,31 @@ function getCliCommand() {
 function docHasTests(doc) {
   return /(^|\n)\s*@test\b/.test(doc.getText());
 }
-async function runAiviTest(target) {
+function toCliPath(uri) {
+  const fsPath = uri.fsPath;
+  return process.platform === "win32" ? fsPath.replace(/\\/g, "/") : fsPath;
+}
+function inferWorkspaceFolderForTarget(target) {
+  const wsFolders = vscode.workspace.workspaceFolders;
+  if (!wsFolders || wsFolders.length === 0) {
+    return void 0;
+  }
+  const base = target.replace(/(\/\.\.\.|\/\*\*)$/, "");
+  if (path.isAbsolute(base)) {
+    const uri = vscode.Uri.file(base);
+    return vscode.workspace.getWorkspaceFolder(uri) ?? wsFolders[0];
+  }
+  return wsFolders[0];
+}
+async function runAiviTest(target, ws) {
   const cli = getCliCommand();
+  const workspaceFolder = ws ?? inferWorkspaceFolderForTarget(target);
   const task = new vscode.Task(
     { type: "aivi", task: "test" },
-    vscode.TaskScope.Workspace,
+    workspaceFolder ?? vscode.TaskScope.Workspace,
     "AIVI: test",
     "aivi",
-    new vscode.ShellExecution(`${cli} test "${target}"`)
+    new vscode.ShellExecution(cli, ["test", target], { cwd: workspaceFolder?.uri.fsPath })
   );
   task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, clear: true };
   await vscode.tasks.executeTask(task);
@@ -18134,9 +18152,10 @@ function activate(context) {
     vscode.commands.registerCommand("aivi.runTests", async () => {
       const doc = vscode.window.activeTextEditor?.document;
       if (doc && doc.languageId === "aivi" && docHasTests(doc)) {
-        await runAiviTest(doc.uri.fsPath);
+        await runAiviTest(toCliPath(doc.uri), vscode.workspace.getWorkspaceFolder(doc.uri));
       } else {
-        await runAiviTest("integration-tests/**");
+        const ws = vscode.workspace.workspaceFolders?.[0];
+        await runAiviTest("integration-tests/**", ws);
       }
     })
   );
@@ -18146,7 +18165,16 @@ function activate(context) {
       if (!doc || doc.languageId !== "aivi") {
         return;
       }
-      await runAiviTest(doc.uri.fsPath);
+      await runAiviTest(toCliPath(doc.uri), vscode.workspace.getWorkspaceFolder(doc.uri));
+    })
+  );
+  context.subscriptions.push(
+    vscode.commands.registerCommand("aivi.runTestsFolder", async (uri) => {
+      if (!uri) {
+        return;
+      }
+      const ws = vscode.workspace.getWorkspaceFolder(uri) ?? vscode.workspace.workspaceFolders?.[0];
+      await runAiviTest(`${toCliPath(uri)}/...`, ws);
     })
   );
   context.subscriptions.push(
@@ -18154,7 +18182,8 @@ function activate(context) {
       if (e.execution.task.source !== "aivi" || e.execution.task.name !== "AIVI: test") {
         return;
       }
-      const ws = vscode.workspace.workspaceFolders?.[0];
+      const scope = e.execution.task.scope;
+      const ws = scope && typeof scope === "object" && "uri" in scope ? scope : vscode.workspace.workspaceFolders?.[0];
       if (!ws) {
         return;
       }

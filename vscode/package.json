@@ -44,6 +44,10 @@
       {
         "command": "aivi.runTestsFile",
         "title": "AIVI: Run Tests (Current File)"
+      },
+      {
+        "command": "aivi.runTestsFolder",
+        "title": "AIVI: Run Tests (Folder)"
       }
     ],
     "menus": {
@@ -51,6 +55,13 @@
         {
           "command": "aivi.runTestsFile",
           "when": "resourceLangId == aivi",
+          "group": "navigation@5"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "aivi.runTestsFolder",
+          "when": "explorerResourceIsFolder",
           "group": "navigation@5"
         }
       ]

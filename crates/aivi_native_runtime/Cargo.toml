@@ -5,12 +5,12 @@ edition = "2021"
 
 [dependencies]
 chrono = "0.4.38"
-getrandom = "0.2.15"
+getrandom = "0.4.1"
 im = "15.1.0"
 num-bigint = "0.4.6"
 num-rational = "0.4.2"
 num-traits = "0.2.19"
-ordered-float = "4.2.2"
+ordered-float = "5.1.0"
 palette = "0.7.5"
 regex = "1.10.6"
 rust_decimal = "1.36.0"
@@ -21,11 +21,11 @@ tokio = { version = "1.40.0", features = ["rt", "sync"] }
 unicode-normalization = "0.1.24"
 unicode-segmentation = "1.11.0"
 url = "2.5.2"
-ureq = "2.10.1"
+ureq = "3.2.0"
 uuid = { version = "1.10.0", features = ["v4"] }
-thiserror = "1.0.63"
+thiserror = "2.0.18"
 
 aivi_http_server = { path = "../aivi_http_server" }
-rusqlite = { version = "0.31.0", features = ["bundled"] }
+rusqlite = { version = "0.38.0", features = ["bundled"] }
 postgres = "0.19.9"
-mysql = "24.0.0"
+mysql = "27.0.0"
