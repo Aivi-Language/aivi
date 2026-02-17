@@ -13,7 +13,7 @@ map = f xs => xs ?
   | []           => []
   | [x, ...rest] => [f x, ...(map f rest)]
 
-  @test
+@test
 listFns = effect {
   l = [1, 2, 3]
   _ <- assertEq (len l) 3

@@ -138,7 +138,7 @@ maxFlowGo = state source sink total => bfs state source sink ?
     maxFlowGo updated source sink newTotal
   }
 
-  @test
+@test
 maxFlowTest = effect {
   edges = [
     { from: 0, to: 1, cap: 16.0 }

@@ -9,9 +9,10 @@ export dfsPreorder, dfsPostorder, bfs
 export fromListBy
 
 use aivi
-use aivi.collections (Queue)
+use aivi.collections (Queue, Map)
 
-Tree A = Node A (List (Tree A))
+Tree A =
+  | Node A (List (Tree A))
 
 node : A -> List (Tree A) -> Tree A
 node = value children => Node value children
@@ -67,7 +68,7 @@ dfsPostorderGo = work outStack outRev => work ?
     dfsPostorderDrain outStack outRev
   }
   | [t, ...rest] => {
-    work2 = append t.children rest
+    work2 = append (childrenOf t) rest
     dfsPostorderGo work2 [t, ...outStack] outRev
   }
 

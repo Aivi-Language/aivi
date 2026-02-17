@@ -15,7 +15,7 @@ toInt = c => c ?
   | Green => 2
   | Blue  => 3
 
-  @test
+@test
 typesWork = effect {
   _ <- assertEq (mk 1 "x") (1, "x")
   _ <- assertEq (toInt Red) 1
