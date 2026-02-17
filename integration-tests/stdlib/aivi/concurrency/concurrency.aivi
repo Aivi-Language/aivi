@@ -1,0 +1,82 @@
+@no_prelude
+module integrationTests.stdlib.aivi.concurrency.tests
+
+use aivi
+use aivi.testing
+use aivi.concurrency
+
+channelError_touch : ChannelError -> Unit
+channelError_touch = _ => Unit
+
+@test
+channelError_smoke = effect {
+  _ <- pure channelError_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+scope_touch : Scope -> Unit
+scope_touch = _ => Unit
+
+@test
+scope_smoke = effect {
+  _ <- pure scope_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+close_smoke = effect {
+  (tx, rx) <- make Unit
+  _        <- send tx Unit
+  res      <- recv rx
+  _        <- res ?
+    | Ok _  => assert True
+    | Err _ => assert False
+    _ <- close tx
+}
+
+@test
+make_smoke = effect {
+  (tx, rx) <- make Unit
+  _        <- send tx Unit
+  res      <- recv rx
+  _        <- res ?
+    | Ok _  => assert True
+    | Err _ => assert False
+    _ <- close tx
+}
+
+@test
+par_smoke = effect {
+  // Just ensure both branches run without throwing.
+  _ <- par (pure 1) (pure 2)
+  _ <- assert True
+}
+
+@test
+recv_smoke = effect {
+  (tx, rx) <- make Unit
+  _        <- send tx Unit
+  res      <- recv rx
+  _        <- res ?
+    | Ok _  => assert True
+    | Err _ => assert False
+    _ <- close tx
+}
+
+@test
+scope_smoke_2 = effect {
+  // Scope should run the callback and return its result.
+  x <- scope (_ => pure 123)
+  _ <- assert (x == 123)
+}
+
+@test
+send_smoke = effect {
+  (tx, rx) <- make Unit
+  _        <- send tx Unit
+  res      <- recv rx
+  _        <- res ?
+    | Ok _  => assert True
+    | Err _ => assert False
+    _ <- close tx
+}

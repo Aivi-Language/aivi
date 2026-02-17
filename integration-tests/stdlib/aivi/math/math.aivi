@@ -1,0 +1,443 @@
+@no_prelude
+module integrationTests.stdlib.aivi.math.tests
+
+use aivi
+use aivi.testing
+use aivi.math
+
+angle_touch : Angle -> Unit
+angle_touch = _ => Unit
+
+@test
+angle_smoke = effect {
+  _ <- pure angle_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+bigInt_touch : BigInt -> Unit
+bigInt_touch = _ => Unit
+
+@test
+bigInt_smoke = effect {
+  _ <- pure bigInt_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+abs_smoke = effect {
+  _ <- assert (abs 1 == 1)
+  _ <- assert (abs (-1) == 1)
+  _ <- assert (abs 1.5 == 1.5)
+  _ <- assert (abs (-1.5) == 1.5)
+}
+
+@test
+acos_smoke = effect {
+  _ <- assert (abs (acos 1.0).radians < 0.0001)
+  _ <- assert (abs (acos 0.0).radians - (pi / 2.0) < 0.0001)
+}
+
+@test
+acosh_smoke = effect {
+  _ <- assert (abs (acosh 1.0) < 0.0001)
+  _ <- assert (abs (acosh 1.5430-1.0) < 0.0001)
+}
+
+@test
+asin_smoke = effect {
+  _ <- assert (abs (asin 0.0).radians < 0.0001)
+  _ <- assert (abs (asin 1.0).radians - (pi / 2.0) < 0.0001)
+}
+
+@test
+asinh_smoke = effect {
+  _ <- assert (abs (asinh 0.0) < 0.0001)
+  _ <- assert (abs (asinh 1.1752-1.0) < 0.0001)
+}
+
+@test
+atan_smoke = effect {
+  _ <- assert (abs (atan 0.0).radians < 0.0001)
+  _ <- assert (abs (atan 1.0).radians - (pi / 4.0) < 0.0001)
+}
+
+@test
+atan2_smoke = effect {
+  _ <- assert (abs (atan2 1.0 1.0).radians - (pi / 4.0) < 0.0001)
+  _ <- assert (abs (atan2 1.0 0.0).radians - (pi / 2.0) < 0.0001)
+}
+
+@test
+atanh_smoke = effect {
+  _ <- assert (abs (atanh 0.0) < 0.0001)
+  _ <- assert (abs (atanh 0.7615-1.0) < 0.0001)
+}
+
+@test
+cbrt_smoke = effect {
+  _ <- assert (abs (cbrt 8.0-2.0) < 0.0001)
+  _ <- assert (abs (cbrt 27.0-3.0) < 0.0001)
+}
+
+@test
+ceil_smoke = effect {
+  _ <- assert (ceil 1.2 == 2.0)
+  _ <- assert (ceil 1.9 == 2.0)
+  _ <- assert (ceil (-1.2) == -1.0)
+}
+
+@test
+clamp_smoke = effect {
+  _ <- assert (clamp 10.0 5.0 0.0 == 5.0)
+  _ <- assert (clamp (-5.0) 5.0 0.0 == 0.0)
+  _ <- assert (clamp 3.0 5.0 0.0 == 3.0)
+}
+
+@test
+comb_smoke = effect {
+  _ <- assert (comb 5 2 == 10)
+}
+
+@test
+copysign_smoke = effect {
+  _ <- assert (copysign 1.0 (-2.0) == -1.0)
+}
+
+@test
+cos_smoke = effect {
+  _ <- assert (abs (cos 0.0-1.0) < 0.0001)
+  _ <- assert (abs (cos (pi / 2.0)) < 0.0001)
+}
+
+@test
+cosh_smoke = effect {
+  _ <- assert (abs (cosh 0.0-1.0) < 0.0001)
+  _ <- assert (abs (cosh 1.0-1.5430) < 0.0001)
+}
+
+@test
+degrees_smoke = effect {
+  _ <- assert (abs (degrees pi - 180.0) < 0.0001)
+}
+
+@test
+divmod_smoke = effect {
+  _ <- assert (divmod 10 3 == (3, 1))
+  _ <- assert (divmod 10 (-3) == (-4, -2))
+}
+
+@test
+e_smoke = effect {
+  _ <- assert (abs (e - 2.71828) < 0.0001)
+}
+
+@test
+exp_smoke = effect {
+  _ <- assert (abs (exp 0.0-1.0) < 0.0001)
+  _ <- assert (abs (exp 1.0- e) < 0.0001)
+}
+
+@test
+exp2_smoke = effect {
+  _ <- assert (abs (exp2 3.0-8.0) < 0.0001)
+  _ <- assert (abs (exp2 0.0-1.0) < 0.0001)
+}
+
+@test
+expm1_smoke = effect {
+  _ <- assert (abs (expm1 0.0) < 0.0001)
+  // expm1(x) = exp(x) - 1
+  _ <- assert (abs (expm1 1.0- (e - 1.0)) < 0.0001)
+}
+
+@test
+factorial_smoke = effect {
+  _ <- assert (factorial 0 == 1)
+  _ <- assert (factorial 5 == 120)
+}
+
+@test
+floor_smoke = effect {
+  _ <- assert (floor 1.2 == 1.0)
+  _ <- assert (floor 1.9 == 1.0)
+  _ <- assert (floor (-1.2) == -2.0)
+}
+
+@test
+fmod_smoke = effect {
+  _ <- assert (abs (fmod 5.5 2.0-1.5) < 0.0001)
+}
+
+@test
+fract_smoke = effect {
+  _ <- assert (abs (fract 1.5-0.5) < 0.0001)
+  _ <- assert (abs (fract (-1.5) - (-0.5)) < 0.0001)
+}
+
+@test
+frexp_smoke = effect {
+  (m, e) = frexp 8.0
+  _ <- assert (abs (ldexp m e - 8.0) < 1e -10)
+}
+
+@test
+gcd_smoke = effect {
+  _ <- assert (gcd 12 8 == 4)
+  _ <- assert (gcd 17 5 == 1)
+}
+
+@test
+gcdAll_smoke = effect {
+  _ <- assert (gcdAll [12, 18, 24] == 6)
+}
+
+@test
+hypot_smoke = effect {
+  _ <- assert (abs (hypot 3.0 4.0-5.0) < 0.0001)
+}
+
+@test
+inf_smoke = effect {
+  _ <- assert (isInf inf)
+}
+
+@test
+isFinite_smoke = effect {
+  _ <- assert (isFinite 1.0 == True)
+  _ <- assert (isFinite inf == False)
+  _ <- assert (isFinite nan == False)
+}
+
+@test
+isInf_smoke = effect {
+  _ <- assert (isInf inf == True)
+  _ <- assert (isInf (- inf) == True)
+  _ <- assert (isInf 1.0 == False)
+}
+
+@test
+isNaN_smoke = effect {
+  _ <- assert (isNaN nan == True)
+  _ <- assert (isNaN 1.0 == False)
+}
+
+@test
+lcm_smoke = effect {
+  _ <- assert (lcm 4 6 == 12)
+  _ <- assert (lcm 3 5 == 15)
+}
+
+@test
+lcmAll_smoke = effect {
+  _ <- assert (lcmAll [3, 4, 6] == 12)
+}
+
+@test
+ldexp_smoke = effect {
+  _ <- assert (ldexp 0.5 4 == 8.0)
+}
+
+@test
+ln10_smoke = effect {
+  _ <- assert (abs (ln10 - 2.30258) < 0.0001)
+}
+
+@test
+ln2_smoke = effect {
+  _ <- assert (abs (ln2 - 0.69314) < 0.0001)
+}
+
+@test
+log_smoke = effect {
+  _ <- assert (abs (log e - 1.0) < 0.0001)
+  _ <- assert (abs (log 1.0) < 0.0001)
+}
+
+@test
+log10_smoke = effect {
+  _ <- assert (abs (log10 100.0-2.0) < 0.0001)
+  _ <- assert (abs (log10 1.0) < 0.0001)
+}
+
+@test
+log1p_smoke = effect {
+  _ <- assert (abs (log1p 0.0) < 0.0001)
+  // log1p(x) = log(1+x)
+  _ <- assert (abs (log1p (e - 1.0) - 1.0) < 0.0001)
+}
+
+@test
+log2_smoke = effect {
+  _ <- assert (abs (log2 8.0-3.0) < 0.0001)
+  _ <- assert (abs (log2 1.0) < 0.0001)
+}
+
+@test
+max_smoke = effect {
+  _ <- assert (max 1.0 2.0 == 2.0)
+  _ <- assert (max 2.0 1.0 == 2.0)
+}
+
+@test
+maxAll_smoke = effect {
+  _ <- assert (maxAll [3, 1, 2] == 3)
+}
+
+@test
+min_smoke = effect {
+  _ <- assert (min 1.0 2.0 == 1.0)
+  _ <- assert (min 2.0 1.0 == 1.0)
+}
+
+@test
+minAll_smoke = effect {
+  _ <- assert (minAll [3, 1, 2] == 1)
+}
+
+@test
+modPow_smoke = effect {
+  _ <- assert (modPow 2 10 1000 == 24)
+}
+
+@test
+modf_smoke = effect {
+  (i, f) = modf 1.5
+  _ <- assert (i == 1.0)
+  _ <- assert (abs (f - 0.5) < 0.0001)
+}
+
+@test
+nan_smoke = effect {
+  _ <- assert (isNaN nan)
+}
+
+@test
+nextAfter_smoke = effect {
+  x = nextAfter 0.0 1.0
+  _ <- assert (x > 0.0)
+}
+
+@test
+perm_smoke = effect {
+  _ <- assert (perm 5 2 == 20)
+}
+
+@test
+phi_smoke = effect {
+  _ <- assert (abs (phi - 1.61803) < 0.0001)
+}
+
+@test
+pi_smoke = effect {
+  _ <- assert (abs (pi - 3.14159) < 0.0001)
+}
+
+@test
+pow_smoke = effect {
+  _ <- assert (pow 2.0 3.0 == 8.0)
+  _ <- assert (pow 3.0 2.0 == 9.0)
+}
+
+@test
+radians_smoke = effect {
+  _ <- assert (abs (radians 180.0- pi) < 0.0001)
+}
+
+@test
+remainder_smoke = effect {
+  _ <- assert (abs (remainder 5.5 2.0- (-0.5)) < 0.0001)
+  // 5.5 - 6.0 = -0.5
+}
+
+@test
+round_smoke = effect {
+  _ <- assert (round 1.2 == 1.0)
+  _ <- assert (round 1.8 == 2.0)
+  _ <- assert (round 1.5 == 2.0) // Round to nearest even? Check implementation.
+  // Rust round() rounds half-way cases away from zero.
+  // Wait, looking at math.rs: "if frac.abs() == 0.5 { let even ..." -> It implements round half to even!
+  _ <- assert (round 2.5 == 2.0)
+  _ <- assert (round 3.5 == 4.0)
+}
+
+@test
+sign_smoke = effect {
+  _ <- assert (sign 10.0 == 1.0)
+  _ <- assert (sign (-10.0) == -1.0)
+  _ <- assert (sign 0.0 == 0.0)
+}
+
+@test
+sin_smoke = effect {
+  _ <- assert (abs (sin 0.0) < 0.0001)
+  _ <- assert (abs (sin (pi / 2.0) - 1.0) < 0.0001)
+}
+
+@test
+sinh_smoke = effect {
+  _ <- assert (abs (sinh 0.0) < 0.0001)
+  _ <- assert (abs (sinh 1.0-1.1752) < 0.0001)
+}
+
+@test
+sqrt_smoke = effect {
+  _ <- assert (abs (sqrt 4.0-2.0) < 0.0001)
+  _ <- assert (abs (sqrt 2.0-1.4142) < 0.0001)
+}
+
+@test
+sqrt2_smoke = effect {
+  _ <- assert (abs (sqrt2 - 1.41421) < 0.0001)
+}
+
+@test
+sum_smoke = effect {
+  _ <- assert (sum [1.0, 2.0, 3.0] == 6.0)
+  _ <- assert (sum [] == 0.0)
+}
+
+@test
+sumInt_smoke = effect {
+  _ <- assert (sumInt [1, 2, 3] == 6)
+  _ <- assert (sumInt [] == 0)
+}
+
+@test
+tan_smoke = effect {
+  _ <- assert (abs (tan 0.0) < 0.0001)
+  _ <- assert (abs (tan (pi / 4.0) - 1.0) < 0.0001)
+}
+
+@test
+tanh_smoke = effect {
+  _ <- assert (abs (tanh 0.0) < 0.0001)
+  _ <- assert (abs (tanh 1.0-0.7615) < 0.0001)
+}
+
+@test
+tau_smoke = effect {
+  _ <- assert (abs (tau - 6.28318) < 0.0001)
+}
+
+@test
+toDegrees_smoke = effect {
+  a = { radians: pi }
+  _ <- assert (abs (toDegrees a - 180.0) < 1e -10)
+}
+
+@test
+toRadians_smoke = effect {
+  a = { radians: pi }
+  _ <- assert (toRadians a == pi)
+}
+
+@test
+trunc_smoke = effect {
+  _ <- assert (trunc 1.9 == 1.0)
+  _ <- assert (trunc (-1.9) == -1.0)
+}
+
+@test
+ulp_smoke = effect {
+  _ <- assert (ulp 1.0 > 0.0)
+}

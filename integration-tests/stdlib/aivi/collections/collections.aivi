@@ -1,0 +1,78 @@
+@no_prelude
+module integrationTests.stdlib.aivi.collections.tests
+
+use aivi
+use aivi.testing
+use aivi.collections
+
+@test
+deque_smoke = effect {
+  d0 = Deque.empty
+  d1 = Deque.pushBack d0 1
+  d2 = Deque.pushFront d1 0
+
+  _ <- assert (Deque.peekFront d2 == Some 0)
+  _ <- assert (Deque.peekBack d2 == Some 1)
+
+  res = Deque.popFront d2
+  _ <- res ?
+    | Some (val, d3) => effect {
+      _ <- assert (val == 0)
+      _ <- assert (Deque.peekFront d3 == Some 1)
+    }
+    | None => assert False
+}
+
+@test
+heap_smoke = effect {
+  h0 = Heap.empty
+  h1 = Heap.push h0 3
+  h2 = Heap.push h1 1
+  h3 = Heap.push h2 2
+
+  _ <- assert (Heap.peekMin h3 == Some 1)
+
+  res = Heap.popMin h3
+  _ <- res ?
+    | Some (val, h4) => effect {
+      _ <- assert (val == 1)
+      _ <- assert (Heap.peekMin h4 == Some 2)
+    }
+    | None => assert False
+}
+
+@test
+map_smoke = effect {
+  m0 = Map.empty
+  m1 = Map.insert 1 "one" m0
+
+  _ <- assert (Map.size m0 == 0)
+  _ <- assert (Map.size m1 == 1)
+  _ <- assert (Map.get 1 m1 == Some "one")
+}
+
+@test
+queue_smoke = effect {
+  q0 = Queue.empty
+  q1 = Queue.enqueue q0 1
+  q2 = Queue.enqueue q1 2
+
+  _ <- assert (Queue.peek q2 == Some 1)
+
+  res = Queue.dequeue q2
+  _ <- res ?
+    | Some (val, q3) => effect {
+      _ <- assert (val == 1)
+      _ <- assert (Queue.peek q3 == Some 2)
+    }
+    | None => assert False
+}
+
+@test
+set_smoke = effect {
+  s0 = Set.empty
+  s1 = Set.insert 1 s0
+  _ <- assert (Set.size s0 == 0)
+  _ <- assert (Set.size s1 == 1)
+  _ <- assert (Set.has 1 s1 == True)
+}

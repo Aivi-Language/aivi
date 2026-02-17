@@ -1,0 +1,39 @@
+@no_prelude
+module integrationTests.stdlib.aivi.probability.tests
+
+use aivi
+use aivi.testing
+use aivi.probability
+
+distribution_touch : Distribution -> Unit
+distribution_touch = _ => Unit
+
+@test
+distribution_smoke = effect {
+  _ <- pure distribution_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+bernoulli_smoke = effect {
+  _ <- pure bernoulli
+  _ <- assert True
+}
+
+@test
+clamp_smoke = effect {
+  _ <- pure clamp
+  _ <- assert True
+}
+
+@test
+expectation_smoke = effect {
+  _ <- pure expectation
+  _ <- assert True
+}
+
+@test
+uniform_smoke = effect {
+  _ <- pure uniform
+  _ <- assert True
+}

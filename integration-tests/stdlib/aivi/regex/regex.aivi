@@ -1,0 +1,145 @@
+@no_prelude
+module integrationTests.stdlib.aivi.regex.tests
+
+use aivi
+use aivi.testing
+use aivi.regex
+
+@test
+match_smoke = effect {
+  reResult = compile "."
+  r <- reResult ? {
+    | Ok re => effect { pure re }
+    | Err _ => effect { fail "compile failed" }
+  }
+
+  mResult = regex.match r "a"
+  _ <- mResult ? {
+    | Some m => assert (m.full == "a")
+    | None   => assert False
+  }
+}
+
+@test
+regex_smoke = effect {
+  reResult = compile "."
+  _ <- reResult ?
+    | Ok re => assert True
+    | Err _ => assert False
+}
+
+@test
+regexError_smoke = effect {
+  reResult = compile ","
+  reResult = compile "["
+  _ <- reResult ?
+    | Ok _  => assert False
+    | Err _ => assert True
+}
+
+@test
+compile_smoke = effect {
+  reResult = compile "abc"
+  _ <- reResult ?
+    | Ok _  => assert True
+    | Err _ => assert False
+}
+
+@test
+find_smoke = effect {
+  reResult = compile "e"
+  r <- reResult ?
+    | Ok re => effect { pure re }
+    | Err _ => effect { fail "compile failed" }
+
+    fResult = regex.find r "hello"
+    _ <- fResult ?
+      | Some (s, e) => effect {
+        _ <- assert (s == 1)
+        _ <- assert (e == 2)
+      }
+      | None => assert False
+}
+
+@test
+findAll_smoke = effect {
+  reResult = compile "l"
+  r <- reResult ?
+    | Ok re => pure re
+    | Err _ => fail "compile failed"
+    ms = findAll r "hello"
+    _ <- assert (List.length ms == 2)
+    _ <- ms ?
+      | [(s1, _), (s2, _)] => effect {
+        _ <- assertEq s1 2
+        _ <- assertEq s2 3
+      }
+      | _ => assert False
+}
+
+@test
+match_smoke_2 = effect {
+  r <- match compile "h(e)llo" {
+    | Ok re => pure re
+    | Err _ => fail "compile failed"
+  }
+  m = match r "hello"
+  _ <- match m {
+    | Some res => effect {
+        _ <- assert (res.full == "hello")
+        _ <- assert (res.groups == [Some "e"])
+        _ <- assert (res.start == 0)
+        _ <- assert (res.end == 5)
+    }
+    | None => assert False
+  }
+}
+
+@test
+matches_smoke = effect {
+  reResult = compile "l"
+  r <- reResult ?
+    | Ok re => pure re
+    | Err _ => fail "compile failed"
+    ms = matches r "hello"
+    _ <- assert (List.length ms == 2)
+}
+
+@test
+replace_smoke = effect {
+  reResult = compile "l"
+  r <- reResult ?
+    | Ok re => effect { pure re }
+    | Err _ => effect { fail "compile failed" }
+    _ <- assert (replace r "hello" "L" == "heLlo")
+}
+
+@test
+replaceAll_smoke = effect {
+  reResult = compile "l"
+  r <- reResult ?
+    | Ok re => effect { pure re }
+    | Err _ => effect { fail "compile failed" }
+    _ <- assert (replaceAll r "hello" "L" == "heLLo")
+}
+
+@test
+split_smoke = effect {
+  reResult = compile ","
+  r <- reResult ?
+    | Ok re => effect { pure re }
+    | Err _ => effect { fail "compile failed" }
+
+    _ <- assert (split r "a,b,c" == ["a", "b", "c"])
+}
+
+@test
+test_smoke = effect {
+  reResult = compile "abc"
+  r <- reResult ?
+    | Ok re => effect { pure re }
+    | Err _ => effect { fail "compile failed" }
+
+    _ <- assert (test r "abc" == True)
+    _ <- assert (test r "123" == False)
+}

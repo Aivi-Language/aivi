@@ -254,7 +254,15 @@ fn http_request(
     body: Option<String>,
 ) -> Result<Value, RuntimeError> {
     let url_text = url.to_string();
-    let mut request = ureq::request(method, &url_text);
+    let mut request = match method {
+        "GET" => ureq::get(&url_text),
+        "POST" => ureq::post(&url_text),
+        "PUT" => ureq::put(&url_text),
+        "DELETE" => ureq::delete(&url_text),
+        "PATCH" => ureq::patch(&url_text),
+        "HEAD" => ureq::head(&url_text),
+        _ => ureq::get(&url_text),
+    };
     for (name, value) in headers {
         request = request.set(&name, &value);
     }

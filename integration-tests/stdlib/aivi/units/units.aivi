@@ -1,0 +1,54 @@
+@no_prelude
+module integrationTests.stdlib.aivi.units.tests
+
+use aivi
+use aivi.testing
+use aivi.math
+use aivi.units
+
+@test
+quantity_smoke = effect {
+  m = defineUnit "m" 1.0
+  a = { value: 2.0, unit: m }
+  b = { value: 3.0, unit: m }
+  sum = Units.(+) a b
+  scaled = Units.(*) a 4.0
+  _ <- assert (abs (sum.value - 5.0) < 0.0000001)
+  _ <- assert (abs (scaled.value - 8.0) < 0.0000001)
+}
+
+@test
+unit_smoke = effect {
+  u = defineUnit "s" 1.0
+  _ <- assert (u.name == "s")
+  _ <- assert (u.factor == 1.0)
+}
+
+@test
+convert_smoke = effect {
+  m = defineUnit "m" 1.0
+  km = defineUnit "km" 1000.0
+  q = { value: 1500.0, unit: m }
+  qKm = convert q km
+  _ <- assert (abs (qKm.value - 1.5) < 0.0000001)
+  _ <- assert (qKm.unit.name == "km")
+}
+
+@test
+defineUnit_smoke = effect {
+  m = defineUnit "m" 1.0
+  km = defineUnit "km" 1000.0
+  _ <- assert (m.name == "m")
+  _ <- assert (km.factor == 1000.0)
+}
+
+@test
+sameUnit_smoke = effect {
+  m = defineUnit "m" 1.0
+  km = defineUnit "km" 1000.0
+  a = { value: 1.0, unit: m }
+  b = { value: 2.0, unit: m }
+  c = { value: 1.0, unit: km }
+  _ <- assert (sameUnit a b == True)
+  _ <- assert (sameUnit a c == False)
+}

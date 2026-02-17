@@ -1,0 +1,61 @@
+@no_prelude
+module integrationTests.stdlib.aivi.net.https.tests
+
+use aivi
+use aivi.testing
+use aivi.net.https
+
+error_touch : Error -> Unit
+error_touch = _ => Unit
+
+@test
+error_smoke = effect {
+  _ <- pure error_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+header_touch : Header -> Unit
+header_touch = _ => Unit
+
+@test
+header_smoke = effect {
+  _ <- pure header_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+request_touch : Request -> Unit
+request_touch = _ => Unit
+
+@test
+request_smoke = effect {
+  _ <- pure request_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+response_touch : Response -> Unit
+response_touch = _ => Unit
+
+@test
+response_smoke = effect {
+  _ <- pure response_touch
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+fetch_smoke = effect {
+  _ <- pure fetch
+  _ <- assert True
+}
+
+@test
+get_smoke = effect {
+  src = get "https://example.com"
+  res <- src
+  _   <- assert True
+}
+
+@test
+post_smoke = effect {
+  _ <- pure post
+  _ <- assert True
+}

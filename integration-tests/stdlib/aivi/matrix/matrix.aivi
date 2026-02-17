@@ -1,0 +1,81 @@
+@no_prelude
+module integrationTests.stdlib.aivi.matrix.tests
+
+use aivi
+use aivi.testing
+use aivi.matrix
+
+@test
+mat2_smoke = effect {
+  m = identity2
+  _ <- assert (m.m00 == 1.0)
+}
+
+@test
+mat3_smoke = effect {
+  m = identity3
+  _ <- assert (m.m00 == 1.0)
+}
+
+@test
+mat4_smoke = effect {
+  m = identity4
+  _ <- assert (m.m00 == 1.0)
+}
+
+@test
+scalar_smoke = effect {
+  s = 1.0
+  _ <- assert (s == 1.0)
+}
+
+@test
+identity2_smoke = effect {
+  _ <- assert (identity2.m00 == 1.0)
+  _ <- assert (identity2.m01 == 0.0)
+}
+
+@test
+identity3_smoke = effect {
+  _ <- assert (identity3.m00 == 1.0)
+  _ <- assert (identity3.m22 == 1.0)
+}
+
+@test
+identity4_smoke = effect {
+  _ <- assert (identity4.m00 == 1.0)
+  _ <- assert (identity4.m33 == 1.0)
+}
+
+@test
+multiply2_smoke = effect {
+  _ <- assert (multiply2 identity2 identity2 == identity2)
+}
+
+@test
+multiply3_smoke = effect {
+  _ <- assert (multiply3 identity3 identity3 == identity3)
+}
+
+@test
+multiply4_smoke = effect {
+  _ <- assert (multiply4 identity4 identity4 == identity4)
+}
+
+@test
+transpose2_smoke = effect {
+  m = { m00: 1.0, m01: 2.0, m10: 3.0, m11: 4.0 }
+  t = transpose2 m
+  _ <- assert (t.m01 == 3.0)
+  _ <- assert (t.m10 == 2.0)
+}
+
+@test
+transpose3_smoke = effect {
+  _ <- assert (transpose3 identity3 == identity3)
+}
+
+@test
+transpose4_smoke = effect {
+  _ <- assert (transpose4 identity4 == identity4)
+}

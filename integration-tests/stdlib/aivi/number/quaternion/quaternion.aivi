@@ -1,0 +1,33 @@
+@no_prelude
+module integrationTests.stdlib.aivi.number.quaternion.tests
+
+use aivi
+use aivi.testing
+use aivi.number.quaternion
+
+@test
+conjugate_smoke = effect {
+  q = { w: 1.0, x: 2.0, y: 3.0, z: 4.0 }
+  c = conjugate q
+  _ <- assert (c.w == 1.0)
+  _ <- assert (c.x == -2.0)
+}
+
+@test
+fromAxisAngle_smoke = effect {
+  q = fromAxisAngle { x: 1.0, y: 0.0, z: 0.0 } 90.0
+  _ <- assert (q.w > 0.707) // approx cos(45)
+}
+
+@test
+magnitude_smoke = effect {
+  q = { w: 1.0, x: 0.0, y: 0.0, z: 0.0 }
+  _ <- assert (magnitude q == 1.0)
+}
+
+@test
+normalize_smoke = effect {
+  q = { w: 2.0, x: 0.0, y: 0.0, z: 0.0 }
+  n = normalize q
+  _ <- assert (n.w == 1.0)
+}

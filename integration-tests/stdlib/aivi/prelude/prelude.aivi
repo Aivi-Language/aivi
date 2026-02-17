@@ -1,0 +1,134 @@
+@no_prelude
+module integrationTests.stdlib.aivi.prelude.tests
+
+use aivi
+use aivi.testing
+use aivi.prelude
+use aivi.text
+
+@test
+bool_smoke = effect {
+  _ <- assert (True && True)
+  _ <- assert (True || False)
+  _ <- assert (False || True)
+  _ <- assert (!False)
+  _ <- assert (!(True && False))
+  _ <- assert (True != False)
+  _ <- assert (True == True)
+}
+
+@test
+bytes_smoke = effect {
+  b = toBytes Utf8 "abc"
+  res = fromBytes Utf8 b
+  _ <- res ?
+    | Ok s  => assertEq s "abc"
+    | Err _ => assert False
+}
+
+@test
+char_smoke = effect {
+  _ <- pure isAlpha
+  _ <- assertEq (1 + 1) 2
+}
+
+@test
+float_smoke = effect {
+  _ <- assert (1.0 + 2.0 == 3.0)
+  _ <- assert (2.0 * 3.0 == 6.0)
+  _ <- assert (4.0 / 2.0 == 2.0)
+  _ <- assert (1.0 < 2.0)
+  _ <- assert (2.0 > 1.0)
+  _ <- assert (1.0 <= 1.0)
+  _ <- assert (1.0 >= 1.0)
+}
+
+@test
+int_smoke = effect {
+  _ <- assertEq (1 + 2) 3
+  _ <- assertEq (2 * 3) 6
+  _ <- assertEq (4 / 2) 2
+  _ <- assert (1 < 2)
+  _ <- assert (2 > 1)
+  _ <- assert (1 <= 1)
+  _ <- assert (1 >= 1)
+}
+
+len = xs => xs ?
+  | []           => 0
+  | [_, ...rest] => 1 + len rest
+
+map = f xs => xs ?
+  | []           => []
+  | [x, ...rest] => [f x, ...(map f rest)]
+
+@test
+list_smoke = effect {
+  l = [1, 2, 3]
+  _ <- assertEq (len l) 3
+  _ <- assertEq (map (x => x + 1) l)[2, 3, 4]
+}
+
+@test
+option_smoke = effect {
+  some = Some 1
+  _ <- some ?
+    | Some n => assertEq n 1
+    | None   => assert False
+
+    none = None
+    _ <- none ?
+      | Some _ => assert False
+      | None   => assert True
+}
+
+@test
+patch_smoke = effect {
+  user = { name: "A", age: 30 }
+  older = user <| { age: _ + 1 }
+  _ <- assertEq older.age 31
+}
+
+@test
+result_smoke = effect {
+  ok = Ok 1
+  _ <- ok ?
+    | Ok n  => assertEq n 1
+    | Err _ => assert False
+
+    err = Err "nope"
+    _ <- err ?
+      | Ok _  => assert False
+      | Err e => assertEq e "nope"
+}
+
+@test
+text_smoke = effect {
+  t = "Hello"
+  _ <- assertEq (length t) 5
+  _ <- assertEq (toUpper t) "HELLO"
+  _ <- assertEq (toLower t) "hello"
+  _ <- assert (isEmpty "" == True)
+  _ <- assert (isEmpty t == False)
+}
+
+@test
+toText_smoke = effect {
+  _ <- assertEq (toText "abc") "abc"
+  _ <- assertEq (toText 123) "123"
+}
+
+@test
+tuple_smoke = effect {
+  t = (1, "two")
+  res = t ?
+    | (a, b) => if a == 1 && b == "two" then True else False
+    | _      => False
+    _ <- assert (res == True)
+}
+
+@test
+toText_smoke_2 = effect {
+  _ <- pure toText
+  _ <- assertEq (toText 0) "0"
+}

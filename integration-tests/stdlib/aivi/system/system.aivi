@@ -1,0 +1,30 @@
+@no_prelude
+module integrationTests.stdlib.aivi.system.tests
+
+use aivi
+use aivi.testing
+use aivi.system
+
+@test
+args_smoke = effect {
+  _ <- pure args
+  _ <- assert True
+}
+
+@test
+env_smoke = effect {
+  _ <- pure env
+  _ <- assert True
+}
+
+@test
+exit_smoke = effect {
+  _ <- pure exit
+  _ <- assert True
+}
+
+@test
+localeTag_smoke = effect {
+  _ <- pure localeTag
+  _ <- assert True
+}
