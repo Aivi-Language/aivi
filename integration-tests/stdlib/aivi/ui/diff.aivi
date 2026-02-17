@@ -11,5 +11,5 @@ smoke = effect {
   new = vText "b"
   ops = diff old new
   // SetText "root" "b"
-  _ <- assert (length ops == 1)
+  _ <- assert (List.length ops == 1)
 }

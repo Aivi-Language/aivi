@@ -10,8 +10,8 @@ boolOps = effect {
   _ <- assert (True && True)
   _ <- assert (True || False)
   _ <- assert (False || True)
-  _ <- assert (not False)
-  _ <- assert (not (True && False))
+  _ <- assert (!False)
+  _ <- assert (!(True && False))
   _ <- assert (True != False)
   _ <- assert (True == True)
 }

@@ -9,6 +9,5 @@ use aivi
 smoke = effect {
   _ <- print "console test"
   _ <- println "console newline"
-  _ <- log "console log"
-  _ <- assert True
+  _ <- assertEq (1 + 1) 2
 }

@@ -15,10 +15,10 @@ smoke = effect {
   _ <- assert (Deque.peekBack d2 == Some 1)
 
   res = Deque.popFront d2
-  _ <- match res with
-  | Some (val, d3) => effect {
+  _ <- res ?
+    | Some (val, d3) => effect {
       _ <- assert (val == 0)
       _ <- assert (Deque.peekFront d3 == Some 1)
-  }
-  | None => assert False
+    }
+    | None => assert False
 }

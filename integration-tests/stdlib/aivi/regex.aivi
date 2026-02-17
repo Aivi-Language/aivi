@@ -3,19 +3,19 @@ module integrationTests.stdlib.aivi.regex
 
 use aivi
 use aivi.testing
-use aivi
+use aivi.regex
 
 @test
 smoke = effect {
   reResult = compile "h.llo"
   r <- reResult ?
-    | Ok re => effect { pure re }
-    | Err e => effect { fail e }
+    | Ok re => pure re
+    | Err e => fail e
     _ <- assert (test r "hello" == True)
     _ <- assert (test r "hxllo" == True)
     _ <- assert (test r "world" == False)
 
-    mResult = regex.match r "hello"
+    mResult = match r "hello"
     _ <- mResult ?
       | Some matched => assert (matched.full == "hello")
       | None         => assert False

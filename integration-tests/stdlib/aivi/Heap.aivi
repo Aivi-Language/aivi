@@ -15,10 +15,10 @@ heapOps = effect {
   _ <- assert (Heap.peekMin h3 == Some 1)
 
   res = Heap.popMin h3
-  _ <- match res with
-  | Some (val, h4) => effect {
+  _ <- res ?
+    | Some (val, h4) => effect {
       _ <- assertEq val 1
       _ <- assert (Heap.peekMin h4 == Some 2)
-  }
-  | None => assert False
+    }
+    | None => assert False
 }
