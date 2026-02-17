@@ -8,6 +8,15 @@ use aivi.collections
 // Adjacency list graph
 Graph = { nodes: List Int, adj: Map Int (List Int) }
 
+listLength = xs => xs ?
+  | []        => 0
+  | [_, ...t] => 1 + listLength t
+
+minInt = a b => if a < b then a else b
+
+bigInt : Int
+bigInt = 1000000000
+
 // Tarjan's algorithm state
 TarjanState = {
   index: Map Int Int
@@ -59,8 +68,8 @@ visitNode = graph node state => {
   }
 
   after = processNeighbors graph node (neighbors node graph) state1
-  nodeLow = getOr after.lowlink node Int.max
-  nodeIdx = getOr after.index node Int.max
+  nodeLow = getOr after.lowlink node bigInt
+  nodeIdx = getOr after.index node bigInt
   if nodeLow == nodeIdx then popComponent node after else after
 }
 
@@ -68,20 +77,20 @@ processNeighbors = graph node nexts state => nexts ?
   | []              => state
   | [next, ...tail] => {
     acc =
-    if Map.has next state.index then
-      if Set.has next state.onStack then {
-        lowNode = getOr state.lowlink node Int.max
-        idxNext = getOr state.index next Int.max
-        state <| { lowlink: Map.insert node (Int.min lowNode idxNext) state.lowlink }
+      if Map.has next state.index then
+        if Set.has next state.onStack then {
+          lowNode = getOr state.lowlink node bigInt
+          idxNext = getOr state.index next bigInt
+          state <| { lowlink: Map.insert node (minInt lowNode idxNext) state.lowlink }
+        }
+        else
+          state
+      else {
+        nested = visitNode graph next state
+        lowNode = getOr nested.lowlink node bigInt
+        lowNext = getOr nested.lowlink next bigInt
+        nested <| { lowlink: Map.insert node (minInt lowNode lowNext) nested.lowlink }
       }
-      else
-        state
-    else {
-      nested = visitNode graph next state
-      lowNode = getOr nested.lowlink node Int.max
-      lowNext = getOr nested.lowlink next Int.max
-      nested <| { lowlink: Map.insert node (Int.min lowNode lowNext) nested.lowlink }
-    }
     processNeighbors graph node tail acc
   }
 
@@ -119,7 +128,7 @@ listAny = list pred => list ?
   | []        => False
   | [h, ...t] => if pred h then True else listAny t pred
 
-  @test
+@test
 sccSmoke = effect {
   adj = ~map{
     0 => [1]
@@ -130,6 +139,6 @@ sccSmoke = effect {
   graph = { nodes: [0, 1, 2, 3], adj: adj }
 
   comps = strongComponents graph
-  _ <- assert (List.length comps == 2)
+  _ <- assert (listLength comps == 2)
   _ <- assert (listAny comps (cmp => contains cmp 0))
 }

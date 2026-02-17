@@ -4,7 +4,7 @@ module integrationTests.complex.EdmondsKarp
 use aivi
 use aivi.testing
 use aivi.collections
-use aivi.graph (Graph, fromWeightedEdges, edgesFrom)
+use aivi.graph (Graph, fromEdges, edgesFrom)
 
 // Edge with capacity
 Edge = { from: Int, to: Int, cap: Float }
@@ -21,13 +21,29 @@ Residual = {
 // Get capacity or 0 from map
 getOrZero = key map => Map.getOrElse key 0.0 map
 
+append = xs ys => xs ?
+  | []        => ys
+  | [h, ...t] => [h, ...append t ys]
+
+backwardEdges = edges => edges ?
+  | []           => []
+  | [e, ...rest] => [{ from: e.to, to: e.from, cap: 0.0 }, ...backwardEdges rest]
+
+edgePairs = edges => edges ?
+  | []           => []
+  | [e, ...rest] => [(e.from, e.to), ...edgePairs rest]
+
+minFloat = a b => if a < b then a else b
+
+bigCap : Float
+bigCap = 1000000000.0
+
 // Build residual network from edges
 buildResidual : List Edge -> Residual
 buildResidual = edges => {
-  backward = List.map edges (e => { from: e.to, to: e.from, cap: 0.0 })
-  allEdges = edges ++ backward
-  weighted = List.map allEdges (e => (e.from, e.to, e.cap))
-  graph = fromWeightedEdges weighted
+  backward = backwardEdges edges
+  allEdges = append edges backward
+  graph = fromEdges (edgePairs allEdges)
 
   { graph: graph, capacities: insertCaps allEdges Map.empty }
 }
@@ -38,7 +54,7 @@ insertCaps = items caps => items ?
 
 // BFS to find augmenting path
 bfs = residual source sink =>
-  bfsVisit residual sink (Queue.enqueue Queue.empty source) (Set.insert source Set.empty) Map.empty
+  bfsVisit residual sink (Queue.enqueue source Queue.empty) (Set.insert source Set.empty) Map.empty
 
 bfsVisit = residual sink q visited parents => (Queue.dequeue q) ?
   | None               => None
@@ -56,8 +72,8 @@ bfsExplore = residual current edges q visited parents => edges ?
   | [edge, ...tail] => {
     next = edge.to
     cap = getOrZero { from: current, to: next } residual.capacities
-    if cap > 0.0 && !Set.has next visited then
-      bfsExplore residual current tail (Queue.enqueue q next) (Set.insert next visited) (Map.insert next current parents)
+    if cap > 0.0 && Set.has next visited == False then
+      bfsExplore residual current tail (Queue.enqueue next q) (Set.insert next visited) (Map.insert next current parents)
     else
       bfsExplore residual current tail q visited parents
   }
@@ -75,10 +91,10 @@ reconstruct = parents sink source acc => {
 // Calculate bottleneck capacity along path
 pathCapacity = residual path => path ?
   | []              => 0.0
-  | [_]             => Float Int.max
+  | [_]             => bigCap
   | [a, b, ...rest] => {
     cap = getOrZero { from: a, to: b } residual.capacities
-    Float.min cap (pathCapacity residual [b, ...rest])
+    minFloat cap (pathCapacity residual [b, ...rest])
   }
 
 // Update capacities along path
