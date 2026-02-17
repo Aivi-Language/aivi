@@ -5,7 +5,12 @@ use aivi
 use aivi.testing
 use aivi.net.http
 
+
+touch : Header -> Unit
+touch = _ => Unit
+
 @test
 smoke = effect {
-  _ <- assert True
+  _ <- pure touch
+  _ <- assertEq (1 + 1) 2
 }

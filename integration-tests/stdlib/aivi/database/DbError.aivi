@@ -5,7 +5,12 @@ use aivi
 use aivi.testing
 use aivi.database
 
+
+touch : DbError -> Unit
+touch = _ => Unit
+
 @test
 smoke = effect {
-  _ <- assert True
+  _ <- pure touch
+  _ <- assertEq (1 + 1) 2
 }
