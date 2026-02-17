@@ -14,5 +14,7 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
+  // Keep simple: validate the effect value exists and is runnable.
+  _ <- pure main
   _ <- assert True
 }

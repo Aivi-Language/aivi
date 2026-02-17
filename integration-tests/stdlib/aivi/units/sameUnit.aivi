@@ -7,6 +7,11 @@ use aivi.units
 
 @test
 smoke = effect {
-  _ <- pure sameUnit
-  _ <- assert True
+  m = defineUnit "m" 1.0
+  km = defineUnit "km" 1000.0
+  a = { value: 1.0, unit: m }
+  b = { value: 2.0, unit: m }
+  c = { value: 1.0, unit: km }
+  _ <- assert (sameUnit a b == True)
+  _ <- assert (sameUnit a c == False)
 }

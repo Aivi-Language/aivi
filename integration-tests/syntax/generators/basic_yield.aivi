@@ -3,6 +3,7 @@ module integrationTests.syntax.generators.basicYield
 
 use aivi
 use aivi.testing
+use aivi.generator
 
 gen = generate {
   yield 1
@@ -12,6 +13,5 @@ gen = generate {
 
 @test
 generatorsExist = effect {
-  _ = text.toText gen
-  _ <- assert True
+  _ <- assert (toList gen == [1, 2, 3])
 }

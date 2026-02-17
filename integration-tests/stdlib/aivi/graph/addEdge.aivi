@@ -8,7 +8,7 @@ use aivi.graph
 @test
 smoke = effect {
   g = addEdge empty { from: 1, to: 2, weight: 1.0 }
-  // addEdge ensures nodes exist
-  _ <- assert (length g.nodes == 2)
-  _ <- assert (length g.edges == 1)
+  // addEdge ensures nodes exist and connectivity updates.
+  _ <- assert (neighbors g 1 == [2])
+  _ <- assert (degreeIn g 2 == 1)
 }
