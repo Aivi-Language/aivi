@@ -1,0 +1,9 @@
+[package]
+name = "aivi_driver"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+aivi_core = { path = "../aivi_core" }
+thiserror = "1.0.63"
+

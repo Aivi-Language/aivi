@@ -3,9 +3,10 @@ module integrationTests.stdlib.aivi.graph
 
 use aivi
 use aivi.testing
-use aivi
+use aivi.graph
 
 @test
 smoke = effect {
-  _ <- assert True
+  g = empty |> addNode 1 |> addNode 2 |> addEdge 1 2
+  _ <- assert (neighbors g 1 == [2])
 }

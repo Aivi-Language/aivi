@@ -3,9 +3,10 @@ module integrationTests.stdlib.aivi.url
 
 use aivi
 use aivi.testing
-use aivi
+use aivi.url
 
 @test
 smoke = effect {
-  _ <- assert True
+  u = parse "https://example.com/path?q=1"
+  _ <- assert (toString u == "https://example.com/path?q=1")
 }

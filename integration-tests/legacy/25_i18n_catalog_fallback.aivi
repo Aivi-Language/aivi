@@ -52,6 +52,8 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
-  _ <- pure main
-  _ <- assert True
+  txt1 = tCatalogWithDefault catalog defaultLocale bundleEnUs (~k"app.welcome") { name: "Alice" }
+  txt2 = tCatalogWithDefault catalog defaultLocale bundleEnUs (~k"app.cartItems") { count: 3 }
+  _ <- assert (txt1 == "Hello, Alice!")
+  _ <- assert (txt2 == "You have 3 items.")
 }

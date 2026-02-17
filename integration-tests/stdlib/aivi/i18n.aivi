@@ -3,9 +3,12 @@ module integrationTests.stdlib.aivi.i18n
 
 use aivi
 use aivi.testing
-use aivi
+use aivi.i18n
 
 @test
 smoke = effect {
-  _ <- assert True
+  loc = parseLocale "en-US"
+  _ <- loc ?
+    | Ok l  => assert (l.tag == "en-US")
+    | Err _ => assert False
 }

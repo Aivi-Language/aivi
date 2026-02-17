@@ -3,9 +3,10 @@ module integrationTests.stdlib.aivi.math
 
 use aivi
 use aivi.testing
-use aivi
+use aivi.math
 
 @test
 smoke = effect {
-  _ <- assert True
+  _ <- assert (abs (-2) == 2)
+  _ <- assert (clamp 0 10 11 == 10)
 }

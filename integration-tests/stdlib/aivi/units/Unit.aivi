@@ -7,5 +7,7 @@ use aivi.units
 
 @test
 smoke = effect {
-  _ <- assert True
+  u = defineUnit "s" 1.0
+  _ <- assert (u.name == "s")
+  _ <- assert (u.factor == 1.0)
 }

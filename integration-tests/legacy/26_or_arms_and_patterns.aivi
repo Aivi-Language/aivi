@@ -37,6 +37,6 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
-  _ <- pure main
-  _ <- assert True
+  _ <- assert (messageFrom (Err (NotFound "missing")) == "missing")
+  _ <- assert (messageFrom (Err Other) == "boom")
 }

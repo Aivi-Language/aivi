@@ -2,6 +2,7 @@
 members = [
     "crates/aivi",
     "crates/aivi_core",
+    "crates/aivi_driver",
     "crates/aivi_http_server",
     "crates/aivi_lsp",
     "crates/aivi_native_runtime",

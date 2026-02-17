@@ -44,6 +44,8 @@ dependencies = [
 name = "aivi"
 version = "0.1.0"
 dependencies = [
+ "aivi_core",
+ "aivi_driver",
  "aivi_http_server",
  "aivi_native_runtime",
  "chrono",
@@ -109,6 +111,14 @@ dependencies = [
  "unicode-segmentation",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "aivi_driver"
+version = "0.1.0"
+dependencies = [
+ "aivi_core",
+ "thiserror",
 ]
 
 [[package]]

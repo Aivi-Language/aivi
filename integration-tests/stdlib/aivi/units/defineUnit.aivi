@@ -7,6 +7,8 @@ use aivi.units
 
 @test
 smoke = effect {
-  _ <- pure defineUnit
-  _ <- assert True
+  m = defineUnit "m" 1.0
+  km = defineUnit "km" 1000.0
+  _ <- assert (m.name == "m")
+  _ <- assert (km.factor == 1000.0)
 }
