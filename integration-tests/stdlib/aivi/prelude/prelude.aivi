@@ -52,8 +52,10 @@ int_smoke = effect {
   assert (2 > 1)
   assert (1 <= 1)
   assert (1 >= 1)
-  assert (Int.min 1 2 == 1)
-  assert (Int.max 1 2 == 2)
+  minInt = a b => if a < b then a else b
+  maxInt = a b => if a > b then a else b
+  assert (minInt 1 2 == 1)
+  assert (maxInt 1 2 == 2)
 }
 
 len = xs => xs ?

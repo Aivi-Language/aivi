@@ -6,6 +6,8 @@ use aivi.testing
 use aivi.collections
 use aivi.graph (Graph, fromEdges, edgesFrom)
 
+minInt = a b => if a < b then a else b
+
 // Edge with capacity
 Edge = { from: Int, to: Int, cap: Int }
 
@@ -114,7 +116,7 @@ dfsExplore = residual levels node sink flow edges => edges ?
     levelNext = Map.getOrElse edge.to (-1) levels
 
     if cap > 0 && levelNext == levelNode + 1 then {
-      available = Int.min flow cap
+      available = minInt flow cap
       (pushed, after) = dfsFlow residual levels edge.to sink available
       if pushed > 0 then
         (pushed, pushFlow after node edge.to pushed)

@@ -5,6 +5,20 @@ use aivi
 use aivi.testing
 use aivi.collections
 
+minInt = a b => if a < b then a else b
+
+len = xs => xs ?
+  | []           => 0
+  | [_, ...rest] => 1 + len rest
+
+any = xs f => xs ?
+  | []           => False
+  | [x, ...rest] => if f x then True else any rest f
+
+contains = xs needle => xs ?
+  | []           => False
+  | [x, ...rest] => if x == needle then True else contains rest needle
+
 // Adjacency list graph
 Graph = { nodes: List Int, adj: Map Int (List Int) }
 
@@ -75,7 +89,7 @@ processNeighbors = graph node nexts state => nexts ?
       if Set.has next state.onStack then {
         lowNode = getOr state.lowlink node bigInt
         idxNext = getOr state.index next bigInt
-        state <| { lowlink: Map.insert node (Int.min lowNode idxNext) state.lowlink }
+        state <| { lowlink: Map.insert node (minInt lowNode idxNext) state.lowlink }
       }
       else
         state
@@ -83,7 +97,7 @@ processNeighbors = graph node nexts state => nexts ?
       nested = visitNode graph next state
       lowNode = getOr nested.lowlink node bigInt
       lowNext = getOr nested.lowlink next bigInt
-      nested <| { lowlink: Map.insert node (Int.min lowNode lowNext) nested.lowlink }
+      nested <| { lowlink: Map.insert node (minInt lowNode lowNext) nested.lowlink }
     }
     processNeighbors graph node tail acc
   }
@@ -122,6 +136,6 @@ sccSmoke = effect {
   graph = { nodes: [0, 1, 2, 3], adj: adj }
 
   comps <- pure (strongComponents graph)
-  assert (List.length comps == 2)
-  assert (List.any comps (cmp => List.contains cmp 0))
+  assert (len comps == 2)
+  assert (any comps (cmp => contains cmp 0))
 }

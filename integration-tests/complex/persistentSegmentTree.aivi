@@ -5,6 +5,19 @@ use aivi
 use aivi.testing
 use aivi.collections
 
+minInt = a b => if a < b then a else b
+maxInt = a b => if a > b then a else b
+
+len = xs => xs ?
+  | []           => 0
+  | [_, ...rest] => 1 + len rest
+
+isEmpty = xs => len xs == 0
+
+at = xs i => xs ?
+  | []           => None
+  | [x, ...rest] => if i == 0 then Some x else at rest (i - 1)
+
 // Segment metadata for aggregate queries
 SegmentMeta = { sum: Int, min: Int, max: Int }
 
@@ -34,8 +47,8 @@ combineMeta = leftMeta rightMeta => (leftMeta, rightMeta) ?
   | (None, Some rm)    => Some rm
   | (Some lm, Some rm) => Some {
     sum: lm.sum + rm.sum
-    min: Int.min lm.min rm.min
-    max: Int.max lm.max rm.max
+    min: minInt lm.min rm.min
+    max: maxInt lm.max rm.max
   }
 
 // Rebuild node from children
@@ -54,7 +67,7 @@ nodeFromChildren = start end left right => combineMeta (nodeMeta left) (nodeMeta
 // Build tree from a range of the array
 buildRange = arr start end => {
   if start == end then
-    List.at arr start ?
+    at arr start ?
       | Some value => Node {
         start: start
         end: end
@@ -76,8 +89,8 @@ buildRange = arr start end => {
 // Create tree from list
   fromList : List Int -> SegmentTree
   fromList = arr =>
-    if List.isEmpty arr then Empty
-    else buildRange arr 0 (List.length arr - 1)
+    if isEmpty arr then Empty
+    else buildRange arr 0 (len arr - 1)
 
 // Query range [l..r] for metadata
   queryRange : SegmentTree -> Int -> Int -> Option SegmentMeta
