@@ -184,6 +184,7 @@ impl Backend {
             Expr::List { items, .. } => items
                 .iter()
                 .find_map(|item| Self::find_call_info(&item.expr, position)),
+            Expr::UnaryNeg { expr, .. } => Self::find_call_info(expr, position),
             Expr::Suffixed { base, .. } => Self::find_call_info(base, position),
             Expr::TextInterpolate { parts, .. } => parts.iter().find_map(|part| match part {
                 aivi::TextPart::Text { .. } => None,
@@ -285,6 +286,7 @@ impl Backend {
                 | Literal::Bool { span, .. }
                 | Literal::DateTime { span, .. } => span,
             },
+            Expr::UnaryNeg { span, .. } => span,
             Expr::TextInterpolate { span, .. } => span,
             Expr::List { span, .. }
             | Expr::Tuple { span, .. }

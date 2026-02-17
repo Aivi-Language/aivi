@@ -1,0 +1,6 @@
+@no_prelude
+module integrationTests.complex.PersistentSegmentTree
+
+use aivi
+
+touch = Unit

@@ -1,0 +1,6 @@
+@no_prelude
+module integrationTests.complex.FenwickTree
+
+use aivi
+
+touch = Unit

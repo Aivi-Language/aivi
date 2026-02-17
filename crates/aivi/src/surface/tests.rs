@@ -348,6 +348,7 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
     match expr {
         Expr::Ident(name) => name.name == target,
         Expr::Literal(_) => false,
+        Expr::UnaryNeg { expr, .. } => expr_contains_ident(expr, target),
         Expr::Suffixed { base, .. } => expr_contains_ident(base, target),
         Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
             crate::surface::TextPart::Text { .. } => false,

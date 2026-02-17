@@ -1,0 +1,6 @@
+@no_prelude
+module integrationTests.complex.EdmondsKarp
+
+use aivi
+
+touch = Unit

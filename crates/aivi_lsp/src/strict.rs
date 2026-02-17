@@ -112,6 +112,7 @@ fn expr_span(expr: &aivi::Expr) -> aivi::Span {
             | aivi::Literal::Bool { span, .. }
             | aivi::Literal::DateTime { span, .. } => span.clone(),
         },
+        aivi::Expr::UnaryNeg { span, .. } => span.clone(),
         aivi::Expr::Suffixed { span, .. }
         | aivi::Expr::TextInterpolate { span, .. }
         | aivi::Expr::List { span, .. }
@@ -588,6 +589,7 @@ fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                     }
                 }
             }
+            aivi::Expr::UnaryNeg { expr, .. } => walk_expr(expr, out),
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => walk_expr(base, out),
@@ -738,6 +740,7 @@ fn strict_pipe_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                     }
                 }
             }
+            aivi::Expr::UnaryNeg { expr, .. } => walk_expr(expr, out),
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => walk_expr(base, out),
@@ -874,6 +877,7 @@ fn strict_record_field_access(file_modules: &[Module], out: &mut Vec<Diagnostic>
                     }
                 }
             }
+            aivi::Expr::UnaryNeg { expr, .. } => walk_expr(expr, out),
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => walk_expr(base, out),
@@ -1036,6 +1040,7 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => expr_uses_name_free(base, name),
+            aivi::Expr::UnaryNeg { expr, .. } => expr_uses_name_free(expr, name),
             aivi::Expr::TextInterpolate { parts, .. } => parts.iter().any(|p| match p {
                 aivi::TextPart::Text { .. } => false,
                 aivi::TextPart::Expr { expr, .. } => expr_uses_name_free(expr, name),
@@ -1147,6 +1152,7 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
                     }
                 }
             }
+            aivi::Expr::UnaryNeg { expr, .. } => walk_expr(expr, out),
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => walk_expr(base, out),
@@ -1265,6 +1271,7 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => expr_uses_name(base, name),
+            aivi::Expr::UnaryNeg { expr, .. } => expr_uses_name(expr, name),
             aivi::Expr::TextInterpolate { parts, .. } => parts.iter().any(|p| match p {
                 aivi::TextPart::Text { .. } => false,
                 aivi::TextPart::Expr { expr, .. } => expr_uses_name(expr, name),
@@ -1487,6 +1494,7 @@ fn strict_missing_import_suggestions(
                     }
                 }
             }
+            aivi::Expr::UnaryNeg { expr, .. } => collect_idents(expr, out),
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => collect_idents(base, out),
@@ -1707,6 +1715,7 @@ fn strict_expected_type_coercions(
                     }
                 }
             }
+            aivi::Expr::UnaryNeg { expr, .. } => collect_calls(expr, out),
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
             | aivi::Expr::Suffixed { base, .. } => collect_calls(base, out),

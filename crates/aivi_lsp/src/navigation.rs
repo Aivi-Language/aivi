@@ -20,6 +20,7 @@ impl Backend {
         use aivi::Expr;
         match expr {
             Expr::Suffixed { base, .. } => Self::find_record_field_name_at_position(base, position),
+            Expr::UnaryNeg { expr, .. } => Self::find_record_field_name_at_position(expr, position),
             Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => {
                 for field in fields.iter() {
                     for segment in field.path.iter() {

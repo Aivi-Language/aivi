@@ -1,0 +1,6 @@
+@no_prelude
+module integrationTests.complex.Dinic
+
+use aivi
+
+touch = Unit
