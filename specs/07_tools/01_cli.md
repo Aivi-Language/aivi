@@ -189,7 +189,7 @@ aivi lsp
 
 #### `mcp`
 
-Starts the Model Context Protocol (MCP) server for a specific file or directory. This allows LLMs to context-aware interaction with the codebase.
+Starts the Model Context Protocol (MCP) server.
 
 ```bash
 aivi mcp serve <path|dir/...> [--allow-effects]
@@ -198,3 +198,4 @@ aivi mcp serve <path|dir/...> [--allow-effects]
 - `--allow-effects`: Allows the MCP server to execute tools that have side effects.
 
 In v0.1, `aivi mcp serve` exposes the bundled language specifications (`specs/`) as MCP resources.
+The `<path|dir/...>` argument is accepted for future expansion, but is currently ignored.
