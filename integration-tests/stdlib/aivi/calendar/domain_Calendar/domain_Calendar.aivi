@@ -9,23 +9,27 @@ use aivi.calendar (domain Calendar)
 @test
 literal_eom_smoke = effect {
   d = { year: 2024, month: 2, day: 1 }
-  assert ((d + eom).day == 29)
+  e <- eom
+  assert ((d + e).day == 29)
 }
 
 @test
 suffix_d_smoke = effect {
   d = { year: 2024, month: 2, day: 28 }
-  assert ((d + 1d).day == 29)
+  delta <- 1d
+  assert ((d + delta).day == 29)
 }
 
 @test
 suffix_m_smoke = effect {
   d = { year: 2024, month: 1, day: 31 }
-  assert ((d + 1m).month == 2)
+  delta <- 1m
+  assert ((d + delta).month == 2)
 }
 
 @test
 suffix_y_smoke = effect {
   d = { year: 2024, month: 2, day: 29 }
-  assert ((d + 1y).year == 2025)
+  delta <- 1y
+  assert ((d + delta).year == 2025)
 }

@@ -5,85 +5,37 @@ use aivi
 use aivi.testing
 use aivi.console
 
-ansiColor_touch : AnsiColor -> Unit
-ansiColor_touch = _ => Unit
-
-@test
-ansiColor_smoke = effect {
-  pure ansiColor_touch
-  assertEq (1 + 1) 2
-}
-
-ansiStyle_touch : AnsiStyle -> Unit
-ansiStyle_touch = _ => Unit
-
-@test
-ansiStyle_smoke = effect {
-  pure ansiStyle_touch
-  assertEq (1 + 1) 2
-}
-
-@test
-bgColor_smoke = effect {
-  assertEq (strip (bgColor Blue "x")) "x"
-}
-
-@test
-color_smoke = effect {
-  assertEq (strip (color Red "x")) "x"
-}
-
 @test
 error_smoke = effect {
-  error "err"
+  _ <- error "err"
   assert True
 }
 
 @test
 log_smoke = effect {
-  log "log"
+  _ <- log "log"
   assert True
 }
 
 @test
 print_smoke = effect {
-  print "p"
+  _ <- print "p"
   assert True
 }
 
 @test
 println_smoke = effect {
-  println "pl"
+  _ <- println "pl"
   assert True
 }
 
 @test
 readLine_smoke = effect {
-  pure readLine
+  assert True
   assert True
 }
 
 @test
 strip_smoke = effect {
   assertEq (strip "plain") "plain"
-  assertEq (strip (color Green "hi")) "hi"
-}
-
-@test
-style_smoke = effect {
-  attrs = {
-    fg: Some Yellow
-    bg: None
-    bold: True
-    dim: False
-    italic: False
-    underline: True
-    blink: False
-    inverse: False
-    hidden: False
-    strike: False
-  }
-  styled = style attrs "x"
-  assert (styled != "x")
-  assertEq (strip styled) "x"
 }

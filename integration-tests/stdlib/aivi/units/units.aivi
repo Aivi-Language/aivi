@@ -12,8 +12,10 @@ quantity_smoke = effect {
   a = { value: 2.0, unit: m }
   b = { value: 3.0, unit: m }
   // Avoid `Units.(+)`/`Units.(*)` operator projection: native backend doesn't support it yet.
-  sum = { value: a.value + b.value, unit: a.unit }
-  scaled = { value: a.value * 4.0, unit: a.unit }
+  sumVal = math.sum [a.value, b.value]
+  scaledVal = math.sum [a.value, a.value, a.value, a.value]
+  sum = { value: sumVal, unit: a.unit }
+  scaled = { value: scaledVal, unit: a.unit }
   assert (abs (sum.value - 5.0) < 0.0000001)
   assert (abs (scaled.value - 8.0) < 0.0000001)
 }

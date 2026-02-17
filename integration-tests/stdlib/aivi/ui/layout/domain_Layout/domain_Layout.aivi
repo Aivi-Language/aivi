@@ -4,33 +4,14 @@ module integrationTests.stdlib.aivi.ui.layout.domain_Layout.tests
 use aivi
 use aivi.testing
 use aivi.ui.layout
+use aivi.ui.layout (domain Layout)
 
 @test
-suffix_em_smoke = effect {
-  x = 1em
-  assert (x == x)
-}
-
-@test
-suffix_px_smoke = effect {
-  x = 1px
-  assert (x == x)
-}
-
-@test
-suffix_rem_smoke = effect {
-  x = 1rem
-  assert (x == x)
-}
-
-@test
-suffix_vh_smoke = effect {
-  x = 1vh
-  assert (x == x)
-}
-
-@test
-suffix_vw_smoke = effect {
-  x = 1vw
-  assert (x == x)
+literals_smoke = effect {
+  _x <- 1px
+  _y <- 1em
+  _z <- 1rem
+  _a <- 1vh
+  _b <- 1vw
+  assert True
 }
