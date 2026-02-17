@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.regex.split
 
 use aivi
 use aivi.testing
-
 use aivi.regex
-
-
 
 @test
 smoke = effect {
@@ -15,5 +12,5 @@ smoke = effect {
     | Ok re => effect { pure re }
     | Err _ => effect { fail "compile failed" }
 
-  _ <- assert (split r "a,b,c" == ["a", "b", "c"])
+    _ <- assert (split r "a,b,c" == ["a", "b", "c"])
 }

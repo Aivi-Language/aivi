@@ -3,14 +3,11 @@ module integrationTests.stdlib.aivi.net.https.get
 
 use aivi
 use aivi.testing
-
 use aivi.net.https
-
-
 
 @test
 smoke = effect {
   src = get "https://example.com"
   res <- src
-  _ <- assert True
+  _   <- assert True
 }

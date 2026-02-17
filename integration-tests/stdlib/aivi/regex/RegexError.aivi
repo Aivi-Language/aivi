@@ -3,16 +3,13 @@ module integrationTests.stdlib.aivi.regex.RegexError
 
 use aivi
 use aivi.testing
-
 use aivi.regex
-
-
 
 @test
 smoke = effect {
   reResult = compile ","
   reResult = compile "["
   _ <- reResult ?
-    | Ok _ => assert False
+    | Ok _  => assert False
     | Err _ => assert True
 }

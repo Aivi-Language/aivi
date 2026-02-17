@@ -3,12 +3,9 @@ module integrationTests.stdlib.aivi.math.sqrt2
 
 use aivi
 use aivi.testing
-
 use aivi.math
-
-
 
 @test
 smoke = effect {
-  _ <- assert (abs (sqrt2 -1.41421) < 0.0001)
+  _ <- assert (abs (sqrt2 - 1.41421) < 0.0001)
 }

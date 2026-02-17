@@ -3,14 +3,11 @@ module integrationTests.stdlib.aivi.net.http.post
 
 use aivi
 use aivi.testing
-
 use aivi.net.http
-
-
 
 @test
 smoke = effect {
   src = post "http://example.com" "body"
   res <- src
-  _ <- assert True
+  _   <- assert True
 }

@@ -11,9 +11,9 @@ classify =
   | n when n < 100 => "medium"
   | _              => "large"
 
-@test
-guardsWork = effect {
-  _ <- assertEq (classify (-1)) "negative"
-  _ <- assertEq (classify 0) "zero"
-  _ <- assertEq (classify 42) "medium"
-}
+    @test
+  guardsWork = effect {
+    _ <- assertEq (classify (-1)) "negative"
+    _ <- assertEq (classify 0) "zero"
+    _ <- assertEq (classify 42) "medium"
+  }

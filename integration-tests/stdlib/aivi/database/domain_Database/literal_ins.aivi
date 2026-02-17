@@ -3,12 +3,8 @@ module integrationTests.stdlib.aivi.database.domain_Database.literal_ins
 
 use aivi
 use aivi.testing
-
 use aivi.database
-
 use aivi.database
-
-
 
 @test
 smoke = effect {

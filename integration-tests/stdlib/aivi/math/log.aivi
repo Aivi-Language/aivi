@@ -3,13 +3,10 @@ module integrationTests.stdlib.aivi.math.log
 
 use aivi
 use aivi.testing
-
 use aivi.math
-
-
 
 @test
 smoke = effect {
-  _ <- assert (abs (log e -1.0) < 0.0001)
+  _ <- assert (abs (log e - 1.0) < 0.0001)
   _ <- assert (abs (log 1.0) < 0.0001)
 }

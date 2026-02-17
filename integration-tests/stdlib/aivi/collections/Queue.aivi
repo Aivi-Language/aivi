@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.collections.Queue
 
 use aivi
 use aivi.testing
-
 use aivi.collections
-
-
 
 @test
 smoke = effect {
@@ -18,9 +15,9 @@ smoke = effect {
 
   res = Queue.dequeue q2
   _ <- match res with
-    | Some (val, q3) => effect {
+  | Some (val, q3) => effect {
       _ <- assert (val == 1)
       _ <- assert (Queue.peek q3 == Some 2)
-    }
-    | None => assert False
+  }
+  | None => assert False
 }

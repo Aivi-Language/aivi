@@ -14,9 +14,9 @@ systemLocale = effect {
   tagOpt <- localeTag
   tag =
     tagOpt ?
-    | Some t => t
-    | None   => defaultLocale.tag
-  pure (parseLocale tag or defaultLocale)
+      | Some t => t
+      | None   => defaultLocale.tag
+      pure (parseLocale tag or defaultLocale)
 }
 
 loadBundle : Locale -> Effect Text Bundle
@@ -30,9 +30,9 @@ loadBundle = locale => effect {
     | Ok p  => pure p
     | Err e => fail e
 
-  bundleFromProperties locale props ?
-    | Ok b  => pure b
-    | Err e => fail e
+    bundleFromProperties locale props ?
+      | Ok b  => pure b
+      | Err e => fail e
 }
 
 main : Effect Text Unit

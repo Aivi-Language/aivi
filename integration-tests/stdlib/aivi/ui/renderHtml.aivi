@@ -3,14 +3,11 @@ module integrationTests.stdlib.aivi.ui.renderHtml
 
 use aivi
 use aivi.testing
-
 use aivi.ui
-
-
 
 @test
 smoke = effect {
-  node = vElement "p" [] [vText "hi"]
+  node = vElement "p" [][vText "hi"]
   html = renderHtml node
   _ <- assert (html == "<p data-aivi-node=\"root\"><span data-aivi-node=\"root/0\">hi</span></p>")
 }

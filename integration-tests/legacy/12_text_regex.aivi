@@ -16,11 +16,11 @@ main = effect {
     | Ok r  => if test r "caa" then "match" else "no"
     | Err _ => "bad"
 
-  print verdict
+    print verdict
 
-  bytes = toBytes Utf8 "ping"
-  decoded = fromBytes Utf8 bytes
-  decoded ?
-    | Ok value => print value
-    | Err _    => print "decode failed"
+    bytes = toBytes Utf8 "ping"
+    decoded = fromBytes Utf8 bytes
+    decoded ?
+      | Ok value => print value
+      | Err _    => print "decode failed"
 }

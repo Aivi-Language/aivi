@@ -10,9 +10,9 @@ floats = [0.0, 3.14, -2.5]
 texts = ["hello", "world"]
 
 suffixes = {
-  duration: 30s,
-  duration2: 1min,
-  decimal: 3.14dec,
+  duration: 30s
+  duration2: 1min
+  decimal: 3.14dec
   bigint: 42n
 }
 instant = 2024-05-21T12:00:00Z

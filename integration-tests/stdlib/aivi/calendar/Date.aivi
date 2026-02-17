@@ -3,7 +3,6 @@ module integrationTests.stdlib.aivi.calendar.Date
 
 use aivi
 use aivi.testing
-
 use aivi.calendar
 
 @test

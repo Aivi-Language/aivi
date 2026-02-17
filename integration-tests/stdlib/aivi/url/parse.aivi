@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.url.parse
 
 use aivi
 use aivi.testing
-
 use aivi.url
-
-
 
 @test
 smoke = effect {
@@ -14,7 +11,7 @@ smoke = effect {
   r <- res ?
     | Ok re => effect { pure re }
     | Err _ => effect { fail "parse failed" }
-  _ <- assert (r.protocol == "https")
-  _ <- assert (r.host == "example.com")
-  _ <- assert (r.port == Some 8080)
+    _ <- assert (r.protocol == "https")
+    _ <- assert (r.host == "example.com")
+    _ <- assert (r.port == Some 8080)
 }

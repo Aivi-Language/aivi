@@ -11,14 +11,14 @@ main = effect {
     | Ok loc => loc
     | Err _  => { language: "en", region: Some "US", variants: [], tag: "en-US" }
 
-  props = "app.welcome = Hello, \{name:Text\}!\napp.cartItems = You have \{count:Int\} items.\n"
+    props = "app.welcome = Hello, \{name:Text\}!\napp.cartItems = You have \{count:Int\} items.\n"
 
-  bundleRes = bundleFromProperties locale props
-  bundle = bundleRes ?
-    | Ok b  => b
-    | Err e => { locale: locale, entries: Map.empty } // fail closed for example
+    bundleRes = bundleFromProperties locale props
+    bundle = bundleRes ?
+      | Ok b  => b
+      | Err e => { locale: locale, entries: Map.empty } // fail closed for example
 
-  _ <- print (t bundle (~k"app.welcome") { name: "Alice" })
-  _ <- print (t bundle (~k"app.cartItems") { count: 3 })
-  pure Unit
+    _ <- print (t bundle (~k"app.welcome") { name: "Alice" })
+    _ <- print (t bundle (~k"app.cartItems") { count: 3 })
+    pure Unit
 }

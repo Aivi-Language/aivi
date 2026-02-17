@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.file.delete
 
 use aivi
 use aivi.testing
-
 use aivi.file
-
-
 
 @test
 smoke = effect {

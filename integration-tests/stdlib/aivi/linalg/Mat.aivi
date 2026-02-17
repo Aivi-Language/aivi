@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.linalg.Mat
 
 use aivi
 use aivi.testing
-
 use aivi.linalg
-
-
 
 @test
 smoke = effect {

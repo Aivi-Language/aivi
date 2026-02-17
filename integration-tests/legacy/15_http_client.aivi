@@ -9,5 +9,5 @@ main = effect {
   message = result ?
     | Ok response => "Status {response.status}"
     | Err err     => "Error {err.message}"
-  print "{message}\n"
+    print "{message}\n"
 }

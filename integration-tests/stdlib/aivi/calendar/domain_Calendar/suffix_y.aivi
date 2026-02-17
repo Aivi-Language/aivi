@@ -3,12 +3,8 @@ module integrationTests.stdlib.aivi.calendar.domain_Calendar.suffix_y
 
 use aivi
 use aivi.testing
-
 use aivi.calendar
-
 use aivi.calendar
-
-
 
 @test
 smoke = effect {

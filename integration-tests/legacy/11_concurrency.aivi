@@ -11,5 +11,5 @@ main = effect {
   msg <- res ?
     | Ok text    => pure text
     | Err Closed => pure "closed\n"
-  print msg
+    print msg
 }

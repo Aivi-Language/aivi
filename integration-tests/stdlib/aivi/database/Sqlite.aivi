@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.database.Sqlite
 
 use aivi
 use aivi.testing
-
 use aivi.database
-
-
 
 @test
 smoke = effect {

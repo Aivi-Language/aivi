@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.number.rational.denominator
 
 use aivi
 use aivi.testing
-
 use aivi.number.rational
-
-
 
 @test
 smoke = effect {

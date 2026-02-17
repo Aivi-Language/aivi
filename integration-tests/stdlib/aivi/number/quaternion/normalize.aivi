@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.number.quaternion.normalize
 
 use aivi
 use aivi.testing
-
 use aivi.number.quaternion
-
-
 
 @test
 smoke = effect {

@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.database.ColumnType
 
 use aivi
 use aivi.testing
-
 use aivi.database
-
-
 
 @test
 smoke = effect {

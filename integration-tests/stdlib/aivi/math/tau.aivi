@@ -3,12 +3,9 @@ module integrationTests.stdlib.aivi.math.tau
 
 use aivi
 use aivi.testing
-
 use aivi.math
-
-
 
 @test
 smoke = effect {
-  _ <- assert (abs (tau -6.28318) < 0.0001)
+  _ <- assert (abs (tau - 6.28318) < 0.0001)
 }

@@ -3,12 +3,8 @@ module integrationTests.stdlib.aivi.ui.layout.domain_Layout.suffix_rem
 
 use aivi
 use aivi.testing
-
 use aivi.ui.layout
-
 use aivi.ui.layout
-
-
 
 @test
 smoke = effect {
