@@ -121,6 +121,6 @@ astarSmoke = effect {
   zeroHeuristic = _ _ => 0.0
   result2 <- pure (astar graph 0 3 zeroHeuristic)
   assert (result2 == Some [0, 1, 2, 3])
-  bad     <- pure (astar graph 3 0 zeroHeuristic)
+  bad <- pure (astar graph 3 0 zeroHeuristic)
   assert (bad == None)
 }

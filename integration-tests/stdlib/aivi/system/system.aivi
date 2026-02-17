@@ -11,7 +11,7 @@ args_smoke = effect {
   xs <- args
   assert (List.length xs >= 1)
   xs ?
-    | [] => assert False
+    | []            => assert False
     | [x, ..._rest] => assert (text.isEmpty x == False)
 }
 
@@ -39,7 +39,7 @@ exit_smoke = effect {
 localeTag_smoke = effect {
   tagOpt <- localeTag
   tagOpt ?
-    | None => assert True
+    | None   => assert True
     | Some t => assert (text.isEmpty t == False)
 }
 
