@@ -1,8 +1,19 @@
 @no_prelude
 module examples.compiler.math
 export add, sub, mul, square
+use aivi.testing
+use aivi
+
 
 add = x y => x + y
 sub = x y => x - y
 mul = x y => x * y
 square = x => mul x x
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- assert (add 2 3 == 5)
+  _ <- assert (square 4 == 16)
+}

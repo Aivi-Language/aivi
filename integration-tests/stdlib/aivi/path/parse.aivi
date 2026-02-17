@@ -7,6 +7,6 @@ use aivi.path
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  p = parse "/a/b/c.txt"
+  _ <- assert (isAbsolute p)
 }

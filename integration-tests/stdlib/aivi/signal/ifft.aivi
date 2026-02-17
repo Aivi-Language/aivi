@@ -7,6 +7,6 @@ use aivi.signal
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure ifft
   _ <- assert True
 }

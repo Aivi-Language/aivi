@@ -7,6 +7,6 @@ use aivi.generator
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  s = foldl (acc x => acc + x) 0 (fromList [1, 2, 3])
+  _ <- assert (s == 6)
 }

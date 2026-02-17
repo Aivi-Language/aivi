@@ -3,6 +3,8 @@ module App
 use aivi.ui
 use aivi.ui.layout
 use aivi.i18n
+use aivi.testing
+
 
 export Model, Msg, init, update, view
 
@@ -32,3 +34,13 @@ welcomeText = (render welcomeMsg { name: "AIVI" }) ? | Ok txt => txt | Err _ => 
 
 view : Model -> VNode Msg
 view = model => vElement "div" ([vClass "card", vStyle { width: 240px, gap: 2em }]) ([vElement "h1" ([]) ([vText "Hello"]), vElement "p" ([]) ([vText welcomeText]), vText (renderCount model)])
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- assert (update Inc init).count == 1
+  _ <- assert (update (SetStep 3) init).step == 3
+  node = view { count: 2, step: 1 }
+  _ <- assert (length (renderHtml node) > 0)
+}

@@ -7,6 +7,6 @@ use aivi.net.https
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure fetch
   _ <- assert True
 }

@@ -7,6 +7,5 @@ use aivi.duration
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (negateDelta 1s == -1s)
 }

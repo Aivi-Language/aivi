@@ -7,6 +7,6 @@ use aivi.number.bigint
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  b = absInt (fromInt (-5))
+  _ <- assert (toInt b == 5)
 }

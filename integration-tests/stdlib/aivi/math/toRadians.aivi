@@ -7,6 +7,6 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  a = { radians: pi }
+  _ <- assert (toRadians a == pi)
 }

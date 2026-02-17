@@ -7,6 +7,6 @@ use aivi.console
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure log
   _ <- assert True
 }

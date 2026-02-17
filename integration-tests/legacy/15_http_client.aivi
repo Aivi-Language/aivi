@@ -2,6 +2,8 @@ module examples.httpClient
 export main
 
 use aivi.net.https
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -10,4 +12,14 @@ main = effect {
     | Ok response => "Status {response.status}"
     | Err err     => "Error {err.message}"
     print "{message}\n"
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  // Avoid real network; just ensure URL sigil parses and get is in scope.
+  url = ~u(https://example.com)
+  _ <- pure (get url)
+  _ <- assert True
 }

@@ -7,6 +7,6 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  x = nextAfter 0.0 1.0
+  _ <- assert (x > 0.0)
 }

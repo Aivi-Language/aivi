@@ -2,6 +2,8 @@ module examples.runtime_effects_core_ops
 export main
 
 use aivi.console
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -19,4 +21,14 @@ main = effect {
     if m > 40 then effect {
       print "branch"
     } else pure Unit
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  res <- attempt (fail "boom")
+  _ <- res ?
+    | Ok _  => assert False
+    | Err _ => assert True
 }

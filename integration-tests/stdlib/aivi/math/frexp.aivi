@@ -7,6 +7,6 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  (m, e) = frexp 8.0
+  _ <- assert (abs (ldexp m e - 8.0) < 1e-10)
 }

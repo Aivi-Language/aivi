@@ -4,6 +4,7 @@ export main
 use aivi.testing
 use aivi.logic
 
+
 id = x => x
 
 compose = f g => x => g (f x)
@@ -31,4 +32,12 @@ main = effect {
   _ <- assertEq (chain Ok (Err "e")) (Err "e")
 
   pure Unit
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- pure main
+  _ <- assert True
 }

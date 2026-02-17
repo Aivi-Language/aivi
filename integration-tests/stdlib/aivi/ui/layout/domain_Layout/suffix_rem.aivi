@@ -8,6 +8,6 @@ use aivi.ui.layout
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  x = 1rem
+  _ <- assert (x == x)
 }

@@ -10,6 +10,6 @@ subject = 1ms
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure suffix_ms
   _ <- assert True
 }

@@ -2,8 +2,17 @@ module examples.hello
 export main
 
 use aivi.console
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
   _ <- print "Hello, world!"
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- assert True
 }

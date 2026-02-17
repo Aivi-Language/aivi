@@ -7,6 +7,14 @@ use aivi.database
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  User = { id: Int, name: Text }
+  @static
+  users : Table User
+  users = table "users"[]
+  _ <- configure { driver: Sqlite, url: ":memory:" }
+  _ <- runMigrations[users]
+  _ <- users + ins { id: 1, name: "Ada" }
+  rows <- load users
+  _ <- assert (length rows == 1)
+  _ <- assert (rows[0].name == "Ada")
 }

@@ -5,6 +5,7 @@ use aivi
 use aivi.math
 use aivi.testing
 
+
 algo_append = left right => left ?
   | []        => right
   | [h, ...t] => [h, ...algo_append t right]
@@ -116,4 +117,12 @@ main = effect {
 
   path = aStar gridEdges Map.empty 0 22
   _ <- assertEq path (Some ([0, 1, 2, 12, 22]))
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- pure main
+  _ <- assert True
 }

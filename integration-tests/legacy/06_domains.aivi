@@ -1,5 +1,7 @@
 module examples.compiler.domains
 export Date, Calendar, addWeek, addTwoWeeks, shiftBy
+use aivi.testing
+
 
 Date = { year: Int, month: Int, day: Int }
 
@@ -21,4 +23,14 @@ domain Calendar over Date = {
     addTwoWeeks = d => (d + w1) + w1
 
     shiftBy = d => delta => d + delta
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  d = { year: 2024, month: 1, day: 1 }
+  _ <- assert ((addWeek d).day == 8)
+  _ <- assert ((addTwoWeeks d).day == 15)
+  _ <- assert ((shiftBy d (Calendar.Day 3)).day == 4)
 }

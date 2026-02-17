@@ -7,6 +7,5 @@ use aivi.path
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (fileName (parse "/a/b/c.txt") == Some "c.txt")
 }

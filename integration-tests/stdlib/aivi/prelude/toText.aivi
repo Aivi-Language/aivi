@@ -7,6 +7,6 @@ use aivi.prelude
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure toText
   _ <- assert True
 }

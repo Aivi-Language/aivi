@@ -8,6 +8,6 @@ use aivi.color
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure suffix_l
   _ <- assert True
 }

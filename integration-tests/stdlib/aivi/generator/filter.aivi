@@ -7,6 +7,6 @@ use aivi.generator
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  xs = toList (filter (_ % 2 == 0) (fromList [1, 2, 3, 4]))
+  _ <- assert (xs == [2, 4])
 }

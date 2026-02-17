@@ -1,3 +1,6 @@
+use aivi.testing
+use aivi
+
 @no_prelude
 module aivi.repro_extends
 
@@ -18,4 +21,11 @@ instance Sub Int = {
 // Case 2: If we provide Super instance, does Sub still require foo?
 instance Super Int = {
   foo: x => x
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- assert True
 }

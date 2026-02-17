@@ -7,6 +7,6 @@ use aivi.path
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (isAbsolute (parse "/a"))
+  _ <- assert (not (isAbsolute (parse "a")))
 }

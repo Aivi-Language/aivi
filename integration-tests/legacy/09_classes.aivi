@@ -1,5 +1,7 @@
 module examples.compiler.classes
 export Eq, Functor, Monad, Option, isNone
+use aivi.testing
+
 
 Option A = None | Some A
 
@@ -48,3 +50,15 @@ instance Eq (Option Bool) = {
 isNone = ?
   | None   => True
   | Some _ => False
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  eqBool = Eq.eq True False
+  _ <- assert (eqBool == False)
+  _ <- assert (Functor.map (Some 1) (_ + 1) == Some 2)
+  _ <- assert (Monad.flatMap (Some 1) (x => Some (x + 1)) == Some 2)
+  _ <- assert (Eq.eq (Some True) (Some True) == True)
+  _ <- assert (isNone None == True)
+}

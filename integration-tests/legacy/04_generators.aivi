@@ -1,5 +1,8 @@
 module examples.compiler.generators
 export gen, evens, grid, fibs, pairs, squares
+use aivi.testing
+use aivi.generator
+
 
 gen = generate {
   yield 1
@@ -36,4 +39,15 @@ squares = generate {
 fibs = generate {
   x <- [0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
   yield x
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- assert (generator.toList gen == [1, 2, 3])
+  _ <- assert (generator.toList evens == [2, 4, 6, 8, 10])
+  _ <- assert (generator.toList grid[0] == (0, 0))
+  _ <- assert (length (generator.toList pairs) == 10)
+  _ <- assert (generator.toList fibs[0] == 0)
 }
