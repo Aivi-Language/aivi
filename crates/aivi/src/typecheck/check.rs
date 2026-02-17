@@ -7,8 +7,8 @@ use super::checker::TypeChecker;
 use super::types::Scheme;
 
 use super::class_env::{
-    collect_exported_class_env, collect_imported_class_env, collect_local_class_env, expand_classes,
-    InstanceDeclInfo,
+    collect_exported_class_env, collect_imported_class_env, collect_local_class_env,
+    expand_classes, InstanceDeclInfo,
 };
 use super::global::collect_global_type_info;
 use super::ordering::ordered_modules;
@@ -26,8 +26,10 @@ fn check_types_impl(modules: &[Module], check_embedded_stdlib: bool) -> Vec<File
     let mut diagnostics = Vec::new();
     let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
     let mut module_domain_exports: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
-    let mut module_class_exports: HashMap<String, HashMap<String, super::class_env::ClassDeclInfo>> =
-        HashMap::new();
+    let mut module_class_exports: HashMap<
+        String,
+        HashMap<String, super::class_env::ClassDeclInfo>,
+    > = HashMap::new();
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
 
     let (global_type_constructors, global_aliases) =

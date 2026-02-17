@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.prelude
 
 @test
-smoke = effect {
+functionIsInScope = effect {
   _ <- pure toText
-  _ <- assert True
+  _ <- assertEq (toText 0) "0"
 }

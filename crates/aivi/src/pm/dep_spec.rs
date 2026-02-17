@@ -1,6 +1,5 @@
-use crate::AiviError;
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use toml_edit::DocumentMut;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,8 +162,4 @@ fn read_package_name_for_path_dep(
         .and_then(|t| t.get("name"))
         .and_then(|i| i.as_str())
         .map(|s| s.to_string()))
-}
-
-pub fn collect_aivi_sources(src_dir: &Path) -> Result<Vec<PathBuf>, AiviError> {
-    super::sources::collect_aivi_sources(src_dir)
 }

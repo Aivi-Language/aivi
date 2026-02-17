@@ -6,6 +6,8 @@ use aivi.testing
 use aivi.prelude
 
 @test
-smoke = effect {
-  _ <- assert True
+bytesRoundtrip = effect {
+  b = toBytes "abc"
+  s = fromBytes b
+  _ <- assertEq s "abc"
 }

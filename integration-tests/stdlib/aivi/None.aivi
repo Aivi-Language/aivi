@@ -6,6 +6,9 @@ use aivi.testing
 use aivi
 
 @test
-smoke = effect {
-  _ <- assert True
+noneMatches = effect {
+  opt = None
+  _ <- opt ?
+    | Some _ => assert False
+    | None   => assert True
 }

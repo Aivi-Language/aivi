@@ -6,6 +6,14 @@ use aivi.testing
 use aivi
 
 @test
-smoke = effect {
-  _ <- assert True
+attemptCapturesFailure = effect {
+  ok <- attempt (pure 42)
+  _ <- ok ?
+    | Ok n  => assertEq n 42
+    | Err _ => assert False
+
+  bad <- attempt (fail "boom")
+  _ <- bad ?
+    | Ok _  => assert False
+    | Err e => assertEq e "boom"
 }

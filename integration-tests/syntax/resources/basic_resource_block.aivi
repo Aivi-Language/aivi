@@ -14,6 +14,9 @@ managedFile = path => resource {
 }
 
 @test
-resourcesTypecheck = effect {
-  _ <- assert True
+resourceOpenFailureIsCaught = effect {
+  res <- attempt (load (file.readAll (managedFile "tmp/does-not-exist.resource")))
+  _ <- res ?
+    | Ok _  => assert False
+    | Err _ => assert True
 }

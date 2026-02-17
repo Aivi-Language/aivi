@@ -6,6 +6,15 @@ use aivi.testing
 use aivi.logic
 
 @test
-smoke = effect {
-  assert True
+constructors = effect {
+  ok = Ok 1
+  err = Err "nope"
+
+  _ <- ok ?
+    | Ok n  => assertEq n 1
+    | Err _ => assert False
+
+  _ <- err ?
+    | Ok _  => assert False
+    | Err e => assertEq e "nope"
 }

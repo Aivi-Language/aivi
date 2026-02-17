@@ -6,6 +6,7 @@ use aivi.testing
 use aivi.prelude
 
 @test
-smoke = effect {
-  _ <- assert True
+charPredicates = effect {
+  _ <- assert (isAlpha "a" == True)
+  _ <- assert (isAlpha "0" == False)
 }
