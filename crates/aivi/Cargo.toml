@@ -13,27 +13,27 @@ num-rational = "0.4.2"
 num-traits = "0.2.19"
 im = "15.1.0"
 palette = "0.7.5"
-ordered-float = "4.2.2"
+ordered-float = "5.1.0"
 regex = "1.10.6"
 rust_decimal = "1.36.0"
 rustfft = "6.2.0"
 serde = { version = "1.0.209", features = ["derive"] }
 serde_json = "1.0.127"
 sha2 = "0.10.8"
-getrandom = "0.2.15"
+getrandom = "0.4.1"
 uuid = { version = "1.10.0", features = ["v4"] }
-thiserror = "1.0.63"
-toml = "0.8.20"
-toml_edit = "0.22.27"
+thiserror = "2.0.18"
+toml = "1.0.2+spec-1.1.0"
+toml_edit = "0.25.2+spec-1.1.0"
 tokio = { version = "1.40.0", features = ["rt", "sync"] }
 unicode-normalization = "0.1.24"
 unicode-segmentation = "1.11.0"
 url = "2.5.2"
-ureq = "2.10.1"
+ureq = "3.2.0"
 include_dir = "0.7.4"
-rusqlite = { version = "0.31.0", features = ["bundled"] }
+rusqlite = { version = "0.38.0", features = ["bundled"] }
 postgres = "0.19.9"
-mysql = "24.0.0"
+mysql = "27.0.0"
 
 [dev-dependencies]
 aivi_native_runtime = { path = "../aivi_native_runtime" }

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import {
   LanguageClient,
@@ -19,14 +20,36 @@ function docHasTests(doc: vscode.TextDocument): boolean {
   return /(^|\n)\s*@test\b/.test(doc.getText());
 }
 
-async function runAiviTest(target: string): Promise<void> {
+function toCliPath(uri: vscode.Uri): string {
+  const fsPath = uri.fsPath;
+  return process.platform === "win32" ? fsPath.replace(/\\/g, "/") : fsPath;
+}
+
+function inferWorkspaceFolderForTarget(target: string): vscode.WorkspaceFolder | undefined {
+  const wsFolders = vscode.workspace.workspaceFolders;
+  if (!wsFolders || wsFolders.length === 0) {
+    return undefined;
+  }
+
+  // Prefer a workspace folder that contains the resolved target path.
+  const base = target.replace(/(\/\.\.\.|\/\*\*)$/, "");
+  if (path.isAbsolute(base)) {
+    const uri = vscode.Uri.file(base);
+    return vscode.workspace.getWorkspaceFolder(uri) ?? wsFolders[0];
+  }
+
+  return wsFolders[0];
+}
+
+async function runAiviTest(target: string, ws?: vscode.WorkspaceFolder): Promise<void> {
   const cli = getCliCommand();
+  const workspaceFolder = ws ?? inferWorkspaceFolderForTarget(target);
   const task = new vscode.Task(
     { type: "aivi", task: "test" },
-    vscode.TaskScope.Workspace,
+    workspaceFolder ?? vscode.TaskScope.Workspace,
     "AIVI: test",
     "aivi",
-    new vscode.ShellExecution(`${cli} test "${target}"`)
+    new vscode.ShellExecution(cli, ["test", target], { cwd: workspaceFolder?.uri.fsPath })
   );
   task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, clear: true };
   await vscode.tasks.executeTask(task);
@@ -146,9 +169,10 @@ export function activate(context: vscode.ExtensionContext) {
       // Prefer: current file if it has tests, else run the canonical integration test suite.
       const doc = vscode.window.activeTextEditor?.document;
       if (doc && doc.languageId === "aivi" && docHasTests(doc)) {
-        await runAiviTest(doc.uri.fsPath);
+        await runAiviTest(toCliPath(doc.uri), vscode.workspace.getWorkspaceFolder(doc.uri));
       } else {
-        await runAiviTest("integration-tests/**");
+        const ws = vscode.workspace.workspaceFolders?.[0];
+        await runAiviTest("integration-tests/**", ws);
       }
     })
   );
@@ -159,7 +183,17 @@ export function activate(context: vscode.ExtensionContext) {
       if (!doc || doc.languageId !== "aivi") {
         return;
       }
-      await runAiviTest(doc.uri.fsPath);
+      await runAiviTest(toCliPath(doc.uri), vscode.workspace.getWorkspaceFolder(doc.uri));
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("aivi.runTestsFolder", async (uri?: vscode.Uri) => {
+      if (!uri) {
+        return;
+      }
+      const ws = vscode.workspace.getWorkspaceFolder(uri) ?? vscode.workspace.workspaceFolders?.[0];
+      await runAiviTest(`${toCliPath(uri)}/...`, ws);
     })
   );
 
@@ -168,7 +202,11 @@ export function activate(context: vscode.ExtensionContext) {
       if (e.execution.task.source !== "aivi" || e.execution.task.name !== "AIVI: test") {
         return;
       }
-      const ws = vscode.workspace.workspaceFolders?.[0];
+      const scope = e.execution.task.scope;
+      const ws =
+        scope && typeof scope === "object" && "uri" in scope
+          ? (scope as vscode.WorkspaceFolder)
+          : vscode.workspace.workspaceFolders?.[0];
       if (!ws) {
         return;
       }
