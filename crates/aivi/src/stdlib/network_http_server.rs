@@ -5,7 +5,9 @@ pub const SOURCE: &str = r#"
 module aivi.net.http_server
 export Header, Request, Response, ServerConfig
 export HttpError, WsError, WsMessage, ServerReply
+export TextMsg, BinaryMsg, Ping, Pong, Close
 export Server, WebSocket
+export Http, Ws
 export listen, stop, wsRecv, wsSend, wsClose
 
 use aivi
