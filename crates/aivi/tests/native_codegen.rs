@@ -13,8 +13,7 @@ fn native_codegen_smoke_compiles_and_runs() {
         r#"module app.main
 main : Effect Text Unit
 main = effect {
-  _ <- print "Hello from AIVI!"
-  pure Unit
+  print "Hello from AIVI!"
 }
 "#,
     )

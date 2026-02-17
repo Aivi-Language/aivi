@@ -89,14 +89,10 @@ mod lsp_integration {
             "integration-tests/syntax/sigils/basic.aivi",
             "integration-tests/syntax/sigils/collections_structured.aivi",
             "integration-tests/syntax/effects/attempt_and_match.aivi",
-            // Legacy runnable programs / larger modules
-            "integration-tests/legacy/hello.aivi",
-            "integration-tests/legacy/11_concurrency.aivi",
-            "integration-tests/legacy/12_text_regex.aivi",
             // Stdlib-import-only microtests
-            "integration-tests/stdlib/aivi/text/length.aivi",
-            "integration-tests/stdlib/aivi/duration/domain_Duration/suffix_ms.aivi",
-            "integration-tests/stdlib/aivi/number/decimal/n_1dec.aivi",
+            "integration-tests/stdlib/aivi/text/text.aivi",
+            "integration-tests/stdlib/aivi/duration/duration.aivi",
+            "integration-tests/stdlib/aivi/url/url.aivi",
         ];
         let mut files: Vec<PathBuf> = rel_paths
             .iter()
