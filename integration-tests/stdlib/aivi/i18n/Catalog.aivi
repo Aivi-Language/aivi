@@ -2,10 +2,6 @@
 module integrationTests.stdlib.aivi.i18n.Catalog
 
 use aivi
-@no_prelude
-module integrationTests.stdlib.aivi.i18n.Catalog
-
-use aivi
 use aivi.testing
 use aivi.i18n
 

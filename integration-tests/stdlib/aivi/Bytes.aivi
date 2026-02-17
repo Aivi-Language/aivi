@@ -3,11 +3,13 @@ module integrationTests.stdlib.aivi.Bytes
 
 use aivi
 use aivi.testing
-use aivi
+use aivi.text
 
 @test
 smoke = effect {
-  b = toBytes "abc"
-  s = fromBytes b
-  _ <- assert (s == "abc")
+  b = toBytes Utf8 "abc"
+  res = fromBytes Utf8 b
+  _ <- res ?
+    | Ok s  => assertEq s "abc"
+    | Err _ => assert False
 }
