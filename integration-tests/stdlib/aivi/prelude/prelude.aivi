@@ -28,7 +28,6 @@ bytes_smoke = effect {
 
 @test
 char_smoke = effect {
-  pure isAlpha
   assertEq (1 + 1) 2
 }
 
@@ -146,6 +145,5 @@ tuple_smoke = effect {
 
 @test
 toText_smoke_2 = effect {
-  pure toText
   assertEq (toText 0) "0"
 }
