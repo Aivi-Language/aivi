@@ -24,55 +24,55 @@ deque_smoke = effect {
 }
 
 @test
-heap_smoke = effect {
-  h0 = Heap.empty
-  h1 = Heap.push h0 3
-  h2 = Heap.push h1 1
-  h3 = Heap.push h2 2
+  heap_smoke = effect {
+    h0 = Heap.empty
+    h1 = Heap.push h0 3
+    h2 = Heap.push h1 1
+    h3 = Heap.push h2 2
 
-  _ <- assert (Heap.peekMin h3 == Some 1)
+    _ <- assert (Heap.peekMin h3 == Some 1)
 
-  res = Heap.popMin h3
-  _ <- res ?
-    | Some (val, h4) => effect {
-      _ <- assert (val == 1)
-      _ <- assert (Heap.peekMin h4 == Some 2)
-    }
-    | None => assert False
-}
-
-@test
-map_smoke = effect {
-  m0 = Map.empty
-  m1 = Map.insert 1 "one" m0
-
-  _ <- assert (Map.size m0 == 0)
-  _ <- assert (Map.size m1 == 1)
-  _ <- assert (Map.get 1 m1 == Some "one")
-}
+    res = Heap.popMin h3
+    _ <- res ?
+      | Some (val, h4) => effect {
+        _ <- assert (val == 1)
+        _ <- assert (Heap.peekMin h4 == Some 2)
+      }
+      | None => assert False
+  }
 
 @test
-queue_smoke = effect {
-  q0 = Queue.empty
-  q1 = Queue.enqueue q0 1
-  q2 = Queue.enqueue q1 2
+  map_smoke = effect {
+    m0 = Map.empty
+    m1 = Map.insert 1 "one" m0
 
-  _ <- assert (Queue.peek q2 == Some 1)
-
-  res = Queue.dequeue q2
-  _ <- res ?
-    | Some (val, q3) => effect {
-      _ <- assert (val == 1)
-      _ <- assert (Queue.peek q3 == Some 2)
-    }
-    | None => assert False
-}
+    _ <- assert (Map.size m0 == 0)
+    _ <- assert (Map.size m1 == 1)
+    _ <- assert (Map.get 1 m1 == Some "one")
+  }
 
 @test
-set_smoke = effect {
-  s0 = Set.empty
-  s1 = Set.insert 1 s0
-  _ <- assert (Set.size s0 == 0)
-  _ <- assert (Set.size s1 == 1)
-  _ <- assert (Set.has 1 s1 == True)
-}
+  queue_smoke = effect {
+    q0 = Queue.empty
+    q1 = Queue.enqueue q0 1
+    q2 = Queue.enqueue q1 2
+
+    _ <- assert (Queue.peek q2 == Some 1)
+
+    res = Queue.dequeue q2
+    _ <- res ?
+      | Some (val, q3) => effect {
+        _ <- assert (val == 1)
+        _ <- assert (Queue.peek q3 == Some 2)
+      }
+      | None => assert False
+  }
+
+@test
+  set_smoke = effect {
+    s0 = Set.empty
+    s1 = Set.insert 1 s0
+    _ <- assert (Set.size s0 == 0)
+    _ <- assert (Set.size s1 == 1)
+    _ <- assert (Set.has 1 s1 == True)
+  }

@@ -138,6 +138,7 @@ fn run() -> Result<(), AiviError> {
         }
         "test" => {
             let (check_stdlib, rest) = consume_check_stdlib_flag(&rest);
+            let (only_tests, rest) = consume_multi_value_flag("--only", &rest)?;
             let Some(target) = rest.first() else {
                 print_help();
                 return Ok(());
@@ -210,6 +211,33 @@ fn run() -> Result<(), AiviError> {
             test_names.dedup();
             debug_assert!(!test_names.is_empty());
 
+            if !only_tests.is_empty() {
+                let mut filtered = Vec::new();
+                let mut missing = Vec::new();
+                for wanted in &only_tests {
+                    if test_names.iter().any(|n| n == wanted) {
+                        filtered.push(wanted.clone());
+                        continue;
+                    }
+                    // Convenience: allow passing an unqualified def name (suffix match).
+                    let suffix = format!(".{wanted}");
+                    if let Some(found) = test_names.iter().find(|n| n.ends_with(&suffix)) {
+                        filtered.push(found.clone());
+                    } else {
+                        missing.push(wanted.clone());
+                    }
+                }
+                if !missing.is_empty() {
+                    return Err(AiviError::InvalidCommand(format!(
+                        "unknown test(s): {}",
+                        missing.join(", ")
+                    )));
+                }
+                filtered.sort();
+                filtered.dedup();
+                test_names = filtered;
+            }
+
             // Check and print module diagnostics (optionally including embedded stdlib).
             let mut modules = aivi::load_modules_from_paths(&test_paths)?;
             let mut check_diags = check_modules(&modules);
@@ -269,6 +297,18 @@ fn run() -> Result<(), AiviError> {
                 .join("\n");
             std::fs::write("target/aivi-test-passed-files.txt", passed_text)?;
             std::fs::write("target/aivi-test-failed-files.txt", failed_text)?;
+
+            // Pretty per-file summary (keeps CI/tooling stable while improving UX).
+            // ASCII tag + ANSI color so terminals show green/red.
+            if !passed_files.is_empty() || !failed_files.is_empty() {
+                println!("\nfiles:");
+                for p in &passed_files {
+                    println!("\x1b[32m[OK]\x1b[0m {}", p.display());
+                }
+                for p in &failed_files {
+                    println!("\x1b[31m[FAIL]\x1b[0m {}", p.display());
+                }
+            }
 
             if report.failed == 0 {
                 println!("\x1b[32m\u{2714}\x1b[0m ok: {} passed", report.passed);
@@ -712,6 +752,29 @@ fn consume_flag(flag: &str, args: &[String]) -> (bool, Vec<String>) {
         }
     }
     (enabled, out)
+}
+
+fn consume_multi_value_flag(flag: &str, args: &[String]) -> Result<(Vec<String>, Vec<String>), AiviError> {
+    let mut values = Vec::new();
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i < args.len() {
+        let arg = &args[i];
+        if arg == flag {
+            let Some(value) = args.get(i + 1) else {
+                return Err(AiviError::InvalidCommand(format!("{flag} expects a value")));
+            };
+            if value.starts_with('-') {
+                return Err(AiviError::InvalidCommand(format!("{flag} expects a value")));
+            }
+            values.push(value.clone());
+            i += 2;
+            continue;
+        }
+        out.push(arg.clone());
+        i += 1;
+    }
+    Ok((values, out))
 }
 
 struct Spinner {

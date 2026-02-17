@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use ureq::Error as UreqError;
 use url::Url;
 
 use super::util::{
@@ -254,55 +253,89 @@ fn http_request(
     body: Option<String>,
 ) -> Result<Value, RuntimeError> {
     let url_text = url.to_string();
-    let mut request = match method {
-        "GET" => ureq::get(&url_text),
-        "POST" => ureq::post(&url_text),
-        "PUT" => ureq::put(&url_text),
-        "DELETE" => ureq::delete(&url_text),
-        "PATCH" => ureq::patch(&url_text),
-        "HEAD" => ureq::head(&url_text),
-        _ => ureq::get(&url_text),
-    };
-    for (name, value) in headers {
-        request = request.set(&name, &value);
-    }
-    let response = match body {
-        Some(text) => request.send_string(&text),
-        None => request.call(),
-    };
-    match response {
-        Ok(resp) => Ok(make_ok(http_response_to_value(resp)?)),
-        Err(err) => Ok(make_err(http_error_record(http_error_message(err)?))),
-    }
-}
+    let method = method.to_ascii_uppercase();
 
-fn http_error_message(err: UreqError) -> Result<String, RuntimeError> {
-    match err {
-        UreqError::Status(code, response) => {
-            let body = response.into_string().unwrap_or_else(|_| String::new());
-            if body.is_empty() {
-                Ok(format!("http status {code}"))
-            } else {
-                Ok(format!("http status {code}: {body}"))
+    // ureq 3 uses typestates for methods that can/can't have request bodies. Keep it explicit.
+    let mut response = if let Some(body_text) = body {
+        let builder = match method.as_str() {
+            "POST" => ureq::post(&url_text),
+            "PUT" => ureq::put(&url_text),
+            "PATCH" => ureq::patch(&url_text),
+            _ => {
+                return Err(RuntimeError::Message(format!(
+                    "http.fetch does not support body for method {method}"
+                )))
+            }
+        };
+        let builder = headers
+            .into_iter()
+            .fold(builder, |builder, (name, value)| builder.header(name, value));
+        builder
+            .config()
+            .http_status_as_error(false)
+            .build()
+            .send(body_text)
+    } else {
+        match method.as_str() {
+            "POST" | "PUT" | "PATCH" => {
+                let builder = match method.as_str() {
+                    "POST" => ureq::post(&url_text),
+                    "PUT" => ureq::put(&url_text),
+                    "PATCH" => ureq::patch(&url_text),
+                    _ => unreachable!("method matched above"),
+                };
+                let builder = headers
+                    .into_iter()
+                    .fold(builder, |builder, (name, value)| builder.header(name, value));
+                builder
+                    .config()
+                    .http_status_as_error(false)
+                    .build()
+                    .send_empty()
+            }
+            _ => {
+                let builder = match method.as_str() {
+                    "GET" => ureq::get(&url_text),
+                    "DELETE" => ureq::delete(&url_text),
+                    "HEAD" => ureq::head(&url_text),
+                    _ => ureq::get(&url_text),
+                };
+                let builder = headers
+                    .into_iter()
+                    .fold(builder, |builder, (name, value)| builder.header(name, value));
+                builder
+                    .config()
+                    .http_status_as_error(false)
+                    .build()
+                    .call()
             }
         }
-        UreqError::Transport(err) => Ok(err.to_string()),
+    };
+
+    match response.as_mut() {
+        Ok(resp) => Ok(make_ok(http_response_to_value(resp)?)),
+        Err(err) => Ok(make_err(http_error_record(err.to_string()))),
     }
 }
 
-fn http_response_to_value(resp: ureq::Response) -> Result<Value, RuntimeError> {
-    let status = resp.status() as i64;
+fn http_response_to_value(
+    resp: &mut ureq::http::Response<ureq::Body>,
+) -> Result<Value, RuntimeError> {
+    let status = resp.status().as_u16() as i64;
     let headers = headers_to_value(
-        resp.headers_names()
-            .into_iter()
-            .filter_map(|name| {
-                resp.header(&name)
+        resp.headers()
+            .iter()
+            .filter_map(|(name, value)| {
+                value
+                    .to_str()
+                    .ok()
                     .map(|value| (name.to_string(), value.to_string()))
             })
             .collect(),
     );
     let body = resp
-        .into_string()
+        .body_mut()
+        .read_to_string()
         .map_err(|err| RuntimeError::Error(Value::Text(err.to_string())))?;
     let mut fields = HashMap::new();
     fields.insert("status".to_string(), Value::Int(status));

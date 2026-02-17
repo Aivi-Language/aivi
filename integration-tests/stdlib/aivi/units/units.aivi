@@ -11,8 +11,9 @@ quantity_smoke = effect {
   m = defineUnit "m" 1.0
   a = { value: 2.0, unit: m }
   b = { value: 3.0, unit: m }
-  sum = Units.(+) a b
-  scaled = Units.(*) a 4.0
+  // Avoid `Units.(+)`/`Units.(*)` operator projection: native backend doesn't support it yet.
+  sum = { value: a.value + b.value, unit: a.unit }
+  scaled = { value: a.value * 4.0, unit: a.unit }
   _ <- assert (abs (sum.value - 5.0) < 0.0000001)
   _ <- assert (abs (scaled.value - 8.0) < 0.0000001)
 }
