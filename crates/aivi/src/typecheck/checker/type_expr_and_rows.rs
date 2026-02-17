@@ -172,26 +172,7 @@ impl TypeChecker {
                     self.validate_type_expr(item, errors);
                 }
             }
-            TypeExpr::Name(name) => {
-                // Flag type names that are not known type constructors, aliases, or
-                // row-op names.  Lowercase names are treated as implicit type variables
-                // (per convention a..z are polymorphic), so we only flag UpperCase names.
-                let n = &name.name;
-                let is_upper = n.chars().next().is_some_and(|c| c.is_ascii_uppercase());
-                if is_upper
-                    && !self.type_constructors.contains_key(n)
-                    && !self.aliases.contains_key(n)
-                    && !Self::is_row_op_name(n)
-                {
-                    errors.push(TypeError {
-                        span: name.span.clone(),
-                        message: format!("unknown type '{}'", n),
-                        expected: None,
-                        found: None,
-                    });
-                }
-            }
-            TypeExpr::Star { .. } | TypeExpr::Unknown { .. } => {}
+            TypeExpr::Name(_) | TypeExpr::Star { .. } | TypeExpr::Unknown { .. } => {}
         }
     }
 

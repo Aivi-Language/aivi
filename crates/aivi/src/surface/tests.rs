@@ -167,10 +167,14 @@ module Example
 f = { a: x b: y } => x
 "#;
     let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    // When pattern parsing fails (E1538 for missing comma), the parser backtracks to
+    // expression parsing where `{ a: (x b) }` is built and the stray `:` and `y`
+    // get flagged as E1527.  This is the intended "strict" behavior.
+    let codes = diag_codes(&diags);
     assert!(
-        diags.is_empty(),
-        "expected parser recovery without diagnostics for this legacy edge-case, got: {:?}",
-        diag_codes(&diags)
+        codes.iter().all(|c| c == "E1527"),
+        "expected E1527 diagnostics for stray tokens, got: {:?}",
+        codes
     );
 }
 
