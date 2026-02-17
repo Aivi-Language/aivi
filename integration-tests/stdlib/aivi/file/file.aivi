@@ -10,94 +10,94 @@ fileStats_touch = _ => Unit
 
 @test
 fileStats_smoke = effect {
-  _ <- pure fileStats_touch
-  _ <- assertEq (1 + 1) 2
+  pure fileStats_touch // todo are not needed
+  assertEq (1 + 1) 2
 }
 
 @test
 close_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
-  _   <- writeText p "hello"
+  writeText p "hello"
   ok  <- exists p
-  _   <- assert ok
+  assert ok
   txt <- readText p
-  _   <- assert (txt == "hello")
-  _   <- delete p
+  assert (txt == "hello")
+  delete p
 }
 
 @test
 delete_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
-  _   <- writeText p "hello"
+  writeText p "hello"
   ok  <- exists p
-  _   <- assert ok
+  assert ok
   txt <- readText p
-  _   <- assert (txt == "hello")
-  _   <- delete p
+  assert (txt == "hello")
+  delete p
 }
 
 @test
 exists_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
-  _   <- writeText p "hello"
+  writeText p "hello"
   ok  <- exists p
-  _   <- assert ok
+  assert ok
   txt <- readText p
-  _   <- assert (txt == "hello")
-  _   <- delete p
+  assert (txt == "hello")
+  delete p
 }
 
 @test
 open_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
-  _   <- writeText p "hello"
+  writeText p "hello"
   ok  <- exists p
-  _   <- assert ok
+  assert ok
   txt <- readText p
-  _   <- assert (txt == "hello")
-  _   <- delete p
+  assert (txt == "hello")
+  delete p
 }
 
 @test
 readAll_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
-  _   <- writeText p "hello"
+  writeText p "hello"
   ok  <- exists p
-  _   <- assert ok
+  assert ok
   txt <- readText p
-  _   <- assert (txt == "hello")
-  _   <- delete p
+  assert (txt == "hello")
+  delete p
 }
 
 @test
 readText_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
-  _   <- writeText p "hello"
+  writeText p "hello"
   ok  <- exists p
-  _   <- assert ok
+  assert ok
   txt <- readText p
-  _   <- assert (txt == "hello")
-  _   <- delete p
+  assert (txt == "hello")
+  delete p
 }
 
 @test
 stat_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
-  _   <- writeText p "hello"
+  writeText p "hello"
   ok  <- exists p
-  _   <- assert ok
+  assert ok
   txt <- readText p
-  _   <- assert (txt == "hello")
-  _   <- delete p
+  assert (txt == "hello")
+  delete p
 }
 
 @test
 writeText_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
-  _   <- writeText p "hello"
+  writeText p "hello"
   ok  <- exists p
-  _   <- assert ok
+  assert ok
   txt <- readText p
-  _   <- assert (txt == "hello")
-  _   <- delete p
+  assert (txt == "hello")
+  delete p
 }

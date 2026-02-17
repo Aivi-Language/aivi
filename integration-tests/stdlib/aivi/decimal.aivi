@@ -7,6 +7,6 @@ use aivi
 
 @test
 smoke = effect {
-  _ <- pure decimal
-  _ <- assertEq (1 + 1) 2
+  pure decimal
+  assertEq (1 + 1) 2
 }

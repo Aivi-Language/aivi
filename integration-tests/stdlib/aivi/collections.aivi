@@ -9,9 +9,9 @@ use aivi
 smoke = effect {
   base = ~map{ "a" => 1, "b" => 2 }
   more = Map.insert "c" 3 base
-  _ <- assert (Map.get more "a" == Some 1)
-  _ <- assert (Map.get more "c" == Some 3)
-  _ <- assert (Map.get more "missing" == None)
+  assert (Map.get more "a" == Some 1)
+  assert (Map.get more "c" == Some 3)
+  assert (Map.get more "missing" == None)
   set = ~set["x", "y"]
-  _ <- assert (Set.has "x" set)
+  assert (Set.has "x" set)
 }

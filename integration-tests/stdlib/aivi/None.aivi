@@ -8,7 +8,7 @@ use aivi
 @test
 noneMatches = effect {
   opt = None
-  _ <- opt ?
+  opt ?
     | Some _ => assert False
     | None   => assert True
 }

@@ -8,5 +8,5 @@ use aivi
 @test
 smoke = effect {
   n <- random.int 1 10
-  _ <- assert (n >= 1 && n <= 10)
+  assert (n >= 1 && n <= 10)
 }

@@ -10,30 +10,30 @@ spectrum_touch = _ => Unit
 
 @test
 spectrum_smoke = effect {
-  _ <- pure spectrum_touch
-  _ <- assertEq (1 + 1) 2
+  pure spectrum_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 fft_smoke = effect {
-  _ <- pure fft
-  _ <- assert True
+  pure fft
+  assert True
 }
 
 @test
 ifft_smoke = effect {
-  _ <- pure ifft
-  _ <- assert True
+  pure ifft
+  assert True
 }
 
 @test
 normalize_smoke = effect {
-  _ <- pure normalize
-  _ <- assert True
+  pure normalize
+  assert True
 }
 
 @test
 windowHann_smoke = effect {
-  _ <- pure windowHann
-  _ <- assert True
+  pure windowHann
+  assert True
 }

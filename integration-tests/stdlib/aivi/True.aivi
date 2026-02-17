@@ -7,7 +7,7 @@ use aivi
 
 @test
 trueBehavesLikeBool = effect {
-  _ <- assert True
-  _ <- assert (True && True)
-  _ <- assert (True || False)
+  assert True
+  assert (True && True)
+  assert (True || False)
 }

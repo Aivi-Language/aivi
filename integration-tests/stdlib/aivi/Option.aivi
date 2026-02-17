@@ -8,7 +8,7 @@ use aivi.logic
 @test
 smoke = effect {
   val = Some 1
-  _ <- val ?
+  val ?
     | Some _ => assert True
     | None   => assert False
 }

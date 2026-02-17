@@ -8,7 +8,7 @@ use aivi
 @test
 someMatches = effect {
   opt = Some 7
-  _ <- opt ?
+  opt ?
     | Some n => assertEq n 7
     | None   => assert False
 }

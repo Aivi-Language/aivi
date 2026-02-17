@@ -10,11 +10,11 @@ span_touch = _ => Unit
 
 @test
 span_smoke = effect {
-  _ <- pure span_touch
-  _ <- assertEq (1 + 1) 2
+  pure span_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 negateDelta_smoke = effect {
-  _ <- assert (negateDelta 1s == -1s)
+  assert (negateDelta 1s == -1s)
 }

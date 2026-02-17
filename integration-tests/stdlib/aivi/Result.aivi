@@ -10,11 +10,11 @@ constructors = effect {
   ok = Ok 1
   err = Err "nope"
 
-  _ <- ok ?
+  ok ?
     | Ok n  => assertEq n 1
     | Err _ => assert False
 
-    _ <- err ?
+    err ?
       | Ok _  => assert False
       | Err e => assertEq e "nope"
 }

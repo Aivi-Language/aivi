@@ -8,5 +8,5 @@ use aivi
 @test
 smoke = effect {
   t <- clock.now
-  _ <- assert True
+  assert True
 }

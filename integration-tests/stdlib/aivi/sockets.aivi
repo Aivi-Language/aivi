@@ -7,6 +7,6 @@ use aivi
 
 @test
 smoke = effect {
-  _ <- pure sockets
-  _ <- assertEq (1 + 1) 2
+  pure sockets
+  assertEq (1 + 1) 2
 }

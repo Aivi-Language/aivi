@@ -9,11 +9,11 @@ use aivi.database (domain Database)
 @test
 literal_del_smoke = effect {
   User = { id: Int }
-  users0 = table "users"[]
+  users0 = table "users"[] // todo what is this for syntax?
   users1 <- users0 + ins { id: 1 }
   users2 <- users1 + del (u => u.id == 1)
   rows   <- load users2
-  _      <- assert (List.length rows == 0)
+  assert (List.length rows == 0)
 }
 
 @test
@@ -22,7 +22,7 @@ literal_ins_smoke = effect {
   users0 = table "users"[]
   users1 <- users0 + ins { id: 1 }
   rows   <- load users1
-  _      <- assert (List.length rows == 1)
+  assert (List.length rows == 1) // todo is not needed.
 }
 
 @test
@@ -32,7 +32,7 @@ literal_upd_smoke = effect {
   users1 <- users0 + ins { id: 1, name: "A" }
   users2 <- users1 + upd (u => u.id == 1) (u => u <| { name: "B" })
   rows   <- load users2
-  _      <- rows ?
+  rows ?
     | [u] => assertEq u.name "B"
     | _   => assert False
 }

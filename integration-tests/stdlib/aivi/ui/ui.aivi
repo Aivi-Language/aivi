@@ -10,8 +10,8 @@ attr_touch = _ => Unit
 
 @test
 attr_smoke = effect {
-  _ <- pure attr_touch
-  _ <- assertEq (1 + 1) 2
+  pure attr_touch
+  assertEq (1 + 1) 2
 }
 
 class_touch : Class -> Unit
@@ -19,8 +19,8 @@ class_touch = _ => Unit
 
 @test
 class_smoke = effect {
-  _ <- pure class_touch
-  _ <- assertEq (1 + 1) 2
+  pure class_touch
+  assertEq (1 + 1) 2
 }
 
 click_touch : Click -> Unit
@@ -28,8 +28,8 @@ click_touch = _ => Unit
 
 @test
 click_smoke = effect {
-  _ <- pure click_touch
-  _ <- assertEq (1 + 1) 2
+  pure click_touch
+  assertEq (1 + 1) 2
 }
 
 clickEvent_touch : ClickEvent -> Unit
@@ -37,8 +37,8 @@ clickEvent_touch = _ => Unit
 
 @test
 clickEvent_smoke = effect {
-  _ <- pure clickEvent_touch
-  _ <- assertEq (1 + 1) 2
+  pure clickEvent_touch
+  assertEq (1 + 1) 2
 }
 
 element_touch : Element -> Unit
@@ -46,8 +46,8 @@ element_touch = _ => Unit
 
 @test
 element_smoke = effect {
-  _ <- pure element_touch
-  _ <- assertEq (1 + 1) 2
+  pure element_touch
+  assertEq (1 + 1) 2
 }
 
 event_touch : Event -> Unit
@@ -55,8 +55,8 @@ event_touch = _ => Unit
 
 @test
 event_smoke = effect {
-  _ <- pure event_touch
-  _ <- assertEq (1 + 1) 2
+  pure event_touch
+  assertEq (1 + 1) 2
 }
 
 id_touch : Id -> Unit
@@ -64,8 +64,8 @@ id_touch = _ => Unit
 
 @test
 id_smoke = effect {
-  _ <- pure id_touch
-  _ <- assertEq (1 + 1) 2
+  pure id_touch
+  assertEq (1 + 1) 2
 }
 
 input_touch : Input -> Unit
@@ -73,8 +73,8 @@ input_touch = _ => Unit
 
 @test
 input_smoke = effect {
-  _ <- pure input_touch
-  _ <- assertEq (1 + 1) 2
+  pure input_touch
+  assertEq (1 + 1) 2
 }
 
 inputEvent_touch : InputEvent -> Unit
@@ -82,8 +82,8 @@ inputEvent_touch = _ => Unit
 
 @test
 inputEvent_smoke = effect {
-  _ <- pure inputEvent_touch
-  _ <- assertEq (1 + 1) 2
+  pure inputEvent_touch
+  assertEq (1 + 1) 2
 }
 
 keyboardEvent_touch : KeyboardEvent -> Unit
@@ -91,8 +91,8 @@ keyboardEvent_touch = _ => Unit
 
 @test
 keyboardEvent_smoke = effect {
-  _ <- pure keyboardEvent_touch
-  _ <- assertEq (1 + 1) 2
+  pure keyboardEvent_touch
+  assertEq (1 + 1) 2
 }
 
 keyed_touch : Keyed -> Unit
@@ -100,8 +100,8 @@ keyed_touch = _ => Unit
 
 @test
 keyed_smoke = effect {
-  _ <- pure keyed_touch
-  _ <- assertEq (1 + 1) 2
+  pure keyed_touch
+  assertEq (1 + 1) 2
 }
 
 liveConfig_touch : LiveConfig -> Unit
@@ -109,8 +109,8 @@ liveConfig_touch = _ => Unit
 
 @test
 liveConfig_smoke = effect {
-  _ <- pure liveConfig_touch
-  _ <- assertEq (1 + 1) 2
+  pure liveConfig_touch
+  assertEq (1 + 1) 2
 }
 
 liveError_touch : LiveError -> Unit
@@ -118,8 +118,8 @@ liveError_touch = _ => Unit
 
 @test
 liveError_smoke = effect {
-  _ <- pure liveError_touch
-  _ <- assertEq (1 + 1) 2
+  pure liveError_touch
+  assertEq (1 + 1) 2
 }
 
 onBlur_touch : OnBlur -> Unit
@@ -127,8 +127,8 @@ onBlur_touch = _ => Unit
 
 @test
 onBlur_smoke = effect {
-  _ <- pure onBlur_touch
-  _ <- assertEq (1 + 1) 2
+  pure onBlur_touch
+  assertEq (1 + 1) 2
 }
 
 onClick_touch : OnClick -> Unit
@@ -136,8 +136,8 @@ onClick_touch = _ => Unit
 
 @test
 onClick_smoke = effect {
-  _ <- pure onClick_touch
-  _ <- assertEq (1 + 1) 2
+  pure onClick_touch
+  assertEq (1 + 1) 2
 }
 
 onClickE_touch : OnClickE -> Unit
@@ -145,8 +145,8 @@ onClickE_touch = _ => Unit
 
 @test
 onClickE_smoke = effect {
-  _ <- pure onClickE_touch
-  _ <- assertEq (1 + 1) 2
+  pure onClickE_touch
+  assertEq (1 + 1) 2
 }
 
 onFocus_touch : OnFocus -> Unit
@@ -154,8 +154,8 @@ onFocus_touch = _ => Unit
 
 @test
 onFocus_smoke = effect {
-  _ <- pure onFocus_touch
-  _ <- assertEq (1 + 1) 2
+  pure onFocus_touch
+  assertEq (1 + 1) 2
 }
 
 onInput_touch : OnInput -> Unit
@@ -163,8 +163,8 @@ onInput_touch = _ => Unit
 
 @test
 onInput_smoke = effect {
-  _ <- pure onInput_touch
-  _ <- assertEq (1 + 1) 2
+  pure onInput_touch
+  assertEq (1 + 1) 2
 }
 
 onInputE_touch : OnInputE -> Unit
@@ -172,8 +172,8 @@ onInputE_touch = _ => Unit
 
 @test
 onInputE_smoke = effect {
-  _ <- pure onInputE_touch
-  _ <- assertEq (1 + 1) 2
+  pure onInputE_touch
+  assertEq (1 + 1) 2
 }
 
 onKeyDown_touch : OnKeyDown -> Unit
@@ -181,8 +181,8 @@ onKeyDown_touch = _ => Unit
 
 @test
 onKeyDown_smoke = effect {
-  _ <- pure onKeyDown_touch
-  _ <- assertEq (1 + 1) 2
+  pure onKeyDown_touch
+  assertEq (1 + 1) 2
 }
 
 onKeyUp_touch : OnKeyUp -> Unit
@@ -190,8 +190,8 @@ onKeyUp_touch = _ => Unit
 
 @test
 onKeyUp_smoke = effect {
-  _ <- pure onKeyUp_touch
-  _ <- assertEq (1 + 1) 2
+  pure onKeyUp_touch
+  assertEq (1 + 1) 2
 }
 
 onPointerDown_touch : OnPointerDown -> Unit
@@ -199,8 +199,8 @@ onPointerDown_touch = _ => Unit
 
 @test
 onPointerDown_smoke = effect {
-  _ <- pure onPointerDown_touch
-  _ <- assertEq (1 + 1) 2
+  pure onPointerDown_touch
+  assertEq (1 + 1) 2
 }
 
 onPointerMove_touch : OnPointerMove -> Unit
@@ -208,8 +208,8 @@ onPointerMove_touch = _ => Unit
 
 @test
 onPointerMove_smoke = effect {
-  _ <- pure onPointerMove_touch
-  _ <- assertEq (1 + 1) 2
+  pure onPointerMove_touch
+  assertEq (1 + 1) 2
 }
 
 onPointerUp_touch : OnPointerUp -> Unit
@@ -217,8 +217,8 @@ onPointerUp_touch = _ => Unit
 
 @test
 onPointerUp_smoke = effect {
-  _ <- pure onPointerUp_touch
-  _ <- assertEq (1 + 1) 2
+  pure onPointerUp_touch
+  assertEq (1 + 1) 2
 }
 
 patchOp_touch : PatchOp -> Unit
@@ -226,8 +226,8 @@ patchOp_touch = _ => Unit
 
 @test
 patchOp_smoke = effect {
-  _ <- pure patchOp_touch
-  _ <- assertEq (1 + 1) 2
+  pure patchOp_touch
+  assertEq (1 + 1) 2
 }
 
 pointerEvent_touch : PointerEvent -> Unit
@@ -235,8 +235,8 @@ pointerEvent_touch = _ => Unit
 
 @test
 pointerEvent_smoke = effect {
-  _ <- pure pointerEvent_touch
-  _ <- assertEq (1 + 1) 2
+  pure pointerEvent_touch
+  assertEq (1 + 1) 2
 }
 
 removeAttr_touch : RemoveAttr -> Unit
@@ -244,8 +244,8 @@ removeAttr_touch = _ => Unit
 
 @test
 removeAttr_smoke = effect {
-  _ <- pure removeAttr_touch
-  _ <- assertEq (1 + 1) 2
+  pure removeAttr_touch
+  assertEq (1 + 1) 2
 }
 
 replace_touch : Replace -> Unit
@@ -253,8 +253,8 @@ replace_touch = _ => Unit
 
 @test
 replace_smoke = effect {
-  _ <- pure replace_touch
-  _ <- assertEq (1 + 1) 2
+  pure replace_touch
+  assertEq (1 + 1) 2
 }
 
 setAttr_touch : SetAttr -> Unit
@@ -262,8 +262,8 @@ setAttr_touch = _ => Unit
 
 @test
 setAttr_smoke = effect {
-  _ <- pure setAttr_touch
-  _ <- assertEq (1 + 1) 2
+  pure setAttr_touch
+  assertEq (1 + 1) 2
 }
 
 setText_touch : SetText -> Unit
@@ -271,8 +271,8 @@ setText_touch = _ => Unit
 
 @test
 setText_smoke = effect {
-  _ <- pure setText_touch
-  _ <- assertEq (1 + 1) 2
+  pure setText_touch
+  assertEq (1 + 1) 2
 }
 
 style_touch : Style -> Unit
@@ -280,8 +280,8 @@ style_touch = _ => Unit
 
 @test
 style_smoke = effect {
-  _ <- pure style_touch
-  _ <- assertEq (1 + 1) 2
+  pure style_touch
+  assertEq (1 + 1) 2
 }
 
 textNode_touch : TextNode -> Unit
@@ -289,8 +289,8 @@ textNode_touch = _ => Unit
 
 @test
 textNode_smoke = effect {
-  _ <- pure textNode_touch
-  _ <- assertEq (1 + 1) 2
+  pure textNode_touch
+  assertEq (1 + 1) 2
 }
 
 vNode_touch : VNode -> Unit
@@ -298,8 +298,8 @@ vNode_touch = _ => Unit
 
 @test
 vNode_smoke = effect {
-  _ <- pure vNode_touch
-  _ <- assertEq (1 + 1) 2
+  pure vNode_touch
+  assertEq (1 + 1) 2
 }
 
 @test
@@ -308,155 +308,155 @@ diff_smoke = effect {
   new = vText "b"
   ops = diff old new
   // SetText "root" "b"
-  _ <- assert (List.length ops == 1)
+  assert (List.length ops == 1)
 }
 
 @test
 eventFromJson_smoke = effect {
   // Unknown JSON details; just ensure decoder accepts something simple.
   ev = eventFromJson "{}"
-  _ <- assert True
+  assert True
 }
 
 @test
 live_smoke = effect {
-  _ <- pure live
-  _ <- assert True
+  pure live
+  assert True
 }
 
 @test
 patchToJson_smoke = effect {
   ops = diff (vText "a") (vText "b")
   json = patchToJson ops
-  _ <- assert (Text.length json > 0)
+  assert (Text.length json > 0)
 }
 
 @test
 renderHtml_smoke = effect {
   node = vElement "p" [][vText "hi"]
   html = renderHtml node
-  _ <- assert (html == "<p data-aivi-node=\"root\"><span data-aivi-node=\"root/0\">hi</span></p>")
+  assert (html == "<p data-aivi-node=\"root\"><span data-aivi-node=\"root/0\">hi</span></p>")
 }
 
 @test
 vAttr_smoke = effect {
   attr = vAttr "id" "foo"
   node = vElement "div" [attr] []
-  _ <- assert (renderHtml node == "<div data-aivi-node=\"root\" id=\"foo\"></div>")
+  assert (renderHtml node == "<div data-aivi-node=\"root\" id=\"foo\"></div>")
 }
 
 @test
 vClass_smoke = effect {
   attr = vClass "c"
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vElement_smoke = effect {
   node = vElement "div" [] []
-  _ <- assert (renderHtml node == "<div data-aivi-node=\"root\"></div>")
+  assert (renderHtml node == "<div data-aivi-node=\"root\"></div>")
 }
 
 @test
 vId_smoke = effect {
   attr = vId "x"
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vKeyed_smoke = effect {
   node = vKeyed "k" (vText "x")
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vOnBlur_smoke = effect {
   attr = vOnBlur "evt"
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vOnClick_smoke = effect {
   attr = vOnClick "evt"
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vOnClickE_smoke = effect {
   attr = vOnClickE (_ => "evt")
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vOnFocus_smoke = effect {
   attr = vOnFocus "evt"
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vOnInput_smoke = effect {
   attr = vOnInput (_ => "evt")
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vOnInputE_smoke = effect {
   attr = vOnInputE (_ => "evt")
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vOnKeyDown_smoke = effect {
   attr = vOnKeyDown (_ => "evt")
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vOnKeyUp_smoke = effect {
   attr = vOnKeyUp (_ => "evt")
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vOnPointerDown_smoke = effect {
   attr = vOnPointerDown (_ => "evt")
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vOnPointerMove_smoke = effect {
   attr = vOnPointerMove (_ => "evt")
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vOnPointerUp_smoke = effect {
   attr = vOnPointerUp (_ => "evt")
   node = vElement "div" [attr] []
-  _ <- assert (Text.length (renderHtml node) > 0)
+  assert (Text.length (renderHtml node) > 0)
 }
 
 @test
 vStyle_smoke = effect {
   style = vStyle { color: "red" }
   node = vElement "div" [style] []
-  _ <- assert (renderHtml node == "<div data-aivi-node=\"root\" style=\"color: red\"></div>")
+  assert (renderHtml node == "<div data-aivi-node=\"root\" style=\"color: red\"></div>")
 }
 
 @test
 vText_smoke = effect {
   node = vText "hello"
-  _ <- assert (renderHtml node == "<span data-aivi-node=\"root\">hello</span>")
+  assert (renderHtml node == "<span data-aivi-node=\"root\">hello</span>")
 }

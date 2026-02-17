@@ -10,8 +10,8 @@ backoffPolicy_touch = _ => Unit
 
 @test
 backoffPolicy_smoke = effect {
-  _ <- pure backoffPolicy_touch
-  _ <- assertEq (1 + 1) 2
+  pure backoffPolicy_touch
+  assertEq (1 + 1) 2
 }
 
 closed_touch : Closed -> Unit
@@ -19,8 +19,8 @@ closed_touch = _ => Unit
 
 @test
 closed_smoke = effect {
-  _ <- pure closed_touch
-  _ <- assertEq (1 + 1) 2
+  pure closed_touch
+  assertEq (1 + 1) 2
 }
 
 config_touch : Config -> Unit
@@ -28,8 +28,8 @@ config_touch = _ => Unit
 
 @test
 config_smoke = effect {
-  _ <- pure config_touch
-  _ <- assertEq (1 + 1) 2
+  pure config_touch
+  assertEq (1 + 1) 2
 }
 
 exponential_touch : Exponential -> Unit
@@ -37,8 +37,8 @@ exponential_touch = _ => Unit
 
 @test
 exponential_smoke = effect {
-  _ <- pure exponential_touch
-  _ <- assertEq (1 + 1) 2
+  pure exponential_touch
+  assertEq (1 + 1) 2
 }
 
 fifo_touch : Fifo -> Unit
@@ -46,8 +46,8 @@ fifo_touch = _ => Unit
 
 @test
 fifo_smoke = effect {
-  _ <- pure fifo_touch
-  _ <- assertEq (1 + 1) 2
+  pure fifo_touch
+  assertEq (1 + 1) 2
 }
 
 fixed_touch : Fixed -> Unit
@@ -55,8 +55,8 @@ fixed_touch = _ => Unit
 
 @test
 fixed_smoke = effect {
-  _ <- pure fixed_touch
-  _ <- assertEq (1 + 1) 2
+  pure fixed_touch
+  assertEq (1 + 1) 2
 }
 
 healthFailed_touch : HealthFailed -> Unit
@@ -64,8 +64,8 @@ healthFailed_touch = _ => Unit
 
 @test
 healthFailed_smoke = effect {
-  _ <- pure healthFailed_touch
-  _ <- assertEq (1 + 1) 2
+  pure healthFailed_touch
+  assertEq (1 + 1) 2
 }
 
 invalidConfig_touch : InvalidConfig -> Unit
@@ -73,8 +73,8 @@ invalidConfig_touch = _ => Unit
 
 @test
 invalidConfig_smoke = effect {
-  _ <- pure invalidConfig_touch
-  _ <- assertEq (1 + 1) 2
+  pure invalidConfig_touch
+  assertEq (1 + 1) 2
 }
 
 lifo_touch : Lifo -> Unit
@@ -82,8 +82,8 @@ lifo_touch = _ => Unit
 
 @test
 lifo_smoke = effect {
-  _ <- pure lifo_touch
-  _ <- assertEq (1 + 1) 2
+  pure lifo_touch
+  assertEq (1 + 1) 2
 }
 
 pool_touch : Pool -> Unit
@@ -91,8 +91,8 @@ pool_touch = _ => Unit
 
 @test
 pool_smoke = effect {
-  _ <- pure pool_touch
-  _ <- assertEq (1 + 1) 2
+  pure pool_touch
+  assertEq (1 + 1) 2
 }
 
 poolError_touch : PoolError -> Unit
@@ -100,8 +100,8 @@ poolError_touch = _ => Unit
 
 @test
 poolError_smoke = effect {
-  _ <- pure poolError_touch
-  _ <- assertEq (1 + 1) 2
+  pure poolError_touch
+  assertEq (1 + 1) 2
 }
 
 poolStats_touch : PoolStats -> Unit
@@ -109,8 +109,8 @@ poolStats_touch = _ => Unit
 
 @test
 poolStats_smoke = effect {
-  _ <- pure poolStats_touch
-  _ <- assertEq (1 + 1) 2
+  pure poolStats_touch
+  assertEq (1 + 1) 2
 }
 
 queuePolicy_touch : QueuePolicy -> Unit
@@ -118,8 +118,8 @@ queuePolicy_touch = _ => Unit
 
 @test
 queuePolicy_smoke = effect {
-  _ <- pure queuePolicy_touch
-  _ <- assertEq (1 + 1) 2
+  pure queuePolicy_touch
+  assertEq (1 + 1) 2
 }
 
 timeout_touch : Timeout -> Unit
@@ -127,48 +127,48 @@ timeout_touch = _ => Unit
 
 @test
 timeout_smoke = effect {
-  _ <- pure timeout_touch
-  _ <- assertEq (1 + 1) 2
+  pure timeout_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 acquire_smoke = effect {
-  _ <- pure acquire
-  _ <- assertEq (1 + 1) 2
+  pure acquire
+  assertEq (1 + 1) 2
 }
 
 @test
 close_smoke = effect {
-  _ <- pure close
-  _ <- assertEq (1 + 1) 2
+  pure close
+  assertEq (1 + 1) 2
 }
 
 @test
 create_smoke = effect {
-  _ <- pure create
-  _ <- assertEq (1 + 1) 2
+  pure create
+  assertEq (1 + 1) 2
 }
 
 @test
 drain_smoke = effect {
-  _ <- pure drain
-  _ <- assertEq (1 + 1) 2
+  pure drain
+  assertEq (1 + 1) 2
 }
 
 @test
 release_smoke = effect {
-  _ <- pure release
-  _ <- assertEq (1 + 1) 2
+  pure release
+  assertEq (1 + 1) 2
 }
 
 @test
 stats_smoke = effect {
-  _ <- pure stats
-  _ <- assertEq (1 + 1) 2
+  pure stats
+  assertEq (1 + 1) 2
 }
 
 @test
 withConn_smoke = effect {
-  _ <- pure withConn
-  _ <- assertEq (1 + 1) 2
+  pure withConn
+  assertEq (1 + 1) 2
 }

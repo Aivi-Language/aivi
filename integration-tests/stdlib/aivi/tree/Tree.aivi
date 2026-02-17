@@ -8,9 +8,9 @@ use aivi.tree
 @test
 traversals = effect {
   t = node 1 [leaf 2, node 3 [leaf 4, leaf 5], leaf 6]
-  _ <- assertEq (dfsPreorder t)[1, 2, 3, 4, 5, 6]
-  _ <- assertEq (dfsPostorder t)[2, 4, 5, 3, 6, 1]
-  _ <- assertEq (bfs t)[1, 2, 3, 6, 4, 5]
+  assertEq (dfsPreorder t)[1, 2, 3, 4, 5, 6]
+  assertEq (dfsPostorder t)[2, 4, 5, 3, 6, 1]
+  assertEq (bfs t)[1, 2, 3, 6, 4, 5]
 }
 
 @test
@@ -29,14 +29,14 @@ fromListByBuildsExpectedShape = effect {
     | None   => leaf 0
     | Some t => t
 
-    _ <- assertEq (dfsPreorder t2)[1, 2, 3, 4, 5, 6]
-    _ <- assertEq (dfsPostorder t2)[2, 4, 5, 3, 6, 1]
-    _ <- assertEq (bfs t2)[1, 2, 3, 6, 4, 5]
+    assertEq (dfsPreorder t2)[1, 2, 3, 4, 5, 6]
+    assertEq (dfsPostorder t2)[2, 4, 5, 3, 6, 1]
+    assertEq (bfs t2)[1, 2, 3, 6, 4, 5]
 }
 
 @test
 fromListByRejectsMultipleRoots = effect {
   idFn = x => x
   parentIdFn = _ => None
-  _ <- assertEq (fromListBy idFn parentIdFn [1, 2]) None
+  assertEq (fromListBy idFn parentIdFn [1, 2]) None
 }

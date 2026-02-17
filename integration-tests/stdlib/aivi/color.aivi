@@ -12,8 +12,8 @@ smoke = effect {
   lighter = adjustLightness base 20
   saturated = adjustSaturation base 10
   hueShift = adjustHue base 30
-  _ <- assert (toHex lighter != toHex base)
-  _ <- assert (toHsl saturated.g > 10.0)
-  _ <- assert (toRgb (toHsl hueShift).r >= 0.0)
-  _ <- assert (text.startsWith (toHex base) "#")
+  assert (toHex lighter != toHex base)
+  assert (toHsl saturated.g > 10.0)
+  assert (toRgb (toHsl hueShift).r >= 0.0)
+  assert (text.startsWith (toHex base) "#")
 }

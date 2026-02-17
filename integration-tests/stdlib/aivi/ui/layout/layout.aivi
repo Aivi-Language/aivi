@@ -10,8 +10,8 @@ length_touch = _ => Unit
 
 @test
 length_smoke = effect {
-  _ <- pure length_touch
-  _ <- assertEq (1 + 1) 2
+  pure length_touch
+  assertEq (1 + 1) 2
 }
 
 percentage_touch : Percentage -> Unit
@@ -19,8 +19,8 @@ percentage_touch = _ => Unit
 
 @test
 percentage_smoke = effect {
-  _ <- pure percentage_touch
-  _ <- assertEq (1 + 1) 2
+  pure percentage_touch
+  assertEq (1 + 1) 2
 }
 
 unitVal_touch : UnitVal -> Unit
@@ -28,6 +28,6 @@ unitVal_touch = _ => Unit
 
 @test
 unitVal_smoke = effect {
-  _ <- pure unitVal_touch
-  _ <- assertEq (1 + 1) 2
+  pure unitVal_touch
+  assertEq (1 + 1) 2
 }

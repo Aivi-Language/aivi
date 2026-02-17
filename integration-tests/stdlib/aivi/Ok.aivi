@@ -8,7 +8,7 @@ use aivi
 @test
 okMatches = effect {
   res = Ok 123
-  _ <- res ?
+  res ?
     | Ok n  => assertEq n 123
     | Err _ => assert False
 }

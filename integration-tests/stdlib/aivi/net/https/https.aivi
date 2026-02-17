@@ -10,8 +10,8 @@ error_touch = _ => Unit
 
 @test
 error_smoke = effect {
-  _ <- pure error_touch
-  _ <- assertEq (1 + 1) 2
+  pure error_touch
+  assertEq (1 + 1) 2
 }
 
 header_touch : Header -> Unit
@@ -19,8 +19,8 @@ header_touch = _ => Unit
 
 @test
 header_smoke = effect {
-  _ <- pure header_touch
-  _ <- assertEq (1 + 1) 2
+  pure header_touch
+  assertEq (1 + 1) 2
 }
 
 request_touch : Request -> Unit
@@ -28,8 +28,8 @@ request_touch = _ => Unit
 
 @test
 request_smoke = effect {
-  _ <- pure request_touch
-  _ <- assertEq (1 + 1) 2
+  pure request_touch
+  assertEq (1 + 1) 2
 }
 
 response_touch : Response -> Unit
@@ -37,25 +37,25 @@ response_touch = _ => Unit
 
 @test
 response_smoke = effect {
-  _ <- pure response_touch
-  _ <- assertEq (1 + 1) 2
+  pure response_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 fetch_smoke = effect {
-  _ <- pure fetch
-  _ <- assert True
+  pure fetch
+  assert True
 }
 
 @test
 get_smoke = effect {
   src = get "https://example.com"
   res <- src
-  _   <- assert True
+  assert True
 }
 
 @test
 post_smoke = effect {
-  _ <- pure post
-  _ <- assert True
+  pure post
+  assert True
 }

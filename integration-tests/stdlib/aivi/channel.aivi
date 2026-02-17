@@ -8,10 +8,10 @@ use aivi
 @test
 sendRecv = effect {
   (tx, rx) <- channel.make Unit
-  _        <- channel.send tx Unit
+  channel.send tx Unit
   res      <- channel.recv rx
-  _        <- res ?
+  res ?
     | Ok _  => assert True
     | Err _ => assert False
-    _ <- channel.close tx
+    channel.close tx
 }

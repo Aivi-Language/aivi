@@ -7,13 +7,13 @@ use aivi
 
 @test
 smoke = effect {
-  _ <- assert (1 + 2 == 3)
-  _ <- assert (2 * 3 == 6)
-  _ <- assert (4 / 2 == 2)
-  _ <- assert (1 < 2)
-  _ <- assert (2 > 1)
-  _ <- assert (1 <= 1)
-  _ <- assert (1 >= 1)
-  _ <- assert (Int.min 1 2 == 1)
-  _ <- assert (Int.max 1 2 == 2)
+  assert (1 + 2 == 3)
+  assert (2 * 3 == 6)
+  assert (4 / 2 == 2)
+  assert (1 < 2)
+  assert (2 > 1)
+  assert (1 <= 1)
+  assert (1 >= 1)
+  assert (Int.min 1 2 == 1)
+  assert (Int.max 1 2 == 2)
 }

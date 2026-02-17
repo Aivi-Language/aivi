@@ -9,7 +9,7 @@ use aivi.text
 smoke = effect {
   b = toBytes Utf8 "abc"
   res = fromBytes Utf8 b
-  _ <- res ?
+  res ?
     | Ok s  => assertEq s "abc"
     | Err _ => assert False
 }

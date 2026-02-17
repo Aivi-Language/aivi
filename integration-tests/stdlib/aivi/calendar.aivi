@@ -7,6 +7,6 @@ use aivi
 
 @test
 smoke = effect {
-  _ <- pure calendar
-  _ <- assertEq (1 + 1) 2
+  pure calendar
+  assertEq (1 + 1) 2
 }

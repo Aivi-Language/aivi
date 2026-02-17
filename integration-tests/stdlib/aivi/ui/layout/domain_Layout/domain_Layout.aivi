@@ -8,29 +8,29 @@ use aivi.ui.layout
 @test
 suffix_em_smoke = effect {
   x = 1em
-  _ <- assert (x == x)
+  assert (x == x)
 }
 
 @test
 suffix_px_smoke = effect {
   x = 1px
-  _ <- assert (x == x)
+  assert (x == x)
 }
 
 @test
 suffix_rem_smoke = effect {
   x = 1rem
-  _ <- assert (x == x)
+  assert (x == x)
 }
 
 @test
 suffix_vh_smoke = effect {
   x = 1vh
-  _ <- assert (x == x)
+  assert (x == x)
 }
 
 @test
 suffix_vw_smoke = effect {
   x = 1vw
-  _ <- assert (x == x)
+  assert (x == x)
 }

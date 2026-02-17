@@ -13,7 +13,7 @@ bundle_smoke = effect {
       | Err _ => { language: "en", region: Some "US", variants: [], tag: "en-US" }
 
     bres = bundleFromProperties loc "app.welcome = Hello!\n"
-    _ <- bres ?
+    bres ?
       | Err _ => assert False
       | Ok b  => assert (t b (~k"app.welcome") {} == "Hello!")
 }
@@ -42,16 +42,16 @@ catalog_smoke = effect {
         | Err _ => { locale: enUs, entries: Map.empty }
 
     catalog = catalogFromBundles [bEn, bEnUs]
-    _ <- assert (tCatalog catalog enUs (~k"app.welcome") {} == "Howdy")
+    assert (tCatalog catalog enUs (~k"app.welcome") {} == "Howdy")
 }
 
 @test
 key_smoke = effect {
   k1 = ~k"app.welcome"
-  _ <- assert (keyText k1 == "app.welcome")
+  assert (keyText k1 == "app.welcome")
 
   kres = key "app.cartItems"
-  _ <- kres ?
+  kres ?
     | Ok k  => assert (keyText k == "app.cartItems")
     | Err _ => assert False
 }
@@ -59,7 +59,7 @@ key_smoke = effect {
 @test
 locale_smoke = effect {
   res = parseLocale "en_US"
-  _ <- res ?
+  res ?
     | Ok l  => assert (l.tag == "en-US")
     | Err _ => assert False
 }
@@ -69,14 +69,14 @@ message_touch = _ => Unit
 
 @test
 message_smoke = effect {
-  _ <- pure message_touch
-  _ <- assertEq (1 + 1) 2
+  pure message_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 bundleForLocale_smoke = effect {
-  _ <- pure bundleForLocale
-  _ <- assert True
+  pure bundleForLocale
+  assert True
 }
 
 @test
@@ -90,31 +90,31 @@ bundleFromProperties_smoke = effect {
     b <- b_res ?
       | Ok b  => pure b
       | Err e => fail e
-    _ <- assert (b.locale.language == "en")
+    assert (b.locale.language == "en")
 }
 
 @test
 bundleFromPropertiesFile_smoke = effect {
-  _ <- pure bundleFromPropertiesFile
-  _ <- assert True
+  pure bundleFromPropertiesFile
+  assert True
 }
 
 @test
 bundlesForLocale_smoke = effect {
-  _ <- pure bundlesForLocale
-  _ <- assert True
+  pure bundlesForLocale
+  assert True
 }
 
 @test
 catalogFromBundles_smoke = effect {
-  _ <- pure catalogFromBundles
-  _ <- assert True
+  pure catalogFromBundles
+  assert True
 }
 
 @test
 fallbackTags_smoke = effect {
-  _ <- pure fallbackTags
-  _ <- assert True
+  pure fallbackTags
+  assert True
 }
 
 @test
@@ -123,13 +123,13 @@ key_smoke_2 = effect {
   k <- mResult ?
     | Ok k  => effect { pure k }
     | Err e => effect { fail e }
-    _ <- assert (k.body == "greeting")
+    assert (k.body == "greeting")
 }
 
 @test
 keyText_smoke = effect {
-  _ <- pure keyText
-  _ <- assert True
+  pure keyText
+  assert True
 }
 
 @test
@@ -138,13 +138,13 @@ message_smoke_2 = effect {
   m <- res ?
     | Ok m  => pure m
     | Err e => fail e
-    _ <- assert (m.body == "Hello!")
+    assert (m.body == "Hello!")
 }
 
 @test
 messageText_smoke = effect {
-  _ <- pure messageText
-  _ <- assert True
+  pure messageText
+  assert True
 }
 
 @test
@@ -153,8 +153,8 @@ parseLocale_smoke = effect {
   r <- res ?
     | Ok x  => effect { pure x }
     | Err _ => effect { fail "parse failed" }
-    _ <- assert (r.language == "en")
-    _ <- assert (r.region == Some "US")
+    assert (r.language == "en")
+    assert (r.region == Some "US")
 }
 
 @test
@@ -169,41 +169,41 @@ render_smoke = effect {
       | Ok r  => pure r
       | Err e => fail e
 
-    _ <- assert (r == "Hello!")
+    assert (r == "Hello!")
 }
 
 @test
 t_smoke = effect {
-  _ <- pure t
-  _ <- assert True
+  pure t
+  assert True
 }
 
 @test
 tCatalog_smoke = effect {
-  _ <- pure tCatalog
-  _ <- assert True
+  pure tCatalog
+  assert True
 }
 
 @test
 tCatalogWithDefault_smoke = effect {
-  _ <- pure tCatalogWithDefault
-  _ <- assert True
+  pure tCatalogWithDefault
+  assert True
 }
 
 @test
 tOpt_smoke = effect {
-  _ <- pure tOpt
-  _ <- assert True
+  pure tOpt
+  assert True
 }
 
 @test
 tResult_smoke = effect {
-  _ <- pure tResult
-  _ <- assert True
+  pure tResult
+  assert True
 }
 
 @test
 tWithFallback_smoke = effect {
-  _ <- pure tWithFallback
-  _ <- assert True
+  pure tWithFallback
+  assert True
 }

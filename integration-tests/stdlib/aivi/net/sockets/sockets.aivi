@@ -10,8 +10,8 @@ address_touch = _ => Unit
 
 @test
 address_smoke = effect {
-  _ <- pure address_touch
-  _ <- assertEq (1 + 1) 2
+  pure address_touch
+  assertEq (1 + 1) 2
 }
 
 connection_touch : Connection -> Unit
@@ -19,8 +19,8 @@ connection_touch = _ => Unit
 
 @test
 connection_smoke = effect {
-  _ <- pure connection_touch
-  _ <- assertEq (1 + 1) 2
+  pure connection_touch
+  assertEq (1 + 1) 2
 }
 
 listener_touch : Listener -> Unit
@@ -28,8 +28,8 @@ listener_touch = _ => Unit
 
 @test
 listener_smoke = effect {
-  _ <- pure listener_touch
-  _ <- assertEq (1 + 1) 2
+  pure listener_touch
+  assertEq (1 + 1) 2
 }
 
 socketError_touch : SocketError -> Unit
@@ -37,20 +37,20 @@ socketError_touch = _ => Unit
 
 @test
 socketError_smoke = effect {
-  _ <- pure socketError_touch
-  _ <- assertEq (1 + 1) 2
+  pure socketError_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 accept_smoke = effect {
-  _ <- pure accept
-  _ <- assert True
+  pure accept
+  assert True
 }
 
 @test
 close_smoke = effect {
-  _ <- pure close
-  _ <- assert True
+  pure close
+  assert True
 }
 
 @test
@@ -58,24 +58,24 @@ connect_smoke = effect {
   // connect returns a source yielding Result Connection SocketError
   src = connect "localhost" 8080
   res <- src
-  _   <- assert True
+  assert True
 }
 
 @test
 listen_smoke = effect {
-  _ <- pure listen
-  _ <- assert True
+  pure listen
+  assert True
 }
 
 @test
 recv_smoke = effect {
-  _ <- pure recv
-  _ <- assert True
+  pure recv
+  assert True
 }
 
 @test
 send_smoke = effect {
   // send returns an effect yiedling Result Unit SocketError
   // we need a connection first, which we do not have in smoke test easily without mocking
-  _ <- assert True
+  assert True
 }

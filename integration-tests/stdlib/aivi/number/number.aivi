@@ -8,19 +8,19 @@ use aivi.number
 @test
 bigInt_smoke = effect {
   b = fromInt 123
-  _ <- assert (toInt b == 123)
+  assert (toInt b == 123)
 }
 
 @test
 complex_smoke = effect {
   z = { re: 1.0, im: 2.0 }
-  _ <- assert (z.re == 1.0)
+  assert (z.re == 1.0)
 }
 
 @test
 decimal_smoke = effect {
   d = fromFloat 12.34
-  _ <- assert (toFloat d == 12.34)
+  assert (toFloat d == 12.34)
 }
 
 rational_touch : Rational -> Unit
@@ -28,62 +28,62 @@ rational_touch = _ => Unit
 
 @test
 rational_smoke = effect {
-  _ <- pure rational_touch
-  _ <- assertEq (1 + 1) 2
+  pure rational_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 denominator_smoke = effect {
-  _ <- pure denominator
-  _ <- assertEq (1 + 1) 2
+  pure denominator
+  assertEq (1 + 1) 2
 }
 
 @test
 fromFloat_smoke = effect {
   d = fromFloat 12.34
-  _ <- assert (toFloat d == 12.34)
+  assert (toFloat d == 12.34)
 }
 
 @test
 fromInt_smoke = effect {
   b = fromInt 123
-  _ <- assert (toInt b == 123)
+  assert (toInt b == 123)
 }
 
 @test
 i_smoke = effect {
   z = i
-  _ <- assert (z.re == 0.0)
-  _ <- assert (z.im == 1.0)
+  assert (z.re == 0.0)
+  assert (z.im == 1.0)
 }
 
 @test
 normalize_smoke = effect {
-  _ <- pure normalize
-  _ <- assertEq (1 + 1) 2
+  pure normalize
+  assertEq (1 + 1) 2
 }
 
 @test
 numerator_smoke = effect {
-  _ <- pure numerator
-  _ <- assertEq (1 + 1) 2
+  pure numerator
+  assertEq (1 + 1) 2
 }
 
 @test
 round_smoke = effect {
   d = fromFloat 1.235
   r = round 2 d
-  _ <- assert (toFloat r == 1.24)
+  assert (toFloat r == 1.24)
 }
 
 @test
 toFloat_smoke = effect {
   d = fromFloat 12.34
-  _ <- assert (toFloat d == 12.34)
+  assert (toFloat d == 12.34)
 }
 
 @test
 toInt_smoke = effect {
   b = fromInt 123
-  _ <- assert (toInt b == 123)
+  assert (toInt b == 123)
 }

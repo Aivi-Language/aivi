@@ -8,18 +8,18 @@ use aivi.crypto
 @test
 randomBytes_smoke = effect {
   b <- randomBytes 16
-  _ <- pure b
-  _ <- assertEq (1 + 1) 2
+  pure b
+  assertEq (1 + 1) 2
 }
 
 @test
 randomUuid_smoke = effect {
   u <- randomUuid
-  _ <- assert (Text.length u == 36)
+  assert (Text.length u == 36)
 }
 
 @test
 sha256_smoke = effect {
   s = sha256 "hello"
-  _ <- assert (s == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
+  assert (s == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
 }

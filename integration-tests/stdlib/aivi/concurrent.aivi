@@ -8,6 +8,6 @@ use aivi
 @test
 parReturnsPair = effect {
   (a, b) <- concurrent.par (pure 1) (pure 2)
-  _      <- assertEq a 1
-  _      <- assertEq b 2
+  assertEq a 1
+  assertEq b 2
 }

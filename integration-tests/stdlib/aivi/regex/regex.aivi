@@ -14,7 +14,7 @@ match_smoke = effect {
   }
 
   mResult = regex.match r "a"
-  _ <- mResult ? {
+  mResult ? {
     | Some m => assert (m.full == "a")
     | None   => assert False
   }
@@ -23,7 +23,7 @@ match_smoke = effect {
 @test
 regex_smoke = effect {
   reResult = compile "."
-  _ <- reResult ?
+  reResult ?
     | Ok re => assert True
     | Err _ => assert False
 }
@@ -32,7 +32,7 @@ regex_smoke = effect {
 regexError_smoke = effect {
   reResult = compile ","
   reResult = compile "["
-  _ <- reResult ?
+  reResult ?
     | Ok _  => assert False
     | Err _ => assert True
 }
@@ -40,7 +40,7 @@ regexError_smoke = effect {
 @test
 compile_smoke = effect {
   reResult = compile "abc"
-  _ <- reResult ?
+  reResult ?
     | Ok _  => assert True
     | Err _ => assert False
 }
@@ -53,10 +53,10 @@ find_smoke = effect {
     | Err _ => effect { fail "compile failed" }
 
     fResult = regex.find r "hello"
-    _ <- fResult ?
+    fResult ?
       | Some (s, e) => effect {
-        _ <- assert (s == 1)
-        _ <- assert (e == 2)
+        assert (s == 1)
+        assert (e == 2)
       }
       | None => assert False
 }
@@ -68,11 +68,11 @@ find_smoke = effect {
       | Ok re => pure re
       | Err _ => fail "compile failed"
     ms = findAll r "hello"
-    _ <- assert (List.length ms == 2)
-    _ <- ms ?
+    assert (List.length ms == 2)
+    ms ?
       | [(s1, _), (s2, _)] => effect {
-        _ <- assertEq s1 2
-        _ <- assertEq s2 3
+        assertEq s1 2
+        assertEq s2 3
       }
       | _ => assert False
   }
@@ -84,12 +84,12 @@ find_smoke = effect {
       | Err _ => fail "compile failed"
     }
     m = match r "hello"
-    _ <- match m {
+    match m {
       | Some res => effect {
-        _ <- assert (res.full == "hello")
-        _ <- assert (res.groups == [Some "e"])
-        _ <- assert (res.start == 0)
-        _ <- assert (res.end == 5)
+        assert (res.full == "hello")
+        assert (res.groups == [Some "e"])
+        assert (res.start == 0)
+        assert (res.end == 5)
       }
       | None => assert False
     }
@@ -102,7 +102,7 @@ find_smoke = effect {
       | Ok re => pure re
       | Err _ => fail "compile failed"
     ms = matches r "hello"
-    _ <- assert (List.length ms == 2)
+    assert (List.length ms == 2)
   }
 
 @test
@@ -111,7 +111,7 @@ find_smoke = effect {
     r <- reResult ?
       | Ok re => effect { pure re }
       | Err _ => effect { fail "compile failed" }
-    _ <- assert (replace r "hello" "L" == "heLlo")
+    assert (replace r "hello" "L" == "heLlo")
   }
 
 @test
@@ -120,7 +120,7 @@ find_smoke = effect {
     r <- reResult ?
       | Ok re => effect { pure re }
       | Err _ => effect { fail "compile failed" }
-    _ <- assert (replaceAll r "hello" "L" == "heLLo")
+    assert (replaceAll r "hello" "L" == "heLLo")
   }
 
 @test
@@ -130,7 +130,7 @@ find_smoke = effect {
       | Ok re => effect { pure re }
       | Err _ => effect { fail "compile failed" }
 
-    _ <- assert (split r "a,b,c" == ["a", "b", "c"])
+    assert (split r "a,b,c" == ["a", "b", "c"])
   }
 
 @test
@@ -140,6 +140,6 @@ find_smoke = effect {
       | Ok re => effect { pure re }
       | Err _ => effect { fail "compile failed" }
 
-    _ <- assert (test r "abc" == True)
-    _ <- assert (test r "123" == False)
+    assert (test r "abc" == True)
+    assert (test r "123" == False)
   }

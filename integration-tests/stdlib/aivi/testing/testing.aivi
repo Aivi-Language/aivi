@@ -6,18 +6,18 @@ use aivi.testing
 
 @test
 assert_smoke = effect {
-  _ <- pure assert
-  _ <- assert True
+  pure assert
+  assert True
 }
 
 @test
 assertEq_smoke = effect {
-  _ <- pure assertEq
-  _ <- assert True
+  pure assertEq
+  assert True
 }
 
 @test
 assert_eq_smoke = effect {
-  _ <- pure assert_eq
-  _ <- assert True
+  pure assert_eq
+  assert True
 }

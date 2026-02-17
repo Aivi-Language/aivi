@@ -10,41 +10,41 @@ path_touch = _ => Unit
 
 @test
 path_smoke = effect {
-  _ <- pure path_touch
-  _ <- assertEq (1 + 1) 2
+  pure path_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 fileName_smoke = effect {
-  _ <- assert (fileName (parse "/a/b/c.txt") == Some "c.txt")
+  assert (fileName (parse "/a/b/c.txt") == Some "c.txt")
 }
 
 @test
 isAbsolute_smoke = effect {
-  _ <- assert (isAbsolute (parse "/a"))
-  _ <- assert (!(isAbsolute (parse "a")))
+  assert (isAbsolute (parse "/a"))
+  assert (!(isAbsolute (parse "a")))
 }
 
 @test
 normalize_smoke = effect {
   p = normalize (parse "/a/b/../c")
-  _ <- assert (toString p == "/a/c")
+  assert (toString p == "/a/c")
 }
 
 @test
 parent_smoke = effect {
   p = parent (parse "/a/b/c.txt")
-  _ <- assert (toString p == "/a/b")
+  assert (toString p == "/a/b")
 }
 
 @test
 parse_smoke = effect {
   p = parse "/a/b/c.txt"
-  _ <- assert (isAbsolute p)
+  assert (isAbsolute p)
 }
 
 @test
 toString_smoke = effect {
   p = parse "/a/b/c.txt"
-  _ <- assert (toString p == "/a/b/c.txt")
+  assert (toString p == "/a/b/c.txt")
 }

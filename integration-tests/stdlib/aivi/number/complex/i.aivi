@@ -7,6 +7,6 @@ use aivi.number.complex
 
 @test
 smoke = effect {
-  _ <- assert (i.re == 0.0)
-  _ <- assert (i.im == 1.0)
+  assert (i.re == 0.0)
+  assert (i.im == 1.0)
 }

@@ -10,6 +10,6 @@ touch = _ => Unit
 
 @test
 smoke = effect {
-  _ <- pure touch
-  _ <- assertEq (1 + 1) 2
+  pure touch
+  assertEq (1 + 1) 2
 }

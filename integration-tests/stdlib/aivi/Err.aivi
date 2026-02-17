@@ -8,7 +8,7 @@ use aivi
 @test
 errMatches = effect {
   res = Err "boom"
-  _ <- res ?
+  res ?
     | Ok _  => assert False
     | Err e => assertEq e "boom"
 }

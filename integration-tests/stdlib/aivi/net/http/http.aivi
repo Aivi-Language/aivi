@@ -10,8 +10,8 @@ error_touch = _ => Unit
 
 @test
 error_smoke = effect {
-  _ <- pure error_touch
-  _ <- assertEq (1 + 1) 2
+  pure error_touch
+  assertEq (1 + 1) 2
 }
 
 header_touch : Header -> Unit
@@ -19,8 +19,8 @@ header_touch = _ => Unit
 
 @test
 header_smoke = effect {
-  _ <- pure header_touch
-  _ <- assertEq (1 + 1) 2
+  pure header_touch
+  assertEq (1 + 1) 2
 }
 
 request_touch : Request -> Unit
@@ -28,8 +28,8 @@ request_touch = _ => Unit
 
 @test
 request_smoke = effect {
-  _ <- pure request_touch
-  _ <- assertEq (1 + 1) 2
+  pure request_touch
+  assertEq (1 + 1) 2
 }
 
 response_touch : Response -> Unit
@@ -37,8 +37,8 @@ response_touch = _ => Unit
 
 @test
 response_smoke = effect {
-  _ <- pure response_touch
-  _ <- assertEq (1 + 1) 2
+  pure response_touch
+  assertEq (1 + 1) 2
 }
 
 @test
@@ -46,7 +46,7 @@ fetch_smoke = effect {
   req = { method: "GET", url: "http://example.com", headers: [], body: None }
   src = fetch req
   res <- src
-  _   <- assert True
+  assert True
 }
 
 @test
@@ -55,12 +55,12 @@ get_smoke = effect {
   src = get "http://example.com"
   // src yield a Result Response Error
   res <- src
-  _   <- assert True // Just checking not crashing for now without real network
+  assert True // Just checking not crashing for now without real network
 }
 
 @test
 post_smoke = effect {
   src = post "http://example.com" "body"
   res <- src
-  _   <- assert True
+  assert True
 }

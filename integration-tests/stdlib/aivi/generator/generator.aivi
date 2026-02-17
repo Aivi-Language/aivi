@@ -10,42 +10,42 @@ generator_touch = _ => Unit
 
 @test
 generator_smoke = effect {
-  _ <- pure generator_touch
-  _ <- assertEq (1 + 1) 2
+  pure generator_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 filter_smoke = effect {
   xs = toList (filter (_ % 2 == 0) (fromList [1, 2, 3, 4]))
-  _ <- assert (xs == [2, 4])
+  assert (xs == [2, 4])
 }
 
 @test
 foldl_smoke = effect {
   s = foldl (acc x => acc + x) 0 (fromList [1, 2, 3])
-  _ <- assert (s == 6)
+  assert (s == 6)
 }
 
 @test
 fromList_smoke = effect {
   xs = toList (fromList [1, 2, 3])
-  _ <- assert (xs == [1, 2, 3])
+  assert (xs == [1, 2, 3])
 }
 
 @test
 map_smoke = effect {
   xs = toList (map (_ + 1) (fromList [1, 2, 3]))
-  _ <- assert (xs == [2, 3, 4])
+  assert (xs == [2, 3, 4])
 }
 
 @test
 range_smoke = effect {
   xs = toList (range 1 3)
-  _ <- assert (xs == [1, 2, 3])
+  assert (xs == [1, 2, 3])
 }
 
 @test
 toList_smoke = effect {
   xs = toList (fromList [1, 2, 3])
-  _ <- assert (xs == [1, 2, 3])
+  assert (xs == [1, 2, 3])
 }

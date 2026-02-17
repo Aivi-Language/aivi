@@ -8,5 +8,5 @@ use aivi
 @test
 smoke = effect {
   u = Unit
-  _ <- assert (u == Unit)
+  assert (u == Unit)
 }
