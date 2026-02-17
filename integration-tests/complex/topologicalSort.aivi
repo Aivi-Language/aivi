@@ -8,10 +8,6 @@ use aivi.collections
 // Type alias for adjacency list graph
 Graph = { nodes: List Int, adj: Map Int (List Int) }
 
-listLength = xs => xs ?
-  | []        => 0
-  | [_, ...t] => 1 + listLength t
-
 // Get neighbors of a node
 neighbors = node graph => Map.get node graph.adj ?
   | Some ns => ns
@@ -75,7 +71,7 @@ cycleNodes = nodes indeg acc => nodes ?
 sortLoop = graph indeg q outRev => (Queue.dequeue q) ?
   | None => {
     out = reverseList outRev
-    if listLength out == listLength graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg [])
+    if List.length out == List.length graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg [])
   }
   | Some (node, q2) => {
     res = relax (neighbors node graph) indeg q2

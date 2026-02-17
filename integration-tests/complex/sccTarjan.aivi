@@ -8,12 +8,6 @@ use aivi.collections
 // Adjacency list graph
 Graph = { nodes: List Int, adj: Map Int (List Int) }
 
-listLength = xs => xs ?
-  | []        => 0
-  | [_, ...t] => 1 + listLength t
-
-minInt = a b => if a < b then a else b
-
 bigInt : Int
 bigInt = 1000000000
 
@@ -81,7 +75,7 @@ processNeighbors = graph node nexts state => nexts ?
       if Set.has next state.onStack then {
         lowNode = getOr state.lowlink node bigInt
         idxNext = getOr state.index next bigInt
-        state <| { lowlink: Map.insert node (minInt lowNode idxNext) state.lowlink }
+        state <| { lowlink: Map.insert node (Int.min lowNode idxNext) state.lowlink }
       }
       else
         state
@@ -89,7 +83,7 @@ processNeighbors = graph node nexts state => nexts ?
       nested = visitNode graph next state
       lowNode = getOr nested.lowlink node bigInt
       lowNext = getOr nested.lowlink next bigInt
-      nested <| { lowlink: Map.insert node (minInt lowNode lowNext) nested.lowlink }
+      nested <| { lowlink: Map.insert node (Int.min lowNode lowNext) nested.lowlink }
     }
     processNeighbors graph node tail acc
   }
@@ -117,17 +111,6 @@ processNodes = graph nodes state => nodes ?
     processNodes graph t nextState
   }
 
-// Check if list contains element
-contains = list target => list ?
-  | []                         => False
-  | [h, ...t] when h == target => True
-  | [_, ...t]                  => contains t target
-
-// Check if any element satisfies predicate
-listAny = list pred => list ?
-  | []        => False
-  | [h, ...t] => if pred h then True else listAny t pred
-
   @test
 sccSmoke = effect {
   adj = ~map{
@@ -139,6 +122,6 @@ sccSmoke = effect {
   graph = { nodes: [0, 1, 2, 3], adj: adj }
 
   comps <- pure (strongComponents graph)
-  _     <- assert (listLength comps == 2)
-  _     <- assert (listAny comps (cmp => contains cmp 0))
+  _     <- assert (List.length comps == 2)
+  _     <- assert (List.any comps (cmp => List.contains cmp 0))
 }

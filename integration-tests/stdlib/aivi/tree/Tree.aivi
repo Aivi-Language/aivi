@@ -1,0 +1,51 @@
+@no_prelude
+module integrationTests.stdlib.aivi.tree.Tree
+
+use aivi
+use aivi.testing
+
+use aivi.tree
+
+@test
+traversals = effect {
+  //      1
+  //    /   \
+  //   2     3
+  //        /
+  //       4
+  t = node 1 [leaf 2, node 3 [leaf 4]]
+
+  _ <- assert (dfsPreorder t == [1, 2, 3, 4])
+  _ <- assert (dfsPostorder t == [2, 4, 3, 1])
+  _ <- assert (bfs t == [1, 2, 3, 4])
+}
+
+@test
+fromListBySmoke = effect {
+  // items are records to mimic typical "list to tree" usage.
+  Item = { id: Int, parent: Option Int }
+
+  items = [
+    { id: 1, parent: None }
+    { id: 2, parent: Some 1 }
+    { id: 3, parent: Some 1 }
+    { id: 4, parent: Some 3 }
+  ]
+
+  idFn = item => item.id
+  parentFn = item => item.parent
+
+  built = fromListBy idFn parentFn items
+
+  expected = Some (node { id: 1, parent: None } [
+    leaf { id: 2, parent: Some 1 }
+    node { id: 3, parent: Some 1 } [leaf { id: 4, parent: Some 3 }]
+  ])
+
+  _ <- assert (built == expected)
+
+  // Multiple roots => None
+  bad = fromListBy idFn parentFn [{ id: 1, parent: None }, { id: 2, parent: None }]
+  _ <- assert (bad == None)
+}
+

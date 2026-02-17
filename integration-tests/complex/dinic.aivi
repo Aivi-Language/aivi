@@ -21,6 +21,7 @@ getCap = from to caps => Map.getOrElse (edgeKey from to) 0 caps
 
 setCap = from to value caps => Map.insert (edgeKey from to) value caps
 
+// NOTE: keep a local list append helper for now (stdlib doesn't currently export a concatenation helper on List)
 append = xs ys => xs ?
   | []        => ys
   | [h, ...t] => [h, ...append t ys]
@@ -32,8 +33,6 @@ backwardEdges = edges => edges ?
 edgePairs = edges => edges ?
   | []           => []
   | [e, ...rest] => [(e.from, e.to), ...edgePairs rest]
-
-minInt = a b => if a < b then a else b
 
 bigFlow : Int
 bigFlow = 1000000000
@@ -115,7 +114,7 @@ dfsExplore = residual levels node sink flow edges => edges ?
     levelNext = Map.getOrElse edge.to (-1) levels
 
     if cap > 0 && levelNext == levelNode + 1 then {
-      available = minInt flow cap
+      available = Int.min flow cap
       (pushed, after) = dfsFlow residual levels edge.to sink available
       if pushed > 0 then
         (pushed, pushFlow after node edge.to pushed)
