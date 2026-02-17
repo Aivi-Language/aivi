@@ -255,14 +255,65 @@ fn http_request(
     body: Option<String>,
 ) -> Result<Value, RuntimeError> {
     let url_text = url.to_string();
-    let mut request = ureq::request(method, &url_text);
-    for (name, value) in headers {
-        request = request.set(&name, &value);
-    }
-    let response = match body {
-        Some(text) => request.send_string(&text),
-        None => request.call(),
+
+    let response = match method {
+        "GET" => {
+            let mut request = ureq::get(&url_text);
+            for (name, value) in headers {
+                request = request.header(&name, &value);
+            }
+            match body {
+                Some(text) => request.force_send_body().send(text),
+                None => request.call(),
+            }
+        }
+        "POST" => {
+            let mut request = ureq::post(&url_text);
+            for (name, value) in headers {
+                request = request.header(&name, &value);
+            }
+            match body {
+                Some(text) => request.send(text),
+                None => request.send_empty(),
+            }
+        }
+        "PUT" => {
+            let mut request = ureq::put(&url_text);
+            for (name, value) in headers {
+                request = request.header(&name, &value);
+            }
+            match body {
+                Some(text) => request.send(text),
+                None => request.send_empty(),
+            }
+        }
+        "DELETE" => {
+            let mut request = ureq::delete(&url_text);
+            for (name, value) in headers {
+                request = request.header(&name, &value);
+            }
+            match body {
+                Some(text) => request.force_send_body().send(text),
+                None => request.call(),
+            }
+        }
+        "HEAD" => {
+            let mut request = ureq::head(&url_text);
+            for (name, value) in headers {
+                request = request.header(&name, &value);
+            }
+            match body {
+                Some(text) => request.force_send_body().send(text),
+                None => request.call(),
+            }
+        }
+        other => {
+            return Err(RuntimeError::Message(format!(
+                "http.fetch unsupported method {other}"
+            )))
+        }
     };
+
     match response {
         Ok(resp) => Ok(make_ok(http_response_to_value(resp)?)),
         Err(err) => Ok(make_err(http_error_record(http_error_message(err)?))),
@@ -271,32 +322,30 @@ fn http_request(
 
 fn http_error_message(err: UreqError) -> Result<String, RuntimeError> {
     match err {
-        UreqError::Status(code, response) => {
-            let body = response.into_string().unwrap_or_else(|_| String::new());
-            if body.is_empty() {
-                Ok(format!("http status {code}"))
-            } else {
-                Ok(format!("http status {code}: {body}"))
-            }
-        }
-        UreqError::Transport(err) => Ok(err.to_string()),
+        UreqError::StatusCode(code) => Ok(format!("http status {code}")),
+        other => Ok(other.to_string()),
     }
 }
 
-fn http_response_to_value(resp: ureq::Response) -> Result<Value, RuntimeError> {
-    let status = resp.status() as i64;
+fn http_response_to_value(resp: ureq::http::Response<ureq::Body>) -> Result<Value, RuntimeError> {
+    let status = resp.status().as_u16() as i64;
     let headers = headers_to_value(
-        resp.headers_names()
-            .into_iter()
-            .filter_map(|name| {
-                resp.header(&name)
-                    .map(|value| (name.to_string(), value.to_string()))
+        resp.headers()
+            .iter()
+            .filter_map(|(name, value)| {
+                value
+                    .to_str()
+                    .ok()
+                    .map(|v| (name.as_str().to_string(), v.to_string()))
             })
             .collect(),
     );
+
     let body = resp
-        .into_string()
+        .into_body()
+        .read_to_string()
         .map_err(|err| RuntimeError::Error(Value::Text(err.to_string())))?;
+
     let mut fields = HashMap::new();
     fields.insert("status".to_string(), Value::Int(status));
     fields.insert("headers".to_string(), headers);
