@@ -52,9 +52,9 @@ dijkstra = graph start =>
   search (Heap.push (0.0, start) Heap.empty)~map{ start => 0.0 } Set.empty graph
 
   @test
-shortestPaths = effect {
-  graph = buildGraph
-  distances = dijkstra graph 0
-  _ <- assert (Map.get 3 distances == Some 4.0)
-  _ <- assert (Map.get 2 distances == Some 3.0)
-}
+  shortestPaths = effect {
+    graph = buildGraph
+    distances = dijkstra graph 0
+    _ <- assert (Map.get 3 distances == Some 4.0)
+    _ <- assert (Map.get 2 distances == Some 3.0)
+  }

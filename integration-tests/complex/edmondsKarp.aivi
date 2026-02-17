@@ -35,14 +35,14 @@ buildResidual = edges => {
   addCaps = items acc isZero => items ?
     | []           => acc
     | [e, ...rest] => {
-        key = { from: e.from, to: e.to }
-        val = if isZero then 0.0 else e.cap
-        addCaps rest (Map.insert key val acc) isZero
-      }
+      key = { from: e.from, to: e.to }
+      val = if isZero then 0.0 else e.cap
+      addCaps rest (Map.insert key val acc) isZero
+    }
 
-  caps = addCaps edges Map.empty False
-  capsWithReverse = addCaps backward caps True
-  { graph: graph, capacities: capsWithReverse }
+    caps = addCaps edges Map.empty False
+    capsWithReverse = addCaps backward caps True
+    { graph: graph, capacities: capsWithReverse }
 }
 
 // BFS to find augmenting path
@@ -57,18 +57,18 @@ bfs = residual source sink => {
         explore = list q seen pars => list ?
           | []              => visit q seen pars
           | [edge, ...tail] => {
-              next = edge.to
-              cap = getOrZero { from: current, to: next } residual.capacities
-              if cap > 0.0 && !Set.has next seen then
-                explore tail (q ++ [next]) (Set.insert next seen) (Map.insert next current pars)
-              else
-                explore tail q seen pars
-            }
+            next = edge.to
+            cap = getOrZero { from: current, to: next } residual.capacities
+            if cap > 0.0 && !Set.has next seen then
+              explore tail (q ++ [next]) (Set.insert next seen) (Map.insert next current pars)
+            else
+              explore tail q seen pars
+          }
 
-        explore edges rest visited parents
+              explore edges rest visited parents
       }
 
-  visit [source] (Set.insert source Set.empty) Map.empty
+              visit [source] (Set.insert source Set.empty) Map.empty
 }
 
 // Reconstruct path from parents map
@@ -83,9 +83,9 @@ pathCapacity = residual path => path ?
   | []              => 0.0
   | [_]             => Float Int.max
   | [a, b, ...rest] => {
-      cap = getOrZero { from: a, to: b } residual.capacities
-      Float.min cap (pathCapacity residual [b, ...rest])
-    }
+    cap = getOrZero { from: a, to: b } residual.capacities
+    Float.min cap (pathCapacity residual [b, ...rest])
+  }
 
 // Update capacities along path
 updatePath = residual path delta => {
@@ -93,8 +93,8 @@ updatePath = residual path delta => {
     forward = getOrZero { from, to } caps
     backward = getOrZero { from: to, to: from } caps
     caps
-      |> Map.insert { from, to } (forward - delta)
-      |> Map.insert { from: to, to: from } (backward + delta)
+    |> Map.insert { from, to } (forward - delta)
+    |> Map.insert { from: to, to: from } (backward + delta)
   }
 
   go = nodes caps => nodes ?
@@ -102,7 +102,7 @@ updatePath = residual path delta => {
     | [_]             => caps
     | [a, b, ...rest] => go [b, ...rest] (apply a b caps)
 
-  residual <| { capacities: go path residual.capacities }
+    residual <| { capacities: go path residual.capacities }
 }
 
 // Main augmenting path loop
@@ -121,11 +121,11 @@ maxFlow = edges source sink => {
   go = state total => bfs state source sink ?
     | None         => (total, state)
     | Some parents => {
-        (newTotal, updated) = augment state source sink parents total
-        go updated newTotal
-      }
+      (newTotal, updated) = augment state source sink parents total
+      go updated newTotal
+    }
 
-  go residual 0.0
+    go residual 0.0
 }
 
 @test

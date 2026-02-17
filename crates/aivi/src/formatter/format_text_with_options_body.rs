@@ -1206,6 +1206,11 @@
             }
         }
 
+        let is_decorator_line = state.tokens[first_idx].text == "@";
+        let is_decorator_only_line = is_decorator_line
+            && find_top_level_token(&state.tokens, "=", first_idx).is_none()
+            && find_top_level_token(&state.tokens, ":", first_idx).is_none();
+
         let effective_indent = " ".repeat(effective_indent_len);
 
         if let Some(max_lhs) = state.effect_align_lhs {
@@ -1545,9 +1550,6 @@
         // Decorators on their own line are part of the following definition/type-sig, even in
         // RHS continuation blocks (e.g. `x =\n  @test\n  foo = ...`). Keep the RHS block alive
         // for the next non-blank line so the binding doesn't accidentally dedent.
-        let is_decorator_only_line = state.tokens[first_idx].text == "@"
-            && find_top_level_token(&state.tokens, "=", first_idx).is_none()
-            && find_top_level_token(&state.tokens, ":", first_idx).is_none();
         if rhs_block_base_indent.is_some() && is_decorator_only_line {
             rhs_decorator_pending = true;
         }
