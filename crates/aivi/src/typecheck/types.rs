@@ -42,6 +42,29 @@ pub(super) enum Type {
 pub(super) struct Scheme {
     pub(super) vars: Vec<TypeVarId>,
     pub(super) ty: Type,
+    pub(super) origin: Option<SchemeOrigin>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct SchemeOrigin {
+    pub(super) module: String,
+    pub(super) domain: Option<String>,
+}
+
+impl SchemeOrigin {
+    pub(super) fn new(module: impl Into<String>, domain: Option<String>) -> Self {
+        Self {
+            module: module.into(),
+            domain,
+        }
+    }
+
+    pub(super) fn render(&self) -> String {
+        match &self.domain {
+            Some(domain) => format!("{}.{}", self.module, domain),
+            None => self.module.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -190,6 +213,7 @@ impl Scheme {
         Scheme {
             vars: Vec::new(),
             ty,
+            origin: None,
         }
     }
 }

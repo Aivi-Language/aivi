@@ -700,11 +700,21 @@ impl TypeChecker {
                         || matches!(right_applied, Type::Con(ref name, _) if name != "Int");
                     if let Some(candidates) = env.get_all(&op_name) {
                         let base_subst = self.subst.clone();
-                        let mut selected: Option<(String, std::collections::HashMap<TypeVarId, Type>)> =
-                            None;
+                        let mut selected: Option<(
+                            String,
+                            String,
+                            String,
+                            std::collections::HashMap<TypeVarId, Type>,
+                        )> = None;
                         for scheme in candidates {
                             self.subst = base_subst.clone();
                             let op_ty = self.instantiate(scheme);
+                            let origin = scheme
+                                .origin
+                                .as_ref()
+                                .map(|o| o.render())
+                                .unwrap_or_else(|| "<unknown>".to_string());
+                            let sig = self.type_to_string(&scheme.ty);
                             let rest_ty = self.fresh_var();
                             // Use applied types for better disambiguation
                             let left_ty_for_unify = self.apply(left_ty.clone());
@@ -745,20 +755,20 @@ impl TypeChecker {
 
                             let key_ty = Type::Func(Box::new(right_ty_for_unify), Box::new(Type::con("Bool")));
                             let key = self.type_to_string(&key_ty);
-                            if let Some((existing_key, _)) = &selected {
+                            if let Some((existing_key, existing_origin, existing_sig, _)) = &selected {
                                 if *existing_key != key {
                                     // Check if the operand is a type variable - if so, suggest adding a type annotation
                                     let left_ty_resolved = self.apply(left_ty.clone());
                                     let is_type_var = matches!(left_ty_resolved, Type::Var(_));
                                     let message = if is_type_var {
                                         format!(
-                                            "cannot determine which domain operator '{}' to use (multiple domains define this operator); add a type annotation to disambiguate",
-                                            op
+                                            "cannot determine which domain operator '{}' to use; candidates: {} ({}) vs {} ({}); add a type annotation to disambiguate",
+                                            op, existing_origin, existing_sig, origin, sig
                                         )
                                     } else {
                                         format!(
-                                            "ambiguous domain operator '{}' for these operand types",
-                                            op
+                                            "ambiguous domain operator '{}' for these operand types; candidates: {} ({}) vs {} ({})",
+                                            op, existing_origin, existing_sig, origin, sig
                                         )
                                     };
                                     self.subst = base_subst;
@@ -772,9 +782,9 @@ impl TypeChecker {
                                 // Duplicate overload (typically from repeated imports); ignore.
                                 continue;
                             }
-                            selected = Some((key, self.subst.clone()));
+                            selected = Some((key, origin, sig, self.subst.clone()));
                         }
-                        if let Some((_, subst)) = selected {
+                        if let Some((_, _, _, subst)) = selected {
                             self.subst = subst;
                             return Ok(Type::con("Bool"));
                         }
@@ -842,6 +852,8 @@ impl TypeChecker {
                         let base_subst = subst_after_operands.clone();
                         let mut selected: Option<(
                             String,
+                            String,
+                            String,
                             Type,
                             std::collections::HashMap<TypeVarId, Type>,
                         )> = None;
@@ -851,6 +863,12 @@ impl TypeChecker {
                             self.subst = base_subst.clone();
 
                             let op_ty = self.instantiate(scheme);
+                            let origin = scheme
+                                .origin
+                                .as_ref()
+                                .map(|o| o.render())
+                                .unwrap_or_else(|| "<unknown>".to_string());
+                            let sig = self.type_to_string(&scheme.ty);
                             // Use already-inferred left_ty instead of re-inferring
                             let left_ty_applied = self.apply(left_ty.clone());
                             let left_ty_expanded = self.expand_alias(left_ty_applied.clone());
@@ -947,20 +965,22 @@ impl TypeChecker {
                                 (self.type_to_string(&key_ty), res_ty)
                             };
 
-                            if let Some((existing_key, _, _)) = &selected {
+                            if let Some((existing_key, existing_origin, existing_sig, _, _)) =
+                                &selected
+                            {
                                 if *existing_key != match_key {
                                     // Check if the operand is a type variable - if so, suggest adding a type annotation
                                     let left_ty_resolved = self.apply(left_ty.clone());
                                     let is_type_var = matches!(left_ty_resolved, Type::Var(_));
                                     let message = if is_type_var {
                                         format!(
-                                            "cannot determine which domain operator '{}' to use (multiple domains define this operator); add a type annotation to disambiguate",
-                                            op
+                                            "cannot determine which domain operator '{}' to use; candidates: {} ({}) vs {} ({}); add a type annotation to disambiguate",
+                                            op, existing_origin, existing_sig, origin, sig
                                         )
                                     } else {
                                         format!(
-                                            "ambiguous domain operator '{}' for these operand types",
-                                            op
+                                            "ambiguous domain operator '{}' for these operand types; candidates: {} ({}) vs {} ({})",
+                                            op, existing_origin, existing_sig, origin, sig
                                         )
                                     };
                                     self.subst = subst_after_operands.clone();
@@ -974,10 +994,10 @@ impl TypeChecker {
                                 // Duplicate overload (typically from repeated imports); ignore.
                                 continue;
                             }
-                            selected = Some((match_key, result_ty, self.subst.clone()));
+                            selected = Some((match_key, origin, sig, result_ty, self.subst.clone()));
                         }
 
-                        if let Some((_, result, subst)) = selected {
+                        if let Some((_, _, _, result, subst)) = selected {
                             self.subst = subst;
                             return Ok(result);
                         }

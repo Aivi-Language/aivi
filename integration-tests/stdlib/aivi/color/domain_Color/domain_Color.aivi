@@ -7,7 +7,7 @@ use aivi.color
 
 @test
 suffix_h_smoke = effect {
-  rgb = { r: 10, g: 20, b: 30 }
+  rgb = 10r + 20g + 30b
   adjusted = adjustHue rgb 1
   assert True
 }

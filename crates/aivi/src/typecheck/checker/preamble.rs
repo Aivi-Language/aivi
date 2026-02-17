@@ -8,8 +8,8 @@ use crate::surface::{
 };
 
 use super::types::{
-    number_kind, split_suffixed_number, AliasInfo, Kind, NumberKind, Scheme, Type, TypeContext,
-    TypeEnv, TypeError, TypePrinter, TypeVarId,
+    number_kind, split_suffixed_number, AliasInfo, Kind, NumberKind, Scheme, SchemeOrigin, Type,
+    TypeContext, TypeEnv, TypeError, TypePrinter, TypeVarId,
 };
 use super::{ClassDeclInfo, InstanceDeclInfo};
 

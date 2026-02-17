@@ -12,6 +12,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![a],
             ty: Type::con("Option").app(vec![Type::Var(a)]),
+            origin: None,
         },
     );
     let a = checker.fresh_var_id();
@@ -23,6 +24,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::Var(a)),
                 Box::new(Type::con("Option").app(vec![Type::Var(a)])),
             ),
+            origin: None,
         },
     );
 
@@ -36,6 +38,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::Var(a)),
                 Box::new(Type::con("Result").app(vec![Type::Var(e), Type::Var(a)])),
             ),
+            origin: None,
         },
     );
     let e = checker.fresh_var_id();
@@ -48,6 +51,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::Var(e)),
                 Box::new(Type::con("Result").app(vec![Type::Var(e), Type::Var(a)])),
             ),
+            origin: None,
         },
     );
     env.insert("Closed".to_string(), Scheme::mono(Type::con("Closed")));
@@ -68,6 +72,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(Type::Func(Box::new(Type::Var(b)), Box::new(Type::Var(b)))),
                 )),
             ),
+            origin: None,
         },
     );
 
@@ -81,6 +86,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::Var(a)),
                 Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
             ),
+            origin: None,
         },
     );
     let a = checker.fresh_var_id();
@@ -93,6 +99,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Box::new(Type::Var(e)),
                 Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
             ),
+            origin: None,
         },
     );
     let a = checker.fresh_var_id();
@@ -108,6 +115,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Type::con("Result").app(vec![Type::Var(e), Type::Var(a)]),
                 ])),
             ),
+            origin: None,
         },
     );
 
@@ -139,6 +147,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Type::Var(a),
                 ])),
             ),
+            origin: None,
         },
     );
 
@@ -550,6 +559,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![msg, model],
             ty: ui_record,
+            origin: None,
         },
     );
 }

@@ -3388,8 +3388,8 @@ var require_main2 = __commonJS({
         }
         uinteger2.is = is;
       })(uinteger || (exports3.uinteger = uinteger = {}));
-      var Position;
-      (function(Position2) {
+      var Position2;
+      (function(Position3) {
         function create(line, character) {
           if (line === Number.MAX_VALUE) {
             line = uinteger.MAX_VALUE;
@@ -3399,31 +3399,31 @@ var require_main2 = __commonJS({
           }
           return { line, character };
         }
-        Position2.create = create;
+        Position3.create = create;
         function is(value) {
           var candidate = value;
           return Is.objectLiteral(candidate) && Is.uinteger(candidate.line) && Is.uinteger(candidate.character);
         }
-        Position2.is = is;
-      })(Position || (exports3.Position = Position = {}));
-      var Range;
-      (function(Range2) {
+        Position3.is = is;
+      })(Position2 || (exports3.Position = Position2 = {}));
+      var Range2;
+      (function(Range3) {
         function create(one, two, three, four) {
           if (Is.uinteger(one) && Is.uinteger(two) && Is.uinteger(three) && Is.uinteger(four)) {
-            return { start: Position.create(one, two), end: Position.create(three, four) };
-          } else if (Position.is(one) && Position.is(two)) {
+            return { start: Position2.create(one, two), end: Position2.create(three, four) };
+          } else if (Position2.is(one) && Position2.is(two)) {
             return { start: one, end: two };
           } else {
             throw new Error("Range#create called with invalid arguments[".concat(one, ", ").concat(two, ", ").concat(three, ", ").concat(four, "]"));
           }
         }
-        Range2.create = create;
+        Range3.create = create;
         function is(value) {
           var candidate = value;
-          return Is.objectLiteral(candidate) && Position.is(candidate.start) && Position.is(candidate.end);
+          return Is.objectLiteral(candidate) && Position2.is(candidate.start) && Position2.is(candidate.end);
         }
-        Range2.is = is;
-      })(Range || (exports3.Range = Range = {}));
+        Range3.is = is;
+      })(Range2 || (exports3.Range = Range2 = {}));
       var Location;
       (function(Location2) {
         function create(uri, range) {
@@ -3432,7 +3432,7 @@ var require_main2 = __commonJS({
         Location2.create = create;
         function is(value) {
           var candidate = value;
-          return Is.objectLiteral(candidate) && Range.is(candidate.range) && (Is.string(candidate.uri) || Is.undefined(candidate.uri));
+          return Is.objectLiteral(candidate) && Range2.is(candidate.range) && (Is.string(candidate.uri) || Is.undefined(candidate.uri));
         }
         Location2.is = is;
       })(Location || (exports3.Location = Location = {}));
@@ -3444,7 +3444,7 @@ var require_main2 = __commonJS({
         LocationLink2.create = create;
         function is(value) {
           var candidate = value;
-          return Is.objectLiteral(candidate) && Range.is(candidate.targetRange) && Is.string(candidate.targetUri) && Range.is(candidate.targetSelectionRange) && (Range.is(candidate.originSelectionRange) || Is.undefined(candidate.originSelectionRange));
+          return Is.objectLiteral(candidate) && Range2.is(candidate.targetRange) && Is.string(candidate.targetUri) && Range2.is(candidate.targetSelectionRange) && (Range2.is(candidate.originSelectionRange) || Is.undefined(candidate.originSelectionRange));
         }
         LocationLink2.is = is;
       })(LocationLink || (exports3.LocationLink = LocationLink = {}));
@@ -3476,7 +3476,7 @@ var require_main2 = __commonJS({
         ColorInformation2.create = create;
         function is(value) {
           var candidate = value;
-          return Is.objectLiteral(candidate) && Range.is(candidate.range) && Color.is(candidate.color);
+          return Is.objectLiteral(candidate) && Range2.is(candidate.range) && Color.is(candidate.color);
         }
         ColorInformation2.is = is;
       })(ColorInformation || (exports3.ColorInformation = ColorInformation = {}));
@@ -3587,7 +3587,7 @@ var require_main2 = __commonJS({
         function is(value) {
           var _a;
           var candidate = value;
-          return Is.defined(candidate) && Range.is(candidate.range) && Is.string(candidate.message) && (Is.number(candidate.severity) || Is.undefined(candidate.severity)) && (Is.integer(candidate.code) || Is.string(candidate.code) || Is.undefined(candidate.code)) && (Is.undefined(candidate.codeDescription) || Is.string((_a = candidate.codeDescription) === null || _a === void 0 ? void 0 : _a.href)) && (Is.string(candidate.source) || Is.undefined(candidate.source)) && (Is.undefined(candidate.relatedInformation) || Is.typedArray(candidate.relatedInformation, DiagnosticRelatedInformation.is));
+          return Is.defined(candidate) && Range2.is(candidate.range) && Is.string(candidate.message) && (Is.number(candidate.severity) || Is.undefined(candidate.severity)) && (Is.integer(candidate.code) || Is.string(candidate.code) || Is.undefined(candidate.code)) && (Is.undefined(candidate.codeDescription) || Is.string((_a = candidate.codeDescription) === null || _a === void 0 ? void 0 : _a.href)) && (Is.string(candidate.source) || Is.undefined(candidate.source)) && (Is.undefined(candidate.relatedInformation) || Is.typedArray(candidate.relatedInformation, DiagnosticRelatedInformation.is));
         }
         Diagnostic2.is = is;
       })(Diagnostic || (exports3.Diagnostic = Diagnostic = {}));
@@ -3627,7 +3627,7 @@ var require_main2 = __commonJS({
         TextEdit2.del = del;
         function is(value) {
           var candidate = value;
-          return Is.objectLiteral(candidate) && Is.string(candidate.newText) && Range.is(candidate.range);
+          return Is.objectLiteral(candidate) && Is.string(candidate.newText) && Range2.is(candidate.range);
         }
         TextEdit2.is = is;
       })(TextEdit || (exports3.TextEdit = TextEdit = {}));
@@ -4171,7 +4171,7 @@ var require_main2 = __commonJS({
         InsertReplaceEdit2.create = create;
         function is(value) {
           var candidate = value;
-          return candidate && Is.string(candidate.newText) && Range.is(candidate.insert) && Range.is(candidate.replace);
+          return candidate && Is.string(candidate.newText) && Range2.is(candidate.insert) && Range2.is(candidate.replace);
         }
         InsertReplaceEdit2.is = is;
       })(InsertReplaceEdit || (exports3.InsertReplaceEdit = InsertReplaceEdit = {}));
@@ -4218,7 +4218,7 @@ var require_main2 = __commonJS({
       (function(Hover2) {
         function is(value) {
           var candidate = value;
-          return !!candidate && Is.objectLiteral(candidate) && (MarkupContent.is(candidate.contents) || MarkedString.is(candidate.contents) || Is.typedArray(candidate.contents, MarkedString.is)) && (value.range === void 0 || Range.is(value.range));
+          return !!candidate && Is.objectLiteral(candidate) && (MarkupContent.is(candidate.contents) || MarkedString.is(candidate.contents) || Is.typedArray(candidate.contents, MarkedString.is)) && (value.range === void 0 || Range2.is(value.range));
         }
         Hover2.is = is;
       })(Hover || (exports3.Hover = Hover = {}));
@@ -4339,7 +4339,7 @@ var require_main2 = __commonJS({
         DocumentSymbol2.create = create;
         function is(value) {
           var candidate = value;
-          return candidate && Is.string(candidate.name) && Is.number(candidate.kind) && Range.is(candidate.range) && Range.is(candidate.selectionRange) && (candidate.detail === void 0 || Is.string(candidate.detail)) && (candidate.deprecated === void 0 || Is.boolean(candidate.deprecated)) && (candidate.children === void 0 || Array.isArray(candidate.children)) && (candidate.tags === void 0 || Array.isArray(candidate.tags));
+          return candidate && Is.string(candidate.name) && Is.number(candidate.kind) && Range2.is(candidate.range) && Range2.is(candidate.selectionRange) && (candidate.detail === void 0 || Is.string(candidate.detail)) && (candidate.deprecated === void 0 || Is.boolean(candidate.deprecated)) && (candidate.children === void 0 || Array.isArray(candidate.children)) && (candidate.tags === void 0 || Array.isArray(candidate.tags));
         }
         DocumentSymbol2.is = is;
       })(DocumentSymbol || (exports3.DocumentSymbol = DocumentSymbol = {}));
@@ -4416,7 +4416,7 @@ var require_main2 = __commonJS({
         CodeLens2.create = create;
         function is(value) {
           var candidate = value;
-          return Is.defined(candidate) && Range.is(candidate.range) && (Is.undefined(candidate.command) || Command.is(candidate.command));
+          return Is.defined(candidate) && Range2.is(candidate.range) && (Is.undefined(candidate.command) || Command.is(candidate.command));
         }
         CodeLens2.is = is;
       })(CodeLens || (exports3.CodeLens = CodeLens = {}));
@@ -4440,7 +4440,7 @@ var require_main2 = __commonJS({
         DocumentLink2.create = create;
         function is(value) {
           var candidate = value;
-          return Is.defined(candidate) && Range.is(candidate.range) && (Is.undefined(candidate.target) || Is.string(candidate.target));
+          return Is.defined(candidate) && Range2.is(candidate.range) && (Is.undefined(candidate.target) || Is.string(candidate.target));
         }
         DocumentLink2.is = is;
       })(DocumentLink || (exports3.DocumentLink = DocumentLink = {}));
@@ -4452,7 +4452,7 @@ var require_main2 = __commonJS({
         SelectionRange2.create = create;
         function is(value) {
           var candidate = value;
-          return Is.objectLiteral(candidate) && Range.is(candidate.range) && (candidate.parent === void 0 || SelectionRange2.is(candidate.parent));
+          return Is.objectLiteral(candidate) && Range2.is(candidate.range) && (candidate.parent === void 0 || SelectionRange2.is(candidate.parent));
         }
         SelectionRange2.is = is;
       })(SelectionRange || (exports3.SelectionRange = SelectionRange = {}));
@@ -4511,7 +4511,7 @@ var require_main2 = __commonJS({
         InlineValueText2.create = create;
         function is(value) {
           var candidate = value;
-          return candidate !== void 0 && candidate !== null && Range.is(candidate.range) && Is.string(candidate.text);
+          return candidate !== void 0 && candidate !== null && Range2.is(candidate.range) && Is.string(candidate.text);
         }
         InlineValueText2.is = is;
       })(InlineValueText || (exports3.InlineValueText = InlineValueText = {}));
@@ -4523,7 +4523,7 @@ var require_main2 = __commonJS({
         InlineValueVariableLookup2.create = create;
         function is(value) {
           var candidate = value;
-          return candidate !== void 0 && candidate !== null && Range.is(candidate.range) && Is.boolean(candidate.caseSensitiveLookup) && (Is.string(candidate.variableName) || candidate.variableName === void 0);
+          return candidate !== void 0 && candidate !== null && Range2.is(candidate.range) && Is.boolean(candidate.caseSensitiveLookup) && (Is.string(candidate.variableName) || candidate.variableName === void 0);
         }
         InlineValueVariableLookup2.is = is;
       })(InlineValueVariableLookup || (exports3.InlineValueVariableLookup = InlineValueVariableLookup = {}));
@@ -4535,7 +4535,7 @@ var require_main2 = __commonJS({
         InlineValueEvaluatableExpression2.create = create;
         function is(value) {
           var candidate = value;
-          return candidate !== void 0 && candidate !== null && Range.is(candidate.range) && (Is.string(candidate.expression) || candidate.expression === void 0);
+          return candidate !== void 0 && candidate !== null && Range2.is(candidate.range) && (Is.string(candidate.expression) || candidate.expression === void 0);
         }
         InlineValueEvaluatableExpression2.is = is;
       })(InlineValueEvaluatableExpression || (exports3.InlineValueEvaluatableExpression = InlineValueEvaluatableExpression = {}));
@@ -4547,7 +4547,7 @@ var require_main2 = __commonJS({
         InlineValueContext2.create = create;
         function is(value) {
           var candidate = value;
-          return Is.defined(candidate) && Range.is(value.stoppedLocation);
+          return Is.defined(candidate) && Range2.is(value.stoppedLocation);
         }
         InlineValueContext2.is = is;
       })(InlineValueContext || (exports3.InlineValueContext = InlineValueContext = {}));
@@ -4584,7 +4584,7 @@ var require_main2 = __commonJS({
         InlayHint2.create = create;
         function is(value) {
           var candidate = value;
-          return Is.objectLiteral(candidate) && Position.is(candidate.position) && (Is.string(candidate.label) || Is.typedArray(candidate.label, InlayHintLabelPart.is)) && (candidate.kind === void 0 || InlayHintKind.is(candidate.kind)) && candidate.textEdits === void 0 || Is.typedArray(candidate.textEdits, TextEdit.is) && (candidate.tooltip === void 0 || Is.string(candidate.tooltip) || MarkupContent.is(candidate.tooltip)) && (candidate.paddingLeft === void 0 || Is.boolean(candidate.paddingLeft)) && (candidate.paddingRight === void 0 || Is.boolean(candidate.paddingRight));
+          return Is.objectLiteral(candidate) && Position2.is(candidate.position) && (Is.string(candidate.label) || Is.typedArray(candidate.label, InlayHintLabelPart.is)) && (candidate.kind === void 0 || InlayHintKind.is(candidate.kind)) && candidate.textEdits === void 0 || Is.typedArray(candidate.textEdits, TextEdit.is) && (candidate.tooltip === void 0 || Is.string(candidate.tooltip) || MarkupContent.is(candidate.tooltip)) && (candidate.paddingLeft === void 0 || Is.boolean(candidate.paddingLeft)) && (candidate.paddingRight === void 0 || Is.boolean(candidate.paddingRight));
         }
         InlayHint2.is = is;
       })(InlayHint || (exports3.InlayHint = InlayHint = {}));
@@ -4773,7 +4773,7 @@ var require_main2 = __commonJS({
             var lineOffsets = this.getLineOffsets();
             var low = 0, high = lineOffsets.length;
             if (high === 0) {
-              return Position.create(0, offset);
+              return Position2.create(0, offset);
             }
             while (low < high) {
               var mid = Math.floor((low + high) / 2);
@@ -4784,7 +4784,7 @@ var require_main2 = __commonJS({
               }
             }
             var line = low - 1;
-            return Position.create(line, offset - lineOffsets[line]);
+            return Position2.create(line, offset - lineOffsets[line]);
           };
           FullTextDocument2.prototype.offsetAt = function(position) {
             var lineOffsets = this.getLineOffsets();
@@ -6089,14 +6089,14 @@ var require_protocol = __commonJS({
       FileChangeType2.Changed = 2;
       FileChangeType2.Deleted = 3;
     })(FileChangeType || (exports2.FileChangeType = FileChangeType = {}));
-    var RelativePattern;
-    (function(RelativePattern2) {
+    var RelativePattern2;
+    (function(RelativePattern3) {
       function is(value) {
         const candidate = value;
         return Is.objectLiteral(candidate) && (vscode_languageserver_types_1.URI.is(candidate.baseUri) || vscode_languageserver_types_1.WorkspaceFolder.is(candidate.baseUri)) && Is.string(candidate.pattern);
       }
-      RelativePattern2.is = is;
-    })(RelativePattern || (exports2.RelativePattern = RelativePattern = {}));
+      RelativePattern3.is = is;
+    })(RelativePattern2 || (exports2.RelativePattern = RelativePattern2 = {}));
     var WatchKind;
     (function(WatchKind2) {
       WatchKind2.Create = 1;
@@ -16997,12 +16997,12 @@ var require_comparator = __commonJS({
           if (this.value === "") {
             return true;
           }
-          return new Range(comp.value, options).test(this.value);
+          return new Range2(comp.value, options).test(this.value);
         } else if (comp.operator === "") {
           if (comp.value === "") {
             return true;
           }
-          return new Range(this.value, options).test(comp.semver);
+          return new Range2(this.value, options).test(comp.semver);
         }
         options = parseOptions(options);
         if (options.includePrerelease && (this.value === "<0.0.0-0" || comp.value === "<0.0.0-0")) {
@@ -17035,7 +17035,7 @@ var require_comparator = __commonJS({
     var cmp = require_cmp();
     var debug = require_debug();
     var SemVer = require_semver();
-    var Range = require_range();
+    var Range2 = require_range();
   }
 });
 
@@ -17044,7 +17044,7 @@ var require_range = __commonJS({
   "node_modules/semver/classes/range.js"(exports2, module2) {
     "use strict";
     var SPACE_CHARACTERS = /\s+/g;
-    var Range = class _Range {
+    var Range2 = class _Range {
       constructor(range, options) {
         options = parseOptions(options);
         if (range instanceof _Range) {
@@ -17182,7 +17182,7 @@ var require_range = __commonJS({
         return false;
       }
     };
-    module2.exports = Range;
+    module2.exports = Range2;
     var LRU = require_lrucache();
     var cache = new LRU();
     var parseOptions = require_parse_options();
@@ -17420,10 +17420,10 @@ var require_range = __commonJS({
 var require_satisfies = __commonJS({
   "node_modules/semver/functions/satisfies.js"(exports2, module2) {
     "use strict";
-    var Range = require_range();
+    var Range2 = require_range();
     var satisfies = (version, range, options) => {
       try {
-        range = new Range(range, options);
+        range = new Range2(range, options);
       } catch (er) {
         return false;
       }
@@ -18026,6 +18026,29 @@ function getCliCommand() {
 function docHasTests(doc) {
   return /(^|\n)\s*@test\b/.test(doc.getText());
 }
+function discoverTestsFromText(text) {
+  const moduleMatch = /^\s*module\s+([A-Za-z0-9_.]+)\b/m.exec(text);
+  const moduleName = moduleMatch?.[1] ?? "<unknown>";
+  const tests2 = [];
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (!/^\s*@test\b/.test(lines[i])) {
+      continue;
+    }
+    let j = i + 1;
+    while (j < lines.length && /^\s*$/.test(lines[j])) {
+      j++;
+    }
+    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(lines[j] ?? "");
+    if (!m) {
+      continue;
+    }
+    const defName = m[1];
+    const fullName = `${moduleName}.${defName}`;
+    tests2.push({ moduleName, defName, fullName, decoratorLine: i });
+  }
+  return { moduleName, tests: tests2 };
+}
 function toCliPath(uri) {
   const fsPath = uri.fsPath;
   return process.platform === "win32" ? fsPath.replace(/\\/g, "/") : fsPath;
@@ -18055,10 +18078,201 @@ async function runAiviTest(target, ws) {
   task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, clear: true };
   await vscode.tasks.executeTask(task);
 }
+async function runAiviTestProcess(args, cwd, token, onStdout, onStderr) {
+  const cli = getCliCommand();
+  return await new Promise((resolve) => {
+    const child = (0, import_node_child_process.spawn)(cli, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const cancel = token?.onCancellationRequested(() => {
+      try {
+        child.kill();
+      } catch {
+      }
+    });
+    child.stdout.on("data", (buf) => onStdout(buf.toString("utf8")));
+    child.stderr.on("data", (buf) => onStderr(buf.toString("utf8")));
+    child.on("close", (code) => {
+      cancel?.dispose();
+      resolve(typeof code === "number" ? code : 1);
+    });
+  });
+}
+function parseFailureNamesFromStderr(stderr) {
+  const out = /* @__PURE__ */ new Set();
+  for (const line of stderr.split(/\r?\n/)) {
+    const m = /^([A-Za-z0-9_.]+):\s+/.exec(line);
+    if (m) {
+      out.add(m[1]);
+    }
+  }
+  return out;
+}
 function activate(context) {
   const outputChannel = vscode.window.createOutputChannel("AIVI Language Server");
   const testOutput = vscode.window.createOutputChannel("AIVI Tests");
   context.subscriptions.push(testOutput);
+  const testController = vscode.tests.createTestController("aiviTests", "AIVI Tests");
+  context.subscriptions.push(testController);
+  const itemMeta = /* @__PURE__ */ new Map();
+  const upsertWorkspaceTests = async () => {
+    testController.items.replace([]);
+    const wsFolders = vscode.workspace.workspaceFolders ?? [];
+    for (const ws of wsFolders) {
+      const root = testController.createTestItem(`aiviWs:${ws.uri.toString()}`, ws.name, ws.uri);
+      itemMeta.set(root.id, { kind: "folder", uri: ws.uri });
+      testController.items.add(root);
+      const integrationFolderUri = vscode.Uri.joinPath(ws.uri, "integration-tests");
+      try {
+        const stat = await vscode.workspace.fs.stat(integrationFolderUri);
+        if (stat.type !== vscode.FileType.Directory) {
+          continue;
+        }
+      } catch {
+        continue;
+      }
+      const integration = testController.createTestItem(
+        `aiviFolder:${integrationFolderUri.toString()}`,
+        "integration-tests",
+        integrationFolderUri
+      );
+      integration.canResolveChildren = true;
+      itemMeta.set(integration.id, { kind: "folder", uri: integrationFolderUri });
+      root.children.add(integration);
+      await resolveFolderChildren(integration);
+    }
+  };
+  const resolveFolderChildren = async (folderItem) => {
+    const meta = itemMeta.get(folderItem.id);
+    if (!meta?.uri) {
+      return;
+    }
+    folderItem.children.replace([]);
+    const ws = vscode.workspace.getWorkspaceFolder(meta.uri) ?? vscode.workspace.workspaceFolders?.[0];
+    if (!ws) {
+      return;
+    }
+    const rel = path.relative(ws.uri.fsPath, meta.uri.fsPath).replace(/\\/g, "/");
+    const pattern = new vscode.RelativePattern(ws, `${rel}/**/*.aivi`);
+    const files = await vscode.workspace.findFiles(pattern, "**/target/**");
+    for (const uri of files) {
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      const text = Buffer.from(bytes).toString("utf8");
+      if (!/(^|\n)\s*@test\b/.test(text)) {
+        continue;
+      }
+      const discovered = discoverTestsFromText(text);
+      if (discovered.tests.length === 0) {
+        continue;
+      }
+      const label = path.posix.basename(toCliPath(uri));
+      const fileItem = testController.createTestItem(`aiviFile:${uri.toString()}`, label, uri);
+      fileItem.canResolveChildren = false;
+      fileItem.description = discovered.moduleName;
+      itemMeta.set(fileItem.id, { kind: "file", uri });
+      folderItem.children.add(fileItem);
+      for (const t of discovered.tests) {
+        const testId = `aiviTest:${uri.toString()}::${t.fullName}`;
+        const testItem = testController.createTestItem(testId, t.defName, uri);
+        testItem.range = new vscode.Range(
+          new vscode.Position(t.decoratorLine, 0),
+          new vscode.Position(t.decoratorLine, linesAt(text, t.decoratorLine).length)
+        );
+        testItem.description = t.moduleName;
+        itemMeta.set(testItem.id, { kind: "test", uri, fullName: t.fullName });
+        fileItem.children.add(testItem);
+      }
+    }
+  };
+  function linesAt(text, line) {
+    const lines = text.split(/\r?\n/);
+    return lines[line] ?? "";
+  }
+  const collectLeafTests = (item, out) => {
+    const meta = itemMeta.get(item.id);
+    if (meta?.kind === "test") {
+      out.push(item);
+      return;
+    }
+    item.children.forEach((child) => collectLeafTests(child, out));
+  };
+  const runHandler = async (request, token) => {
+    const run = testController.createTestRun(request);
+    const includedRoots = request.include ?? (() => {
+      const all = [];
+      testController.items.forEach((i) => all.push(i));
+      return all;
+    })();
+    const leafTests = [];
+    for (const root of includedRoots) {
+      collectLeafTests(root, leafTests);
+    }
+    const toRun = leafTests.filter((t) => !(request.exclude?.includes(t) ?? false));
+    const byFile = /* @__PURE__ */ new Map();
+    for (const t of toRun) {
+      const meta = itemMeta.get(t.id);
+      if (!meta?.uri || !meta.fullName) {
+        continue;
+      }
+      const key = meta.uri.toString();
+      const entry = byFile.get(key) ?? { uri: meta.uri, tests: [] };
+      entry.tests.push({ item: t, fullName: meta.fullName });
+      byFile.set(key, entry);
+    }
+    for (const { uri, tests: tests2 } of byFile.values()) {
+      if (token.isCancellationRequested) {
+        break;
+      }
+      for (const { item } of tests2) {
+        run.enqueued(item);
+        run.started(item);
+      }
+      const ws = vscode.workspace.getWorkspaceFolder(uri) ?? vscode.workspace.workspaceFolders?.[0];
+      const cwd = ws?.uri.fsPath;
+      const args = ["test", ...tests2.flatMap((t) => ["--only", t.fullName]), toCliPath(uri)];
+      let stderr = "";
+      run.appendOutput(`[RUN] ${toCliPath(uri)}
+`);
+      const exitCode = await runAiviTestProcess(
+        args,
+        cwd,
+        token,
+        (s) => run.appendOutput(s),
+        (s) => {
+          stderr += s;
+          run.appendOutput(s);
+        }
+      );
+      const failures = parseFailureNamesFromStderr(stderr);
+      for (const { item, fullName } of tests2) {
+        if (exitCode === 0) {
+          run.passed(item);
+        } else if (failures.has(fullName)) {
+          run.failed(item, new vscode.TestMessage("failed"));
+        } else {
+          run.failed(item, new vscode.TestMessage("failed"));
+        }
+      }
+      run.appendOutput(exitCode === 0 ? `[OK ] ${toCliPath(uri)}
+` : `[FAIL] ${toCliPath(uri)}
+`);
+    }
+    run.end();
+  };
+  testController.resolveHandler = async (item) => {
+    if (!item) {
+      await upsertWorkspaceTests();
+      return;
+    }
+    const meta = itemMeta.get(item.id);
+    if (meta?.kind === "folder") {
+      await resolveFolderChildren(item);
+    }
+  };
+  testController.createRunProfile(
+    "Run",
+    vscode.TestRunProfileKind.Run,
+    (request, token) => void runHandler(request, token),
+    true
+  );
   const isWindows = process.platform === "win32";
   const serverExe = isWindows ? "aivi-lsp.exe" : "aivi-lsp";
   const bundledServerPath = context.asAbsolutePath(`bin/${serverExe}`);
