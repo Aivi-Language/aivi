@@ -15,9 +15,7 @@ suffix_h_smoke = effect {
 @test
 add_r_smoke = effect {
   rgb = { r: 20, g: 20, b: 20 }
-  // Avoid overloaded `domain Color.(+)` here: native backend can hit a non-exhaustive
-  // match when lowering overloaded operators.
-  adjusted = { r: rgb.r + 10, g: rgb.g, b: rgb.b }
+  adjusted = rgb + 10r
   assertEq adjusted.r 30
 }
 

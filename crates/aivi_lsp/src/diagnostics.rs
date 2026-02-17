@@ -181,10 +181,132 @@ impl Backend {
         (end == '\'').then_some(open)
     }
 
-    pub(super) fn build_code_actions(
+    fn unknown_name_from_message(message: &str) -> Option<String> {
+        // Compiler diagnostic format: "unknown name 'x'".
+        let start = message.find('\'')?;
+        let rest = &message[start + 1..];
+        let end = rest.find('\'')?;
+        let name = &rest[..end];
+        if name.is_empty() {
+            None
+        } else {
+            Some(name.to_string())
+        }
+    }
+
+    fn import_insertion_position(text: &str) -> Position {
+        // Modules are file-scoped and the `module` declaration must appear first (after optional
+        // decorators). We insert after the last contiguous `use ...` line, or directly after the
+        // module declaration when there are no uses.
+        let lines: Vec<&str> = text.split('\n').collect();
+        let mut i: usize = 0;
+
+        // Skip leading empty lines and module decorators.
+        while i < lines.len() {
+            let trimmed = lines[i].trim();
+            if trimmed.is_empty() || trimmed.starts_with('@') {
+                i += 1;
+                continue;
+            }
+            break;
+        }
+
+        // Find `module` line.
+        while i < lines.len() {
+            let trimmed = lines[i].trim_start();
+            if trimmed.starts_with("module ") {
+                break;
+            }
+            // If we didn't find a module line, fall back to start of document.
+            return Position::new(0, 0);
+        }
+        if i >= lines.len() {
+            return Position::new(0, 0);
+        }
+
+        let module_line = i;
+        let mut last_use_line: Option<usize> = None;
+        i = module_line + 1;
+        while i < lines.len() {
+            let trimmed = lines[i].trim_start();
+            if trimmed.starts_with("use ") {
+                last_use_line = Some(i);
+                i += 1;
+                continue;
+            }
+            // Stop on the first non-use line (including a blank line).
+            break;
+        }
+
+        let insert_line = last_use_line.map(|l| l + 1).unwrap_or(module_line + 1);
+        Position::new(insert_line as u32, 0)
+    }
+
+    fn import_quickfixes_for_unknown_name(
+        text: &str,
+        uri: &Url,
+        diagnostic: &Diagnostic,
+        workspace_modules: &HashMap<String, IndexedModule>,
+    ) -> Vec<CodeActionOrCommand> {
+        let Some(name) = Self::unknown_name_from_message(&diagnostic.message) else {
+            return Vec::new();
+        };
+
+        let mut providers: Vec<String> = Vec::new();
+        for (module_name, indexed) in workspace_modules {
+            if indexed
+                .module
+                .exports
+                .iter()
+                .any(|e| matches!(e.kind, aivi::ScopeItemKind::Value) && e.name.name == name)
+            {
+                providers.push(module_name.clone());
+            }
+        }
+
+        providers.sort();
+        providers.dedup();
+
+        // Heuristic: keep the list small to avoid spamming the user.
+        const MAX_ACTIONS: usize = 8;
+        if providers.is_empty() {
+            return Vec::new();
+        }
+
+        let insert_at = Self::import_insertion_position(text);
+        let range = Range::new(insert_at, insert_at);
+
+        let mut out = Vec::new();
+        let preferred = providers.len() == 1;
+        for (idx, module_name) in providers.into_iter().take(MAX_ACTIONS).enumerate() {
+            let title = format!("Add `use {module_name} ({name})`");
+            let edit = TextEdit {
+                range,
+                new_text: format!("use {module_name} ({name})\n"),
+            };
+            out.push(CodeActionOrCommand::CodeAction(CodeAction {
+                title,
+                kind: Some(CodeActionKind::QUICKFIX),
+                diagnostics: Some(vec![diagnostic.clone()]),
+                edit: Some(WorkspaceEdit {
+                    changes: Some(HashMap::from([(uri.clone(), vec![edit])])),
+                    document_changes: None,
+                    change_annotations: None,
+                }),
+                command: None,
+                is_preferred: Some(preferred && idx == 0),
+                disabled: None,
+                data: None,
+            }));
+        }
+        out
+    }
+
+    pub(super) fn build_code_actions_with_workspace(
         text: &str,
         uri: &Url,
         diagnostics: &[Diagnostic],
+        workspace_modules: &HashMap<String, IndexedModule>,
     ) -> Vec<CodeActionOrCommand> {
         let mut out = Vec::new();
         for diagnostic in diagnostics {
@@ -201,6 +323,14 @@ impl Backend {
             };
 
             match code {
+                "E3000" => {
+                    out.extend(Self::import_quickfixes_for_unknown_name(
+                        text,
+                        uri,
+                        diagnostic,
+                        workspace_modules,
+                    ));
+                }
                 "E1004" => {
                     let Some(open) = Self::unclosed_open_delimiter(&diagnostic.message) else {
                         continue;

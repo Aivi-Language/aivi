@@ -102,7 +102,7 @@ fn code_actions_offer_quick_fix_for_unclosed_delimiter() {
     let text = "module broken = {";
     let uri = sample_uri();
     let diagnostics = Backend::build_diagnostics(text, &uri);
-    let actions = Backend::build_code_actions(text, &uri, &diagnostics);
+    let actions = Backend::build_code_actions_with_workspace(text, &uri, &diagnostics, &std::collections::HashMap::new());
     let expected_pos = Backend::end_position(text);
 
     let mut saw_fix = false;
@@ -150,11 +150,68 @@ fn strict_mode_reports_split_arrow_and_offers_fix() {
     });
     assert!(split_arrow.is_some(), "expected split-arrow diagnostic");
 
-    let actions = Backend::build_code_actions(text, &uri, &diagnostics);
+    let actions = Backend::build_code_actions_with_workspace(text, &uri, &diagnostics, &std::collections::HashMap::new());
     assert!(actions.iter().any(|action| match action {
         CodeActionOrCommand::CodeAction(action) => action.title.contains("Replace with \"=>\""),
         _ => false,
     }));
+}
+
+#[test]
+fn code_actions_suggest_import_for_unknown_name() {
+    // `magnitude` lives in `aivi.vector`.
+    let text = r#"module demo
+use aivi
+
+main = magnitude { x: 3.0, y: 4.0 }
+"#;
+    let uri = sample_uri();
+    let diagnostics = Backend::build_diagnostics(text, &uri);
+
+    let stdlib_workspace = {
+        let mut map = std::collections::HashMap::new();
+        for module in aivi::embedded_stdlib_modules() {
+            let name = module.name.name.clone();
+            let uri = tower_lsp::lsp_types::Url::parse(&format!("aivi://stdlib/{name}")).unwrap();
+            map.insert(
+                name,
+                crate::state::IndexedModule {
+                    uri,
+                    module,
+                    text: None,
+                },
+            );
+        }
+        map
+    };
+
+    let actions = Backend::build_code_actions_with_workspace(text, &uri, &diagnostics, &stdlib_workspace);
+
+    // We should offer a quickfix that inserts `use aivi.vector (magnitude)`.
+    let mut saw_import_fix = false;
+    for action in actions {
+        let CodeActionOrCommand::CodeAction(action) = action else {
+            continue;
+        };
+        if !action.title.contains("use aivi.vector (magnitude)") {
+            continue;
+        }
+        let Some(edit) = action.edit else {
+            continue;
+        };
+        let Some(changes) = edit.changes else {
+            continue;
+        };
+        let Some(edits) = changes.get(&uri) else {
+            continue;
+        };
+        if edits.iter().any(|e| e.new_text == "use aivi.vector (magnitude)\n") {
+            saw_import_fix = true;
+            break;
+        }
+    }
+
+    assert!(saw_import_fix, "expected an import quickfix for `magnitude`");
 }
 
 #[test]
