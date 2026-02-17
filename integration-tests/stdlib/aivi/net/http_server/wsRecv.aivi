@@ -7,6 +7,6 @@ use aivi.net.http_server
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure wsRecv
   _ <- assert True
 }

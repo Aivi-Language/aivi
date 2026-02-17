@@ -2,6 +2,8 @@ module examples.compiler.effects
 export program, readConfig, withFile, managedFile, loadOrDefault, program2
 
 use aivi.console
+use aivi.testing
+
 
 program : Effect Text Unit
 program = effect {
@@ -43,4 +45,12 @@ program2 : Effect Text Unit
 program2 = effect {
   cfg <- loadOrDefault "config.json" "default"
   print cfg
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  txt <- loadOrDefault "tmp/does-not-exist.json" "fallback"
+  _ <- assert (txt == "fallback")
 }

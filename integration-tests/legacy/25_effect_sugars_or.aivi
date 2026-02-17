@@ -3,6 +3,8 @@ export main, loadOrDefault
 
 use aivi
 use aivi.console
+use aivi.testing
+
 
 Result E A = Err E | Ok A
 
@@ -24,4 +26,14 @@ main = effect {
 
   print msg
   println "done"
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  r = attempt (pure 1) or (pure 2)
+  _ <- r ?
+    | Ok x  => assert (x == 1)
+    | Err _ => assert False
 }

@@ -4,6 +4,8 @@ export main
 use aivi.console
 use aivi.text
 use aivi.regex
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -23,4 +25,22 @@ main = effect {
     decoded ?
       | Ok value => print value
       | Err _    => print "decode failed"
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  msg = "  Hello World  "
+  slug = msg |> trim |> toLower |> text.replaceAll " " "-"
+  _ <- assert (slug == "hello-world")
+  compiled = compile "[a-z]+"
+  _ <- compiled ?
+    | Ok r  => assert (test r "caa" == True)
+    | Err _ => assert False
+  bytes = toBytes Utf8 "ping"
+  decoded = fromBytes Utf8 bytes
+  _ <- decoded ?
+    | Ok value => assert (value == "ping")
+    | Err _    => assert False
 }

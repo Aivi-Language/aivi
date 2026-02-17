@@ -3,6 +3,9 @@ module examples.compiler.stats
 export sum, mean
 
 use examples.compiler.math
+use aivi.testing
+use aivi
+
 
 sum =
   | []        => 0
@@ -16,3 +19,11 @@ sumCount =
   mean = xs => (sumCount xs) ?
     | (_, n) when n == 0 => 0
     | (s, n)             => s / n
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- assert (sum [1, 2, 3] == 6)
+  _ <- assert (mean [1, 2, 3, 4] == 2.5)
+}

@@ -7,6 +7,6 @@ use aivi.i18n
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure bundleForLocale
   _ <- assert True
 }

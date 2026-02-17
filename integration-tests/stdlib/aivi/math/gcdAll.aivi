@@ -7,6 +7,5 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (gcdAll [12, 18, 24] == 6)
 }

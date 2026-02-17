@@ -1,5 +1,7 @@
 module examples.runtime
 export main
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -12,4 +14,16 @@ main = effect {
     | Ok text    => pure text
     | Err Closed => pure "closed\n"
     print msg
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  (tx, rx) <- channel.make Text
+  _ <- channel.send tx "ping"
+  res <- channel.recv rx
+  _ <- res ?
+    | Ok msg  => assert (msg == "ping")
+    | Err _   => assert False
 }

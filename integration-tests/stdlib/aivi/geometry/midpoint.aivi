@@ -7,6 +7,6 @@ use aivi.geometry
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure midpoint
   _ <- assert True
 }

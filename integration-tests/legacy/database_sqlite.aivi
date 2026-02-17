@@ -2,6 +2,8 @@ module examples.databaseSqlite
 export main
 
 use aivi.database as db
+use aivi.testing
+
 
 User = { id: Int, name: Text }
 
@@ -14,4 +16,17 @@ main = effect {
   _ <- db.runMigrations[userTable]
   _ <- userTable + db.ins { id: 1, name: "Alice" }
   db.load userTable
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  // Ensure in-memory sqlite path works and insert/load roundtrips
+  _ <- db.configure { driver: db.Sqlite, url: ":memory:" }
+  _ <- db.runMigrations[userTable]
+  _ <- userTable + db.ins { id: 1, name: "Alice" }
+  rows <- db.load userTable
+  _ <- assert (length rows == 1)
+  _ <- assert (rows[0].name == "Alice")
 }

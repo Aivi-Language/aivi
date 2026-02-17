@@ -7,6 +7,6 @@ use aivi.net.streams
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure fromSocket
   _ <- assert True
 }

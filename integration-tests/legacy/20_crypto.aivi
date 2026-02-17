@@ -3,6 +3,8 @@ export main
 
 use aivi.console
 use aivi.crypto
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -14,4 +16,12 @@ main = effect {
 
   bytes <- randomBytes 16
   print "bytes: {bytes}"
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  h = sha256 "aivi"
+  _ <- assert (h == "e1b42b70e0bb3c110f54ea21d9d0b6ee08e1f83e6ba5b75a98ebaaa289058cad")
 }

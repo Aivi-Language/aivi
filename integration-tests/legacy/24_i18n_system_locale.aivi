@@ -5,6 +5,8 @@ use aivi
 use aivi.file
 use aivi.i18n
 use aivi.system
+use aivi.testing
+
 
 defaultLocale : Locale
 defaultLocale = { language: "en", region: Some "US", variants: [], tag: "en-US" }
@@ -42,4 +44,12 @@ main = effect {
 
   print (t bundle (~k"app.welcome") { name: "Alice" })
   print (t bundle (~k"app.lastLogin") { when: ~dt(2026-02-12T15:30:00Z) })
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  // parseLocale should accept a basic tag
+  _ <- assert ((parseLocale "en-US") ? | Ok _ => True | Err _ => False)
 }

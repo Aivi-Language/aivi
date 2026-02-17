@@ -1,5 +1,7 @@
 module examples.compiler.records_patching
 export User, user1, user2, user3, store2, store3, promote
+use aivi.testing
+
 
 User = { name: Text, age: Int, tags: List Text }
 
@@ -43,4 +45,17 @@ store2 = store <| {
 
 store3 = store2 <| {
   items[2].active: True
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- assert (user1.age == 36)
+  _ <- assert (user2.age == 37)
+  _ <- assert (user2.tags == ["dev", "vip"])
+  _ <- assert (user3.name == "Ada+")
+  _ <- assert (user3.age == 39)
+  _ <- assert (store2.items[0].price == 15)
+  _ <- assert (store3.items[2].active == True)
 }

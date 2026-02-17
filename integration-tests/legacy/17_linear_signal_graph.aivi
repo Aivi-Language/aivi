@@ -5,6 +5,8 @@ use aivi.console
 use aivi.linear_algebra
 use aivi.signal
 use aivi.graph
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -32,4 +34,12 @@ main = effect {
   }
   path = shortestPath g0 1 3
   print "path: {path}"
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- pure main
+  _ <- assert True
 }

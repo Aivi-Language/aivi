@@ -7,6 +7,6 @@ use aivi.probability
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure expectation
   _ <- assert True
 }

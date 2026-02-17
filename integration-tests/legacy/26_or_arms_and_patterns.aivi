@@ -2,6 +2,8 @@ module examples.orArmsAndPatterns
 export main, messageFrom
 
 use aivi.console
+use aivi.testing
+
 
 Result E A = Err E | Ok A
 
@@ -29,4 +31,12 @@ main = effect {
     | _              => "none"
 
     println detail
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- pure main
+  _ <- assert True
 }

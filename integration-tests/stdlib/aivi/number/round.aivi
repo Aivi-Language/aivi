@@ -7,6 +7,7 @@ use aivi.number
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  d = fromFloat 1.235
+  r = round 2 d
+  _ <- assert (toFloat r == 1.24)
 }

@@ -81,11 +81,34 @@ dependencies = [
 name = "aivi-lsp"
 version = "0.1.0"
 dependencies = [
- "aivi",
+ "aivi_core",
  "serde",
  "serde_json",
  "tokio",
  "tower-lsp",
+]
+
+[[package]]
+name = "aivi_core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "im",
+ "num-bigint",
+ "num-rational",
+ "num-traits",
+ "ordered-float",
+ "palette",
+ "regex",
+ "rust_decimal",
+ "rustfft",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "unicode-normalization",
+ "unicode-segmentation",
+ "url",
+ "uuid",
 ]
 
 [[package]]

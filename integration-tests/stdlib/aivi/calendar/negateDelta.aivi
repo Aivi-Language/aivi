@@ -7,6 +7,6 @@ use aivi.calendar
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure negateDelta
   _ <- assert True
 }

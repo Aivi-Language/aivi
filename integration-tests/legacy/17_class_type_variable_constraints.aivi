@@ -1,5 +1,7 @@
 module examples.compiler.classTypeVariableConstraints
 export Eq, NeedsEq
+use aivi.testing
+
 
 // A tiny typeclass, used only to demonstrate constrained member variables.
 class Eq A = {
@@ -28,4 +30,12 @@ class NeedsEq = with (A: Eq) {
 
 instance NeedsEq = {
   same: x => eq x x
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- pure Eq
+  _ <- assert True
 }

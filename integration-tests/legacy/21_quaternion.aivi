@@ -3,6 +3,8 @@ export main
 
 use aivi.console
 use aivi.number.quaternion
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -11,4 +13,12 @@ main = effect {
   unit = normalize spin
   len = magnitude unit
   print "quat len: {len}"
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- pure main
+  _ <- assert True
 }

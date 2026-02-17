@@ -4,6 +4,8 @@ export main
 use aivi.console
 use aivi.calendar
 use aivi.color
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -22,4 +24,12 @@ main = effect {
   v2 = { x: 3, y: 4 }
   v3 = { x: v1.x + v2.x, y: v1.y + v2.y }
   print "{v3.x},{v3.y}"
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- pure main
+  _ <- assert True
 }

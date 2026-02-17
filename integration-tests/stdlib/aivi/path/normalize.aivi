@@ -7,6 +7,6 @@ use aivi.path
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  p = normalize (parse "/a/b/../c")
+  _ <- assert (toString p == "/a/c")
 }

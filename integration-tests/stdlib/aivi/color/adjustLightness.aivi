@@ -7,6 +7,6 @@ use aivi.color
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure adjustLightness
   _ <- assert True
 }

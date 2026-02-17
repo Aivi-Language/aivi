@@ -7,6 +7,6 @@ use aivi.testing
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure assert
   _ <- assert True
 }

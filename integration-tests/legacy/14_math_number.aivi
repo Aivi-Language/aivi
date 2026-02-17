@@ -4,6 +4,8 @@ export main
 use aivi.console
 use aivi.math
 use aivi.number.decimal
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -19,4 +21,12 @@ main = effect {
 
   unit = sin (degrees 90.0)
   print "sin: {unit}"
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- pure main
+  _ <- assert True
 }

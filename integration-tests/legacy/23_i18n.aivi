@@ -3,6 +3,8 @@ export main
 
 use aivi
 use aivi.i18n
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -21,4 +23,14 @@ main = effect {
     _ <- print (t bundle (~k"app.welcome") { name: "Alice" })
     _ <- print (t bundle (~k"app.cartItems") { count: 3 })
     pure Unit
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  // bundleFromProperties is pure; verify a key lookup
+  b = bundleFromProperties "app.welcome=Hello"
+  catalog = catalogFromBundles [b]
+  _ <- assert (tCatalog catalog (~k"app.welcome") == Ok "Hello")
 }

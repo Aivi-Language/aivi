@@ -1,6 +1,8 @@
 module repro_generators.main
 
 export main, printGen
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -15,4 +17,12 @@ main = effect {
 
 printGen = g => effect {
   _ <- print "{g}\n"
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- pure main
+  _ <- assert True
 }

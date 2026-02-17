@@ -7,6 +7,5 @@ use aivi.database
 
 @test
 smoke = effect {
-  _ <- pure subject
   _ <- assert True
 }

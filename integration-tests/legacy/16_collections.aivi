@@ -3,6 +3,8 @@ export main
 
 use aivi.console
 use aivi
+use aivi.testing
+
 
 main : Effect Text Unit
 main = effect {
@@ -42,4 +44,19 @@ main = effect {
     smallest ?
       | Some (value, _) => print "heap: {value}"
       | None            => print "heap empty"
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  base = ~map{ "a" => 1, "b" => 2 }
+  more = ~map{ "b" => 3, "c" => 4 }
+  merged = Map.union base more
+  _ <- assert (Map.get merged "a" == Some 1)
+  _ <- assert (Map.get merged "b" == Some 3)
+  q = Queue.enqueue "x" Queue.empty
+  _ <- assert (Queue.dequeue q == Some ("x", Queue.empty))
+  h = Heap.push 3 (Heap.push 1 Heap.empty)
+  _ <- assert ((Heap.popMin h) ? | Some (v, _) => v == 1 | None => False)
 }

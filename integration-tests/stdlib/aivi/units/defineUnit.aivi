@@ -7,6 +7,6 @@ use aivi.units
 
 @test
 smoke = effect {
-  _ <- pure subject
+  _ <- pure defineUnit
   _ <- assert True
 }

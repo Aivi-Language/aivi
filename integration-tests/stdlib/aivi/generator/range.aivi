@@ -7,6 +7,6 @@ use aivi.generator
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  xs = toList (range 1 3)
+  _ <- assert (xs == [1, 2, 3])
 }

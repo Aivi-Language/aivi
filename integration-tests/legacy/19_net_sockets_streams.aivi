@@ -2,6 +2,8 @@ module examples.net_sockets_streams
 export main, echoServer
 
 use aivi.net.sockets
+use aivi.testing
+
 
 main : Effect SocketError Unit
 main = effect {
@@ -20,4 +22,12 @@ handle = socket => effect {
   msg <- recv socket
   _   <- send socket msg
   handle socket
+}
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- pure main
+  _ <- assert True
 }

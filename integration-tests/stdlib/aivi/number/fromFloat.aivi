@@ -7,6 +7,6 @@ use aivi.number
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  d = fromFloat 12.34
+  _ <- assert (toFloat d == 12.34)
 }

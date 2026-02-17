@@ -7,6 +7,5 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- pure subject
-  _ <- assert True
+  _ <- assert (maxAll [3, 1, 2] == 3)
 }

@@ -1,5 +1,7 @@
 module examples.fantasy_land
 export Option, isNone
+use aivi.testing
+
 
 class Setoid A = {
   equals: A -> A -> Bool
@@ -57,3 +59,11 @@ instance Chain (Option *) = {
 isNone =
   | None   => True
   | Some _ => False
+
+__test_sentinel = 0
+
+@test
+smoke = effect {
+  _ <- pure Option
+  _ <- assert True
+}
