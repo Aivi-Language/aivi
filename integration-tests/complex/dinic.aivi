@@ -163,8 +163,8 @@ flowTest = effect {
   ]
 
   (result, _) <- pure (maxFlow edges 0 5)
-  _           <- assert (result == 20)
+  assert (result == 20)
 
   (zero, _) <- pure (maxFlow [] 0 1)
-  _         <- assert (zero == 0)
+  assert (zero == 0)
 }

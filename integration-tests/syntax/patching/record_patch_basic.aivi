@@ -9,5 +9,5 @@ older = user <| { age: _ + 1 }
 
 @test
 patchingWorks = effect {
-  _ <- assertEq older.age 31
+  assertEq older.age 31
 }

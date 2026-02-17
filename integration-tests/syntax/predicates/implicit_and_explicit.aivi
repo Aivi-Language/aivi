@@ -15,5 +15,5 @@ expected = [3, 4, 5]
 
 @test
 predicatesWork = effect {
-  _ <- assertEq gt2 expected
+  assertEq gt2 expected
 }

@@ -4,6 +4,7 @@ module integrationTests.stdlib.aivi.calendar.tests
 use aivi
 use aivi.testing
 use aivi.calendar
+use aivi.calendar (domain Calendar)
 
 @test
 date_smoke = effect {
@@ -31,25 +32,25 @@ endOfMonth_smoke = effect {
 
 @test
 addDays_smoke = effect {
-  d = addDays 1 { year: 2024, month: 2, day: 28 }
+  d = addDays { year: 2024, month: 2, day: 28 } 1
   assert (d.day == 29)
   assert (d.month == 2)
 
-  d2 = addDays 2 { year: 2024, month: 2, day: 28 }
+  d2 = addDays { year: 2024, month: 2, day: 28 } 2
   assert (d2.day == 1)
   assert (d2.month == 3)
 }
 
 @test
 addMonths_smoke = effect {
-  d = addMonths 1 { year: 2024, month: 1, day: 31 }
+  d = addMonths { year: 2024, month: 1, day: 31 } 1
   assert (d.month == 2)
   assert (d.day == 29) // 2024 is leap year, 29th is max
 }
 
 @test
 addYears_smoke = effect {
-  d = addYears 1 { year: 2024, month: 2, day: 29 }
+  d = addYears { year: 2024, month: 2, day: 29 } 1
   assert (d.year == 2025)
   assert (d.day == 28) // 2025 is not leap, clamps to 28
 }
@@ -74,12 +75,14 @@ isLeapYear_smoke = effect {
 
 @test
 negateDelta_smoke = effect {
-  pure negateDelta
-  assert True
+  assertEq (negateDelta (Day 3)) (Day (-3))
+  assertEq (negateDelta (Month 2)) (Month (-2))
+  assertEq (negateDelta (Year 1)) (Year (-1))
+  assertEq (negateDelta End) End
 }
 
 @test
 now_smoke = effect {
-  n <- now // todo make sure now is a function not an effect
-  assert True // Just checking not crashing for now
+  now
+  assert True
 }

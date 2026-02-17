@@ -18,13 +18,13 @@ args_smoke = effect {
 @test
 env_smoke = effect {
   key = "AIVI_SYSTEM_ENV_TEST"
-  _ <- env.remove key
+  env.remove key
   v0 <- env.get key
   assertEq v0 None
-  _ <- env.set key "ok"
+  env.set key "ok"
   v1 <- env.get key
   assertEq v1 (Some "ok")
-  _ <- env.remove key
+  env.remove key
   v2 <- env.get key
   assertEq v2 None
 }
@@ -45,7 +45,7 @@ localeTag_smoke = effect {
 
 @test
 clockNow_smoke = effect {
-  _ <- clock.now Unit
+  clock.now Unit
   assert True
 }
 

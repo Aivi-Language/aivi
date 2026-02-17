@@ -10,11 +10,11 @@ managedFile : Text -> Resource Text FileHandle
 managedFile = path => resource {
   handle <- file.open path
   yield handle
-  _ <- file.close handle
+  file.close handle
 }
 
 @test
 resourceOpenFailureIsCaught = effect {
-  _ <- pure managedFile
-  _ <- assertEq (1 + 1) 2
+  pure managedFile
+  assertEq (1 + 1) 2
 }

@@ -7,5 +7,5 @@ use aivi.testing
 @test
 envDefaultWorks = effect {
   port <- load (env.get "AIVI__MISSING_TEST_PORT__") or "3000"
-  _    <- assertEq port "3000"
+  assertEq port "3000"
 }

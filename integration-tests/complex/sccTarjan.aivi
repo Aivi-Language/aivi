@@ -122,6 +122,6 @@ sccSmoke = effect {
   graph = { nodes: [0, 1, 2, 3], adj: adj }
 
   comps <- pure (strongComponents graph)
-  _     <- assert (List.length comps == 2)
-  _     <- assert (List.any comps (cmp => List.contains cmp 0))
+  assert (List.length comps == 2)
+  assert (List.any comps (cmp => List.contains cmp 0))
 }

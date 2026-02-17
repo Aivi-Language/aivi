@@ -14,6 +14,6 @@ inc = n => n + 1
 
 @test
 functionsWork = effect {
-  _ <- assertEq (add 2 3) 5
-  _ <- assertEq (applyTwice inc 1) 3
+  assertEq (add 2 3) 5
+  assertEq (applyTwice inc 1) 3
 }

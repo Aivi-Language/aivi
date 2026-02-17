@@ -154,8 +154,8 @@ maxFlowTest = effect {
   ]
 
   (flow, _) = maxFlow edges 0 5
-  _ <- assert (flow == 23.0)
+  assert (flow == 23.0)
 
   (zeroFlow, _) = maxFlow [] 0 1
-  _ <- assert (zeroFlow == 0.0)
+  assert (zeroFlow == 0.0)
 }

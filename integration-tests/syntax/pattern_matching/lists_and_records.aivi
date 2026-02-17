@@ -14,7 +14,7 @@ getName = user => user ?
 
 @test
 patternsWork = effect {
-  _ <- assertEq (head([1, 2])) (Some 1)
-  _ <- assertEq (head([])) None
-  _ <- assertEq (getName { name: "A", age: 1 }) (Some "A")
+  assertEq (head([1, 2])) (Some 1)
+  assertEq (head([])) None
+  assertEq (getName { name: "A", age: 1 }) (Some "A")
 }

@@ -22,8 +22,8 @@ expected = [2, 0, 42]
 
 @test
 irDumpMinimalRuns = effect {
-  _ <- assertEq value 3
-  _ <- assertEq pair (3, "ok")
-  _ <- assertEq (maybeInc (Some 1)) 2
-  _ <- assertEq result expected
+  assertEq value 3
+  assertEq pair (3, "ok")
+  assertEq (maybeInc (Some 1)) 2
+  assertEq result expected
 }

@@ -1,3 +1,7 @@
+---
+apply: always
+---
+
 # AIVI Language Summary (LLM Context)
 
 ## 1) Core principles
