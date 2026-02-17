@@ -4,6 +4,7 @@ module integrationTests.stdlib.aivi.vector.normalize
 use aivi
 use aivi.testing
 use aivi.vector
+use aivi.math
 
 @test
 smoke = effect {

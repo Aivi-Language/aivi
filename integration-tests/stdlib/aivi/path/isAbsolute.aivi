@@ -8,5 +8,5 @@ use aivi.path
 @test
 smoke = effect {
   _ <- assert (isAbsolute (parse "/a"))
-  _ <- assert (not (isAbsolute (parse "a")))
+  _ <- assert (!(isAbsolute (parse "a")))
 }

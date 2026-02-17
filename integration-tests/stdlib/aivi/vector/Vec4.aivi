@@ -4,10 +4,10 @@ module integrationTests.stdlib.aivi.vector.Vec4
 use aivi
 use aivi.testing
 use aivi.vector
+use aivi.math
 
 @test
 smoke = effect {
-  v : Vec4
   v = { x: 1.0, y: 2.0, z: 3.0, w: 4.0 }
   _ <- assert (v.w == 4.0)
 }

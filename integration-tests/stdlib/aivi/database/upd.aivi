@@ -8,13 +8,11 @@ use aivi.database
 @test
 smoke = effect {
   User = { id: Int, name: Text }
-  @static
-  users : Table User
-  users = table "users"[]
-  _    <- configure { driver: Sqlite, url: ":memory:" }
-  _    <- runMigrations[users]
-  _    <- users + ins { id: 1, name: "Ada" }
-  rows <- load users
-  _    <- assert (length rows == 1)
-  _    <- assert (rows[0].name == "Ada")
+  users0 = table "users"[]
+  users1 <- applyDelta users0 (ins { id: 1, name: "Ada" })
+  users2 <- applyDelta users1 (upd (u => u.id == 1) (u => u <| { name: "Bea" }))
+  rows   <- load users2
+  _      <- rows ?
+    | [u] => assertEq u.name "Bea"
+    | _   => assert False
 }

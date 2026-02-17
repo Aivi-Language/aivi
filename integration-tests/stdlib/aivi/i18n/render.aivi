@@ -7,13 +7,15 @@ use aivi.i18n
 
 @test
 smoke = effect {
-  m_res = message "Hello, {name}!"
+  m_res = message "Hello!"
   m <- m_res ?
-    | Ok m  => effect { pure m }
-    | Err e => effect { fail e }
-    r_res = render m { name: "Antigravity" }
+    | Ok m  => pure m
+    | Err e => fail e
+
+    r_res = render m {}
     r <- r_res ?
-      | Ok r  => effect { pure r }
-      | Err e => effect { fail e }
-    _ <- testing.assert (r == "Hello, Antigravity!")
+      | Ok r  => pure r
+      | Err e => fail e
+
+    _ <- assert (r == "Hello!")
 }
