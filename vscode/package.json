@@ -2,7 +2,7 @@
   "name": "aivi-vscode",
   "displayName": "AIVI Language Support",
   "description": "Syntax highlighting and formatting for the AIVI language (from the AIVI specs).",
-  "version": "0.1.110",
+  "version": "0.1.111",
   "publisher": "aivi",
   "packageManager": "pnpm@9.15.4",
   "repository": {
@@ -114,29 +114,83 @@
       }
     ],
     "semanticTokenTypes": [
-      { "id": "aiviArrow", "superType": "operator", "description": "Arrow operators (=>, <-, ->)" },
-      { "id": "aiviPipe", "superType": "operator", "description": "Pipe operators (|>, <|, |)" },
-      { "id": "aiviBracket", "superType": "operator", "description": "Brackets and parentheses" },
-      { "id": "aiviDot", "superType": "operator", "description": "Dot separator in dotted paths" },
-      { "id": "aiviUnit", "superType": "keyword", "description": "Domain unit suffixes" },
-      { "id": "aiviSigil", "superType": "string", "description": "Sigil prefix markers" },
-      { "id": "aiviPathHead", "superType": "variable", "description": "First segment of a dotted path" },
-      { "id": "aiviPathMid", "superType": "variable", "description": "Middle segment of a dotted path" },
-      { "id": "aiviPathTail", "superType": "variable", "description": "Last segment of a dotted path" }
+      {
+        "id": "aiviArrow",
+        "superType": "operator",
+        "description": "Arrow operators (=>, <-, ->)"
+      },
+      {
+        "id": "aiviPipe",
+        "superType": "operator",
+        "description": "Pipe operators (|>, <|, |)"
+      },
+      {
+        "id": "aiviBracket",
+        "superType": "operator",
+        "description": "Brackets and parentheses"
+      },
+      {
+        "id": "aiviDot",
+        "superType": "operator",
+        "description": "Dot separator in dotted paths"
+      },
+      {
+        "id": "aiviUnit",
+        "superType": "keyword",
+        "description": "Domain unit suffixes"
+      },
+      {
+        "id": "aiviSigil",
+        "superType": "string",
+        "description": "Sigil prefix markers"
+      },
+      {
+        "id": "aiviPathHead",
+        "superType": "variable",
+        "description": "First segment of a dotted path"
+      },
+      {
+        "id": "aiviPathMid",
+        "superType": "variable",
+        "description": "Middle segment of a dotted path"
+      },
+      {
+        "id": "aiviPathTail",
+        "superType": "variable",
+        "description": "Last segment of a dotted path"
+      }
     ],
     "semanticTokenScopes": [
       {
         "language": "aivi",
         "scopes": {
-          "aiviArrow": ["keyword.operator.arrow.aivi"],
-          "aiviPipe": ["keyword.operator.pipe.aivi"],
-          "aiviBracket": ["punctuation.section.bracket.aivi"],
-          "aiviDot": ["punctuation.accessor.aivi"],
-          "aiviUnit": ["constant.other.unit.aivi"],
-          "aiviSigil": ["storage.type.sigil.aivi"],
-          "aiviPathHead": ["variable.other.readwrite.aivi"],
-          "aiviPathMid": ["variable.other.readwrite.aivi"],
-          "aiviPathTail": ["variable.other.property.aivi"]
+          "aiviArrow": [
+            "keyword.operator.arrow.aivi"
+          ],
+          "aiviPipe": [
+            "keyword.operator.pipe.aivi"
+          ],
+          "aiviBracket": [
+            "punctuation.section.bracket.aivi"
+          ],
+          "aiviDot": [
+            "punctuation.accessor.aivi"
+          ],
+          "aiviUnit": [
+            "constant.other.unit.aivi"
+          ],
+          "aiviSigil": [
+            "storage.type.sigil.aivi"
+          ],
+          "aiviPathHead": [
+            "variable.other.readwrite.aivi"
+          ],
+          "aiviPathMid": [
+            "variable.other.readwrite.aivi"
+          ],
+          "aiviPathTail": [
+            "variable.other.property.aivi"
+          ]
         }
       }
     ],
