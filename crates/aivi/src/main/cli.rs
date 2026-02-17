@@ -89,7 +89,11 @@ fn run() -> Result<(), AiviError> {
             let modules = load_modules(target)?;
             diagnostics.extend(check_modules(&modules));
             if !aivi::file_diagnostics_have_errors(&diagnostics) {
-                diagnostics.extend(check_types(&modules));
+                if check_stdlib {
+                    diagnostics.extend(aivi::check_types_including_stdlib(&modules));
+                } else {
+                    diagnostics.extend(check_types(&modules));
+                }
             }
             if !check_stdlib {
                 diagnostics.retain(|diag| !diag.path.starts_with("<embedded:"));

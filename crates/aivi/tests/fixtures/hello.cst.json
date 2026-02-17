@@ -2,13 +2,13 @@
   "files": [
     {
       "path": "integration-tests/legacy/hello.aivi",
-      "byte_count": 132,
+      "byte_count": 124,
       "line_count": 9,
       "lines": [
         "module examples.hello",
         "export main",
         "",
-        "use aivi.console (print)",
+        "use aivi.console",
         "",
         "main : Effect Text Unit",
         "main = effect {",
@@ -195,62 +195,6 @@
             "end": {
               "line": 4,
               "column": 16
-            }
-          }
-        },
-        {
-          "kind": "whitespace",
-          "text": " ",
-          "span": {
-            "start": {
-              "line": 4,
-              "column": 17
-            },
-            "end": {
-              "line": 4,
-              "column": 17
-            }
-          }
-        },
-        {
-          "kind": "symbol",
-          "text": "(",
-          "span": {
-            "start": {
-              "line": 4,
-              "column": 18
-            },
-            "end": {
-              "line": 4,
-              "column": 18
-            }
-          }
-        },
-        {
-          "kind": "ident",
-          "text": "print",
-          "span": {
-            "start": {
-              "line": 4,
-              "column": 19
-            },
-            "end": {
-              "line": 4,
-              "column": 23
-            }
-          }
-        },
-        {
-          "kind": "symbol",
-          "text": ")",
-          "span": {
-            "start": {
-              "line": 4,
-              "column": 24
-            },
-            "end": {
-              "line": 4,
-              "column": 24
             }
           }
         },
