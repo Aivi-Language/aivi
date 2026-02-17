@@ -18,8 +18,10 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
-  // Avoid real network; just ensure URL sigil parses and get is in scope.
-  url = ~u(https://example.com)
-  _ <- pure (get url)
-  _ <- assert True
+  url = ~u(https://example.com/path?q=1)
+  _ <- assert (url.protocol == "https")
+  _ <- assert (url.host == "example.com")
+  _ <- assert (url.path == "/path")
+  src = get url
+  _ <- pure src
 }

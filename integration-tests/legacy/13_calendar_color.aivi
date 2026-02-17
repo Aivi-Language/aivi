@@ -4,6 +4,7 @@ export main
 use aivi.console
 use aivi.calendar
 use aivi.color
+use aivi.text
 use aivi.testing
 
 
@@ -30,6 +31,21 @@ __test_sentinel = 0
 
 @test
 smoke = effect {
-  _ <- pure main
-  _ <- assert True
+  today = { year: 2025, month: 2, day: 8 }
+  next = addDays today 1
+  _ <- assert (next.day == 9)
+
+  timeout = { millis: 1000 }
+  _ <- assert (timeout.millis == 1000)
+
+  primary = { r: 10, g: 20, b: 30 }
+  lighter = adjustLightness primary 10
+  hex = toHex lighter
+  _ <- assert (text.startsWith hex "#")
+
+  v1 = { x: 1, y: 2 }
+  v2 = { x: 3, y: 4 }
+  v3 = { x: v1.x + v2.x, y: v1.y + v2.y }
+  _ <- assert (v3.x == 4)
+  _ <- assert (v3.y == 6)
 }
