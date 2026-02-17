@@ -2,6 +2,10 @@
 module integrationTests.stdlib.aivi.i18n.Catalog
 
 use aivi
+@no_prelude
+module integrationTests.stdlib.aivi.i18n.Catalog
+
+use aivi
 use aivi.testing
 use aivi.i18n
 
@@ -16,8 +20,8 @@ smoke = effect {
         | Ok l  => l
         | Err _ => { language: "en", region: Some "US", variants: [], tag: "en-US" }
 
-    bEnRes = bundleFromProperties en "app.welcome = Hello\\n"
-    bEnUsRes = bundleFromProperties enUs "app.welcome = Howdy\\n"
+    bEnRes = bundleFromProperties en "app.welcome = Hello\n"
+    bEnUsRes = bundleFromProperties enUs "app.welcome = Howdy\n"
 
     bEn =
       bEnRes ?
@@ -29,5 +33,5 @@ smoke = effect {
         | Err _ => { locale: enUs, entries: Map.empty }
 
     catalog = catalogFromBundles [bEn, bEnUs]
-    _ <- assert (tCatalog catalog enUs (~k\"app.welcome\") {} == \"Howdy\")
+    _ <- assert (tCatalog catalog enUs (~k"app.welcome") {} == "Howdy")
 }
