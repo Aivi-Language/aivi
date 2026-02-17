@@ -48,8 +48,8 @@ bfs_smoke = effect {
 dedupEdges_smoke = effect {
   g0 =
     addEdge
-      (addEdge (addEdge empty { from: 1, to: 2, weight: 1.0 }) { from: 1, to: 2, weight: 1.0 })
-      { from: 2, to: 3, weight: 1.0 }
+    (addEdge (addEdge empty { from: 1, to: 2, weight: 1.0 }) { from: 1, to: 2, weight: 1.0 })
+    { from: 2, to: 3, weight: 1.0 }
   g1 = dedupEdges g0
   assert (List.length g1.edges == 2)
 }
@@ -78,8 +78,8 @@ dfs_smoke = effect {
 edgesFrom_smoke = effect {
   g =
     addEdge
-      (addEdge (addEdge empty { from: 1, to: 2, weight: 1.0 }) { from: 1, to: 3, weight: 2.0 })
-      { from: 2, to: 3, weight: 3.0 }
+    (addEdge (addEdge empty { from: 1, to: 2, weight: 1.0 }) { from: 1, to: 3, weight: 2.0 })
+    { from: 2, to: 3, weight: 3.0 }
   es = edgesFrom g 1
   assert (List.length es == 2)
   assert (neighbors g 1 == [2, 3])

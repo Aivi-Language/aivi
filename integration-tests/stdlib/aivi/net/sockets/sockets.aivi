@@ -59,7 +59,7 @@ connect_smoke = effect {
   res <- attempt (connect { host: "127.0.0.1", port: 1 })
   res ?
     | Ok _conn => assert True
-    | Err _e => assert True
+    | Err _e   => assert True
 }
 
 @test

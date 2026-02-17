@@ -6,27 +6,27 @@ use aivi.testing
 use aivi.signal
 
 abs : Float -> Float
-abs = x => if x < 0.0 then -x else x
+abs = x => if x < 0.0 then - x else x
 
 maxAbs : List Float -> Float
 maxAbs = xs => xs ?
-  | [] => 0.0
+  | []           => 0.0
   | [x, ...rest] => {
-      r = maxAbs rest
-      ax = abs x
-      if ax > r then ax else r
-    }
+    r = maxAbs rest
+    ax = abs x
+    if ax > r then ax else r
+  }
 
 maxAbsDiff : List Float -> List Float -> Float
 maxAbsDiff = a b => (a, b) ?
-  | ([], []) => 0.0
-  | ([], _) => 1.0
-  | (_, []) => 1.0
+  | ([], [])                 => 0.0
+  | ([], _)                  => 1.0
+  | (_, [])                  => 1.0
   | ([x, ...xs], [y, ...ys]) => {
-      d = abs (x - y)
-      r = maxAbsDiff xs ys
-      if d > r then d else r
-    }
+    d = abs (x - y)
+    r = maxAbsDiff xs ys
+    if d > r then d else r
+  }
 
 spectrum_touch : Spectrum -> Unit
 spectrum_touch = _ => Unit
@@ -64,10 +64,10 @@ windowHann_smoke = effect {
   win = windowHann sig
   assertEq (List.length win.samples) 4
   win.samples ?
-    | [] => assert False
+    | []             => assert False
     | [a, _b, _c, d] => effect {
-        assert (abs a < 0.000001)
-        assert (abs d < 0.000001)
-      }
+      assert (abs a < 0.000001)
+      assert (abs d < 0.000001)
+    }
     | _ => assert False
 }

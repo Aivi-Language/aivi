@@ -72,14 +72,14 @@ viewId_smoke = effect {
 
 @test
 serveHttp_smoke = effect {
-  app =
-    { init: _ctx => 0
-    , update: _msg model => (model, [])
-    , view: _model => vText "ok"
-    , onPlatform: _ev => None
-    }
+  app = {
+    init: _ctx => 0
+    update: _msg model => (model, [])
+    view: _model => vText "ok"
+    onPlatform: _ev => None
+  }
 
-  req : http_server.Request
+  req : Request
   req = { method: "GET", path: "/", headers: [], body: [], remoteAddr: None }
 
   res = serveHttp app req
