@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.math.fmod
 
 use aivi
 use aivi.testing
-
 use aivi.math
-
-
 
 @test
 smoke = effect {

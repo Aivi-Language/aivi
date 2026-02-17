@@ -8,7 +8,7 @@ sum = xs => xs ?
   | []           => 0
   | [x, ...rest] => x + sum rest
 
-@test
+  @test
 recursionWorks = effect {
   _ <- assertEq (sum[1, 2, 3]) 6
 }

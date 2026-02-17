@@ -12,7 +12,7 @@ Error =
 
 messageFrom : Result Error Text -> Text
 messageFrom = res =>
-res or
+  res or
 | Err NotFound m => m
 | Err _          => "boom"
 
@@ -28,5 +28,5 @@ main = effect {
     | Err NotFound m => m
     | _              => "none"
 
-  println detail
+    println detail
 }

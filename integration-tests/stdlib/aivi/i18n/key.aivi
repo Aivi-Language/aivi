@@ -3,16 +3,13 @@ module integrationTests.stdlib.aivi.i18n.key
 
 use aivi
 use aivi.testing
-
 use aivi.i18n
-
-
 
 @test
 smoke = effect {
   mResult = key "hello.world"
   k <- mResult ?
-    | Ok k => effect { pure k }
+    | Ok k  => effect { pure k }
     | Err e => effect { fail e }
-  _ <- assert (k.body == "greeting")
+    _ <- assert (k.body == "greeting")
 }

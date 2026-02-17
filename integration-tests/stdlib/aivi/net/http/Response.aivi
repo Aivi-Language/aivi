@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.net.http.Response
 
 use aivi
 use aivi.testing
-
 use aivi.net.http
-
-
 
 @test
 smoke = effect {

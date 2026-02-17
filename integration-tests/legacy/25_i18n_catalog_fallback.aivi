@@ -13,9 +13,9 @@ systemLocale = effect {
   tagOpt <- localeTag
   tag =
     tagOpt ?
-    | Some t => t
-    | None   => defaultLocale.tag
-  pure (parseLocale tag or defaultLocale)
+      | Some t => t
+      | None   => defaultLocale.tag
+      pure (parseLocale tag or defaultLocale)
 }
 
 bundleEnUsRes = bundleFromProperties defaultLocale "app.welcome = Hello, \{name:Text\}!\napp.cartItems = You have \{count:Int\} items.\n"
@@ -23,16 +23,16 @@ bundleEnUsRes = bundleFromProperties defaultLocale "app.welcome = Hello, \{name:
 bundleEnUs : Bundle
 bundleEnUs =
   bundleEnUsRes ?
-  | Ok b  => b
-  | Err _ => { locale: defaultLocale, entries: Map.empty }
+    | Ok b  => b
+    | Err _ => { locale: defaultLocale, entries: Map.empty }
 
 bundleDeDeRes = bundleFromProperties { language: "de", region: Some "DE", variants: [], tag: "de-DE" } "app.welcome = Hallo, \{name:Text\}!\n"
 
 bundleDeDe : Bundle
 bundleDeDe =
   bundleDeDeRes ?
-  | Ok b  => b
-  | Err _ => { locale: { language: "de", region: Some "DE", variants: [], tag: "de-DE" }, entries: Map.empty }
+    | Ok b  => b
+    | Err _ => { locale: { language: "de", region: Some "DE", variants: [], tag: "de-DE" }, entries: Map.empty }
 
 catalog : Catalog
 catalog = catalogFromBundles[bundleEnUs, bundleDeDe]

@@ -3,15 +3,12 @@ module integrationTests.stdlib.aivi.net.sockets.connect
 
 use aivi
 use aivi.testing
-
 use aivi.net.sockets
-
-
 
 @test
 smoke = effect {
   // connect returns a source yielding Result Connection SocketError
   src = connect "localhost" 8080
   res <- src
-  _ <- assert True
+  _   <- assert True
 }

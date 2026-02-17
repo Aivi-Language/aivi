@@ -3,7 +3,6 @@ module integrationTests.stdlib.aivi.number.decimal.n_1dec
 
 use aivi
 use aivi.testing
-
 use aivi.number.decimal
 
 .14dec

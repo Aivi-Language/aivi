@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.text.Latin1
 
 use aivi
 use aivi.testing
-
 use aivi.text
-
-
 
 @test
 smoke = effect {

@@ -17,101 +17,90 @@ algo_rev = xs acc => xs ?
 
 algo_partition = p xs => xs ?
   | []        => ([], [])
-  | [h, ...t] =>
-(algo_partition p t) ?
-  | (yes, no) => if p h then ([h, ...yes], no) else (yes, [h, ...no])
+  | [h, ...t] => (algo_partition p t) ?
+    | (yes, no) => if p h then ([h, ...yes], no) else (yes, [h, ...no])
 
-algo_quicksort : List Int -> List Int
+  algo_quicksort : List Int -> List Int
 algo_quicksort = xs => xs ?
   | []        => []
-  | [p, ...t] =>
-(algo_partition (_ < p) t) ?
-  | (lt, ge) => algo_append (algo_quicksort lt) ([p, ...algo_quicksort ge])
+  | [p, ...t] => (algo_partition (_ < p) t) ?
+    | (lt, ge)  => algo_append (algo_quicksort lt) ([p, ...algo_quicksort ge])
 
-algo_split = xs => xs ?
-  | []           => ([], [])
-  | [a]          => ([a], [])
-  | [a, b, ...t] =>
-(algo_split t) ?
-  | (left, right) => ([a, ...left], [b, ...right])
+  algo_split = xs => xs ?
+    | []            => ([], [])
+    | [a]           => ([a], [])
+    | [a, b, ...t]  => (algo_split t) ?
+      | (left, right) => ([a, ...left], [b, ...right])
 
-algo_merge = left right => (left, right) ?
-  | ([], ys)                 => ys
-  | (xs, [])                 => xs
-  | ([x, ...xs], [y, ...ys]) => if x <= y then[x, ...algo_merge xs ([y, ...ys])] else[y, ...algo_merge ([x, ...xs]) ys]
+  algo_merge = left right => (left, right) ?
+    | ([], ys)                 => ys
+    | (xs, [])                 => xs
+    | ([x, ...xs], [y, ...ys]) => if x <= y then[x, ...algo_merge xs ([y, ...ys])] else[y, ...algo_merge ([x, ...xs]) ys]
 
-algo_mergeSort : List Int -> List Int
-algo_mergeSort = xs => xs ?
-  | []  => []
-  | [_] => xs
-  | _   =>
-(algo_split xs) ?
-  | (left, right) => algo_merge (algo_mergeSort left) (algo_mergeSort right)
+  algo_mergeSort : List Int -> List Int
+  algo_mergeSort = xs => xs ?
+    | []            => []
+    | [_]           => xs
+    | _             => (algo_split xs) ?
+      | (left, right) => algo_merge (algo_mergeSort left) (algo_mergeSort right)
 
-AlgoEdge = { from: Int, to: Int, cost: Int }
+  AlgoEdge = { from: Int, to: Int, cost: Int }
 
-algo_neighbors = adj node => (Map.get node adj) ?
-  | None    => []
-  | Some xs => xs
+  algo_neighbors = adj node => (Map.get node adj) ?
+    | None    => []
+    | Some xs => xs
 
-algo_pushAdj = from to cost adj =>
-(Map.get from adj) ?
-  | None    => Map.insert from ([(to, cost)]) adj
-  | Some xs => Map.insert from ([(to, cost), ...xs]) adj
+  algo_pushAdj = from to cost adj => (Map.get from adj) ?
+    | None    => Map.insert from ([(to, cost)]) adj
+    | Some xs => Map.insert from ([(to, cost), ...xs]) adj
 
-algo_buildAdjUndirected = edges => edges ?
-  | []        => Map.empty
-  | [e, ...t] => algo_buildAdjUndirected t |> algo_pushAdj e.from e.to e.cost |> algo_pushAdj e.to e.from e.cost
+  algo_buildAdjUndirected = edges => edges ?
+    | []        => Map.empty
+    | [e, ...t] => algo_buildAdjUndirected t |> algo_pushAdj e.from e.to e.cost |> algo_pushAdj e.to e.from e.cost
 
-algo_reconstruct = came current =>
-(Map.get current came) ?
-  | None      => [current]
-  | Some prev => [current, ...algo_reconstruct came prev]
+  algo_reconstruct = came current => (Map.get current came) ?
+    | None      => [current]
+    | Some prev => [current, ...algo_reconstruct came prev]
 
-algo_score = node scores default =>
-(Map.get node scores) ?
-  | Some v => v
-  | None   => default
+  algo_score = node scores default => (Map.get node scores) ?
+    | Some v => v
+    | None   => default
 
-algo_encode = priority node => (priority * 1000) + node
+  algo_encode = priority node => (priority * 1000) + node
 
-algo_decode = encoded =>
-(divmod encoded 1000) ?
+algo_decode = encoded => (divmod encoded 1000) ?
   | (_, node) => node
 
 algo_manhattan = _ _ _ => 0
 
-algo_relaxNeighbors = adj coords goal current neighs came gScore open closed =>
-neighs ?
+algo_relaxNeighbors = adj coords goal current neighs came gScore open closed => neighs ?
   | []                      => algo_loop adj coords goal open came gScore closed
   | [(next, cost), ...rest] =>
-if algo_score current gScore 1000000000 + cost < algo_score next gScore 1000000000 then algo_relaxNeighbors adj coords goal current rest (Map.insert next current came) (Map.insert next (algo_score current gScore 1000000000 + cost) gScore) (Heap.push (algo_encode (algo_score current gScore 1000000000 + cost + algo_manhattan coords next goal) next) open) closed else algo_relaxNeighbors adj coords goal current rest came gScore open closed
+    if algo_score current gScore 1000000000 + cost < algo_score next gScore 1000000000 then algo_relaxNeighbors adj coords goal current rest (Map.insert next current came) (Map.insert next (algo_score current gScore 1000000000 + cost) gScore) (Heap.push (algo_encode (algo_score current gScore 1000000000 + cost + algo_manhattan coords next goal) next) open) closed else algo_relaxNeighbors adj coords goal current rest came gScore open closed
 
 algo_aStar = edges coords start goal =>
-algo_loop (algo_buildAdjUndirected edges) coords goal (Heap.push (algo_encode (algo_manhattan coords start goal) start) Heap.empty) Map.empty (Map.insert start 0 Map.empty) Set.empty
+  algo_loop (algo_buildAdjUndirected edges) coords goal (Heap.push (algo_encode (algo_manhattan coords start goal) start) Heap.empty) Map.empty (Map.insert start 0 Map.empty) Set.empty
 
-algo_loop = adj coords goal open came gScore closed =>
-(Heap.popMin open) ?
+algo_loop = adj coords goal open came gScore closed => (Heap.popMin open) ?
   | None                  => None
   | Some (encoded, open2) =>
-if algo_decode encoded == goal then Some (algo_reverse (algo_reconstruct came (algo_decode encoded))) else if Set.has (algo_decode encoded) closed then algo_loop adj coords goal open2 came gScore closed else algo_relaxNeighbors adj coords goal (algo_decode encoded) (algo_neighbors adj (algo_decode encoded)) came gScore open2 (Set.insert (algo_decode encoded) closed)
+    if algo_decode encoded == goal then Some (algo_reverse (algo_reconstruct came (algo_decode encoded))) else if Set.has (algo_decode encoded) closed then algo_loop adj coords goal open2 came gScore closed else algo_relaxNeighbors adj coords goal (algo_decode encoded) (algo_neighbors adj (algo_decode encoded)) came gScore open2 (Set.insert (algo_decode encoded) closed)
 
-gridEdges =
-  [
+gridEdges = [
   // horizontal
-    { from: 0, to: 1, cost: 1 },
-    { from: 1, to: 2, cost: 1 },
-    { from: 10, to: 11, cost: 1 },
-    { from: 11, to: 12, cost: 1 },
-    { from: 20, to: 21, cost: 1 },
-    { from: 21, to: 22, cost: 1 },
+  { from: 0, to: 1, cost: 1 }
+  { from: 1, to: 2, cost: 1 }
+  { from: 10, to: 11, cost: 1 }
+  { from: 11, to: 12, cost: 1 }
+  { from: 20, to: 21, cost: 1 }
+  { from: 21, to: 22, cost: 1 }
 
   // vertical
-  { from: 0, to: 10, cost: 1 },
-  { from: 1, to: 11, cost: 1 },
-  { from: 2, to: 12, cost: 1 },
-  { from: 10, to: 20, cost: 1 },
-  { from: 11, to: 21, cost: 1 },
+  { from: 0, to: 10, cost: 1 }
+  { from: 1, to: 11, cost: 1 }
+  { from: 2, to: 12, cost: 1 }
+  { from: 10, to: 20, cost: 1 }
+  { from: 11, to: 21, cost: 1 }
   { from: 12, to: 22, cost: 1 }
 ]
 

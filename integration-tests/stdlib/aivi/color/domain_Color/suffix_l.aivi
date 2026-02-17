@@ -3,12 +3,8 @@ module integrationTests.stdlib.aivi.color.domain_Color.suffix_l
 
 use aivi
 use aivi.testing
-
 use aivi.color
-
 use aivi.color
-
-
 
 @test
 smoke = effect {

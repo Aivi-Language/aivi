@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.geometry.midpoint
 
 use aivi
 use aivi.testing
-
 use aivi.geometry
-
-
 
 @test
 smoke = effect {

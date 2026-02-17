@@ -7,12 +7,12 @@ use aivi.system
 User = { id: Int, name: Text, active: Bool }
 
 userTable = (db.table "users")[
-  { name: "id", colType: db.IntType, constraints: [db.NotNull], default: None },
-  { name: "name", colType: db.Varchar 64, constraints: [db.NotNull], default: None },
+  { name: "id", colType: db.IntType, constraints: [db.NotNull], default: None }
+  { name: "name", colType: db.Varchar 64, constraints: [db.NotNull], default: None }
   {
-    name: "active",
-    colType: db.BoolType,
-    constraints: [db.NotNull],
+    name: "active"
+    colType: db.BoolType
+    constraints: [db.NotNull]
     default: Some (db.DefaultBool False)
   }
 ]

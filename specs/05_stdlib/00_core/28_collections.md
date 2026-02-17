@@ -35,7 +35,7 @@ Rules:
 
 ### Merge operator
 
-The `Collections` domain provides `++` as a right-biased merge for `Map` and union for `Set`.
+The `Collections` domain provides `++` as concatenation for `List`, a right-biased merge for `Map`, and union for `Set`.
 
 <<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_05.aivi{aivi}
 

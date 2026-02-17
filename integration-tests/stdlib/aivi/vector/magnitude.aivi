@@ -3,10 +3,7 @@ module integrationTests.stdlib.aivi.vector.magnitude
 
 use aivi
 use aivi.testing
-
 use aivi.vector
-
-
 
 @test
 smoke = effect {

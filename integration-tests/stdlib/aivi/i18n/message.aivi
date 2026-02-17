@@ -3,16 +3,13 @@ module integrationTests.stdlib.aivi.i18n.message
 
 use aivi
 use aivi.testing
-
 use aivi.i18n
-
-
 
 @test
 smoke = effect {
   res = message "hello"
   m <- res ?
-    | Ok m => effect { pure m }
+    | Ok m  => effect { pure m }
     | Err e => effect { fail e }
-  _ <- assert (m.body == "Hello, {name}!")
+    _ <- assert (m.body == "Hello, {name}!")
 }

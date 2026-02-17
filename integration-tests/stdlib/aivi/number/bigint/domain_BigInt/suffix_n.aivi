@@ -3,12 +3,8 @@ module integrationTests.stdlib.aivi.number.bigint.domain_BigInt.suffix_n
 
 use aivi
 use aivi.testing
-
 use aivi.number.bigint
-
 use aivi.number.bigint
-
-
 
 @test
 smoke = effect {

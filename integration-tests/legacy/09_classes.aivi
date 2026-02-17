@@ -31,11 +31,11 @@ instance Monad (Option *) = {
     | None   => None
     | Some x => Some (f x)
 
-  pure: x => Some x
+    pure: x => Some x
 
-  flatMap: opt f => opt ?
-    | None   => None
-    | Some x => f x
+    flatMap: opt f => opt ?
+      | None   => None
+      | Some x => f x
 }
 
 instance Eq (Option Bool) = {

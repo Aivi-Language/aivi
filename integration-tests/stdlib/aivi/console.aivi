@@ -3,7 +3,6 @@ module integrationTests.stdlib.aivi.console
 
 use aivi
 use aivi.testing
-
 use aivi
 
 @test

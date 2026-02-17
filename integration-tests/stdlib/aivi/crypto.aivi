@@ -3,7 +3,6 @@ module integrationTests.stdlib.aivi.crypto
 
 use aivi
 use aivi.testing
-
 use aivi
 
 @test

@@ -3,7 +3,6 @@ module integrationTests.stdlib.aivi.SourceError
 
 use aivi
 use aivi.testing
-
 use aivi
 
 @test

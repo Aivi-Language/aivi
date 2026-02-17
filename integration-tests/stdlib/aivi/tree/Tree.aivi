@@ -3,7 +3,6 @@ module integrationTests.stdlib.aivi.tree.Tree
 
 use aivi
 use aivi.testing
-
 use aivi.tree
 
 @test
@@ -38,8 +37,8 @@ fromListBySmoke = effect {
   built = fromListBy idFn parentFn items
 
   expected = Some (node { id: 1, parent: None } [
-    leaf { id: 2, parent: Some 1 }
-    node { id: 3, parent: Some 1 } [leaf { id: 4, parent: Some 3 }]
+      leaf { id: 2, parent: Some 1 }
+      node { id: 3, parent: Some 1 } [leaf { id: 4, parent: Some 3 }]
   ])
 
   _ <- assert (built == expected)
@@ -48,4 +47,3 @@ fromListBySmoke = effect {
   bad = fromListBy idFn parentFn [{ id: 1, parent: None }, { id: 2, parent: None }]
   _ <- assert (bad == None)
 }
-

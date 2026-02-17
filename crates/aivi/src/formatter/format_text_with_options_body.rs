@@ -140,8 +140,9 @@
             return false;
         }
 
-        // Indexing/call brackets: never insert a space before `[` after a closed group.
-        if curr_text == "[" && matches!(prev_text, ")" | "]" | "}") {
+        // Keep indexing tight after a closed group, even if the input had whitespace:
+        // `(f x) [i]` should format to `(f x)[i]`, not a list-literal argument.
+        if curr_text == "[" && prev_text == ")" {
             return false;
         }
 
