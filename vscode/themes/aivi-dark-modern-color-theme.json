@@ -172,8 +172,13 @@
   "tokenColors": [
     {
       "name": "AIVI Comments",
-      "scope": ["comment.line.double-slash.aivi", "comment.block.aivi"],
-      "settings": { "foreground": "#6A9955" }
+      "scope": [
+        "comment.line.double-slash.aivi",
+        "comment.block.aivi"
+      ],
+      "settings": {
+        "foreground": "#6A9955"
+      }
     },
     {
       "name": "AIVI Strings",
@@ -182,12 +187,18 @@
         "string.quoted.single.aivi",
         "string.quoted.other.backtick.aivi"
       ],
-      "settings": { "foreground": "#CE9178" }
+      "settings": {
+        "foreground": "#CE9178"
+      }
     },
     {
       "name": "AIVI Sigil Literals",
-      "scope": ["string.quoted.other.sigil.aivi"],
-      "settings": { "foreground": "#CE9178" }
+      "scope": [
+        "string.quoted.other.sigil.aivi"
+      ],
+      "settings": {
+        "foreground": "#CE9178"
+      }
     },
     {
       "name": "AIVI Sigil Delimiters",
@@ -196,12 +207,19 @@
         "punctuation.section.embedded.begin.aivi",
         "punctuation.section.embedded.end.aivi"
       ],
-      "settings": { "foreground": "#565656" }
+      "settings": {
+        "foreground": "#565656"
+      }
     },
     {
       "name": "AIVI Sigil Quotes",
-      "scope": ["punctuation.definition.string.begin.aivi", "punctuation.definition.string.end.aivi"],
-      "settings": { "foreground": "#565656" }
+      "scope": [
+        "punctuation.definition.string.begin.aivi",
+        "punctuation.definition.string.end.aivi"
+      ],
+      "settings": {
+        "foreground": "#565656"
+      }
     },
     {
       "name": "AIVI String Interpolation Braces",
@@ -209,122 +227,219 @@
         "punctuation.section.interpolation.begin.aivi",
         "punctuation.section.interpolation.end.aivi"
       ],
-      "settings": { "foreground": "#C586C0" }
+      "settings": {
+        "foreground": "#C586C0"
+      }
     },
     {
       "name": "AIVI Sigil Tags",
-      "scope": ["entity.name.function.sigil.aivi"],
-      "settings": { "foreground": "#565656" }
+      "scope": [
+        "entity.name.function.sigil.aivi"
+      ],
+      "settings": {
+        "foreground": "#565656"
+      }
     },
     {
       "name": "AIVI Numbers",
-      "scope": ["constant.numeric.aivi"],
-      "settings": { "foreground": "#B5CEA8" }
+      "scope": [
+        "constant.numeric.aivi"
+      ],
+      "settings": {
+        "foreground": "#B5CEA8"
+      }
     },
     {
       "name": "AIVI Units",
-      "scope": ["constant.other.unit.aivi"],
-      "settings": { "foreground": "#D7BA7D" }
+      "scope": [
+        "constant.other.unit.aivi"
+      ],
+      "settings": {
+        "foreground": "#D7BA7D"
+      }
     },
     {
       "name": "AIVI Color Literals",
-      "scope": ["constant.other.color.aivi"],
-      "settings": { "foreground": "#4FC1FF" }
+      "scope": [
+        "constant.other.color.aivi"
+      ],
+      "settings": {
+        "foreground": "#4FC1FF"
+      }
     },
     {
       "name": "AIVI Booleans",
-      "scope": ["constant.language.boolean.aivi"],
-      "settings": { "foreground": "#569CD6" }
+      "scope": [
+        "constant.language.boolean.aivi"
+      ],
+      "settings": {
+        "foreground": "#569CD6"
+      }
     },
     {
       "name": "AIVI Constructors",
-      "scope": ["support.constant.aivi"],
-      "settings": { "foreground": "#9CDCFE" }
+      "scope": [
+        "support.constant.aivi"
+      ],
+      "settings": {
+        "foreground": "#9CDCFE"
+      }
     },
     {
       "name": "AIVI Decorators",
-      "scope": ["meta.annotation.decorator.aivi"],
-      "settings": { "foreground": "#C586C0" }
+      "scope": [
+        "meta.annotation.decorator.aivi"
+      ],
+      "settings": {
+        "foreground": "#C586C0"
+      }
     },
     {
       "name": "AIVI Keywords",
-      "scope": ["keyword.control.aivi", "keyword.other.aivi"],
-      "settings": { "foreground": "#C586C0" }
+      "scope": [
+        "keyword.control.aivi",
+        "keyword.other.aivi"
+      ],
+      "settings": {
+        "foreground": "#C586C0"
+      }
     },
     {
       "name": "AIVI Placeholders",
-      "scope": ["variable.language.placeholder.aivi"],
-      "settings": { "foreground": "#D7BA7D" }
+      "scope": [
+        "variable.language.placeholder.aivi"
+      ],
+      "settings": {
+        "foreground": "#D7BA7D"
+      }
     },
     {
       "name": "AIVI Identifiers",
-      "scope": ["variable.other.readwrite.aivi"],
-      "settings": { "foreground": "#DCDCAA" }
+      "scope": [
+        "variable.other.readwrite.aivi"
+      ],
+      "settings": {
+        "foreground": "#DCDCAA"
+      }
     },
     {
       "name": "AIVI Properties",
-      "scope": ["variable.other.property.aivi"],
-      "settings": { "foreground": "#9CDCFE" }
+      "scope": [
+        "variable.other.property.aivi"
+      ],
+      "settings": {
+        "foreground": "#9CDCFE"
+      }
     },
     {
       "name": "AIVI Accessors",
-      "scope": ["punctuation.accessor.aivi"],
-      "settings": { "foreground": "#5A5A5A" }
+      "scope": [
+        "punctuation.accessor.aivi"
+      ],
+      "settings": {
+        "foreground": "#5A5A5A"
+      }
     },
     {
       "name": "AIVI Types",
-      "scope": ["entity.name.type.aivi"],
-      "settings": { "foreground": "#4EC9B0" }
+      "scope": [
+        "entity.name.type.aivi"
+      ],
+      "settings": {
+        "foreground": "#4EC9B0"
+      }
     },
     {
       "name": "AIVI Pipe Operators",
-      "scope": ["keyword.operator.pipe.aivi"],
-      "settings": { "foreground": "#569CD6" }
+      "scope": [
+        "keyword.operator.pipe.aivi"
+      ],
+      "settings": {
+        "foreground": "#569CD6"
+      }
     },
     {
       "name": "AIVI Match Operator",
-      "scope": ["keyword.operator.match.aivi"],
-      "settings": { "foreground": "#C586C0" }
+      "scope": [
+        "keyword.operator.match.aivi"
+      ],
+      "settings": {
+        "foreground": "#C586C0"
+      }
     },
     {
       "name": "AIVI Arrow Operators",
-      "scope": ["keyword.operator.arrow.aivi"],
-      "settings": { "foreground": "#c53665" }
+      "scope": [
+        "keyword.operator.arrow.aivi"
+      ],
+      "settings": {
+        "foreground": "#c53665"
+      }
     },
     {
       "name": "AIVI Comparison Operators",
-      "scope": ["keyword.operator.comparison.aivi"],
-      "settings": { "foreground": "#D4D4D4" }
+      "scope": [
+        "keyword.operator.comparison.aivi"
+      ],
+      "settings": {
+        "foreground": "#D4D4D4"
+      }
     },
     {
       "name": "AIVI Brackets",
-      "scope": ["punctuation.section.bracket.aivi"],
-      "settings": { "foreground": "#BFBFBF" }
+      "scope": [
+        "punctuation.section.bracket.aivi"
+      ],
+      "settings": {
+        "foreground": "#BFBFBF"
+      }
     },
     {
       "name": "AIVI Punctuation",
-      "scope": ["punctuation.separator.key-value.aivi", "punctuation.separator.comma.aivi"],
-      "settings": { "foreground": "#B0B0B0" }
+      "scope": [
+        "punctuation.separator.key-value.aivi",
+        "punctuation.separator.comma.aivi"
+      ],
+      "settings": {
+        "foreground": "#B0B0B0"
+      }
     },
     {
       "name": "AIVI Operators",
-      "scope": ["keyword.operator.aivi"],
-      "settings": { "foreground": "#D4D4D4" }
+      "scope": [
+        "keyword.operator.aivi"
+      ],
+      "settings": {
+        "foreground": "#D4D4D4"
+      }
     },
     {
       "name": "AIVI Type Signatures",
-      "scope": ["meta.type.signature.aivi"],
-      "settings": { "foreground": "#6E6E6E" }
+      "scope": [
+        "meta.type.signature.aivi"
+      ],
+      "settings": {
+        "foreground": "#6E6E6E"
+      }
     },
     {
       "name": "HTML Comments (Dark Modern)",
-      "scope": ["comment.block.html", "comment.line.html"],
-      "settings": { "foreground": "#6A9955" }
+      "scope": [
+        "comment.block.html",
+        "comment.line.html"
+      ],
+      "settings": {
+        "foreground": "#6A9955"
+      }
     },
     {
       "name": "HTML Tag Names (Dark Modern)",
-      "scope": ["entity.name.tag.html"],
-      "settings": { "foreground": "#569CD6" }
+      "scope": [
+        "entity.name.tag.html"
+      ],
+      "settings": {
+        "foreground": "#569CD6"
+      }
     },
     {
       "name": "HTML Tag Punctuation (Dark Modern)",
@@ -333,17 +448,27 @@
         "punctuation.definition.tag.end.html",
         "punctuation.definition.tag.html"
       ],
-      "settings": { "foreground": "#808080" }
+      "settings": {
+        "foreground": "#808080"
+      }
     },
     {
       "name": "HTML Attributes (Dark Modern)",
-      "scope": ["entity.other.attribute-name.html"],
-      "settings": { "foreground": "#9CDCFE" }
+      "scope": [
+        "entity.other.attribute-name.html"
+      ],
+      "settings": {
+        "foreground": "#9CDCFE"
+      }
     },
     {
       "name": "HTML Attribute Equals (Dark Modern)",
-      "scope": ["punctuation.separator.key-value.html"],
-      "settings": { "foreground": "#D4D4D4" }
+      "scope": [
+        "punctuation.separator.key-value.html"
+      ],
+      "settings": {
+        "foreground": "#D4D4D4"
+      }
     },
     {
       "name": "HTML Strings (Dark Modern)",
@@ -355,12 +480,19 @@
         "string.quoted.single.html punctuation.definition.string.begin.html",
         "string.quoted.single.html punctuation.definition.string.end.html"
       ],
-      "settings": { "foreground": "#CE9178" }
+      "settings": {
+        "foreground": "#CE9178"
+      }
     },
     {
       "name": "HTML Entities (Dark Modern)",
-      "scope": ["constant.character.entity.html", "constant.character.entity.named.html"],
-      "settings": { "foreground": "#D7BA7D" }
+      "scope": [
+        "constant.character.entity.html",
+        "constant.character.entity.named.html"
+      ],
+      "settings": {
+        "foreground": "#D7BA7D"
+      }
     }
   ]
 }
