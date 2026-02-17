@@ -93,6 +93,24 @@ impl Parser {
             span: number.span.clone(),
         });
 
+        // `1suffix = n => ...` already defines the literal template explicitly.
+        // Only synthesize a template parameter for the shorthand form `1suffix = <expr-with-1>`.
+        if matches!(expr, Expr::Lambda { .. }) {
+            let name_span = merge_span(number.span.clone(), suffix.span.clone());
+            let name = SpannedName {
+                name: format!("{}{}", number.text, suffix.name),
+                span: name_span.clone(),
+            };
+            let span = merge_span(name_span, expr_span(&expr));
+            return Some(Def {
+                decorators,
+                name,
+                params: Vec::new(),
+                expr,
+                span,
+            });
+        }
+
         fn rewrite_literal_template(expr: Expr, needle: &str, param: &str) -> Expr {
             match expr {
                 Expr::Literal(Literal::Number { text, span }) if text == needle => {

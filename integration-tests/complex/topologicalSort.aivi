@@ -2,5 +2,109 @@
 module integrationTests.complex.TopologicalSort
 
 use aivi
+use aivi.testing
+use aivi.collections
 
-touch = Unit
+len = xs => xs ?
+  | []           => 0
+  | [_, ...rest] => 1 + len rest
+
+// Type alias for adjacency list graph
+Graph = { nodes: List Int, adj: Map Int (List Int) }
+
+// Get neighbors of a node
+neighbors = node graph => Map.get node graph.adj ?
+  | Some ns => ns
+  | None    => []
+
+reverseList = xs => reverseGo xs []
+
+reverseGo = list acc => list ?
+  | []        => acc
+  | [h, ...t] => reverseGo t [h, ...acc]
+
+initIndegree = nodes acc => nodes ?
+  | []        => acc
+  | [n, ...t] => initIndegree t (Map.insert n 0 acc)
+
+incIndegree = node indeg => {
+  cur = Map.getOrElse node 0 indeg
+  Map.insert node (cur + 1) indeg
+}
+
+addIncoming = ns indeg => ns ?
+  | []        => indeg
+  | [n, ...t] => addIncoming t (incIndegree n indeg)
+
+buildIndegree : Graph -> Map Int Int
+buildIndegree = graph => {
+  start = initIndegree graph.nodes (Map.empty)
+  buildIndegreeNodes graph graph.nodes start
+}
+
+buildIndegreeNodes = graph nodes indeg => nodes ?
+  | []        => indeg
+  | [u, ...t] => buildIndegreeNodes graph t (addIncoming (neighbors u graph) indeg)
+
+enqueueZero = nodes indeg q => nodes ?
+  | []        => q
+  | [n, ...t] =>
+    if Map.getOrElse n 0 indeg == 0 then
+      enqueueZero t indeg (Queue.enqueue n q)
+    else
+      enqueueZero t indeg q
+
+relax = ns indeg q => ns ?
+  | []        => { indeg: indeg, q: q }
+  | [n, ...t] => {
+    cur = Map.getOrElse n 0 indeg
+    next = cur - 1
+    indeg2 = Map.insert n next indeg
+    q2 = if next == 0 then Queue.enqueue n q else q
+    relax t indeg2 q2
+  }
+
+cycleNodes = nodes indeg acc => nodes ?
+  | []        => reverseList acc
+  | [n, ...t] =>
+    if Map.getOrElse n 0 indeg > 0 then
+      cycleNodes t indeg [n, ...acc]
+    else
+      cycleNodes t indeg acc
+
+sortLoop = graph indeg q outRev => (Queue.dequeue q) ?
+  | None => {
+    out = reverseList outRev
+    if len out == len graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg [])
+  }
+  | Some (node, q2) => {
+    res = relax (neighbors node graph) indeg q2
+    sortLoop graph res.indeg res.q [node, ...outRev]
+  }
+
+topologicalSort : Graph -> Result (List Int) (List Int)
+topologicalSort = graph => {
+  indeg = buildIndegree graph
+  q0 = enqueueZero graph.nodes indeg (Queue.empty)
+  sortLoop graph indeg q0 []
+}
+
+@test
+topoSmoke = effect {
+  adj = ~map{
+    0 => [1, 2]
+    1 => [3]
+    2 => [3]
+    3 => []
+  }
+  graph = { nodes: [0, 1, 2, 3], adj: adj }
+
+  result <- pure (topologicalSort graph)
+  assert (result == Ok [0, 1, 2, 3] || result == Ok [0, 2, 1, 3])
+
+  // Test cyclic graph detection
+  cyclicAdj = ~map{ 0 => [1], 1 => [0] }
+  cyclicGraph = { nodes: [0, 1], adj: cyclicAdj }
+  cycle <- pure (topologicalSort cyclicGraph)
+  assert (cycle == Err [0, 1] || cycle == Err [1, 0])
+}

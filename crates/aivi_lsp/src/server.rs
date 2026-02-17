@@ -481,12 +481,16 @@ impl LanguageServer for Backend {
     ) -> Result<Option<Vec<CodeActionOrCommand>>> {
         let uri = params.text_document.uri;
         let diagnostics = params.context.diagnostics;
-        let actions = self
-            .with_document_text(&uri, |content| {
-                Self::build_code_actions(content, &uri, &diagnostics)
-            })
+        let actions = match self
+            .with_document_text(&uri, |content| content.to_string())
             .await
-            .unwrap_or_default();
+        {
+            Some(text) => {
+                let workspace = self.workspace_modules_for(&uri).await;
+                Self::build_code_actions_with_workspace(&text, &uri, &diagnostics, &workspace)
+            }
+            None => Vec::new(),
+        };
         Ok(Some(actions))
     }
 

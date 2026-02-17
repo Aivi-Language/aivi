@@ -184,6 +184,10 @@ fn expand_module_aliases(modules: &mut [Module]) {
                 suffix,
                 span,
             },
+            Expr::UnaryNeg { expr, span } => Expr::UnaryNeg {
+                expr: Box::new(rewrite_expr(*expr, aliases)),
+                span,
+            },
             Expr::FieldAccess { base, field, span } => {
                 // Best-effort support for `use some.module as alias`.
                 //

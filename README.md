@@ -152,6 +152,12 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 
 **Implementation Note**: Generated Rust code is emitted to `target/aivi-gen/` (managed builds) or `target/aivi-rustc/` (direct `rustc` target).
 
+## Todo
+
+- mcp server doesn't start
+- some imports report problems List.partition
+- LSP server should suggest auto import
+
 ## License
 
 [License information to be determined]
