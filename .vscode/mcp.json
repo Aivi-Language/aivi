@@ -1,0 +1,12 @@
+{
+	"servers": {
+		"Aivi MCP": {
+			"type": "stdio",
+			"command": "aivi",
+			"args": [
+				"mcp"
+			]
+		}
+	},
+	"inputs": []
+}
