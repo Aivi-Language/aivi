@@ -626,11 +626,11 @@ impl TypeChecker {
                 })
             }
             (Type::Var(var), other) => {
-                self.bind_var(var, other, span.clone())?;
+                self.bind_var(var, other, span.clone(), true)?;
                 Ok(self.apply(Type::Var(var)))
             }
             (other, Type::Var(var)) => {
-                self.bind_var(var, other, span.clone())?;
+                self.bind_var(var, other, span.clone(), false)?;
                 Ok(self.apply(Type::Var(var)))
             }
             _ => {

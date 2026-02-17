@@ -1,89 +1,90 @@
 impl TypeChecker {
-    fn unify_with_span(&mut self, left: Type, right: Type, span: Span) -> Result<(), TypeError> {
-        self.unify(left, right, span)
+    fn unify_with_span(&mut self, found: Type, expected: Type, span: Span) -> Result<(), TypeError> {
+        self.unify(found, expected, span)
     }
 
-    fn unify(&mut self, left: Type, right: Type, span: Span) -> Result<(), TypeError> {
-        let left = self.apply(left);
-        let left = self.expand_alias(left);
-        let right = self.apply(right);
-        let right = self.expand_alias(right);
-        match (left, right) {
+    fn unify(&mut self, found: Type, expected: Type, span: Span) -> Result<(), TypeError> {
+        let found = self.apply(found);
+        let found = self.expand_alias(found);
+        let expected = self.apply(expected);
+        let expected = self.expand_alias(expected);
+        match (found, expected) {
             (Type::Var(a), Type::Var(b)) if a == b => Ok(()),
-            (Type::Var(var), ty) | (ty, Type::Var(var)) => self.bind_var(var, ty, span),
-            (Type::Con(name_a, args_a), Type::Con(name_b, args_b)) => {
-                if name_a != name_b || args_a.len() != args_b.len() {
+            (Type::Var(var), ty) => self.bind_var(var, ty, span, true),
+            (ty, Type::Var(var)) => self.bind_var(var, ty, span, false),
+            (Type::Con(name_f, args_f), Type::Con(name_e, args_e)) => {
+                if name_f != name_e || args_f.len() != args_e.len() {
                     return Err(TypeError {
                         span,
                         message: "type mismatch".to_string(),
-                        expected: Some(Box::new(Type::Con(name_a, args_a))),
-                        found: Some(Box::new(Type::Con(name_b, args_b))),
+                        expected: Some(Box::new(Type::Con(name_e, args_e))),
+                        found: Some(Box::new(Type::Con(name_f, args_f))),
                     });
                 }
-                for (a, b) in args_a.into_iter().zip(args_b.into_iter()) {
-                    self.unify(a, b, span.clone())?;
+                for (f, e) in args_f.into_iter().zip(args_e.into_iter()) {
+                    self.unify(f, e, span.clone())?;
                 }
                 Ok(())
             }
-            (Type::App(base_a, args_a), Type::App(base_b, args_b)) => {
-                if args_a.len() != args_b.len() {
+            (Type::App(base_f, args_f), Type::App(base_e, args_e)) => {
+                if args_f.len() != args_e.len() {
                     return Err(TypeError {
                         span,
                         message: "type mismatch".to_string(),
-                        expected: Some(Box::new(Type::App(base_a, args_a))),
-                        found: Some(Box::new(Type::App(base_b, args_b))),
+                        expected: Some(Box::new(Type::App(base_e, args_e))),
+                        found: Some(Box::new(Type::App(base_f, args_f))),
                     });
                 }
-                self.unify(*base_a, *base_b, span.clone())?;
-                for (a, b) in args_a.into_iter().zip(args_b.into_iter()) {
-                    self.unify(a, b, span.clone())?;
+                self.unify(*base_f, *base_e, span.clone())?;
+                for (f, e) in args_f.into_iter().zip(args_e.into_iter()) {
+                    self.unify(f, e, span.clone())?;
                 }
                 Ok(())
             }
-            (Type::App(base_a, args_a), Type::Con(name_b, args_b)) => {
+            (Type::App(base_f, args_f), Type::Con(name_e, args_e)) => {
                 // Allow unifying a type application with a fully-applied constructor by splitting
                 // constructor args into a "prefix" (applied to the base) and a "suffix"
                 // corresponding to this application.
-                if args_a.len() > args_b.len() {
+                if args_f.len() > args_e.len() {
                     return Err(TypeError {
                         span,
                         message: "type mismatch".to_string(),
-                        expected: Some(Box::new(Type::App(base_a, args_a))),
-                        found: Some(Box::new(Type::Con(name_b, args_b))),
+                        expected: Some(Box::new(Type::Con(name_e, args_e))),
+                        found: Some(Box::new(Type::App(base_f, args_f))),
                     });
                 }
 
-                let split = args_b.len() - args_a.len();
-                let (prefix, suffix) = args_b.split_at(split);
+                let split = args_e.len() - args_f.len();
+                let (prefix, suffix) = args_e.split_at(split);
                 self.unify(
-                    *base_a,
-                    Type::Con(name_b, prefix.to_vec()),
+                    *base_f,
+                    Type::Con(name_e, prefix.to_vec()),
                     span.clone(),
                 )?;
-                for (a, b) in args_a.into_iter().zip(suffix.iter().cloned()) {
-                    self.unify(a, b, span.clone())?;
+                for (f, e) in args_f.into_iter().zip(suffix.iter().cloned()) {
+                    self.unify(f, e, span.clone())?;
                 }
                 Ok(())
             }
-            (Type::Con(name_a, args_a), Type::App(base_b, args_b)) => {
-                if args_b.len() > args_a.len() {
+            (Type::Con(name_f, args_f), Type::App(base_e, args_e)) => {
+                if args_e.len() > args_f.len() {
                     return Err(TypeError {
                         span,
                         message: "type mismatch".to_string(),
-                        expected: Some(Box::new(Type::Con(name_a, args_a))),
-                        found: Some(Box::new(Type::App(base_b, args_b))),
+                        expected: Some(Box::new(Type::App(base_e, args_e))),
+                        found: Some(Box::new(Type::Con(name_f, args_f))),
                     });
                 }
 
-                let split = args_a.len() - args_b.len();
-                let (prefix, suffix) = args_a.split_at(split);
+                let split = args_f.len() - args_e.len();
+                let (prefix, suffix) = args_f.split_at(split);
                 self.unify(
-                    Type::Con(name_a, prefix.to_vec()),
-                    *base_b,
+                    Type::Con(name_f, prefix.to_vec()),
+                    *base_e,
                     span.clone(),
                 )?;
-                for (a, b) in suffix.iter().cloned().zip(args_b.into_iter()) {
-                    self.unify(a, b, span.clone())?;
+                for (f, e) in suffix.iter().cloned().zip(args_e.into_iter()) {
+                    self.unify(f, e, span.clone())?;
                 }
                 Ok(())
             }
@@ -91,66 +92,66 @@ impl TypeChecker {
                 self.unify(*a1, *a2, span.clone())?;
                 self.unify(*b1, *b2, span)
             }
-            (Type::Tuple(items_a), Type::Tuple(items_b)) => {
-                if items_a.len() != items_b.len() {
+            (Type::Tuple(items_f), Type::Tuple(items_e)) => {
+                if items_f.len() != items_e.len() {
                     return Err(TypeError {
                         span,
                         message: "tuple length mismatch".to_string(),
-                        expected: Some(Box::new(Type::Tuple(items_a))),
-                        found: Some(Box::new(Type::Tuple(items_b))),
+                        expected: Some(Box::new(Type::Tuple(items_e))),
+                        found: Some(Box::new(Type::Tuple(items_f))),
                     });
                 }
-                for (a, b) in items_a.into_iter().zip(items_b.into_iter()) {
-                    self.unify(a, b, span.clone())?;
+                for (f, e) in items_f.into_iter().zip(items_e.into_iter()) {
+                    self.unify(f, e, span.clone())?;
                 }
                 Ok(())
             }
             (
                 Type::Record {
-                    fields: a,
-                    open: open_a,
+                    fields: f_fields,
+                    open: open_f,
                 },
                 Type::Record {
-                    fields: b,
-                    open: open_b,
+                    fields: e_fields,
+                    open: open_e,
                 },
             ) => {
-                let mut all_fields: HashSet<String> = a.keys().cloned().collect();
-                all_fields.extend(b.keys().cloned());
+                let mut all_fields: HashSet<String> = f_fields.keys().cloned().collect();
+                all_fields.extend(e_fields.keys().cloned());
 
                 for field in &all_fields {
-                    match (a.get(field), b.get(field)) {
-                        (Some(ta), Some(tb)) => {
-                            self.unify(ta.clone(), tb.clone(), span.clone())?;
+                    match (f_fields.get(field), e_fields.get(field)) {
+                        (Some(tf), Some(te)) => {
+                            self.unify(tf.clone(), te.clone(), span.clone())?;
                         }
                         (Some(_), None) => {
-                            if !open_b {
+                            if !open_e {
                                 return Err(TypeError {
                                     span: span.clone(),
                                     message: format!("missing field '{}'", field),
                                     expected: Some(Box::new(Type::Record {
-                                        fields: a.clone(),
-                                        open: open_a,
+                                        fields: e_fields.clone(),
+                                        open: open_e,
                                     })),
                                     found: Some(Box::new(Type::Record {
-                                        fields: b.clone(),
-                                        open: open_b,
+                                        fields: f_fields.clone(),
+                                        open: open_f,
                                     })),
                                 });
                             }
                         }
                         (None, Some(_)) => {
-                            if !open_a {
+                            if !open_f {
                                 return Err(TypeError {
                                     span: span.clone(),
                                     message: format!("missing field '{}'", field),
                                     expected: Some(Box::new(Type::Record {
-                                        fields: a.clone(),
-                                        open: open_a,
+                                        fields: e_fields.clone(),
+                                        open: open_e,
                                     })),
                                     found: Some(Box::new(Type::Record {
-                                        fields: b.clone(),
-                                        open: open_b,
+                                        fields: f_fields.clone(),
+                                        open: open_f,
                                     })),
                                 });
                             }
@@ -160,16 +161,22 @@ impl TypeChecker {
                 }
                 Ok(())
             }
-            (a, b) => Err(TypeError {
+            (f, e) => Err(TypeError {
                 span,
                 message: "type mismatch".to_string(),
-                expected: Some(Box::new(a)),
-                found: Some(Box::new(b)),
+                expected: Some(Box::new(e)),
+                found: Some(Box::new(f)),
             }),
         }
     }
 
-    fn bind_var(&mut self, var: TypeVarId, ty: Type, span: Span) -> Result<(), TypeError> {
+    fn bind_var(
+        &mut self,
+        var: TypeVarId,
+        ty: Type,
+        span: Span,
+        var_is_found: bool,
+    ) -> Result<(), TypeError> {
         // Normalize through the current substitution before doing the occurs check.
         // Without this, we can falsely report an occurs-check error when `ty` is a var
         // that already resolves to `var` (via substitution), which should be a no-op.
@@ -188,8 +195,16 @@ impl TypeChecker {
             return Err(TypeError {
                 span,
                 message,
-                expected: Some(Box::new(Type::Var(var))),
-                found: Some(Box::new(ty)),
+                expected: Some(Box::new(if var_is_found {
+                    ty.clone()
+                } else {
+                    Type::Var(var)
+                })),
+                found: Some(Box::new(if var_is_found {
+                    Type::Var(var)
+                } else {
+                    ty
+                })),
             });
         }
         self.subst.insert(var, ty);
