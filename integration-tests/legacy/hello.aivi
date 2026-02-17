@@ -1,11 +1,9 @@
-
 module examples.hello
 export main
 
 use aivi
 use aivi.console
 use aivi.testing
-
 
 main : Effect Text Unit
 main = effect {

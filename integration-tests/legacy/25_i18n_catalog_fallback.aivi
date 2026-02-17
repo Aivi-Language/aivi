@@ -6,7 +6,6 @@ use aivi.i18n
 use aivi.system
 use aivi.testing
 
-
 defaultLocale : Locale
 defaultLocale = { language: "en", region: Some "US", variants: [], tag: "en-US" }
 

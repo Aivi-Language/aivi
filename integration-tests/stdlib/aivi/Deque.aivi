@@ -6,6 +6,19 @@ use aivi.testing
 use aivi
 
 @test
-smoke = effect {
-  _ <- assert True
+dequeOps = effect {
+  d0 = Deque.empty
+  d1 = Deque.pushBack d0 1
+  d2 = Deque.pushFront d1 0
+
+  _ <- assert (Deque.peekFront d2 == Some 0)
+  _ <- assert (Deque.peekBack d2 == Some 1)
+
+  res = Deque.popFront d2
+  _ <- match res with
+  | Some (val, d3) => effect {
+      _ <- assertEq val 0
+      _ <- assert (Deque.peekFront d3 == Some 1)
+  }
+  | None => assert False
 }

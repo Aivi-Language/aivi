@@ -4,7 +4,6 @@ export main, printGen
 use aivi.generator
 use aivi.testing
 
-
 main : Effect Text Unit
 main = effect {
   _ <- print "--- Basic Yield ---"

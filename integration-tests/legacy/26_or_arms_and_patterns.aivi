@@ -4,7 +4,6 @@ export main, messageFrom
 use aivi.console
 use aivi.testing
 
-
 Result E A = Err E | Ok A
 
 Error =

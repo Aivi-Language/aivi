@@ -8,5 +8,5 @@ use aivi.math
 @test
 smoke = effect {
   (m, e) = frexp 8.0
-  _ <- assert (abs (ldexp m e - 8.0) < 1e-10)
+  _ <- assert (abs (ldexp m e - 8.0) < 1e -10)
 }

@@ -6,6 +6,8 @@ use aivi.testing
 use aivi
 
 @test
-smoke = effect {
-  _ <- assert True
+parReturnsPair = effect {
+  (a, b) <- concurrent.par (pure 1) (pure 2)
+  _      <- assertEq a 1
+  _      <- assertEq b 2
 }

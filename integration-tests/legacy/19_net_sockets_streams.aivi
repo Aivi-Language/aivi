@@ -4,7 +4,6 @@ export main, echoServer
 use aivi.net.sockets
 use aivi.testing
 
-
 main : Effect SocketError Unit
 main = effect {
   echoServer 8080

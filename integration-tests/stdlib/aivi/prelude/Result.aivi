@@ -12,8 +12,8 @@ resultMatches = effect {
     | Ok n  => assertEq n 1
     | Err _ => assert False
 
-  err = Err "nope"
-  _ <- err ?
-    | Ok _  => assert False
-    | Err e => assertEq e "nope"
+    err = Err "nope"
+    _ <- err ?
+      | Ok _  => assert False
+      | Err e => assertEq e "nope"
 }

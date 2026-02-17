@@ -1,4 +1,3 @@
-
 module examples.stdlib_linear_signal_graph
 export main
 
@@ -8,7 +7,6 @@ use aivi.linear_algebra
 use aivi.signal
 use aivi.graph
 use aivi.testing
-
 
 main : Effect Text Unit
 main = effect {

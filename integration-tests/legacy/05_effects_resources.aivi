@@ -4,7 +4,6 @@ export program, readConfig, withFile, managedFile, loadOrDefault, program2
 use aivi.console
 use aivi.testing
 
-
 program : Effect Text Unit
 program = effect {
   _   <- print "boot"
@@ -52,5 +51,5 @@ __test_sentinel = 0
 @test
 smoke = effect {
   txt <- loadOrDefault "tmp/does-not-exist.json" "fallback"
-  _ <- assert (txt == "fallback")
+  _   <- assert (txt == "fallback")
 }

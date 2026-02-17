@@ -5,7 +5,6 @@ use aivi.console
 use aivi.math
 use aivi.testing
 
-
 main : Effect Text Unit
 main = effect {
   _ <- if isInf inf then pure Unit else fail "expected inf to be infinite"

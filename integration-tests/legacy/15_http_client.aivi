@@ -4,7 +4,6 @@ export main
 use aivi.net.https
 use aivi.testing
 
-
 main : Effect Text Unit
 main = effect {
   result <- get ~u(https://example.com)

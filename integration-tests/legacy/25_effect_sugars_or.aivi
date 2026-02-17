@@ -5,7 +5,6 @@ use aivi
 use aivi.console
 use aivi.testing
 
-
 Result E A = Err E | Ok A
 
 // Avoid `attempt` / `?` / `pure` for the common "use default on failure" pattern.

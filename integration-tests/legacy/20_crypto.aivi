@@ -5,7 +5,6 @@ use aivi.console
 use aivi.crypto
 use aivi.testing
 
-
 main : Effect Text Unit
 main = effect {
   hash = sha256 "aivi"
