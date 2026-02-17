@@ -52,6 +52,8 @@ int_smoke = effect {
   assert (2 > 1)
   assert (1 <= 1)
   assert (1 >= 1)
+  assert (Int.min 1 2 == 1)
+  assert (Int.max 1 2 == 2)
 }
 
 len = xs => xs ?
@@ -100,6 +102,19 @@ result_smoke = effect {
     err ?
       | Ok _  => assert False
       | Err e => assertEq e "nope"
+}
+
+@test
+attempt_smoke = effect {
+  ok <- attempt (pure 42)
+  ok ?
+    | Ok n  => assertEq n 42
+    | Err _ => assert False
+
+    bad <- attempt (fail "boom")
+    bad ?
+      | Ok _  => assert False
+      | Err e => assertEq e "boom"
 }
 
 @test

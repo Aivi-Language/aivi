@@ -52,18 +52,21 @@ segment2_smoke = effect {
 
 @test
 area_smoke = effect {
-  pure area // todo nothing tested here
-  assert True
+  square = { vertices: [{ x: 0.0, y: 0.0 }, { x: 1.0, y: 0.0 }, { x: 1.0, y: 1.0 }, { x: 0.0, y: 1.0 }] }
+  squareRev = { vertices: [{ x: 0.0, y: 0.0 }, { x: 0.0, y: 1.0 }, { x: 1.0, y: 1.0 }, { x: 1.0, y: 0.0 }] }
+  assertEq (area square) 1.0
+  assertEq (area squareRev) 1.0
 }
 
 @test
 distance_smoke = effect {
-  pure distance
-  assert True
+  a = { x: 0.0, y: 0.0 }
+  b = { x: 3.0, y: 4.0 }
+  assertEq (distance a b) 5.0
 }
 
 @test
 midpoint_smoke = effect {
-  pure midpoint
-  assert True
+  seg = { start: { x: 0.0, y: 0.0 }, end: { x: 2.0, y: 2.0 } }
+  assertEq (midpoint seg) { x: 1.0, y: 1.0 }
 }

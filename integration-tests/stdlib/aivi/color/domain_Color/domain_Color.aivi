@@ -26,3 +26,9 @@ suffix_s_smoke = effect {
   adjusted = rgb + 1s
   assert (toHex adjusted != toHex rgb)
 }
+
+@test
+rgb_channel_literals = effect {
+  rgb = 20r + 128g + 20b
+  assert (rgb == { r: 20, g: 128, b: 20 })
+}

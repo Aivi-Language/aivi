@@ -18,7 +18,7 @@ fileStats_smoke = effect {
 close_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
   writeText p "hello"
-  ok  <- exists p
+  ok <- exists p
   assert ok
   txt <- readText p
   assert (txt == "hello")
@@ -29,7 +29,7 @@ close_smoke = effect {
 delete_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
   writeText p "hello"
-  ok  <- exists p
+  ok <- exists p
   assert ok
   txt <- readText p
   assert (txt == "hello")
@@ -40,7 +40,7 @@ delete_smoke = effect {
 exists_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
   writeText p "hello"
-  ok  <- exists p
+  ok <- exists p
   assert ok
   txt <- readText p
   assert (txt == "hello")
@@ -51,7 +51,7 @@ exists_smoke = effect {
 open_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
   writeText p "hello"
-  ok  <- exists p
+  ok <- exists p
   assert ok
   txt <- readText p
   assert (txt == "hello")
@@ -62,7 +62,7 @@ open_smoke = effect {
 readAll_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
   writeText p "hello"
-  ok  <- exists p
+  ok <- exists p
   assert ok
   txt <- readText p
   assert (txt == "hello")
@@ -73,7 +73,7 @@ readAll_smoke = effect {
 readText_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
   writeText p "hello"
-  ok  <- exists p
+  ok <- exists p
   assert ok
   txt <- readText p
   assert (txt == "hello")
@@ -84,7 +84,7 @@ readText_smoke = effect {
 stat_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
   writeText p "hello"
-  ok  <- exists p
+  ok <- exists p
   assert ok
   txt <- readText p
   assert (txt == "hello")
@@ -95,7 +95,7 @@ stat_smoke = effect {
 writeText_smoke = effect {
   p = "tmp/integration-tests-file-smoke.txt"
   writeText p "hello"
-  ok  <- exists p
+  ok <- exists p
   assert ok
   txt <- readText p
   assert (txt == "hello")

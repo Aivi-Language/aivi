@@ -5,6 +5,29 @@ use aivi
 use aivi.testing
 use aivi.signal
 
+abs : Float -> Float
+abs = x => if x < 0.0 then -x else x
+
+maxAbs : List Float -> Float
+maxAbs = xs => xs ?
+  | [] => 0.0
+  | [x, ...rest] => {
+      r = maxAbs rest
+      ax = abs x
+      if ax > r then ax else r
+    }
+
+maxAbsDiff : List Float -> List Float -> Float
+maxAbsDiff = a b => (a, b) ?
+  | ([], []) => 0.0
+  | ([], _) => 1.0
+  | (_, []) => 1.0
+  | ([x, ...xs], [y, ...ys]) => {
+      d = abs (x - y)
+      r = maxAbsDiff xs ys
+      if d > r then d else r
+    }
+
 spectrum_touch : Spectrum -> Unit
 spectrum_touch = _ => Unit
 
@@ -16,24 +39,35 @@ spectrum_smoke = effect {
 
 @test
 fft_smoke = effect {
-  pure fft
-  assert True
+  sig = { samples: [0.0, 1.0, 0.0, -1.0], rate: 4.0 }
+  spec = fft sig
+  assertEq (List.length spec.bins) 4
 }
 
 @test
 ifft_smoke = effect {
-  pure ifft
-  assert True
+  sig = { samples: [0.0, 1.0, 0.0, -1.0], rate: 4.0 }
+  sig2 = ifft (fft sig)
+  assert (maxAbsDiff sig.samples sig2.samples < 0.000001)
 }
 
 @test
 normalize_smoke = effect {
-  pure normalize
-  assert True
+  sig = { samples: [0.0, 2.0, -1.0, 0.0], rate: 4.0 }
+  sig2 = normalize sig
+  assert (maxAbs sig2.samples <= 1.000001)
 }
 
 @test
 windowHann_smoke = effect {
-  pure windowHann
-  assert True
+  sig = { samples: [1.0, 1.0, 1.0, 1.0], rate: 4.0 }
+  win = windowHann sig
+  assertEq (List.length win.samples) 4
+  win.samples ?
+    | [] => assert False
+    | [a, _b, _c, d] => effect {
+        assert (abs a < 0.000001)
+        assert (abs d < 0.000001)
+      }
+    | _ => assert False
 }

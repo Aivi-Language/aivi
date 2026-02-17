@@ -6,3 +6,5 @@ lighter = primary + 10l
 darker = primary - 20l
 muted = primary - 30s
 shifted = primary + 30h
+
+forest = 20r + 128g + 20b

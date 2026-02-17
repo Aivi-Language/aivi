@@ -49,6 +49,11 @@ deque_smoke = effect {
     assert (Map.size m0 == 0)
     assert (Map.size m1 == 1)
     assert (Map.get 1 m1 == Some "one")
+    assert (Map.get 2 m1 == None)
+
+    m2 = Map.remove 1 m1
+    assert (Map.size m2 == 0)
+    assert (Map.get 1 m2 == None)
   }
 
 @test
