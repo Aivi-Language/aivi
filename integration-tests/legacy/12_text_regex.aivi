@@ -8,7 +8,7 @@ use aivi.regex
 main : Effect Text Unit
 main = effect {
   msg = "  Hello World  "
-  slug = msg |> trim |> toLower |> replaceAll " " "-"
+  slug = msg |> trim |> toLower |> text.replaceAll " " "-"
   print slug
 
   compiled = compile "[a-z]+"

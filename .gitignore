@@ -1,7 +1,7 @@
 node_modules
 .idea/
 .ai/
-
+tmp
 specs/.vitepress/cache/
 
 # Legacy pandoc build output
