@@ -218,7 +218,7 @@ impl LanguageServer for Backend {
         let text = params.text_document.text;
         let version = params.text_document.version;
         self.update_document(uri.clone(), text).await;
-        let workspace = self.workspace_modules_for(&uri).await;
+        let workspace = self.workspace_modules_for_diagnostics(&uri).await;
         let (include_specs_snippets, strict) = {
             let state = self.state.lock().await;
             (state.diagnostics_in_specs_snippets, state.strict.clone())
@@ -246,7 +246,7 @@ impl LanguageServer for Backend {
         let version = params.text_document.version;
         if let Some(change) = params.content_changes.into_iter().next() {
             self.update_document(uri.clone(), change.text).await;
-            let workspace = self.workspace_modules_for(&uri).await;
+            let workspace = self.workspace_modules_for_diagnostics(&uri).await;
             let (include_specs_snippets, strict) = {
                 let state = self.state.lock().await;
                 (state.diagnostics_in_specs_snippets, state.strict.clone())

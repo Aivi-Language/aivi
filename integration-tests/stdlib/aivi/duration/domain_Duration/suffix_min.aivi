@@ -6,6 +6,8 @@ use aivi.testing
 use aivi.duration
 use aivi.duration
 
+subject = 1min
+
 @test
 smoke = effect {
   _ <- pure subject
