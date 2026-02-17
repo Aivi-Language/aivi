@@ -1,0 +1,11 @@
+@no_prelude
+module integrationTests.stdlib.aivi.text.tests
+
+use aivi
+use aivi.testing
+use aivi.text
+
+@test
+smoke = effect {
+  assert (length "abc" == 3)
+}
