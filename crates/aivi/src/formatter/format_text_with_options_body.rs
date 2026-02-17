@@ -398,6 +398,100 @@
         (indent, len)
     }
 
+    // Pre-pass: split trailing closers (`}`/`]`/`)`) off a line onto their own
+    // line when the line also contains other tokens and the matching opener lives
+    // on a different source line.  This prevents the common pattern:
+    //
+    //   rgb = {
+    //     r: 255, g: 0, b: 0 }      ← `}` should be on its own line
+    //
+    // from causing downstream indentation drift.
+    {
+        let mut split_raw_lines: Vec<&str> = Vec::with_capacity(raw_lines.len() + 16);
+        let mut split_tokens_by_line: Vec<Vec<&crate::cst::CstToken>> =
+            Vec::with_capacity(tokens_by_line.len() + 16);
+
+        for (line_index, raw) in raw_lines.iter().enumerate() {
+            let line_tokens = tokens_by_line[line_index].clone();
+            let has_comment = line_tokens.iter().any(|t| t.kind == "comment");
+            if has_comment || line_tokens.len() < 2 {
+                split_raw_lines.push(*raw);
+                split_tokens_by_line.push(line_tokens);
+                continue;
+            }
+            // Check if the last code token is a closer.
+            let last_close = last_code_token_is(&line_tokens, &["}", "]", ")"]);
+            if !last_close {
+                split_raw_lines.push(*raw);
+                split_tokens_by_line.push(line_tokens);
+                continue;
+            }
+            // Check that there are other code tokens besides the closer.
+            let first_code = first_code_index(&line_tokens);
+            let last_code_idx = line_tokens
+                .iter()
+                .rposition(|t| t.kind != "comment" && t.text != "\n");
+            if first_code == last_code_idx {
+                // Only token on the line is the closer — nothing to split.
+                split_raw_lines.push(*raw);
+                split_tokens_by_line.push(line_tokens);
+                continue;
+            }
+            // Find the matching open delimiter for the trailing closer.
+            // Walk backwards through all tokens up to this point to find the
+            // opener.  If the opener is on the same source line, keep the line
+            // intact (e.g. `{ r: 255, g: 0, b: 0 }` all on one source line).
+            let closer_tok = line_tokens[last_code_idx.unwrap()];
+            let opener_char = match closer_tok.text.as_str() {
+                "}" => "{",
+                "]" => "[",
+                ")" => "(",
+                _ => {
+                    split_raw_lines.push(*raw);
+                    split_tokens_by_line.push(line_tokens);
+                    continue;
+                }
+            };
+            // Find matching opener by scanning backward through all token buckets.
+            let mut depth = 0isize;
+            let mut opener_line: Option<usize> = None;
+            'outer: for scan_line in (0..=line_index).rev() {
+                let scan_tokens = &tokens_by_line[scan_line];
+                for t in scan_tokens.iter().rev() {
+                    if t.kind == "comment" || t.kind == "string" {
+                        continue;
+                    }
+                    if is_close_sym(t.text.as_str()).is_some() {
+                        depth += 1;
+                    } else if is_open_sym(t.text.as_str()).is_some() {
+                        if depth == 0 {
+                            opener_line = Some(scan_line);
+                            break 'outer;
+                        }
+                        depth -= 1;
+                    }
+                }
+            }
+            let same_line = opener_line == Some(line_index);
+            if same_line {
+                split_raw_lines.push(*raw);
+                split_tokens_by_line.push(line_tokens);
+                continue;
+            }
+            // Split: everything except the closer goes on one line, the closer
+            // goes on a new line.
+            let mut before = line_tokens.clone();
+            let closer = before.pop().expect("closer token");
+            split_raw_lines.push(*raw);
+            split_tokens_by_line.push(before);
+            split_raw_lines.push("");
+            split_tokens_by_line.push(vec![closer]);
+        }
+
+        raw_lines = split_raw_lines;
+        tokens_by_line = split_tokens_by_line;
+    }
+
     // Pre-pass: merge "hanging" openers (`{`/`[`) that appear alone on the next line after
     // `=` / `=>` / `<-` / `->` back onto the previous line, then drop the opener-only line.
     //
