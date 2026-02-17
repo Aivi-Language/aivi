@@ -42,6 +42,7 @@ mod signal;
 mod system;
 mod testing;
 mod text;
+mod tree;
 mod ui;
 mod ui_layout;
 mod ui_server_html;
@@ -134,6 +135,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: graph::MODULE_NAME,
         source: graph::SOURCE,
+    },
+    EmbeddedModule {
+        name: tree::MODULE_NAME,
+        source: tree::SOURCE,
     },
     EmbeddedModule {
         name: math::MODULE_NAME,

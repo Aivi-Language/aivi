@@ -8,14 +8,6 @@ use aivi.collections
 // Fenwick tree (Binary Indexed Tree) for efficient prefix sums
 Fenwick = { size: Int, tree: Map Int Int }
 
-listLength = xs => xs ?
-  | []        => 0
-  | [_, ...t] => 1 + listLength t
-
-at = xs idx => xs ?
-  | []        => None
-  | [h, ...t] => if idx == 0 then Some h else at t (idx - 1)
-
 // Extract lowest set bit
 lowbit : Int -> Int
 lowbit = idx =>
@@ -41,7 +33,7 @@ addDelta = size idx delta tree =>
 // Build Fenwick tree from list
 buildFromList : List Int -> Fenwick
 buildFromList = arr => {
-  size = listLength arr
+  size = List.length arr
   { size: size, tree: buildTree arr size 1 (Map.empty) }
 }
 
@@ -49,7 +41,7 @@ buildTree = arr size idx tree => {
   if idx > size then
     tree
   else
-    at arr (idx - 1) ?
+    List.at arr (idx - 1) ?
       | None       => buildTree arr size (idx + 1) tree
       | Some value => buildTree arr size (idx + 1) (addDelta size idx value tree)
 }

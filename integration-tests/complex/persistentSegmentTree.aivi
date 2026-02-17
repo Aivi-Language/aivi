@@ -5,21 +5,6 @@ use aivi
 use aivi.testing
 use aivi.collections
 
-listLength = xs => xs ?
-  | []        => 0
-  | [_, ...t] => 1 + listLength t
-
-isEmpty = xs => xs ?
-  | [] => True
-  | _  => False
-
-at = xs idx => xs ?
-  | []        => None
-  | [h, ...t] => if idx == 0 then Some h else at t (idx - 1)
-
-minInt = a b => if a < b then a else b
-maxInt = a b => if a < b then b else a
-
 // Segment metadata for aggregate queries
 SegmentMeta = { sum: Int, min: Int, max: Int }
 
@@ -49,8 +34,8 @@ combineMeta = leftMeta rightMeta => (leftMeta, rightMeta) ?
   | (None, Some rm)    => Some rm
   | (Some lm, Some rm) => Some {
     sum: lm.sum + rm.sum
-    min: minInt lm.min rm.min
-    max: maxInt lm.max rm.max
+    min: Int.min lm.min rm.min
+    max: Int.max lm.max rm.max
   }
 
 // Rebuild node from children
@@ -69,7 +54,7 @@ nodeFromChildren = start end left right => combineMeta (nodeMeta left) (nodeMeta
 // Build tree from a range of the array
 buildRange = arr start end => {
   if start == end then
-    at arr start ?
+    List.at arr start ?
       | Some value => Node {
         start: start
         end: end
@@ -91,8 +76,8 @@ buildRange = arr start end => {
 // Create tree from list
   fromList : List Int -> SegmentTree
   fromList = arr =>
-    if isEmpty arr then Empty
-    else buildRange arr 0 (listLength arr - 1)
+    if List.isEmpty arr then Empty
+    else buildRange arr 0 (List.length arr - 1)
 
 // Query range [l..r] for metadata
   queryRange : SegmentTree -> Int -> Int -> Option SegmentMeta

@@ -16,4 +16,6 @@ smoke = effect {
   _ <- assert (2 > 1)
   _ <- assert (1 <= 1)
   _ <- assert (1 >= 1)
+  _ <- assert (Int.min 1 2 == 1)
+  _ <- assert (Int.max 1 2 == 2)
 }
