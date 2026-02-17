@@ -10,8 +10,8 @@ header_touch = _ => Unit
 
 @test
 header_smoke = effect {
-  _ <- pure header_touch
-  _ <- assertEq (1 + 1) 2
+  pure header_touch
+  assertEq (1 + 1) 2
 }
 
 httpError_touch : HttpError -> Unit
@@ -19,8 +19,8 @@ httpError_touch = _ => Unit
 
 @test
 httpError_smoke = effect {
-  _ <- pure httpError_touch
-  _ <- assertEq (1 + 1) 2
+  pure httpError_touch
+  assertEq (1 + 1) 2
 }
 
 request_touch : Request -> Unit
@@ -28,8 +28,8 @@ request_touch = _ => Unit
 
 @test
 request_smoke = effect {
-  _ <- pure request_touch
-  _ <- assertEq (1 + 1) 2
+  pure request_touch
+  assertEq (1 + 1) 2
 }
 
 response_touch : Response -> Unit
@@ -37,8 +37,8 @@ response_touch = _ => Unit
 
 @test
 response_smoke = effect {
-  _ <- pure response_touch
-  _ <- assertEq (1 + 1) 2
+  pure response_touch
+  assertEq (1 + 1) 2
 }
 
 server_touch : Server -> Unit
@@ -46,8 +46,8 @@ server_touch = _ => Unit
 
 @test
 server_smoke = effect {
-  _ <- pure server_touch
-  _ <- assertEq (1 + 1) 2
+  pure server_touch
+  assertEq (1 + 1) 2
 }
 
 serverConfig_touch : ServerConfig -> Unit
@@ -55,8 +55,8 @@ serverConfig_touch = _ => Unit
 
 @test
 serverConfig_smoke = effect {
-  _ <- pure serverConfig_touch
-  _ <- assertEq (1 + 1) 2
+  pure serverConfig_touch
+  assertEq (1 + 1) 2
 }
 
 serverReply_touch : ServerReply -> Unit
@@ -64,8 +64,8 @@ serverReply_touch = _ => Unit
 
 @test
 serverReply_smoke = effect {
-  _ <- pure serverReply_touch
-  _ <- assertEq (1 + 1) 2
+  pure serverReply_touch
+  assertEq (1 + 1) 2
 }
 
 webSocket_touch : WebSocket -> Unit
@@ -73,8 +73,8 @@ webSocket_touch = _ => Unit
 
 @test
 webSocket_smoke = effect {
-  _ <- pure webSocket_touch
-  _ <- assertEq (1 + 1) 2
+  pure webSocket_touch
+  assertEq (1 + 1) 2
 }
 
 wsError_touch : WsError -> Unit
@@ -82,8 +82,8 @@ wsError_touch = _ => Unit
 
 @test
 wsError_smoke = effect {
-  _ <- pure wsError_touch
-  _ <- assertEq (1 + 1) 2
+  pure wsError_touch
+  assertEq (1 + 1) 2
 }
 
 wsMessage_touch : WsMessage -> Unit
@@ -91,36 +91,36 @@ wsMessage_touch = _ => Unit
 
 @test
 wsMessage_smoke = effect {
-  _ <- pure wsMessage_touch
-  _ <- assertEq (1 + 1) 2
+  pure wsMessage_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 listen_smoke = effect {
-  _ <- pure listen
-  _ <- assert True
+  pure listen
+  assert True
 }
 
 @test
 stop_smoke = effect {
-  _ <- pure stop
-  _ <- assert True
+  pure stop
+  assert True
 }
 
 @test
 wsClose_smoke = effect {
-  _ <- pure wsClose
-  _ <- assert True
+  pure wsClose
+  assert True
 }
 
 @test
 wsRecv_smoke = effect {
-  _ <- pure wsRecv
-  _ <- assert True
+  pure wsRecv
+  assert True
 }
 
 @test
 wsSend_smoke = effect {
-  _ <- pure wsSend
-  _ <- assert True
+  pure wsSend
+  assert True
 }

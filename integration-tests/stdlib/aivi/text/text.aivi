@@ -10,8 +10,8 @@ bytes_touch = _ => Unit
 
 @test
 bytes_smoke = effect {
-  _ <- pure bytes_touch
-  _ <- assertEq (1 + 1) 2
+  pure bytes_touch
+  assertEq (1 + 1) 2
 }
 
 encoding_touch : Encoding -> Unit
@@ -19,8 +19,8 @@ encoding_touch = _ => Unit
 
 @test
 encoding_smoke = effect {
-  _ <- pure encoding_touch
-  _ <- assertEq (1 + 1) 2
+  pure encoding_touch
+  assertEq (1 + 1) 2
 }
 
 latin1_touch : Latin1 -> Unit
@@ -28,8 +28,8 @@ latin1_touch = _ => Unit
 
 @test
 latin1_smoke = effect {
-  _ <- pure latin1_touch
-  _ <- assertEq (1 + 1) 2
+  pure latin1_touch
+  assertEq (1 + 1) 2
 }
 
 textError_touch : TextError -> Unit
@@ -37,8 +37,8 @@ textError_touch = _ => Unit
 
 @test
 textError_smoke = effect {
-  _ <- pure textError_touch
-  _ <- assertEq (1 + 1) 2
+  pure textError_touch
+  assertEq (1 + 1) 2
 }
 
 utf16_touch : Utf16 -> Unit
@@ -46,8 +46,8 @@ utf16_touch = _ => Unit
 
 @test
 utf16_smoke = effect {
-  _ <- pure utf16_touch
-  _ <- assertEq (1 + 1) 2
+  pure utf16_touch
+  assertEq (1 + 1) 2
 }
 
 utf32_touch : Utf32 -> Unit
@@ -55,8 +55,8 @@ utf32_touch = _ => Unit
 
 @test
 utf32_smoke = effect {
-  _ <- pure utf32_touch
-  _ <- assertEq (1 + 1) 2
+  pure utf32_touch
+  assertEq (1 + 1) 2
 }
 
 utf8_touch : Utf8 -> Unit
@@ -64,229 +64,229 @@ utf8_touch = _ => Unit
 
 @test
 utf8_smoke = effect {
-  _ <- pure utf8_touch
-  _ <- assertEq (1 + 1) 2
+  pure utf8_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 capitalize_smoke = effect {
-  _ <- assert (capitalize "hello" == "Hello")
-  _ <- assert (capitalize "Hello" == "Hello")
+  assert (capitalize "hello" == "Hello")
+  assert (capitalize "Hello" == "Hello")
 }
 
 @test
 caseFold_smoke = effect {
-  _ <- assert (caseFold "Hello" == "hello")
+  assert (caseFold "Hello" == "hello")
 }
 
 @test
 chunk_smoke = effect {
-  _ <- assert (chunk 2 "abcde" == ["ab", "cd", "e"])
+  assert (chunk 2 "abcde" == ["ab", "cd", "e"])
 }
 
 @test
 compare_smoke = effect {
-  _ <- assert (compare "a" "b" < 0)
-  _ <- assert (compare "b" "a" > 0)
-  _ <- assert (compare "a" "a" == 0)
+  assert (compare "a" "b" < 0)
+  assert (compare "b" "a" > 0)
+  assert (compare "a" "a" == 0)
 }
 
 @test
 concat_smoke = effect {
-  _ <- assert (concat "a" "b" == "ab")
+  assert (concat "a" "b" == "ab")
 }
 
 @test
 contains_smoke = effect {
-  _ <- assert (contains "ell" "hello" == True)
-  _ <- assert (contains "z" "hello" == False)
+  assert (contains "ell" "hello" == True)
+  assert (contains "z" "hello" == False)
 }
 
 @test
 count_smoke = effect {
-  _ <- assert (count "l" "hello" == 2)
-  _ <- assert (count "z" "hello" == 0)
+  assert (count "l" "hello" == 2)
+  assert (count "z" "hello" == 0)
 }
 
 @test
 debugText_smoke = effect {
-  _ <- assert (length (debugText "hello") > 0)
+  assert (length (debugText "hello") > 0)
 }
 
 @test
 endsWith_smoke = effect {
-  _ <- assert (endsWith "lo" "hello" == True)
-  _ <- assert (endsWith "he" "hello" == False)
+  assert (endsWith "lo" "hello" == True)
+  assert (endsWith "he" "hello" == False)
 }
 
 @test
 fromBytes_smoke = effect {
   // Inverse of toBytes
-  _ <- assert True
+  assert True
 }
 
 @test
 indexOf_smoke = effect {
-  _ <- assert (indexOf "e" "hello" == Some 1)
-  _ <- assert (indexOf "l" "hello" == Some 2)
-  _ <- assert (indexOf "z" "hello" == None)
+  assert (indexOf "e" "hello" == Some 1)
+  assert (indexOf "l" "hello" == Some 2)
+  assert (indexOf "z" "hello" == None)
 }
 
 @test
 isAlnum_smoke = effect {
-  _ <- assert (isAlnum "a" == True)
-  _ <- assert (isAlnum "1" == True)
-  _ <- assert (isAlnum "!" == False)
+  assert (isAlnum "a" == True)
+  assert (isAlnum "1" == True)
+  assert (isAlnum "!" == False)
 }
 
 @test
 isAlpha_smoke = effect {
-  _ <- pure isAlpha
-  _ <- assertEq (1 + 1) 2
+  pure isAlpha
+  assertEq (1 + 1) 2
 }
 
 @test
 isDigit_smoke = effect {
-  _ <- assert (isDigit "1" == True)
-  _ <- assert (isDigit "a" == False)
+  assert (isDigit "1" == True)
+  assert (isDigit "a" == False)
 }
 
 @test
 isEmpty_smoke = effect {
-  _ <- assert (isEmpty "" == True)
-  _ <- assert (isEmpty "a" == False)
+  assert (isEmpty "" == True)
+  assert (isEmpty "a" == False)
 }
 
 @test
 isLower_smoke = effect {
-  _ <- assert (isLower "a" == True)
-  _ <- assert (isLower "A" == False)
+  assert (isLower "a" == True)
+  assert (isLower "A" == False)
 }
 
 @test
 isSpace_smoke = effect {
-  _ <- assert (isSpace " " == True)
-  _ <- assert (isSpace "a" == False)
+  assert (isSpace " " == True)
+  assert (isSpace "a" == False)
 }
 
 @test
 isUpper_smoke = effect {
-  _ <- assert (isUpper "A" == True)
-  _ <- assert (isUpper "a" == False)
+  assert (isUpper "A" == True)
+  assert (isUpper "a" == False)
 }
 
 @test
 lastIndexOf_smoke = effect {
-  _ <- assert (lastIndexOf "l" "hello" == Some 3)
-  _ <- assert (lastIndexOf "z" "hello" == None)
+  assert (lastIndexOf "l" "hello" == Some 3)
+  assert (lastIndexOf "z" "hello" == None)
 }
 
 @test
 length_smoke = effect {
-  _ <- assert (length "hello" == 5)
-  _ <- assert (length "" == 0)
+  assert (length "hello" == 5)
+  assert (length "" == 0)
 }
 
 @test
 normalizeNFC_smoke = effect {
-  _ <- assert (length (normalizeNFC "hello") == 5)
+  assert (length (normalizeNFC "hello") == 5)
 }
 
 @test
 normalizeNFD_smoke = effect {
-  _ <- assert (length (normalizeNFD "hello") == 5)
+  assert (length (normalizeNFD "hello") == 5)
 }
 
 @test
 normalizeNFKC_smoke = effect {
-  _ <- assert (length (normalizeNFKC "hello") == 5)
+  assert (length (normalizeNFKC "hello") == 5)
 }
 
 @test
 normalizeNFKD_smoke = effect {
-  _ <- assert (length (normalizeNFKD "hello") == 5)
+  assert (length (normalizeNFKD "hello") == 5)
 }
 
 @test
 padEnd_smoke = effect {
-  _ <- assert (padEnd 5 " " "abc" == "abc  ")
-  _ <- assert (padEnd 3 " " "abc" == "abc")
+  assert (padEnd 5 " " "abc" == "abc  ")
+  assert (padEnd 3 " " "abc" == "abc")
 }
 
 @test
 padStart_smoke = effect {
-  _ <- assert (padStart 5 " " "abc" == "  abc")
+  assert (padStart 5 " " "abc" == "  abc")
 }
 
 @test
 parseFloat_smoke = effect {
-  _ <- assert (parseFloat "123.45" == Some 123.45)
-  // _ <- assert (parseFloat "abc" == None)? Not sure if it yields None or error. Assuming Option return.
+  assert (parseFloat "123.45" == Some 123.45)
+  // assert (parseFloat "abc" == None)? Not sure if it yields None or error. Assuming Option return.
   res = parseFloat "abc"
-  _ <- res ?
+  res ?
     | Some _ => assert False
     | None   => assert True
 }
 
 @test
 parseInt_smoke = effect {
-  _ <- assert (parseInt "123" == Some 123)
-  _ <- assert (parseInt "abc" == None)
+  assert (parseInt "123" == Some 123)
+  assert (parseInt "abc" == None)
 }
 
 @test
 remove_smoke = effect {
-  _ <- assert (remove "l" "hello" == "heo")
+  assert (remove "l" "hello" == "heo")
 }
 
 @test
 repeat_smoke = effect {
-  _ <- assert (repeat 3 "a" == "aaa")
-  _ <- assert (repeat 0 "a" == "")
+  assert (repeat 3 "a" == "aaa")
+  assert (repeat 0 "a" == "")
 }
 
 @test
 replace_smoke = effect {
-  _ <- assert (replace "l" "L" "hello" == "heLlo") // Replaces first occurrence? Assuming standard behavior for replace vs replaceAll
+  assert (replace "l" "L" "hello" == "heLlo") // Replaces first occurrence? Assuming standard behavior for replace vs replaceAll
 }
 
 @test
 replaceAll_smoke = effect {
-  _ <- assert (replaceAll "l" "L" "hello" == "heLLo")
+  assert (replaceAll "l" "L" "hello" == "heLLo")
 }
 
 @test
 reverse_smoke = effect {
-  _ <- assert (reverse "abc" == "cba")
+  assert (reverse "abc" == "cba")
 }
 
 @test
 slice_smoke = effect {
-  _ <- assert (slice 0 2 "hello" == "he")
-  _ <- assert (slice 1 3 "hello" == "el")
+  assert (slice 0 2 "hello" == "he")
+  assert (slice 1 3 "hello" == "el")
 }
 
 @test
 split_smoke = effect {
-  _ <- assert (split "," "a,b,c" == ["a", "b", "c"])
-  _ <- assert (split "." "a" == ["a"])
+  assert (split "," "a,b,c" == ["a", "b", "c"])
+  assert (split "." "a" == ["a"])
 }
 
 @test
 splitLines_smoke = effect {
-  _ <- assert (splitLines "a\nb\nc" == ["a", "b", "c"])
-  _ <- assert (splitLines "a\r\nb" == ["a", "b"])
+  assert (splitLines "a\nb\nc" == ["a", "b", "c"])
+  assert (splitLines "a\r\nb" == ["a", "b"])
 }
 
 @test
 startsWith_smoke = effect {
-  _ <- assert (startsWith "he" "hello" == True)
-  _ <- assert (startsWith "lo" "hello" == False)
+  assert (startsWith "he" "hello" == True)
+  assert (startsWith "lo" "hello" == False)
 }
 
 @test
 titleCase_smoke = effect {
-  _ <- assert (titleCase "hello world" == "Hello World")
+  assert (titleCase "hello world" == "Hello World")
 }
 
 @test
@@ -294,30 +294,30 @@ toBytes_smoke = effect {
   // Assuming Bytes or list of ints/bytes
   bytes = toBytes "abc"
   // Just checking not crashing for now, until Bytes is explored
-  _ <- assert True
+  assert True
 }
 
 @test
 toLower_smoke = effect {
-  _ <- assert (toLower "HELLO" == "hello")
+  assert (toLower "HELLO" == "hello")
 }
 
 @test
 toUpper_smoke = effect {
-  _ <- assert (toUpper "hello" == "HELLO")
+  assert (toUpper "hello" == "HELLO")
 }
 
 @test
 trim_smoke = effect {
-  _ <- assert (trim "  hello  " == "hello")
+  assert (trim "  hello  " == "hello")
 }
 
 @test
 trimEnd_smoke = effect {
-  _ <- assert (trimEnd "abc  " == "abc")
+  assert (trimEnd "abc  " == "abc")
 }
 
 @test
 trimStart_smoke = effect {
-  _ <- assert (trimStart "  abc" == "abc")
+  assert (trimStart "  abc" == "abc")
 }

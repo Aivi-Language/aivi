@@ -7,6 +7,6 @@ use aivi.math
 
 @test
 smoke = effect {
-  _ <- assert (abs (-2) == 2)
-  _ <- assert (clamp 0 10 11 == 10)
+  assert (abs (-2) == 2)
+  assert (clamp 0 10 11 == 10)
 }

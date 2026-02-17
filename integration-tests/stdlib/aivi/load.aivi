@@ -7,6 +7,6 @@ use aivi
 
 @test
 smoke = effect {
-  _ <- pure load
-  _ <- assertEq (1 + 1) 2
+  pure load
+  assertEq (1 + 1) 2
 }

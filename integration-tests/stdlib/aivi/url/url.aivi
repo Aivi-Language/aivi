@@ -11,14 +11,14 @@ parse_smoke = effect {
   r <- res ?
     | Ok re => effect { pure re }
     | Err _ => effect { fail "parse failed" }
-    _ <- assert (r.protocol == "https")
-    _ <- assert (r.host == "example.com")
-    _ <- assert (r.port == Some 8080)
+    assert (r.protocol == "https")
+    assert (r.host == "example.com")
+    assert (r.port == Some 8080)
 }
 
 @test
 toString_smoke = effect {
   u = { protocol: "http", host: "example.com", port: None, path: "/", query: [], hash: None }
   s = toString u
-  _ <- assert (s == "http://example.com/")
+  assert (s == "http://example.com/")
 }

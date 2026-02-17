@@ -9,9 +9,9 @@ use aivi.text
 @test
 smoke = effect {
   txt = "Hello, Test"
-  _ <- assert (length txt == 11)
-  _ <- assert (toLower txt == "hello, test")
-  _ <- assert (contains txt "Test")
-  _ <- assert (startsWith txt "Hello")
-  _ <- assert (titleCase txt == "Hello, Test")
+  assert (length txt == 11)
+  assert (toLower txt == "hello, test")
+  assert (contains txt "Test")
+  assert (startsWith txt "Hello")
+  assert (titleCase txt == "Hello, Test")
 }

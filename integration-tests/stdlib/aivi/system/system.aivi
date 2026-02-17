@@ -7,24 +7,24 @@ use aivi.system
 
 @test
 args_smoke = effect {
-  _ <- pure args
-  _ <- assert True
+  pure args
+  assert True
 }
 
 @test
 env_smoke = effect {
-  _ <- pure env
-  _ <- assert True
+  pure env
+  assert True
 }
 
 @test
 exit_smoke = effect {
-  _ <- pure exit
-  _ <- assert True
+  pure exit
+  assert True
 }
 
 @test
 localeTag_smoke = effect {
-  _ <- pure localeTag
-  _ <- assert True
+  pure localeTag
+  assert True
 }

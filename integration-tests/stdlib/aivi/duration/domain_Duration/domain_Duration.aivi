@@ -11,7 +11,7 @@ suffix_h_smoke = effect {
   subject = 1h
   base = { millis: 0 }
   res = base + subject
-  _ <- assertEq res.millis 3600000
+  assertEq res.millis 3600000
 }
 
 @test
@@ -19,7 +19,7 @@ suffix_min_smoke = effect {
   subject = 1min
   base = { millis: 0 }
   res = base + subject
-  _ <- assertEq res.millis 60000
+  assertEq res.millis 60000
 }
 
 @test
@@ -27,7 +27,7 @@ suffix_ms_smoke = effect {
   subject = 1ms
   base = { millis: 0 }
   res = base + subject
-  _ <- assertEq res.millis 1
+  assertEq res.millis 1
 }
 
 @test
@@ -35,5 +35,5 @@ suffix_s_smoke = effect {
   subject = 1s
   base = { millis: 0 }
   res = base + subject
-  _ <- assertEq res.millis 1000
+  assertEq res.millis 1000
 }

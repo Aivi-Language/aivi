@@ -12,13 +12,13 @@ heapOps = effect {
   h2 = Heap.push h1 1
   h3 = Heap.push h2 2
 
-  _ <- assert (Heap.peekMin h3 == Some 1)
+  assert (Heap.peekMin h3 == Some 1)
 
   res = Heap.popMin h3
-  _ <- res ?
+  res ?
     | Some (val, h4) => effect {
-      _ <- assertEq val 1
-      _ <- assert (Heap.peekMin h4 == Some 2)
+      assertEq val 1
+      assert (Heap.peekMin h4 == Some 2)
     }
     | None => assert False
 }

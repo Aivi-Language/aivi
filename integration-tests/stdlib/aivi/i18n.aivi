@@ -8,7 +8,7 @@ use aivi.i18n
 @test
 smoke = effect {
   loc = parseLocale "en-US"
-  _ <- loc ?
+  loc ?
     | Ok l  => assert (l.tag == "en-US")
     | Err _ => assert False
 }

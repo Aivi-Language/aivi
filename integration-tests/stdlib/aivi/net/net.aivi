@@ -7,30 +7,30 @@ use aivi.net
 
 @test
 http_smoke = effect {
-  _ <- pure http
-  _ <- assert True
+  pure http
+  assert True
 }
 
 @test
 httpServer_smoke = effect {
-  _ <- pure httpServer
-  _ <- assert True
+  pure httpServer
+  assert True
 }
 
 @test
 https_smoke = effect {
-  _ <- pure https
-  _ <- assert True
+  pure https
+  assert True
 }
 
 @test
 sockets_smoke = effect {
-  _ <- pure sockets
-  _ <- assert True
+  pure sockets
+  assert True
 }
 
 @test
 streams_smoke = effect {
-  _ <- pure streams
-  _ <- assert True
+  pure streams
+  assert True
 }

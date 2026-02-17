@@ -11,14 +11,14 @@ deque_smoke = effect {
   d1 = Deque.pushBack d0 1
   d2 = Deque.pushFront d1 0
 
-  _ <- assert (Deque.peekFront d2 == Some 0)
-  _ <- assert (Deque.peekBack d2 == Some 1)
+  assert (Deque.peekFront d2 == Some 0)
+  assert (Deque.peekBack d2 == Some 1)
 
   res = Deque.popFront d2
-  _ <- res ?
+  res ?
     | Some (val, d3) => effect {
-      _ <- assert (val == 0)
-      _ <- assert (Deque.peekFront d3 == Some 1)
+      assert (val == 0)
+      assert (Deque.peekFront d3 == Some 1)
     }
     | None => assert False
 }
@@ -30,13 +30,13 @@ deque_smoke = effect {
     h2 = Heap.push h1 1
     h3 = Heap.push h2 2
 
-    _ <- assert (Heap.peekMin h3 == Some 1)
+    assert (Heap.peekMin h3 == Some 1)
 
     res = Heap.popMin h3
-    _ <- res ?
+    res ?
       | Some (val, h4) => effect {
-        _ <- assert (val == 1)
-        _ <- assert (Heap.peekMin h4 == Some 2)
+        assert (val == 1)
+        assert (Heap.peekMin h4 == Some 2)
       }
       | None => assert False
   }
@@ -46,9 +46,9 @@ deque_smoke = effect {
     m0 = Map.empty
     m1 = Map.insert 1 "one" m0
 
-    _ <- assert (Map.size m0 == 0)
-    _ <- assert (Map.size m1 == 1)
-    _ <- assert (Map.get 1 m1 == Some "one")
+    assert (Map.size m0 == 0)
+    assert (Map.size m1 == 1)
+    assert (Map.get 1 m1 == Some "one")
   }
 
 @test
@@ -57,13 +57,13 @@ deque_smoke = effect {
     q1 = Queue.enqueue q0 1
     q2 = Queue.enqueue q1 2
 
-    _ <- assert (Queue.peek q2 == Some 1)
+    assert (Queue.peek q2 == Some 1)
 
     res = Queue.dequeue q2
-    _ <- res ?
+    res ?
       | Some (val, q3) => effect {
-        _ <- assert (val == 1)
-        _ <- assert (Queue.peek q3 == Some 2)
+        assert (val == 1)
+        assert (Queue.peek q3 == Some 2)
       }
       | None => assert False
   }
@@ -72,7 +72,7 @@ deque_smoke = effect {
   set_smoke = effect {
     s0 = Set.empty
     s1 = Set.insert 1 s0
-    _ <- assert (Set.size s0 == 0)
-    _ <- assert (Set.size s1 == 1)
-    _ <- assert (Set.has 1 s1 == True)
+    assert (Set.size s0 == 0)
+    assert (Set.size s1 == 1)
+    assert (Set.has 1 s1 == True)
   }

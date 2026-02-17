@@ -10,8 +10,8 @@ ansiColor_touch = _ => Unit
 
 @test
 ansiColor_smoke = effect {
-  _ <- pure ansiColor_touch
-  _ <- assertEq (1 + 1) 2
+  pure ansiColor_touch
+  assertEq (1 + 1) 2
 }
 
 ansiStyle_touch : AnsiStyle -> Unit
@@ -19,60 +19,60 @@ ansiStyle_touch = _ => Unit
 
 @test
 ansiStyle_smoke = effect {
-  _ <- pure ansiStyle_touch
-  _ <- assertEq (1 + 1) 2
+  pure ansiStyle_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 bgColor_smoke = effect {
-  _ <- pure bgColor
-  _ <- assert True
+  pure bgColor
+  assert True
 }
 
 @test
 color_smoke = effect {
-  _ <- pure color
-  _ <- assert True
+  pure color
+  assert True
 }
 
 @test
 error_smoke = effect {
-  _ <- pure error
-  _ <- assert True
+  pure error
+  assert True
 }
 
 @test
 log_smoke = effect {
-  _ <- pure log
-  _ <- assert True
+  pure log
+  assert True
 }
 
 @test
 print_smoke = effect {
-  _ <- pure print
-  _ <- assert True
+  pure print
+  assert True
 }
 
 @test
 println_smoke = effect {
-  _ <- pure println
-  _ <- assert True
+  pure println
+  assert True
 }
 
 @test
 readLine_smoke = effect {
-  _ <- pure readLine
-  _ <- assert True
+  pure readLine
+  assert True
 }
 
 @test
 strip_smoke = effect {
-  _ <- pure strip
-  _ <- assert True
+  pure strip
+  assert True
 }
 
 @test
 style_smoke = effect {
-  _ <- pure style
-  _ <- assert True
+  pure style
+  assert True
 }

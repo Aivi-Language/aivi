@@ -10,6 +10,6 @@ use aivi.crypto
 @test
 smoke = effect {
   hash = sha256 "aivi"
-  _ <- assert (text.length hash == 64)
-  _ <- assert (hash != "")
+  assert (text.length hash == 64)
+  assert (hash != "")
 }

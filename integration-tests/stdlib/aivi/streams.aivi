@@ -7,6 +7,6 @@ use aivi
 
 @test
 smoke = effect {
-  _ <- pure streams
-  _ <- assertEq (1 + 1) 2
+  pure streams
+  assertEq (1 + 1) 2
 }

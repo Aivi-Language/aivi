@@ -7,6 +7,6 @@ use aivi
 
 @test
 smoke = effect {
-  _ <- pure https
-  _ <- assertEq (1 + 1) 2
+  pure https
+  assertEq (1 + 1) 2
 }

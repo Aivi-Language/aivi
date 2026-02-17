@@ -7,7 +7,7 @@ use aivi
 
 @test
 smoke = effect {
-  _ <- print "console test"
-  _ <- println "console newline"
-  _ <- assertEq (1 + 1) 2
+  print "console test"
+  println "console newline"
+  assertEq (1 + 1) 2
 }

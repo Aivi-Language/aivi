@@ -10,30 +10,30 @@ distribution_touch = _ => Unit
 
 @test
 distribution_smoke = effect {
-  _ <- pure distribution_touch
-  _ <- assertEq (1 + 1) 2
+  pure distribution_touch
+  assertEq (1 + 1) 2
 }
 
 @test
 bernoulli_smoke = effect {
-  _ <- pure bernoulli
-  _ <- assert True
+  pure bernoulli
+  assert True
 }
 
 @test
 clamp_smoke = effect {
-  _ <- pure clamp
-  _ <- assert True
+  pure clamp
+  assert True
 }
 
 @test
 expectation_smoke = effect {
-  _ <- pure expectation
-  _ <- assert True
+  pure expectation
+  assert True
 }
 
 @test
 uniform_smoke = effect {
-  _ <- pure uniform
-  _ <- assert True
+  pure uniform
+  assert True
 }

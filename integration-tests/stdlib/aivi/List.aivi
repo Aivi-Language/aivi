@@ -8,16 +8,16 @@ use aivi
 @test
 smoke = effect {
   l = [1, 2, 3]
-  _ <- assert (List.length l == 3)
-  _ <- assert (List.at l 0 == Some 1)
-  _ <- assert (List.at l 3 == None)
+  assert (List.length l == 3)
+  assert (List.at l 0 == Some 1)
+  assert (List.at l 3 == None)
 
   l2 = List.map l (x => x + 1)
-  _ <- assert (l2 == [2, 3, 4])
+  assert (l2 == [2, 3, 4])
 
   l3 = List.filter l (x => x > 1)
-  _ <- assert (l3 == [2, 3])
+  assert (l3 == [2, 3])
 
-  _ <- assert (List.isEmpty[] == True)
-  _ <- assert (List.isEmpty l == False)
+  assert (List.isEmpty[] == True)
+  assert (List.isEmpty l == False)
 }

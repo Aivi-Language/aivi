@@ -7,11 +7,11 @@ use aivi
 
 @test
 smoke = effect {
-  _ <- assert (True && True)
-  _ <- assert (True || False)
-  _ <- assert (False || True)
-  _ <- assert (!False)
-  _ <- assert (!(True && False))
-  _ <- assert (True != False)
-  _ <- assert (True == True)
+  assert (True && True)
+  assert (True || False)
+  assert (False || True)
+  assert (!False)
+  assert (!(True && False))
+  assert (True != False)
+  assert (True == True)
 }

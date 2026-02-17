@@ -8,5 +8,5 @@ use aivi.graph
 @test
 smoke = effect {
   g = empty |> addNode 1 |> addNode 2 |> addEdge 1 2
-  _ <- assert (neighbors g 1 == [2])
+  assert (neighbors g 1 == [2])
 }

@@ -10,19 +10,19 @@ use aivi.color (domain Color)
 suffix_h_smoke = effect {
   rgb = { r: 10, g: 20, b: 30 }
   adjusted = rgb + 1h
-  _ <- assert (toHex adjusted != toHex rgb)
+  assert (toHex adjusted != toHex rgb)
 }
 
 @test
 suffix_l_smoke = effect {
   rgb = { r: 20, g: 20, b: 20 }
   adjusted = rgb + 1l
-  _ <- assert (toHex adjusted != toHex rgb)
+  assert (toHex adjusted != toHex rgb)
 }
 
 @test
 suffix_s_smoke = effect {
   rgb = { r: 0, g: 50, b: 100 }
   adjusted = rgb + 1s
-  _ <- assert (toHex adjusted != toHex rgb)
+  assert (toHex adjusted != toHex rgb)
 }

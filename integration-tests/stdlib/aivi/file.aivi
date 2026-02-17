@@ -9,5 +9,5 @@ use aivi
 smoke = effect {
   // read is a source
   src = file.read "README.md"
-  _ <- assert True
+  assert True
 }

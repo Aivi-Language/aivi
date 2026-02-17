@@ -11,13 +11,13 @@ queueOps = effect {
   q1 = Queue.enqueue q0 1
   q2 = Queue.enqueue q1 2
 
-  _ <- assert (Queue.peek q2 == Some 1)
+  assert (Queue.peek q2 == Some 1)
 
   res = Queue.dequeue q2
-  _ <- res ?
+  res ?
     | Some (val, q3) => effect {
-      _ <- assertEq val 1
-      _ <- assert (Queue.peek q3 == Some 2)
+      assertEq val 1
+      assert (Queue.peek q3 == Some 2)
     }
     | None => assert False
 }
