@@ -255,3 +255,26 @@ x = 1
     let expected = "module demo\n\nuse aivi\nuse aivi.collections\nuse aivi.testing\n\nx = 1\n";
     assert_eq!(format_text(input), expected);
 }
+
+#[test]
+fn test_fmt_space_after_keyword_before_bracket() {
+    // `then[1,2,3]` should become `then [1, 2, 3]`
+    let input = "x = if True then[1, 2, 3] else[4]\n";
+    let expected = "x = if True then [1, 2, 3] else [4]\n";
+    assert_eq!(format_text(input), expected);
+
+    // `then(x)` should become `then (x)`
+    let input = "x = if True then(1) else(0)\n";
+    let expected = "x = if True then (1) else (0)\n";
+    assert_eq!(format_text(input), expected);
+
+    // Non-keywords should still support adjacent brackets for indexing
+    let input = "x = arr[0]\n";
+    let expected = "x = arr[0]\n";
+    assert_eq!(format_text(input), expected);
+
+    // Non-keywords should still support adjacent parens for grouping
+    let input = "x = f(1)\n";
+    let expected = "x = f(1)\n";
+    assert_eq!(format_text(input), expected);
+}
