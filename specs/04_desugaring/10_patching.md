@@ -21,7 +21,7 @@ Patch literals are desugared into unary functions:
 | :--- | :--- |
 | `r <| { a: v }` | `update ⟦r⟧ "a" (λ_. ⟦v⟧)` (replace/insert) |
 | `r <| { a: f }` where `f` is a function | `update ⟦r⟧ "a" ⟦f⟧` (transform) |
-| `r <| { a: - }` | `removeField ⟦r⟧ "a"` (derived; shrinks row type) |
+| `r <| { a: - }` | `delete ⟦r⟧ "a"` (derived; shrinks row type) |
 
 Nested:
 
@@ -29,7 +29,7 @@ Nested:
 | :--- | :--- |
 | `r <| { a.b: v }` | `update ⟦r⟧ "a" (λa0. update a0 "b" (λ_. ⟦v⟧))` |
 | `r <| { a.b: f }` | `update ⟦r⟧ "a" (λa0. update a0 "b" ⟦f⟧)` |
-| `r <| { a.b: - }` | `update ⟦r⟧ "a" (λa0. removeField a0 "b")` |
+| `r <| { a.b: - }` | `update ⟦r⟧ "a" (λa0. delete a0 "b")` |
 
 ## Function-as-data disambiguation `:=`
 

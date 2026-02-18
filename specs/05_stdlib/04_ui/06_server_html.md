@@ -139,9 +139,9 @@ Route model msg =
   }
 
 serve
-  : aivi.net.http_server.ServerConfig
+  : aivi.net.httpServer.ServerConfig
   -> List (Route model msg)
-  -> Resource aivi.net.http_server.HttpError aivi.net.http_server.Server
+  -> Resource aivi.net.httpServer.HttpError aivi.net.httpServer.Server
 ```
 
 Routing is path-based:
