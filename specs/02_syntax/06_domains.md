@@ -15,7 +15,7 @@ To use a domain, you `use` it. This brings its **operator functions** and **lite
 Domains are exported/imported separately from normal values and types.
 
 - Export: `export domain Calendar`
-- Import domain members: `use aivi.calendar (domain Calendar)`
+- Import domain members: `use aivi.chronos.calendar (domain Calendar)`
 
 Importing a domain brings its members (operator definitions like `(+)` and literal templates like `1d`) into the current scope.
 

@@ -1,6 +1,6 @@
 # Calendar Domain
 
-<!-- quick-info: {"kind":"module","name":"aivi.calendar"} -->
+<!-- quick-info: {"kind":"module","name":"aivi.chronos.calendar"} -->
 The `Calendar` domain gives you robust tools for handling **Dates** and **Human Time**.
 
 Handling time is deceptively hard. Ideally, a day is 24 hours. In reality, months have 28-31 days, years have 365 or 366 days, and timezones shift clocks back and forth.

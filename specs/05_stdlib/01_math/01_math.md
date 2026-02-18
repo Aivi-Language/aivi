@@ -24,17 +24,8 @@ Angles are represented by a dedicated domain so trigonometric functions are not 
 | Function | Explanation |
 | --- | --- |
 | **radians** value<br><pre><code>`Float -> Angle`</code></pre> | Creates an `Angle` from a raw radians value. |
-
-| Function | Explanation |
-| --- | --- |
 | **degrees** value<br><pre><code>`Float -> Angle`</code></pre> | Creates an `Angle` from a raw degrees value. |
-
-| Function | Explanation |
-| --- | --- |
 | **toRadians** angle<br><pre><code>`Angle -> Float`</code></pre> | Extracts the radians value from an `Angle`. |
-
-| Function | Explanation |
-| --- | --- |
 | **toDegrees** angle<br><pre><code>`Angle -> Float`</code></pre> | Extracts the degrees value from an `Angle`. |
 
 ## Basic helpers
@@ -143,8 +134,8 @@ Angles are represented by a dedicated domain so trigonometric functions are not 
 
 | Function | Explanation |
 | --- | --- |
-| **divmod** | `Int -> Int -> (Int, Int)` | `a`: dividend; `b`: divisor. | Returns `(q, r)` where `a = q * b + r` and `0 <= r < |b|`. |
-| **modPow** | `Int -> Int -> Int -> Int` | `base`: base; `exp`: exponent; `modulus`: modulus. | Computes `(base^exp) mod modulus`. |
+| **divmod** a b<br><pre><code>`Int -> Int -> (Int, Int)`</code></pre> | Returns `(q, r)` where `a = q * b + r` and `0 <= r < \|b\|`. |
+| **modPow** base exp modulus<br><pre><code>`Int -> Int -> Int -> Int`</code></pre> | Computes `(base^exp) mod modulus`. |
 
 Notes:
 - `BigInt` is from `aivi.number.bigint` and is re-exported by `aivi.math`.

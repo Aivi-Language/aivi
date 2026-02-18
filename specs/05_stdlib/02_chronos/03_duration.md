@@ -1,6 +1,6 @@
 # Duration Domain
 
-<!-- quick-info: {"kind":"module","name":"aivi.duration"} -->
+<!-- quick-info: {"kind":"module","name":"aivi.chronos.duration"} -->
 The `Duration` domain provides a type-safe way to represent **Spans of Time**.
 
 In many systems, a timeout is just an integer like `500`. But is that 500 milliseconds? 500 seconds? Ambiguous units cause outages (like setting a 30-second timeout that the system reads as 30 milliseconds).

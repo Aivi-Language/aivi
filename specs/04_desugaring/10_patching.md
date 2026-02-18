@@ -2,8 +2,8 @@
 
 Kernel record primitives:
 
-* `update(e, l, f)` : update/insert field `l` by applying `f` to old value (or a sentinel for missing)
-* field removal is a **typing/elaboration** operation (row shrink) plus a runtime representation choice; a compiler may lower `-` either to a dedicated `delete(e, l)` primitive or to an `update` that drops the field in a representation-specific way.
+* `update e l f` : update/insert field `l` by applying `f` to old value (or a sentinel for missing)
+* field removal is a **typing/elaboration** operation (row shrink) plus a runtime representation choice; a compiler may lower `-` either to a dedicated `delete e l` primitive or to an `update` that drops the field in a representation-specific way.
 
 For nested paths, desugar into nested `update`/`delete`.
 
@@ -13,7 +13,7 @@ Patch literals are desugared into unary functions:
 
 | Surface | Desugaring |
 | :--- | :--- |
-| `patch { a: v }` | `λx. x <| { a: v }` |
+| `patch { a: v }` | `λx. update x "a" (λ_. ⟦v⟧)` |
 
 ## Path compilation (dot paths)
 
@@ -75,7 +75,7 @@ Predicate segments desugar to **map with conditional update**.
 | :--- | :--- |
 | `items[pred].price: f` | `update r "items" (λxs. map (λit. case (⟦pred→λ⟧ it) of \| True -> update it "price" ⟦f⟧ \| False -> it) xs)` |
 
-Predicate `pred` uses the unified predicate desugaring table (Section 8).
+Predicate `pred` uses the unified predicate desugaring table (Section 5).
 
 ## Sum-type focus (prisms)
 
@@ -84,7 +84,7 @@ Predicate `pred` uses the unified predicate desugaring table (Section 8).
 | Surface | Desugaring |
 | :--- | :--- |
 | `Ok.value: f` | `λres. case res of \| Ok v -> Ok (update v "value" ⟦f⟧) \| _ -> res` (record payload) |
-| `Some.val: f` | `λopt. case opt of \| Some v -> Some (update v "val" ⟦f⟧) \| _ -> opt` |
+| `Some.value: f` | `λopt. case opt of \| Some v -> Some (update v "value" ⟦f⟧) \| _ -> opt` |
 
 For constructors with direct payload (not record), `value` refers to the payload position.
 
@@ -121,7 +121,7 @@ Predicate `pred` is applied to an entry record `{ key, value }`.
 * `let`
 * `case` + patterns (including `@`)
 * ADT constructors
-* records + projection + `update` + `delete`
+* records + projection + `update` + `delete` (optional)
 * `fold` (List)
 * `Effect` with `bind/pure`
 * compile-time elaboration for classes (dictionary passing)

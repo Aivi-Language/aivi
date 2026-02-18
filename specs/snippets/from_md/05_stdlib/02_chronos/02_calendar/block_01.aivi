@@ -1,4 +1,4 @@
-use aivi.calendar (Date, DateTime)
+use aivi.chronos.calendar (Date, DateTime)
 
 now = DateTime.now
 

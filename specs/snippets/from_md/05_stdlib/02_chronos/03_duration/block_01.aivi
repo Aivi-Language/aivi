@@ -1,4 +1,4 @@
-use aivi.duration (Duration)
+use aivi.chronos.duration (Duration)
 
 // Clear, unambiguous literals
 timeout = 500ms

@@ -16,9 +16,9 @@ Note: older docs referenced a minimal `aivi.ui.live`. That API has been removed;
 
 ```aivi
 serve
-  : aivi.net.http_server.ServerConfig
+  : aivi.net.httpServer.ServerConfig
   -> List (aivi.ui.ServerHtml.Route model msg)
-  -> Resource aivi.net.http_server.HttpError aivi.net.http_server.Server
+  -> Resource aivi.net.httpServer.HttpError aivi.net.httpServer.Server
 ```
 
 ## Protocol (Browser <-> Server)
@@ -46,12 +46,12 @@ Where each op is one of:
 
 ### Event messages (browser -> server)
 
-The embedded client delegates events and sends JSON:
+The embedded client delegates events and sends JSON using the unified event format (see [Server HTML Protocol](06_server_html.md)):
 
-- click: `{"t":"click","id":123}`
-- input: `{"t":"input","id":123,"value":"..."}` where `value` is taken from the event target
+- click: `{"t":"event","viewId":"<uuid>","hid":123,"kind":"click","p":{}}`
+- input: `{"t":"event","viewId":"<uuid>","hid":123,"kind":"input","p":{"value":"..."}}`
 
-The event `id` identifies the handler attached by the server for that node.
+The `hid` identifies the handler attached by the server for that node. `kind` specifies the event type and `p` carries any event-specific payload.
 
 ## Limitations (v0.1)
 

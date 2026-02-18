@@ -1,7 +1,7 @@
-use aivi.duration (domain Duration)
+use aivi.chronos.duration (domain Duration)
 use aivi.ui.layout (domain Layout)
 
 10min // 10 minutes
-30s   // 30 seconds
+30s // 30 seconds
 100px // 100 pixels
-50%   // 50 percent
+50% // 50 percent

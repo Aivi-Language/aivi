@@ -1,4 +1,4 @@
-use aivi.calendar (domain Calendar)
+use aivi.chronos.calendar (domain Calendar)
 
 date = ~d[2026-02-15]
 

@@ -1,2 +1,2 @@
-use aivi.calendar (Date, isLeapYear)
+use aivi.chronos.calendar (Date, isLeapYear)
 use aivi.list hiding (map, filter)

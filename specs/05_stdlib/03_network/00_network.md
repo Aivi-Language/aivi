@@ -10,6 +10,6 @@ The `Net` package groups networking domains under a single entry point. These mo
 
 - `aivi.net.http`
 - `aivi.net.https`
-- `aivi.net.http_server`
+- `aivi.net.httpServer`
 - `aivi.net.sockets`
 - `aivi.net.streams`

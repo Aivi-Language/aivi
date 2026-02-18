@@ -21,7 +21,9 @@ Effect sequencing is expressed via `effect { ... }` blocks, but the underlying i
 
 For *handling* an effect error as a value, the standard library provides:
 
-- `attempt : Effect E A -> Effect E (Result E A)`
+- `attempt : Effect E A -> Effect F (Result E A)`
+
+`attempt` runs the inner effect and captures its outcome (success or failure with `E`) as a `Result E A`. The outer effect uses a *different* error type `F`, since the original error `E` has been caught and is now represented as data inside the `Result`. If `F` is unconstrained, the outer effect cannot fail (equivalent to `Effect Never (Result E A)` in practice).
 
 ### Examples (core operations)
 

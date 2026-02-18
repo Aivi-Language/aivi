@@ -1,4 +1,4 @@
-use aivi.calendar (DateTime)
+use aivi.chronos.calendar (DateTime)
 use aivi.chronos.timezone (TimeZone, ZonedDateTime)
 
 // Instantiation

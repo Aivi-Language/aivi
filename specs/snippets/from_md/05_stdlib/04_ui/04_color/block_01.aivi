@@ -2,4 +2,4 @@ use aivi.color (Color)
 
 primary = { r: 0, g: 123, b: 255 }
 // Mathematically correct lightening
-lighter = primary + 10lightness
+lighter = primary + 10l
