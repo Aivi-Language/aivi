@@ -136,7 +136,10 @@
         };
         let (curr_kind, curr_text) = curr;
 
-        if adjacent_in_input && (curr_text == "(" || curr_text == "[") {
+        if adjacent_in_input
+            && (curr_text == "(" || curr_text == "[")
+            && !is_keyword(prev_text)
+        {
             return false;
         }
 
@@ -220,7 +223,10 @@
                 return false;
             }
             // Indexing is only when the bracket is adjacent: `arr[i]` / `(f x)[i]`.
-            if adjacent_in_input && (is_word_kind(prev_kind) || matches!(prev_text, ")" | "]" | "}"))
+            // Keywords (e.g. `then`, `else`) always need a space before `[`.
+            if adjacent_in_input
+                && !is_keyword(prev_text)
+                && (is_word_kind(prev_kind) || matches!(prev_text, ")" | "]" | "}"))
             {
                 return false;
             }
@@ -453,11 +459,18 @@
                 }
             };
             // Find matching opener by scanning backward through all token buckets.
+            // On the current line, exclude the closer token itself from the scan so we
+            // don't count it in the nesting depth.
             let mut depth = 0isize;
             let mut opener_line: Option<usize> = None;
             'outer: for scan_line in (0..=line_index).rev() {
                 let scan_tokens = &tokens_by_line[scan_line];
-                for t in scan_tokens.iter().rev() {
+                let end = if scan_line == line_index {
+                    last_code_idx.unwrap()
+                } else {
+                    scan_tokens.len()
+                };
+                for t in scan_tokens[..end].iter().rev() {
                     if t.kind == "comment" || t.kind == "string" {
                         continue;
                     }
