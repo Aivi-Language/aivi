@@ -17,7 +17,7 @@ e.l
 ## 3.3 Record update (primitive)
 
 ```text
-update(e, l, f)
+update e l f
 ```
 
 Semantics:

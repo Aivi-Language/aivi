@@ -1,4 +1,4 @@
-use aivi.linalg (solve, eigen)
+use aivi.linearAlgebra (solve, eigen)
 
 // Matrix A and Vector b
 // Solve for x in: Ax = b

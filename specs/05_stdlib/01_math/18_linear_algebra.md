@@ -1,6 +1,6 @@
 # Linear Algebra Domain
 
-<!-- quick-info: {"kind":"module","name":"aivi.linalg"} -->
+<!-- quick-info: {"kind":"module","name":"aivi.linearAlgebra"} -->
 The `LinearAlgebra` domain solves massive **Systems of Equations**.
 
 While `Vector` and `Matrix` are for 3D graphics, this domain is for "hard" science and engineering. It answers questions like: "If `3x + 2y = 10` and `x - y = 5`, what are `x` and `y`?"... but for systems with *thousands* of variables.

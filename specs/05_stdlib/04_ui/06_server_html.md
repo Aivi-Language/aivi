@@ -128,7 +128,7 @@ On error:
 
 ## Server Bootstrap (Routing)
 
-`aivi.ui.ServerHtml` can bootstrap an HTTP + WebSocket server via `aivi.net.http_server.listen`.
+`aivi.ui.ServerHtml` can bootstrap an HTTP + WebSocket server via `aivi.net.httpServer.listen`.
 
 ### API Shape
 

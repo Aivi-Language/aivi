@@ -13,7 +13,7 @@ export domain Vector
 use aivi
 use aivi.text
 use aivi.logic
-use aivi.calendar
-use aivi.duration
+use aivi.chronos.calendar
+use aivi.chronos.duration
 use aivi.color
 use aivi.vector

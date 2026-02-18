@@ -80,7 +80,7 @@ Suffix literals are **not strings**. They elaborate as applying an in-scope *tem
 - `10ms` elaborates roughly as `1ms 10`
 - `(x)ms` elaborates roughly as `1ms x`
 
-These templates are usually provided by a domain (e.g. `aivi.duration` defines `1ms`, `1s`, `1min`, `1h`).
+These templates are usually provided by a domain (e.g. `aivi.chronos.duration` defines `1ms`, `1s`, `1min`, `1h`).
 
 <<< ../snippets/from_md/02_syntax/11_operators/block_02.aivi{aivi}
 

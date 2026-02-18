@@ -3,6 +3,6 @@ export domain Calendar
 export domain Color
 export List, Result, Ok, Err
 
-use aivi.calendar (domain Calendar)
+use aivi.chronos.calendar (domain Calendar)
 use aivi.color (domain Color)
 use aivi (List, Result, Ok, Err)

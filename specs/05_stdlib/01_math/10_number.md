@@ -26,7 +26,7 @@ Helpers:
 | Function | Explanation |
 | --- | --- |
 | **fromInt** value<br><pre><code>`Int -> BigInt`</code></pre> | Converts a machine `Int` into `BigInt`. |
-| **toInt** value<br><pre><code>`BigInt -> Int`</code></pre> | Converts a `BigInt` to `Int` (may overflow in implementations). |
+| **toInt** value<br><pre><code>`BigInt -> Option Int`</code></pre> | Converts a `BigInt` to `Int`. Returns `None` if the value overflows the machine `Int` range. |
 
 Example:
 

@@ -309,7 +309,7 @@ ValueBinding   := lowerIdent "=" FunArms Sep
 FunArms        := "|" Arm { Sep "|" Arm }
 ```
 
-This form desugars to a single-argument function that performs a `case` on its input (see [Desugaring: Patterns](../04_desugaring/04_patterns.md)).
+This form desugars to a single-argument function that performs pattern matching (`?`) on its input (see [Desugaring: Patterns](../04_desugaring/04_patterns.md)).
 
 If you want multi-argument matching, match on a tuple:
 
@@ -354,7 +354,7 @@ TuplePat       := "(" Pattern "," Pattern { "," Pattern } ")"
 ListPat        := "[" [ Pattern { "," Pattern } [ "," "..." [ (lowerIdent | "_") ] ] ] "]"
 
 RecordPat      := "{" { RecordPatField } "}"
-RecordPatField := RecordPatKey [ (":" Pattern) | ("@" Pattern) ] [ FieldSep ]
+RecordPatField := RecordPatKey [ (":" Pattern) | ("@" Pattern) | ("." "{" { RecordPatField } "}") ] [ FieldSep ]
 RecordPatKey   := lowerIdent { "." lowerIdent }
 ```
 

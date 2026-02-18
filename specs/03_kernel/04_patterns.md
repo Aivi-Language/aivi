@@ -5,7 +5,10 @@
 ```text
 p ::= x
     | _
+    | n                       (literal: Int, Float, Text, Char)
     | C p₁ … pₙ
+    | (p₁, …, pₙ)
+    | [p₁, …, pₖ, ...rest]
     | { l₁ = p₁, … }
 ```
 

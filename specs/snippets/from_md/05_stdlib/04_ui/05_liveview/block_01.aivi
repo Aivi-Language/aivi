@@ -1,6 +1,6 @@
 use aivi.ui
 use aivi.ui.layout
-use aivi.net.http_server
+use aivi.net.httpServer
 use aivi.ui.ServerHtml
 
 Model = { count: Int }
@@ -27,7 +27,7 @@ app =
     onPlatform: _ => None
   }
 
-main : Resource http_server.HttpError http_server.Server
+main : Resource httpServer.HttpError httpServer.Server
 main =
   ServerHtml.serve
   { address: "127.0.0.1:3000" }

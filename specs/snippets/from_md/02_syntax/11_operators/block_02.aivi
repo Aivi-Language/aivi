@@ -1,4 +1,4 @@
-use aivi.duration (domain Duration)
+use aivi.chronos.duration (domain Duration)
 
 // Suffix literals apply an in-scope template function:
 tenSeconds = 10s

@@ -92,23 +92,54 @@ For readability, nested constructor patterns can be written without parentheses 
 
 This "constructor chain" rule applies only in pattern context (after `|` and before `=>`).
 
-## 8.5 Whole-value binding `@`
+## 8.5 Record Pattern Syntax: `@`, `.{ }`, and `:`
 
-Patterns support whole-value binding:
+Record patterns use three distinct operators for different purposes:
 
-```aivi
-user@{ name, age }
-```
+### `:` — Matching and renaming (instantiation)
 
-This binds `user` to the entire matched value while also matching the record pattern `{ name, age }`.
-
-To bind a nested value *and* destructure it, combine record-field paths with whole-value binding:
+`{ field: pat }` matches the field and binds the result of the nested pattern `pat`. This is the primary form for both matching and renaming:
 
 ```aivi
-{ profile@profile@{ name, age } }
+{ name: n }           // binds field 'name' to variable 'n'
+{ role: Admin }       // matches field 'role' against constructor 'Admin'
+{ name }              // shorthand for { name: name }
 ```
 
-Here the outer `profile@...` selects the record field, and the inner `profile@{ ... }` binds the full field value.
+### `@` — Whole-value plus destructuring
+
+`field@{ pat }` binds `field` to the **entire** field value *and* destructures it. Both `field` and the contents of `pat` are in scope:
+
+```aivi
+user@{ name, age }    // 'user' holds the whole record; 'name' and 'age' are also bound
+```
+
+In nested position:
+
+```aivi
+{ profile@{ name, age } }
+```
+
+Here `profile` is bound to the full value of the `profile` field, and `name`/`age` are also brought into scope from within that field.
+
+### `.{ }` — Destructuring only (no whole-value binding)
+
+`field.{ pat }` destructures the field but does **not** bind the field itself. Only the contents of the nested pattern are in scope:
+
+```aivi
+{ profile.{ name, age } }
+```
+
+Here `name` and `age` are in scope, but `profile` is **not** — it is only used as a path to reach the nested fields.
+
+### Summary
+
+| Syntax | `field` in scope? | `pat` contents in scope? | Use case |
+| :--- | :---: | :---: | :--- |
+| `{ field: pat }` | no (renamed) | yes | Match/rename a field |
+| `{ field@{ pat } }` | yes | yes | Keep whole field + destructure |
+| `{ field.{ pat } }` | no | yes | Destructure only, discard field |
+| `{ field }` | yes | — | Shorthand, binds field by name |
 
 ## 8.6 Guards
 
