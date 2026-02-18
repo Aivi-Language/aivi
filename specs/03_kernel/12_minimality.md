@@ -12,13 +12,17 @@
 | Predicates | λ + case |
 | Generators | fold |
 | Effects | bind |
+| Resources | effects + finalizer |
 | Domains | static rewrite |
+| Sigils | function call |
+| Modules | namespaces |
+| Classes | dictionaries (records) |
 | HKTs | ∀ |
 
 Nothing else is required.
 
 
-# The true kernel
+## The true kernel
 
 > **AIVI’s kernel is simply:**
 > **λ-calculus with algebraic data types, row-typed records with update, universal types, fold, and an opaque effect monad.**

@@ -222,6 +222,7 @@ GenStmt        := BindStmt
                | GuardStmt
                | ValueBinding
                | "yield" Expr Sep
+               | "recurse" Expr Sep
                | "loop" Pattern "=" Expr "=>" "{" { GenStmt } "}" Sep
 GuardStmt      := lowerIdent "->" Expr Sep
 
@@ -358,7 +359,7 @@ RecordPatKey   := lowerIdent { "." lowerIdent }
 ```
 
 
-## 0.9 Diagnostics (where the compiler should nag)
+## 0.8 Diagnostics (where the compiler should nag)
 
 - **Arms without a `?`**: `| p => e` is only valid after `?` *or* directly after `=` in the multi-clause unary function form.
 - **`_` placeholder**: `_ + 1` is only legal where a unary function is expected; otherwise error and suggest `x => x + 1`.

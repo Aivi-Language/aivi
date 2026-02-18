@@ -11,8 +11,10 @@ A → Bool
 ### Predicate sugar desugars to:
 
 ```text
-λ_. e
+λx. e
 ```
+
+where `x` is a fresh variable bound as the implicit argument; field accesses and comparisons in `e` resolve against `x`.
 
 Field shortcuts:
 

@@ -28,21 +28,21 @@ For more control or large files, use the resource-based API.
 
 | Function | Explanation |
 | --- | --- |
-| **open** path<br><pre><code>`Text -> Resource Handle`</code></pre> | Opens a file for reading and returns a managed `Handle` resource. |
+| **open** path<br><pre><code>`Text -> Resource FileError Handle`</code></pre> | Opens a file for reading and returns a managed `Handle` resource. |
 
 ### `readAll`
 
 
 | Function | Explanation |
 | --- | --- |
-| **readAll** handle<br><pre><code>`Handle -> Effect (Result Text Text)`</code></pre> | Reads the entire contents of an open handle as text. |
+| **readAll** handle<br><pre><code>`Handle -> Effect FileError Text`</code></pre> | Reads the entire contents of an open handle as text. |
 
 ### `close`
 
 
 | Function | Explanation |
 | --- | --- |
-| **close** handle<br><pre><code>`Handle -> Effect Unit`</code></pre> | Closes the file handle (automatic with `resource` blocks). |
+| **close** handle<br><pre><code>`Handle -> Effect FileError Unit`</code></pre> | Closes the file handle (automatic with `resource` blocks). |
 
 ## Path Operations
 
@@ -51,32 +51,32 @@ For more control or large files, use the resource-based API.
 
 | Function | Explanation |
 | --- | --- |
-| **readText** path<br><pre><code>`Text -> Effect (Result Text Text)`</code></pre> | Reads the entire contents of `path` as text. |
+| **readText** path<br><pre><code>`Text -> Effect FileError Text`</code></pre> | Reads the entire contents of `path` as text. |
 
 ### `writeText`
 
 
 | Function | Explanation |
 | --- | --- |
-| **writeText** path contents<br><pre><code>`Text -> Text -> Effect (Result Unit Text)`</code></pre> | Writes `contents` to `path`, overwriting if it exists. |
+| **writeText** path contents<br><pre><code>`Text -> Text -> Effect FileError Unit`</code></pre> | Writes `contents` to `path`, overwriting if it exists. |
 
 ### `exists`
 
 
 | Function | Explanation |
 | --- | --- |
-| **exists** path<br><pre><code>`Text -> Effect Bool`</code></pre> | Returns whether a file or directory exists at `path`. |
+| **exists** path<br><pre><code>`Text -> Effect FileError Bool`</code></pre> | Returns whether a file or directory exists at `path`. |
 
 ### `stat`
 
 
 | Function | Explanation |
 | --- | --- |
-| **stat** path<br><pre><code>`Text -> Effect (Result FileStats Text)`</code></pre> | Retrieves metadata about a file or directory at `path`. |
+| **stat** path<br><pre><code>`Text -> Effect FileError FileStats`</code></pre> | Retrieves metadata about a file or directory at `path`. |
 
 ### `delete`
 
 
 | Function | Explanation |
 | --- | --- |
-| **delete** path<br><pre><code>`Text -> Effect (Result Unit Text)`</code></pre> | Removes the file at `path`. |
+| **delete** path<br><pre><code>`Text -> Effect FileError Unit`</code></pre> | Removes the file at `path`. |

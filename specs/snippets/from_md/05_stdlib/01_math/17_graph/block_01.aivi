@@ -2,11 +2,11 @@ use aivi.graph (fromEdges, bfs)
 
 // Create a small network
 g =
-  fromEdges([
-    (1, 2), // Node 1 connects to 2
-    (2, 3), // Node 2 connects to 3
+  fromEdges [
+    (1, 2) // Node 1 connects to 2
+    (2, 3) // Node 2 connects to 3
     (1, 3) // Node 1 connects to 3
-  ])
+  ]
 
 // Find a path through the network
 path = bfs g { start: 1, end: 3 }

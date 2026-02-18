@@ -58,7 +58,7 @@ Inside an `effect { ... }` block:
 - `x <- eff` binds the result of an `Effect` to `x`
 - `x = e` is a pure local binding (does not run effects)
 - `x <- res` acquires a `Resource` (see [Resources](15_resources.md))
-- Branching is done with ordinary expressions (`if`, `case`, `?`); `->` guards are generator-only.
+- Branching is done with ordinary expressions (`if`, `?`); `->` guards are generator-only.
 - If a final expression is present, it must be an `Effect` (commonly `pure value` or an effect call like `print "..."`).
 - If there is no final expression, the block defaults to `pure Unit`.
 

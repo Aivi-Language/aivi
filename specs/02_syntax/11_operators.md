@@ -13,10 +13,10 @@ This chapter is an index of AIVI's **operator tokens** (and a few pieces of punc
 | `->` | guard | `generate {}` | Filter current generator element using predicate syntax (implicit `_`). |
 | `|>` | pipe | expressions | Left-to-right application: `x |> f` is `f x`. Chains for readable data transforms. |
 | `<|` | patch | expressions | Record update: `target <| { field: value }` applies a patch to a record value. |
-| `?` | match / refutable | patterns, `case`/multi-clause forms | Marks refutable pattern matching (producing `Option`/`Result` in some forms). Also used to introduce match arms. |
+| `?` | match / refutable | patterns, multi-clause forms | Marks refutable pattern matching (producing `Option`/`Result` in some forms). Also used to introduce match arms. |
 | `|` | arm / union separator | `?` arms, `type` RHS | Separates match arms and sum-type constructors. |
 | `=>` | arrow | lambdas, match arms, `loop` | Lambda body delimiter and match arm delimiter. |
-| `..` | range | expressions, list literals | `a .. b` builds a list of `Int` from `a` to `b` (inclusive). In list literals, range items are implicitly *spreads* (see 11.3). |
+| `..` | range | list literals | `a .. b` builds a list of `Int` from `a` to `b` (inclusive). Only valid inside list literals (see 11.3). |
 | `...` | spread / rest | list/record literals, list patterns | Spreads a list/record into another; in patterns, binds the “rest” of a list. |
 | `.` | access / accessor sugar | expressions | Field access `x.field`. Also `.field` is accessor sugar (`x => x.field`). |
 | `[]` | list / index | expressions | List literal `[a, b]`; list range `[a..b]`; index `xs[i]`; bracket-list call `f[a, b]` in specific positions. |
@@ -30,13 +30,22 @@ For full concrete syntax, see the grammar: [02_syntax/00_grammar.md](00_grammar.
 
 The v0.1 parser recognizes these infix operators (from lowest to highest precedence):
 
-1. `<|`, `|>`
-2. `||`
-3. `&&`
-4. `==`, `!=`, `<`, `<=`, `>`, `>=`
-5. `..`
-6. `+`, `-`
-7. `*`, `×`, `/`, `%`
+1. `|>` (forward pipe)
+2. `??` (coalesce — unwrap `Option` with fallback)
+3. `||` (logical or)
+4. `&&` (logical and)
+5. `==`, `!=` (equality)
+6. `<`, `<=`, `>`, `>=` (comparison)
+7. `|` (bitwise or)
+8. `^` (bitwise xor)
+9. `<<`, `>>` (shift)
+10. `+`, `-`, `++` (additive / concatenation)
+11. `*`, `×`, `/`, `%` (multiplicative)
+12. `<|` (patch — binds tighter than arithmetic, just below application; see [Patching](05_patching.md))
+
+Unary prefix operators (not infix): `!` (not), `-` (negate), `~` (bitwise complement).
+
+Note: `..` is **not** a general infix operator; it is a list-item construct (see 11.3).
 
 Domains may provide semantics for a subset of these operators (see 11.4). Precedence is **not** domain-defined.
 
@@ -53,14 +62,14 @@ Inside a list literal, there are three ways to contribute elements:
 Notes:
 
 - `a .. b` constructs a list of `Int` values from `a` to `b` **inclusive**. If `b < a`, it produces `[]`.
-- `[a..b]` is the common spelling for a range list, but the underlying expression `a .. b` is also available.
+- `a .. b` is syntactically valid only inside list literals (as a `ListItem` in the grammar). `[a..b]` is the canonical spelling.
 
 ## 11.4 Domains and operator meaning
 
 Some operators are **domain-resolved** when operand types are not plain `Int`. In v0.1:
 
 - Domain-resolved (when non-`Int` is involved): `+`, `-`, `*`, `×`, `/`, `%`, `<`, `<=`, `>`, `>=`
-- Not domain-resolved in v0.1 (built-in): `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`
+- Not domain-resolved in v0.1 (built-in): `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`, `??`, `++`
 
 Domain operator resolution is a static rewrite to an in-scope function named like `(+)` or `(<)` (see [Desugaring: Domains and Operators](../04_desugaring/09_domains.md)).
 

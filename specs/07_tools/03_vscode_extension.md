@@ -1,6 +1,6 @@
 # VSCode Extension
 
-The **AIVI Language Support** extension for Visual Studio Code provides a comprehensive development environment for Aivi.
+The **AIVI Language Support** extension for Visual Studio Code provides a comprehensive development environment for AIVI.
 
 ## Features
 
@@ -12,7 +12,7 @@ The **AIVI Language Support** extension for Visual Studio Code provides a compre
     -   Renaming
     -   Real-time Error Reporting
 -   **Formatting**: Integrated formatter support (`Shift + Alt + F` or Format on Save).
--   **EBNF Support**: Syntax highlighting for `.ebnf` files (used in Aivi development).
+-   **EBNF Support**: Syntax highlighting for `.ebnf` files (used in AIVI development).
 
 ## Configuration
 

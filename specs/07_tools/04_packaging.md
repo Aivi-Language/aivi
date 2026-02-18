@@ -1,17 +1,17 @@
 # Packaging & Project Structure
 
-Aivi piggybacks on Rust's `cargo` ecosystem for packaging and dependency management. An Aivi project is essentially a Rust project with additional metadata and build steps.
+AIVI piggybacks on Rust's `cargo` ecosystem for packaging and dependency management. An AIVI project is essentially a Rust project with additional metadata and build steps.
 
 ## File Structure
 
-A typical Aivi project looks like this:
+A typical AIVI project looks like this:
 
 ```text
 my-project/
-├── aivi.toml        # Aivi-specific configuration
+├── aivi.toml        # AIVI-specific configuration
 ├── Cargo.toml       # Rust/Cargo configuration
 ├── src/
-│   └── main.aivi    # Entry point (for binaries)
+│   ├── main.aivi    # Entry point (for binaries)
 │   └── lib.aivi     # Entry point (for libraries)
 ├── .gitignore
 └── target/          # Build artifacts
@@ -19,13 +19,13 @@ my-project/
 
 ## `aivi.toml`
 
-The `aivi.toml` file configures the Aivi compiler settings for the project.
+The `aivi.toml` file configures the AIVI compiler settings for the project.
 
 ```toml
 [project]
 kind = "bin"              # "bin" or "lib"
 entry = "main.aivi"       # Entry source file
-language_version = "0.1"  # Targeted Aivi version
+language_version = "0.1"  # Targeted AIVI version
 
 [build]
 gen_dir = "target/aivi-gen" # Where generated Rust code is placed
@@ -35,11 +35,11 @@ cargo_profile = "dev"       # Default cargo profile
 
 ## `Cargo.toml` Integration
 
-Aivi projects are valid Cargo packages. The `Cargo.toml` file contains standard Rust package metadata and dependencies.
+AIVI projects are valid Cargo packages. The `Cargo.toml` file contains standard Rust package metadata and dependencies.
 
 ### Metadata
 
-Aivi stores its specific metadata under `[package.metadata.aivi]`:
+AIVI stores its specific metadata under `[package.metadata.aivi]`:
 
 ```toml
 [package.metadata.aivi]
@@ -50,12 +50,12 @@ entry = "src/main.aivi"
 
 ### Dependencies
 
-Dependencies are managed via `Cargo.toml`'s `[dependencies]` section. You can use standard Rust crates or other Aivi packages.
+Dependencies are managed via `Cargo.toml`'s `[dependencies]` section. You can use standard Rust crates or other AIVI packages.
 
 ```toml
 [dependencies]
 aivi_native_runtime = { path = "..." } # Runtime for generated Rust code (native backend; experimental)
-my-aivi-lib = { path = "../my-aivi-lib" } # Another Aivi package
+my-aivi-lib = { path = "../my-aivi-lib" } # Another AIVI package
 ```
 
 ## Compilation Model

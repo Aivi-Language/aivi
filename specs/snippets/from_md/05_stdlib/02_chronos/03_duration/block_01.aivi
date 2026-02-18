@@ -5,6 +5,8 @@ timeout = 500ms
 delay = 2seconds
 
 // Type-safe comparison
-if delay > timeout {
-  // ...
-}
+if delay > timeout then
+// delay exceeds timeout
+True
+else
+False
