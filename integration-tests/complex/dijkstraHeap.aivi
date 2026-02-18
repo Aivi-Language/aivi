@@ -68,10 +68,10 @@ dijkstra : Graph -> Int -> Map Int Float
 dijkstra = graph start =>
   search [(0.0, start)] (~map{ start => 0.0 }) (Set.empty) graph
 
-  @test
-  shortestPaths = effect {
-    graph     <- pure buildGraph
-    distances <- pure (dijkstra graph 0)
-    assert (Map.get 3 distances == Some 4.0)
-    assert (Map.get 2 distances == Some 3.0)
-  }
+@test
+shortestPaths = effect {
+  graph     <- pure buildGraph
+  distances <- pure (dijkstra graph 0)
+  assert (Map.get 3 distances == Some 4.0)
+  assert (Map.get 2 distances == Some 3.0)
+}
