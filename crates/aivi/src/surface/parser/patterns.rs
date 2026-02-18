@@ -41,8 +41,15 @@ impl Parser {
                     span,
                 });
             }
-            let subject = self.consume_symbol("!");
-            if self.consume_symbol("@") {
+            let subject = false; // `!` deconstructor head removed (Change 4)
+            if self.match_keyword("as") || self.consume_symbol("@") {
+                if self.tokens.get(self.pos - 1).is_some_and(|t| t.text == "@") {
+                    self.emit_diag(
+                        "E1603",
+                        "`@` in destructuring is deprecated; use `as` instead",
+                        self.previous_span(),
+                    );
+                }
                 let at_span = self.previous_span();
                 let inner = self
                     .parse_pattern()
@@ -235,8 +242,15 @@ impl Parser {
             }
         }
 
-        let shorthand_subject = self.consume_symbol("!");
-        let pattern = if self.consume_symbol("@") || self.consume_symbol(":") {
+        let shorthand_subject = false; // `!` deconstructor head removed (Change 4)
+        let pattern = if self.match_keyword("as") || self.consume_symbol("@") || self.consume_symbol(":") {
+            if self.tokens.get(self.pos - 1).is_some_and(|t| t.text == "@") {
+                self.emit_diag(
+                    "E1603",
+                    "`@` in destructuring is deprecated; use `as` instead",
+                    self.previous_span(),
+                );
+            }
             self.parse_pattern()
                 .unwrap_or(Pattern::Wildcard(self.previous_span()))
         } else {

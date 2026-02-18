@@ -256,6 +256,7 @@ impl Backend {
                     ));
                 }
             }
+            ModuleItem::MachineDecl(_) => {}
         }
         None
     }

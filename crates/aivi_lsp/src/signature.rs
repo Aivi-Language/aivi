@@ -240,6 +240,12 @@ impl Backend {
                 | BlockItem::Yield { expr, .. }
                 | BlockItem::Recurse { expr, .. }
                 | BlockItem::Expr { expr, .. } => Self::find_call_info(expr, position),
+                BlockItem::When { cond, effect, .. } => Self::find_call_info(cond, position)
+                    .or_else(|| Self::find_call_info(effect, position)),
+                BlockItem::Given { cond, fail_expr, .. } => Self::find_call_info(cond, position)
+                    .or_else(|| Self::find_call_info(fail_expr, position)),
+                BlockItem::On { transition, handler, .. } => Self::find_call_info(transition, position)
+                    .or_else(|| Self::find_call_info(handler, position)),
             }),
             Expr::Ident(_) | Expr::Literal(_) | Expr::FieldSection { .. } | Expr::Raw { .. } => {
                 None

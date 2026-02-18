@@ -185,6 +185,7 @@ impl Backend {
                     children: Some(children),
                 })
             }
+            ModuleItem::MachineDecl(_) => None,
         }
     }
 }

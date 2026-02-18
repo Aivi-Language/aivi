@@ -19,7 +19,7 @@ impl Parser {
                     if crate::syntax::KEYWORDS_ALL.contains(&token.text.as_str()) {
                         return matches!(
                             token.text.as_str(),
-                            "if" | "effect" | "generate" | "resource" | "patch"
+                            "if" | "do" | "generate" | "resource" | "patch"
                         );
                     }
                     return true;
@@ -312,8 +312,26 @@ impl Parser {
             });
         }
 
+        if self.match_keyword("do") {
+            let monad = self.consume_ident().unwrap_or(SpannedName {
+                name: "Effect".to_string(),
+                span: self.previous_span(),
+            });
+            return Some(self.parse_block(BlockKind::Do { monad }));
+        }
         if self.match_keyword("effect") {
-            return Some(self.parse_block(BlockKind::Effect));
+            // Legacy: accept `effect {` with a deprecation diagnostic
+            let effect_span = self.previous_span();
+            self.emit_diag(
+                "E1600",
+                "`effect { }` is deprecated; use `do Effect { }` instead",
+                effect_span.clone(),
+            );
+            let monad = SpannedName {
+                name: "Effect".to_string(),
+                span: effect_span,
+            };
+            return Some(self.parse_block(BlockKind::Do { monad }));
         }
         if self.match_keyword("generate") {
             return Some(self.parse_block(BlockKind::Generate));

@@ -149,6 +149,18 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
                         | BlockItem::Yield { expr, .. }
                         | BlockItem::Recurse { expr, .. }
                         | BlockItem::Expr { expr, .. } => collect_expr(expr, env, bound, out),
+                        BlockItem::When { cond, effect, .. } => {
+                            collect_expr(cond, env, bound, out);
+                            collect_expr(effect, env, bound, out);
+                        }
+                        BlockItem::Given { cond, fail_expr, .. } => {
+                            collect_expr(cond, env, bound, out);
+                            collect_expr(fail_expr, env, bound, out);
+                        }
+                        BlockItem::On { transition, handler, .. } => {
+                            collect_expr(transition, env, bound, out);
+                            collect_expr(handler, env, bound, out);
+                        }
                     }
                 }
                 bound.truncate(before);
@@ -356,6 +368,18 @@ fn rewrite_implicit_field_vars(
                         | BlockItem::Expr { expr, .. } => {
                             *expr =
                                 rewrite_implicit_field_vars(expr.clone(), implicit_param, unbound);
+                        }
+                        BlockItem::When { cond, effect, .. } => {
+                            *cond = rewrite_implicit_field_vars(cond.clone(), implicit_param, unbound);
+                            *effect = rewrite_implicit_field_vars(effect.clone(), implicit_param, unbound);
+                        }
+                        BlockItem::Given { cond, fail_expr, .. } => {
+                            *cond = rewrite_implicit_field_vars(cond.clone(), implicit_param, unbound);
+                            *fail_expr = rewrite_implicit_field_vars(fail_expr.clone(), implicit_param, unbound);
+                        }
+                        BlockItem::On { transition, handler, .. } => {
+                            *transition = rewrite_implicit_field_vars(transition.clone(), implicit_param, unbound);
+                            *handler = rewrite_implicit_field_vars(handler.clone(), implicit_param, unbound);
                         }
                     }
                     item

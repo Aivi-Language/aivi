@@ -299,6 +299,111 @@ impl Parser {
                 }
                 continue;
             }
+            // `when cond <- eff` — conditional effect (Change 6)
+            if self.match_keyword("when") {
+                let when_kw = self.previous_span();
+                if !matches!(kind, BlockKind::Do { .. }) {
+                    self.emit_diag(
+                        "E1540",
+                        "`when` is only allowed inside `do Monad { ... }` blocks",
+                        when_kw.clone(),
+                    );
+                }
+                let cond = self.parse_binary(0).unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: when_kw.clone(),
+                });
+                self.expect_symbol("<-", "expected '<-' after `when` condition");
+                let effect = self.parse_expr().unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: when_kw.clone(),
+                });
+                let span = merge_span(when_kw, expr_span(&effect));
+                items.push(BlockItem::When { cond, effect, span });
+                continue;
+            }
+            // `given cond or failExpr` — precondition guard (Change 8)
+            if self.match_keyword("given") {
+                let given_kw = self.previous_span();
+                if !matches!(kind, BlockKind::Do { .. }) {
+                    self.emit_diag(
+                        "E1541",
+                        "`given` is only allowed inside `do Monad { ... }` blocks",
+                        given_kw.clone(),
+                    );
+                }
+                let cond = self.parse_binary(0).unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: given_kw.clone(),
+                });
+                self.expect_keyword("or", "expected 'or' after `given` condition");
+                self.consume_newlines();
+                let fail_expr = if self.consume_symbol("|") {
+                    // match form: given cond or | Pattern => failExpr | ...
+                    let mut arms = Vec::new();
+                    loop {
+                        let pattern = self
+                            .parse_pattern()
+                            .unwrap_or(Pattern::Wildcard(given_kw.clone()));
+                        self.expect_symbol("=>", "expected '=>' in given or arm");
+                        let body = self.parse_expr().unwrap_or(Expr::Raw {
+                            text: String::new(),
+                            span: given_kw.clone(),
+                        });
+                        let span = merge_span(pattern_span(&pattern), expr_span(&body));
+                        arms.push(MatchArm {
+                            pattern,
+                            guard: None,
+                            body,
+                            span,
+                        });
+                        self.consume_newlines();
+                        if !self.consume_symbol("|") {
+                            break;
+                        }
+                    }
+                    let span = merge_span(
+                        given_kw.clone(),
+                        arms.last().map(|a| a.span.clone()).unwrap_or(given_kw.clone()),
+                    );
+                    Expr::Match {
+                        scrutinee: Some(Box::new(cond.clone())),
+                        arms,
+                        span,
+                    }
+                } else {
+                    self.parse_expr().unwrap_or(Expr::Raw {
+                        text: String::new(),
+                        span: given_kw.clone(),
+                    })
+                };
+                let span = merge_span(given_kw, expr_span(&fail_expr));
+                items.push(BlockItem::Given { cond, fail_expr, span });
+                continue;
+            }
+            // `on Transition => effect` — transition event wiring (Change 7)
+            if self.match_keyword("on") {
+                let on_kw = self.previous_span();
+                if !matches!(kind, BlockKind::Do { .. }) {
+                    self.emit_diag(
+                        "E1542",
+                        "`on` is only allowed inside `do Monad { ... }` blocks",
+                        on_kw.clone(),
+                    );
+                }
+                let transition = self.parse_postfix().unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: on_kw.clone(),
+                });
+                self.expect_symbol("=>", "expected '=>' after `on` transition");
+                let handler = self.parse_expr().unwrap_or(Expr::Raw {
+                    text: String::new(),
+                    span: on_kw.clone(),
+                });
+                let span = merge_span(on_kw, expr_span(&handler));
+                items.push(BlockItem::On { transition, handler, span });
+                continue;
+            }
             let checkpoint = self.pos;
             let diag_checkpoint = self.diagnostics.len();
             if let Some(pattern) = self.parse_pattern() {
@@ -309,11 +414,11 @@ impl Parser {
                     });
                     if !matches!(
                         kind,
-                        BlockKind::Effect | BlockKind::Generate | BlockKind::Resource
+                        BlockKind::Do { .. } | BlockKind::Generate | BlockKind::Resource
                     ) {
                         self.emit_diag(
                             "E1536",
-                            "`<-` is only allowed inside `effect { ... }`, `generate { ... }`, or `resource { ... }` blocks",
+                            "`<-` is only allowed inside `do Monad { ... }`, `generate { ... }`, or `resource { ... }` blocks",
                             merge_span(pattern_span(&pattern), expr_span(&expr)),
                         );
                         let span = merge_span(pattern_span(&pattern), expr_span(&expr));
@@ -324,7 +429,7 @@ impl Parser {
                         });
                         continue;
                     }
-                    let expr = if matches!(kind, BlockKind::Effect) && self.peek_keyword("or") {
+                    let expr = if matches!(kind, BlockKind::Do { .. }) && self.peek_keyword("or") {
                         // Disambiguation:
                         // - `x <- eff or | NotFound m => ...` is effect-fallback (patterns match E)
                         // - `x <- (res or "boom")` is result-fallback (expression-level)
@@ -554,7 +659,7 @@ impl Parser {
 
         let span = merge_span(or_span.clone(), or_span.clone());
         Expr::Block {
-            kind: BlockKind::Effect,
+            kind: BlockKind::Do { monad: SpannedName { name: "Effect".to_string(), span: or_span.clone() } },
             items: vec![
                 bind_item,
                 BlockItem::Expr {

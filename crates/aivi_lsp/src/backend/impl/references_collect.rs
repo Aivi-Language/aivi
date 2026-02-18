@@ -68,6 +68,7 @@ impl Backend {
                     locations,
                 );
             }
+            ModuleItem::MachineDecl(_) => {}
         }
     }
 

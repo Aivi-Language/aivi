@@ -43,7 +43,7 @@ main = effect {
             def.expr
         );
     };
-    assert!(matches!(kind, BlockKind::Effect));
+    assert!(matches!(kind, BlockKind::Do { .. }));
 
     let Some(BlockItem::Let { expr, .. }) = items.first() else {
         panic!(

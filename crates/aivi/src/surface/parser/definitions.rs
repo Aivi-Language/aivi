@@ -266,6 +266,21 @@ impl Parser {
                                 expr: rewrite_literal_template(expr, needle, param),
                                 span,
                             },
+                            BlockItem::When { cond, effect, span } => BlockItem::When {
+                                cond: rewrite_literal_template(cond, needle, param),
+                                effect: rewrite_literal_template(effect, needle, param),
+                                span,
+                            },
+                            BlockItem::Given { cond, fail_expr, span } => BlockItem::Given {
+                                cond: rewrite_literal_template(cond, needle, param),
+                                fail_expr: rewrite_literal_template(fail_expr, needle, param),
+                                span,
+                            },
+                            BlockItem::On { transition, handler, span } => BlockItem::On {
+                                transition: rewrite_literal_template(transition, needle, param),
+                                handler: rewrite_literal_template(handler, needle, param),
+                                span,
+                            },
                         })
                         .collect(),
                     span,

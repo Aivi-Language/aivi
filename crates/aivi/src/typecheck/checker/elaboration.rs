@@ -445,6 +445,21 @@ impl TypeChecker {
                             let (expr, _ty) = self.elab_expr(expr, None, &mut local_env)?;
                             new_items.push(BlockItem::Recurse { expr, span });
                         }
+                        BlockItem::When { cond, effect, span } => {
+                            let (cond, _) = self.elab_expr(cond, None, &mut local_env)?;
+                            let (effect, _) = self.elab_expr(effect, None, &mut local_env)?;
+                            new_items.push(BlockItem::When { cond, effect, span });
+                        }
+                        BlockItem::Given { cond, fail_expr, span } => {
+                            let (cond, _) = self.elab_expr(cond, None, &mut local_env)?;
+                            let (fail_expr, _) = self.elab_expr(fail_expr, None, &mut local_env)?;
+                            new_items.push(BlockItem::Given { cond, fail_expr, span });
+                        }
+                        BlockItem::On { transition, handler, span } => {
+                            let (transition, _) = self.elab_expr(transition, None, &mut local_env)?;
+                            let (handler, _) = self.elab_expr(handler, None, &mut local_env)?;
+                            new_items.push(BlockItem::On { transition, handler, span });
+                        }
                     }
                 }
                 let out = Expr::Block {
