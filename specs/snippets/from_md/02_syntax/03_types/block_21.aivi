@@ -7,7 +7,6 @@ class Collection (C *) = with (A: Eq) {
 }
 
 // Combined: superclass composition + constrained member variables
-class Monad (M *) =
-Applicative (M *) with (A: Eq, B: Show) {
+class Monad (M *) = Applicative (M *) with (A: Eq, B: Show) {
   bind: M A -> (A -> M B) -> M B
 }
