@@ -1,5 +1,5 @@
 users |> filter active
 users |> filter (age > 18)
-users = |> find (email => = Some "x")
+users |> find (email == Some "x")
 xs |> takeWhile (_ < 10)
 xs |> dropWhile (_ < 0)

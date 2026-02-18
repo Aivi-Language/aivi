@@ -15,5 +15,5 @@ This means:
 ## 7.2 `yield`
 
 ```text
-yield x ≡ λk acc. k acc x
+yield x ≡ λk. λacc. k acc x
 ```

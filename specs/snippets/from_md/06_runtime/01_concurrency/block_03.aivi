@@ -1,5 +1,5 @@
 effect {
-  (tx, rx) = channel.make ()
+  (tx, rx) <- channel.make ()
 
   // Sending
   channel.send tx "hello"

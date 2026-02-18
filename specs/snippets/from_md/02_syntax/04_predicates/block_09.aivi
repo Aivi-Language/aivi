@@ -1,2 +1,2 @@
-filter = (email => = "x") // ❌ if email : Option Text
-filter = (email => = Some "x") // ✅
+filter (email == "x") // ❌ if email : Option Text
+filter (email == Some "x") // ✅

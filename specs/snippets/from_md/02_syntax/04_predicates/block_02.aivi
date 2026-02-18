@@ -1,4 +1,4 @@
-Pred A = A => Bool
+Pred A = A -> Bool
 
 andPred : Pred A -> Pred A -> Pred A
 andPred = p q => x => p x && q x

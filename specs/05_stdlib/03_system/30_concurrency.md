@@ -39,7 +39,7 @@ Channels provide a mechanism for synchronization and communication between concu
 
 | Function | Explanation |
 | --- | --- |
-| **recv** receiver<br><pre><code>`Receiver A -> Effect E (Result A ChannelError)`</code></pre> | Waits for the next value; returns `Ok value` or `Err Closed`. |
+| **recv** receiver<br><pre><code>`Receiver A -> Effect E (Result ChannelError A)`</code></pre> | Waits for the next value; returns `Ok value` or `Err Closed`. |
 
 ### `close`
 

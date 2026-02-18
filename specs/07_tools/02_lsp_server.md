@@ -1,6 +1,6 @@
 # LSP Server
 
-The Aivi Language Server (`aivi-lsp`) implements the Language Server Protocol (LSP) to provide rich editing features in compatible editors (like VSCode, Neovim, Zed, etc.).
+The AIVI Language Server (`aivi-lsp`) implements the Language Server Protocol (LSP) to provide rich editing features in compatible editors (like VSCode, Neovim, Zed, etc.).
 
 ## Capabilities
 
@@ -10,7 +10,7 @@ The server currently supports the following LSP capabilities:
 
 -   **Go to Definition**: Jump to where a symbol (function, type, variable) is defined.
 -   **Go to Declaration**: Same as definition for most items.
--   **Go to Implementation**: Navigate to implementations of classes or traits.
+-   **Go to Implementation**: Navigate to implementations of classes.
 -   **Find References**: List all usages of a symbol in the workspace.
 -   **Document Symbols**: List all symbols defined in the current file (outline view).
 

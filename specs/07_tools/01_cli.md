@@ -1,6 +1,6 @@
-# Aivi CLI
+# AIVI CLI
 
-The Aivi Command Line Interface (CLI) is the primary tool for managing Aivi projects. It handles project creation, dependency management, compilation, and execution.
+The AIVI Command Line Interface (CLI) is the primary tool for managing AIVI projects. It handles project creation, dependency management, compilation, and execution.
 
 ## Installation
 
@@ -12,7 +12,7 @@ The CLI is distributed as a single binary named `aivi`. It can be installed dire
 
 #### `init` / `new`
 
-Creates a new Aivi project in a directory.
+Creates a new AIVI project in a directory.
 
 ```bash
 aivi init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]
@@ -22,7 +22,7 @@ aivi init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--forc
 - `--bin`: Create a binary (application) project (default).
 - `--lib`: Create a library project.
 - `--edition`: Set the Rust edition (default: 2024).
-- `--language-version`: Set the Aivi language version (default: 0.1).
+- `--language-version`: Set the AIVI language version (default: 0.1).
 - `--force`: Force creation even if the directory is not empty.
 
 #### `install`
@@ -45,7 +45,7 @@ aivi install <spec> [--no-fetch]
 
 #### `search`
 
-Searches for Aivi packages in the registry.
+Searches for AIVI packages in the registry.
 
 ```bash
 aivi search <query>

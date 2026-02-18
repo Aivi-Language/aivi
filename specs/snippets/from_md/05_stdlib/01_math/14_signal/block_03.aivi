@@ -3,5 +3,5 @@ domain Signal over Signal = {
   (+) = a b => { samples: zipWith (+) a.samples b.samples, rate: a.rate }
 
   (*) : Signal -> Float -> Signal
-  (*) = s k => { samples: map (\x -> x * k) s.samples, rate: s.rate }
+  (*) = s k => { samples: map (x => x * k) s.samples, rate: s.rate }
 }

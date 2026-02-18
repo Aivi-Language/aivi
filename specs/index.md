@@ -34,8 +34,9 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Pattern Matching](02_syntax/08_pattern_matching)
 - [Effects](02_syntax/09_effects)
 - [Modules](02_syntax/10_modules)
-- [Sigils](02_syntax/13_sigils)
+- [Operators and Context](02_syntax/11_operators)
 - [External Sources](02_syntax/12_external_sources)
+- [Sigils](02_syntax/13_sigils)
 - [Decorators](02_syntax/14_decorators)
 - [Resources](02_syntax/15_resources)
 - [Concrete Syntax (EBNF draft)](02_syntax/00_grammar)
@@ -100,6 +101,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 ### Execution & Concurrency
 
 - [Concurrency](06_runtime/01_concurrency)
+- [Memory Management](06_runtime/02_memory_management)
 - [Package Manager (Cargo-backed)](06_runtime/03_package_manager)
 
 ### Tools & Ecosystem

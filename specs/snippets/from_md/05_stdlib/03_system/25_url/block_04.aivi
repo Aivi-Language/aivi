@@ -10,7 +10,7 @@ search = base + ("q", "aivi")
 sorted = search + ("sort", "desc")
 
 // Change protocol or path using record update
-secure_login = base <| {
-  path: "/v1/login",
+secureLogin = base <| {
+  path: "/v1/login"
   protocol: "wss"
 }

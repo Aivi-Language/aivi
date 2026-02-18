@@ -1,16 +1,16 @@
 domain Url over Url = {
   // Add a query parameter
-  (+) : Url -> (String, String) -> Url
+  (+) : Url -> (Text, Text) -> Url
   (+) = url (key, value) => {
-    ...url,
+    ...url
     query: url.query ++ [(key, value)]
   }
 
   // Remove a query parameter by key
-  (-) : Url -> String -> Url
+  (-) : Url -> Text -> Url
   (-) = url key => {
-    ...url,
-    query: filter (\(k, _) -> k != key) url.query
+    ...url
+    query: filter ((k, _) => k != key) url.query
   }
 
   // Update record fields (standard record update syntax)

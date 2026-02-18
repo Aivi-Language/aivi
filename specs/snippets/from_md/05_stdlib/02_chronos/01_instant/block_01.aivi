@@ -4,6 +4,8 @@ use aivi.chronos.instant (Instant)
 started = 2024-05-21T12:00:00Z
 
 // Instants can be compared
-if now > started {
-  // ...
-}
+if now > started then
+// time has passed
+True
+else
+False

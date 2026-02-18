@@ -22,8 +22,8 @@ A URL isn't just text; it's a structured address with protocols, hosts, and quer
 
 | Function | Explanation |
 | --- | --- |
-| **parse** text<br><pre><code>`String -> Result Url Error`</code></pre> | Converts a URL string into a structured `Url`. |
-| **toString** url<br><pre><code>`Url -> String`</code></pre> | Renders a `Url` back into its string form. |
+| **parse** text<br><pre><code>`Text -> Result UrlError Url`</code></pre> | Converts a URL string into a structured `Url`. |
+| **toString** url<br><pre><code>`Url -> Text`</code></pre> | Renders a `Url` back into its string form. |
 
 ## Usage Examples
 
