@@ -448,7 +448,7 @@
             // opener.  If the opener is on the same source line, keep the line
             // intact (e.g. `{ r: 255, g: 0, b: 0 }` all on one source line).
             let closer_tok = line_tokens[last_code_idx.unwrap()];
-            let opener_char = match closer_tok.text.as_str() {
+            let _opener_char = match closer_tok.text.as_str() {
                 "}" => "{",
                 "]" => "[",
                 ")" => "(",
