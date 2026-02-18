@@ -5,11 +5,11 @@ use aivi::{format_text_with_options, BraceStyle, FormatOptions};
 fn test_fmt_basic_indentation() {
     let input = r#"
 module Test
-main = effect {
+main = do Effect {
   x = 1
   _ <- print x
 }"#;
-    let expected = "module Test\nmain = effect {\n  x = 1\n  _ <- print x\n}\n";
+    let expected = "module Test\nmain = do Effect {\n  x = 1\n  _ <- print x\n}\n";
     assert_eq!(format_text(input), expected);
 }
 
@@ -85,8 +85,8 @@ fn test_fmt_pipe_blocks_indent_after_equals_and_question() {
     let expected = "head =\n  | []       => None\n  | [x, ...] => Some x\n";
     assert_eq!(format_text(input), expected);
 
-    let input = "isNone = opt => opt ?\n| None   => True\n| Some _ => False\n";
-    let expected = "isNone = opt => opt ?\n  | None   => True\n  | Some _ => False\n";
+    let input = "isNone = opt => opt match\n| None   => True\n| Some _ => False\n";
+    let expected = "isNone = opt => opt match\n  | None   => True\n  | Some _ => False\n";
     assert_eq!(format_text(input), expected);
 }
 
@@ -184,16 +184,16 @@ fn test_fmt_decorator_does_not_inherit_pipe_block_indent() {
     let input = r#"
 module demo
 
-sum = xs => xs ?
+sum = xs => xs match
   | []           => 0
   | [x, ...rest] => x + sum rest
 
 @test
-recursionWorks = effect {
+recursionWorks = do Effect {
   _ <- assertEq (sum[1, 2, 3]) 6
 }
 "#;
-    let expected = "module demo\n\nsum = xs => xs ?\n  | []           => 0\n  | [x, ...rest] => x + sum rest\n\n@test\nrecursionWorks = effect {\n  _ <- assertEq (sum[1, 2, 3]) 6\n}\n";
+    let expected = "module demo\n\nsum = xs => xs match\n  | []           => 0\n  | [x, ...rest] => x + sum rest\n\n@test\nrecursionWorks = do Effect {\n  _ <- assertEq (sum[1, 2, 3]) 6\n}\n";
     assert_eq!(format_text(input), expected);
 }
 
@@ -214,12 +214,12 @@ fn test_fmt_allman_brace_style_is_configurable() {
 fn test_fmt_match_subject_moves_onto_arrow_line() {
     let input = r#"
 initialQueue = indegree graph =>
-  graph.nodes ?
+  graph.nodes match
     | []        => []
     | [h, ...t] => []
 "#;
     let formatted = format_text(input);
-    assert!(formatted.contains("initialQueue = indegree graph => graph.nodes ?"));
+    assert!(formatted.contains("initialQueue = indegree graph => graph.nodes match"));
 }
 
 #[test]

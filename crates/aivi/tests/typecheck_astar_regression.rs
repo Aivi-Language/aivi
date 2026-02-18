@@ -61,7 +61,7 @@ step : State -> { to: Int, weight: Float } -> State
 step = state edge => {
   currentG = 1.0
   tentative = currentG + edge.weight
-  prevScore = Map.get edge.to state.scores ?
+  prevScore = Map.get edge.to state.scores match
     | Some v => v
     | None   => infinity
   if tentative < prevScore then {

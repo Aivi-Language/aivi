@@ -12,7 +12,7 @@ fn native_codegen_smoke_compiles_and_runs() {
         &source_path,
         r#"module app.main
 main : Effect Text Unit
-main = effect {
+main = do Effect {
   print "Hello from AIVI!"
 }
 "#,

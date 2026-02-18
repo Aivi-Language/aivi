@@ -1,0 +1,24 @@
+@no_prelude
+module integrationTests.syntax.patternMatching.matchKeyword
+
+use aivi
+use aivi.testing
+
+Option A = None | Some A
+
+safeHead = xs => xs match
+  | []       => None
+  | [x, ...] => Some x
+
+describe = opt => opt match
+  | None   => "nothing"
+  | Some x => "something"
+
+@test
+matchKeywordWorks = do Effect {
+  assertEq (safeHead [1, 2, 3]) (Some 1)
+  assertEq (safeHead []) None
+  assertEq (describe (Some 1)) "something"
+  assertEq (describe None) "nothing"
+}
+

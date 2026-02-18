@@ -1,0 +1,27 @@
+@no_prelude
+module integrationTests.syntax.effects.givenPrecondition
+
+use aivi
+use aivi.testing
+
+positiveOnly = n => do Effect {
+  given n > 0 or fail "must be positive"
+  pure n
+}
+
+@test
+givenOkContinues = do Effect {
+  res <- attempt (positiveOnly 5)
+  res match
+    | Ok v  => assertEq v 5
+    | Err _ => fail "unexpected error"
+}
+
+@test
+givenFailsOnBadInput = do Effect {
+  res <- attempt (positiveOnly (-1))
+  res match
+    | Err e => assertEq e "must be positive"
+    | Ok _  => fail "should have failed"
+}
+

@@ -529,7 +529,7 @@ use aivi.database as db
 User = { id: Int, name: Text }
 userTable = db.table "users"[]
 
-main = effect {
+main = do Effect {
   _ <- db.configure { driver: db.Sqlite, url: ":memory:" }
   _ <- db.runMigrations[userTable]
   _ <- userTable + db.ins { id: 1, name: "Alice" }

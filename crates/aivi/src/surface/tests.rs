@@ -179,11 +179,11 @@ f = { a: x b: y } => x
 }
 
 #[test]
-fn parses_deconstructor_pipe_head_with_subject_marker() {
+fn parses_record_destructuring_pipe_head() {
     let src = r#"
 module Example
 
-f = { name! } |> toUpper
+f = { name } => name |> toUpper
 "#;
 
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
@@ -215,9 +215,9 @@ f = { name! } |> toUpper
             assert!(
                 matches!(
                     &fields[0].pattern,
-                    crate::surface::Pattern::SubjectIdent(n) if n.name == "name"
+                    crate::surface::Pattern::Ident(n) if n.name == "name"
                 ),
-                "expected record-pattern shorthand to bind `name` and mark it as subject"
+                "expected record-pattern shorthand to bind `name`"
             );
         }
         other => panic!("unexpected param pattern: {other:?}"),
@@ -236,11 +236,11 @@ f = { name! } |> toUpper
 }
 
 #[test]
-fn parses_deconstructor_match_head_with_subject_marker() {
+fn parses_record_destructuring_match_head() {
     let src = r#"
 module Example
 
-g = { name! } ?
+g = { name } => name match
   | "A" => 1
   | _   => 0
 "#;
@@ -273,11 +273,11 @@ g = { name! } ?
 }
 
 #[test]
-fn parses_at_binding_and_subject_tuple_for_deconstructor_pipe_head() {
+fn parses_at_binding_with_record_destructuring_pipe_head() {
     let src = r#"
 module Example
 
-h = user!@{ name! } |> consume
+h = user as { name } => name |> consume
 "#;
 
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
@@ -306,18 +306,15 @@ h = user!@{ name! } |> consume
             &params[0],
             crate::surface::Pattern::At { name, .. } if name.name == "user"
         ),
-        "expected `user@...` at-binding param"
+        "expected `user as ...` at-binding param"
     );
 
-    let Expr::Binary { left, .. } = &**body else {
+    let Expr::Binary { op, left, right, .. } = &**body else {
         panic!("expected pipe");
     };
-    let Expr::Tuple { items, .. } = &**left else {
-        panic!("expected tuple subject");
-    };
-    assert_eq!(items.len(), 2);
-    assert!(matches!(&items[0], Expr::Ident(n) if n.name == "user"));
-    assert!(matches!(&items[1], Expr::Ident(n) if n.name == "name"));
+    assert_eq!(op, "|>");
+    assert!(matches!(&**left, Expr::Ident(n) if n.name == "name"));
+    assert!(matches!(&**right, Expr::Ident(n) if n.name == "consume"));
 }
 
 #[test]

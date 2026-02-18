@@ -80,7 +80,7 @@ mod tests {
 
     #[test]
     fn format_respects_indent_size() {
-        let text = "module demo\n\nmain = effect {\n_<-print \"hi\"\n}\n";
+        let text = "module demo\n\nmain = do Effect {\n_<-print \"hi\"\n}\n";
         let formatted = format_text_with_options(
             text,
             FormatOptions {

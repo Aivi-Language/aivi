@@ -1,0 +1,12 @@
+@no_prelude
+module integrationTests.syntax.effects.onEvent
+
+use aivi
+use aivi.testing
+
+@test
+onEventWiring = do Effect {
+  on Click => pure Unit
+  pure Unit
+}
+

@@ -1,0 +1,13 @@
+@no_prelude
+module integrationTests.syntax.effects.doMonadBlock
+
+use aivi
+use aivi.testing
+
+@test
+doEffectBlockWorks = do Effect {
+  x = 1
+  y <- pure 2
+  assertEq (x + y) 3
+}
+

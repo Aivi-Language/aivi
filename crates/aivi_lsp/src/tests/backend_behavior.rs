@@ -27,7 +27,7 @@ fn diagnostics_report_non_exhaustive_match() {
 
 Option A = None | Some A
 
-value = Some 1 ?
+value = Some 1 match
   | Some _ => 1
 "#;
     let uri = sample_uri();
@@ -50,7 +50,7 @@ fn diagnostics_report_missing_list_comma() {
 
 #[test]
 fn formatting_edits_match_formatter_output() {
-    let text = "module demo\n\nmain = effect { _<-print \"hi\" }\n";
+    let text = "module demo\n\nmain = do Effect { _<-print \"hi\" }\n";
     let options = FormatOptions::default();
     let edits = Backend::build_formatting_edits(text, options);
     assert_eq!(edits.len(), 1);
@@ -60,7 +60,7 @@ fn formatting_edits_match_formatter_output() {
 
 #[test]
 fn formatting_edits_respect_indent_size() {
-    let text = "module demo\n\nmain = effect {\n_<-print \"hi\"\n}\n";
+    let text = "module demo\n\nmain = do Effect {\n_<-print \"hi\"\n}\n";
     let options = FormatOptions {
         indent_size: 4,
         max_blank_lines: 1,
@@ -391,7 +391,7 @@ x = ~<html><div class="a">{ foo }</div></html>
 #[test]
 fn semantic_tokens_highlight_paths_and_calls() {
     let text = r#"use aivi.net.https (get)
-main = effect {
+main = do Effect {
   xs = [1, 2]
   ys = xs |> map inc
 }

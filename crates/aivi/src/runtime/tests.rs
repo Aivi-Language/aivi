@@ -403,7 +403,7 @@ User = { id: Int, name: Text }
 
 userTable = database.table "users" []
 
-main = effect {
+main = do Effect {
   _ <- database.configure { driver: Sqlite, url: ":memory:" }
   _ <- database.runMigrations [ userTable ]
   _ <- database.applyDelta userTable (database.ins { id: 1, name: "A" })
@@ -823,9 +823,9 @@ cfg = {
 }
 
 main : Effect Text (Pool.PoolStats, Pool.PoolStats)
-main = effect {
+main = do Effect {
   poolRes <- Pool.create cfg
-  pool = poolRes ? | Ok p => p | Err _ => { acquire: _ => pure (Err Pool.Closed), release: _ => pure Unit, stats: _ => pure { size: 0, idle: 0, inUse: 0, waiters: 0, closed: True }, drain: _ => pure Unit, close: _ => pure Unit }
+  pool = poolRes match | Ok p => p | Err _ => { acquire: _ => pure (Err Pool.Closed), release: _ => pure Unit, stats: _ => pure { size: 0, idle: 0, inUse: 0, waiters: 0, closed: True }, drain: _ => pure Unit, close: _ => pure Unit }
   before <- Pool.stats pool
   _ <- attempt (Pool.withConn pool (_ => fail "boom"))
   after <- Pool.stats pool
@@ -884,9 +884,9 @@ cfg = {
 }
 
 main : Effect Text (Result Pool.PoolError Conn, Result Pool.PoolError Conn)
-main = effect {
+main = do Effect {
   poolRes <- Pool.create cfg
-  pool = poolRes ? | Ok p => p | Err _ => { acquire: _ => pure (Err Pool.Closed), release: _ => pure Unit, stats: _ => pure { size: 0, idle: 0, inUse: 0, waiters: 0, closed: True }, drain: _ => pure Unit, close: _ => pure Unit }
+  pool = poolRes match | Ok p => p | Err _ => { acquire: _ => pure (Err Pool.Closed), release: _ => pure Unit, stats: _ => pure { size: 0, idle: 0, inUse: 0, waiters: 0, closed: True }, drain: _ => pure Unit, close: _ => pure Unit }
   c1 <- Pool.acquire pool
   c2 <- Pool.acquire pool
   pure (c1, c2)
