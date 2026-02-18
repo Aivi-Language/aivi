@@ -7,19 +7,19 @@ use aivi.crypto
 use aivi.text
 
 @test
-randomBytes_smoke = effect {
+randomBytes_smoke = do Effect {
   b <- randomBytes 16
   assertEq (1 + 1) 2
 }
 
 @test
-randomUuid_smoke = effect {
+randomUuid_smoke = do Effect {
   u <- randomUuid
   assert (length u == 36)
 }
 
 @test
-sha256_smoke = effect {
+sha256_smoke = do Effect {
   s = sha256 "hello"
   assert (s == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
 }

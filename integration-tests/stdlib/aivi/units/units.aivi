@@ -7,7 +7,7 @@ use aivi.math
 use aivi.units
 
 @test
-quantity_smoke = effect {
+quantity_smoke = do Effect {
   m = defineUnit "m" 1.0
   a = { value: 2.0, unit: m }
   b = { value: 3.0, unit: m }
@@ -21,14 +21,14 @@ quantity_smoke = effect {
 }
 
 @test
-unit_smoke = effect {
+unit_smoke = do Effect {
   u = defineUnit "s" 1.0
   assert (u.name == "s")
   assert (u.factor == 1.0)
 }
 
 @test
-convert_smoke = effect {
+convert_smoke = do Effect {
   m = defineUnit "m" 1.0
   km = defineUnit "km" 1000.0
   q = { value: 1500.0, unit: m }
@@ -38,7 +38,7 @@ convert_smoke = effect {
 }
 
 @test
-defineUnit_smoke = effect {
+defineUnit_smoke = do Effect {
   m = defineUnit "m" 1.0
   km = defineUnit "km" 1000.0
   assert (m.name == "m")
@@ -46,7 +46,7 @@ defineUnit_smoke = effect {
 }
 
 @test
-sameUnit_smoke = effect {
+sameUnit_smoke = do Effect {
   m = defineUnit "m" 1.0
   km = defineUnit "km" 1000.0
   a = { value: 1.0, unit: m }

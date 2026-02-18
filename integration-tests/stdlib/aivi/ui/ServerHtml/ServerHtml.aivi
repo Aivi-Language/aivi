@@ -74,9 +74,9 @@ convertAppEffects
 -> RequestId
 -> Map RequestId (PendingEntry msg)
 -> ConvertedEffects msg
-convertAppEffects = effects rid pending => effects ?
+convertAppEffects = effects rid pending => effects match
   | []                 => { serverEffects: [], nextRid: rid, pendingTable: pending }
-  | [eff, ...rest]     => eff ?
+  | [eff, ...rest]     => eff match
     | ReadClipboard cont => {
       result = convertAppEffects rest (rid + 1)
       (Map.insert rid (ReadPending cont) pending)
@@ -141,21 +141,21 @@ convertAppEffects = effects rid pending => effects ?
 // Strip scheme + authority from a URL, returning path onward.
   stripSchemeHost : Text -> Text
   stripSchemeHost = url => {
-    afterScheme = text.contains "://" url ?
+    afterScheme = text.contains "://" url match
       | True  => text.splitOnce "://" url |> sndOf |> dropUntilSlash
       | False => url
     afterScheme
   }
 
   dropUntilSlash : Text -> Text
-  dropUntilSlash = t => text.contains "/" t ?
+  dropUntilSlash = t => text.contains "/" t match
     | True  => "/" ++ (text.splitOnce "/" t |> sndOf)
     | False => "/"
 
 // Split a text on the first occurrence of sep. Returns (before, after).
 // If sep is not found, returns (text, "").
   splitOnce : Text -> Text -> (Text, Text)
-  splitOnce = sep t => text.contains sep t ?
+  splitOnce = sep t => text.contains sep t match
     | True  => text.splitOnce sep t
     | False => (t, "")
 
@@ -167,7 +167,7 @@ sndOf = (_, b) => b
 // ---------------------------------------------------------------------------
 
 serveHttp : App model msg -> Request -> Effect HttpError Response
-serveHttp = app req => effect {
+serveHttp = app req => do Effect {
   viewId <- randomUuid
   url = parseUrlInfo req.path
   initCtx = { viewId, url, online: True }
@@ -191,20 +191,20 @@ serveHttp = app req => effect {
 // ---------------------------------------------------------------------------
 
 serveWs : App model msg -> WebSocket -> Effect WsError Unit
-serveWs = app ws => effect {
+serveWs = app ws => do Effect {
   // 1. Receive first message; expect Hello.
   firstRaw <- wsRecv ws
-  firstText = firstRaw ?
+  firstText = firstRaw match
     | TextMsg t => t
     | _         => ""
     decoded = decodeClientMsg firstText
-    decoded ?
-      | Err _ => effect {
+    decoded match
+      | Err _ => do Effect {
         _ <- wsSend ws (TextMsg (encodeServerMsg (Error { code: "PROTO", detail: "expected hello" })))
         wsClose ws
       }
-      | Ok clientMsg => clientMsg ?
-        | Hello hello  => effect {
+      | Ok clientMsg => clientMsg match
+        | Hello hello  => do Effect {
     // v1: always create a new view per connection.
     // Reconnection policy v1: treat every Hello as a new view.
           viewId <- randomUuid
@@ -229,7 +229,7 @@ serveWs = app ws => effect {
           }
           recvLoop app ws initialState
         }
-  | _ => effect {
+  | _ => do Effect {
       _ <- wsSend ws (TextMsg (encodeServerMsg (Error { code: "PROTO", detail: "first message must be hello" })))
       wsClose ws
   }
@@ -244,14 +244,14 @@ serveWs = app ws => effect {
   -> WebSocket
   -> ViewState model msg
   -> Effect WsError Unit
-  recvLoop = app ws state => effect {
+  recvLoop = app ws state => do Effect {
     rawMsg <- wsRecv ws
-    msgText = rawMsg ?
+    msgText = rawMsg match
       | TextMsg t => t
       | _         => ""
     decoded = decodeClientMsg msgText
-    newState <- decoded ?
-      | Err _ => effect {
+    newState <- decoded match
+      | Err _ => do Effect {
         _ <- wsSend ws (TextMsg (encodeServerMsg (Error { code: "DECODE", detail: "invalid message" })))
         pure state
       }
@@ -265,14 +265,14 @@ serveWs = app ws => effect {
   -> ViewState model msg
   -> ClientMsg
   -> Effect WsError (ViewState model msg)
-  dispatchMsg = app ws state clientMsg => clientMsg ?
+  dispatchMsg = app ws state clientMsg => clientMsg match
     | Hello _ =>
 // Already initialized; ignore duplicate hello.
   pure state
 | Event e => {
     handlerOpt = Map.get e.hid state.handlerTable
-    handlerOpt ?
-      | None => effect {
+    handlerOpt match
+      | None => do Effect {
         _ <- wsSend ws (TextMsg (encodeServerMsg
             (Error { code: "HID", detail: "unknown handler id" }))
         )
@@ -280,8 +280,8 @@ serveWs = app ws => effect {
       }
       | Some handler => {
         payloadResult = decodeEventPayload e.kind e.p
-        payloadResult ?
-          | Err _ => effect {
+        payloadResult match
+          | Err _ => do Effect {
             _ <- wsSend ws (TextMsg (encodeServerMsg
             (Error { code: "PAYLOAD", detail: "invalid event payload" }))
             )
@@ -289,7 +289,7 @@ serveWs = app ws => effect {
           }
           | Ok payload => {
             msgOpt = handler payload
-            msgOpt ?
+            msgOpt match
               | None     => pure state
               | Some msg =>
             runUpdate msg state (makeUpdateAdapter app) ws
@@ -298,8 +298,8 @@ serveWs = app ws => effect {
 }
 | Platform p => {
     platformResult = decodePlatformEvent p.kind (jsonToText p.p)
-    platformResult ?
-      | Err _ => effect {
+    platformResult match
+      | Err _ => do Effect {
         _ <- wsSend ws (TextMsg (encodeServerMsg
             (Error { code: "PLATFORM", detail: "invalid platform event" }))
         )
@@ -307,15 +307,15 @@ serveWs = app ws => effect {
       }
       | Ok platformEvt => {
         msgOpt = app.onPlatform platformEvt
-        msgOpt ?
+        msgOpt match
           | None     => pure state
           | Some msg => runUpdate msg state (makeUpdateAdapter app) ws
       }
 }
 | EffectResult er => {
     pendingOpt = Map.get er.rid state.pendingTable
-    pendingOpt ?
-      | None => effect {
+    pendingOpt match
+      | None => do Effect {
         _ <- wsSend ws (TextMsg (encodeServerMsg
             (Error { code: "RID", detail: "unknown request id" }))
         )
@@ -325,7 +325,7 @@ serveWs = app ws => effect {
         newPending = Map.delete er.rid state.pendingTable
         stateWithoutPending = state <| { pendingTable: newPending }
         resolveResult = resolveEffectResult er entry
-        resolveResult ?
+        resolveResult match
           | None     => pure stateWithoutPending
           | Some msg => runUpdate msg stateWithoutPending (makeUpdateAdapter app) ws
       }
@@ -336,16 +336,16 @@ serveWs = app ws => effect {
   : { viewId: ViewId, rid: RequestId, kind: Text, ok: Bool, p: JsonValue }
   -> PendingEntry msg
   -> Option msg
-  resolveEffectResult = er entry => entry ?
-    | ReadPending cont => er.ok ?
+  resolveEffectResult = er entry => entry match
+    | ReadPending cont => er.ok match
       | True             => {
         textResult = decodeField "text" er.p |> bind decodeText
-        textResult ?
+        textResult match
           | Ok t  => Some (cont (Ok t))
           | Err _ => Some (cont (Err (Other "decode error")))
       }
       | False             => Some (cont (Err (classifyClipboardError er)))
-      | WritePending cont => er.ok ?
+      | WritePending cont => er.ok match
         | True              => Some (cont (Ok Unit))
         | False             => Some (cont (Err (classifyClipboardError er)))
 
@@ -355,7 +355,7 @@ serveWs = app ws => effect {
   -> ClipboardError
   classifyClipboardError = er => {
     errorField = decodeField "error" er.p |> bind decodeText
-    errorField ?
+    errorField match
       | Ok "NotAllowedError" => PermissionDenied
       | Ok "Unavailable"     => Unavailable
       | Ok other             => Other other

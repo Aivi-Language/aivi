@@ -7,7 +7,7 @@ use aivi.prelude
 use aivi.text
 
 @test
-bool_smoke = effect {
+bool_smoke = do Effect {
   assert (True && True)
   assert (True || False)
   assert (False || True)
@@ -18,21 +18,21 @@ bool_smoke = effect {
 }
 
 @test
-bytes_smoke = effect {
+bytes_smoke = do Effect {
   b = toBytes Utf8 "abc"
   res = fromBytes Utf8 b
-  res ?
+  res match
     | Ok s  => assertEq s "abc"
     | Err _ => assert False
 }
 
 @test
-char_smoke = effect {
+char_smoke = do Effect {
   assertEq (1 + 1) 2
 }
 
 @test
-float_smoke = effect {
+float_smoke = do Effect {
   assert (1.0 + 2.0 == 3.0)
   assert (2.0 * 3.0 == 6.0)
   assert (4.0 / 2.0 == 2.0)
@@ -43,7 +43,7 @@ float_smoke = effect {
 }
 
 @test
-int_smoke = effect {
+int_smoke = do Effect {
   assertEq (1 + 2) 3
   assertEq (2 * 3) 6
   assertEq (4 / 2) 2
@@ -57,69 +57,69 @@ int_smoke = effect {
   assert (maxInt 1 2 == 2)
 }
 
-len = xs => xs ?
+len = xs => xs match
   | []           => 0
   | [_, ...rest] => 1 + len rest
 
-map = f xs => xs ?
+map = f xs => xs match
   | []           => []
   | [x, ...rest] => [f x, ...(map f rest)]
 
 @test
-list_smoke = effect {
+list_smoke = do Effect {
   l = [1, 2, 3]
   assertEq (len l) 3
   assertEq (map (x => x + 1) l)[2, 3, 4]
 }
 
 @test
-option_smoke = effect {
+option_smoke = do Effect {
   some = Some 1
-  some ?
+  some match
     | Some n => assertEq n 1
     | None   => assert False
 
     none = None
-    none ?
+    none match
       | Some _ => assert False
       | None   => assert True
 }
 
 @test
-patch_smoke = effect {
+patch_smoke = do Effect {
   user = { name: "A", age: 30 }
   older = user <| { age: _ + 1 }
   assertEq older.age 31
 }
 
 @test
-result_smoke = effect {
+result_smoke = do Effect {
   ok = Ok 1
-  ok ?
+  ok match
     | Ok n  => assertEq n 1
     | Err _ => assert False
 
     err = Err "nope"
-    err ?
+    err match
       | Ok _  => assert False
       | Err e => assertEq e "nope"
 }
 
 @test
-attempt_smoke = effect {
+attempt_smoke = do Effect {
   ok <- attempt (pure 42)
-  ok ?
+  ok match
     | Ok n  => assertEq n 42
     | Err _ => assert False
 
     bad <- attempt (fail "boom")
-    bad ?
+    bad match
       | Ok _  => assert False
       | Err e => assertEq e "boom"
 }
 
 @test
-text_smoke = effect {
+text_smoke = do Effect {
   t = "Hello"
   assertEq (length t) 5
   assertEq (toUpper t) "HELLO"
@@ -129,21 +129,21 @@ text_smoke = effect {
 }
 
 @test
-toText_smoke = effect {
+toText_smoke = do Effect {
   assertEq (toText "abc") "abc"
   assertEq (toText 123) "123"
 }
 
 @test
-tuple_smoke = effect {
+tuple_smoke = do Effect {
   t = (1, "two")
-  res = t ?
+  res = t match
     | (a, b) => if a == 1 && b == "two" then True else False
     | _      => False
     assert (res == True)
 }
 
 @test
-toText_smoke_2 = effect {
+toText_smoke_2 = do Effect {
   assertEq (toText 0) "0"
 }

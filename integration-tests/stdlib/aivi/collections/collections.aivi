@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.collections
 
 @test
-deque_smoke = effect {
+deque_smoke = do Effect {
   d0 = Deque.empty
   d1 = Deque.pushBack 1 d0
   d2 = Deque.pushFront 0 d1
@@ -15,8 +15,8 @@ deque_smoke = effect {
   assert (Deque.peekBack d2 == Some 1)
 
   res = Deque.popFront d2
-  res ?
-    | Some (val, d3) => effect {
+  res match
+    | Some (val, d3) => do Effect {
       assert (val == 0)
       assert (Deque.peekFront d3 == Some 1)
     }
@@ -24,7 +24,7 @@ deque_smoke = effect {
 }
 
 @test
-  heap_smoke = effect {
+  heap_smoke = do Effect {
     h0 = Heap.empty
     h1 = Heap.push 3 h0
     h2 = Heap.push 1 h1
@@ -33,8 +33,8 @@ deque_smoke = effect {
     assert (Heap.peekMin h3 == Some 1)
 
     res = Heap.popMin h3
-    res ?
-      | Some (val, h4) => effect {
+    res match
+      | Some (val, h4) => do Effect {
         assert (val == 1)
         assert (Heap.peekMin h4 == Some 2)
       }
@@ -42,7 +42,7 @@ deque_smoke = effect {
   }
 
 @test
-  map_smoke = effect {
+  map_smoke = do Effect {
     m0 = Map.empty
     m1 = Map.insert 1 "one" m0
 
@@ -57,7 +57,7 @@ deque_smoke = effect {
   }
 
 @test
-  queue_smoke = effect {
+  queue_smoke = do Effect {
     q0 = Queue.empty
     q1 = Queue.enqueue 1 q0
     q2 = Queue.enqueue 2 q1
@@ -65,8 +65,8 @@ deque_smoke = effect {
     assert (Queue.peek q2 == Some 1)
 
     res = Queue.dequeue q2
-    res ?
-      | Some (val, q3) => effect {
+    res match
+      | Some (val, q3) => do Effect {
         assert (val == 1)
         assert (Queue.peek q3 == Some 2)
       }
@@ -74,7 +74,7 @@ deque_smoke = effect {
   }
 
 @test
-  set_smoke = effect {
+  set_smoke = do Effect {
     s0 = Set.empty
     s1 = Set.insert 1 s0
     assert (Set.size s0 == 0)

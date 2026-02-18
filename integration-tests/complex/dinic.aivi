@@ -24,15 +24,15 @@ getCap = from to caps => Map.getOrElse (edgeKey from to) 0 caps
 setCap = from to value caps => Map.insert (edgeKey from to) value caps
 
 // NOTE: keep a local list append helper for now (stdlib doesn't currently export a concatenation helper on List)
-append = xs ys => xs ?
+append = xs ys => xs match
   | []        => ys
   | [h, ...t] => [h, ...append t ys]
 
-backwardEdges = edges => edges ?
+backwardEdges = edges => edges match
   | []           => []
   | [e, ...rest] => [{ from: e.to, to: e.from, cap: 0 }, ...backwardEdges rest]
 
-edgePairs = edges => edges ?
+edgePairs = edges => edges match
   | []           => []
   | [e, ...rest] => [(e.from, e.to), ...edgePairs rest]
 
@@ -49,7 +49,7 @@ buildResidual = edges => {
   { graph: graph, capacities: insertCaps allEdges (Map.empty) }
 }
 
-insertCaps = items caps => items ?
+insertCaps = items caps => items match
   | []           => caps
   | [e, ...rest] => insertCaps rest (setCap e.from e.to e.cap caps)
 
@@ -61,7 +61,7 @@ bfsLevels = residual source sink => {
   (Map.has sink levels, levels)
 }
 
-bfsVisit = residual sink q levels => (Queue.dequeue q) ?
+bfsVisit = residual sink q levels => (Queue.dequeue q) match
   | None               => levels
   | Some (current, q2) => {
     levelCurrent = Map.getOrElse current (-1) levels
@@ -71,7 +71,7 @@ bfsVisit = residual sink q levels => (Queue.dequeue q) ?
     bfsVisit residual sink q3 levels3
   }
 
-bfsExplore = residual current levelCurrent edges q levels => edges ?
+bfsExplore = residual current levelCurrent edges q levels => edges match
   | []              => (q, levels)
   | [edge, ...tail] => {
     next = edge.to
@@ -107,7 +107,7 @@ dfsFlow = residual levels node sink flow =>
     dfsExplore residual levels node sink flow neighbors
   }
 
-dfsExplore = residual levels node sink flow edges => edges ?
+dfsExplore = residual levels node sink flow edges => edges match
   | []              => (0, residual)
   | [edge, ...tail] => {
     caps = residual.capacities
@@ -152,7 +152,7 @@ maxFlowGo = state source sink total => {
 }
 
 @test
-flowTest = effect {
+flowTest = do Effect {
   edges = [
     { from: 0, to: 1, cap: 10 }
     { from: 0, to: 2, cap: 5 }

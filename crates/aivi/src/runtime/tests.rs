@@ -16,7 +16,8 @@ fn expect_ok<T>(result: Result<T, RuntimeError>, msg: &str) -> T {
 
 fn runtime_from_source(source: &str) -> Runtime {
     let (modules, diags) = crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
-    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    let errors: Vec<_> = diags.iter().filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error).collect();
+    assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
 
     let program = crate::hir::desugar_modules(&modules);
     let module = program.modules.into_iter().next().expect("expected module");
@@ -60,7 +61,8 @@ fn runtime_from_source(source: &str) -> Runtime {
 fn runtime_from_source_with_stdlib(source: &str) -> Runtime {
     let (mut modules, diags) =
         crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
-    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    let errors: Vec<_> = diags.iter().filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error).collect();
+    assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
 
     let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
     stdlib_modules.append(&mut modules);

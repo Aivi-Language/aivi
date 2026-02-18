@@ -75,7 +75,7 @@ ViewState model msg = {
 extractHandler
 : Attr msg
 -> Option (Text, EventPayload -> Option msg)
-extractHandler = attr => attr ?
+extractHandler = attr => attr match
   | OnClickE f      => Some ("click", ep => ep ? | ClickEvt p => Some (f p) | _ => None)
   | OnInputE f      => Some ("input", ep => ep ? | InputEvt p => Some (f p) | _ => None)
   | OnKeyDown f     => Some ("keydown", ep => ep ? | KeyDownEvt p => Some (f p) | _ => None)
@@ -95,9 +95,9 @@ partitionAttrs
 partitionAttrs = attrs startHid =>
   partitionAttrsGo attrs startHid [] Map.empty
 
-partitionAttrsGo = attrs hid accAttrs accMap => attrs ?
+partitionAttrsGo = attrs hid accAttrs accMap => attrs match
   | []                   => (reverseList accAttrs, accMap, hid)
-  | [a, ...rest]         => extractHandler a ?
+  | [a, ...rest]         => extractHandler a match
     | Some (kind, handler) => {
       hidAttr = Attr ("data-aivi-hid-{ kind }") (toText hid) -- DOCS: verify Attr constructor
       partitionAttrsGo rest (hid + 1)
@@ -123,7 +123,7 @@ partitionAttrsGo = attrs hid accAttrs accMap => attrs ?
   }
 
   assignWalk : VNode msg -> HandlerId -> Int -> AssignResult msg
-  assignWalk = node hid idx => node ?
+  assignWalk = node hid idx => node match
     | TextNode t    => { node: TextNode t, handlers: Map.empty, nextHid: hid, nextIdx: idx }
     | Keyed k inner => {
       result = assignWalk inner hid idx
@@ -158,7 +158,7 @@ assignChildrenWalk
 : List (VNode msg) -> HandlerId -> Int -> List (VNode msg)
 -> Map HandlerId (EventPayload -> Option msg)
 -> AssignChildrenResult msg
-assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes ?
+assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes match
   | [] => { children: reverseList accChildren, handlers: accHandlers
       nextHid: hid, nextIdx: idx
     }
@@ -174,14 +174,14 @@ assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes ?
   mergeMaps = base overlay =>
     mergeGo (Map.toList overlay) base
 
-  mergeGo = pairs acc => pairs ?
+  mergeGo = pairs acc => pairs match
     | []                => acc
     | [(k, v), ...rest] => mergeGo rest (Map.insert k v acc)
 
 // Reverse a list (helper)
   reverseList = xs => reverseListGo xs []
 
-  reverseListGo = xs acc => xs ?
+  reverseListGo = xs acc => xs match
     | []        => acc
     | [h, ...t] => reverseListGo t [h, ...acc]
 
@@ -198,10 +198,10 @@ assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes ?
   : List (ServerEffect msg)
   -> WebSocket
   -> Effect WsError Unit
-  processEffects = effects ws => effects ?
+  processEffects = effects ws => effects match
     | []             => pure Unit
-    | [eff, ...rest] => effect {
-      _ <- eff ?
+    | [eff, ...rest] => do Effect {
+      _ <- eff match
         | SubscribeIntersectEff sid options targets =>
       sendServerMsg ws (SubscribeIntersect { sid, options, targets })
         | UnsubscribeIntersectEff sid =>
@@ -221,13 +221,13 @@ assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes ?
   }
   -> WebSocket
   -> Effect WsError (ViewState model msg)
-  runUpdate = msg state app ws => effect {
+  runUpdate = msg state app ws => do Effect {
     (newModel, effects) = app.update msg state.model
     _ <- processEffects effects ws
     newVdom0 = app.view newModel
     (newVdom, newHandlers, nextHid) = assignHandlers newVdom0 state.nextHid
     ops = diff state.lastVdom newVdom
-    _ <- ops ?
+    _ <- ops match
       | [] => pure Unit
       | _  => sendServerMsg ws (Patch { ops: patchToJson ops })
     pure {
@@ -247,51 +247,51 @@ assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes ?
 // ---------------------------------------------------------------------------
 
 @test
-  pendingTableResolveReadPendingOk = effect {
-    handler = result => result ?
+  pendingTableResolveReadPendingOk = do Effect {
+    handler = result => result match
       | Ok t  => t
       | Err _ => "fail"
     entry = ReadPending handler
-    result = entry ?
+    result = entry match
       | ReadPending f  => f (Ok "clipboard text")
       | WritePending _ => "wrong branch"
     assertEq result "clipboard text"
   }
 
 @test
-  pendingTableResolveReadPendingErrPermissionDenied = effect {
-    handler = result => result ?
+  pendingTableResolveReadPendingErrPermissionDenied = do Effect {
+    handler = result => result match
       | Ok _                 => "unexpected ok"
       | Err PermissionDenied => "denied"
       | Err _                => "other error"
     entry = ReadPending handler
-    result = entry ?
+    result = entry match
       | ReadPending f  => f (Err PermissionDenied)
       | WritePending _ => "wrong branch"
     assertEq result "denied"
   }
 
 @test
-  pendingTableResolveWritePendingOk = effect {
-    handler = result => result ?
+  pendingTableResolveWritePendingOk = do Effect {
+    handler = result => result match
       | Ok Unit => "write ok"
       | Err _   => "write fail"
     entry = WritePending handler
-    result = entry ?
+    result = entry match
       | ReadPending _  => "wrong branch"
       | WritePending f => f (Ok Unit)
     assertEq result "write ok"
   }
 
 @test
-  assignHandlersClickEmitsHidAttribute = effect {
+  assignHandlersClickEmitsHidAttribute = do Effect {
     clickMsg = 99
     node = Element "button" [OnClickE (_ => clickMsg)] [TextNode "Click"]
     (assigned, handlers, _) = assignHandlers node 0
   // The assigned node should contain a data-aivi-hid-click attribute
-    assigned ?
+    assigned match
       | Element _ attrs _ => {
-        hasHid = attrs |> any (a => a ?
+        hasHid = attrs |> any (a => a match
           | Attr name _ when text.startsWith "data-aivi-hid-click" name => True
           | _                                                           => False
         )
@@ -301,7 +301,7 @@ assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes ?
   }
 
 @test
-  assignHandlersMultipleHandlersGetDistinctHids = effect {
+  assignHandlersMultipleHandlersGetDistinctHids = do Effect {
     node = Element "div" [
       OnClickE (_ => "clicked")
       OnInputE (p => p.value)
@@ -314,23 +314,23 @@ assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes ?
   }
 
 @test
-  assignHandlersAssignsDataAiviNode = effect {
+  assignHandlersAssignsDataAiviNode = do Effect {
     node = Element "div" [] [
       Element "span" [] [TextNode "a"]
       Element "span" [] [TextNode "b"]
     ]
     (assigned, _, _) = assignHandlers node 0
-    assigned ?
+    assigned match
       | Element _ attrs children => {
-        hasNode = attrs |> any (a => a ?
+        hasNode = attrs |> any (a => a match
           | Attr "data-aivi-node" _ => True
           | _                       => False
         )
         assert hasNode
     // Each child element should also have data-aivi-node
-        children |> each (child => child ?
+        children |> each (child => child match
           | Element _ cAttrs _ => {
-            childHasNode = cAttrs |> any (a => a ?
+            childHasNode = cAttrs |> any (a => a match
               | Attr "data-aivi-node" _ => True
               | _                       => False
             )
@@ -343,7 +343,7 @@ assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes ?
   }
 
 @test
-  diffPatchToJsonProducesNonEmptyForChangedText = effect {
+  diffPatchToJsonProducesNonEmptyForChangedText = do Effect {
     old = Element "p" [] [TextNode "hello"]
     neu = Element "p" [] [TextNode "world"]
     ops = diff old neu

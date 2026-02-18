@@ -590,11 +590,17 @@ impl Parser {
     }
 
     fn emit_diag(&mut self, code: &str, message: &str, span: Span) {
+        // Deprecation codes are warnings, not errors
+        let severity = if code.starts_with('W') {
+            DiagnosticSeverity::Warning
+        } else {
+            DiagnosticSeverity::Error
+        };
         self.diagnostics.push(FileDiagnostic {
             path: self.path.clone(),
             diagnostic: Diagnostic {
                 code: code.to_string(),
-                severity: DiagnosticSeverity::Error,
+                severity,
                 message: message.to_string(),
                 span,
                 labels: Vec::new(),

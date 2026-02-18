@@ -8,6 +8,6 @@ use aivi.testing
 embedded = "ok"
 
 @test
-staticIsAvailable = effect {
+staticIsAvailable = do Effect {
   assertEq embedded "ok"
 }

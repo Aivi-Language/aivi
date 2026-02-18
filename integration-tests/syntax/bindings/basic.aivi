@@ -9,7 +9,7 @@ y = if x < 2 then 3 else 4
 pair = (x, y)
 
 @test
-basicBindings = effect {
+basicBindings = do Effect {
   assertEq x 1
   assertEq y 3
   assertEq pair (1, 3)

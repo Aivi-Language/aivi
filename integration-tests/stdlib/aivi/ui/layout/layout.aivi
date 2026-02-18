@@ -6,6 +6,6 @@ use aivi.testing
 use aivi.ui.layout
 
 @test
-smoke = effect {
+smoke = do Effect {
   assertEq (1 + 1) 2
 }

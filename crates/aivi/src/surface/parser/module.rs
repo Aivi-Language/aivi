@@ -259,6 +259,12 @@ impl Parser {
                 }
                 continue;
             }
+            if self.match_keyword("machine") {
+                if let Some(machine) = self.parse_machine_decl(decorators) {
+                    items.push(ModuleItem::MachineDecl(machine));
+                }
+                continue;
+            }
 
             if self.peek_keyword("type")
                 && self.tokens.get(self.pos + 1).is_some_and(|tok| {

@@ -6,6 +6,6 @@ use aivi.testing
 use aivi.text
 
 @test
-smoke = effect {
+smoke = do Effect {
   assert (length "abc" == 3)
 }

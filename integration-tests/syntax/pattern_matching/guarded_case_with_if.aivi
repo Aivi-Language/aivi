@@ -8,7 +8,7 @@ clamp01 = x =>
   if x < 0 then 0 else if x > 1 then 1 else x
 
   @test
-  ifsWork = effect {
+  ifsWork = do Effect {
     assertEq (clamp01 (-1)) 0
     assertEq (clamp01 0) 0
     assertEq (clamp01 2) 1

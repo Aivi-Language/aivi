@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::diagnostics::DiagnosticSeverity;
 use crate::surface::{parse_modules, Module};
 
 mod bigint;
@@ -281,9 +282,13 @@ pub fn embedded_stdlib_source(module_name: &str) -> Option<&'static str> {
 fn parse_embedded(name: &str, source: &str) -> Vec<Module> {
     let path = PathBuf::from(format!("<embedded:{name}>"));
     let (modules, diagnostics) = parse_modules(path.as_path(), source);
+    let errors: Vec<_> = diagnostics
+        .iter()
+        .filter(|d| d.diagnostic.severity == DiagnosticSeverity::Error)
+        .collect();
     debug_assert!(
-        diagnostics.is_empty(),
-        "embedded stdlib module {name} failed to parse: {diagnostics:#?}"
+        errors.is_empty(),
+        "embedded stdlib module {name} failed to parse: {errors:#?}"
     );
     modules
 }

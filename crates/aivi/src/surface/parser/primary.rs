@@ -323,7 +323,7 @@ impl Parser {
             // Legacy: accept `effect {` with a deprecation diagnostic
             let effect_span = self.previous_span();
             self.emit_diag(
-                "E1600",
+                "W1600",
                 "`effect { }` is deprecated; use `do Effect { }` instead",
                 effect_span.clone(),
             );

@@ -5,9 +5,9 @@ use aivi
 use aivi.testing
 
 @test
-attemptWorks = effect {
+attemptWorks = do Effect {
   res <- attempt (fail "nope")
-  res ?
+  res match
     | Ok _  => fail "unexpected"
     | Err e => assertEq e "nope"
 }

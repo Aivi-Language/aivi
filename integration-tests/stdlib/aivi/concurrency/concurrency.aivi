@@ -6,68 +6,68 @@ use aivi.testing
 use aivi.concurrency
 
 @test
-channelError_smoke = effect {
+channelError_smoke = do Effect {
   assertEq (1 + 1) 2
 }
 
 @test
-scope_smoke = effect {
+scope_smoke = do Effect {
   assertEq (1 + 1) 2
 }
 
 @test
-close_smoke = effect {
+close_smoke = do Effect {
   (tx, rx) <- make Unit
   send tx Unit
   res <- recv rx
-  res ?
+  res match
     | Ok _  => assert True
     | Err _ => assert False
     close tx
 }
 
 @test
-make_smoke = effect {
+make_smoke = do Effect {
   (tx, rx) <- make Unit
   send tx Unit
   res <- recv rx
-  res ?
+  res match
     | Ok _  => assert True
     | Err _ => assert False
     close tx
 }
 
 @test
-par_smoke = effect {
+par_smoke = do Effect {
   // Just ensure both branches run without throwing.
   _ <- par (pure 1) (pure 2)
   assert True
 }
 
 @test
-recv_smoke = effect {
+recv_smoke = do Effect {
   (tx, rx) <- make Unit
   send tx Unit
   res <- recv rx
-  res ?
+  res match
     | Ok _  => assert True
     | Err _ => assert False
     close tx
 }
 
 @test
-scope_smoke_2 = effect {
+scope_smoke_2 = do Effect {
   // Scope should run the callback and return its result.
   x <- scope (_ => pure 123)
   assert (x == 123)
 }
 
 @test
-send_smoke = effect {
+send_smoke = do Effect {
   (tx, rx) <- make Unit
   send tx Unit
   res <- recv rx
-  res ?
+  res match
     | Ok _  => assert True
     | Err _ => assert False
     close tx

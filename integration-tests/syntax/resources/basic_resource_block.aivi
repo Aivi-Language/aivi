@@ -14,6 +14,6 @@ managedFile = path => resource {
 }
 
 @test
-resourceOpenFailureIsCaught = effect {
+resourceOpenFailureIsCaught = do Effect {
   assertEq (1 + 1) 2
 }

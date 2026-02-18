@@ -7,27 +7,27 @@ use aivi.math
 use aivi.vector
 
 @test
-vec2_smoke = effect {
+vec2_smoke = do Effect {
   v = { x: 3.0, y: 4.0 }
   assert (abs (magnitude v - 5.0) < 0.0001)
   assert (dot v v == 25.0)
 }
 
 @test
-vec3_smoke = effect {
+vec3_smoke = do Effect {
   v = { x: 1.0, y: 2.0, z: 3.0 }
   assert (v.z == 3.0)
   assert (cross { x: 1.0, y: 0.0, z: 0.0 } { x: 0.0, y: 1.0, z: 0.0 } == { x: 0.0, y: 0.0, z: 1.0 })
 }
 
 @test
-vec4_smoke = effect {
+vec4_smoke = do Effect {
   v = { x: 1.0, y: 2.0, z: 3.0, w: 4.0 }
   assert (v.w == 4.0)
 }
 
 @test
-cross_smoke = effect {
+cross_smoke = do Effect {
   v1 = { x: 1.0, y: 0.0, z: 0.0 }
   v2 = { x: 0.0, y: 1.0, z: 0.0 }
   c = cross v1 v2
@@ -37,7 +37,7 @@ cross_smoke = effect {
 }
 
 @test
-dot_smoke = effect {
+dot_smoke = do Effect {
   v1 = { x: 1.0, y: 0.0 }
   v2 = { x: 0.0, y: 1.0 }
   assert (abs (dot v1 v2) < 0.0001)
@@ -47,13 +47,13 @@ dot_smoke = effect {
 }
 
 @test
-magnitude_smoke = effect {
+magnitude_smoke = do Effect {
   v = { x: 3.0, y: 4.0 }
   assert (abs (magnitude v - 5.0) < 0.0001)
 }
 
 @test
-normalize_smoke = effect {
+normalize_smoke = do Effect {
   v = { x: 3.0, y: 4.0 }
   n = normalize v
   assert (abs (n.x - 0.6) < 0.0001)

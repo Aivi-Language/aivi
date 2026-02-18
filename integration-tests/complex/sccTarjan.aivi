@@ -7,15 +7,15 @@ use aivi.collections
 
 minInt = a b => if a < b then a else b
 
-len = xs => xs ?
+len = xs => xs match
   | []           => 0
   | [_, ...rest] => 1 + len rest
 
-any = xs f => xs ?
+any = xs f => xs match
   | []           => False
   | [x, ...rest] => if f x then True else any rest f
 
-contains = xs needle => xs ?
+contains = xs needle => xs match
   | []           => False
   | [x, ...rest] => if x == needle then True else contains rest needle
 
@@ -36,7 +36,7 @@ TarjanState = {
 }
 
 // Helper to get value or fallback from map
-getOr = map key fallback => Map.get key map ?
+getOr = map key fallback => Map.get key map match
   | Some v => v
   | None   => fallback
 
@@ -50,17 +50,17 @@ popComponent = node state => {
   }
 }
 
-popUntil = node stack acc => stack ?
+popUntil = node stack acc => stack match
   | []                       => ([], acc)
   | [h, ...t] when h == node => (t, [h, ...acc])
   | [h, ...t]                => popUntil node t [h, ...acc]
 
-removeAll = nodes set => nodes ?
+removeAll = nodes set => nodes match
   | []        => set
   | [h, ...t] => removeAll t (Set.remove h set)
 
 // Get neighbors of a node
-neighbors = node graph => Map.get node graph.adj ?
+neighbors = node graph => Map.get node graph.adj match
   | Some list => list
   | None      => []
 
@@ -81,7 +81,7 @@ visitNode = graph node state => {
   if nodeLow == nodeIdx then popComponent node after else after
 }
 
-processNeighbors = graph node nexts state => nexts ?
+processNeighbors = graph node nexts state => nexts match
   | []              => state
   | [next, ...tail] => {
     acc =
@@ -118,7 +118,7 @@ strongComponents = graph => {
   finalState.components
 }
 
-processNodes = graph nodes state => nodes ?
+processNodes = graph nodes state => nodes match
   | []        => state
   | [h, ...t] => {
     nextState = if Map.has h state.index then state else visitNode graph h state
@@ -126,7 +126,7 @@ processNodes = graph nodes state => nodes ?
   }
 
 @test
-sccSmoke = effect {
+sccSmoke = do Effect {
   adj = ~map{
     0 => [1]
     1 => [2]

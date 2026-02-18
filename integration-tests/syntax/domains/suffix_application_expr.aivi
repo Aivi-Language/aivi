@@ -14,6 +14,6 @@ delta = (x)min
 span1 = span0 + delta
 
 @test
-suffixApplicationWorks = effect {
+suffixApplicationWorks = do Effect {
   assertEq span1.millis 120000
 }

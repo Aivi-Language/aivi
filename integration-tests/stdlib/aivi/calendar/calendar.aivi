@@ -6,23 +6,23 @@ use aivi.testing
 use aivi.calendar
 
 @test
-date_smoke = effect {
+date_smoke = do Effect {
   d = { year: 2024, month: 2, day: 29 }
   assert (d.year == 2024)
 }
 
 @test
-dateTime_smoke = effect {
+dateTime_smoke = do Effect {
   assertEq (1 + 1) 2
 }
 
 @test
-endOfMonth_smoke = effect {
+endOfMonth_smoke = do Effect {
   assertEq (1 + 1) 2
 }
 
 @test
-addDays_smoke = effect {
+addDays_smoke = do Effect {
   d = addDays { year: 2024, month: 2, day: 28 } 1
   assert (d.day == 29)
   assert (d.month == 2)
@@ -33,39 +33,39 @@ addDays_smoke = effect {
 }
 
 @test
-addMonths_smoke = effect {
+addMonths_smoke = do Effect {
   d = addMonths { year: 2024, month: 1, day: 31 } 1
   assert (d.month == 2)
   assert (d.day == 29) // 2024 is leap year, 29th is max
 }
 
 @test
-addYears_smoke = effect {
+addYears_smoke = do Effect {
   d = addYears { year: 2024, month: 2, day: 29 } 1
   assert (d.year == 2025)
   assert (d.day == 28) // 2025 is not leap, clamps to 28
 }
 
 @test
-daysInMonth_smoke = effect {
+daysInMonth_smoke = do Effect {
   assert (daysInMonth { year: 2024, month: 2, day: 1 } == 29)
   assert (daysInMonth { year: 2023, month: 2, day: 1 } == 28)
 }
 
 @test
-endOfMonth_smoke_2 = effect {
+endOfMonth_smoke_2 = do Effect {
   d = endOfMonth { year: 2024, month: 2, day: 1 }
   assert (d.day == 29)
 }
 
 @test
-isLeapYear_smoke = effect {
+isLeapYear_smoke = do Effect {
   assert (isLeapYear { year: 2024, month: 1, day: 1 } == True)
   assert (isLeapYear { year: 2023, month: 1, day: 1 } == False)
 }
 
 @test
-negateDelta_smoke = effect {
+negateDelta_smoke = do Effect {
   useDate = { year: 2024, month: 2, day: 10 }
   d1 <- 1d
   m1 <- 1m
@@ -79,7 +79,7 @@ negateDelta_smoke = effect {
 }
 
 @test
-now_smoke = effect {
+now_smoke = do Effect {
   _t <- now
   assert True
 }
