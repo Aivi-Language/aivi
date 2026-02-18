@@ -1,7 +1,7 @@
 Option A = None | Some A
 
-getOrDefault = default => v => v ?
-  | None       => default
-  | Some value => value
+getOrDefault = default => v => v match
+| None       => default
+| Some value => value
 
 userName = user.nickname |> getOrDefault "Anonymous"

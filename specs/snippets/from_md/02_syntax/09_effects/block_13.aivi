@@ -1,9 +1,9 @@
 // More explicit (same semantics)
 main = effect {
   res <- attempt (foo x)
-  verdict = res ?
-    | Ok _  => "ok"
-    | Err _ => "err"
+  verdict = res match
+  | Ok _  => "ok"
+  | Err _ => "err"
 
   _ <- print verdict
 

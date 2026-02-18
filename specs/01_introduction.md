@@ -47,7 +47,7 @@ AIVI is a statically typed, purely functional language designed for **high-integ
 ## Normative Principles
 
 > **Bindings are immutable.**
-> **Patterns are total by default; use `?` for partial matches.**
+> **Patterns are total by default; use `match` for partial matches.**
 > **Predicates are expressions with implicit scope (`.prop`).**
 > **Patches describe structure, not mutation (`<|`).**
 > **Domains own semantics and domain-defined operators.**

@@ -4,6 +4,6 @@ greet =
   | Some name => "hi {name}"
 
 // Equivalent explicit form
-greet2 = u => u ?
-  | None      => "hi"
-  | Some name => "hi {name}"
+greet2 = u => u match
+| None      => "hi"
+| Some name => "hi {name}"

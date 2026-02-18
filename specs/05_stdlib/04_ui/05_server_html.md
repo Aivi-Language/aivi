@@ -48,7 +48,7 @@ view = model =>
     </div>
   </html>
 
-update = msg model => msg ?
+update = msg model => msg match
   | Inc => (model <| { count: _ + 1 }, [])
   | Dec => (model <| { count: _ - 1 }, [])
 
@@ -114,7 +114,7 @@ AppEffect model msg =
 ```aivi
 Msg = Paste (Result ClipboardError Text) | RequestPaste
 
-update = msg model => msg ?
+update = msg model => msg match
   | RequestPaste   => (model, [ReadClipboard Paste])
   | Paste (Ok txt) => (model <| { clipboard: txt }, [])
   | Paste (Err _)  => (model, [])
@@ -126,7 +126,7 @@ update = msg model => msg ?
 Msg = BecameVisible { sid: SubscriptionId, entries: List IntersectionEntry }
     | WatchSection
 
-update = msg model => msg ?
+update = msg model => msg match
   | WatchSection =>
     (model, [SubIntersect 1
                { rootMargin: "0px", threshold: [0.0, 1.0] }
@@ -222,9 +222,9 @@ Platform kind strings: `"popstate"`, `"hashchange"`, `"visibility"`, `"focus"`,
 ### Platform event example
 
 ```aivi
-onPlatform = evt => evt ?
+onPlatform = evt => evt match
   | PopState url       => Some (NavigateTo url.path)
-  | Online { online }  => online ?
+  | Online { online }  => online match
     | True  => Some Reconnected
     | False => Some Disconnected
   | _                  => None

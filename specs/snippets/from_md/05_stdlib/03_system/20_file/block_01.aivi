@@ -8,7 +8,7 @@ main = effect {
 
   // Metadata inspection
   infoRes <- stat "large_video.mp4"
-  infoRes ?
-    | Ok info => print "File size: {info.size} bytes"
-    | Err _   => print "File not found"
+  infoRes match
+  | Ok info => print "File size: {info.size} bytes"
+  | Err _   => print "File not found"
 }
