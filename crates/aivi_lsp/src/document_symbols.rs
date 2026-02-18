@@ -94,7 +94,7 @@ impl Backend {
                 Some(DocumentSymbol {
                     name: alias.name.name,
                     detail: Some("type alias".to_string()),
-                    kind: SymbolKind::TYPE_PARAMETER,
+                    kind: SymbolKind::INTERFACE,
                     tags: None,
                     deprecated: None,
                     range,
@@ -137,7 +137,7 @@ impl Backend {
                             children.push(DocumentSymbol {
                                 name: type_alias.name.name,
                                 detail: Some("domain type".to_string()),
-                                kind: SymbolKind::TYPE_PARAMETER,
+                                kind: SymbolKind::INTERFACE,
                                 tags: None,
                                 deprecated: None,
                                 range,

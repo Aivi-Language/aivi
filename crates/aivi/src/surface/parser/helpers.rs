@@ -1,13 +1,35 @@
 fn binary_prec(op: &str) -> u8 {
+    // Precedence (low → high), matching specs/02_syntax/00_grammar.md:
+    //  1  ..        range (only valid in list literals)
+    //  2  |>        pipe
+    //  3  ??        coalesce
+    //  4  ||        logical or
+    //  5  &&        logical and
+    //  6  == !=     equality
+    //  7  < <= > >= comparison
+    //  8  ^         bitwise xor
+    //  9  << >>     shift
+    // 10  + - ++    additive / concatenation
+    // 11  * × / %   multiplicative
+    // 12  <|        patch application
+    //
+    // NOTE: `|` (bitwise or) is listed in the grammar at prec 8, but it
+    //       conflicts with the `|` arm separator in single-line match
+    //       expressions. It is intentionally omitted until the parser
+    //       enforces `Sep` between match arms.
     match op {
-        "<|" | "|>" => 1,
-        "||" => 2,
-        "&&" => 3,
-        "==" | "!=" | "<" | ">" | "<=" | ">=" => 4,
-        ".." => 5,
-        "++" => 6,
-        "+" | "-" => 6,
-        "*" | "×" | "/" | "%" => 7,
+        ".." => 1,
+        "|>" => 2,
+        "??" => 3,
+        "||" => 4,
+        "&&" => 5,
+        "==" | "!=" => 6,
+        "<" | "<=" | ">" | ">=" => 7,
+        "^" => 8,
+        "<<" | ">>" => 9,
+        "++" | "+" | "-" => 10,
+        "*" | "×" | "/" | "%" => 11,
+        "<|" => 12,
         _ => 0,
     }
 }
