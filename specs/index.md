@@ -58,18 +58,19 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Math](05_stdlib/01_math/01_math)
 - [Vector](05_stdlib/01_math/05_vector)
 - [Matrix](05_stdlib/01_math/09_matrix)
-- [Number (BigInt, Rational, Complex, Quaternion)](05_stdlib/01_math/10_number)
+- [Number (BigInt, Rational, Decimal, Complex, Quaternion)](05_stdlib/01_math/10_number)
 - [Probability](05_stdlib/01_math/13_probability)
 - [FFT & Signal](05_stdlib/01_math/14_signal)
 - [Geometry](05_stdlib/01_math/15_geometry)
 - [Graph](05_stdlib/01_math/17_graph)
 - [Linear Algebra](05_stdlib/01_math/18_linear_algebra)
+- [Tree](05_stdlib/01_math/19_tree)
 
 #### Chronos (Time)
-- [Instant](05_stdlib/02_chronos/01_instant)
+- [Instant](05_stdlib/02_chronos/01_instant) *(planned — not yet implemented)*
 - [Calendar](05_stdlib/02_chronos/02_calendar)
 - [Duration](05_stdlib/02_chronos/03_duration)
-- [TimeZone](05_stdlib/02_chronos/04_timezone)
+- [TimeZone](05_stdlib/02_chronos/04_timezone) *(planned — not yet implemented)*
 
 #### Network
 - [Network](05_stdlib/03_network/00_network)
@@ -82,18 +83,18 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 #### System & IO
 - [File](05_stdlib/03_system/20_file)
 - [Console](05_stdlib/03_system/21_console)
+- [Crypto](05_stdlib/03_system/22_crypto)
 - [Database](05_stdlib/03_system/23_database)
 - [Path](05_stdlib/03_system/24_path)
 - [URL](05_stdlib/03_system/25_url)
-- [Crypto](05_stdlib/03_system/22_crypto)
-- [System](05_stdlib/03_system/25_system)
-- [Log](05_stdlib/03_system/26_log)
+- [System](05_stdlib/03_system/26_system)
+- [Log](05_stdlib/03_system/27_log) *(planned — not yet implemented)*
 - [Concurrency](05_stdlib/03_system/30_concurrency)
 
 #### UI
 - [Layout](05_stdlib/04_ui/01_layout)
-- [Virtual DOM](05_stdlib/04_ui/02_vdom)
-- [HTML Sigil](05_stdlib/04_ui/03_html)
+- [Virtual DOM](05_stdlib/04_ui/02_vdom) *(planned — not yet implemented)*
+- [HTML Sigil](05_stdlib/04_ui/03_html) *(planned — not yet implemented)*
 - [Color](05_stdlib/04_ui/04_color)
 - [ServerHtml (server-driven HTML)](05_stdlib/04_ui/05_server_html)
 
@@ -137,3 +138,4 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Classes](04_desugaring/08_classes)
 - [Domains and Operators](04_desugaring/09_domains)
 - [Patching](04_desugaring/10_patching)
+- [Resources](04_desugaring/11_resources)

@@ -6,22 +6,22 @@ This chapter is an index of AIVI's **operator tokens** (and a few pieces of punc
 
 ## 11.1 Operator and punctuation index (v0.1)
 
-| Token | Name | Where it appears | Meaning |
-| --- | --- | --- | --- |
-| `=` | binding | top-level, blocks | Define a value / function clause / type alias. |
-| `<-` | binder | `do Effect {}`, `generate {}`, `resource {}` | Bind each produced value (generator) or run/bind effect/resource results. |
-| `->` | guard | `generate {}` | Filter current generator element using predicate syntax (implicit `_`). |
-| `|>` | pipe | expressions | Left-to-right application: `x |> f` is `f x`. Chains for readable data transforms. |
-| `<|` | patch | expressions | Record update: `target <| { field: value }` applies a patch to a record value. |
-| `match` | match / refutable | expressions | The `match` keyword marks refutable pattern matching. Introduces match arms after the scrutinee expression. |
-| `|` | arm / union separator | `match` arms, `type` RHS | Separates match arms and sum-type constructors. |
-| `=>` | arrow | lambdas, match arms, `loop` | Lambda body delimiter and match arm delimiter. |
-| `..` | range | list literals | `a .. b` builds a list of `Int` from `a` to `b` (inclusive). Only valid inside list literals (see 11.3). |
-| `...` | spread / rest | list/record literals, list patterns | Spreads a list/record into another; in patterns, binds the “rest” of a list. |
-| `.` | access / accessor sugar | expressions | Field access `x.field`. Also `.field` is accessor sugar (`x => x.field`). |
-| `[]` | list / index | expressions | List literal `[a, b]`; list range `[a..b]`; index `xs[i]`; bracket-list call `f[a, b]` in specific positions. |
-| `{}` | record / block | expressions, types, patterns | Record literal/type/pattern, patch literal, or block; disambiguated by lookahead (see grammar notes). |
-| `()` | group / tuple / call | expressions, types | Grouping `(e)`, tuple `(a, b)`, call `f(x)`, and suffix application `(e)px`. |
+| Token       | Name | Where it appears | Meaning |
+|-------------| --- | --- | --- |
+| `=`         | binding | top-level, blocks | Define a value / function clause / type alias. |
+| `<-`        | binder | `do Effect {}`, `generate {}`, `resource {}` | Bind each produced value (generator) or run/bind effect/resource results. |
+| `->`        | guard | `generate {}` | Filter current generator element using predicate syntax (implicit `_`). |
+| `\|>`       | pipe | expressions | Left-to-right application: `x |> f` is `f x`. Chains for readable data transforms. |
+| `<\|`       | patch | expressions | Record update: `target <| { field: value }` applies a patch to a record value. |
+| `match`     | match / refutable | expressions | The `match` keyword marks refutable pattern matching. Introduces match arms after the scrutinee expression. |
+| `           |` | arm / union separator | `match` arms, `type` RHS | Separates match arms and sum-type constructors. |
+| `=>`        | arrow | lambdas, match arms, `loop` | Lambda body delimiter and match arm delimiter. |
+| `..`        | range | list literals | `a .. b` builds a list of `Int` from `a` to `b` (inclusive). Only valid inside list literals (see 11.3). |
+| `...`       | spread / rest | list/record literals, list patterns | Spreads a list/record into another; in patterns, binds the “rest” of a list. |
+| `.`         | access / accessor sugar | expressions | Field access `x.field`. Also `.field` is accessor sugar (`x => x.field`). |
+| `[]`        | list / index | expressions | List literal `[a, b]`; list range `[a..b]`; index `xs[i]`; bracket-list call `f[a, b]` in specific positions. |
+| `{}`        | record / block | expressions, types, patterns | Record literal/type/pattern, patch literal, or block; disambiguated by lookahead (see grammar notes). |
+| `()`        | group / tuple / call | expressions, types | Grouping `(e)`, tuple `(a, b)`, call `f(x)`, and suffix application `(e)px`. |
 | `~tag[...]` | sigil | literals | Structured literals such as `~path[...]`, `~map{...}`, `~r/.../`. |
 
 For full concrete syntax, see the grammar: [02_syntax/00_grammar.md](00_grammar.md).

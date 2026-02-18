@@ -1,5 +1,7 @@
 # TimeZone and ZonedDateTime
 
+> **Status: Planned** — this module is not yet implemented in the runtime. The spec below is a design document for a future version.
+
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.timezone"} -->
 The `TimeZone` and `ZonedDateTime` domains handle geographic time offsets, daylight saving transitions, and global time coordination.
 

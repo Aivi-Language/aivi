@@ -34,6 +34,33 @@ The LSP server reports diagnostics (errors and warnings) in real-time as you typ
 -   **Type Checking**: Ensures type safety and correctness.
 -   **Scope Analysis**: Checks for undefined variables and scoping rules.
 
+## Configuration
+
+The LSP server reads configuration from the editor's settings (sent via `workspace/didChangeConfiguration`). The following sections are supported:
+
+### Format Options
+
+| Setting | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `format.indentSize` | number | `2` | Number of spaces for indentation. |
+| `format.maxBlankLines` | number | `1` | Maximum consecutive blank lines. |
+| `format.braceStyle` | string | `"kr"` | Brace placement style: `"kr"` (K&R / Java / TS) or `"allman"`. |
+| `format.maxWidth` | number | `100` | Maximum line width before wrapping. |
+
+### Diagnostics Options
+
+| Setting | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `diagnostics.includeSpecsSnippets` | boolean | `false` | Include diagnostics for AIVI snippets embedded in specification markdown files. |
+
+### Strict Mode
+
+| Setting | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `strict.level` | number | `0` | Strictness level (0 = default, higher = stricter). |
+| `strict.forbidImplicitCoercions` | boolean | `false` | Forbid implicit type coercions. |
+| `strict.warningsAsErrors` | boolean | `false` | Treat warnings as errors. |
+
 ## Installation & Usage
 
 The LSP server is embedded in the `aivi` CLI but can also be run as a standalone binary `aivi-lsp`.

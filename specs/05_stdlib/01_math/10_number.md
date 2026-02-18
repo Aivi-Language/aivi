@@ -1,11 +1,13 @@
-# Number Domains (BigInt, Rational, Complex, Quaternion)
+# Number Domains (BigInt, Rational, Decimal, Complex, Quaternion)
 
 <!-- quick-info: {"kind":"module","name":"aivi.number"} -->
 The `aivi.number` family groups numeric domains that sit above `Int` and `Float`:
 
 - `aivi.number.bigint` for arbitrary-precision integers
 - `aivi.number.rational` for exact fractions
+- `aivi.number.decimal` for fixed-point base-10 arithmetic
 - `aivi.number.complex` for complex arithmetic
+- `aivi.number.quaternion` for quaternion arithmetic
 
 You can use either the facade module or the specific domain module depending on how much you want in scope.
 

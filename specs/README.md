@@ -1,6 +1,6 @@
 # AIVI Language Specification
 
-A high-integrity functional language targeting WebAssembly.
+A high-integrity functional language with a Rust-first compilation pipeline.
 
 **Version:** 0.1 (Draft)
 
@@ -61,6 +61,7 @@ A high-integrity functional language targeting WebAssembly.
 - [Classes](04_desugaring/08_classes.md)
 - [Domains and Operators](04_desugaring/09_domains.md)
 - [Patching](04_desugaring/10_patching.md)
+- [Resources](04_desugaring/11_resources.md)
 
 ### Standard Library
 
@@ -79,12 +80,13 @@ A high-integrity functional language targeting WebAssembly.
 - [Math](05_stdlib/01_math/01_math.md)
 - [Vector](05_stdlib/01_math/05_vector.md)
 - [Matrix](05_stdlib/01_math/09_matrix.md)
-- [Number (BigInt, Rational, Complex, Quaternion)](05_stdlib/01_math/10_number.md)
+- [Number (BigInt, Rational, Decimal, Complex, Quaternion)](05_stdlib/01_math/10_number.md)
 - [Probability](05_stdlib/01_math/13_probability.md)
 - [FFT & Signal](05_stdlib/01_math/14_signal.md)
 - [Geometry](05_stdlib/01_math/15_geometry.md)
 - [Graph](05_stdlib/01_math/17_graph.md)
 - [Linear Algebra](05_stdlib/01_math/18_linear_algebra.md)
+- [Tree](05_stdlib/01_math/19_tree.md)
 
 #### Chronos (Time)
 - [Instant](05_stdlib/02_chronos/01_instant.md)
@@ -103,22 +105,33 @@ A high-integrity functional language targeting WebAssembly.
 #### System & IO
 - [File](05_stdlib/03_system/20_file.md)
 - [Console](05_stdlib/03_system/21_console.md)
+- [Crypto](05_stdlib/03_system/22_crypto.md)
 - [Database](05_stdlib/03_system/23_database.md)
 - [Path](05_stdlib/03_system/24_path.md)
 - [URL](05_stdlib/03_system/25_url.md)
-- [Crypto](05_stdlib/03_system/22_crypto.md)
-- [System](05_stdlib/03_system/25_system.md)
-- [Log](05_stdlib/03_system/26_log.md)
+- [System](05_stdlib/03_system/26_system.md)
+- [Log](05_stdlib/03_system/27_log.md)
 - [Concurrency](05_stdlib/03_system/30_concurrency.md)
 
 #### UI
 - [Layout](05_stdlib/04_ui/01_layout.md)
+- [Virtual DOM](05_stdlib/04_ui/02_vdom.md)
+- [HTML Sigil](05_stdlib/04_ui/03_html.md)
 - [Color](05_stdlib/04_ui/04_color.md)
+- [ServerHtml](05_stdlib/04_ui/05_server_html.md)
 
 ### Execution & Concurrency
 
 - [Concurrency](06_runtime/01_concurrency.md)
+- [Memory Management](06_runtime/02_memory_management.md)
 - [Package Manager (Cargo-backed)](06_runtime/03_package_manager.md)
+
+### Tools & Ecosystem
+
+- [CLI](07_tools/01_cli.md)
+- [LSP Server](07_tools/02_lsp_server.md)
+- [VSCode Extension](07_tools/03_vscode_extension.md)
+- [Packaging](07_tools/04_packaging.md)
 
 
 ## Building the Specification
