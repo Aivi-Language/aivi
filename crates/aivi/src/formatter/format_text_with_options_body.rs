@@ -1065,6 +1065,7 @@
             continue;
         }
 
+        let preceded_by_blank = blank_run > 0;
         blank_run = 0;
 
         let mut out = String::new();
@@ -1130,9 +1131,11 @@
 
         if let (Some(base_indent), Some(base_depth)) = (rhs_block_base_indent, rhs_block_base_depth)
         {
+            let is_decorator_start = state.tokens[first_idx].text == "@";
             if line_depth <= base_depth
                 && line_indent_len <= base_indent
-                && looks_like_new_stmt(&state.tokens, first_idx)
+                && (looks_like_new_stmt(&state.tokens, first_idx)
+                    || (is_decorator_start && preceded_by_blank))
                 && !rhs_decorator_pending_for_this_line
             {
                 rhs_block_base_indent = None;
