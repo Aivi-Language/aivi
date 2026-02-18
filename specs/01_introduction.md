@@ -1,8 +1,6 @@
 # AIVI Language Specification (v0.1)
 
-> Note: **AIVI v0.1** executes via a native Rust runtime (CST -> Kernel -> native runtime).
-> Experimental Rust codegen exists for ahead-of-time compilation, but coverage is still evolving.
-> See [Missing Features](./missing_features_v0.1.md) for current implementation status.
+> Note: **AIVI v0.1** executes via a tree-walking interpreter (CST → HIR → Kernel → native runtime) or compiles to Rust (CST → HIR → Kernel → Rust IR → Rust source).
 
 ## Overview
 

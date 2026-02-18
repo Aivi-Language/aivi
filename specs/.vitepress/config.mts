@@ -147,12 +147,13 @@ export default defineConfig({
               { text: 'Math', link: '/05_stdlib/01_math/01_math' },
               { text: 'Vector', link: '/05_stdlib/01_math/05_vector' },
               { text: 'Matrix', link: '/05_stdlib/01_math/09_matrix' },
-              { text: 'Number (BigInt, Rational, Complex, Quaternion)', link: '/05_stdlib/01_math/10_number' },
+              { text: 'Number (BigInt, Rational, Decimal, Complex, Quaternion)', link: '/05_stdlib/01_math/10_number' },
               { text: 'Probability', link: '/05_stdlib/01_math/13_probability' },
               { text: 'FFT & Signal', link: '/05_stdlib/01_math/14_signal' },
               { text: 'Geometry', link: '/05_stdlib/01_math/15_geometry' },
               { text: 'Graph', link: '/05_stdlib/01_math/17_graph' },
               { text: 'Linear Algebra', link: '/05_stdlib/01_math/18_linear_algebra' },
+              { text: 'Tree', link: '/05_stdlib/01_math/19_tree' },
             ]
           },
           {
@@ -171,11 +172,12 @@ export default defineConfig({
             items: [
               { text: 'File', link: '/05_stdlib/03_system/20_file' },
               { text: 'Console', link: '/05_stdlib/03_system/21_console' },
-              { text: 'Database', link: '/05_stdlib/03_system/23_database' },
-              { text: 'URL', link: '/05_stdlib/03_system/25_url' },
               { text: 'Crypto', link: '/05_stdlib/03_system/22_crypto' },
-              { text: 'System', link: '/05_stdlib/03_system/25_system' },
-              { text: 'Log', link: '/05_stdlib/03_system/26_log' },
+              { text: 'Database', link: '/05_stdlib/03_system/23_database' },
+              { text: 'Path', link: '/05_stdlib/03_system/24_path' },
+              { text: 'URL', link: '/05_stdlib/03_system/25_url' },
+              { text: 'System', link: '/05_stdlib/03_system/26_system' },
+              { text: 'Log', link: '/05_stdlib/03_system/27_log' },
               { text: 'Concurrency', link: '/05_stdlib/03_system/30_concurrency' },
             ]
           },
@@ -255,6 +257,7 @@ export default defineConfig({
           { text: 'Classes', link: '/04_desugaring/08_classes' },
           { text: 'Domains and Operators', link: '/04_desugaring/09_domains' },
           { text: 'Patching', link: '/04_desugaring/10_patching' },
+          { text: 'Resources', link: '/04_desugaring/11_resources' },
         ]
       }
     ]

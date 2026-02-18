@@ -1,5 +1,7 @@
 # Instant Domain
 
+> **Status: Planned** — this module is not yet implemented in the runtime. The spec below is a design document for a future version.
+
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.instant"} -->
 The `Instant` domain represents **a specific moment in time** on the timeline, independent of time zones or calendars.
 

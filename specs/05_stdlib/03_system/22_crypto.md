@@ -10,8 +10,8 @@ From generating unguessable **UUIDs** for database keys to hashing passwords wit
 
 ## Functions
 
-| Function | Explanation |
-| --- | --- |
-| **sha256** text<br><pre><code>`Text -> Text`</code></pre> | Returns the SHA-256 hash of `text` encoded as hex. |
-| **randomUuid** :()<br><pre><code>`Unit -> Effect CryptoError Text`</code></pre> | Generates a random UUID v4. |
-| **randomBytes** n<br><pre><code>`Int -> Effect CryptoError Bytes`</code></pre> | Generates `n` random bytes. |
+| Function                                                                          | Explanation |
+|-----------------------------------------------------------------------------------| --- |
+| **sha256** text<br><pre><code>`Text -> Text`</code></pre>                         | Returns the SHA-256 hash of `text` encoded as hex. |
+| **randomUuid** :\(\)<br><pre><code>`Unit -> Effect CryptoError Text`</code></pre> | Generates a random UUID v4. |
+| **randomBytes** n<br><pre><code>`Int -> Effect CryptoError Bytes`</code></pre>    | Generates `n` random bytes. |

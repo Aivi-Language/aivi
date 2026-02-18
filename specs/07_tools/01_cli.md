@@ -92,7 +92,9 @@ aivi clean [--all]
 
 #### `build`
 
-Compiles the current project.
+Compiles AIVI code. Has two modes:
+
+**Project mode** (no positional path argument — uses `aivi.toml`):
 
 ```bash
 aivi build [--release] [-- <cargo args...>]
@@ -101,9 +103,26 @@ aivi build [--release] [-- <cargo args...>]
 - `--release`: Build in release mode (optimizations enabled).
 - `<cargo args...>`: Additional arguments passed to `cargo build`.
 
+Reads `aivi.toml`, compiles all `.aivi` sources to Rust, writes the output to `target/aivi-gen/src/`, and invokes `cargo build`.
+
+**Direct mode** (a path/glob is given as the first argument):
+
+```bash
+aivi build <path|dir/...> [--debug-trace] [--target rust|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]
+```
+
+- `--target`: Backend to use.
+  - `rust` (default): Generates a Rust library project in `--out`.
+  - `rust-native`: Generates a Rust binary project in `--out`.
+  - `rustc`: Invokes `rustc` directly; extra args after `--` are forwarded to `rustc`.
+- `--out`: Output directory (default: `target/aivi-gen` for Rust targets, `target/aivi-rustc/aivi_out` for `rustc`).
+- `--debug-trace`: Enables verbose compiler tracing via `AIVI_DEBUG_TRACE=1`.
+
 #### `run`
 
-Runs the current project (if it is a binary).
+Runs AIVI code. Has two modes:
+
+**Project mode** (no positional path argument — uses `aivi.toml`):
 
 ```bash
 aivi run [--release] [-- <cargo args...>]
@@ -112,38 +131,53 @@ aivi run [--release] [-- <cargo args...>]
 - `--release`: Run in release mode.
 - `<cargo args...>`: Additional arguments passed to `cargo run`.
 
+**Direct mode** (a path/glob is given as the first argument):
+
+```bash
+aivi run <path|dir/...> [--debug-trace] [--target native]
+```
+
+- `--target native` (default): Executes the program in the built-in interpreter.
+- `--debug-trace`: Enables verbose compiler tracing.
+
 ### Development Tools
 
 #### `fmt`
 
-Formats Aivi source code.
+Formats AIVI source code.
 
 ```bash
-aivi fmt <path>
+aivi fmt [--write] <path|dir/...>
 ```
+
+- Without `--write`: prints the formatted output to stdout.
+- `--write`: formats files **in-place**, overwriting if the content changed.
 
 #### `check`
 
 Checks the code for errors without generating code.
 
 ```bash
-aivi check <path|dir/...>
+aivi check [--debug-trace] [--check-stdlib] <path|dir/...>
 ```
 
-Calculates diagnostics and performs type checking.
+- Loads, parses, resolves, and type-checks all modules under the target.
+- `--debug-trace`: Enables verbose compiler tracing.
+- `--check-stdlib`: Include diagnostics from embedded stdlib modules (default filters them out).
 
 #### `test`
 
 Runs `@test`-decorated top-level definitions as integration tests.
 
 ```bash
-aivi test <path|dir/**> [--check-stdlib]
+aivi test <path|dir/**> [--check-stdlib] [--only <name>...]
 ```
 
 - Test discovery: only files under the target that contain `@test` are formatted, parsed, and typechecked.
-- Execution: each `@test` definition is executed as an `Effect`; failures are reported with the qualified name.
+- Execution: each `@test` definition is executed as an `Effect`; failures are reported with the qualified name (`Module.testName`).
 - Reports: writes file lists to `target/aivi-test-passed-files.txt` and `target/aivi-test-failed-files.txt`.
-- `--check-stdlib`: include diagnostics from embedded stdlib modules (default filters them out).
+- `--check-stdlib`: Include diagnostics from embedded stdlib modules (default filters them out).
+- `--only <name>`: Run only the specified test(s). Can be repeated (`--only foo --only bar`). Accepts fully qualified names (`Module.testName`) or unqualified suffixes (`testName`).
 
 #### `parse`
 
@@ -158,7 +192,7 @@ aivi parse <path|dir/...>
 Shows the desugared high-level intermediate representation (HIR) of a module.
 
 ```bash
-aivi desugar <path|dir/...>
+aivi desugar [--debug-trace] <path|dir/...>
 ```
 
 #### `kernel`
@@ -166,7 +200,7 @@ aivi desugar <path|dir/...>
 Shows the Kernel (Core Calculus) representation of a module.
 
 ```bash
-aivi kernel <path|dir/...>
+aivi kernel [--debug-trace] <path|dir/...>
 ```
 
 #### `rust-ir`
@@ -174,7 +208,7 @@ aivi kernel <path|dir/...>
 Shows the Rust Intermediate Representation (Rust IR) of a module.
 
 ```bash
-aivi rust-ir <path|dir/...>
+aivi rust-ir [--debug-trace] <path|dir/...>
 ```
 
 ### Services
@@ -199,3 +233,16 @@ aivi mcp serve <path|dir/...> [--allow-effects]
 
 In v0.1, `aivi mcp serve` exposes the bundled language specifications (`specs/`) as MCP resources.
 The `<path|dir/...>` argument is accepted for future expansion, but is currently ignored.
+
+#### `i18n`
+
+Generates an AIVI module from a `.properties` message catalog (Java-style key=value pairs).
+
+```bash
+aivi i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>
+```
+
+- `<catalog.properties>`: Path to the Java-style `.properties` file.
+- `--locale <tag>`: BCP-47 locale tag (e.g., `en`, `de-AT`).
+- `--module <name>`: The AIVI module name for the generated file (e.g., `Messages`).
+- `--out <file>`: Output `.aivi` file path.
