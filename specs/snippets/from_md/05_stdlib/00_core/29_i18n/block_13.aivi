@@ -1,0 +1,13 @@
+```aivi
+use aivi.i18n
+
+// One-step localization: load bundle + get a lookup function
+main = do Effect {
+  tr <- localize
+    { language: "en", region: Some "US", variants: [], tag: "en-US" }
+    "messages/en-US.json"
+
+  print (tr (~k"app.welcome") { name: "Alice" })
+  print (tr (~k"app.cartItems") { count: 3 })
+}
+```

@@ -1,7 +1,14 @@
+```aivi
 use aivi.vector
+use aivi.matrix
 
-position = { x: 10.0, y: 20.0 }
-velocity = { x: 1.0, y: 0.5 }
+position = vec2 10.0 20.0
+velocity = vec2 1.0 0.5
 
 newPos = position + velocity * 0.016 // 60fps frame
 direction = normalize velocity
+
+// Vector × Matrix
+rotation = identity2  // placeholder for a real rotation matrix
+transformed = transform2 rotation position
+```

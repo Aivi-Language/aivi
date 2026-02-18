@@ -1,0 +1,86 @@
+@no_prelude
+module integrationTests.stdlib.aivi.i18n.tests
+
+use aivi
+use aivi.testing
+use aivi.i18n
+use aivi.map
+
+@test
+parseLocale_smoke = do Effect {
+  locale = parseLocale "en-US"
+    or { language: "en", region: Some "US", variants: [], tag: "en-US" }
+  assertEq locale.language "en"
+  assertEq locale.region (Some "US")
+  assertEq locale.tag "en-US"
+}
+
+@test
+parseLocale_underscore = do Effect {
+  locale = parseLocale "pt_BR"
+    or { language: "pt", region: Some "BR", variants: [], tag: "pt-BR" }
+  assertEq locale.language "pt"
+  assertEq locale.region (Some "BR")
+}
+
+@test
+key_valid = do Effect {
+  k = key "app.welcome"
+  k match
+    | Ok kv => assertEq kv.body "app.welcome"
+    | Err _ => assert False
+}
+
+@test
+key_invalid_empty = do Effect {
+  k = key ""
+  k match
+    | Ok _  => assert False
+    | Err _ => assert True
+}
+
+@test
+key_invalid_double_dot = do Effect {
+  k = key "app..welcome"
+  k match
+    | Ok _  => assert False
+    | Err _ => assert True
+}
+
+@test
+sigil_key = do Effect {
+  k = ~k"user.settings.theme"
+  assertEq k.body "user.settings.theme"
+}
+
+@test
+sigil_message_render = do Effect {
+  m = ~m"You have {count:Int} items in your cart."
+  result = render m { count: 5 }
+  result match
+    | Ok txt => assertEq txt "You have 5 items in your cart."
+    | Err _  => assert False
+}
+
+@test
+sigil_message_no_placeholders = do Effect {
+  m = ~m"Plain hello"
+  result = render m {}
+  result match
+    | Ok txt => assertEq txt "Plain hello"
+    | Err _  => assert False
+}
+
+@test
+fallbackTags_smoke = do Effect {
+  locale = { language: "en", region: Some "US", variants: [], tag: "en-US" }
+  tags = fallbackTags locale
+  assert (List.length tags >= 1)
+}
+
+@test
+fallbackTags_no_region = do Effect {
+  locale = { language: "ja", region: None, variants: [], tag: "ja" }
+  tags = fallbackTags locale
+  assertEq tags ["ja"]
+}

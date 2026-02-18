@@ -325,3 +325,16 @@ hr {
   font-size: 14pt;
   color: #666;
 }
+
+/* Long type signatures that may need to wrap */
+.type-sig {
+  overflow-wrap: break-word;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.type-sig pre,
+.type-sig code {
+  white-space: pre-wrap;
+  word-break: break-all;
+}

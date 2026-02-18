@@ -73,7 +73,6 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [TimeZone](05_stdlib/02_chronos/04_timezone) *(planned — not yet implemented)*
 
 #### Network
-- [Network](05_stdlib/03_network/00_network)
 - [HTTP Utils](05_stdlib/03_network/01_http)
 - [HTTPS](05_stdlib/03_network/02_https)
 - [HTTP Server](05_stdlib/03_network/03_http_server)

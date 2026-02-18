@@ -586,21 +586,19 @@ Desugars to: `_ <- if cond then pure Unit else failExpr`.
 
 ### State machines (`machine`)
 
-`machine` declares a state machine with typed states and transitions.
+`machine` declares a state machine where transitions are first-class and states are inferred.
 
 ```aivi
 machine Door = {
-  state Closed =
-    on Open => Opened
-  state Opened =
-    on Close => Closed
-    on Lock => Locked
-  state Locked =
-    on Unlock => Closed
+  -> Closed   : init   {}
+  Closed  -> Opened : open   {}
+  Opened  -> Closed : close  {}
+  Opened  -> Locked : lock   {}
+  Locked  -> Closed : unlock {}
 }
 ```
 
-Each `state` defines possible `on Event => NextState` transitions. The compiler checks transition completeness and type safety.
+`-> State : init {}` marks the starting state. `Source -> Target : event { payload }` defines transitions with optional typed payloads. States are inferred from the transition graph. The compiler checks completeness and type safety.
 
 ### Transition wiring (`on`)
 
@@ -695,7 +693,11 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 - `aivi.*` — standard library
 - `aivi.chronos.*` — time/date/duration/timezone
 - `aivi.net.*` — networking (http, https, httpServer)
-- `aivi.collections` — Map, Set, Queue
+- `aivi.list` — List operations (map, filter, fold, …)
+- `aivi.map` — Map (ordered key-value)
+- `aivi.set` — Set (ordered unique elements)
+- `aivi.queue` — Queue / Deque
+- `aivi.heap` — Min/Max heap
 - `vendor.name.*` — third-party libraries
 - `user.app.*` — application code
 
@@ -780,7 +782,8 @@ module integrationTests.complex.TopologicalSort
 
 use aivi
 use aivi.testing
-use aivi.collections
+use aivi.list
+use aivi.map
 
 Graph = { nodes: List Int, adj: Map Int (List Int) }
 
@@ -848,7 +851,7 @@ topoSmoke = do Effect {
 | Create set | `~set[1, 2, 3]` |
 | Build a sequence | `generate { x <- src; x -> pred; yield f x }` |
 | Infinite sequence | `generate { loop s = init => { yield s; recurse (next s) } }` |
-| State machine | `machine Name = { state Idle = on Start => Running; ... }` |
+| State machine | `machine Name = { -> Idle : init {}; Idle -> Running : start {}; ... }` |
 | Acquire resource | `handle <- managedFile "data.txt"` (inside `do Effect`) |
 | Write a test | `@test myTest = do Effect { assertEq (f 1) 2 }` |
 
