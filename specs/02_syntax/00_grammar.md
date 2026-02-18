@@ -25,8 +25,8 @@ This chapter is intentionally pragmatic: it aims to be complete enough to build 
 ### Keywords (v0.1)
 
 ```text
-as class do domain effect else export generate hiding if
-instance module or over patch recurse resource then use when with yield loop
+as class do domain effect else export generate given hiding if
+instance machine match module on or over patch recurse resource then use when with yield loop
 ```
 
 (`True`, `False`, `None`, `Some`, `Ok`, `Err` are ordinary constructors, not keywords.)
@@ -151,18 +151,14 @@ IfExpr         := "if" Expr "then" Expr "else" Expr
                | LambdaExpr
 
 LambdaExpr     := LambdaArgs "=>" Expr
-               | LambdaArgs DeconstructHead   (* requires at least one `!` binder in LambdaArgs *)
                | MatchExpr
 LambdaArgs     := PatParam { PatParam }
-PatParam       := lowerIdent [ "!" ] [ "@" PatParam ]
+PatParam       := lowerIdent [ "as" PatParam ]
                | "_"
                | RecordPat
                | TuplePat
                | ListPat
                | "(" PatParam ")"
-
-DeconstructHead := ("|>" CoalesceExpr { "|>" CoalesceExpr } [ "match" MatchArms ])
-                | ("match" MatchArms)
 
 MatchExpr      := PipeExpr [ "match" MatchArms ] [ OrFallback ]
 MatchArms      := Sep? "|" Arm { Sep "|" Arm }
@@ -339,7 +335,7 @@ FieldDecorator := "@" lowerIdent [ DecoratorArg ]
 ## 0.7 Patterns
 
 ```ebnf
-Pattern        := PatAtom [ "@" Pattern ]
+Pattern        := PatAtom [ "as" Pattern ]
 PatAtom        := "_"
                | lowerIdent
                | UpperIdent
@@ -354,7 +350,7 @@ TuplePat       := "(" Pattern "," Pattern { "," Pattern } ")"
 ListPat        := "[" [ Pattern { "," Pattern } [ "," "..." [ (lowerIdent | "_") ] ] ] "]"
 
 RecordPat      := "{" { RecordPatField } "}"
-RecordPatField := RecordPatKey [ (":" Pattern) | ("@" Pattern) | ("." "{" { RecordPatField } "}") ] [ FieldSep ]
+RecordPatField := RecordPatKey [ (":" Pattern) | ("as" Pattern) | ("." "{" { RecordPatField } "}") ] [ FieldSep ]
 RecordPatKey   := lowerIdent { "." lowerIdent }
 ```
 

@@ -56,7 +56,7 @@ You can also destructure nested records using dot-paths (Section 1.5).
 > Using `=` with a non-total pattern (like `[h, ...t] = []`) results in a compile-time error. For partial matches, use the `match` keyword which converts a refutable pattern into an `Option` or branch.
 
 
-## 1.4 Whole-value binding with `@`
+## 1.4 Whole-value binding with `as`
 
 Patterns may bind the **entire value** alongside destructuring.
 
@@ -91,13 +91,13 @@ Example:
 
 ### Deep path destructuring
 
-Record destructuring supports **dot-paths** to access nested fields directly. This combines path addressing with the `@` whole-value binder.
+Record destructuring supports **dot-paths** to access nested fields directly. This combines path addressing with the `as` whole-value binder.
 
 <<< ../snippets/from_md/02_syntax/01_bindings/block_09.aivi{aivi}
 
 Semantics:
 * `data.user.profile` is the path to the record being destructured.
-* `@{ name }` binds the fields of that specific nested record.
+* `as { name }` binds the fields of that specific nested record.
 * Intermediate records are **not** bound unless explicitly requested.
 
 This is exactly equivalent to the nested expansion:

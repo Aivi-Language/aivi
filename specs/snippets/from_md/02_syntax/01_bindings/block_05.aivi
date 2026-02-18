@@ -1,2 +1,2 @@
-user@{ name: n } = input
-user@{ name } = input
+user as { name: n } = input
+user as { name } = input
