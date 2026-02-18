@@ -17,4 +17,3 @@ whenFalseSkips = do Effect {
   when x <- print "never"
   pure Unit
 }
-
