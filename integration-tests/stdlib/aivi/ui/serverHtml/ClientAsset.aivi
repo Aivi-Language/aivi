@@ -7,4 +7,5 @@ export clientJs
 
 // The Vite build in ui-client/ outputs to ui-client/dist/aivi-server-html-client.js.
 // Run `cd ui-client && pnpm build` before compilation.
-@static clientJs = file.read "ui-client/dist/aivi-server-html-client.js"
+@static
+clientJs = file.read "ui-client/dist/aivi-server-html-client.js"
