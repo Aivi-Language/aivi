@@ -2,6 +2,7 @@ impl Parser {
     fn parse_type_or_def(&mut self, decorators: Vec<Decorator>) -> Option<ModuleItem> {
         let checkpoint = self.pos;
         if self.consume_name().is_some() {
+            self.consume_newlines();
             if self.check_symbol(":") {
                 self.pos = checkpoint;
                 return self.parse_type_sig(decorators).map(ModuleItem::TypeSig);
@@ -38,6 +39,7 @@ impl Parser {
         self.reject_debug_decorators(&decorators, "type signatures");
         let name = self.consume_name()?;
         let start = name.span.clone();
+        self.consume_newlines();
         self.expect_symbol(":", "expected ':' for type signature");
         let ty = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
             span: start.clone(),
