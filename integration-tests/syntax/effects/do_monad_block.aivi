@@ -10,4 +10,3 @@ doEffectBlockWorks = do Effect {
   y <- pure 2
   assertEq (x + y) 3
 }
-

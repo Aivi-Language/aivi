@@ -516,7 +516,7 @@ count = result or 0
 
 ### Branching in effect blocks
 
-`if`/`then`/`else` is an expression. For multi-step branches, use nested `effect { ... }`:
+`if`/`then`/`else` is an expression. For multi-step branches, use nested `do Effect { ... }`:
 
 ```aivi
 process = input => do Effect {
@@ -850,7 +850,7 @@ topoSmoke = do Effect {
 | Infinite sequence | `generate { loop s = init => { yield s; recurse (next s) } }` |
 | State machine | `machine Name = { state Idle = on Start => Running; ... }` |
 | Acquire resource | `handle <- managedFile "data.txt"` (inside `do Effect`) |
-| Write a test | `@test myTest = effect { assertEq (f 1) 2 }` |
+| Write a test | `@test myTest = do Effect { assertEq (f 1) 2 }` |
 
 ---
 

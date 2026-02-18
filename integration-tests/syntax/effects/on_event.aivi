@@ -9,4 +9,3 @@ onEventWiring = do Effect {
   on Click => pure Unit
   pure Unit
 }
-
