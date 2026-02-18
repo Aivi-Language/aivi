@@ -1,5 +1,5 @@
 attemptExample : Effect Text Text
-attemptExample = effect {
+attemptExample = do Effect {
   res <- attempt (fail "nope")
   res match
   | Ok _  => pure "unexpected"

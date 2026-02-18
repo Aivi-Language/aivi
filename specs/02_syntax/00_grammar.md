@@ -203,7 +203,7 @@ Atom           := Literal
                | RecordLit
                | "patch" PatchLit
                | Block
-               | EffectBlock
+               | DoBlock
                | GenerateBlock
                | ResourceBlock
                
@@ -211,7 +211,7 @@ SuffixedParens := "(" Expr ")" Suffix
 Suffix         := lowerIdent | "%"
 
 Block          := "{" { Stmt } "}"
-EffectBlock    := "effect" "{" { Stmt } "}"
+DoBlock        := "do" UpperIdent "{" { Stmt } "}"
 GenerateBlock  := "generate" "{" { GenStmt } "}"
 ResourceBlock  := "resource" "{" { ResStmt } "}"
 

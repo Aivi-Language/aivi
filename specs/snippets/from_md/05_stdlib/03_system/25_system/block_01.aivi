@@ -1,6 +1,6 @@
 use aivi.system (env)
 
-main = effect {
+main = do Effect {
   // Read an environment variable (missing => default)
   portOpt <- env.get "PORT"
   port =

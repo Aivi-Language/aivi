@@ -60,7 +60,7 @@ app =
     onPlatform: _ => None
   }
 
-main = effect {
+main = do Effect {
   req <- receiveHttpRequest   // pseudo — depends on httpServer.listen
   resp <- serveHttp app req
   pure resp

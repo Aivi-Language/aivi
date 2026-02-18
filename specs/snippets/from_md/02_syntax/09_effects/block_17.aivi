@@ -1,4 +1,4 @@
-val = effect {
+val = do Effect {
   x <- f
   g x
 }

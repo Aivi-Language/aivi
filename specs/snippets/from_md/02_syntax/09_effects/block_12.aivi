@@ -1,5 +1,5 @@
 // Concise (recommended in effect blocks)
-main = effect {
+main = do Effect {
   res <- attempt (foo x)
   verdict = res match
   | Ok _  => "ok"

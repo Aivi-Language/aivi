@@ -1,6 +1,6 @@
 use aivi.file (readText, stat)
 
-main = effect {
+main = do Effect {
   // Safe reading
   contentRes <- readText "config.json"
   content = contentRes or "missing config"

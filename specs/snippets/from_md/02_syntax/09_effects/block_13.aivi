@@ -1,5 +1,5 @@
 // More explicit (same semantics)
-main = effect {
+main = do Effect {
   res <- attempt (foo x)
   verdict = res match
   | Ok _  => "ok"

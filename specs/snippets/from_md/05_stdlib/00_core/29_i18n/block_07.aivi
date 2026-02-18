@@ -5,7 +5,7 @@ defaultLocale : Locale
 defaultLocale = { language: "en", region: Some "US", variants: [], tag: "en-US" }
 
 systemLocale : Effect Text Locale
-systemLocale = effect {
+systemLocale = do Effect {
   tagOpt <- localeTag
   tag =
     tagOpt match

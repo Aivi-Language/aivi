@@ -13,7 +13,7 @@ Effectful operations in AIVI are modeled using the `Effect E A` type, where:
 
 ### Core operations (surface names)
 
-Effect sequencing is expressed via `effect { ... }` blocks, but the underlying interface is:
+Effect sequencing is expressed via `do Effect { ... }` blocks, but the underlying interface is:
 
 - `pure : A -> Effect E A` (return a value)
 - `bind : Effect E A -> (A -> Effect E B) -> Effect E B` (sequence)
@@ -31,7 +31,7 @@ For *handling* an effect error as a value, the standard library provides:
 
 <<< ../snippets/from_md/02_syntax/09_effects/block_01.aivi{aivi}
 
-`bind` sequences effects explicitly (the `effect { ... }` block desugars to `bind`):
+`bind` sequences effects explicitly (the `do Effect { ... }` block desugars to `bind`):
 
 <<< ../snippets/from_md/02_syntax/09_effects/block_02.aivi{aivi}
 
@@ -49,13 +49,13 @@ The standard library function `load` lifts a typed `Source` (see [External Sourc
 
 <<< ../snippets/from_md/02_syntax/09_effects/block_05.aivi{aivi}
 
-## 9.2 `effect` blocks
+## 9.2 `do Effect` blocks
 
 <<< ../snippets/from_md/02_syntax/09_effects/block_06.aivi{aivi}
 
 This is syntax sugar for monadic binding (see Desugaring section). All effectful operations within these blocks are automatically sequenced.
 
-Inside an `effect { ... }` block:
+Inside a `do Effect { ... }` block:
 
 - `x <- eff` binds the result of an `Effect` to `x`
 - `x = e` is a pure local binding (does not run effects)
@@ -78,7 +78,7 @@ Compiler checks:
 
 Two forms exist:
 
-1) **Effect fallback** (inside `effect {}` and only after `<-`):
+1) **Effect fallback** (inside `do Effect {}` and only after `<-`):
 
 <<< ../snippets/from_md/02_syntax/09_effects/block_07.aivi{aivi}
 
@@ -99,20 +99,20 @@ Or with explicit `Err ...` arms:
 Restrictions (v0.1):
 
 - Effect fallback arms match the error value (so write `NotFound m`, not `Err NotFound m`).
-- In `effect { ... }`, `x <- eff or | Err ... => ...` is parsed as a **Result** fallback (for ergonomics).
+- In `do Effect { ... }`, `x <- eff or | Err ... => ...` is parsed as a **Result** fallback (for ergonomics).
   If you mean effect-fallback, write error patterns directly (`NotFound ...`) rather than `Err ...`.
 - Result fallback arms must match only `Err ...` at the top level (no `Ok ...`, no `_`).
   Include a final `Err _` catch-all arm.
 
 ### `if ... else Unit` as a statement
 
-In `effect { ... }`, this common pattern is allowed without `_ <-`:
+In `do Effect { ... }`, this common pattern is allowed without `_ <-`:
 
 <<< ../snippets/from_md/02_syntax/09_effects/block_11.aivi{aivi}
 
 Conceptually, the `Unit` branch is lifted to `pure Unit` so both branches have an `Effect` type.
 
-### Concise vs explicit `effect` style
+### Concise vs explicit `do Effect` style
 
 These are equivalent:
 
@@ -120,9 +120,9 @@ These are equivalent:
 
 <<< ../snippets/from_md/02_syntax/09_effects/block_13.aivi{aivi}
 
-### `if` with nested blocks inside `effect`
+### `if` with nested blocks inside `do Effect`
 
-`if` is an expression, so you can branch inside an `effect { … }` block. When a branch needs multiple steps, use a nested `effect { … }` block (since `{ … }` is reserved for record-shaped forms).
+`if` is an expression, so you can branch inside a `do Effect { … }` block. When a branch needs multiple steps, use a nested `do Effect { … }` block (since `{ … }` is reserved for record-shaped forms).
 
 This pattern is common when a branch needs multiple effectful steps:
 
@@ -130,25 +130,25 @@ This pattern is common when a branch needs multiple effectful steps:
 
 Desugaring-wise, the `if … then … else …` appears inside the continuation of a `bind`, and each branch desugars to its own sequence of `bind` calls.
 
-### Nested `effect { … }` expressions inside `if`
+### Nested `do Effect { … }` expressions inside `if`
 
-An explicit `effect { … }` is itself an expression of type `Effect E A`. If you write `effect { … }` in an `if` branch, you usually want to run (bind) the chosen effect:
+An explicit `do Effect { … }` is itself an expression of type `Effect E A`. If you write `do Effect { … }` in an `if` branch, you usually want to run (bind) the chosen effect:
 
 <<< ../snippets/from_md/02_syntax/09_effects/block_15.aivi{aivi}
 
-If you instead write `if … then effect { … } else effect { … }` *without* binding it, the result of the `if` is an `Effect …` value, not a sequence of steps in the surrounding block (unless it is the final expression of that surrounding `effect { … }`).
+If you instead write `if … then do Effect { … } else do Effect { … }` *without* binding it, the result of the `if` is an `Effect …` value, not a sequence of steps in the surrounding block (unless it is the final expression of that surrounding `do Effect { … }`).
 
 
 ## 9.3 Effects and patching
 
 <<< ../snippets/from_md/02_syntax/09_effects/block_16.aivi{aivi}
 
-Patches are pure values. Apply them where you have the record value available (often inside an `effect` block after decoding/loading).
+Patches are pure values. Apply them where you have the record value available (often inside a `do Effect` block after decoding/loading).
 
 
 ## 9.4 Comparison and Translation
 
-The `effect` block is the primary way to sequence impure operations. It translates directly to monadic binds.
+The `do Effect` block is the primary way to sequence impure operations. It translates directly to monadic binds.
 
 Example translations:
 
