@@ -15,18 +15,18 @@ back. No client-side VDOM is needed — patches target stable `data-aivi-node` i
 
 ```
  Browser                        Server
-┌──────────────────┐     ┌──────────────────────┐
-│ Initial HTML GET ├────►│ serveHttp             │
-│                  │◄────┤  app.init → VNode     │
+┌──────────────────┐     ┌───────────────────────┐
+│ Initial HTML GET ├────>│ serveHttp             │
+│                  │<────┤  app.init → VNode     │
 │                  │     │  renderHtml → HTML    │
-│ WebSocket        │     │                      │
-│  hello ──────────┼────►│ serveWs               │
-│  event ──────────┼────►│  decodeEvent → msg    │
-│  platform ───────┼────►│  app.update → model'  │
-│  effectResult ───┼────►│  diff old new → ops   │
-│                  │◄────┤  patch (ops) ─────────│
-│                  │◄────┤  effectReq ───────────│
-└──────────────────┘     └──────────────────────┘
+│ WebSocket        │     │                       │
+│  hello ──────────┼────>│ serveWs               │
+│  event ──────────┼────>│  decodeEvent → msg    │
+│  platform ───────┼────>│  app.update → model'  │
+│  effectResult ───┼────>│  diff old new → ops   │
+│                  │<────┤  patch (ops) ─────────│
+│                  │<────┤  effectReq ───────────│
+└──────────────────┘     └───────────────────────┘
 ```
 
 ## Quick Start Example
