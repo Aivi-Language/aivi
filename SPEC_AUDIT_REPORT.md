@@ -335,11 +335,7 @@ AIVI's canonical text type is `Text`. These files use `String`:
 
 `aivi.toml` uses `entry = "main.aivi"` but `Cargo.toml`'s `[package.metadata.aivi]` uses `entry = "src/main.aivi"`. The difference is never explained.
 
-### 6.8 ~~Medium: LiveView event format contradictions~~ RESOLVED
-
-`05_liveview.md` has been retired and now redirects to `06_server_html.md`. The unified event format is `{"t":"event","hid":123,"kind":"click","p":{...}}`.
-
-### 6.9 Low: Terminology
+### 6.8 Low: Terminology
 
 - "traits" used in LSP spec (`02_lsp_server.md`) — AIVI uses "classes"
 - "Aivi" vs "AIVI" inconsistency across all `07_tools/` files
