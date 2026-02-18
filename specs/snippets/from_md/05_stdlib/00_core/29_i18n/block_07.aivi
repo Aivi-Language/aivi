@@ -8,8 +8,8 @@ systemLocale : Effect Text Locale
 systemLocale = effect {
   tagOpt <- localeTag
   tag =
-  tagOpt ?
-    | Some t => t
-    | None   => defaultLocale.tag
-  pure (parseLocale tag or defaultLocale)
+    tagOpt match
+  | Some t => t
+  | None   => defaultLocale.tag
+    pure (parseLocale tag or defaultLocale)
 }

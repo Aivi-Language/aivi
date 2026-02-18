@@ -65,7 +65,7 @@ case e of
 
 This is the **only branching construct**.
 
-* `?`
+* `match`
 * multi-clause functions
 * predicate patterns
 

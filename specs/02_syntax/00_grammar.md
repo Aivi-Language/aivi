@@ -161,10 +161,10 @@ PatParam       := lowerIdent [ "!" ] [ "@" PatParam ]
                | ListPat
                | "(" PatParam ")"
 
-DeconstructHead := ("|>" CoalesceExpr { "|>" CoalesceExpr } [ "?" MatchArms ])
-                | ("?" MatchArms)
+DeconstructHead := ("|>" CoalesceExpr { "|>" CoalesceExpr } [ "match" MatchArms ])
+                | ("match" MatchArms)
 
-MatchExpr      := PipeExpr [ "?" MatchArms ] [ OrFallback ]
+MatchExpr      := PipeExpr [ "match" MatchArms ] [ OrFallback ]
 MatchArms      := Sep? "|" Arm { Sep "|" Arm }
 Arm            := Pattern [ "when" Expr ] "=>" Expr
 
@@ -309,7 +309,7 @@ ValueBinding   := lowerIdent "=" FunArms Sep
 FunArms        := "|" Arm { Sep "|" Arm }
 ```
 
-This form desugars to a single-argument function that performs pattern matching (`?`) on its input (see [Desugaring: Patterns](../04_desugaring/04_patterns.md)).
+This form desugars to a single-argument function that performs pattern matching (`match`) on its input (see [Desugaring: Patterns](../04_desugaring/04_patterns.md)).
 
 If you want multi-argument matching, match on a tuple:
 
@@ -361,6 +361,6 @@ RecordPatKey   := lowerIdent { "." lowerIdent }
 
 ## 0.8 Diagnostics (where the compiler should nag)
 
-- **Arms without a `?`**: `| p => e` is only valid after `?` *or* directly after `=` in the multi-clause unary function form.
+- **Arms without a `match`**: `| p => e` is only valid after `match` *or* directly after `=` in the multi-clause unary function form.
 - **`_` placeholder**: `_ + 1` is only legal where a unary function is expected; otherwise error and suggest `x => x + 1`.
 - **Deep keys in record literals**: `a.b: 1` should be rejected in record literals (suggest patching with `<|` if the intent was a path).

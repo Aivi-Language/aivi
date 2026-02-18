@@ -1,9 +1,9 @@
 // Concise (recommended in effect blocks)
 main = effect {
   res <- attempt (foo x)
-  verdict = res ?
-    | Ok _  => "ok"
-    | Err _ => "err"
+  verdict = res match
+  | Ok _  => "ok"
+  | Err _ => "err"
 
   print verdict
 

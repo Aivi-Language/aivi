@@ -167,3 +167,49 @@ This supports ergonomic boundary code such as HTTP requests:
 AIVI uses open structural records, so a record type like `{}` denotes "any record".
 Implementations may ship a default instance `ToText {}` to support record-to-text coercions without
 per-record boilerplate.
+
+## 3.7 Machine Types (State Machines)
+
+`machine` declares a finite state machine with typed states and transitions. The compiler checks that all transitions reference valid states and can enforce transition safety.
+
+### Declaration
+
+```aivi
+machine Door = {
+  state Closed =
+    on Open => Opened
+  state Opened =
+    on Close => Closed
+    on Lock => Locked
+  state Locked =
+    on Unlock => Closed
+}
+```
+
+### Grammar
+
+```text
+MachineDecl     := "machine" UpperIdent "=" "{" { MachineStateDecl } "}"
+MachineStateDecl := "state" UpperIdent "=" { "on" UpperIdent "=>" UpperIdent }
+```
+
+### Semantics
+
+- Each `state` declares a named state of the machine.
+- `on Event => TargetState` defines a valid transition from the current state when the given event occurs.
+- The compiler verifies that all target states (`TargetState`) are declared states within the same machine.
+- Unreferenced states or missing transitions may produce warnings.
+- Machine types can be used to model protocol states, UI states, or workflow steps.
+
+### Example: Traffic light
+
+```aivi
+machine TrafficLight = {
+  state Red =
+    on Next => Green
+  state Green =
+    on Next => Yellow
+  state Yellow =
+    on Next => Red
+}
+```

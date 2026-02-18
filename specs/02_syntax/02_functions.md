@@ -83,15 +83,15 @@ is shorthand for:
 h = user@{ name } => (user, name) |> consume
 ```
 
-Pipelines often feed directly into `?` branching:
+Pipelines often feed directly into `match` branching:
 
 ```aivi
-input |> parse ?
+input |> parse match
   | Ok x  => x
   | Err _ => 0
 ```
 
-See also: [Pattern Matching](08_pattern_matching.md) for the `?` operator.
+See also: [Pattern Matching](08_pattern_matching.md) for the `match` operator.
 
 ---
 

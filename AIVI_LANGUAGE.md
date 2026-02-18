@@ -14,7 +14,7 @@ apply: always
 - Statically typed, purely functional, expression-oriented.
 - Immutable bindings; **no mutation**, no loops, no null.
 - Use `Option A` / `Result E A` instead of null; recursion, folds, or generators instead of loops.
-- Pattern bindings with `=` must be **total**; refutable matches use `?`.
+- Pattern bindings with `=` must be **total**; refutable matches use `match`.
 - Records are structural and open (row polymorphism).
 - Effects are explicit: `Effect E A` (error type `E`, success type `A`).
 - Domains give meaning to operators and suffix literals for non-`Int` types.

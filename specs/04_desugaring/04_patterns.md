@@ -38,13 +38,13 @@ A `{ ... }` binding with `@`:
 desugars to `case ⟦e⟧ of \| v @ ⟦p⟧ -> ⟦body⟧`.
 
 
-# Pattern matching `?`
+# Pattern matching `match`
 
-Surface `?` is syntactic sugar for `case` with ordered arms.
+Surface `match` is syntactic sugar for `case` with ordered arms.
 
 | Surface | Desugaring |
 | :--- | :--- |
-| `e ? \| p1 => b1 \| p2 => b2` | `case ⟦e⟧ of \| ⟦p1⟧ -> ⟦b1⟧ \| ⟦p2⟧ -> ⟦b2⟧` |
+| `e match \| p1 => b1 \| p2 => b2` | `case ⟦e⟧ of \| ⟦p1⟧ -> ⟦b1⟧ \| ⟦p2⟧ -> ⟦b2⟧` |
 | guard: `\| p when g => b` | `\| ⟦p⟧ -> case ⟦g⟧ of \| True -> ⟦b⟧ \| False -> nextArm` (compiled as nested cases) |
 
 Multi-clause functions:

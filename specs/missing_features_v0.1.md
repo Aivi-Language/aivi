@@ -27,7 +27,7 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
   - `generate { ... }` stays separate (different semantics: `yield`, guards, `recurse`).
   - Enables: `do Option { x <- someOpt; y <- anotherOpt; pure (x + y) }`
   - Trade-offs: Requires explicit monad annotation to avoid inference ambiguity; adds surface syntax complexity.
-  - Decision: Defer to post-v0.1; current `?` pattern matching and `flatMap`/`chain` suffice for `Option`/`Result`.
+  - Decision: Defer to post-v0.1; current `match` pattern matching and `flatMap`/`chain` suffice for `Option`/`Result`.
 
 ### Kernel & Desugaring
 

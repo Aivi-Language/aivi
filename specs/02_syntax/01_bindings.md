@@ -50,10 +50,10 @@ To deconstruct a record, use a record pattern on the left-hand side.
 You can also destructure nested records using dot-paths (Section 1.5).
 
 * `=` may only be used where the compiler can prove the pattern is **total** (i.e., it covers all possible shapes of the data).
-* Potentially failing matches (refutable patterns) must use `?` (case analysis) or appear in a context where failure can be handled.
+* Potentially failing matches (refutable patterns) must use `match` (case analysis) or appear in a context where failure can be handled.
 
 > [!NOTE]
-> Using `=` with a non-total pattern (like `[h, ...t] = []`) results in a compile-time error. For partial matches, use the `?` operator which converts a refutable pattern into an `Option` or branch.
+> Using `=` with a non-total pattern (like `[h, ...t] = []`) results in a compile-time error. For partial matches, use the `match` keyword which converts a refutable pattern into an `Option` or branch.
 
 
 ## 1.4 Whole-value binding with `@`
@@ -71,7 +71,7 @@ Semantics:
 Allowed in:
 
 * Top-level and local bindings
-* `?` pattern arms (allowing capture of the matched sub-structure)
+* `match` pattern arms (allowing capture of the matched sub-structure)
 * Function clauses 
 
 Example:

@@ -1,6 +1,6 @@
 # Pattern Matching
 
-## 8.1 `?` branching
+## 8.1 `match` branching
 
 <<< ../snippets/from_md/02_syntax/08_pattern_matching/block_01.aivi{aivi}
 
@@ -8,32 +8,32 @@ This is a concise way to do case analysis, similar to `match` in Rust or `case` 
 
 ### Choosing the match subject (scrutinee)
 
-<!-- quick-info: {"kind":"operator","name":"?"} -->
-`?` matches on the expression immediately to its left.
+<!-- quick-info: {"kind":"operator","name":"match"} -->
+`match` matches on the expression immediately to its left.
 <!-- /quick-info -->
 
 ```aivi
 value = parse input
 
-value ?
+value match
   | Ok x  => x
   | Err _ => 0
 ```
 
-This rule composes with pipelines because `?` comes *after* the full expression:
+This rule composes with pipelines because `match` comes *after* the full expression:
 
 ```aivi
-input |> parse |> validate ?
+input |> parse |> validate match
   | Ok x  => x
   | Err e => handle e
 ```
 
 ### Deconstructor match heads (`!` subject selection)
 
-For unary functions that destructure their argument, you can mark one or more binders in the parameter pattern with `!` and start the body with `?` (without writing `=> <scrutinee>` explicitly):
+For unary functions that destructure their argument, you can mark one or more binders in the parameter pattern with `!` and start the body with `match` (without writing `=> <scrutinee>` explicitly):
 
 ```aivi
-g = { name! } ?
+g = { name! } match
   | "A" => 1
   | _   => 0
 ```
@@ -41,7 +41,7 @@ g = { name! } ?
 is shorthand for:
 
 ```aivi
-g = { name } => name ?
+g = { name } => name match
   | "A" => 1
   | _   => 0
 ```

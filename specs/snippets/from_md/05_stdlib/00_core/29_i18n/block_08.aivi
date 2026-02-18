@@ -3,7 +3,7 @@ use aivi.i18n
 loadBundle : Locale -> Text -> Effect Text Bundle
 loadBundle = locale path => effect {
   res <- bundleFromPropertiesFile locale path
-  res ?
-    | Ok b  => pure b
-    | Err e => fail e
+  res match
+  | Ok b  => pure b
+  | Err e => fail e
 }

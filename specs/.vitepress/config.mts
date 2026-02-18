@@ -114,6 +114,7 @@ export default defineConfig({
           { text: 'Pattern Matching', link: '/02_syntax/08_pattern_matching' },
           { text: 'Effects', link: '/02_syntax/09_effects' },
           { text: 'Modules', link: '/02_syntax/10_modules' },
+          { text: 'Operators and Context', link: '/02_syntax/11_operators' },
           { text: 'Sigils', link: '/02_syntax/13_sigils' },
           { text: 'External Sources', link: '/02_syntax/12_external_sources' },
           { text: 'Decorators', link: '/02_syntax/14_decorators' },
@@ -198,7 +199,7 @@ export default defineConfig({
               { text: 'VDOM', link: '/05_stdlib/04_ui/02_vdom' },
               { text: 'HTML Sigil', link: '/05_stdlib/04_ui/03_html' },
               { text: 'Color', link: '/05_stdlib/04_ui/04_color' },
-              { text: 'ServerHtml', link: '/05_stdlib/04_ui/06_server_html' },
+              { text: 'ServerHtml', link: '/05_stdlib/04_ui/05_server_html' },
             ]
           }
         ]

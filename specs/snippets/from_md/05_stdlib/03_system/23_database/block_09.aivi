@@ -5,24 +5,24 @@ Conn = { id: Int }
 
 cfg : Pool.Config Conn
 cfg = {
-  maxSize: 4,
-  minIdle: 1,
-  acquireTimeout: { millis: 1000 },
-  idleTimeout: None,
-  maxLifetime: None,
-  healthCheckInterval: None,
-  backoffPolicy: Pool.Fixed ({ millis: 25 }),
-  queuePolicy: Pool.Fifo,
+  maxSize: 4
+  minIdle: 1
+  acquireTimeout: { millis: 1000 }
+  idleTimeout: None
+  maxLifetime: None
+  healthCheckInterval: None
+  backoffPolicy: Pool.Fixed ({ millis: 25 })
+  queuePolicy: Pool.Fifo
 
-  acquire: _ => pure { id: 0 },
-  release: _ => pure Unit,
+  acquire: _ => pure { id: 0 }
+  release: _ => pure Unit
   healthCheck: _ => pure True
 }
 
 main : Effect Text (Result Pool.PoolError Int)
 main = effect {
   poolRes <- Pool.create cfg
-  poolRes ?
-    | Err e   => pure (Err e)
-    | Ok pool => Pool.withConn pool (_ => pure 123)
+  poolRes match
+  | Err e   => pure (Err e)
+  | Ok pool => Pool.withConn pool (_ => pure 123)
 }
