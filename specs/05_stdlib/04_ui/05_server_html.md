@@ -1,4 +1,5 @@
-# `aivi.ui.ServerHtml` (Server-Driven HTML + DOM Patching + Typed Events)
+# `aivi.ui.ServerHtml`
+## Server-Driven HTML · DOM Patching · Typed Events
 
 <!-- quick-info: {"kind":"module","name":"aivi.ui.ServerHtml"} -->
 `aivi.ui.ServerHtml` is a server-driven UI runtime. The server renders HTML from

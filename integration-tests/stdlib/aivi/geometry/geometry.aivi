@@ -1,0 +1,77 @@
+@no_prelude
+module integrationTests.stdlib.aivi.geometry.tests
+
+use aivi
+use aivi.testing
+use aivi.math
+use aivi.geometry
+
+@test
+point2_constructor = do Effect {
+  p = point2 3.0 4.0
+  assertEq p.x 3.0
+  assertEq p.y 4.0
+}
+
+@test
+point3_constructor = do Effect {
+  p = point3 1.0 2.0 3.0
+  assertEq p.x 1.0
+  assertEq p.y 2.0
+  assertEq p.z 3.0
+}
+
+@test
+line2_constructor = do Effect {
+  l = line2 0.0 0.0 1.0 0.0
+  assertEq l.origin.x 0.0
+  assertEq l.direction.x 1.0
+}
+
+@test
+segment2_constructor = do Effect {
+  s = segment2 0.0 0.0 3.0 4.0
+  assertEq s.start.x 0.0
+  assertEq s.end.x 3.0
+}
+
+@test
+ray3_constructor = do Effect {
+  r = ray3 0.0 0.0 0.0 0.0 0.0 1.0
+  assertEq r.origin.x 0.0
+  assertEq r.dir.z 1.0
+}
+
+@test
+distance_2d = do Effect {
+  p1 = point2 0.0 0.0
+  p2 = point2 3.0 4.0
+  assert (abs (distance p1 p2 - 5.0) < 0.0001)
+}
+
+@test
+midpoint_smoke = do Effect {
+  seg = segment2 0.0 0.0 4.0 6.0
+  mid = midpoint seg
+  assert (abs (mid.x - 2.0) < 0.0001)
+  assert (abs (mid.y - 3.0) < 0.0001)
+}
+
+@test
+point2_arithmetic = do Effect {
+  a = point2 1.0 2.0
+  b = point2 3.0 4.0
+  s = a + b
+  assertEq s.x 4.0
+  assertEq s.y 6.0
+}
+
+@test
+point3_arithmetic = do Effect {
+  a = point3 1.0 2.0 3.0
+  b = point3 4.0 5.0 6.0
+  s = a + b
+  assertEq s.x 5.0
+  assertEq s.y 7.0
+  assertEq s.z 9.0
+}

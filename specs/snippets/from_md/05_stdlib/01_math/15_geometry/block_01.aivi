@@ -1,12 +1,14 @@
-use aivi.geometry (Ray, Sphere, intersect)
+```aivi
+use aivi.geometry (ray3, point3, Sphere, intersect)
 
 // A ray firing forwards from origin
-ray = Ray { origin: { x: 0, y: 0, z: 0 }, dir: { x: 0, y: 0, z: 1 } }
+ray = ray3 0.0 0.0 0.0 0.0 0.0 1.0
 
 // A sphere 5 units away
-sphere = Sphere { center: { x: 0, y: 0, z: 5 }, radius: 1.0 }
+sphere = Sphere { center: point3 0.0 0.0 5.0, radius: 1.0 }
 
 if intersect ray sphere then
   print "Hit!"
 else
   print "Miss!"
+```

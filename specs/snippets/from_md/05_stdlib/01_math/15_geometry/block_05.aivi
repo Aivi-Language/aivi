@@ -1,0 +1,17 @@
+```aivi
+// Short constructors for geometry types
+point2 : Float -> Float -> Point2
+point2 = x y => { x: x, y: y }
+
+point3 : Float -> Float -> Float -> Point3
+point3 = x y z => { x: x, y: y, z: z }
+
+line2 : Float -> Float -> Float -> Float -> Line2
+line2 = ox oy dx dy => { origin: point2 ox oy, direction: point2 dx dy }
+
+segment2 : Float -> Float -> Float -> Float -> Segment2
+segment2 = x1 y1 x2 y2 => { start: point2 x1 y1, end: point2 x2 y2 }
+
+ray3 : Float -> Float -> Float -> Float -> Float -> Float -> Ray
+ray3 = ox oy oz dx dy dz => { origin: point3 ox oy oz, dir: point3 dx dy dz }
+```

@@ -1,7 +1,9 @@
+```aivi
 use aivi.geometry
 
-p1 = { x: 0.0, y: 0.0 }
-p2 = { x: 3.0, y: 4.0 }
+p1 = point2 0.0 0.0
+p2 = point2 3.0 4.0
 
 d = distance p1 p2
-center = midpoint { start: p1, end: p2 }
+center = midpoint (segment2 0.0 0.0 3.0 4.0)
+```

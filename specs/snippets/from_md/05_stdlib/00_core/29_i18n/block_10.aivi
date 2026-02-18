@@ -1,7 +1,7 @@
-use aivi.chronos.calendar (DateTime)
+```aivi
 use aivi.i18n
 
-props = "app.welcome = Hello, \\{name:Text\\}!\\napp.lastLogin = Last login: \\{when:DateTime\\}.\\n"
+props = "app.welcome = Hello, \\{name:Text\\}!\\napp.lastLogin = Last login: \\{when:Text\\}.\\n"
 
 main = do Effect {
   locale =
@@ -12,6 +12,7 @@ main = do Effect {
     bundleFromProperties locale props
     or { locale: locale, entries: Map.empty }
 
-    print (t bundle (~k"app.welcome") { name: "Alice" })
-    print (t bundle (~k"app.lastLogin") { when: ~dt(2026-02-12T15:30:00Z) })
+  print (t bundle (~k"app.welcome") { name: "Alice" })
+  print (t bundle (~k"app.lastLogin") { when: "2026-02-12" })
 }
+```

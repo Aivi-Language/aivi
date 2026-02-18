@@ -1,3 +1,4 @@
+```aivi
 parseLocale: Text -> Result Text Locale
 
 key: Text -> Result Text Key
@@ -6,7 +7,9 @@ message: Text -> Result Text Message
 render: Message -> {} -> Result Text Text
 
 bundleFromProperties: Locale -> Text -> Result Text Bundle
-bundleFromPropertiesFile: Locale -> Text -> Effect Text (Result Text Bundle)
+bundleFromJson: Locale -> Text -> Result Text Bundle
+bundleFromYaml: Locale -> Text -> Result Text Bundle
+bundleFromFile: Locale -> Text -> Effect Text (Result Text Bundle)
 
 tResult: Bundle -> Key -> {} -> Result Text Text
 tOpt: Bundle -> Key -> {} -> Option Text
@@ -21,3 +24,6 @@ bundlesForLocale: Catalog -> Locale -> List Bundle
 
 tCatalog: Catalog -> Locale -> Key -> {} -> Text
 tCatalogWithDefault: Catalog -> Locale -> Bundle -> Key -> {} -> Text
+
+localize: Locale -> Text -> Effect Text (Key -> {} -> Text)
+```

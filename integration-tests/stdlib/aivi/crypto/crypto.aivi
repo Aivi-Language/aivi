@@ -6,20 +6,115 @@ use aivi.testing
 use aivi.crypto
 use aivi.text
 
+-- Hashing --
+
 @test
-randomBytes_smoke = do Effect {
-  b <- randomBytes 16
-  assertEq (1 + 1) 2
+sha256_hello = do Effect {
+  s = sha256 "hello"
+  assert (s == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
 }
 
 @test
-randomUuid_smoke = do Effect {
-  u <- randomUuid
+sha384_hello = do Effect {
+  s = sha384 "hello"
+  assert (length s == 96)
+}
+
+@test
+sha512_hello = do Effect {
+  s = sha512 "hello"
+  assert (length s == 128)
+}
+
+@test
+sha256_empty = do Effect {
+  s = sha256 ""
+  assert (s == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+}
+
+-- HMAC --
+
+@test
+hmacSha256_smoke = do Effect {
+  key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+    ? { Err _ => panic "bad hex" }
+  msg = fromHex "4869205468657265"
+    ? { Err _ => panic "bad hex" }
+  tag = hmacSha256 key msg
+  assert (length tag > 0)
+}
+
+@test
+hmacSha512_smoke = do Effect {
+  key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+    ? { Err _ => panic "bad hex" }
+  msg = fromHex "4869205468657265"
+    ? { Err _ => panic "bad hex" }
+  tag = hmacSha512 key msg
+  assert (length tag > 0)
+}
+
+@test
+hmacVerify_roundtrip = do Effect {
+  key = fromHex "aabbccdd"
+    ? { Err _ => panic "bad hex" }
+  msg = fromHex "deadbeef"
+    ? { Err _ => panic "bad hex" }
+  tag   = hmacSha256 key msg
+  valid = hmacVerify key msg tag
+  assert valid
+}
+
+-- Password Hashing --
+
+@test
+hashPassword_and_verify = do Effect {
+  hashed <- hashPassword "myS3cret!"
+  ok     <- verifyPassword "myS3cret!" hashed
+  assert ok
+}
+
+@test
+verifyPassword_wrong = do Effect {
+  hashed <- hashPassword "correct"
+  ok     <- verifyPassword "wrong" hashed
+  assert (not ok)
+}
+
+-- Random --
+
+@test
+randomBytes_length = do Effect {
+  b <- randomBytes 32
+  assert (length b == 32)
+}
+
+@test
+randomUuid_format = do Effect {
+  u <- randomUuid ()
   assert (length u == 36)
 }
 
+-- Utilities --
+
 @test
-sha256_smoke = do Effect {
-  s = sha256 "hello"
-  assert (s == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
+toHex_fromHex_roundtrip = do Effect {
+  original <- randomBytes 16
+  hex       = toHex original
+  decoded   = fromHex hex
+    ? { Err _ => panic "fromHex failed" }
+  assert (secureEquals original decoded)
+}
+
+@test
+secureEquals_same = do Effect {
+  a <- randomBytes 8
+  assert (secureEquals a a)
+}
+
+@test
+secureEquals_different = do Effect {
+  a <- randomBytes 8
+  b <- randomBytes 8
+  assert (not (secureEquals a b))
 }

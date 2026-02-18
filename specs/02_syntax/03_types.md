@@ -170,46 +170,67 @@ per-record boilerplate.
 
 ## 3.7 Machine Types (State Machines)
 
-`machine` declares a finite state machine with typed states and transitions. The compiler checks that all transitions reference valid states and can enforce transition safety.
+`machine` declares a finite state machine where **transitions are first-class**
+and states are inferred from the transition graph. The compiler checks that every
+referenced state appears as a source or target, and can enforce transition safety
+at the type level.
 
 ### Declaration
 
 ```aivi
 machine Door = {
-  state Closed =
-    on Open => Opened
-  state Opened =
-    on Close => Closed
-    on Lock => Locked
-  state Locked =
-    on Unlock => Closed
+  -> Closed   : init   {}
+  Closed  -> Opened : open   {}
+  Opened  -> Closed : close  {}
+  Opened  -> Locked : lock   {}
+  Locked  -> Closed : unlock {}
 }
 ```
+
+- `-> Closed : init {}` is the **initial transition** — it has no source state and
+  marks `Closed` as the machine's starting state. Every machine must have exactly one
+  initial transition.
+- `Source -> Target : event { payload }` defines a named transition with an optional
+  typed payload.
 
 ### Grammar
 
 ```text
-MachineDecl     := "machine" UpperIdent "=" "{" { MachineStateDecl } "}"
-MachineStateDecl := "state" UpperIdent "=" { "on" UpperIdent "=>" UpperIdent }
+MachineDecl      := "machine" UpperIdent "=" "{" { MachineTransition } "}"
+MachineTransition := [ UpperIdent ] "->" UpperIdent ":" lowerIdent "{" { FieldDecl } "}"
+FieldDecl         := lowerIdent ":" TypeExpr
 ```
 
 ### Semantics
 
-- Each `state` declares a named state of the machine.
-- `on Event => TargetState` defines a valid transition from the current state when the given event occurs.
-- The compiler verifies that all target states (`TargetState`) are declared states within the same machine.
-- Unreferenced states or missing transitions may produce warnings.
+- States are **inferred** from the set of sources and targets — no `state` keyword.
+- The initial transition (`-> State : init {}`) designates the starting state and
+  may carry a payload for initial data.
+- `Source -> Target : event { fields }` defines a valid transition carrying typed data.
+- The compiler verifies that all states appear on at least one side of a transition.
+- Unreachable states or dead-end states produce warnings.
 - Machine types can be used to model protocol states, UI states, or workflow steps.
+
+### Formatter alignment
+
+The LSP formatter aligns `->` arrows and `:` colons for readability:
+
+```aivi
+machine OrderFlow = {
+  -> Pending              : init    {}
+  Pending   -> Confirmed  : confirm { confirmedAt : Instant }
+  Confirmed -> Shipped    : ship    { trackingId  : Text }
+  Shipped   -> Delivered  : deliver { deliveredAt : Instant }
+}
+```
 
 ### Example: Traffic light
 
 ```aivi
 machine TrafficLight = {
-  state Red =
-    on Next => Green
-  state Green =
-    on Next => Yellow
-  state Yellow =
-    on Next => Red
+  -> Red   : init {}
+  Red    -> Green  : next {}
+  Green  -> Yellow : next {}
+  Yellow -> Red    : next {}
 }
 ```

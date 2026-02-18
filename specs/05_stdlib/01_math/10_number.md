@@ -11,6 +11,18 @@ The `aivi.number` family groups numeric domains that sit above `Int` and `Float`
 
 You can use either the facade module or the specific domain module depending on how much you want in scope.
 
+### Choosing between Decimal and Rational
+
+| | **Decimal** | **Rational** |
+| --- | --- | --- |
+| **Representation** | Fixed-point base-10 (like `123.45`) | Exact fraction `numerator / denominator` (BigInt-backed) |
+| **Use case** | Financial math, currency ($19.99) | Exact math (1/3 stays 1/3, never rounds) |
+| **Precision** | Fixed decimal places, rounds at boundaries | Infinite (denominators can grow unboundedly) |
+| **Speed** | Faster (bounded representation) | Slower (numerator/denominator may grow large) |
+| **Float problem solved** | `0.1 + 0.2 == 0.3` (exact in Decimal) | `1/3 * 3 == 1` (exact in Rational) |
+
+**Rule of thumb**: Use `Decimal` for money and human-facing decimal values. Use `Rational` for symbolic math where any rounding is unacceptable.
+
 <!-- /quick-info -->
 <<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_01.aivi{aivi}
 

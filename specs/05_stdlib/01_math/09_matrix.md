@@ -35,6 +35,20 @@ Manually calculating the new position of a 3D point after it's been rotated, mov
 | **multiply3** a b<br><pre><code>`Mat3 -> Mat3 -> Mat3`</code></pre> | Multiplies two 3x3 matrices. |
 | **multiply4** a b<br><pre><code>`Mat4 -> Mat4 -> Mat4`</code></pre> | Multiplies two 4x4 matrices. |
 
+## Sigil Constructors
+
+For concise matrix literals, use the `~mat` structured sigil:
+
+```aivi
+// 2x2 rotation matrix (90 degrees)
+rot90 = ~mat[0.0, -1.0; 1.0, 0.0]
+
+// 3x3 identity
+id3 = ~mat[1.0, 0.0, 0.0; 0.0, 1.0, 0.0; 0.0, 0.0, 1.0]
+```
+
+Rows are separated by `;`, columns by `,`. The sigil infers `Mat2`, `Mat3`, or `Mat4` from the row/column count.
+
 ## Usage Examples
 
 <<< ../../snippets/from_md/05_stdlib/01_math/09_matrix/block_04.aivi{aivi}
