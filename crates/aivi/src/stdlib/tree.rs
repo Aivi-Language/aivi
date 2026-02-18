@@ -21,22 +21,22 @@ leaf : A -> Tree A
 leaf = value => Node value []
 
 valueOf : Tree A -> A
-valueOf = t => t ?
+valueOf = t => t match
   | Node v _ => v
 
 childrenOf : Tree A -> List (Tree A)
-childrenOf = t => t ?
+childrenOf = t => t match
   | Node _ cs => cs
 
 append : List A -> List A -> List A
-append = xs ys => xs ?
+append = xs ys => xs match
   | [] => ys
   | [h, ...t] => [h, ...append t ys]
 
 reverse : List A -> List A
 reverse = xs => reverseGo xs []
 
-reverseGo = xs acc => xs ?
+reverseGo = xs acc => xs match
   | [] => acc
   | [h, ...t] => reverseGo t [h, ...acc]
 
@@ -46,7 +46,7 @@ dfsPreorder : Tree A -> List A
 dfsPreorder = tree => dfsPreorderGo [tree] []
 
 dfsPreorderGo : List (Tree A) -> List A -> List A
-dfsPreorderGo = stack outRev => stack ?
+dfsPreorderGo = stack outRev => stack match
   | [] => reverse outRev
   | [t, ...rest] => {
     // push children in reverse so leftmost is visited first
@@ -62,7 +62,7 @@ dfsPostorder = tree => dfsPostorderGo [tree] [] []
 
 // We simulate recursion with two stacks: one for work, one for output nodes.
 dfsPostorderGo : List (Tree A) -> List (Tree A) -> List A -> List A
-dfsPostorderGo = work outStack outRev => work ?
+dfsPostorderGo = work outStack outRev => work match
   | [] => {
     // pop outStack into outRev
     dfsPostorderDrain outStack outRev
@@ -73,7 +73,7 @@ dfsPostorderGo = work outStack outRev => work ?
   }
 
 dfsPostorderDrain : List (Tree A) -> List A -> List A
-dfsPostorderDrain = outStack outRev => outStack ?
+dfsPostorderDrain = outStack outRev => outStack match
   | [] => reverse outRev
   | [t, ...rest] => dfsPostorderDrain rest [valueOf t, ...outRev]
 
@@ -82,7 +82,7 @@ bfs : Tree A -> List A
 bfs = tree => bfsLoop (Queue.enqueue tree Queue.empty) []
 
 bfsLoop : Queue (Tree A) -> List A -> List A
-bfsLoop = q outRev => (Queue.dequeue q) ?
+bfsLoop = q outRev => (Queue.dequeue q) match
   | None => reverse outRev
   | Some (t, q2) => {
     q3 = bfsEnqueueChildren (childrenOf t) q2
@@ -90,7 +90,7 @@ bfsLoop = q outRev => (Queue.dequeue q) ?
   }
 
 bfsEnqueueChildren : List (Tree A) -> Queue (Tree A) -> Queue (Tree A)
-bfsEnqueueChildren = children q => children ?
+bfsEnqueueChildren = children q => children match
   | [] => q
   | [c, ...rest] => bfsEnqueueChildren rest (Queue.enqueue c q)
 
@@ -107,33 +107,33 @@ fromListBy = idFn parentIdFn items => {
   // Build children map: parentId -> List A (children)
   childrenMap = fromListChildrenMap idFn parentIdFn items Map.empty
   roots = rootsFromList idFn parentIdFn items []
-  roots ?
+  roots match
     | [] => None
     | [root] => Some (buildTree idFn (idFn root) root childrenMap)
     | _ => None
 }
 
 fromListChildrenMap : (A -> K) -> (A -> Option K) -> List A -> Map K (List A) -> Map K (List A)
-fromListChildrenMap = idFn parentIdFn items acc => items ?
+fromListChildrenMap = idFn parentIdFn items acc => items match
   | [] => acc
   | [x, ...rest] => {
     pidOpt = parentIdFn x
-    acc2 = pidOpt ?
+    acc2 = pidOpt match
       | None => acc
       | Some pid => mapPush pid x acc
     fromListChildrenMap idFn parentIdFn rest acc2
   }
 
 mapPush : K -> A -> Map K (List A) -> Map K (List A)
-mapPush = key value m => (Map.get key m) ?
+mapPush = key value m => (Map.get key m) match
   | None => Map.insert key [value] m
   | Some xs => Map.insert key [value, ...xs] m
 
 rootsFromList : (A -> K) -> (A -> Option K) -> List A -> List A -> List A
-rootsFromList = idFn parentIdFn items accRev => items ?
+rootsFromList = idFn parentIdFn items accRev => items match
   | [] => reverse accRev
   | [x, ...rest] =>
-    (parentIdFn x) ?
+    (parentIdFn x) match
       | None => rootsFromList idFn parentIdFn rest [x, ...accRev]
       | Some _ => rootsFromList idFn parentIdFn rest accRev
 
@@ -145,7 +145,7 @@ buildTree = idFn id item childrenMap => {
 }
 
 buildForest : (A -> K) -> List A -> Map K (List A) -> List (Tree A) -> List (Tree A)
-buildForest = idFn items childrenMap accRev => items ?
+buildForest = idFn items childrenMap accRev => items match
   | [] => reverse accRev
   | [x, ...rest] => {
     id = idFn x

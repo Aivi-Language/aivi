@@ -17,17 +17,17 @@ toString : Url -> Text
 toString = value => url.toString value
 
 filter : (A -> Bool) -> List A -> List A
-filter = predicate items => items ?
+filter = predicate items => items match
   | [] => []
   | [x, ...xs] => if predicate x then [x, ...filter predicate xs] else filter predicate xs
 
 append : List A -> List A -> List A
-append = left right => left ?
+append = left right => left match
   | [] => right
   | [x, ...xs] => [x, ...append xs right]
 
 filterKey : Text -> (Text, Text) -> Bool
-filterKey = key pair => pair ?
+filterKey = key pair => pair match
   | (k, _) => k != key
 
 domain Url over Url = {

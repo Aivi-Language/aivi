@@ -15,12 +15,12 @@ isAbsolute : Path -> Bool
 isAbsolute = p => p.absolute
 
 append : List A -> List A -> List A
-append = left right => left ?
+append = left right => left match
   | [] => right
   | [x, ...xs] => [x, ...append xs right]
 
 revAppend : List A -> List A -> List A
-revAppend = xs ys => xs ?
+revAppend = xs ys => xs match
   | [] => ys
   | [x, ...rest] => revAppend rest [x, ...ys]
 
@@ -28,12 +28,12 @@ reverse : List A -> List A
 reverse = xs => revAppend xs []
 
 isEmpty : List A -> Bool
-isEmpty = xs => xs ?
+isEmpty = xs => xs match
   | [] => True
   | _ => False
 
 normalizeAcc : Bool -> List Text -> List Text -> List Text
-normalizeAcc = absolute acc segments => segments ?
+normalizeAcc = absolute acc segments => segments match
   | [] => acc
   | [s, ...rest] => if s == "" || s == "." then normalizeAcc absolute acc rest else if s == ".." then (acc ? | [] => if absolute then normalizeAcc absolute [] rest else normalizeAcc absolute ["..", ...acc] rest | [a, ...accTail] => if a == ".." then normalizeAcc absolute ["..", ...acc] rest else normalizeAcc absolute accTail rest) else normalizeAcc absolute [s, ...acc] rest
 
@@ -53,7 +53,7 @@ parse = raw => {
 }
 
 joinSegments : List Text -> Text
-joinSegments = segments => segments ?
+joinSegments = segments => segments match
   | [] => ""
   | [x] => x
   | [x, ...xs] => text.concat [x, "/", joinSegments xs]
@@ -64,7 +64,7 @@ toString = p =>
   (if p.absolute then text.concat ["/", joinSegments p.segments] else joinSegments p.segments)
 
 init : List A -> List A
-init = xs => xs ?
+init = xs => xs match
   | [] => []
   | [_] => []
   | [x, ...rest] => [x, ...init rest]
@@ -73,7 +73,7 @@ parent : Path -> Option Path
 parent = p => if isEmpty p.segments then None else Some { absolute: p.absolute, segments: init p.segments }
 
 last : List A -> Option A
-last = xs => xs ?
+last = xs => xs match
   | [] => None
   | [x] => Some x
   | [_, ...rest] => last rest

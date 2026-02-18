@@ -33,7 +33,7 @@ class ToText A = {
 // for non-record values, allowing other `toText` clauses to apply.
 instance ToText {} = {
   toText: value =>
-    value ?
+    value match
       | {} => text.toText value
 }
 

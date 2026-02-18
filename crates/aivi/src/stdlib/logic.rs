@@ -94,14 +94,14 @@ class Profunctor (F * *) = {
 
 instance Functor (Option *) = {
   map: f opt =>
-    opt ?
+    opt match
       | None   => None
       | Some x => Some (f x)
 }
 
 instance Apply (Option *) = {
   ap: fOpt opt =>
-    (fOpt, opt) ?
+    (fOpt, opt) match
       | (Some f, Some x) => Some (f x)
       | _                => None
 }
@@ -112,7 +112,7 @@ instance Applicative (Option *) = {
 
 instance Chain (Option *) = {
   chain: f opt =>
-    opt ?
+    opt match
       | None   => None
       | Some x => f x
 }
@@ -123,14 +123,14 @@ instance Monad (Option *) = {}
 
 instance Functor (Result E *) = {
   map: f res =>
-    res ?
+    res match
       | Ok x  => Ok (f x)
       | Err e => Err e
 }
 
 instance Apply (Result E *) = {
   ap: fRes xRes =>
-    (fRes, xRes) ?
+    (fRes, xRes) match
       | (Ok f, Ok x)   => Ok (f x)
       | (Err e, _)     => Err e
       | (_, Err e)     => Err e
@@ -142,7 +142,7 @@ instance Applicative (Result E *) = {
 
 instance Chain (Result E *) = {
   chain: f res =>
-    res ?
+    res match
       | Ok x  => f x
       | Err e => Err e
 }

@@ -14,12 +14,12 @@ Signal = { samples: List Float, rate: Float }
 Spectrum = { bins: List Complex, rate: Float }
 
 map : (A -> B) -> List A -> List B
-map = f items => items ?
+map = f items => items match
   | [] => []
   | [x, ...xs] => [f x, ...map f xs]
 
 zipWith : (A -> B -> C) -> List A -> List B -> List C
-zipWith = f left right => (left, right) ?
+zipWith = f left right => (left, right) match
   | ([], _) => []
   | (_, []) => []
   | ([x, ...xs], [y, ...ys]) => [f x y, ...zipWith f xs ys]

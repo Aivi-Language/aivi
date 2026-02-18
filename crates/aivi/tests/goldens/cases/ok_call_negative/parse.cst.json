@@ -2,7 +2,24 @@
   "files": [
     {
       "byte_count": 150,
-      "diagnostics": [],
+      "diagnostics": [
+        {
+          "code": "W1601",
+          "labels": [],
+          "message": "`?` for pattern matching is deprecated; use `match` instead",
+          "severity": "warning",
+          "span": {
+            "end": {
+              "column": 19,
+              "line": 5
+            },
+            "start": {
+              "column": 19,
+              "line": 5
+            }
+          }
+        }
+      ],
       "line_count": 9,
       "lines": [
         "module test.ok_call_negative",
