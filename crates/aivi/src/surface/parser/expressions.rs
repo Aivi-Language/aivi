@@ -292,7 +292,7 @@ impl Parser {
         // Legacy `?` support with deprecation warning
         if self.consume_symbol("?") {
             self.emit_diag(
-                "E1601",
+                "W1601",
                 "`?` for pattern matching is deprecated; use `match` instead",
                 self.previous_span(),
             );

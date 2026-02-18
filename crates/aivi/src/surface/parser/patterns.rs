@@ -45,7 +45,7 @@ impl Parser {
             if self.match_keyword("as") || self.consume_symbol("@") {
                 if self.tokens.get(self.pos - 1).is_some_and(|t| t.text == "@") {
                     self.emit_diag(
-                        "E1603",
+                        "W1603",
                         "`@` in destructuring is deprecated; use `as` instead",
                         self.previous_span(),
                     );
@@ -246,7 +246,7 @@ impl Parser {
         let pattern = if self.match_keyword("as") || self.consume_symbol("@") || self.consume_symbol(":") {
             if self.tokens.get(self.pos - 1).is_some_and(|t| t.text == "@") {
                 self.emit_diag(
-                    "E1603",
+                    "W1603",
                     "`@` in destructuring is deprecated; use `as` instead",
                     self.previous_span(),
                 );

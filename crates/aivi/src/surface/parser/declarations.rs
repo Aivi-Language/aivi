@@ -634,4 +634,119 @@ impl Parser {
             span,
         })
     }
+
+    /// Parse a `machine Name = { state ... on ... }` declaration.
+    ///
+    /// Grammar:
+    ///   MachineDecl := "machine" UpperIdent "=" "{" { MachineStateDecl } "}"
+    ///   MachineStateDecl := "state" UpperIdent "=" { "on" UpperIdent "=>" UpperIdent }
+    pub(crate) fn parse_machine_decl(
+        &mut self,
+        decorators: Vec<Decorator>,
+    ) -> Option<MachineDecl> {
+        self.reject_debug_decorators(&decorators, "machine declarations");
+        let start = self.previous_span();
+        let name = self.consume_ident()?;
+        self.consume_newlines();
+        self.expect_symbol("=", "expected '=' in machine declaration");
+        self.consume_newlines();
+        self.expect_symbol("{", "expected '{' to start machine body");
+
+        let mut states = Vec::new();
+        let mut transitions = Vec::new();
+
+        loop {
+            self.consume_newlines();
+            if self.check_symbol("}") || self.pos >= self.tokens.len() {
+                break;
+            }
+            if self.match_keyword("state") {
+                let state_start = self.previous_span();
+                let Some(state_name) = self.consume_ident() else {
+                    self.emit_diag(
+                        "E1550",
+                        "expected state name after 'state'",
+                        self.previous_span(),
+                    );
+                    self.recover_to_item();
+                    continue;
+                };
+                self.consume_newlines();
+                if self.consume_symbol("=") {
+                    // nothing more needed
+                }
+                // Parse `on Event => Target` transitions for this state
+                loop {
+                    self.consume_newlines();
+                    if self.check_symbol("}")
+                        || self.peek_keyword("state")
+                        || self.pos >= self.tokens.len()
+                    {
+                        break;
+                    }
+                    if self.match_keyword("on") {
+                        let on_start = self.previous_span();
+                        let Some(event_name) = self.consume_ident() else {
+                            self.emit_diag(
+                                "E1551",
+                                "expected event name after 'on'",
+                                self.previous_span(),
+                            );
+                            break;
+                        };
+                        self.expect_symbol("=>", "expected '=>' after event name in machine transition");
+                        let Some(target_name) = self.consume_ident() else {
+                            self.emit_diag(
+                                "E1552",
+                                "expected target state name after '=>'",
+                                self.previous_span(),
+                            );
+                            break;
+                        };
+                        let trans_span = merge_span(on_start, target_name.span.clone());
+                        transitions.push(MachineTransition {
+                            source: state_name.clone(),
+                            name: event_name,
+                            target: target_name,
+                            payload: Vec::new(),
+                            span: trans_span,
+                        });
+                    } else {
+                        // Unexpected token inside state block
+                        let span = self.peek_span().unwrap_or_else(|| self.previous_span());
+                        self.emit_diag(
+                            "E1553",
+                            "expected 'on' or 'state' inside machine body",
+                            span,
+                        );
+                        self.pos += 1;
+                        break;
+                    }
+                }
+                let state_end = self.previous_span();
+                states.push(MachineState {
+                    name: state_name,
+                    fields: Vec::new(),
+                    span: merge_span(state_start, state_end),
+                });
+            } else {
+                let span = self.peek_span().unwrap_or_else(|| self.previous_span());
+                self.emit_diag(
+                    "E1554",
+                    "expected 'state' declaration inside machine body",
+                    span,
+                );
+                self.pos += 1;
+            }
+        }
+        let end = self.expect_symbol("}", "expected '}' to close machine body");
+        let span = merge_span(start, end.unwrap_or(name.span.clone()));
+        Some(MachineDecl {
+            decorators,
+            name,
+            states,
+            transitions,
+            span,
+        })
+    }
 }

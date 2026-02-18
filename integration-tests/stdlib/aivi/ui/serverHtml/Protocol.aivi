@@ -231,7 +231,7 @@ decodePointerPayload = json =>
   )
 
 encodeEventPayload : EventPayload -> (Text, JsonValue)
-encodeEventPayload = payload => payload ?
+encodeEventPayload = payload => payload match
   | ClickEvt p   => ("click", encodeClickPayload p)
   | InputEvt p   => ("input", encodeInputPayload p)
   | KeyDownEvt p => ("keydown", encodeKeyPayload p)
@@ -241,7 +241,7 @@ encodeEventPayload = payload => payload ?
   | PtrMoveEvt p => ("pointermove", encodePointerPayload p)
 
 decodeEventPayload : Text -> JsonValue -> Result JsonError EventPayload
-decodeEventPayload = kind pJson => kind ?
+decodeEventPayload = kind pJson => kind match
   | "click"       => decodeClickPayload pJson |> map ClickEvt
   | "input"       => decodeInputPayload pJson |> map InputEvt
   | "keydown"     => decodeKeyPayload pJson |> map KeyDownEvt
@@ -277,7 +277,7 @@ decodeIntersectionEntry = json =>
 decodePlatformEvent : Text -> Text -> Result JsonError PlatformEvent
 decodePlatformEvent = kind rawPJson => {
   parsed = decode rawPJson
-  parsed |> bind (pJson => kind ?
+  parsed |> bind (pJson => kind match
     | "popstate" =>
           decodeUrlInfo pJson |> map PopState
     | "hashchange" =>
@@ -344,7 +344,7 @@ decodePlatformEvent = kind rawPJson => {
 // ---------------------------------------------------------------------------
 
   encodeClipboardOp : ClipboardOp -> JsonValue
-  encodeClipboardOp = op => op ?
+  encodeClipboardOp = op => op match
     | ReadText           => encodeObject [("kind", encodeText "clipboard.readText")]
     | WriteText { text } => encodeObject [
       ("kind", encodeText "clipboard.writeText")
@@ -352,7 +352,7 @@ decodePlatformEvent = kind rawPJson => {
     ]
 
 decodeClipboardOp : JsonValue -> Result JsonError ClipboardOp
-decodeClipboardOp = json => field "kind" decodeText json |> bind (kind => kind ?
+decodeClipboardOp = json => field "kind" decodeText json |> bind (kind => kind match
   | "clipboard.readText"  => Ok ReadText
   | "clipboard.writeText" =>
       field "text" decodeText json |> bind (text =>
@@ -366,7 +366,7 @@ decodeClipboardOp = json => field "kind" decodeText json |> bind (kind => kind ?
 // ---------------------------------------------------------------------------
 
   encodeClientMsg : ClientMsg -> Text
-  encodeClientMsg = msg => msg ?
+  encodeClientMsg = msg => msg match
     | Hello h => toJsonText [
       ("t", encodeText "hello")
       ("viewId", encodeText h.viewId)
@@ -397,7 +397,7 @@ decodeClipboardOp = json => field "kind" decodeText json |> bind (kind => kind ?
 
 decodeClientMsg : Text -> Result JsonError ClientMsg
 decodeClientMsg = raw =>
-  decode raw |> bind (json => field "t" decodeText json |> bind (t => t ?
+  decode raw |> bind (json => field "t" decodeText json |> bind (t => t match
     | "hello" =>
           field "viewId" decodeText json |> bind (viewId =>
             field "url" decodeText json |> bind (url =>
@@ -434,7 +434,7 @@ decodeClientMsg = raw =>
 // ---------------------------------------------------------------------------
 
   encodeServerMsg : ServerMsg -> Text
-  encodeServerMsg = msg => msg ?
+  encodeServerMsg = msg => msg match
     | Patch { ops } => toJsonText [
       ("t", encodeText "patch")
       ("ops", encodeText ops)
@@ -462,7 +462,7 @@ decodeClientMsg = raw =>
 
 decodeServerMsg : Text -> Result JsonError ServerMsg
 decodeServerMsg = raw =>
-  decode raw |> bind (json => field "t" decodeText json |> bind (t => t ?
+  decode raw |> bind (json => field "t" decodeText json |> bind (t => t match
     | "patch" =>
           field "ops" decodeText json |> bind (ops =>
             Ok (Patch { ops })
@@ -496,7 +496,7 @@ decodeServerMsg = raw =>
 // ---------------------------------------------------------------------------
 
 @test
-  clientMsgHelloRoundtrip = effect {
+  clientMsgHelloRoundtrip = do Effect {
     orig = Hello { viewId: "abc-123", url: "https://example.com/", online: True }
     encoded = encodeClientMsg orig
     decoded = decodeClientMsg encoded
@@ -504,7 +504,7 @@ decodeServerMsg = raw =>
   }
 
 @test
-  clientMsgEventClickRoundtrip = effect {
+  clientMsgEventClickRoundtrip = do Effect {
     p = encodeClickPayload { button: 0, alt: False, ctrl: False, shift: False, meta: False }
     orig = Event { viewId: "v1", hid: 42, kind: "click", p: p }
     encoded = encodeClientMsg orig
@@ -513,7 +513,7 @@ decodeServerMsg = raw =>
   }
 
 @test
-  serverMsgPatchRoundtrip = effect {
+  serverMsgPatchRoundtrip = do Effect {
     orig = Patch { ops: "[{\"op\":\"setText\",\"id\":\"n1\",\"text\":\"hi\"}]" }
     encoded = encodeServerMsg orig
     decoded = decodeServerMsg encoded
@@ -521,7 +521,7 @@ decodeServerMsg = raw =>
   }
 
 @test
-  serverMsgEffectReqClipboardReadTextRoundtrip = effect {
+  serverMsgEffectReqClipboardReadTextRoundtrip = do Effect {
     orig = EffectReq { rid: 1, op: ReadText }
     encoded = encodeServerMsg orig
     decoded = decodeServerMsg encoded
@@ -529,7 +529,7 @@ decodeServerMsg = raw =>
   }
 
 @test
-  serverMsgEffectReqClipboardWriteTextRoundtrip = effect {
+  serverMsgEffectReqClipboardWriteTextRoundtrip = do Effect {
     orig = EffectReq { rid: 2, op: WriteText { text: "copied" } }
     encoded = encodeServerMsg orig
     decoded = decodeServerMsg encoded
@@ -537,7 +537,7 @@ decodeServerMsg = raw =>
   }
 
 @test
-  platformPopStateDecode = effect {
+  platformPopStateDecode = do Effect {
     pJson = "{\"href\":\"https://x.com/a\",\"path\":\"/a\",\"query\":\"?q=1\",\"hash\":\"#top\"}"
     result = decodePlatformEvent "popstate" pJson
     expected = PopState { href: "https://x.com/a", path: "/a", query: "?q=1", hash: "#top" }
@@ -545,7 +545,7 @@ decodeServerMsg = raw =>
   }
 
 @test
-  platformIntersectionDecode = effect {
+  platformIntersectionDecode = do Effect {
     pJson = "{\"sid\":7,\"entries\":[{\"tid\":1,\"isIntersecting\":true,\"ratio\":0.5}]}"
     result = decodePlatformEvent "intersection" pJson
     expected = Intersection {
@@ -556,7 +556,7 @@ decodeServerMsg = raw =>
   }
 
 @test
-  eventPayloadClickDecode = effect {
+  eventPayloadClickDecode = do Effect {
     pJson = decode "{\"button\":0,\"alt\":false,\"ctrl\":true,\"shift\":false,\"meta\":false}"
     result = pJson |> bind (decodeEventPayload "click")
     expected = ClickEvt { button: 0, alt: False, ctrl: True, shift: False, meta: False }
@@ -564,7 +564,7 @@ decodeServerMsg = raw =>
   }
 
 @test
-  eventPayloadPointerDecode = effect {
+  eventPayloadPointerDecode = do Effect {
     raw = "{\"pointerId\":1,\"pointerType\":\"mouse\",\"button\":0,\"buttons\":1,\"clientX\":100,\"clientY\":200,\"alt\":false,\"ctrl\":false,\"shift\":false,\"meta\":false}"
     pJson = decode raw
     result = pJson |> bind (decodeEventPayload "pointerdown")

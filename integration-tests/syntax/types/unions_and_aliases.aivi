@@ -10,13 +10,13 @@ Pair A B = (A, B)
 mk : A -> B -> Pair A B
 mk = a b => (a, b)
 
-toInt = c => c ?
+toInt = c => c match
   | Red   => 1
   | Green => 2
   | Blue  => 3
 
 @test
-typesWork = effect {
+typesWork = do Effect {
   assertEq (mk 1 "x") (1, "x")
   assertEq (toInt Red) 1
 }

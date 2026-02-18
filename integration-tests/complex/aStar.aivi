@@ -18,23 +18,23 @@ positions = ~map{
 
 // Euclidean distance heuristic
 heuristic : Int -> Int -> Float
-heuristic = goal node => (Map.get goal positions, Map.get node positions) ?
+heuristic = goal node => (Map.get goal positions, Map.get node positions) match
   | (Some target, Some current) => magnitude (target - current)
   | _                           => 0.0
 
 // Path reconstruction helper - walks the cameFrom map backwards
-reconstructGo = cameFrom current acc => Map.get current cameFrom ?
+reconstructGo = cameFrom current acc => Map.get current cameFrom match
   | Some prev => reconstructGo cameFrom prev [current, ...acc]
   | None      => [current, ...acc]
 reconstructPath = cameFrom goal => reconstructGo cameFrom goal []
 
 priority3 = item => item ? | (p, _, _) => p
 
-popMin3 = items => items ?
+popMin3 = items => items match
   | []        => None
   | [h, ...t] => Some (popMin3Go h [] t)
 
-popMin3Go = best restAcc items => items ?
+popMin3Go = best restAcc items => items match
   | []        => (best, restAcc)
   | [x, ...t] => {
     bestP = priority3 best
@@ -60,7 +60,7 @@ infinity = 1000000.0
 expandNeighbor : Int -> Float -> Int -> (Int -> Int -> Float) -> AStarState -> { to: Int, weight: Float } -> AStarState
 expandNeighbor = current currentG goal heuristicFunc state edge => {
   tentative = sum [currentG, edge.weight]
-  prevScore = Map.get edge.to state.scores ?
+  prevScore = Map.get edge.to state.scores match
     | Some v => v
     | None   => infinity
     if tentative < prevScore then {
@@ -73,7 +73,7 @@ expandNeighbor = current currentG goal heuristicFunc state edge => {
 }
 
 // Expand all neighbors
-expandNeighbors = edges current currentG goal heuristicFunc state => edges ?
+expandNeighbors = edges current currentG goal heuristicFunc state => edges match
   | []              => state
   | [edge, ...tail] => {
     nextState = expandNeighbor current currentG goal heuristicFunc state edge
@@ -81,7 +81,7 @@ expandNeighbors = edges current currentG goal heuristicFunc state => edges ?
   }
 
 // Main search loop
-search = state graph goal heuristicFunc => popMin3 state.queue ?
+search = state graph goal heuristicFunc => popMin3 state.queue match
   | None                                => None
   | Some ((_, current, currentG), rest) =>
     if current == goal then
@@ -114,7 +114,7 @@ buildGraph = fromWeightedEdges [
 ]
 
 @test
-astarSmoke = effect {
+astarSmoke = do Effect {
   graph  <- pure buildGraph
   result <- pure (astar graph 0 3 heuristic)
   assert (result == Some [0, 1, 2, 3])

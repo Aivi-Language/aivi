@@ -14,7 +14,7 @@ baseTags = ~set["base"]
 tags = ~set[...baseTags, "hot", "new"]
 
 @test
-structuredSigilsWork = effect {
+structuredSigilsWork = do Effect {
   assertEq (Map.size users) 2
   assert (Set.has "hot" tags)
 }

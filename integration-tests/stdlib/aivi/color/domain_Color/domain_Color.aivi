@@ -6,35 +6,35 @@ use aivi.testing
 use aivi.color
 
 @test
-suffix_h_smoke = effect {
+suffix_h_smoke = do Effect {
   rgb = { r: 20, g: 20, b: 20 }
   _adjusted = adjustHue rgb 1
   assert True
 }
 
 @test
-add_r_smoke = effect {
+add_r_smoke = do Effect {
   rgb = { r: 20, g: 20, b: 20 }
   adjusted = rgb + 10r
   assertEq adjusted.r 30
 }
 
 @test
-suffix_l_smoke = effect {
+suffix_l_smoke = do Effect {
   rgb = { r: 20, g: 20, b: 20 }
   _adjusted = adjustLightness rgb 1
   assert True
 }
 
 @test
-suffix_s_smoke = effect {
+suffix_s_smoke = do Effect {
   rgb = { r: 0, g: 50, b: 100 }
   _adjusted = adjustSaturation rgb 1
   assert True
 }
 
 @test
-rgb_channel_literals = effect {
+rgb_channel_literals = do Effect {
   rgb = { r: 20, g: 128, b: 20 }
   assert (rgb == { r: 20, g: 128, b: 20 })
 }

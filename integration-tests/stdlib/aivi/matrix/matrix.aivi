@@ -6,64 +6,64 @@ use aivi.testing
 use aivi.matrix
 
 @test
-mat2_smoke = effect {
+mat2_smoke = do Effect {
   m = identity2
   assert (m.m00 == 1.0)
 }
 
 @test
-mat3_smoke = effect {
+mat3_smoke = do Effect {
   m = identity3
   assert (m.m00 == 1.0)
 }
 
 @test
-mat4_smoke = effect {
+mat4_smoke = do Effect {
   m = identity4
   assert (m.m00 == 1.0)
 }
 
 @test
-scalar_smoke = effect {
+scalar_smoke = do Effect {
   s = 1.0
   assert (s == 1.0)
 }
 
 @test
-identity2_smoke = effect {
+identity2_smoke = do Effect {
   assert (identity2.m00 == 1.0)
   assert (identity2.m01 == 0.0)
 }
 
 @test
-identity3_smoke = effect {
+identity3_smoke = do Effect {
   assert (identity3.m00 == 1.0)
   assert (identity3.m22 == 1.0)
 }
 
 @test
-identity4_smoke = effect {
+identity4_smoke = do Effect {
   assert (identity4.m00 == 1.0)
   assert (identity4.m33 == 1.0)
 }
 
 @test
-multiply2_smoke = effect {
+multiply2_smoke = do Effect {
   assert (multiply2 identity2 identity2 == identity2)
 }
 
 @test
-multiply3_smoke = effect {
+multiply3_smoke = do Effect {
   assert (multiply3 identity3 identity3 == identity3)
 }
 
 @test
-multiply4_smoke = effect {
+multiply4_smoke = do Effect {
   assert (multiply4 identity4 identity4 == identity4)
 }
 
 @test
-transpose2_smoke = effect {
+transpose2_smoke = do Effect {
   m = { m00: 1.0, m01: 2.0, m10: 3.0, m11: 4.0 }
   t = transpose2 m
   assert (t.m01 == 3.0)
@@ -71,11 +71,11 @@ transpose2_smoke = effect {
 }
 
 @test
-transpose3_smoke = effect {
+transpose3_smoke = do Effect {
   assert (transpose3 identity3 == identity3)
 }
 
 @test
-transpose4_smoke = effect {
+transpose4_smoke = do Effect {
   assert (transpose4 identity4 == identity4)
 }

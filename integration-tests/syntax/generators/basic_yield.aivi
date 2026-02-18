@@ -12,6 +12,6 @@ gen = generate {
 }
 
 @test
-generatorsExist = effect {
+generatorsExist = do Effect {
   assert (toList gen == [1, 2, 3])
 }

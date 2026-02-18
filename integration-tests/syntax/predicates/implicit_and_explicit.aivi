@@ -4,7 +4,7 @@ module integrationTests.syntax.predicates.implicitAndExplicit
 use aivi
 use aivi.testing
 
-filter = pred xs => xs ?
+filter = pred xs => xs match
   | []           => []
   | [x, ...rest] =>
     if pred x then [x, ...(filter pred rest)] else filter pred rest
@@ -14,6 +14,6 @@ gt2 = values |> filter (_ > 2)
 expected = [3, 4, 5]
 
 @test
-predicatesWork = effect {
+predicatesWork = do Effect {
   assertEq gt2 expected
 }

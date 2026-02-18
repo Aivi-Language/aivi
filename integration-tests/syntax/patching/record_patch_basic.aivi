@@ -8,6 +8,6 @@ user = { name: "A", age: 30 }
 older = user <| { age: _ + 1 }
 
 @test
-patchingWorks = effect {
+patchingWorks = do Effect {
   assertEq older.age 31
 }

@@ -5,12 +5,12 @@ use aivi
 use aivi.testing
 use aivi.tree
 
-len = xs => xs ?
+len = xs => xs match
   | []           => 0
   | [_, ...rest] => 1 + len rest
 
 @test
-traversals = effect {
+traversals = do Effect {
   t = node 1 [leaf 2, node 3 [leaf 4, leaf 5], leaf 6]
   assertEq (len (dfsPreorder t)) 6
   assertEq (len (dfsPostorder t)) 6
@@ -18,7 +18,7 @@ traversals = effect {
 }
 
 @test
-fromListByBuildsExpectedShape = effect {
+fromListByBuildsExpectedShape = do Effect {
   idFn = x => x
   parentIdFn = x =>
     if x == 1 then None
@@ -29,7 +29,7 @@ fromListByBuildsExpectedShape = effect {
     else if x == 5 then Some 3
     else None
 
-  t2 = (fromListBy idFn parentIdFn [1, 2, 3, 4, 5, 6]) ?
+  t2 = (fromListBy idFn parentIdFn [1, 2, 3, 4, 5, 6]) match
     | None   => leaf 0
     | Some t => t
 
@@ -39,7 +39,7 @@ fromListByBuildsExpectedShape = effect {
 }
 
 @test
-fromListByRejectsMultipleRoots = effect {
+fromListByRejectsMultipleRoots = do Effect {
   idFn = x => x
   parentIdFn = _ => None
   assertEq (fromListBy idFn parentIdFn [1, 2]) None

@@ -8,17 +8,17 @@ use aivi.collections
 // Fenwick tree (Binary Indexed Tree) for efficient prefix sums
 Fenwick = { size: Int, tree: Map Int Int }
 
-listLength = xs => xs ?
+listLength = xs => xs match
   | []        => 0
   | [_, ...t] => 1 + listLength t
 
-at = xs idx => xs ?
+at = xs idx => xs match
   | []        => None
   | [h, ...t] => if idx == 0 then Some h else at t (idx - 1)
 
 // Extract lowest set bit
 lowbit : Int -> Int
-lowbit = idx => idx ?
+lowbit = idx => idx match
   | _ when idx % 2 == 1 => 1
   | _                   => 2 * lowbit (idx / 2)
 
@@ -42,7 +42,7 @@ buildTree = arr size idx tree => {
   if idx > size then
     tree
   else
-    at arr (idx - 1) ?
+    at arr (idx - 1) match
       | None       => buildTree arr size (idx + 1) tree
       | Some value => buildTree arr size (idx + 1) (addDelta size idx value tree)
 }
@@ -78,24 +78,24 @@ update = fenwick idx value =>
 
 // Naive sum for verification
 naiveSum : List Int -> Int -> Int -> Int
-naiveSum = arr l r => arr ?
+naiveSum = arr l r => arr match
   | []                              => 0
   | [h, ...t] when l <= 1 && r >= 1 => h + naiveSum t (l - 1) (r - 1)
   | [_, ...t]                       => naiveSum t (l - 1) (r - 1)
 
 // Verify indices match naive implementation
-verifyIndices = indices fen arr => indices ?
+verifyIndices = indices fen arr => indices match
   | []        => True
   | [h, ...t] => {
     expected = naiveSum arr h h
-    matches = rangeSum fen h h ?
+    matches = rangeSum fen h h match
       | Some got => got == expected
       | None     => False
     matches && verifyIndices t fen arr
   }
 
 @test
-behaviors = effect {
+behaviors = do Effect {
   values = [3, 1, 4, 1, 5]
   fenwick = buildFromList values
 

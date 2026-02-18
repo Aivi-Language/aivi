@@ -15,7 +15,7 @@ spanMinusDelta = { millis: 1000 } - (1s)
 spanPlusSpan = { millis: 1000 } + { millis: 2000 }
 
 @test
-domainOperatorsResolve = effect {
+domainOperatorsResolve = do Effect {
   assertEq spanPlusDelta.millis 1000
   assertEq spanMinusDelta.millis 0
   assertEq spanPlusSpan.millis 3000

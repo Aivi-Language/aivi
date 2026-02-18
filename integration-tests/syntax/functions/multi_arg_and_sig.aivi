@@ -13,7 +13,7 @@ applyTwice = f x => f (f x)
 inc = n => n + 1
 
 @test
-functionsWork = effect {
+functionsWork = do Effect {
   assertEq (add 2 3) 5
   assertEq (applyTwice inc 1) 3
 }

@@ -10,7 +10,7 @@ upper = toUpper
 qualifiedLen = text.length
 
 @test
-importsWork = effect {
+importsWork = do Effect {
   assertEq (len "abc") 3
   assertEq (upper "ab") "AB"
   assertEq (qualifiedLen "abcd") 4

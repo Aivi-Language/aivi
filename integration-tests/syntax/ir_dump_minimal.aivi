@@ -7,11 +7,11 @@ use aivi.testing
 value = 1 + 2
 pair = (value, "ok")
 
-map = f xs => xs ?
+map = f xs => xs match
   | []           => []
   | [x, ...rest] => [f x, ...(map f rest)]
 
-maybeInc = opt => opt ?
+maybeInc = opt => opt match
   | Some n => n + 1
   | None   => 0
 
@@ -21,7 +21,7 @@ result =
 expected = [2, 0, 42]
 
 @test
-irDumpMinimalRuns = effect {
+irDumpMinimalRuns = do Effect {
   assertEq value 3
   assertEq pair (3, "ok")
   assertEq (maybeInc (Some 1)) 2

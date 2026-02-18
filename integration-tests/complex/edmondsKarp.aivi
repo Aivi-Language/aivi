@@ -21,15 +21,15 @@ Residual = {
 // Get capacity or 0 from map
 getOrZero = key map => Map.getOrElse key 0.0 map
 
-append = xs ys => xs ?
+append = xs ys => xs match
   | []        => ys
   | [h, ...t] => [h, ...append t ys]
 
-backwardEdges = _ ?
+backwardEdges = _ match
   | []           => []
   | [e, ...rest] => [{ from: e.to, to: e.from, cap: 0.0 }, ...backwardEdges rest]
 
-edgePairs = _ ?
+edgePairs = _ match
   | []           => []
   | [e, ...rest] => [(e.from, e.to), ...edgePairs rest]
 
@@ -46,7 +46,7 @@ buildResidual = edges => {
   { graph: graph, capacities: insertCaps allEdges Map.empty }
 }
 
-insertCaps = items caps => items ?
+insertCaps = items caps => items match
   | []           => caps
   | [e, ...rest] => insertCaps rest (Map.insert { from: e.from, to: e.to } e.cap caps)
 
@@ -54,7 +54,7 @@ insertCaps = items caps => items ?
 bfs = residual source sink =>
   bfsVisit residual sink (Queue.enqueue source Queue.empty) (Set.insert source Set.empty) Map.empty
 
-bfsVisit = residual sink q visited parents => (Queue.dequeue q) ?
+bfsVisit = residual sink q visited parents => (Queue.dequeue q) match
   | None               => None
   | Some (current, q2) =>
     if current == sink then
@@ -65,7 +65,7 @@ bfsVisit = residual sink q visited parents => (Queue.dequeue q) ?
       bfsVisit residual sink q3 visited3 parents3
     }
 
-bfsExplore = residual current edges q visited parents => edges ?
+bfsExplore = residual current edges q visited parents => edges match
   | []              => (q, visited, parents)
   | [edge, ...tail] => {
     next = edge.to
@@ -82,7 +82,7 @@ reconstruct = parents sink source acc => {
   if sink == source then
     [source, ...acc]
   else
-    (Map.get sink parents) ?
+    (Map.get sink parents) match
       | Some prev => reconstruct parents prev source [sink, ...acc]
       | None      => []
 }
@@ -92,7 +92,7 @@ pathCapacity : Residual -> List Int -> Float
 pathCapacity = residual path => pathCapacityGo residual path
 
 pathCapacityGo : Residual -> List Int -> Float
-pathCapacityGo = residual path => path ?
+pathCapacityGo = residual path => path match
   | []              => 0.0
   | [_]             => bigCap
   | [a, b, ...rest] => {
@@ -106,7 +106,7 @@ updatePath = residual path delta => {
   residual <| { capacities: updatePathGo delta path residual.capacities }
 }
 
-updatePathGo = delta nodes caps => nodes ?
+updatePathGo = delta nodes caps => nodes match
   | []              => caps
   | [_]             => caps
   | [a, b, ...rest] => updatePathGo delta [b, ...rest] (updatePathApply delta a b caps)
@@ -131,7 +131,7 @@ augment = residual source sink parents total => {
 maxFlow : List Edge -> Int -> Int -> (Float, Residual)
 maxFlow = edges source sink => maxFlowGo (buildResidual edges) source sink 0.0
 
-maxFlowGo = state source sink total => bfs state source sink ?
+maxFlowGo = state source sink total => bfs state source sink match
   | None         => (total, state)
   | Some parents => {
     (newTotal, updated) = augment state source sink parents total
@@ -139,7 +139,7 @@ maxFlowGo = state source sink total => bfs state source sink ?
   }
 
 @test
-maxFlowTest = effect {
+maxFlowTest = do Effect {
   edges = [
     { from: 0, to: 1, cap: 16.0 }
     { from: 0, to: 2, cap: 13.0 }

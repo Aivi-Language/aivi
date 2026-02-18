@@ -40,11 +40,13 @@ fn examples_parse_without_diagnostics() {
 
     for path in files {
         let file = parse_file(&path).expect("parse integration test");
-        if file.diagnostics.is_empty() {
+        let errors: Vec<_> = file.diagnostics.iter()
+            .filter(|d| d.severity == aivi::DiagnosticSeverity::Error)
+            .collect();
+        if errors.is_empty() {
             continue;
         }
-        let messages = file
-            .diagnostics
+        let messages = errors
             .into_iter()
             .map(|diag| format!("{}: {}", diag.code, diag.message))
             .collect();

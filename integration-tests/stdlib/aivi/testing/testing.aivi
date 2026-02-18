@@ -5,16 +5,16 @@ use aivi
 use aivi.testing
 
 @test
-assert_smoke = effect {
+assert_smoke = do Effect {
   assert True
 }
 
 @test
-assertEq_smoke = effect {
+assertEq_smoke = do Effect {
   assertEq (1 + 1) 2
 }
 
 @test
-assert_eq_smoke = effect {
+assert_eq_smoke = do Effect {
   assert_eq (1 + 1) 2
 }

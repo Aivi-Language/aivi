@@ -34,7 +34,7 @@ apply: always
 | Char | `'a'` |
 | ISO instant | `2024-05-21T12:00:00Z` |
 | Suffixed number | `10px`, `30s`, `100%` (domain-resolved) |
-| Keywords | `as class do domain effect else export generate hiding if instance module or over patch recurse resource then use when with yield loop` |
+| Keywords | `as class do domain effect else export generate given hiding if instance machine match module on or over patch recurse resource then use when with yield loop` |
 
 `True`, `False`, `None`, `Some`, `Ok`, `Err` are constructors, not keywords.
 
@@ -55,7 +55,7 @@ add = a b => a + b
 { name, age } = user             // record destructuring
 (a, b) = pair                    // tuple destructuring
 [h, ...t] = list                 // list head/tail (must be total)
-user@{ name } = getUser          // whole-value + destructure
+user as { name } = getUser       // whole-value + destructure
 ```
 
 ### Record pattern operators
@@ -63,11 +63,11 @@ user@{ name } = getUser          // whole-value + destructure
 | Syntax | `field` in scope? | Inner bindings? | Purpose |
 | :--- | :---: | :---: | :--- |
 | `{ field: pat }` | no (renamed) | yes | Match / rename a field |
-| `{ field@{ pat } }` | yes | yes | Keep whole field + destructure |
+| `{ field as { pat } }` | yes | yes | Keep whole field + destructure |
 | `{ field.{ pat } }` | no | yes | Destructure only, discard field |
 | `{ field }` | yes | — | Shorthand, binds field by name |
 
-Deep path destructuring: `{ data.user.profile@{ name } }` reaches nested fields directly.
+Deep path destructuring: `{ data.user.profile as { name } }` reaches nested fields directly.
 
 ### Shadowing
 
@@ -121,17 +121,6 @@ filter (_ > 0) (map inc xs)
 
 Rules: `x |> f` = `f x`; `x |> f a b` = `f a b x`.
 
-### Deconstructor heads (`!`)
-
-Mark parameter binders with `!` to use them as the implicit pipe/match subject:
-
-```aivi
-f = { name! } |> toUpper       // desugars to: { name } => name |> toUpper
-g = { tag! } ?                  // desugars to: { tag } => tag ?
-  | "A" => 1
-  | _   => 0
-```
-
 ### Multi-clause functions
 
 A unary function can be written as multiple match arms directly:
@@ -146,7 +135,7 @@ describe =
 For multi-argument matching, match on a tuple:
 
 ```aivi
-gcd = (a, b) => (a, b) ?
+gcd = (a, b) => (a, b) match
   | (x, 0) => x
   | (x, y) => gcd y (x % y)
 ```
@@ -161,12 +150,12 @@ users |> map .name
 
 ---
 
-## 5 Pattern Matching (`?`)
+## 5 Pattern Matching (`match`)
 
-`?` takes the expression **immediately to its left** and tests it against arms.
+`match` takes the expression **immediately to its left** and tests it against arms.
 
 ```aivi
-value ?
+value match
   | Ok x  => x
   | Err _ => 0
 ```
@@ -174,7 +163,7 @@ value ?
 Works with pipelines:
 
 ```aivi
-input |> parse |> validate ?
+input |> parse |> validate match
   | Ok x  => x
   | Err e => handle e
 ```
@@ -182,7 +171,7 @@ input |> parse |> validate ?
 ### Guards
 
 ```aivi
-classify = n => n ?
+classify = n => n match
   | _ when n > 0 => "positive"
   | _ when n < 0 => "negative"
   | _            => "zero"
@@ -191,23 +180,23 @@ classify = n => n ?
 ### Whole-value binding in patterns
 
 ```aivi
-response ?
-  | { data.user.profile@{ name } } => name
-  | { data.guest: True }           => "Guest"
-  | _                              => "Unknown"
+response match
+  | { data.user.profile as { name } } => name
+  | { data.guest: True }               => "Guest"
+  | _                                  => "Unknown"
 ```
 
 ### Nested constructor patterns
 
 ```aivi
-parse = expr => expr ?
+parse = expr => expr match
   | Add (Lit a) (Lit b) => Lit (a + b)
   | _                   => expr
 ```
 
 ### Exhaustiveness
 
-All `?` matches must be exhaustive. Non-exhaustive matches are compile errors. Use `_` as a catch-all.
+All `match` expressions must be exhaustive. Non-exhaustive matches are compile errors. Use `_` as a catch-all.
 
 ---
 
@@ -487,27 +476,31 @@ fibs = generate {
 | `bind` | `Effect E A -> (A -> Effect E B) -> Effect E B` | Sequence |
 | `attempt` | `Effect E A -> Effect F (Result E A)` | Catch error as `Result` |
 
-### `effect { ... }` blocks
+### `do Effect { ... }` blocks
 
 ```aivi
-main = effect {
+main = do Effect {
   cfg  <- load (file.read "config.json")   // <- runs effect
   name = cfg.appName                        // = is pure binding
   print "loaded { name }"
 }
 ```
 
-Rules inside `effect { ... }`:
+`do Monad { ... }` is the general form; `do Effect { ... }` is the most common usage.
+
+Rules inside `do Effect { ... }`:
 - `x <- eff` — run effect, bind result
 - `x = expr` — pure local binding (`expr` must NOT be `Effect`)
 - `x <- resource` — acquire a `Resource`, released on scope exit
+- `when cond <- eff` — conditional effect (runs `eff` only when `cond` is true)
+- `given cond or failExpr` — precondition guard (fails with `failExpr` if `cond` is false)
 - Final expression must be `Effect E A` (commonly `pure value`)
 - Statement expressions must be `Effect E Unit`; non-Unit results must be bound
 
 ### Error fallback with `or`
 
 ```aivi
-// Effect fallback (inside effect block after <-):
+// Effect fallback (inside do Effect block after <-):
 txt <- load (file.read path) or "(missing)"
 
 // With error pattern matching:
@@ -526,10 +519,10 @@ count = result or 0
 `if`/`then`/`else` is an expression. For multi-step branches, use nested `effect { ... }`:
 
 ```aivi
-process = input => effect {
+process = input => do Effect {
   validated <- validate input
   result <- if validated.needsReview then
-    effect {
+    do Effect {
       _ <- notifyReviewer validated
       pure (Pending validated)
     }
@@ -541,15 +534,87 @@ process = input => effect {
 ### Attempt (error recovery)
 
 ```aivi
-getUser = id => effect {
+getUser = id => do Effect {
   res <- attempt (api.fetchUser id)
-  res ?
+  res match
     | Ok user => pure user
     | Err _   => pure GuestUser
 }
 ```
 
 `attempt` catches errors of type `E`, producing `Result E A`. The outer effect has error type `F` (different from `E`).
+
+### Conditional effects (`when`)
+
+`when cond <- eff` runs `eff` only when `cond` is true. Otherwise the block continues with `Unit`.
+
+```aivi
+main = do Effect {
+  cfg <- loadConfig
+  when cfg.verbose <- print "verbose mode enabled"
+  when cfg.dryRun <- print "dry run — no side effects"
+  process cfg
+}
+```
+
+Desugars to: `_ <- if cond then eff else pure Unit`.
+
+### Precondition guards (`given`)
+
+`given cond or failExpr` asserts a condition. If `cond` is false, `failExpr` is evaluated (typically `fail`).
+
+```aivi
+withdraw = amount account => do Effect {
+  given amount > 0 or fail (InvalidAmount amount)
+  given account.balance >= amount or fail InsufficientFunds
+  updateBalance account (account.balance - amount)
+}
+```
+
+`given` also supports match arms on the condition's value:
+
+```aivi
+main = do Effect {
+  given validate input or
+    | InvalidField f => fail (BadRequest f)
+    | MissingField f => fail (BadRequest "missing: { f }")
+  process input
+}
+```
+
+Desugars to: `_ <- if cond then pure Unit else failExpr`.
+
+### State machines (`machine`)
+
+`machine` declares a state machine with typed states and transitions.
+
+```aivi
+machine Door = {
+  state Closed =
+    on Open => Opened
+  state Opened =
+    on Close => Closed
+    on Lock => Locked
+  state Locked =
+    on Unlock => Closed
+}
+```
+
+Each `state` defines possible `on Event => NextState` transitions. The compiler checks transition completeness and type safety.
+
+### Transition wiring (`on`)
+
+Inside `do Effect { ... }`, `on Event => handler` wires event handlers for state machine transitions or UI events:
+
+```aivi
+main = do Effect {
+  on Click => do Effect {
+    count <- getState
+    setState (count + 1)
+  }
+  on KeyPress => handleKey
+}
+```
 
 ---
 
@@ -572,7 +637,7 @@ Rules: exactly one `yield`; code after `yield` is cleanup; cleanup may perform e
 ### Using
 
 ```aivi
-main = effect {
+main = do Effect {
   f <- managedFile "data.txt"       // acquired here
   content <- file.readAll f
   print content
@@ -597,7 +662,7 @@ use aivi.json (decode)
 User = { id: Int, name: Text }
 
 fetchUser : Int -> Effect HttpError User
-fetchUser = id => effect {
+fetchUser = id => do Effect {
   resp <- get (~u(https://api.example.com/users/{ id }))
   decode resp.body
 }
@@ -638,7 +703,7 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 
 ## 14 External Sources
 
-`Source K A` represents typed external data. Load with `load` inside `effect { ... }`.
+`Source K A` represents typed external data. Load with `load` inside `do Effect { ... }`.
 
 ```aivi
 cfg <- load (file.read "config.json")
@@ -719,13 +784,13 @@ use aivi.collections
 
 Graph = { nodes: List Int, adj: Map Int (List Int) }
 
-neighbors = node graph => Map.get node graph.adj ?
+neighbors = node graph => Map.get node graph.adj match
   | Some ns => ns
   | None    => []
 
 reverseList = xs => reverseGo xs []
 
-reverseGo = list acc => list ?
+reverseGo = list acc => list match
   | []        => acc
   | [h, ...t] => reverseGo t [h, ...acc]
 
@@ -735,7 +800,7 @@ buildIndegree = graph => {
   processNodes graph graph.nodes start
 }
 
-initIndegree = nodes acc => nodes ?
+initIndegree = nodes acc => nodes match
   | []        => acc
   | [n, ...t] => initIndegree t (Map.insert n 0 acc)
 
@@ -747,7 +812,7 @@ topologicalSort = graph => {
 }
 
 @test
-topoSmoke = effect {
+topoSmoke = do Effect {
   adj = ~map{
     0 => [1, 2]
     1 => [3]
@@ -770,19 +835,21 @@ topoSmoke = effect {
 | Transform a list | `xs \|> map f` |
 | Filter a list | `xs \|> filter (age > 18)` |
 | Find first match | `xs \|> find (name == "Alice")` |
-| Handle Option | `opt ? \| Some x => x \| None => default` |
-| Handle Result | `res ? \| Ok x => x \| Err e => handle e` |
+| Handle Option | `opt match \| Some x => x \| None => default` |
+| Handle Result | `res match \| Ok x => x \| Err e => handle e` |
 | Provide default for Option | `opt ?? default` |
-| Run fallback on effect error | `val <- riskyOp or default` |
-| Catch error as Result | `res <- attempt riskyOp` |
+| Run fallback on effect error | `val <- riskyOp or default` (inside `do Effect`) |
+| Catch error as Result | `res <- attempt riskyOp` (inside `do Effect`) |
+| Conditional effect | `when cond <- eff` (inside `do Effect`) |
+| Precondition guard | `given cond or failExpr` (inside `do Effect`) |
 | Update nested record | `state <\| { user.profile.name: "New" }` |
 | Transform nested field | `state <\| { items[*].price: _ * 1.1 }` |
 | Create map | `~map{ "key" => value }` |
 | Create set | `~set[1, 2, 3]` |
 | Build a sequence | `generate { x <- src; x -> pred; yield f x }` |
 | Infinite sequence | `generate { loop s = init => { yield s; recurse (next s) } }` |
-| State machine | `(state, event) ? \| (Idle, Start) => Running \| ...` |
-| Acquire resource | `handle <- managedFile "data.txt"` (inside `effect`) |
+| State machine | `machine Name = { state Idle = on Start => Running; ... }` |
+| Acquire resource | `handle <- managedFile "data.txt"` (inside `do Effect`) |
 | Write a test | `@test myTest = effect { assertEq (f 1) 2 }` |
 
 ---
@@ -799,7 +866,7 @@ topoSmoke = effect {
 | `for x in xs { ... }` | No loops | `xs \|> map f` or `generate { x <- xs; yield f x }` |
 | `while cond { ... }` | No loops | Recursion or `loop`/`recurse` in generators |
 | `x.method()` | No methods, no parens | `method x` or `x \|> method` |
-| `case x of ...` | `case` is kernel only | `x ? \| pat => expr` |
+| `case x of ...` | `case` is kernel only | `x match \| pat => expr` |
 | `String` | Type is called `Text` | `Text` |
 | `return x` | No return statement | Expression result is implicit; `pure x` in effects |
 | `{ x = 1 }` in records | `=` is binding, not record field | `{ x: 1 }` |

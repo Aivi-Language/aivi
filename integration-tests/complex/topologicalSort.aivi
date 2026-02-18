@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 use aivi.collections
 
-len = xs => xs ?
+len = xs => xs match
   | []           => 0
   | [_, ...rest] => 1 + len rest
 
@@ -13,17 +13,17 @@ len = xs => xs ?
 Graph = { nodes: List Int, adj: Map Int (List Int) }
 
 // Get neighbors of a node
-neighbors = node graph => Map.get node graph.adj ?
+neighbors = node graph => Map.get node graph.adj match
   | Some ns => ns
   | None    => []
 
 reverseList = xs => reverseGo xs []
 
-reverseGo = list acc => list ?
+reverseGo = list acc => list match
   | []        => acc
   | [h, ...t] => reverseGo t [h, ...acc]
 
-initIndegree = nodes acc => nodes ?
+initIndegree = nodes acc => nodes match
   | []        => acc
   | [n, ...t] => initIndegree t (Map.insert n 0 acc)
 
@@ -32,7 +32,7 @@ incIndegree = node indeg => {
   Map.insert node (cur + 1) indeg
 }
 
-addIncoming = ns indeg => ns ?
+addIncoming = ns indeg => ns match
   | []        => indeg
   | [n, ...t] => addIncoming t (incIndegree n indeg)
 
@@ -42,11 +42,11 @@ buildIndegree = graph => {
   buildIndegreeNodes graph graph.nodes start
 }
 
-buildIndegreeNodes = graph nodes indeg => nodes ?
+buildIndegreeNodes = graph nodes indeg => nodes match
   | []        => indeg
   | [u, ...t] => buildIndegreeNodes graph t (addIncoming (neighbors u graph) indeg)
 
-enqueueZero = nodes indeg q => nodes ?
+enqueueZero = nodes indeg q => nodes match
   | []        => q
   | [n, ...t] =>
     if Map.getOrElse n 0 indeg == 0 then
@@ -54,7 +54,7 @@ enqueueZero = nodes indeg q => nodes ?
     else
       enqueueZero t indeg q
 
-relax = ns indeg q => ns ?
+relax = ns indeg q => ns match
   | []        => { indeg: indeg, q: q }
   | [n, ...t] => {
     cur = Map.getOrElse n 0 indeg
@@ -64,7 +64,7 @@ relax = ns indeg q => ns ?
     relax t indeg2 q2
   }
 
-cycleNodes = nodes indeg acc => nodes ?
+cycleNodes = nodes indeg acc => nodes match
   | []        => reverseList acc
   | [n, ...t] =>
     if Map.getOrElse n 0 indeg > 0 then
@@ -72,7 +72,7 @@ cycleNodes = nodes indeg acc => nodes ?
     else
       cycleNodes t indeg acc
 
-sortLoop = graph indeg q outRev => (Queue.dequeue q) ?
+sortLoop = graph indeg q outRev => (Queue.dequeue q) match
   | None => {
     out = reverseList outRev
     if len out == len graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg [])
@@ -90,7 +90,7 @@ topologicalSort = graph => {
 }
 
 @test
-topoSmoke = effect {
+topoSmoke = do Effect {
   adj = ~map{
     0 => [1, 2]
     1 => [3]

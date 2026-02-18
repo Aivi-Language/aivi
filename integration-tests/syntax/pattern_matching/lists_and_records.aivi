@@ -4,16 +4,16 @@ module integrationTests.syntax.patternMatching.listsAndRecords
 use aivi
 use aivi.testing
 
-head = xs => xs ?
+head = xs => xs match
   | []           => None
   | [x, ...rest] => Some x
 
-getName = user => user ?
+getName = user => user match
   | { name } => Some name
   | _        => None
 
 @test
-patternsWork = effect {
+patternsWork = do Effect {
   assertEq (head([1, 2])) (Some 1)
   assertEq (head([])) None
   assertEq (getName { name: "A", age: 1 }) (Some "A")

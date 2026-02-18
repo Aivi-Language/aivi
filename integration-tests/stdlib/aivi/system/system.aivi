@@ -6,6 +6,6 @@ use aivi.testing
 use aivi.system
 
 @test
-smoke = effect {
+smoke = do Effect {
   assertEq (1 + 1) 2
 }
