@@ -3,7 +3,7 @@ use aivi.i18n
 
 props = "app.welcome = Hello, \\{name:Text\\}!\\napp.lastLogin = Last login: \\{when:DateTime\\}.\\n"
 
-main = effect {
+main = do Effect {
   locale =
     parseLocale "en-US"
     or { language: "en", region: Some "US", variants: [], tag: "en-US" }

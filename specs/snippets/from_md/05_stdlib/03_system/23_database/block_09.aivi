@@ -20,7 +20,7 @@ cfg = {
 }
 
 main : Effect Text (Result Pool.PoolError Int)
-main = effect {
+main = do Effect {
   poolRes <- Pool.create cfg
   poolRes match
   | Err e   => pure (Err e)

@@ -2,7 +2,7 @@
 config : Source Env Text
 config = env.get "API_URL"
 
-connect = effect {
+connect = do Effect {
   apiUrl <- load config
   // ... use apiUrl
 }

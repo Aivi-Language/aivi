@@ -2,7 +2,7 @@ use aivi.file as file
 use aivi.i18n
 
 loadBundleWithResource : Locale -> Text -> Effect Text Bundle
-loadBundleWithResource = locale path => effect {
+loadBundleWithResource = locale path => do Effect {
   h      <- file.open path
   txtRes <- file.readAll h
 

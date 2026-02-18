@@ -1,4 +1,4 @@
-# Effects: `effect` block
+# Effects: `do Effect` block
 
 Kernel effect primitives:
 
@@ -6,41 +6,41 @@ Kernel effect primitives:
 * `bind : Effect E A -> (A -> Effect E B) -> Effect E B`
 * `fail : E -> Effect E A`
 
-## `effect { … }`
+## `do Effect { … }`
 
-`effect` is the same pattern but over `Effect` with `bind/pure`:
+`do Effect` is the same pattern but over `Effect` with `bind/pure`:
 
 - Bind:
 
 <<< ../snippets/from_md/04_desugaring/07_effects/block_01.aivi{aivi}
 
-  desugars to `bind ⟦e⟧ (λx. ⟦effect { body }⟧)`.
+  desugars to `bind ⟦e⟧ (λx. ⟦do Effect { body }⟧)`.
 
 - Pure let-binding:
 
 <<< ../snippets/from_md/04_desugaring/07_effects/block_02.aivi{aivi}
 
-  desugars to `let x = ⟦e⟧ in ⟦effect { body }⟧`.
+  desugars to `let x = ⟦e⟧ in ⟦do Effect { body }⟧`.
 
 - Sequencing an `Effect E Unit` expression:
 
 <<< ../snippets/from_md/04_desugaring/07_effects/block_03.aivi{aivi}
 
-  desugars to `bind ⟦e⟧ (λ_. ⟦effect { body }⟧)` (if `e : Effect E Unit`).
+  desugars to `bind ⟦e⟧ (λ_. ⟦do Effect { body }⟧)` (if `e : Effect E Unit`).
 
 - Final expression:
 
-  `effect { e }` desugars to `⟦e⟧` (the final expression must already be an `Effect`).
+  `do Effect { e }` desugars to `⟦e⟧` (the final expression must already be an `Effect`).
 
 - Empty block:
 
-  `effect { }` desugars to `pure Unit`.
+  `do Effect { }` desugars to `pure Unit`.
 
 - No final expression:
 
 <<< ../snippets/from_md/04_desugaring/07_effects/block_04.aivi{aivi}
 
-  desugars to `⟦effect { s1 ... sn pure Unit }⟧` (i.e. insert `pure Unit` as the final expression).
+  desugars to `⟦do Effect { s1 ... sn pure Unit }⟧` (i.e. insert `pure Unit` as the final expression).
 
 If you want to return a pure value from an effect block, write `pure value` as the final expression.
 
@@ -54,7 +54,7 @@ If the surface allows `print` etc as effectful calls, those are already `Effect`
 
   `res or rhs` desugars to a match on `res` with an implicit `Ok` passthrough arm.
 
-- Effect fallback (only after `<-` inside `effect {}`):
+- Effect fallback (only after `<-` inside `do Effect {}`):
 
   `x <- eff or rhs` desugars by inserting `attempt` and matching on `Result`:
 
@@ -62,4 +62,4 @@ If the surface allows `print` etc as effectful calls, those are already `Effect`
 
 Implementation note (v0.1 parser):
 
-- In `effect { ... }`, a fallback written as `x <- eff or | Err ... => ...` is treated as **Result** fallback syntax to avoid confusion with effect-fallback arms (which match the raw error `E`).
+- In `do Effect { ... }`, a fallback written as `x <- eff or | Err ... => ...` is treated as **Result** fallback syntax to avoid confusion with effect-fallback arms (which match the raw error `E`).

@@ -1,4 +1,4 @@
 migrate : Effect DbError Unit
-migrate = effect {
+migrate = do Effect {
   db.runMigrations[userTable]
 }

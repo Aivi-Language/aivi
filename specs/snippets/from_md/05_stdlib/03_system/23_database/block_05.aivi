@@ -1,5 +1,5 @@
 getUserById : Int -> Effect DbError (Option User)
-getUserById = id => effect {
+getUserById = id => do Effect {
   users <- db.load userTable
   pure = (users |> find (_.id => = id))
 }

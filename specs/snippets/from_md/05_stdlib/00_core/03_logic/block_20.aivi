@@ -1,5 +1,5 @@
 // Sugar
-val = effect {
+val = do Effect {
   x <- fetch
   y <- decode x
   pure y

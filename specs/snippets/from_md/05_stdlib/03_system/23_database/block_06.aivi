@@ -1,7 +1,7 @@
 UserWithPosts = { user: User, posts: List Post }
 
 getUsersWithPosts : Effect DbError (List UserWithPosts)
-getUsersWithPosts = effect {
+getUsersWithPosts = do Effect {
   users <- db.load userTable
   posts <- db.load postTable
   pure (

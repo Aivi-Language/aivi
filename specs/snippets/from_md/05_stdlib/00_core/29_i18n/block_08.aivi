@@ -1,7 +1,7 @@
 use aivi.i18n
 
 loadBundle : Locale -> Text -> Effect Text Bundle
-loadBundle = locale path => effect {
+loadBundle = locale path => do Effect {
   res <- bundleFromPropertiesFile locale path
   res match
   | Ok b  => pure b

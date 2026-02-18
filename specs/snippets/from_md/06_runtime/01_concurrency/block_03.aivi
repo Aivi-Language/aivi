@@ -1,4 +1,4 @@
-effect {
+do Effect {
   (tx, rx) <- channel.make ()
 
   // Sending

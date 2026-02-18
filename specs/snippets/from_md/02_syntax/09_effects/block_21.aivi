@@ -1,7 +1,7 @@
 // Sequence with effect block
-transfer = fromAccount toAccount amount => effect {
+transfer = fromAccount toAccount amount => do Effect {
   balance <- getBalance fromAccount
-  if balance >= amount then effect {
+  if balance >= amount then do Effect {
     withdraw fromAccount amount
     deposit toAccount amount
   } else fail InsufficientFunds

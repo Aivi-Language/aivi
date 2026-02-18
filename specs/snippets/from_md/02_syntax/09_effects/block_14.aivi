@@ -1,6 +1,6 @@
-main = effect {
+main = do Effect {
   u     <- loadUser
-  token <- if u.isAdmin then effect {
+  token <- if u.isAdmin then do Effect {
     log "admin login"
     token <- mintToken u
     pure token

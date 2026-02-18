@@ -110,6 +110,6 @@ A `Group` provides an `invert` operation.
 
 ### `Effect` sequencing is `chain`/`bind`
 
-`effect { ... }` is surface syntax for repeated sequencing (see [Effects](../../02_syntax/09_effects.md)):
+`do Effect { ... }` is surface syntax for repeated sequencing (see [Effects](../../02_syntax/09_effects.md)):
 
 <<< ../../snippets/from_md/05_stdlib/00_core/03_logic/block_20.aivi{aivi}

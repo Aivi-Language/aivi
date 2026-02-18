@@ -1,4 +1,4 @@
-effect {
+do Effect {
   s1
   ...
   sn
