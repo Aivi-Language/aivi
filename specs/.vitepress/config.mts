@@ -198,7 +198,6 @@ export default defineConfig({
               { text: 'VDOM', link: '/05_stdlib/04_ui/02_vdom' },
               { text: 'HTML Sigil', link: '/05_stdlib/04_ui/03_html' },
               { text: 'Color', link: '/05_stdlib/04_ui/04_color' },
-              { text: 'LiveView', link: '/05_stdlib/04_ui/05_liveview' },
               { text: 'ServerHtml', link: '/05_stdlib/04_ui/06_server_html' },
             ]
           }
