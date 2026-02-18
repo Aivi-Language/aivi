@@ -293,7 +293,7 @@ AIVI's canonical text type is `Text`. These files use `String`:
 - `29_i18n.md` block_09: duplicate `| Err e => fail e` (copy-paste bug)
 - `01_math.md`: broken table formatting in `divmod`/`modPow` rows (extra `|` chars)
 - `01_math.md`: angles section uses 4 separate single-row tables instead of one grouped table
-- `04_ui/02_vdom.md`, `03_html.md`, `05_liveview.md`: use 4-backtick fences inconsistently
+- `04_ui/02_vdom.md`, `03_html.md`: use 4-backtick fences inconsistently
 - `03_logic.md`: snippet references out of order (block_18, block_21, block_19, block_20)
 - `04_color.md`: `negateDelta` referenced but never defined (also Calendar, Duration domains)
 
@@ -335,9 +335,9 @@ AIVI's canonical text type is `Text`. These files use `String`:
 
 `aivi.toml` uses `entry = "main.aivi"` but `Cargo.toml`'s `[package.metadata.aivi]` uses `entry = "src/main.aivi"`. The difference is never explained.
 
-### 6.8 Medium: LiveView event format contradictions
+### 6.8 ~~Medium: LiveView event format contradictions~~ RESOLVED
 
-`05_liveview.md`: `{"t":"click","id":123}` vs `06_server_html.md`: `{"t":"event","hid":123,"kind":"click"}` — incompatible formats for the same protocol.
+`05_liveview.md` has been retired and now redirects to `06_server_html.md`. The unified event format is `{"t":"event","hid":123,"kind":"click","p":{...}}`.
 
 ### 6.9 Low: Terminology
 

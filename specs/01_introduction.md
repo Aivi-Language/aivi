@@ -62,7 +62,7 @@ By eliminating `null`, exceptions, and mutable state, AIVI ensures that if a pro
 
 ### Universal Portability (WASM & WASI)
 AIVI is built from the ground up to target **WebAssembly (WASM)**. 
-- **Browser**: High-performance client-side logic and Aivi LiveView-like frontends.
+- **Browser**: High-performance client-side logic and server-driven UI frontends via `aivi.ui.ServerHtml`.
 - **Server/Edge**: Using **WASI** (WebAssembly System Interface), AIVI runs in highly isolated, secure sandboxes across cloud and edge infrastructure with near-native speed and instant startup.
 - **Security**: The WASM capability-based security model naturally complements AIVI's explicit effect tracking.
 

@@ -1,59 +1,64 @@
-# LiveView-Style Server-Driven UI
+# Server-Driven UI (Concept)
 
-<!-- quick-info: {"kind":"module","name":"aivi.ui"} -->
-LiveView-style server-driven UI in v0.1 is provided by `aivi.ui.ServerHtml`:
+> **Retired.** The `aivi.ui.live` concept has been fully absorbed into
+> [`aivi.ui.ServerHtml`](06_server_html.md).
+> See that page for the complete API, wire protocol, typed event payloads,
+> browser client, and usage examples.
 
-- server renders initial HTML from `VNode msg`
-- browser forwards delegated DOM/platform events over WebSocket
-- server updates the model and streams DOM patch ops
+## Summary
 
-<!-- /quick-info -->
+Server-driven UI in AIVI v0.1 is provided exclusively by `aivi.ui.ServerHtml`:
 
-Note: older docs referenced a minimal `aivi.ui.live`. That API has been removed; use `aivi.ui.ServerHtml.serve` instead.
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_liveview/block_01.aivi{aivi}
+- The server renders initial HTML from `VNode msg`.
+- The browser forwards delegated DOM and platform events over WebSocket.
+- The server updates the model, diffs the VDOM, and streams patch ops.
 
-## API Shape
+## Example
 
 ```aivi
-serve
-  : aivi.net.httpServer.ServerConfig
-  -> List (aivi.ui.ServerHtml.Route model msg)
-  -> Resource aivi.net.httpServer.HttpError aivi.net.httpServer.Server
+use aivi.ui
+use aivi.ui.layout
+use aivi.net.httpServer
+use aivi.ui.ServerHtml
+
+Model = { count: Int }
+Msg = Inc | Dec
+
+view = model =>
+  ~<html>
+    <div style={ { width: 240px } }>
+      <button onClick={ Dec }>-</button>
+      <span>{ model.count }</span>
+      <button onClick={ Inc }>+</button>
+    </div>
+  </html>
+
+update = msg model => msg ?
+  | Inc => (model <| { count: _ + 1 }, [])
+  | Dec => (model <| { count: _ - 1 }, [])
+
+app : App Model Msg
+app =
+  { init: _ => { count: 0 }
+    update: update
+    view: view
+    onPlatform: _ => None
+  }
 ```
 
-## Protocol (Browser <-> Server)
+## Protocol
 
-### Stable node ids
+See [ServerHtml § WebSocket Protocol](06_server_html.md#websocket-protocol-json)
+for the full wire format. Key points:
 
-The HTML renderer attaches a stable node id to every rendered node:
-
-- `data-aivi-node="root/..."` (string ids derived from tree position and keys)
-
-### Patch messages (server -> browser)
-
-The server sends JSON messages shaped like:
-
-```json
-{"t":"patch","ops":[ ... ]}
-```
-
-Where each op is one of:
-
-- `{"op":"replace","id":"...","html":"<div ...>...</div>"}`
-- `{"op":"setText","id":"...","text":"..."}`
-- `{"op":"setAttr","id":"...","name":"class","value":"..."}`
-- `{"op":"removeAttr","id":"...","name":"class"}`
-
-### Event messages (browser -> server)
-
-The embedded client delegates events and sends JSON using the unified event format (see [Server HTML Protocol](06_server_html.md)):
-
-- click: `{"t":"event","viewId":"<uuid>","hid":123,"kind":"click","p":{}}`
-- input: `{"t":"event","viewId":"<uuid>","hid":123,"kind":"input","p":{"value":"..."}}`
-
-The `hid` identifies the handler attached by the server for that node. `kind` specifies the event type and `p` carries any event-specific payload.
+- Stable node ids: `data-aivi-node="<id>"` (depth-first index).
+- Handler ids: `data-aivi-hid-click="42"` etc.
+- Patch ops: `replace`, `setText`, `setAttr`, `removeAttr`.
+- Client→Server: `hello`, `event`, `platform`, `effectResult`.
+- Server→Client: `patch`, `subscribeIntersect`, `unsubscribeIntersect`, `effectReq`, `error`.
 
 ## Limitations (v0.1)
 
-- Diffing is conservative: when structure or keyed child segments change, the runtime may emit a subtree `replace`.
-- Keyed reorders are represented as `replace` rather than a dedicated "move" op.
+- Diffing is conservative: structural changes may emit subtree `replace`.
+- Keyed reorders are represented as `replace` rather than a "move" op.
+- Reconnection creates a new view (no state resume).
