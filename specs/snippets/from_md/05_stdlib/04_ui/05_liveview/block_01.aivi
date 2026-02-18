@@ -15,20 +15,14 @@ view = model =>
     </div>
   </html>
 
-update = msg => model => msg ?
-  | Inc => model <| { count: _ + 1 }
-  | Dec => model <| { count: _ - 1 }
+update = msg model => msg ?
+  | Inc => (model <| { count: _ + 1 }, [])
+  | Dec => (model <| { count: _ - 1 }, [])
 
-app : ServerHtmlApp Model Msg
+app : App Model Msg
 app =
   { init: _ => { count: 0 }
-    update: msg model => (update msg model, [])
+    update: update
     view: view
     onPlatform: _ => None
   }
-
-main : Resource httpServer.HttpError httpServer.Server
-main =
-  ServerHtml.serve
-  { address: "127.0.0.1:3000" }
-  [{ path: "/", app: app }]
