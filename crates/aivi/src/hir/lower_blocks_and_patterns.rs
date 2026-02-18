@@ -13,7 +13,7 @@ fn lower_block_item_ctx(
         },
         BlockItem::Let { pattern, expr, .. } => {
             let lowered_expr = lower_expr_ctx(expr, id_gen, ctx, false);
-            let expr = if matches!(surface_kind, BlockKind::Effect)
+            let expr = if matches!(surface_kind, BlockKind::Do { .. })
                 && matches!(hir_kind, HirBlockKind::Effect)
             {
                 // `name = expr` inside `effect { ... }` is a pure let-binding and must not
@@ -45,6 +45,60 @@ fn lower_block_item_ctx(
         },
         BlockItem::Expr { expr, .. } => HirBlockItem::Expr {
             expr: lower_expr_ctx(expr, id_gen, ctx, false),
+        },
+        // Desugar `when cond <- eff` → `_ <- if cond then eff else pure Unit`
+        BlockItem::When { cond, effect, .. } => {
+            let cond_hir = lower_expr_ctx(cond, id_gen, ctx, false);
+            let eff_hir = lower_expr_ctx(effect, id_gen, ctx, false);
+            let pure_unit = HirExpr::Call {
+                id: id_gen.next(),
+                func: Box::new(HirExpr::Var {
+                    id: id_gen.next(),
+                    name: "pure".to_string(),
+                }),
+                args: vec![HirExpr::Var {
+                    id: id_gen.next(),
+                    name: "Unit".to_string(),
+                }],
+            };
+            HirBlockItem::Bind {
+                pattern: HirPattern::Wildcard { id: id_gen.next() },
+                expr: HirExpr::If {
+                    id: id_gen.next(),
+                    cond: Box::new(cond_hir),
+                    then_branch: Box::new(eff_hir),
+                    else_branch: Box::new(pure_unit),
+                },
+            }
+        }
+        // Desugar `given cond or failExpr` → `_ <- if cond then pure Unit else failExpr`
+        BlockItem::Given { cond, fail_expr, .. } => {
+            let cond_hir = lower_expr_ctx(cond, id_gen, ctx, false);
+            let fail_hir = lower_expr_ctx(fail_expr, id_gen, ctx, false);
+            let pure_unit = HirExpr::Call {
+                id: id_gen.next(),
+                func: Box::new(HirExpr::Var {
+                    id: id_gen.next(),
+                    name: "pure".to_string(),
+                }),
+                args: vec![HirExpr::Var {
+                    id: id_gen.next(),
+                    name: "Unit".to_string(),
+                }],
+            };
+            HirBlockItem::Bind {
+                pattern: HirPattern::Wildcard { id: id_gen.next() },
+                expr: HirExpr::If {
+                    id: id_gen.next(),
+                    cond: Box::new(cond_hir),
+                    then_branch: Box::new(pure_unit),
+                    else_branch: Box::new(fail_hir),
+                },
+            }
+        }
+        // `on transition => handler` — lower as expression statement for now
+        BlockItem::On { handler, .. } => HirBlockItem::Expr {
+            expr: lower_expr_ctx(handler, id_gen, ctx, false),
         },
     }
 }
@@ -182,6 +236,15 @@ fn contains_placeholder(expr: &Expr) -> bool {
             | BlockItem::Yield { expr, .. }
             | BlockItem::Recurse { expr, .. }
             | BlockItem::Expr { expr, .. } => contains_placeholder(expr),
+            BlockItem::When { cond, effect, .. } => {
+                contains_placeholder(cond) || contains_placeholder(effect)
+            }
+            BlockItem::Given { cond, fail_expr, .. } => {
+                contains_placeholder(cond) || contains_placeholder(fail_expr)
+            }
+            BlockItem::On { transition, handler, .. } => {
+                contains_placeholder(transition) || contains_placeholder(handler)
+            }
         }),
         Expr::Raw { .. } => false,
     }
@@ -390,6 +453,21 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
                     },
                     BlockItem::Expr { expr, span } => BlockItem::Expr {
                         expr: desugar_placeholder_lambdas(expr),
+                        span,
+                    },
+                    BlockItem::When { cond, effect, span } => BlockItem::When {
+                        cond: desugar_placeholder_lambdas(cond),
+                        effect: desugar_placeholder_lambdas(effect),
+                        span,
+                    },
+                    BlockItem::Given { cond, fail_expr, span } => BlockItem::Given {
+                        cond: desugar_placeholder_lambdas(cond),
+                        fail_expr: desugar_placeholder_lambdas(fail_expr),
+                        span,
+                    },
+                    BlockItem::On { transition, handler, span } => BlockItem::On {
+                        transition: desugar_placeholder_lambdas(transition),
+                        handler: desugar_placeholder_lambdas(handler),
                         span,
                     },
                 })
@@ -669,6 +747,21 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                     },
                     BlockItem::Expr { expr, span } => BlockItem::Expr {
                         expr: replace_holes_inner(expr, counter, params),
+                        span,
+                    },
+                    BlockItem::When { cond, effect, span } => BlockItem::When {
+                        cond: replace_holes_inner(cond, counter, params),
+                        effect: replace_holes_inner(effect, counter, params),
+                        span,
+                    },
+                    BlockItem::Given { cond, fail_expr, span } => BlockItem::Given {
+                        cond: replace_holes_inner(cond, counter, params),
+                        fail_expr: replace_holes_inner(fail_expr, counter, params),
+                        span,
+                    },
+                    BlockItem::On { transition, handler, span } => BlockItem::On {
+                        transition: replace_holes_inner(transition, counter, params),
+                        handler: replace_holes_inner(handler, counter, params),
                         span,
                     },
                 })

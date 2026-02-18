@@ -116,6 +116,18 @@ impl Backend {
                 | aivi::BlockItem::Expr { expr, .. } => {
                     Self::find_record_field_name_at_position(expr, position)
                 }
+                aivi::BlockItem::When { cond, effect, .. } => {
+                    Self::find_record_field_name_at_position(cond, position)
+                        .or_else(|| Self::find_record_field_name_at_position(effect, position))
+                }
+                aivi::BlockItem::Given { cond, fail_expr, .. } => {
+                    Self::find_record_field_name_at_position(cond, position)
+                        .or_else(|| Self::find_record_field_name_at_position(fail_expr, position))
+                }
+                aivi::BlockItem::On { transition, handler, .. } => {
+                    Self::find_record_field_name_at_position(transition, position)
+                        .or_else(|| Self::find_record_field_name_at_position(handler, position))
+                }
             }),
         }
     }

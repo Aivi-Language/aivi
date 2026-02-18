@@ -1,17 +1,17 @@
 pub const KEYWORDS_CONTROL: &[&str] = &[
     "do", "effect", "generate", "resource", "if", "then", "else", "when", "yield", "loop",
-    "recurse", "or",
+    "recurse", "or", "match", "given",
 ];
 
 pub const KEYWORDS_OTHER: &[&str] = &[
     "module", "export", "use", "as", "hiding", "domain", "class", "instance", "over", "patch",
-    "with",
+    "with", "machine", "on",
 ];
 
 pub const KEYWORDS_ALL: &[&str] = &[
     "do", "effect", "generate", "resource", "if", "then", "else", "when", "yield", "loop",
-    "recurse", "or", "module", "export", "use", "as", "hiding", "domain", "class", "instance",
-    "over", "patch", "with",
+    "recurse", "or", "match", "given", "module", "export", "use", "as", "hiding", "domain",
+    "class", "instance", "over", "patch", "with", "machine", "on",
 ];
 
 pub const BOOLEAN_LITERALS: &[&str] = &["True", "False"];

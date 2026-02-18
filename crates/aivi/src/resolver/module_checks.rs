@@ -279,6 +279,18 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                         | BlockItem::Yield { expr, .. }
                         | BlockItem::Recurse { expr, .. }
                         | BlockItem::Expr { expr, .. } => collect_expr(expr, out),
+                        BlockItem::When { cond, effect, .. } => {
+                            collect_expr(cond, out);
+                            collect_expr(effect, out);
+                        }
+                        BlockItem::Given { cond, fail_expr, .. } => {
+                            collect_expr(cond, out);
+                            collect_expr(fail_expr, out);
+                        }
+                        BlockItem::On { transition, handler, .. } => {
+                            collect_expr(transition, out);
+                            collect_expr(handler, out);
+                        }
                     }
                 }
             }
@@ -604,6 +616,7 @@ fn collect_value_defs(item: &ModuleItem, scope: &mut HashMap<String, Option<Stri
             }
         }
         ModuleItem::TypeSig(_) => {}
+        ModuleItem::MachineDecl(_) => {}
     }
 }
 

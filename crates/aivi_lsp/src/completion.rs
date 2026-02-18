@@ -171,6 +171,7 @@ impl Backend {
             ModuleItem::DomainDecl(domain_decl) => {
                 Some((domain_decl.name.name, CompletionItemKind::MODULE))
             }
+            ModuleItem::MachineDecl(_) => None,
         }
     }
 

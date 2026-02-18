@@ -125,6 +125,32 @@ pub struct DomainDecl {
     pub span: Span,
 }
 
+/// State machine declaration (Change 7)
+#[derive(Debug, Clone)]
+pub struct MachineDecl {
+    pub decorators: Vec<Decorator>,
+    pub name: SpannedName,
+    pub states: Vec<MachineState>,
+    pub transitions: Vec<MachineTransition>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct MachineState {
+    pub name: SpannedName,
+    pub fields: Vec<(SpannedName, TypeExpr)>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct MachineTransition {
+    pub source: SpannedName,
+    pub target: SpannedName,
+    pub name: SpannedName,
+    pub payload: Vec<(SpannedName, TypeExpr)>,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone)]
 pub enum DomainItem {
     TypeAlias(TypeDecl),
@@ -142,6 +168,7 @@ pub enum ModuleItem {
     ClassDecl(ClassDecl),
     InstanceDecl(InstanceDecl),
     DomainDecl(DomainDecl),
+    MachineDecl(MachineDecl),
 }
 
 #[derive(Debug, Clone)]
@@ -346,7 +373,7 @@ pub struct MatchArm {
 #[derive(Debug, Clone)]
 pub enum BlockKind {
     Plain,
-    Effect,
+    Do { monad: SpannedName },
     Generate,
     Resource,
 }
@@ -377,6 +404,24 @@ pub enum BlockItem {
     },
     Expr {
         expr: Expr,
+        span: Span,
+    },
+    /// `when cond <- eff` — conditional effect (Change 6)
+    When {
+        cond: Expr,
+        effect: Expr,
+        span: Span,
+    },
+    /// `given cond or failExpr` — precondition guard (Change 8)
+    Given {
+        cond: Expr,
+        fail_expr: Expr,
+        span: Span,
+    },
+    /// `on Transition => effect` — transition event wiring (Change 7)
+    On {
+        transition: Expr,
+        handler: Expr,
         span: Span,
     },
 }

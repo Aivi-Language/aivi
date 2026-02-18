@@ -363,6 +363,21 @@ fn expand_module_aliases(modules: &mut [Module]) {
                             expr: rewrite_expr(expr, aliases),
                             span,
                         },
+                        BlockItem::When { cond, effect, span } => BlockItem::When {
+                            cond: rewrite_expr(cond, aliases),
+                            effect: rewrite_expr(effect, aliases),
+                            span,
+                        },
+                        BlockItem::Given { cond, fail_expr, span } => BlockItem::Given {
+                            cond: rewrite_expr(cond, aliases),
+                            fail_expr: rewrite_expr(fail_expr, aliases),
+                            span,
+                        },
+                        BlockItem::On { transition, handler, span } => BlockItem::On {
+                            transition: rewrite_expr(transition, aliases),
+                            handler: rewrite_expr(handler, aliases),
+                            span,
+                        },
                     })
                     .collect(),
                 span,
@@ -444,6 +459,7 @@ fn expand_module_aliases(modules: &mut [Module]) {
                         .map(|super_expr| rewrite_type_expr(super_expr, &aliases))
                         .collect();
                 }
+                ModuleItem::MachineDecl(_) => {}
             }
         }
     }
@@ -591,7 +607,8 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                 ModuleItem::TypeSig(_)
                 | ModuleItem::TypeDecl(_)
                 | ModuleItem::TypeAlias(_)
-                | ModuleItem::ClassDecl(_) => {}
+                | ModuleItem::ClassDecl(_)
+                | ModuleItem::MachineDecl(_) => {}
             }
         }
     }

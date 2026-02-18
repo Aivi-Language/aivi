@@ -1052,7 +1052,7 @@ impl TypeChecker {
     ) -> Result<Type, TypeError> {
         match kind {
             BlockKind::Plain => self.infer_plain_block(items, env),
-            BlockKind::Effect => self.infer_effect_block(items, env),
+            BlockKind::Do { .. } => self.infer_effect_block(items, env),
             BlockKind::Generate => self.infer_generate_block(items, env),
             BlockKind::Resource => self.infer_resource_block(items, env),
         }
@@ -1082,6 +1082,17 @@ impl TypeChecker {
                 | BlockItem::Recurse { expr, .. }
                 | BlockItem::Expr { expr, .. } => {
                     last_ty = self.infer_expr(expr, &mut local_env)?;
+                }
+                BlockItem::When { cond, effect, .. } => {
+                    self.infer_expr(cond, &mut local_env)?;
+                    self.infer_expr(effect, &mut local_env)?;
+                }
+                BlockItem::Given { cond, fail_expr, .. } => {
+                    self.infer_expr(cond, &mut local_env)?;
+                    self.infer_expr(fail_expr, &mut local_env)?;
+                }
+                BlockItem::On { handler, .. } => {
+                    last_ty = self.infer_expr(handler, &mut local_env)?;
                 }
             }
         }

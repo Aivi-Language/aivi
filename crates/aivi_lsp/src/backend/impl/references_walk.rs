@@ -71,6 +71,18 @@ impl Backend {
             | BlockItem::Expr { expr, .. } => {
                 Self::collect_expr_references(expr, ident, text, uri, locations);
             }
+            BlockItem::When { cond, effect, .. } => {
+                Self::collect_expr_references(cond, ident, text, uri, locations);
+                Self::collect_expr_references(effect, ident, text, uri, locations);
+            }
+            BlockItem::Given { cond, fail_expr, .. } => {
+                Self::collect_expr_references(cond, ident, text, uri, locations);
+                Self::collect_expr_references(fail_expr, ident, text, uri, locations);
+            }
+            BlockItem::On { transition, handler, .. } => {
+                Self::collect_expr_references(transition, ident, text, uri, locations);
+                Self::collect_expr_references(handler, ident, text, uri, locations);
+            }
         }
     }
 
@@ -263,6 +275,7 @@ impl Backend {
                         }
                     }
                 }
+                ModuleItem::MachineDecl(_) => {}
                 ModuleItem::DomainDecl(domain_decl) => {
                     if domain_decl.name.name == ident {
                         return Some(Self::span_to_range(domain_decl.name.span.clone()));

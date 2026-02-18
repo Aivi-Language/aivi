@@ -264,6 +264,18 @@ fn check_expr(
                     | BlockItem::Expr { expr, .. } => {
                         check_expr(expr, &mut block_scope, diagnostics, module, allow_unknown);
                     }
+                    BlockItem::When { cond, effect, .. } => {
+                        check_expr(cond, &mut block_scope, diagnostics, module, allow_unknown);
+                        check_expr(effect, &mut block_scope, diagnostics, module, allow_unknown);
+                    }
+                    BlockItem::Given { cond, fail_expr, .. } => {
+                        check_expr(cond, &mut block_scope, diagnostics, module, allow_unknown);
+                        check_expr(fail_expr, &mut block_scope, diagnostics, module, allow_unknown);
+                    }
+                    BlockItem::On { transition, handler, .. } => {
+                        check_expr(transition, &mut block_scope, diagnostics, module, allow_unknown);
+                        check_expr(handler, &mut block_scope, diagnostics, module, allow_unknown);
+                    }
                 }
             }
         }

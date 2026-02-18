@@ -101,6 +101,17 @@ impl TypeChecker {
                 BlockItem::Yield { expr, .. } | BlockItem::Recurse { expr, .. } => {
                     let _ = self.infer_expr(expr, &mut local_env)?;
                 }
+                BlockItem::When { cond, effect, .. } => {
+                    self.infer_expr(cond, &mut local_env)?;
+                    self.infer_expr(effect, &mut local_env)?;
+                }
+                BlockItem::Given { cond, fail_expr, .. } => {
+                    self.infer_expr(cond, &mut local_env)?;
+                    self.infer_expr(fail_expr, &mut local_env)?;
+                }
+                BlockItem::On { handler, .. } => {
+                    let _ = self.infer_expr(handler, &mut local_env)?;
+                }
                 BlockItem::Expr { expr, .. } => {
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     if idx + 1 == items.len() {
@@ -165,6 +176,17 @@ impl TypeChecker {
                 BlockItem::Recurse { expr, .. } | BlockItem::Expr { expr, .. } => {
                     let _ = self.infer_expr(expr, &mut local_env)?;
                 }
+                BlockItem::When { cond, effect, .. } => {
+                    self.infer_expr(cond, &mut local_env)?;
+                    self.infer_expr(effect, &mut local_env)?;
+                }
+                BlockItem::Given { cond, fail_expr, .. } => {
+                    self.infer_expr(cond, &mut local_env)?;
+                    self.infer_expr(fail_expr, &mut local_env)?;
+                }
+                BlockItem::On { handler, .. } => {
+                    let _ = self.infer_expr(handler, &mut local_env)?;
+                }
             }
         }
         Ok(Type::con("Generator").app(vec![yield_ty]))
@@ -202,6 +224,17 @@ impl TypeChecker {
                 }
                 BlockItem::Recurse { expr, .. } | BlockItem::Expr { expr, .. } => {
                     let _ = self.infer_expr(expr, &mut local_env)?;
+                }
+                BlockItem::When { cond, effect, .. } => {
+                    self.infer_expr(cond, &mut local_env)?;
+                    self.infer_expr(effect, &mut local_env)?;
+                }
+                BlockItem::Given { cond, fail_expr, .. } => {
+                    self.infer_expr(cond, &mut local_env)?;
+                    self.infer_expr(fail_expr, &mut local_env)?;
+                }
+                BlockItem::On { handler, .. } => {
+                    let _ = self.infer_expr(handler, &mut local_env)?;
                 }
             }
         }

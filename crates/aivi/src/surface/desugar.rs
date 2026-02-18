@@ -257,12 +257,28 @@ fn desugar_expr(expr: Expr) -> Expr {
                         span,
                     },
                     BlockItem::Expr { expr, span } => {
-                        let expr = if matches!(kind, BlockKind::Effect) {
+                        let expr = if matches!(kind, BlockKind::Do { .. }) {
                             desugar_effect_stmt_expr(expr)
                         } else {
                             desugar_expr(expr)
                         };
                         BlockItem::Expr { expr, span }
+                    }
+                    BlockItem::When { cond, effect, span } => {
+                        // Desugar: `when cond <- eff` → `_ <- if cond then eff else pure Unit`
+                        let cond = desugar_expr(cond);
+                        let effect = desugar_expr(effect);
+                        BlockItem::When { cond, effect, span }
+                    }
+                    BlockItem::Given { cond, fail_expr, span } => {
+                        let cond = desugar_expr(cond);
+                        let fail_expr = desugar_expr(fail_expr);
+                        BlockItem::Given { cond, fail_expr, span }
+                    }
+                    BlockItem::On { transition, handler, span } => {
+                        let transition = desugar_expr(transition);
+                        let handler = desugar_expr(handler);
+                        BlockItem::On { transition, handler, span }
                     }
                 })
                 .collect();
