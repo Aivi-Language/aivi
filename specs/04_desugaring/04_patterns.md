@@ -52,3 +52,14 @@ Multi-clause functions:
 | Surface | Desugaring |
 | :--- | :--- |
 | `f = \| p1 => b1 \| p2 => b2` | `f = λx#1. case x#1 of \| ⟦p1⟧ -> ⟦b1⟧ \| ⟦p2⟧ -> ⟦b2⟧` |
+
+
+# Conditional `if / then / else`
+
+`if … then … else …` is syntactic sugar for a `case` on `True`/`False`:
+
+| Surface | Desugaring |
+| :--- | :--- |
+| `if c then a else b` | `case ⟦c⟧ of \| True -> ⟦a⟧ \| False -> ⟦b⟧` |
+
+The condition must have type `Bool`. There is no `if` without `else` — every `if` is an expression that produces a value.

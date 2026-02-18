@@ -39,15 +39,3 @@ Primitive “constructors” as definable macros:
 - Loops:
 
   `generate { loop pat = init => body }` desugars by defining local `recurse` and starting it: `let rec recurse pat = ⟦generate { body }⟧ in recurse ⟦init⟧`.
-
-## `resource { ... }`
-
-Resources are desugared into `bracket` calls.
-
-- Resource sequencing:
-
-<<< ../snippets/from_md/04_desugaring/06_generators/block_04.aivi{aivi}
-
-  desugars to `Resource { acquire = ⟦setup pure r⟧, release = λr. ⟦cleanup⟧ }`.
-
-(Note: This is a simplification; the actual desugaring handles the `Resource` type wrapper).
