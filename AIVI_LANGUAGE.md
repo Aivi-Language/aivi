@@ -2,51 +2,168 @@
 apply: always
 ---
 
-# AIVI Language Summary (LLM Context)
+# AIVI Language Reference (LLM Context)
 
-## 1) Core principles
+> This file is the authoritative quick-reference for writing AIVI code.
+> For the full specification see `specs/`. When in doubt, the specs win.
+
+---
+
+## 1 Core Design
+
 - Statically typed, purely functional, expression-oriented.
-- Immutable bindings; no mutation.
-- No null or exceptions: use Option / Result.
-- No loops: use recursion, folds, generators.
-- Pattern matches are total by default; refutable matches require `?`.
-- Records are open and structural (row polymorphism).
-- Effects are explicit: `Effect E A`.
-- Domains define operator and literal semantics.
+- Immutable bindings; **no mutation**, no loops, no null.
+- Use `Option A` / `Result E A` instead of null; recursion, folds, or generators instead of loops.
+- Pattern bindings with `=` must be **total**; refutable matches use `?`.
+- Records are structural and open (row polymorphism).
+- Effects are explicit: `Effect E A` (error type `E`, success type `A`).
+- Domains give meaning to operators and suffix literals for non-`Int` types.
 
-## 2) Lexical basics
-- Line comments: `//` or `--`; block comments: `/* ... */`.
-- Identifiers: lowerIdent for values/functions/fields, UpperIdent for types/constructors/modules/domains/classes.
-- Text literals use `"..."` with `{ expr }` interpolation.
-- Literals: Int, Float, Text, Char, ISO instant, suffixed numbers (e.g. `10px`).
+---
 
-## 3) Bindings and scope
+## 2 Lexical Basics
+
+| Element | Syntax |
+| :--- | :--- |
+| Line comment | `//` or `--` |
+| Block comment | `/* ... */` |
+| Value / function / field names | `lowerCamelCase` (`lowerIdent`) |
+| Type / constructor / module / domain / class names | `UpperCamelCase` (`UpperIdent`) |
+| Text literal | `"hello { name }"` (interpolation with `{ expr }`) |
+| Int, Float | `42`, `3.14` |
+| Char | `'a'` |
+| ISO instant | `2024-05-21T12:00:00Z` |
+| Suffixed number | `10px`, `30s`, `100%` (domain-resolved) |
+| Keywords | `as class do domain effect else export generate hiding if instance module or over patch recurse resource then use when with yield loop` |
+
+`True`, `False`, `None`, `Some`, `Ok`, `Err` are constructors, not keywords.
+
+---
+
+## 3 Bindings and Scope
+
+All bindings use `=`. There is no `let`, `var`, or `const`.
+
 ```aivi
 x = 42
 add = a b => a + b
-{ name, age } = user
-user@{ name } = user
 ```
-- All bindings use `=` and are lexical; shadowing is allowed.
-- Top-level bindings in a module are recursive.
-- Use `@` to bind the whole value alongside destructuring.
-- Deep path destructuring in record patterns uses dot paths.
 
-## 4) Functions and application
-- Functions are curried; application is whitespace.
-- Lambdas: `x => ...` or `_` for unary placeholder.
-- Pipes: `x |> f` == `f x`; `x |> f a b` == `f a b x`.
-- Deconstructor pipe heads: mark binders with `!` then start body with `|>`.
+### Destructuring
 
 ```aivi
-f = { name! } |> toUpper
+{ name, age } = user             // record destructuring
+(a, b) = pair                    // tuple destructuring
+[h, ...t] = list                 // list head/tail (must be total)
+user@{ name } = getUser          // whole-value + destructure
 ```
 
-## 5) Pattern matching and `?`
-- `?` matches the expression immediately to its left.
-- Multi-clause unary functions use leading `|` arms.
-- Guards with `when`.
-- Whole-value binders `@` work in patterns.
+### Record pattern operators
+
+| Syntax | `field` in scope? | Inner bindings? | Purpose |
+| :--- | :---: | :---: | :--- |
+| `{ field: pat }` | no (renamed) | yes | Match / rename a field |
+| `{ field@{ pat } }` | yes | yes | Keep whole field + destructure |
+| `{ field.{ pat } }` | no | yes | Destructure only, discard field |
+| `{ field }` | yes | — | Shorthand, binds field by name |
+
+Deep path destructuring: `{ data.user.profile@{ name } }` reaches nested fields directly.
+
+### Shadowing
+
+Shadowing is allowed. It introduces a new binding; there is no mutation.
+
+```aivi
+x = 1
+x = x + 1  // new binding, old `x` is no longer accessible
+```
+
+### Recursion
+
+Top-level module bindings are recursive (can refer to themselves and later bindings). Local recursion uses module-level helpers or generators with `loop`/`recurse`.
+
+---
+
+## 4 Functions
+
+### Definition and application
+
+Functions are **curried**. Application is by whitespace.
+
+```aivi
+add : Int -> Int -> Int
+add = a b => a + b
+
+result = add 5 10       // 15
+inc = add 1             // partial application
+```
+
+### Lambdas
+
+```aivi
+x => x + 1              // explicit lambda
+_ + 1                   // placeholder lambda (unary only)
+a b => a + b            // multi-argument
+```
+
+`_` in expression position is a single-argument placeholder lambda. It is only valid where a unary function is expected.
+
+### Pipes (`|>`)
+
+Pipes apply the value on the left as the **last** argument to the right-hand side.
+
+```aivi
+xs |> map inc |> filter (_ > 0)
+
+// equivalent to:
+filter (_ > 0) (map inc xs)
+```
+
+Rules: `x |> f` = `f x`; `x |> f a b` = `f a b x`.
+
+### Deconstructor heads (`!`)
+
+Mark parameter binders with `!` to use them as the implicit pipe/match subject:
+
+```aivi
+f = { name! } |> toUpper       // desugars to: { name } => name |> toUpper
+g = { tag! } ?                  // desugars to: { tag } => tag ?
+  | "A" => 1
+  | _   => 0
+```
+
+### Multi-clause functions
+
+A unary function can be written as multiple match arms directly:
+
+```aivi
+describe = 
+  | 0 => "zero"
+  | 1 => "one"
+  | _ => "many"
+```
+
+For multi-argument matching, match on a tuple:
+
+```aivi
+gcd = (a, b) => (a, b) ?
+  | (x, 0) => x
+  | (x, y) => gcd y (x % y)
+```
+
+### Accessor sugar
+
+`.field` (with dot prefix) is shorthand for `x => x.field`:
+
+```aivi
+users |> map .name
+```
+
+---
+
+## 5 Pattern Matching (`?`)
+
+`?` takes the expression **immediately to its left** and tests it against arms.
 
 ```aivi
 value ?
@@ -54,98 +171,636 @@ value ?
   | Err _ => 0
 ```
 
-## 6) Predicates
-- Predicate expressions are Bool expressions using literals, field access, patterns, `_`.
-- Implicit binding: `_` is the current element; bare field `active` means `_.active`.
-- Predicate lifting: in predicate positions, `pred` is desugared to `_ => pred`.
-- No auto-lifting over Option/Result in predicates.
+Works with pipelines:
 
-## 7) Types
-- ADTs: `Type = Con A | Con2 B C`.
-- Records are open structural types: `{ name: Text }` means at least that field.
-- Type operators: `->`, `with` (record/type composition), `|>` in types.
-- Row transforms: `Pick`, `Omit`, `Optional`, `Required`, `Rename`, `Defaulted`.
-- Classes and instances support ad-hoc polymorphism and HKTs (`*`).
-- Expected-type coercions only, via in-scope instances (e.g., `ToText`).
+```aivi
+input |> parse |> validate ?
+  | Ok x  => x
+  | Err e => handle e
+```
 
-## 8) Records, lists, tuples
+### Guards
+
+```aivi
+classify = n => n ?
+  | _ when n > 0 => "positive"
+  | _ when n < 0 => "negative"
+  | _            => "zero"
+```
+
+### Whole-value binding in patterns
+
+```aivi
+response ?
+  | { data.user.profile@{ name } } => name
+  | { data.guest: True }           => "Guest"
+  | _                              => "Unknown"
+```
+
+### Nested constructor patterns
+
+```aivi
+parse = expr => expr ?
+  | Add (Lit a) (Lit b) => Lit (a + b)
+  | _                   => expr
+```
+
+### Exhaustiveness
+
+All `?` matches must be exhaustive. Non-exhaustive matches are compile errors. Use `_` as a catch-all.
+
+---
+
+## 6 Types
+
+### Compiler primitives
+
+```aivi
+Unit  Bool  Int  Float
+```
+
+### Standard library types
+
+```aivi
+Text  Bytes  Decimal  BigInt
+Duration  Instant  Date  Time  TimeZone  ZonedDateTime
+```
+
+### Algebraic data types (ADTs)
+
+```aivi
+Option A = None | Some A
+Result E A = Err E | Ok A
+Color = Red | Green | Blue
+Tree A = Leaf A | Node (Tree A) (Tree A)
+```
+
+Create values by applying constructors: `Some 42`, `Err "nope"`, `Node (Leaf 1) (Leaf 2)`.
+Nullary constructors (`None`, `True`, `Red`) are values directly.
+
+### Open records (row polymorphism)
+
+```aivi
+User = { id: Int, name: Text, email: Option Text }
+
+// Functions require minimum fields, accept more:
+greet : { name: Text } -> Text
+greet = user => "Hello, { user.name }"
+```
+
+### Record creation and spread
+
 ```aivi
 p = { x: 1, y: 2 }
-xs = [1, 2, 3]
-t = (1, "a")
+q = { ...p, x: 3 }          // later fields win: { x: 3, y: 2 }
 ```
-- Record spread: `{ ...base, x: 3 }` (later fields win).
-- List spread: `[head, ...tail]`.
-- Range item: `a .. b` (inclusive), usable in list literals.
 
-## 9) Patching (structural updates)
-- `<|` applies a patch: `target <| { path: value }`.
-- Patch literals are declarative, type-checked updates.
-- Paths support dot fields, traversals, predicates, and map key selectors.
-- Instructions: replace, transform, `:=` for function-as-data, `-` to remove.
+### Tuples and lists
 
 ```aivi
-user2 = user <| { profile.name: "Sam" }
+pair = (1, "hello")
+xs = [1, 2, 3]
+ys = [0, ...xs, 4]          // spread
+zs = [1 .. 10]              // range (inclusive)
 ```
 
-## 10) Domains, units, and operators
-- Domains define semantics for operators and literal templates.
-- Suffix literals (e.g. `10ms`, `(x)kg`) resolve to template functions like `1ms`.
-- Domain-resolved operators (when non-Int carrier): `+ - * × / % < <= > >=`.
-- `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..` are built-in.
-- Domains are imported explicitly: `use aivi.calendar (domain Calendar)`.
+### Row transforms (type-level)
 
-## 11) Generators
-- Pure, pull-based sequences: `Generator A`.
-- `generate { ... }` with `yield`, `x <- xs`, `x = e`, and guards `x -> pred`.
-- `loop state = init => { ... recurse next }` for local tail recursion.
+```aivi
+Pick (id, name) User
+Omit (isAdmin) User
+Optional (email) User
+Required (email) User
+Rename { createdAt: created_at } User
 
-## 12) Effects
-- `Effect E A` models typed effects with explicit error domain.
-- `effect { ... }` sequences effects using `<-` for binding.
-- `x = e` inside `effect` is pure-only; use `<-` to run effects.
-- Expression statements must be `Effect E Unit` unless bound.
-- `or` is fallback-only sugar for effects or `Result`.
+// Type-level pipe:
+User |> Pick (id, name) |> Optional (name)
+```
 
-## 13) Resources
-- `resource { ... }` with `yield` for acquire/use/release.
-- Acquired in `effect` blocks with `<-`; released LIFO on scope exit.
+### Type signatures
 
-## 14) Modules and imports
-- One module per file: `module path.name` must be first non-empty item.
-- `use` imports values/types; `use ... (domain D)` imports domain semantics.
-- `export` controls public symbols; `export domain D` exports domain members.
-- Implicit prelude: `use aivi.prelude`, disabled via `@no_prelude`.
-- Circular dependencies are forbidden.
+```aivi
+add : Int -> Int -> Int
+map : (A -> B) -> List A -> List B
+```
 
-## 15) External sources
-- `Source K A` represents typed external data.
-- `load : Source K A -> Effect (SourceError K) A`.
-- Provided sources: file, http/https, env, db, email, llm, image, s3.
-- `@static` can embed compile-time sources.
+### Classes and instances (ad-hoc polymorphism, HKTs)
 
-## 16) Sigils
-- Custom literals: `~tag(...)`, `~tag[...]`, `~tag{...}`, `~tag/.../`.
-- Structured sigils include `~map{...}` and `~set[...]`.
-- Some compiler-provided sigils: `~u(...)`, `~url(...)`, `~path[...]`.
+```aivi
+class Functor (F *) = {
+  map : (A -> B) -> F A -> F B
+}
 
-## 17) Decorators (v0.1)
-- `@static`, `@inline`, `@deprecated`, `@debug`, `@test`, `@no_prelude`.
-- Unknown decorators are compile errors; user-defined decorators are not supported.
+class Apply (F *) =
+Functor (F *) with {
+  ap : F A -> F (A -> B) -> F B
+}
 
-## 18) Operator reference (selected)
-- Binding: `=`
-- Effect/generator/resource bind: `<-`
-- Guard: `->` (generators only)
-- Pipe: `|>`
-- Patch: `<|`
-- Match/refutable: `?`
-- Arms: `|`
-- Lambda/arm: `=>`
-- Spread/rest: `...`
-- Range: `..`
-- Accessor: `.` and `.field` accessor function
+instance Monad (Option *) = { ... }
+instance Monad (Result E *) = { ... }
+```
 
-## 19) Block forms
-- `{ ... }` is either a record literal or a block; disambiguated by first entry.
-- `effect { ... }`, `generate { ... }`, `resource { ... }` are dedicated blocks.
+`*` denotes a higher-kinded type (F takes one type argument).
+`A with B` in types is record/type composition (intersection).
+
+### Type variable constraints
+
+```aivi
+class Collection (C *) = with (A: Eq) {
+  elem : A -> C A -> Bool
+  unique : C A -> C A
+}
+```
+
+### Expected-type coercions
+
+In positions where a `Text` is expected, the compiler may insert `toText expr` if a `ToText A` instance is in scope. This is the only coercion mechanism (no global implicit casts).
+
+---
+
+## 7 Predicates
+
+Predicate expressions are `Bool` expressions that can be used directly where a function `A -> Bool` is expected (auto-lifted).
+
+```aivi
+users |> filter active               // active is _.active
+users |> filter (age > 18)           // age is _.age
+users |> find (email == Some "x")
+xs |> takeWhile (_ < 10)
+```
+
+Inside predicates:
+- `_` is the current element.
+- Bare field names resolve to `_.field`.
+- `.field` is an accessor function, not a field value.
+- Combinators: `!p`, `p && q`, `p || q`.
+- Pattern predicates: `Some _`, `Ok { value } when value > 10`.
+
+---
+
+## 8 Patching (Structural Updates)
+
+`<|` applies a declarative, type-checked patch to a record.
+
+```aivi
+user2 = user <| { name: "Sam" }
+user3 = user <| { profile.avatar: "new.png" }
+```
+
+### Path addressing
+
+```aivi
+record <| { a.b.c: value }                // dot paths
+record <| { items[*].price: _ * 1.1 }     // traversal (all items)
+record <| { items[price > 80].tag: "hot" } // predicate selector
+record <| { lookup["key"]: newVal }        // map key selector
+record <| { shape.Circle.radius: 5 }       // sum-type focus (prism)
+```
+
+### Instructions
+
+| Instruction | Meaning |
+| :--- | :--- |
+| `value` | Replace or insert |
+| `function` | Transform existing value (applied to old value) |
+| `:= function` | Replace with function **as data** (not applied) |
+| `-` | Remove field (shrinks record type) |
+
+### Patch-as-value
+
+```aivi
+p = patch { name: toUpper }     // Patch User, i.e. User -> User
+result = user <| p
+```
+
+---
+
+## 9 Domains, Units, and Operators
+
+Domains define operator semantics and suffix literals for non-`Int` types.
+
+```aivi
+use aivi.chronos.duration (domain Duration)
+
+deadline = { millis: 0 } + 10min     // + resolved by Duration domain
+```
+
+### Suffix literals
+
+```aivi
+10min  30s  100px  50%  2w  3d
+(x)kg                                // variable suffix application
+```
+
+Suffixes resolve to template functions: `10ms` uses `1ms` defined by a domain.
+
+### Defining domains
+
+```aivi
+domain Color over Rgb = {
+  Delta = Lightness Int | Hue Int
+
+  (+) : Rgb -> Delta -> Rgb
+  (+) = color (Lightness amount) => adjustLightness color amount
+  (+) = color (Hue amount) => adjustHue color amount
+
+  1l = Lightness 1
+  1h = Hue 1
+}
+```
+
+### Import/export
+
+```aivi
+use aivi.chronos.duration (domain Duration)    // import domain
+export domain Color                             // export domain
+```
+
+### Built-in vs domain-resolved operators
+
+Domain-resolved (when non-`Int`): `+`, `-`, `*`, `×`, `/`, `%`, `<`, `<=`, `>`, `>=`.
+Always built-in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
+
+---
+
+## 10 Generators
+
+Pure, pull-based sequences. No effects, no suspension.
+
+```aivi
+gen = generate {
+  yield 1
+  yield 2
+  yield 3
+}
+```
+
+### Bindings, guards, transforms
+
+```aivi
+evens = generate {
+  x <- [1 .. 100]
+  x -> x % 2 == 0           // guard (filter)
+  yield x
+}
+```
+
+### Cartesian product
+
+```aivi
+pairs = generate {
+  x <- [1 .. 3]
+  y <- ["a", "b"]
+  yield (x, y)
+}
+```
+
+### Tail-recursive loops
+
+```aivi
+fibs = generate {
+  loop (a, b) = (0, 1) => {
+    yield a
+    recurse (b, a + b)
+  }
+}
+```
+
+- `x <- source` — bind from another generator/list
+- `x = expr` — pure local binding
+- `x -> pred` — guard (filter by predicate)
+- `yield expr` — emit a value
+- `loop pat = init => { ... recurse next }` — local tail recursion
+
+---
+
+## 11 Effects
+
+`Effect E A` models typed effects where `E` is the error type and `A` is the success type.
+
+### Core operations
+
+| Operation | Type | Purpose |
+| :--- | :--- | :--- |
+| `pure` | `A -> Effect E A` | Lift a value |
+| `fail` | `E -> Effect E A` | Abort with error |
+| `bind` | `Effect E A -> (A -> Effect E B) -> Effect E B` | Sequence |
+| `attempt` | `Effect E A -> Effect F (Result E A)` | Catch error as `Result` |
+
+### `effect { ... }` blocks
+
+```aivi
+main = effect {
+  cfg  <- load (file.read "config.json")   // <- runs effect
+  name = cfg.appName                        // = is pure binding
+  print "loaded { name }"
+}
+```
+
+Rules inside `effect { ... }`:
+- `x <- eff` — run effect, bind result
+- `x = expr` — pure local binding (`expr` must NOT be `Effect`)
+- `x <- resource` — acquire a `Resource`, released on scope exit
+- Final expression must be `Effect E A` (commonly `pure value`)
+- Statement expressions must be `Effect E Unit`; non-Unit results must be bound
+
+### Error fallback with `or`
+
+```aivi
+// Effect fallback (inside effect block after <-):
+txt <- load (file.read path) or "(missing)"
+
+// With error pattern matching:
+val <- riskyOp or
+  | NotFound msg => pure default
+  | Timeout _    => fail "timed out"
+
+// Result fallback (expression form):
+count = result or 0
+```
+
+`or` arms match the **error value** directly (write `NotFound m`, not `Err NotFound m`).
+
+### Branching in effect blocks
+
+`if`/`then`/`else` is an expression. For multi-step branches, use nested `effect { ... }`:
+
+```aivi
+process = input => effect {
+  validated <- validate input
+  result <- if validated.needsReview then
+    effect {
+      _ <- notifyReviewer validated
+      pure (Pending validated)
+    }
+  else pure (Approved validated)
+  pure result
+}
+```
+
+### Attempt (error recovery)
+
+```aivi
+getUser = id => effect {
+  res <- attempt (api.fetchUser id)
+  res ?
+    | Ok user => pure user
+    | Err _   => pure GuestUser
+}
+```
+
+`attempt` catches errors of type `E`, producing `Result E A`. The outer effect has error type `F` (different from `E`).
+
+---
+
+## 12 Resources
+
+`Resource E A` — a recipe for acquiring a handle of type `A` (with error type `E`), using it, and releasing it.
+
+### Defining
+
+```aivi
+managedFile = path => resource {
+  handle <- file.open path       // acquire
+  yield handle                   // provide to caller
+  file.close handle              // release (runs on scope exit)
+}
+```
+
+Rules: exactly one `yield`; code after `yield` is cleanup; cleanup may perform effects.
+
+### Using
+
+```aivi
+main = effect {
+  f <- managedFile "data.txt"       // acquired here
+  content <- file.readAll f
+  print content
+}                                    // f released here (LIFO)
+```
+
+Multiple resources are released in reverse acquisition order. Cleanup runs even on error or cancellation.
+
+---
+
+## 13 Modules and Imports
+
+One module per file. `module` must be the first non-empty item.
+
+```aivi
+module my.app.api
+export fetchUser, User
+
+use aivi.net.http (get)
+use aivi.json (decode)
+
+User = { id: Int, name: Text }
+
+fetchUser : Int -> Effect HttpError User
+fetchUser = id => effect {
+  resp <- get (~u(https://api.example.com/users/{ id }))
+  decode resp.body
+}
+```
+
+### Import forms
+
+```aivi
+use aivi.text                            // import all public symbols
+use aivi.text (toUpper, toLower)         // selective
+use aivi.text hiding (trim)             // import all except
+use aivi.text as T                       // aliased module
+use aivi.chronos.duration (domain Duration)  // import domain
+```
+
+### Export forms
+
+```aivi
+export *                                 // export everything
+export add, subtract, pi                 // selective
+export domain Color                      // export domain
+```
+
+### Prelude
+
+Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
+
+### Module path convention
+
+- `aivi.*` — standard library
+- `aivi.chronos.*` — time/date/duration/timezone
+- `aivi.net.*` — networking (http, https, httpServer)
+- `aivi.collections` — Map, Set, Queue
+- `vendor.name.*` — third-party libraries
+- `user.app.*` — application code
+
+---
+
+## 14 External Sources
+
+`Source K A` represents typed external data. Load with `load` inside `effect { ... }`.
+
+```aivi
+cfg <- load (file.read "config.json")
+resp <- load (http.get "https://api.example.com/data")
+apiKey <- load (env.get "API_KEY")
+```
+
+Available sources: `file`, `http`/`https`, `env`, `db`, `email`, `llm`, `image`, `s3`.
+
+`@static` embeds sources at compile time: `@static schema = file.read "schema.json"`.
+
+---
+
+## 15 Sigils
+
+Custom literals with `~tag` and a delimiter:
+
+```aivi
+~u(https://example.com)        // URL
+~path[/usr/local/bin]          // Path
+~r/[a-z]+/i                    // Regex
+~map{ "a" => 1, "b" => 2 }    // Map K V literal
+~set[1, 2, 3]                  // Set A literal
+~d(2024-05-21)                 // Date
+~t(12:00:00)                   // Time
+~tz(Europe/Paris)              // TimeZone
+```
+
+`~map{...}` and `~set[...]` are **structured** (parsed as AIVI expressions). Other sigils are raw text until the closing delimiter.
+
+---
+
+## 16 Decorators (v0.1)
+
+Compile-time metadata only. No user-defined decorators.
+
+| Decorator | Purpose |
+| :--- | :--- |
+| `@test` | Mark as test case |
+| `@static` | Embed at compile time |
+| `@inline` | Always inline |
+| `@deprecated` | Emit warning on use |
+| `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`) |
+| `@no_prelude` | Skip implicit `use aivi.prelude` |
+
+Unknown decorators are compile errors.
+
+---
+
+## 17 Operator Precedence (lowest to highest)
+
+1. `|>` (pipe)
+2. `??` (coalesce Option)
+3. `||` (logical or)
+4. `&&` (logical and)
+5. `==`, `!=` (equality)
+6. `<`, `<=`, `>`, `>=` (comparison)
+7. `|` (bitwise or)
+8. `^` (bitwise xor)
+9. `<<`, `>>` (shift)
+10. `+`, `-`, `++` (add, concat)
+11. `*`, `×`, `/`, `%` (multiply)
+12. `<|` (patch)
+
+Unary prefix: `!` (not), `-` (negate), `~` (bitwise complement).
+
+---
+
+## 18 Complete Example
+
+```aivi
+@no_prelude
+module integrationTests.complex.TopologicalSort
+
+use aivi
+use aivi.testing
+use aivi.collections
+
+Graph = { nodes: List Int, adj: Map Int (List Int) }
+
+neighbors = node graph => Map.get node graph.adj ?
+  | Some ns => ns
+  | None    => []
+
+reverseList = xs => reverseGo xs []
+
+reverseGo = list acc => list ?
+  | []        => acc
+  | [h, ...t] => reverseGo t [h, ...acc]
+
+buildIndegree : Graph -> Map Int Int
+buildIndegree = graph => {
+  start = initIndegree graph.nodes Map.empty
+  processNodes graph graph.nodes start
+}
+
+initIndegree = nodes acc => nodes ?
+  | []        => acc
+  | [n, ...t] => initIndegree t (Map.insert n 0 acc)
+
+topologicalSort : Graph -> Result (List Int) (List Int)
+topologicalSort = graph => {
+  indeg = buildIndegree graph
+  q0 = enqueueZero graph.nodes indeg Queue.empty
+  sortLoop graph indeg q0 []
+}
+
+@test
+topoSmoke = effect {
+  adj = ~map{
+    0 => [1, 2]
+    1 => [3]
+    2 => [3]
+    3 => []
+  }
+  graph = { nodes: [0, 1, 2, 3], adj: adj }
+
+  result <- pure (topologicalSort graph)
+  assert (result == Ok [0, 1, 2, 3] || result == Ok [0, 2, 1, 3])
+}
+```
+
+---
+
+## 19 Quick Idiom Reference
+
+| Task | AIVI idiom |
+| :--- | :--- |
+| Transform a list | `xs \|> map f` |
+| Filter a list | `xs \|> filter (age > 18)` |
+| Find first match | `xs \|> find (name == "Alice")` |
+| Handle Option | `opt ? \| Some x => x \| None => default` |
+| Handle Result | `res ? \| Ok x => x \| Err e => handle e` |
+| Provide default for Option | `opt ?? default` |
+| Run fallback on effect error | `val <- riskyOp or default` |
+| Catch error as Result | `res <- attempt riskyOp` |
+| Update nested record | `state <\| { user.profile.name: "New" }` |
+| Transform nested field | `state <\| { items[*].price: _ * 1.1 }` |
+| Create map | `~map{ "key" => value }` |
+| Create set | `~set[1, 2, 3]` |
+| Build a sequence | `generate { x <- src; x -> pred; yield f x }` |
+| Infinite sequence | `generate { loop s = init => { yield s; recurse (next s) } }` |
+| State machine | `(state, event) ? \| (Idle, Start) => Running \| ...` |
+| Acquire resource | `handle <- managedFile "data.txt"` (inside `effect`) |
+| Write a test | `@test myTest = effect { assertEq (f 1) 2 }` |
+
+---
+
+## 20 Anti-Patterns (Do NOT write these)
+
+| Wrong | Why | Correct |
+| :--- | :--- | :--- |
+| `let x = 1` | No `let` keyword | `x = 1` |
+| `def f(x):` | No `def`, no parens for args | `f = x => ...` |
+| `var x = 1; x = 2` | No mutation | `x = 1; x = x + 1` (shadow) |
+| `null` / `nil` | No nulls | `None` / `Option A` |
+| `throw` / `try/catch` | No exceptions | `fail e` / `attempt` / `or` |
+| `for x in xs { ... }` | No loops | `xs \|> map f` or `generate { x <- xs; yield f x }` |
+| `while cond { ... }` | No loops | Recursion or `loop`/`recurse` in generators |
+| `x.method()` | No methods, no parens | `method x` or `x \|> method` |
+| `case x of ...` | `case` is kernel only | `x ? \| pat => expr` |
+| `String` | Type is called `Text` | `Text` |
+| `return x` | No return statement | Expression result is implicit; `pure x` in effects |
+| `{ x = 1 }` in records | `=` is binding, not record field | `{ x: 1 }` |
+| `import X` | No `import` keyword | `use module.path` |
