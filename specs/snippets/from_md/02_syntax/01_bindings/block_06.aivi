@@ -1,2 +1,2 @@
 // u is bound to the full record; id/name come from destructuring
-formatUser = u@{ id, name } => "{id}: {name}"
+formatUser = u as { id, name } => "{id}: {name}"

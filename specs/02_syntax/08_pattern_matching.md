@@ -28,26 +28,6 @@ input |> parse |> validate match
   | Err e => handle e
 ```
 
-### Deconstructor match heads (`!` subject selection)
-
-For unary functions that destructure their argument, you can mark one or more binders in the parameter pattern with `!` and start the body with `match` (without writing `=> <scrutinee>` explicitly):
-
-```aivi
-g = { name! } match
-  | "A" => 1
-  | _   => 0
-```
-
-is shorthand for:
-
-```aivi
-g = { name } => name match
-  | "A" => 1
-  | _   => 0
-```
-
-If multiple binders are marked with `!`, the match scrutinee is a tuple (in left-to-right order).
-
 In a multi-clause unary function (Section 8.2), the subject is the function's single implicit argument.
 
 See also: [Functions and Pipes](02_functions.md) for `|>`.
@@ -92,7 +72,7 @@ For readability, nested constructor patterns can be written without parentheses 
 
 This "constructor chain" rule applies only in pattern context (after `|` and before `=>`).
 
-## 8.5 Record Pattern Syntax: `@`, `.{ }`, and `:`
+## 8.5 Record Pattern Syntax: `as`, `.{ }`, and `:`
 
 Record patterns use three distinct operators for different purposes:
 
@@ -106,18 +86,18 @@ Record patterns use three distinct operators for different purposes:
 { name }              // shorthand for { name: name }
 ```
 
-### `@` — Whole-value plus destructuring
+### `as` — Whole-value plus destructuring
 
-`field@{ pat }` binds `field` to the **entire** field value *and* destructures it. Both `field` and the contents of `pat` are in scope:
+`field as { pat }` binds `field` to the **entire** field value *and* destructures it. Both `field` and the contents of `pat` are in scope:
 
 ```aivi
-user@{ name, age }    // 'user' holds the whole record; 'name' and 'age' are also bound
+user as { name, age }    // 'user' holds the whole record; 'name' and 'age' are also bound
 ```
 
 In nested position:
 
 ```aivi
-{ profile@{ name, age } }
+{ profile as { name, age } }
 ```
 
 Here `profile` is bound to the full value of the `profile` field, and `name`/`age` are also brought into scope from within that field.
@@ -137,7 +117,7 @@ Here `name` and `age` are in scope, but `profile` is **not** — it is only used
 | Syntax | `field` in scope? | `pat` contents in scope? | Use case |
 | :--- | :---: | :---: | :--- |
 | `{ field: pat }` | no (renamed) | yes | Match/rename a field |
-| `{ field@{ pat } }` | yes | yes | Keep whole field + destructure |
+| `{ field as { pat } }` | yes | yes | Keep whole field + destructure |
 | `{ field.{ pat } }` | no | yes | Destructure only, discard field |
 | `{ field }` | yes | — | Shorthand, binds field by name |
 

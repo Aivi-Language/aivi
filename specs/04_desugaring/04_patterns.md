@@ -19,19 +19,19 @@ desugars to `case ⟦e⟧ of \| ⟦p⟧ -> ⟦body⟧`.
 ### Deep Path Destructuring
 | Surface | Desugaring |
 | :--- | :--- |
-| `{ a.b.c@{x} }` | `⟦{ a: { b: { c: v#1@{x} } } }⟧` |
+| `{ a.b.c as {x} }` | `⟦{ a: { b: { c: v#1@{x} } } }⟧` |
 
 Pattern translation `⟦p⟧` uses the kernel pattern forms.
 
 
-# Whole-value binding `@`
+# Whole-value binding `as`
 
 | Surface | Desugaring |
 | :--- | :--- |
-| `v@p` (pattern) | kernel pattern `v @ ⟦p⟧` |
-| `case e of \| v@{ name: n } -> b` | `case ⟦e⟧ of \| v @ { name = n } -> ⟦b⟧` |
+| `v as p` (pattern) | kernel pattern `v @ ⟦p⟧` |
+| `case e of \| v as { name: n } -> b` | `case ⟦e⟧ of \| v @ { name = n } -> ⟦b⟧` |
 
-A `{ ... }` binding with `@`:
+A `{ ... }` binding with `as`:
 
 <<< ../snippets/from_md/04_desugaring/04_patterns/block_04.aivi{aivi}
 
