@@ -249,7 +249,11 @@ impl Backend {
             return false;
         }
         if let Some(prev) = prev {
-            if Self::is_expression_token(prev) {
+            // Only treat the previous expression token as blocking when it is on
+            // the same line.  Newlines separate statements in AIVI, so an
+            // identifier at the start of a new line is a fresh application head
+            // even if the previous line ended with an expression token.
+            if Self::is_expression_token(prev) && prev.span.end.line == token.span.start.line {
                 return false;
             }
             if prev.kind == "symbol"

@@ -152,14 +152,12 @@
     "aiviPipe": "#569CD6",
     "aiviBracket": "#BFBFBF",
     "aiviDot": "#8A8A8A",
-    "aiviPathHead": "#8A8A8A",
-    "aiviPathMid": "#8A8A8A",
-    "aiviPathTail": {
-      "foreground": "#8A8A8A",
-      "fontStyle": "bold"
-    },
-    "aiviUnit": "#D7BA7D",
+    "aiviPathHead": "#b8b8b8",
+    "aiviPathMid": "#dbdbdb",
+    "aiviPathTail": "#51a67a",
+    "aiviUnit": "#e37a11",
     "aiviSigil": "#565656",
+    "variable": "#9CDCFE",
     "function": "#DCDCAA",
     "decorator": "#92d49d",
     "property": "#9CDCFE",
@@ -168,10 +166,7 @@
     "aiviDot.signature": "#6E6E6E",
     "aiviPathHead.signature": "#6E6E6E",
     "aiviPathMid.signature": "#6E6E6E",
-    "aiviPathTail.signature": {
-      "foreground": "#6E6E6E",
-      "fontStyle": "bold"
-    },
+    "aiviPathTail.signature": "#6E6E6E",
     "*.signature": {
       "foreground": "#6E6E6E"
     }
