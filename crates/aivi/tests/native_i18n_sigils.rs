@@ -12,7 +12,7 @@ fn native_codegen_compiles_i18n_sigils_with_parts() {
         &source_path,
         r#"module app.main
 main : Effect Text Unit
-main = effect {
+main = do Effect {
   k = ~k"app.welcome"
   msg = ~m"Hello, {name:Text}!"
   rendered = i18n.render msg { name: "Alice" } or "ERR"

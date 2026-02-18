@@ -99,7 +99,7 @@ mod tests {
 
     #[test]
     fn format_respects_indent_size() {
-        let text = "module demo\n\nmain = effect {\n_<-print \"hi\"\n}\n";
+        let text = "module demo\n\nmain = do Effect {\n_<-print \"hi\"\n}\n";
         let formatted = format_text_with_options(
             text,
             FormatOptions {
@@ -133,11 +133,11 @@ mod tests {
 
     #[test]
     fn format_indents_multiline_match_arms_and_continuations() {
-        let text = "module demo\n\nf = ?\n  | { a@{\n    x\n  } } => x\n| _ => 0\n";
+        let text = "module demo\n\nf = match\n  | { a@{\n    x\n  } } => x\n| _ => 0\n";
         let formatted = format_text(text);
         assert_eq!(
             formatted,
-            "module demo\n\nf = ?\n  | { a@{\n      x\n    } } => x\n  | _ => 0\n"
+            "module demo\n\nf = match\n  | { a@{\n      x\n    } } => x\n  | _ => 0\n"
         );
     }
 

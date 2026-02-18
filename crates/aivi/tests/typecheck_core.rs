@@ -138,7 +138,7 @@ module test.core
 export main
 
 main : Effect Text Unit
-main = effect {
+main = do Effect {
   f <- resource {
     handle <- file.open "Cargo.toml"
     yield handle
@@ -163,7 +163,7 @@ Date = { year: Int, month: Int, day: Int }
   Delta = Day Int | Week Int
 
   (+) : Date -> Delta -> Date
-  (+) = d delta => delta ?
+  (+) = d delta => delta match
     | Day n => addDays d n
     | Week n => addDays d (n * 7)
 
@@ -367,7 +367,7 @@ module test.err
 export main
 
 main : Effect Text Unit
-main = effect {
+main = do Effect {
   1
 }"#;
     check_err(source);
@@ -383,13 +383,13 @@ export main
 Result E A = Err E | Ok A
 
 main : Effect Text Unit
-main = effect {
+main = do Effect {
   n <- 41
   m <- n + 1
 
   res <- attempt (if m == 42 then fail "boom" else pure m)
 
-  verdict = res ?
+  verdict = res match
     | Ok _  => "ok"
     | Err _ => "err"
 
@@ -410,7 +410,7 @@ foo : Effect Text Int
 foo = pure 1
 
 main : Effect Text Unit
-main = effect {
+main = do Effect {
   println "start"
   foo
   pure Unit
@@ -425,7 +425,7 @@ module test.effect_let_err
 export main
 
 main : Effect Text Unit
-main = effect {
+main = do Effect {
   x = print "nope"
   pure Unit
 }"#;
@@ -445,7 +445,7 @@ res : Result Error Text
 res = Err (NotFound "hi")
 
 msg : Text
-msg = res ?
+msg = res match
   | Err NotFound m => m
   | _              => "no-msg""#;
     check_ok(source);
@@ -476,7 +476,7 @@ module test.or_effect
 export main
 
 main : Effect Text Unit
-main = effect {
+main = do Effect {
   n <- (fail "nope") or 1
   _ = n
   pure Unit
@@ -605,7 +605,7 @@ class Functor (F *) = {
 }
 
 instance Functor (Option *) = {
-  map: opt f => opt ?
+  map: opt f => opt match
     | None => None
     | Some x => Some (f x)
 }
@@ -622,7 +622,7 @@ module test.match_err
 
 Option A = None | Some A
 
-value = Some 1 ?
+value = Some 1 match
   | Some _ => 1
 "#;
 
@@ -647,7 +647,7 @@ module test.match_warn
 
 Option A = None | Some A
 
-value = Some 1 ?
+value = Some 1 match
   | _ => 0
   | Some _ => 1
 "#;
@@ -701,7 +701,7 @@ module test.load_source
 use aivi
 
 main : Effect Text Text
-main = effect {
+main = do Effect {
   txt <- load (file.read "missing.txt") or "(missing)"
   pure txt
 }

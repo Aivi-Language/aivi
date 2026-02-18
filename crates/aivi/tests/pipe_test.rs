@@ -1,7 +1,7 @@
 #[test]
 fn test_pipe_preserved_without_alignment() {
     // Single arm - no alignment group should form
-    let input = "f = x ?\n  | a => b\n";
+    let input = "f = x match\n  | a => b\n";
     let formatted = aivi::format_text(input);
     eprintln!("Input: {:?}", input);
     eprintln!("Output: {:?}", formatted);
@@ -11,7 +11,7 @@ fn test_pipe_preserved_without_alignment() {
 #[test]
 fn test_pipe_preserved_with_alignment() {
     // Two arms - alignment group should form
-    let input = "f = x ?\n  | a => b\n  | c => d\n";
+    let input = "f = x match\n  | a => b\n  | c => d\n";
     let formatted = aivi::format_text(input);
     eprintln!("Input: {:?}", input);
     eprintln!("Output: {:?}", formatted);

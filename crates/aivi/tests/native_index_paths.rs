@@ -12,7 +12,7 @@ fn native_codegen_supports_map_index_and_patch_selectors() {
         &source_path,
         r#"module app.main
 main : Effect Text Unit
-main = effect {
+main = do Effect {
   m = ~map{ "a" => 1, "b" => 2 }
   _ <- println (m["a"])
 

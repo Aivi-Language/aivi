@@ -1,0 +1,18 @@
+@no_prelude
+module integrationTests.syntax.patternMatching.asBinding
+
+use aivi
+use aivi.testing
+
+getNameAndAge = person as { name, age } => (name, age)
+
+nestedAs = r => r match
+  | { user as { name } } => name
+  | _                     => "unknown"
+
+@test
+asBindingWorks = do Effect {
+  assertEq (getNameAndAge { name: "A", age: 30 }) ("A", 30)
+  assertEq (nestedAs { user: { name: "B" } }) "B"
+}
+

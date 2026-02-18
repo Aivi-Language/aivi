@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.syntax.effects.whenConditional
+
+use aivi
+use aivi.testing
+
+@test
+whenTrueRuns = do Effect {
+  x = True
+  when x <- print "yes"
+  pure Unit
+}
+
+@test
+whenFalseSkips = do Effect {
+  x = False
+  when x <- print "never"
+  pure Unit
+}
+

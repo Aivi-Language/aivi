@@ -9,7 +9,7 @@ module tmp
 export main
 
 main : Effect Text Int
-main = effect {
+main = do Effect {
   x = 1
   pure x
 }
