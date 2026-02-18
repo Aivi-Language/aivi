@@ -80,12 +80,12 @@ wsPathFor = routePath => {
 }
 
 findAppForHttpPath : Text -> List (Route model msg) -> Option (ServerHtmlApp model msg)
-findAppForHttpPath = path routes => routes ?
+findAppForHttpPath = path routes => routes match
   | [] => None
   | [r, ...rest] => if normalizePath r.path == path then Some r.app else findAppForHttpPath path rest
 
 findAppForWsPath : Text -> List (Route model msg) -> Option (ServerHtmlApp model msg)
-findAppForWsPath = path routes => routes ?
+findAppForWsPath = path routes => routes match
   | [] => None
   | [r, ...rest] => if wsPathFor r.path == path then Some r.app else findAppForWsPath path rest
 
@@ -99,10 +99,10 @@ notFound =
 dispatch : List (Route model msg) -> Request -> ServerReply
 dispatch = routes req => {
   path = normalizePath req.path
-  findAppForHttpPath path routes ?
+  findAppForHttpPath path routes match
     | Some app => Http (serveHttp app req)
     | None =>
-        findAppForWsPath path routes ?
+        findAppForWsPath path routes match
           | Some app => Ws (socket => serveWs app socket)
           | None => Http notFound
 }

@@ -43,11 +43,11 @@ midpoint : Segment2 -> Point2
 midpoint = seg => { x: (seg.start.x + seg.end.x) / 2.0, y: (seg.start.y + seg.end.y) / 2.0 }
 
 areaLoop : Point2 -> Point2 -> List Point2 -> Float -> Float
-areaLoop = first prev rest acc => rest ?
+areaLoop = first prev rest acc => rest match
   | [] => acc + (prev.x * first.y - first.x * prev.y)
   | [p, ...ps] => areaLoop first p ps (acc + (prev.x * p.y - p.x * prev.y))
 
 area : Polygon -> Float
-area = poly => poly.vertices ?
+area = poly => poly.vertices match
   | [] => 0.0
   | [first, ...rest] => abs (areaLoop first first rest 0.0) / 2.0"#;

@@ -33,7 +33,7 @@ addYears : Date -> Int -> Date
 addYears = value n => calendar.addYears value n
 
 negateDelta : Delta -> Delta
-negateDelta = delta => delta ?
+negateDelta = delta => delta match
   | Day n => Day (-n)
   | Month n => Month (-n)
   | Year n => Year (-n)

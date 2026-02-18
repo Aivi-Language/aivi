@@ -14,7 +14,7 @@ foldl : (B -> A -> B) -> B -> Generator A -> B
 foldl = step init gen => gen step init
 
 revAppend : List A -> List A -> List A
-revAppend = xs acc => xs ?
+revAppend = xs acc => xs match
   | []        => acc
   | [h, ...t] => revAppend t [h, ...acc]
 
@@ -30,7 +30,7 @@ toList = gen =>
   reverse (foldl consRev [] gen)
 
 fromList : List A -> Generator A
-fromList = xs => k => z => xs ?
+fromList = xs => k => z => xs match
   | []        => z
   | [h, ...t] => fromList t k (k z h)
 

@@ -11,7 +11,7 @@ use aivi
 Span = { millis: Int }
 
 negateDelta : Delta -> Delta
-negateDelta = delta => delta ?
+negateDelta = delta => delta match
   | Millisecond n => Millisecond (-n)
   | Second n => Second (-n)
   | Minute n => Minute (-n)

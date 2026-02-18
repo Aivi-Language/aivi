@@ -34,7 +34,7 @@ toHex : Rgb -> Hex
 toHex = value => color.toHex value
 
 negateDelta : Delta -> Delta
-negateDelta = delta => delta ?
+negateDelta = delta => delta match
   | Lightness n => Lightness (-n)
   | Saturation n => Saturation (-n)
   | Hue n => Hue (-n)

@@ -9,7 +9,7 @@ export domain Collections
 use aivi
 
 append : List a -> List a -> List a
-append = left right => left ?
+append = left right => left match
   | [] => right
   | [x, ...xs] => [x, ...append xs right]
 

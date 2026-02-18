@@ -565,7 +565,7 @@
                     if let Some(prev_tokens) = merged_tokens_by_line.last_mut() {
                         if last_code_token_is(
                             prev_tokens,
-                            &["=", "=>", "<-", "->", "then", "else", "?"],
+                            &["=", "=>", "<-", "->", "then", "else", "?", "match"],
                         ) {
                             prev_tokens.push(opener_tok);
                             continue;
@@ -585,12 +585,12 @@
     // Pre-pass: merge "hanging" match subjects onto the `=>` line:
     //
     //   name = args =>
-    //     subject ?
+    //     subject match
     //       | ...
     //
     // becomes
     //
-    //   name = args => subject ?
+    //   name = args => subject match
     //     | ...
     //
     // This is intentionally conservative (no comments on either merged line).
@@ -621,7 +621,7 @@
                 if !next_tokens.is_empty()
                     && !after_tokens.is_empty()
                     && !next_tokens.iter().any(|t| t.kind == "comment")
-                    && last_code_token_is(&next_tokens, &["?"])
+                    && last_code_token_is(&next_tokens, &["?", "match"])
                     && !starts_with(&next_tokens, "|")
                     && starts_with(&after_tokens, "|")
                 {
@@ -1148,7 +1148,7 @@
             && find_top_level_token(&state.tokens, ":", first_idx).is_none();
 
         // Continuation blocks:
-        // - Multi-line `| ...` blocks (multi-clause functions and `?` matches).
+        // - Multi-line `| ...` blocks (multi-clause functions and `match` expressions).
         //   These blocks can contain continuation lines (e.g. multi-line patterns/bodies), so we
         //   keep the block active until we hit a same-indent non-`|` line (or a blank line).
         // - Multi-line `|> ...` pipeline blocks (common after `=`, even when RHS starts on same line).
@@ -1158,7 +1158,7 @@
         let is_arm_line =
             starts_with_pipe && find_top_level_token(&state.tokens, "=>", first_idx + 1).is_some();
         let should_start_pipe_block =
-            starts_with_pipe && matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?"));
+            starts_with_pipe && matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?") | Some("match"));
         let should_start_pipeop_block = starts_with_pipeop
             && (pipeop_seed_match
                 || matches!(prev_non_blank_last_token.as_deref(), Some("=") | Some("?")));

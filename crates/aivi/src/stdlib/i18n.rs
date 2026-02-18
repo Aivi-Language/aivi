@@ -35,9 +35,9 @@ bundleFromProperties : Locale -> Text -> Result Text Bundle
 bundleFromProperties = locale props => i18n.bundleFromProperties locale props
 
 bundleFromPropertiesFile : Locale -> Text -> Effect Text (Result Text Bundle)
-bundleFromPropertiesFile = locale path => effect {
+bundleFromPropertiesFile = locale path => do Effect {
   res <- attempt (load (file.read path))
-  res ?
+  res match
     | Err e => pure (Err e)
     | Ok txt => pure (bundleFromProperties locale txt)
 }
@@ -50,27 +50,27 @@ messageText = m => m.body
 
 tResult : Bundle -> Key -> {} -> Result Text Text
 tResult = bundle k args =>
-  Map.get (keyText k) bundle.entries ?
+  Map.get (keyText k) bundle.entries match
     | None => Err (text.concat ["missing key: ", keyText k])
     | Some msg => render msg args
 
 tOpt : Bundle -> Key -> {} -> Option Text
 tOpt = bundle k args =>
-  (tResult bundle k args) ?
+  (tResult bundle k args) match
     | Ok txt => Some txt
     | Err _  => None
 
 t : Bundle -> Key -> {} -> Text
 t = bundle k args =>
-  (tResult bundle k args) ?
+  (tResult bundle k args) match
     | Ok txt => txt
     | Err _  => keyText k
 
 tWithFallback : List Bundle -> Key -> {} -> Text
-tWithFallback = bundles k args => bundles ?
+tWithFallback = bundles k args => bundles match
   | [] => keyText k
   | [b, ...rest] =>
-    (tOpt b k args) ?
+    (tOpt b k args) match
       | Some txt => txt
       | None => tWithFallback rest k args
 
@@ -86,7 +86,7 @@ fallbackTagsFromTag = tag =>
 
 fallbackTagsFromNonEmptyTag : Text -> List Text
 fallbackTagsFromNonEmptyTag = tag =>
-  (text.lastIndexOf tag "-") ?
+  (text.lastIndexOf tag "-") match
     | None => [tag]
     | Some i => if i <= 0 then [tag] else [tag, ...fallbackTagsFromNonEmptyTag (text.slice tag 0 i)]
 
@@ -94,7 +94,7 @@ fallbackTagsFromNonEmptyTag = tag =>
 // When duplicates exist, the last bundle wins (right-biased).
 catalogFromBundles : List Bundle -> Catalog
 catalogFromBundles = bundles =>
-  bundles ?
+  bundles match
     | [] => Map.empty
     | [b, ...rest] => Map.insert b.locale.tag b (catalogFromBundles rest)
 
@@ -102,10 +102,10 @@ bundleForLocale : Catalog -> Locale -> Option Bundle
 bundleForLocale = catalog locale => bundleForTags catalog (fallbackTags locale)
 
 bundleForTags : Catalog -> List Text -> Option Bundle
-bundleForTags = catalog tags => tags ?
+bundleForTags = catalog tags => tags match
   | [] => None
   | [t, ...rest] =>
-    (Map.get t catalog) ?
+    (Map.get t catalog) match
       | Some b => Some b
       | None   => bundleForTags catalog rest
 
@@ -113,10 +113,10 @@ bundlesForLocale : Catalog -> Locale -> List Bundle
 bundlesForLocale = catalog locale => bundlesForTags catalog (fallbackTags locale)
 
 bundlesForTags : Catalog -> List Text -> List Bundle
-bundlesForTags = catalog tags => tags ?
+bundlesForTags = catalog tags => tags match
   | [] => []
   | [t, ...rest] =>
-    (Map.get t catalog) ?
+    (Map.get t catalog) match
       | None   => bundlesForTags catalog rest
       | Some b => [b, ...bundlesForTags catalog rest]
 
@@ -129,7 +129,7 @@ tCatalogWithDefault = catalog locale defaultBundle k args =>
   tWithFallback (append1 (bundlesForLocale catalog locale) defaultBundle) k args
 
 append1 : List A -> A -> List A
-append1 = xs x => xs ?
+append1 = xs x => xs match
   | [] => [x]
   | [h, ...t] => [h, ...append1 t x]
 "#;
