@@ -323,7 +323,7 @@ impl Backend {
             };
 
             match code {
-                "E3000" => {
+                "E3000" | "E2005" => {
                     out.extend(Self::import_quickfixes_for_unknown_name(
                         text,
                         uri,

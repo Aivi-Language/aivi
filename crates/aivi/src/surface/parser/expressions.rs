@@ -318,7 +318,10 @@ impl Parser {
                     let mut expr = subject_expr;
                     while self.consume_symbol("|>") {
                         self.consume_newlines();
-                        let rhs = self.parse_binary(2).unwrap_or(Expr::Raw {
+                        // min_prec must be pipe_prec + 1 so the RHS does not
+                        // consume another `|>` (left-associativity is handled
+                        // by the surrounding `while` loop).
+                        let rhs = self.parse_binary(3).unwrap_or(Expr::Raw {
                             text: String::new(),
                             span: expr_span(&expr),
                         });

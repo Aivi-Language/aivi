@@ -160,13 +160,13 @@ impl Backend {
             ModuleItem::TypeSig(sig) => Some((sig.name.name, CompletionItemKind::FUNCTION)),
             ModuleItem::TypeDecl(decl) => Some((decl.name.name, CompletionItemKind::STRUCT)),
             ModuleItem::TypeAlias(alias) => {
-                Some((alias.name.name, CompletionItemKind::TYPE_PARAMETER))
+                Some((alias.name.name, CompletionItemKind::INTERFACE))
             }
             ModuleItem::ClassDecl(class_decl) => {
                 Some((class_decl.name.name, CompletionItemKind::CLASS))
             }
             ModuleItem::InstanceDecl(instance_decl) => {
-                Some((instance_decl.name.name, CompletionItemKind::VARIABLE))
+                Some((instance_decl.name.name, CompletionItemKind::STRUCT))
             }
             ModuleItem::DomainDecl(domain_decl) => {
                 Some((domain_decl.name.name, CompletionItemKind::MODULE))
