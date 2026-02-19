@@ -363,8 +363,33 @@ impl Parser {
         self.parse_binary(0)
     }
 
+    /// Returns `true` when `expr` is something that can syntactically appear
+    /// as the head of a juxtaposition-style function application (`f x y`).
+    fn is_callable_head(expr: &Expr) -> bool {
+        matches!(
+            expr,
+            Expr::Ident(_)
+                | Expr::Call { .. }
+                | Expr::FieldAccess { .. }
+                | Expr::FieldSection { .. }
+                | Expr::Index { .. }
+                | Expr::Lambda { .. }
+                | Expr::Block { .. }
+        )
+    }
+
     fn parse_application(&mut self) -> Option<Expr> {
         let mut expr = self.parse_postfix()?;
+        // Only collect juxtaposition arguments when the head expression is
+        // something that could plausibly be called — identifiers, field access,
+        // indexing, lambdas, blocks, etc.  Literals, lists, records, tuples,
+        // if-expressions and match-expressions are never callable; treating
+        // adjacent tokens as arguments would hide missing-comma diagnostics
+        // inside [list] and {record} contexts and produce confusing ASTs like
+        // `Call(1, [2])` for `[1 2]`.
+        if !Self::is_callable_head(&expr) {
+            return Some(expr);
+        }
         let mut args = Vec::new();
         while self.is_expr_start()
             || (self.is_negative_number_literal_start()
