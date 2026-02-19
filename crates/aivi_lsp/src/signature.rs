@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use aivi::{
@@ -25,18 +25,14 @@ impl Backend {
         let (modules, _) = parse_modules(&path, text);
         let current_module = Self::module_at_position(&modules, position)?;
 
-        let mut workspace_module_list = Vec::new();
-        let mut seen_modules = HashSet::new();
-        for indexed in workspace_modules.values() {
-            seen_modules.insert(indexed.module.name.name.clone());
-            workspace_module_list.push(indexed.module.clone());
-        }
-        for module in modules.iter() {
-            if seen_modules.insert(module.name.name.clone()) {
-                workspace_module_list.push(module.clone());
-            }
-        }
-        let (_, inferred) = infer_value_types(&workspace_module_list);
+        // Only infer types for the current file's modules + direct imports to
+        // keep signature help responsive in large projects.
+        let relevant_modules = Self::collect_relevant_modules(
+            &modules,
+            current_module,
+            workspace_modules,
+        );
+        let (_, inferred) = infer_value_types(&relevant_modules);
 
         let call = current_module
             .items

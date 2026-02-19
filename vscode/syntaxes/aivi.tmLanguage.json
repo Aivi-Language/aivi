@@ -147,11 +147,11 @@
     "keyword": {
       "patterns": [
         {
-          "match": "\\b(do|effect|generate|resource|if|then|else|when|unless|yield|loop|recurse|or)\\b",
+          "match": "\\b(do|effect|generate|resource|if|then|else|when|unless|yield|loop|recurse|or|match|given)\\b",
           "name": "keyword.control.aivi"
         },
         {
-          "match": "\\b(module|export|use|as|hiding|domain|class|instance|over|patch|with)\\b",
+          "match": "\\b(module|export|use|as|hiding|domain|class|instance|over|patch|with|machine|on)\\b",
           "name": "keyword.other.aivi"
         }
       ]

@@ -7,7 +7,7 @@ use aivi.collections
 use aivi.json (JsonValue, jsonToText)
 use aivi.ui
 use aivi.ui.serverHtml.Protocol
-use aivi.net.httpServer (WsError, WebSocket, wsSend, TextMsg) -- DOCS: verify names
+use aivi.net.httpServer (WsError, WebSocket, wsSend, TextMsg) // -- DOCS: verify names
 
 export
 ClipboardError, PendingEntry, ServerEffect, ViewState
@@ -89,7 +89,7 @@ partitionAttrsGo = attrs hid accAttrs accMap => attrs match
   | []                   => (reverseList accAttrs, accMap, hid)
   | [a, ...rest]         => extractHandler a match
     | Some (kind, handler) => {
-      hidAttr = Attr ("data-aivi-hid-{ kind }") (toText hid) -- DOCS: verify Attr constructor
+      hidAttr = Attr ("data-aivi-hid-{ kind }") (toText hid) // -- DOCS: verify Attr constructor
       partitionAttrsGo rest (hid + 1)
       [hidAttr, ...accAttrs]
       (Map.insert hid handler accMap)

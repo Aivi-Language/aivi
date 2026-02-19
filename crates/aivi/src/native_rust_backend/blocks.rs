@@ -70,13 +70,21 @@ pub(super) fn emit_block(
         RustIrBlockKind::Effect => {
             // Effect blocks manage resource cleanups. We run cleanups even if the body errors,
             // and prefer the original error over cleanup errors.
+            let captured = collect_free_locals_in_items(items);
             s.push_str("aivi_ok(Value::Effect(Arc::new(EffectValue::Thunk {\n");
             s.push_str(&ind2);
             s.push_str("func: Arc::new(move |rt: &mut Runtime| {\n");
             s.push_str(&ind3);
             s.push_str("let mut __cleanups: Vec<Value> = Vec::new();\n");
+            for name in &captured {
+                let rust_name = rust_local_name(name);
+                s.push_str(&ind3);
+                s.push_str(&format!("let {rust_name} = {rust_name}.clone();\n"));
+            }
             s.push_str(&ind3);
-            s.push_str("let __result: R = (|| {\n");
+            // Use a plain block (not a nested closure) so we can freely move values
+            // in/out of the surrounding `move |rt| { ... }` thunk.
+            s.push_str("let __result: R = {\n");
 
             for (i, item) in items.iter().enumerate() {
                 let last = i + 1 == items.len();
@@ -148,7 +156,7 @@ pub(super) fn emit_block(
             }
 
             s.push_str(&ind3);
-            s.push_str("})();\n");
+            s.push_str("};\n");
             s.push_str(&ind3);
             s.push_str("let __cleanup_result: Result<(), RuntimeError> = (|| {\n");
             s.push_str(&"    ".repeat(indent + 4));
