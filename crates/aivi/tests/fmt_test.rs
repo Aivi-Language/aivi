@@ -105,6 +105,13 @@ fn test_fmt_keeps_space_before_list_literal_arg() {
 }
 
 #[test]
+fn test_fmt_matrix_sigil_alignment() {
+    let input = "matrix = ~mat[1.0, 2.0; 3.0, -1.0]\n";
+    let expected = "matrix = ~mat[1.0  2.0\n              3.0 -1.0]\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
 fn test_fmt_merges_hanging_opener_after_then_and_else() {
     let input = r#"
 x =

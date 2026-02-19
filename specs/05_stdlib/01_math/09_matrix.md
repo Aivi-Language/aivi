@@ -43,13 +43,16 @@ For concise matrix literals, use the `~mat` structured sigil:
 
 ```aivi
 // 2x2 rotation matrix (90 degrees)
-rot90 = ~mat[0.0, -1.0; 1.0, 0.0]
+rot90 = ~mat[0.0 -1.0
+             1.0  0.0]
 
 // 3x3 identity
-id3 = ~mat[1.0, 0.0, 0.0; 0.0, 1.0, 0.0; 0.0, 0.0, 1.0]
+id3 = ~mat[1.0 0.0 0.0
+           0.0 1.0 0.0
+           0.0 0.0 1.0]
 ```
 
-Rows are separated by `;`, columns by `,`. The sigil infers `Mat2`, `Mat3`, or `Mat4` from the row/column count.
+Rows are separated by newlines; columns by spaces (any whitespace). The formatter aligns columns for readability. The sigil infers `Mat2`, `Mat3`, or `Mat4` from the row/column count.
 
 ## Usage Examples
 
