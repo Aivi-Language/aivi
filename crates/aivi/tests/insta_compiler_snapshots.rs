@@ -54,10 +54,7 @@ fn snapshot_case(name: &str, src: &str) {
         "parse errors in {name}: {diags:?}"
     );
 
-    insta::assert_snapshot!(
-        format!("{name}_surface_ast"),
-        format!("{:#?}", modules)
-    );
+    insta::assert_snapshot!(format!("{name}_surface_ast"), format!("{:#?}", modules));
 
     insta::assert_snapshot!(
         format!("{name}_formatted"),

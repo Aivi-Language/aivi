@@ -121,14 +121,16 @@ impl Backend {
                     Self::find_record_field_name_at_position(cond, position)
                         .or_else(|| Self::find_record_field_name_at_position(effect, position))
                 }
-                aivi::BlockItem::Given { cond, fail_expr, .. } => {
-                    Self::find_record_field_name_at_position(cond, position)
-                        .or_else(|| Self::find_record_field_name_at_position(fail_expr, position))
-                }
-                aivi::BlockItem::On { transition, handler, .. } => {
-                    Self::find_record_field_name_at_position(transition, position)
-                        .or_else(|| Self::find_record_field_name_at_position(handler, position))
-                }
+                aivi::BlockItem::Given {
+                    cond, fail_expr, ..
+                } => Self::find_record_field_name_at_position(cond, position)
+                    .or_else(|| Self::find_record_field_name_at_position(fail_expr, position)),
+                aivi::BlockItem::On {
+                    transition,
+                    handler,
+                    ..
+                } => Self::find_record_field_name_at_position(transition, position)
+                    .or_else(|| Self::find_record_field_name_at_position(handler, position)),
             }),
         }
     }
@@ -373,14 +375,14 @@ impl Backend {
 
         // Look through imported modules for one that exports or defines the prefix
         // as a type, domain, or type alias. Then look up the member in that module.
-        let modules_to_search = Self::find_modules_exporting(
-            prefix,
-            current_module,
-            workspace_modules,
-        );
+        let modules_to_search =
+            Self::find_modules_exporting(prefix, current_module, workspace_modules);
 
         #[cfg(test)]
-        eprintln!("hover_for_dotted_member: prefix={prefix:?}, member={member:?}, modules_found={}", modules_to_search.len());
+        eprintln!(
+            "hover_for_dotted_member: prefix={prefix:?}, member={member:?}, modules_found={}",
+            modules_to_search.len()
+        );
 
         for indexed in &modules_to_search {
             let inf = inferred.get(&indexed.module.name.name);
@@ -394,7 +396,11 @@ impl Backend {
                 .and_then(|text| Self::doc_for_ident(text, &indexed.module, member));
 
             #[cfg(test)]
-            eprintln!("  checking module={}, has_inferred={}", indexed.module.name.name, inf.is_some());
+            eprintln!(
+                "  checking module={}, has_inferred={}",
+                indexed.module.name.name,
+                inf.is_some()
+            );
 
             // Check domain members with the member name.
             if let Some(contents) = Self::hover_contents_for_module(
@@ -417,13 +423,9 @@ impl Backend {
         // Also check the current module itself (the prefix might be defined locally).
         let doc = Self::doc_for_ident("", current_module, member);
         let inf = inferred.get(&current_module.name.name);
-        if let Some(contents) = Self::hover_contents_for_module(
-            current_module,
-            member,
-            inf,
-            doc.as_deref(),
-            doc_index,
-        ) {
+        if let Some(contents) =
+            Self::hover_contents_for_module(current_module, member, inf, doc.as_deref(), doc_index)
+        {
             return Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
                     kind: MarkupKind::Markdown,
@@ -445,8 +447,8 @@ impl Backend {
     ) -> Vec<&'a IndexedModule> {
         let mut result = Vec::new();
         for use_decl in current_module.uses.iter() {
-            let imports_name = use_decl.wildcard
-                || use_decl.items.iter().any(|item| item.name.name == name);
+            let imports_name =
+                use_decl.wildcard || use_decl.items.iter().any(|item| item.name.name == name);
             if !imports_name {
                 continue;
             }
@@ -517,16 +519,18 @@ impl Backend {
         eprintln!("build_hover_ws: modules={}", modules.len());
         let current_module = Self::module_at_position(&modules, position);
         #[cfg(test)]
-        eprintln!("build_hover_ws: current_module={}", current_module.map(|m| m.name.name.as_str()).unwrap_or("None"));
+        eprintln!(
+            "build_hover_ws: current_module={}",
+            current_module
+                .map(|m| m.name.name.as_str())
+                .unwrap_or("None")
+        );
         let current_module = current_module?;
 
         // Only infer types for the current file's modules + direct imports (not the
         // entire workspace) to keep hover responsive in large projects.
-        let relevant_modules = Self::collect_relevant_modules(
-            &modules,
-            current_module,
-            workspace_modules,
-        );
+        let relevant_modules =
+            Self::collect_relevant_modules(&modules, current_module, workspace_modules);
         let (_, inferred) = infer_value_types(&relevant_modules);
 
         // Handle dotted identifiers: first check if it's a full module name (e.g.

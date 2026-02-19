@@ -299,13 +299,25 @@ impl Parser {
         }
 
         if self.match_keyword("if") {
-            let cond = self.parse_expr()?;
+            let if_span = self.previous_span();
+            let cond = self.parse_expr().unwrap_or_else(|| {
+                self.emit_diag("E1504", "expected condition after 'if'", if_span.clone());
+                Expr::Raw { text: String::new(), span: if_span.clone() }
+            });
             self.consume_newlines();
             self.expect_keyword("then", "expected 'then' in if expression");
-            let then_branch = self.parse_expr()?;
+            let then_branch = self.parse_expr().unwrap_or_else(|| {
+                let sp = self.previous_span();
+                self.emit_diag("E1504", "expected expression after 'then'", sp.clone());
+                Expr::Raw { text: String::new(), span: sp }
+            });
             self.consume_newlines();
             self.expect_keyword("else", "expected 'else' in if expression");
-            let else_branch = self.parse_expr()?;
+            let else_branch = self.parse_expr().unwrap_or_else(|| {
+                let sp = self.previous_span();
+                self.emit_diag("E1504", "expected expression after 'else'", sp.clone());
+                Expr::Raw { text: String::new(), span: sp }
+            });
             let span = merge_span(expr_span(&cond), expr_span(&else_branch));
             return Some(Expr::If {
                 cond: Box::new(cond),

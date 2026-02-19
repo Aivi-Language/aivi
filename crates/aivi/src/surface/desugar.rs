@@ -276,15 +276,31 @@ fn desugar_expr(expr: Expr) -> Expr {
                         let effect = desugar_expr(effect);
                         BlockItem::Unless { cond, effect, span }
                     }
-                    BlockItem::Given { cond, fail_expr, span } => {
+                    BlockItem::Given {
+                        cond,
+                        fail_expr,
+                        span,
+                    } => {
                         let cond = desugar_expr(cond);
                         let fail_expr = desugar_expr(fail_expr);
-                        BlockItem::Given { cond, fail_expr, span }
+                        BlockItem::Given {
+                            cond,
+                            fail_expr,
+                            span,
+                        }
                     }
-                    BlockItem::On { transition, handler, span } => {
+                    BlockItem::On {
+                        transition,
+                        handler,
+                        span,
+                    } => {
                         let transition = desugar_expr(transition);
                         let handler = desugar_expr(handler);
-                        BlockItem::On { transition, handler, span }
+                        BlockItem::On {
+                            transition,
+                            handler,
+                            span,
+                        }
                     }
                 })
                 .collect();

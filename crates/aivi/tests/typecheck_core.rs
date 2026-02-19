@@ -732,7 +732,10 @@ main = 1.0
         .unwrap_or_else(|| panic!("expected type mismatch diagnostic, got: {module_diags:?}"));
 
     assert!(
-        mismatch_diag.diagnostic.message.contains("expected Int, found Float"),
+        mismatch_diag
+            .diagnostic
+            .message
+            .contains("expected Int, found Float"),
         "mismatch diagnostic message has wrong order: {}",
         mismatch_diag.diagnostic.message
     );

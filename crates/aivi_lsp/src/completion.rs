@@ -159,9 +159,7 @@ impl Backend {
             ModuleItem::Def(def) => Some((def.name.name, CompletionItemKind::FUNCTION)),
             ModuleItem::TypeSig(sig) => Some((sig.name.name, CompletionItemKind::FUNCTION)),
             ModuleItem::TypeDecl(decl) => Some((decl.name.name, CompletionItemKind::STRUCT)),
-            ModuleItem::TypeAlias(alias) => {
-                Some((alias.name.name, CompletionItemKind::INTERFACE))
-            }
+            ModuleItem::TypeAlias(alias) => Some((alias.name.name, CompletionItemKind::INTERFACE)),
             ModuleItem::ClassDecl(class_decl) => {
                 Some((class_decl.name.name, CompletionItemKind::CLASS))
             }

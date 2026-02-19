@@ -21,8 +21,7 @@ fn expr_strategy() -> impl Strategy<Value = String> {
         prop_oneof![
             (inner.clone(), inner.clone()).prop_map(|(a, b)| format!("({a}, {b})")),
             (inner.clone(), inner.clone()).prop_map(|(a, b)| format!("{a} + {b}")),
-            (inner.clone(), inner.clone())
-                .prop_map(|(t, e)| format!("if True then {t} else {e}")),
+            (inner.clone(), inner.clone()).prop_map(|(t, e)| format!("if True then {t} else {e}")),
         ]
     })
 }

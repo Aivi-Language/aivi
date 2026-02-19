@@ -53,8 +53,9 @@ impl Backend {
         }
 
         // Check if we are on a symbol/operator character
+        // Note: '.' is excluded because it's part of dotted identifiers (e.g. MyHeap.push)
         fn is_symbol_char(c: char) -> bool {
-            !c.is_alphanumeric() && c != '_' && c != ' ' && c != '\t' && c != '\n' && c != '\r'
+            !c.is_alphanumeric() && c != '_' && c != '.' && c != ' ' && c != '\t' && c != '\n' && c != '\r'
         }
 
         // Helper to check if a char is part of a standard identifier

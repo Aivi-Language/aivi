@@ -534,7 +534,10 @@ fn strict_record_syntax_cst(cst_tokens: &[aivi::CstToken], out: &mut Vec<Diagnos
                         .iter()
                         .rfind(|t| t.kind != "whitespace" && t.kind != "newline");
                     prev.is_some_and(|p| {
-                        matches!(p.text.as_str(), "effect" | "generate" | "resource" | "=>" | "=" | "->" | "<-")
+                        matches!(
+                            p.text.as_str(),
+                            "effect" | "generate" | "resource" | "=>" | "=" | "->" | "<-"
+                        )
                     })
                 };
                 stack.push(Frame {
@@ -600,7 +603,11 @@ fn strict_record_syntax_cst(cst_tokens: &[aivi::CstToken], out: &mut Vec<Diagnos
             }
             // Pattern: `ident =` at depth 0 → likely `name = value` instead of `name: value`.
             if tok.kind == "ident"
-                && tok.text.chars().next().is_some_and(|c| c.is_ascii_lowercase())
+                && tok
+                    .text
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_ascii_lowercase())
             {
                 // Peek forward past whitespace for `=`.
                 let next = cst_tokens[j + 1..close_idx]
@@ -741,11 +748,17 @@ fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                             walk_expr(cond, out);
                             walk_expr(effect, out);
                         }
-                        aivi::BlockItem::Given { cond, fail_expr, .. } => {
+                        aivi::BlockItem::Given {
+                            cond, fail_expr, ..
+                        } => {
                             walk_expr(cond, out);
                             walk_expr(fail_expr, out);
                         }
-                        aivi::BlockItem::On { transition, handler, .. } => {
+                        aivi::BlockItem::On {
+                            transition,
+                            handler,
+                            ..
+                        } => {
                             walk_expr(transition, out);
                             walk_expr(handler, out);
                         }
@@ -905,11 +918,17 @@ fn strict_pipe_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                             walk_expr(cond, out);
                             walk_expr(effect, out);
                         }
-                        aivi::BlockItem::Given { cond, fail_expr, .. } => {
+                        aivi::BlockItem::Given {
+                            cond, fail_expr, ..
+                        } => {
                             walk_expr(cond, out);
                             walk_expr(fail_expr, out);
                         }
-                        aivi::BlockItem::On { transition, handler, .. } => {
+                        aivi::BlockItem::On {
+                            transition,
+                            handler,
+                            ..
+                        } => {
                             walk_expr(transition, out);
                             walk_expr(handler, out);
                         }
@@ -1055,11 +1074,17 @@ fn strict_record_field_access(file_modules: &[Module], out: &mut Vec<Diagnostic>
                             walk_expr(cond, out);
                             walk_expr(effect, out);
                         }
-                        aivi::BlockItem::Given { cond, fail_expr, .. } => {
+                        aivi::BlockItem::Given {
+                            cond, fail_expr, ..
+                        } => {
                             walk_expr(cond, out);
                             walk_expr(fail_expr, out);
                         }
-                        aivi::BlockItem::On { transition, handler, .. } => {
+                        aivi::BlockItem::On {
+                            transition,
+                            handler,
+                            ..
+                        } => {
                             walk_expr(transition, out);
                             walk_expr(handler, out);
                         }
@@ -1224,17 +1249,32 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
                         }
                         aivi::BlockItem::When { cond, effect, .. }
                         | aivi::BlockItem::Unless { cond, effect, .. } => {
-                            if !shadowed && (expr_uses_name_free(cond, name) || expr_uses_name_free(effect, name)) {
+                            if !shadowed
+                                && (expr_uses_name_free(cond, name)
+                                    || expr_uses_name_free(effect, name))
+                            {
                                 return true;
                             }
                         }
-                        aivi::BlockItem::Given { cond, fail_expr, .. } => {
-                            if !shadowed && (expr_uses_name_free(cond, name) || expr_uses_name_free(fail_expr, name)) {
+                        aivi::BlockItem::Given {
+                            cond, fail_expr, ..
+                        } => {
+                            if !shadowed
+                                && (expr_uses_name_free(cond, name)
+                                    || expr_uses_name_free(fail_expr, name))
+                            {
                                 return true;
                             }
                         }
-                        aivi::BlockItem::On { transition, handler, .. } => {
-                            if !shadowed && (expr_uses_name_free(transition, name) || expr_uses_name_free(handler, name)) {
+                        aivi::BlockItem::On {
+                            transition,
+                            handler,
+                            ..
+                        } => {
+                            if !shadowed
+                                && (expr_uses_name_free(transition, name)
+                                    || expr_uses_name_free(handler, name))
+                            {
                                 return true;
                             }
                         }
@@ -1359,11 +1399,17 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
                             walk_expr(cond, out);
                             walk_expr(effect, out);
                         }
-                        aivi::BlockItem::Given { cond, fail_expr, .. } => {
+                        aivi::BlockItem::Given {
+                            cond, fail_expr, ..
+                        } => {
                             walk_expr(cond, out);
                             walk_expr(fail_expr, out);
                         }
-                        aivi::BlockItem::On { transition, handler, .. } => {
+                        aivi::BlockItem::On {
+                            transition,
+                            handler,
+                            ..
+                        } => {
                             walk_expr(transition, out);
                             walk_expr(handler, out);
                         }
@@ -1489,12 +1535,14 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                 | aivi::BlockItem::Unless { cond, effect, .. } => {
                     expr_uses_name(cond, name) || expr_uses_name(effect, name)
                 }
-                aivi::BlockItem::Given { cond, fail_expr, .. } => {
-                    expr_uses_name(cond, name) || expr_uses_name(fail_expr, name)
-                }
-                aivi::BlockItem::On { transition, handler, .. } => {
-                    expr_uses_name(transition, name) || expr_uses_name(handler, name)
-                }
+                aivi::BlockItem::Given {
+                    cond, fail_expr, ..
+                } => expr_uses_name(cond, name) || expr_uses_name(fail_expr, name),
+                aivi::BlockItem::On {
+                    transition,
+                    handler,
+                    ..
+                } => expr_uses_name(transition, name) || expr_uses_name(handler, name),
             }),
             aivi::Expr::FieldAccess { base, .. }
             | aivi::Expr::Index { base, .. }
@@ -1575,9 +1623,17 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                     | aivi::BlockItem::Recurse { expr, .. }
                     | aivi::BlockItem::Expr { expr, .. } => expr_uses_name(expr, &name),
                     aivi::BlockItem::When { cond, effect, .. }
-                    | aivi::BlockItem::Unless { cond, effect, .. } => expr_uses_name(cond, &name) || expr_uses_name(effect, &name),
-                    aivi::BlockItem::Given { cond, fail_expr, .. } => expr_uses_name(cond, &name) || expr_uses_name(fail_expr, &name),
-                    aivi::BlockItem::On { transition, handler, .. } => expr_uses_name(transition, &name) || expr_uses_name(handler, &name),
+                    | aivi::BlockItem::Unless { cond, effect, .. } => {
+                        expr_uses_name(cond, &name) || expr_uses_name(effect, &name)
+                    }
+                    aivi::BlockItem::Given {
+                        cond, fail_expr, ..
+                    } => expr_uses_name(cond, &name) || expr_uses_name(fail_expr, &name),
+                    aivi::BlockItem::On {
+                        transition,
+                        handler,
+                        ..
+                    } => expr_uses_name(transition, &name) || expr_uses_name(handler, &name),
                 });
                 if !used_later && !name.starts_with('_') {
                     push_simple(
@@ -1613,11 +1669,17 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                             walk_expr(cond, out);
                             walk_expr(effect, out);
                         }
-                        aivi::BlockItem::Given { cond, fail_expr, .. } => {
+                        aivi::BlockItem::Given {
+                            cond, fail_expr, ..
+                        } => {
                             walk_expr(cond, out);
                             walk_expr(fail_expr, out);
                         }
-                        aivi::BlockItem::On { transition, handler, .. } => {
+                        aivi::BlockItem::On {
+                            transition,
+                            handler,
+                            ..
+                        } => {
                             walk_expr(transition, out);
                             walk_expr(handler, out);
                         }
@@ -1741,11 +1803,17 @@ fn strict_missing_import_suggestions(
                             collect_idents(cond, out);
                             collect_idents(effect, out);
                         }
-                        aivi::BlockItem::Given { cond, fail_expr, .. } => {
+                        aivi::BlockItem::Given {
+                            cond, fail_expr, ..
+                        } => {
                             collect_idents(cond, out);
                             collect_idents(fail_expr, out);
                         }
-                        aivi::BlockItem::On { transition, handler, .. } => {
+                        aivi::BlockItem::On {
+                            transition,
+                            handler,
+                            ..
+                        } => {
                             collect_idents(transition, out);
                             collect_idents(handler, out);
                         }
@@ -1975,11 +2043,17 @@ fn strict_expected_type_coercions(
                             collect_calls(cond, out);
                             collect_calls(effect, out);
                         }
-                        aivi::BlockItem::Given { cond, fail_expr, .. } => {
+                        aivi::BlockItem::Given {
+                            cond, fail_expr, ..
+                        } => {
                             collect_calls(cond, out);
                             collect_calls(fail_expr, out);
                         }
-                        aivi::BlockItem::On { transition, handler, .. } => {
+                        aivi::BlockItem::On {
+                            transition,
+                            handler,
+                            ..
+                        } => {
                             collect_calls(transition, out);
                             collect_calls(handler, out);
                         }

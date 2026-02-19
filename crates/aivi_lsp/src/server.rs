@@ -339,7 +339,7 @@ impl LanguageServer for Backend {
             }
             None => None,
         };
-        Ok(location.map(GotoDefinitionResponse::Scalar))
+        Ok(location.map(|loc| GotoDefinitionResponse::Array(vec![loc])))
     }
 
     async fn goto_declaration(
@@ -361,7 +361,7 @@ impl LanguageServer for Backend {
             }
             None => None,
         };
-        Ok(location.map(GotoDeclarationResponse::Scalar))
+        Ok(location.map(|loc| GotoDeclarationResponse::Array(vec![loc])))
     }
 
     async fn goto_implementation(
@@ -383,7 +383,7 @@ impl LanguageServer for Backend {
             }
             None => None,
         };
-        Ok(location.map(GotoImplementationResponse::Scalar))
+        Ok(location.map(|loc| GotoImplementationResponse::Array(vec![loc])))
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {

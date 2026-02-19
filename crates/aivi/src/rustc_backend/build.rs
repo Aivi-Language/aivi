@@ -1,5 +1,5 @@
-use crate::AiviError;
 use crate::hir::HirProgram;
+use crate::AiviError;
 use std::path::Path;
 
 pub fn build_with_rustc(
@@ -17,4 +17,3 @@ pub fn emit_rustc_source(_program: crate::rust_ir::RustIrProgram) -> Result<Stri
         "The rustc backend has been removed. Use --target=rust-native instead.".to_string(),
     ))
 }
-
