@@ -9,7 +9,7 @@ use aivi.map
 @test
 parseLocale_smoke = do Effect {
   locale = parseLocale "en-US"
-    or { language: "en", region: Some "US", variants: [], tag: "en-US" }
+  or { language: "en", region: Some "US", variants: [], tag: "en-US" }
   assertEq locale.language "en"
   assertEq locale.region (Some "US")
   assertEq locale.tag "en-US"
@@ -18,7 +18,7 @@ parseLocale_smoke = do Effect {
 @test
 parseLocale_underscore = do Effect {
   locale = parseLocale "pt_BR"
-    or { language: "pt", region: Some "BR", variants: [], tag: "pt-BR" }
+  or { language: "pt", region: Some "BR", variants: [], tag: "pt-BR" }
   assertEq locale.language "pt"
   assertEq locale.region (Some "BR")
 }

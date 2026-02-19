@@ -37,9 +37,9 @@ sha256_empty = do Effect {
 @test
 hmacSha256_smoke = do Effect {
   key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
-    ? { Err _ => panic "bad hex" }
+  ? { Err _ => panic "bad hex" }
   msg = fromHex "4869205468657265"
-    ? { Err _ => panic "bad hex" }
+  ? { Err _ => panic "bad hex" }
   tag = hmacSha256 key msg
   assert (length tag > 0)
 }
@@ -47,9 +47,9 @@ hmacSha256_smoke = do Effect {
 @test
 hmacSha512_smoke = do Effect {
   key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
-    ? { Err _ => panic "bad hex" }
+  ? { Err _ => panic "bad hex" }
   msg = fromHex "4869205468657265"
-    ? { Err _ => panic "bad hex" }
+  ? { Err _ => panic "bad hex" }
   tag = hmacSha512 key msg
   assert (length tag > 0)
 }
@@ -57,10 +57,10 @@ hmacSha512_smoke = do Effect {
 @test
 hmacVerify_roundtrip = do Effect {
   key = fromHex "aabbccdd"
-    ? { Err _ => panic "bad hex" }
+  ? { Err _ => panic "bad hex" }
   msg = fromHex "deadbeef"
-    ? { Err _ => panic "bad hex" }
-  tag   = hmacSha256 key msg
+  ? { Err _ => panic "bad hex" }
+  tag = hmacSha256 key msg
   valid = hmacVerify key msg tag
   assert valid
 }
@@ -70,14 +70,14 @@ hmacVerify_roundtrip = do Effect {
 @test
 hashPassword_and_verify = do Effect {
   hashed <- hashPassword "myS3cret!"
-  ok     <- verifyPassword "myS3cret!" hashed
+  ok <- verifyPassword "myS3cret!" hashed
   assert ok
 }
 
 @test
 verifyPassword_wrong = do Effect {
   hashed <- hashPassword "correct"
-  ok     <- verifyPassword "wrong" hashed
+  ok <- verifyPassword "wrong" hashed
   assert (not ok)
 }
 
@@ -100,9 +100,9 @@ randomUuid_format = do Effect {
 @test
 toHex_fromHex_roundtrip = do Effect {
   original <- randomBytes 16
-  hex       = toHex original
-  decoded   = fromHex hex
-    ? { Err _ => panic "fromHex failed" }
+  hex = toHex original
+  decoded = fromHex hex
+  ? { Err _ => panic "fromHex failed" }
   assert (secureEquals original decoded)
 }
 

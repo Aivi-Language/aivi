@@ -116,7 +116,8 @@ impl Backend {
                 | aivi::BlockItem::Expr { expr, .. } => {
                     Self::find_record_field_name_at_position(expr, position)
                 }
-                aivi::BlockItem::When { cond, effect, .. } => {
+                aivi::BlockItem::When { cond, effect, .. }
+                | aivi::BlockItem::Unless { cond, effect, .. } => {
                     Self::find_record_field_name_at_position(cond, position)
                         .or_else(|| Self::find_record_field_name_at_position(effect, position))
                 }

@@ -182,7 +182,9 @@ use aivi.heap
 | **push** value h<br><pre><code>`a -> Heap a -> Heap a`</code></pre> | Inserts `value` into the heap. |
 | **popMin** h<br><pre><code>`Heap a -> Option (a, Heap a)`</code></pre> | Removes and returns the smallest value and remaining heap. |
 | **peekMin** h<br><pre><code>`Heap a -> Option a`</code></pre> | Returns the smallest value without removing it. |
+| **fromList** xs<br><pre><code>`List a -> Heap a`</code></pre> | Creates a heap from a list of elements. |
+| **size** h<br><pre><code>`Heap a -> Int`</code></pre> | Returns the number of elements in the heap. |
 
-`Heap` ordering is determined by `Ord` for the element type.
+`Heap` ordering is determined by `Ord` for the element type. Element types must be comparable primitives or tuples of comparable primitives (lexicographic ordering for tuples).
 
 ````

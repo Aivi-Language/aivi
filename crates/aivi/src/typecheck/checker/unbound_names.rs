@@ -142,6 +142,11 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
                     match item {
                         BlockItem::Bind { pattern, expr, .. }
                         | BlockItem::Let { pattern, expr, .. } => {
+                            // Pre-add compiler-generated bindings (e.g. __loop)
+                            // to allow self-reference inside their definition.
+                            if matches!(pattern, Pattern::Ident(n) if n.name.starts_with("__")) {
+                                collect_pattern_binders(pattern, bound);
+                            }
                             collect_expr(expr, env, bound, out);
                             collect_pattern_binders(pattern, bound);
                         }
@@ -149,7 +154,8 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
                         | BlockItem::Yield { expr, .. }
                         | BlockItem::Recurse { expr, .. }
                         | BlockItem::Expr { expr, .. } => collect_expr(expr, env, bound, out),
-                        BlockItem::When { cond, effect, .. } => {
+                        BlockItem::When { cond, effect, .. }
+                        | BlockItem::Unless { cond, effect, .. } => {
                             collect_expr(cond, env, bound, out);
                             collect_expr(effect, env, bound, out);
                         }
@@ -369,7 +375,8 @@ fn rewrite_implicit_field_vars(
                             *expr =
                                 rewrite_implicit_field_vars(expr.clone(), implicit_param, unbound);
                         }
-                        BlockItem::When { cond, effect, .. } => {
+                        BlockItem::When { cond, effect, .. }
+                        | BlockItem::Unless { cond, effect, .. } => {
                             *cond = rewrite_implicit_field_vars(cond.clone(), implicit_param, unbound);
                             *effect = rewrite_implicit_field_vars(effect.clone(), implicit_param, unbound);
                         }

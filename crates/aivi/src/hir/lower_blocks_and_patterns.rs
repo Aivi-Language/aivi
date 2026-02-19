@@ -71,6 +71,45 @@ fn lower_block_item_ctx(
                 },
             }
         }
+        // Desugar `unless cond <- eff` → `_ <- if (not cond) then eff else pure Unit`
+        BlockItem::Unless { cond, effect, .. } => {
+            let cond_hir = lower_expr_ctx(cond, id_gen, ctx, false);
+            let eff_hir = lower_expr_ctx(effect, id_gen, ctx, false);
+            let pure_unit = HirExpr::Call {
+                id: id_gen.next(),
+                func: Box::new(HirExpr::Var {
+                    id: id_gen.next(),
+                    name: "pure".to_string(),
+                }),
+                args: vec![HirExpr::Var {
+                    id: id_gen.next(),
+                    name: "Unit".to_string(),
+                }],
+            };
+            // Negate the condition: `!cond` desugars to `if cond then False else True`
+            // (AIVI has no `not` function; `!` is syntactic sugar for an if expression)
+            let negated_cond = HirExpr::If {
+                id: id_gen.next(),
+                cond: Box::new(cond_hir),
+                then_branch: Box::new(HirExpr::LitBool {
+                    id: id_gen.next(),
+                    value: false,
+                }),
+                else_branch: Box::new(HirExpr::LitBool {
+                    id: id_gen.next(),
+                    value: true,
+                }),
+            };
+            HirBlockItem::Bind {
+                pattern: HirPattern::Wildcard { id: id_gen.next() },
+                expr: HirExpr::If {
+                    id: id_gen.next(),
+                    cond: Box::new(negated_cond),
+                    then_branch: Box::new(eff_hir),
+                    else_branch: Box::new(pure_unit),
+                },
+            }
+        }
         // Desugar `given cond or failExpr` → `_ <- if cond then pure Unit else failExpr`
         BlockItem::Given { cond, fail_expr, .. } => {
             let cond_hir = lower_expr_ctx(cond, id_gen, ctx, false);
@@ -236,7 +275,8 @@ fn contains_placeholder(expr: &Expr) -> bool {
             | BlockItem::Yield { expr, .. }
             | BlockItem::Recurse { expr, .. }
             | BlockItem::Expr { expr, .. } => contains_placeholder(expr),
-            BlockItem::When { cond, effect, .. } => {
+            BlockItem::When { cond, effect, .. }
+            | BlockItem::Unless { cond, effect, .. } => {
                 contains_placeholder(cond) || contains_placeholder(effect)
             }
             BlockItem::Given { cond, fail_expr, .. } => {
@@ -456,6 +496,11 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
                         span,
                     },
                     BlockItem::When { cond, effect, span } => BlockItem::When {
+                        cond: desugar_placeholder_lambdas(cond),
+                        effect: desugar_placeholder_lambdas(effect),
+                        span,
+                    },
+                    BlockItem::Unless { cond, effect, span } => BlockItem::Unless {
                         cond: desugar_placeholder_lambdas(cond),
                         effect: desugar_placeholder_lambdas(effect),
                         span,
@@ -750,6 +795,11 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                         span,
                     },
                     BlockItem::When { cond, effect, span } => BlockItem::When {
+                        cond: replace_holes_inner(cond, counter, params),
+                        effect: replace_holes_inner(effect, counter, params),
+                        span,
+                    },
+                    BlockItem::Unless { cond, effect, span } => BlockItem::Unless {
                         cond: replace_holes_inner(cond, counter, params),
                         effect: replace_holes_inner(effect, counter, params),
                         span,

@@ -1,0 +1,24 @@
+@no_prelude
+module integrationTests.syntax.effects.unlessConditional
+
+use aivi
+use aivi.testing
+
+@test
+unlessSkipsWhenTrue = do Effect {
+  unless True <- print "should not run"
+  pure Unit
+}
+
+@test
+unlessFalseRuns = do Effect {
+  unless False <- print "runs"
+  pure Unit
+}
+
+@test
+whenAndUnlessSymmetric = do Effect {
+  when False <- pure Unit
+  unless True <- pure Unit
+  pure Unit
+}

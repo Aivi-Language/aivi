@@ -270,6 +270,12 @@ fn desugar_expr(expr: Expr) -> Expr {
                         let effect = desugar_expr(effect);
                         BlockItem::When { cond, effect, span }
                     }
+                    BlockItem::Unless { cond, effect, span } => {
+                        // Desugar: `unless cond <- eff` → `_ <- if (not cond) then eff else pure Unit`
+                        let cond = desugar_expr(cond);
+                        let effect = desugar_expr(effect);
+                        BlockItem::Unless { cond, effect, span }
+                    }
                     BlockItem::Given { cond, fail_expr, span } => {
                         let cond = desugar_expr(cond);
                         let fail_expr = desugar_expr(fail_expr);

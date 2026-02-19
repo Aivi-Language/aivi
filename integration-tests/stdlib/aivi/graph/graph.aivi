@@ -1,0 +1,45 @@
+@no_prelude
+module integrationTests.stdlib.aivi.graph.tests
+
+use aivi
+use aivi.testing
+use aivi.graph
+use aivi.mutableMap
+
+@test
+relax_updatesWhenShorter = do Effect {
+  dists <- MutableMap.create (Map.insert 1 0.0 Map.empty)
+  edge = { from: 1, to: 2, weight: 3.5 }
+  updated <- relax dists 0.0 edge
+  assert updated
+  val <- MutableMap.get 2 dists
+  assert (val == Some 3.5)
+}
+
+@test
+relax_skipsWhenLonger = do Effect {
+  dists <- MutableMap.create (Map.insert 1 0.0 (Map.insert 2 1.0 Map.empty))
+  edge = { from: 1, to: 2, weight: 5.0 }
+  updated <- relax dists 0.0 edge
+  assert (updated == False)
+  val <- MutableMap.get 2 dists
+  assert (val == Some 1.0)
+}
+
+@test
+relaxEdges_countsUpdates = do Effect {
+  dists <- MutableMap.create (Map.insert 0 0.0 Map.empty)
+  edges = [
+    { from: 0, to: 1, weight: 2.0 }
+    { from: 0, to: 2, weight: 5.0 }
+    { from: 0, to: 3, weight: 1.0 }
+  ]
+  count <- relaxEdges dists 0.0 edges
+  assert (count == 3)
+  d1 <- MutableMap.get 1 dists
+  d2 <- MutableMap.get 2 dists
+  d3 <- MutableMap.get 3 dists
+  assert (d1 == Some 2.0)
+  assert (d2 == Some 5.0)
+  assert (d3 == Some 1.0)
+}

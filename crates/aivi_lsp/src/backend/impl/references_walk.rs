@@ -71,7 +71,8 @@ impl Backend {
             | BlockItem::Expr { expr, .. } => {
                 Self::collect_expr_references(expr, ident, text, uri, locations);
             }
-            BlockItem::When { cond, effect, .. } => {
+            BlockItem::When { cond, effect, .. }
+            | BlockItem::Unless { cond, effect, .. } => {
                 Self::collect_expr_references(cond, ident, text, uri, locations);
                 Self::collect_expr_references(effect, ident, text, uri, locations);
             }

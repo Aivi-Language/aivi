@@ -147,7 +147,7 @@
     "keyword": {
       "patterns": [
         {
-          "match": "\\b(do|effect|generate|resource|if|then|else|when|yield|loop|recurse|or)\\b",
+          "match": "\\b(do|effect|generate|resource|if|then|else|when|unless|yield|loop|recurse|or)\\b",
           "name": "keyword.control.aivi"
         },
         {

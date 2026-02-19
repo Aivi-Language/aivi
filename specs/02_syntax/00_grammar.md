@@ -207,12 +207,22 @@ SuffixedParens := "(" Expr ")" Suffix
 Suffix         := lowerIdent | "%"
 
 Block          := "{" { Stmt } "}"
-DoBlock        := "do" UpperIdent "{" { Stmt } "}"
+DoBlock        := "do" UpperIdent "{" { DoStmt } "}"
 GenerateBlock  := "generate" "{" { GenStmt } "}"
 ResourceBlock  := "resource" "{" { ResStmt } "}"
 
 Stmt           := BindStmt | ValueBinding | Expr Sep
 BindStmt       := Pattern "<-" Expr [ OrFallback ] Sep
+
+DoStmt         := BindStmt
+               | ValueBinding
+               | Expr Sep
+               | "when" Expr "<-" Expr Sep
+               | "unless" Expr "<-" Expr Sep
+               | "given" Expr "or" Expr Sep
+               | "on" PostfixExpr "=>" Expr Sep
+               | "recurse" Expr Sep
+               | "loop" Pattern "=" Expr "=>" Block Sep
 
 GenStmt        := BindStmt
                | GuardStmt

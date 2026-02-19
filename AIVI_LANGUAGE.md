@@ -584,6 +584,39 @@ main = do Effect {
 
 Desugars to: `_ <- if cond then pure Unit else failExpr`.
 
+### Tail-recursive loops in effect blocks
+
+`loop`/`recurse` works inside `do Effect { ... }` blocks for stateful iteration:
+
+```aivi
+dijkstra = source graph => do Effect {
+  dists <- MutableMap.create (Map.insert source 0.0 Map.empty)
+
+  loop pq = Heap.push (0.0, source) Heap.empty => {
+    result = Heap.popMin pq
+    result match
+      | None                       => pure Unit
+      | Some ((d, node), restPq)   => do Effect {
+          currentDist <- MutableMap.getOrElse node 999999.0 dists
+          if d > currentDist
+          then do Effect { recurse restPq }
+          else do Effect {
+            edges = edgesFrom graph node
+            newPq <- processEdges dists d edges restPq
+            recurse newPq
+          }
+        }
+  }
+
+  MutableMap.freeze dists
+}
+```
+
+- `loop pat = init => { body }` — local tail-recursive loop (same syntax as in generators)
+- `recurse newState` — continue with the next iteration
+- Omitting `recurse` in a branch terminates the loop
+- The loop body `{ ... }` is promoted to the parent effect-block kind, so `<-`, `when`/`unless`, and `recurse` work inside
+
 ### State machines (`machine`)
 
 `machine` declares a state machine where transitions are first-class and states are inferred.

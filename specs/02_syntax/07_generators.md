@@ -78,5 +78,47 @@ Generators provide a powerful, declarative way to build complex sequences withou
 
 <<< ../snippets/from_md/02_syntax/07_generators/block_09.aivi{aivi}
 
+## 7.6 Tail-recursive loops
+
 `loop (pat) = init => { ... }` introduces a local tail-recursive loop for generators.
-Inside the loop body, `recurse next` continues with the next state.
+Inside the loop body, `recurse next` continues with the next iteration with updated state.
+
+### Syntax
+
+```aivi
+loop pattern = initialValue => {
+  -- body: may yield, may recurse
+  yield someValue
+  recurse nextState
+}
+```
+
+- **`pattern`** binds the loop state (may be a tuple, record, or simple name).
+- **`initialValue`** is the starting state.
+- **`recurse expr`** restarts the loop with the new state `expr`. It must appear in tail position.
+- If `recurse` is never reached (e.g. a branch doesn't call it), the loop terminates.
+
+### Desugaring
+
+`loop` is syntactic sugar for a local recursive function. The compiler transforms:
+
+```aivi
+loop (a, b) = (0, 1) => {
+  yield a
+  recurse (b, a + b)
+}
+```
+
+into (approximately):
+
+```aivi
+__loop0 = (a, b) => {
+  yield a
+  __loop0 (b, a + b)
+}
+__loop0 (0, 1)
+```
+
+### Use in effect blocks
+
+`loop`/`recurse` is also available in `do Effect { ... }` blocks for stateful iteration (see [Effects § 9.6](09_effects.md#96-tail-recursive-loops)).

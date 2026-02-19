@@ -107,6 +107,7 @@ pub enum Value {
     Stream(Arc<StreamHandle>),
     HttpServer(Arc<ServerHandle>),
     WebSocket(Arc<WebSocketHandle>),
+    MutableMap(Arc<Mutex<ImHashMap<KeyValue, Value>>>),
 }
 
 #[derive(Clone)]

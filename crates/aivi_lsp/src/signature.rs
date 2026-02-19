@@ -240,7 +240,8 @@ impl Backend {
                 | BlockItem::Yield { expr, .. }
                 | BlockItem::Recurse { expr, .. }
                 | BlockItem::Expr { expr, .. } => Self::find_call_info(expr, position),
-                BlockItem::When { cond, effect, .. } => Self::find_call_info(cond, position)
+                BlockItem::When { cond, effect, .. }
+                | BlockItem::Unless { cond, effect, .. } => Self::find_call_info(cond, position)
                     .or_else(|| Self::find_call_info(effect, position)),
                 BlockItem::Given { cond, fail_expr, .. } => Self::find_call_info(cond, position)
                     .or_else(|| Self::find_call_info(fail_expr, position)),

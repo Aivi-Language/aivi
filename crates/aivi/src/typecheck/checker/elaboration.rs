@@ -406,11 +406,23 @@ impl TypeChecker {
                             expr,
                             span,
                         } => {
+                            // Compiler-generated let bindings (e.g. __loop from
+                            // loop/recurse desugaring) may be self-referential.
+                            // Pre-add them to scope so the recursive reference
+                            // inside the lambda body can be elaborated.
+                            if matches!(&pattern, Pattern::Ident(n) if n.name.starts_with("__")) {
+                                self.infer_pattern(&pattern, &mut local_env)?;
+                            }
                             let (expr, expr_ty) = self.elab_expr(expr, None, &mut local_env)?;
                             let pat_ty = self.infer_pattern(&pattern, &mut local_env)?;
-                            if matches!(kind, BlockKind::Plain) {
-                                self.unify_with_span(pat_ty, expr_ty, pattern_span(&pattern))?;
-                            }
+                            // Always unify Let pattern with expression type so that
+                            // later items have accurate constraints during elaboration.
+                            // (Let bindings are pure in all block kinds.)
+                            self.unify_with_span(
+                                pat_ty,
+                                expr_ty,
+                                pattern_span(&pattern),
+                            )?;
                             new_items.push(BlockItem::Let {
                                 pattern,
                                 expr,
@@ -425,7 +437,38 @@ impl TypeChecker {
                             let (expr, expr_ty) = self.elab_expr(expr, None, &mut local_env)?;
                             let pat_ty = self.infer_pattern(&pattern, &mut local_env)?;
                             if matches!(kind, BlockKind::Plain) {
-                                self.unify_with_span(pat_ty, expr_ty, pattern_span(&pattern))?;
+                                self.unify_with_span(
+                                    pat_ty,
+                                    expr_ty,
+                                    pattern_span(&pattern),
+                                )?;
+                            } else {
+                                // For effect/resource/generate blocks, extract the
+                                // value type from the Effect wrapper and unify with
+                                // the pattern. This propagates constraints during
+                                // elaboration so that later items (e.g. operator
+                                // overload selection) see accurate types.
+                                let backup = self.subst.clone();
+                                let value_ty = self.fresh_var();
+                                let eff_err_ty = self.fresh_var();
+                                let effect_ty = Type::con("Effect")
+                                    .app(vec![eff_err_ty, value_ty.clone()]);
+                                if self
+                                    .unify_with_span(
+                                        expr_ty.clone(),
+                                        effect_ty,
+                                        span.clone(),
+                                    )
+                                    .is_ok()
+                                {
+                                    let _ = self.unify_with_span(
+                                        pat_ty,
+                                        value_ty,
+                                        pattern_span(&pattern),
+                                    );
+                                } else {
+                                    self.subst = backup;
+                                }
                             }
                             new_items.push(BlockItem::Bind {
                                 pattern,
@@ -449,6 +492,11 @@ impl TypeChecker {
                             let (cond, _) = self.elab_expr(cond, None, &mut local_env)?;
                             let (effect, _) = self.elab_expr(effect, None, &mut local_env)?;
                             new_items.push(BlockItem::When { cond, effect, span });
+                        }
+                        BlockItem::Unless { cond, effect, span } => {
+                            let (cond, _) = self.elab_expr(cond, None, &mut local_env)?;
+                            let (effect, _) = self.elab_expr(effect, None, &mut local_env)?;
+                            new_items.push(BlockItem::Unless { cond, effect, span });
                         }
                         BlockItem::Given { cond, fail_expr, span } => {
                             let (cond, _) = self.elab_expr(cond, None, &mut local_env)?;

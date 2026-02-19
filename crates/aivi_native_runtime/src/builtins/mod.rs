@@ -11,6 +11,7 @@ mod i18n;
 mod linalg;
 mod log;
 mod math;
+mod mutable_map;
 mod number;
 mod regex;
 mod signal;

@@ -90,7 +90,7 @@ vec2_scalar_mul = do Effect {
 
 @test
 vec2_negate = do Effect {
-  v = vec2 1.0 -2.0
+  v = vec2 1.0-2.0
   n = negate v
   assertEq n.x -1.0
   assertEq n.y 2.0

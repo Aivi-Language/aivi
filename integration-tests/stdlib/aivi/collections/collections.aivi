@@ -42,6 +42,38 @@ deque_smoke = do Effect {
   }
 
 @test
+  heapSize = do Effect {
+    h0 = Heap.empty
+    h1 = Heap.push 3 h0
+    h2 = Heap.push 1 h1
+    h3 = Heap.push 2 h2
+    assert (Heap.size h3 == 3)
+    assert (Heap.size h0 == 0)
+  }
+
+@test
+  heapFromList = do Effect {
+    h <- Heap.fromList [5, 1, 3, 2, 4]
+    assert (Heap.size h == 5)
+    assert (Heap.peekMin h == Some 1)
+  }
+
+@test
+  heapTuplePriority = do Effect {
+    h0 = Heap.empty
+    h1 = Heap.push (3, "c") h0
+    h2 = Heap.push (1, "a") h1
+    h3 = Heap.push (2, "b") h2
+    res = Heap.popMin h3
+    res match
+      | Some ((w, n), _rest) => do Effect {
+        assert (w == 1)
+        assert (n == "a")
+      }
+      | None => assert False
+  }
+
+@test
   map_smoke = do Effect {
     m0 = Map.empty
     m1 = Map.insert 1 "one" m0
