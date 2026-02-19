@@ -1,6 +1,6 @@
 # Generic Monadic `do` Blocks
 
-> **Status**: Implemented (v0.1) — `do M { ... }` works for any type constructor with a `Chain` instance (including `Option`, `Result`, and `List`). Blocks are desugared to nested `chain`/lambda calls during HIR lowering. Native codegen is stubbed.  
+> **Status**: Implemented (v0.1)   `do M { ... }` works for any type constructor with a `Chain` instance (including `Option`, `Result`, and `List`). Blocks are desugared to nested `chain`/lambda calls during HIR lowering. Native codegen is stubbed.  
 > **Depends on**: Type classes ([§ 3.5](03_types.md#35-classes-and-hkts)), `Monad` hierarchy ([aivi.logic](../05_stdlib/00_core/03_logic.md)), effects ([§ 9](09_effects.md)), instance resolution (compiler).
 
 ## Overview
@@ -9,10 +9,10 @@
 
 ### Design Principles
 
-1. **`do Effect { ... }` remains the primary form** — it is the most common and retains its special features (`or` fallback, `resource` acquisition, `when`/`unless`/`given`, `loop`/`recurse`, `on`).
-2. **`generate { ... }` stays separate** — generators have fundamentally different semantics (`yield`, guards, pull-based), and are not monadic in the standard sense.
-3. **Generic `do M` supports only the common monadic subset** — `<-` (bind), `=` (let), final expression. Effect-specific statements are not available in generic blocks.
-4. **Instance-driven** — the compiler uses the existing class/instance resolution to find `Chain M` (for `chain`) and `Applicative M` (for `of`).
+1. **`do Effect { ... }` remains the primary form**   it is the most common and retains its special features (`or` fallback, `resource` acquisition, `when`/`unless`/`given`, `loop`/`recurse`, `on`).
+2. **`generate { ... }` stays separate**   generators have fundamentally different semantics (`yield`, guards, pull-based), and are not monadic in the standard sense.
+3. **Generic `do M` supports only the common monadic subset**   `<-` (bind), `=` (let), final expression. Effect-specific statements are not available in generic blocks.
+4. **Instance-driven**   the compiler uses the existing class/instance resolution to find `Chain M` (for `chain`) and `Applicative M` (for `of`).
 
 ## Syntax
 
@@ -24,7 +24,7 @@ The existing grammar rule:
 DoBlock := "do" UpperIdent "{" { DoStmt } "}"
 ```
 
-is **unchanged** — the parser already accepts any `UpperIdent` after `do`. The change is semantic: the type checker and desugaring must handle the monad name generically.
+is **unchanged**   the parser already accepts any `UpperIdent` after `do`. The change is semantic: the type checker and desugaring must handle the monad name generically.
 
 ### Statement subset by monad
 
@@ -178,15 +178,15 @@ This contrasts with `do Effect`, which uses the built-in `Effect` runtime machin
 
 | Type | Description | `do` block benefit |
 | :--- | :--- | :--- |
-| `Validation E A` | Like `Result` but **accumulates** errors (via `Applicative`, not short-circuiting `chain`). | `do Validation { name <- validateName input; age <- validateAge input; pure { name, age } }` — note: `Validation` only benefits from `ap` (applicative), not `chain`. A `do` block would be misleading since `<-` suggests sequencing. Better served by applicative combinators. |
-| `Reader R A` | Computation with read-only environment. | `do Reader { env <- ask; pure (env.dbUrl) }` — useful for dependency injection patterns. |
-| `Writer W A` | Computation that accumulates a log (`W : Monoid`). | `do Writer { tell "step 1"; x <- compute; tell "step 2"; pure x }` — structured logging. |
-| `State S A` | Computation with read-write state. | `do State { s <- get; put (s + 1); pure s }` — stateful algorithms without effects. |
-| `Parser A` | Parser combinators. | `do Parser { x <- literal "if"; _ <- spaces; cond <- expr; pure (If cond) }` — parser composition. |
+| `Validation E A` | Like `Result` but **accumulates** errors (via `Applicative`, not short-circuiting `chain`). | `do Validation { name <- validateName input; age <- validateAge input; pure { name, age } }`   note: `Validation` only benefits from `ap` (applicative), not `chain`. A `do` block would be misleading since `<-` suggests sequencing. Better served by applicative combinators. |
+| `Reader R A` | Computation with read-only environment. | `do Reader { env <- ask; pure (env.dbUrl) }`   useful for dependency injection patterns. |
+| `Writer W A` | Computation that accumulates a log (`W : Monoid`). | `do Writer { tell "step 1"; x <- compute; tell "step 2"; pure x }`   structured logging. |
+| `State S A` | Computation with read-write state. | `do State { s <- get; put (s + 1); pure s }`   stateful algorithms without effects. |
+| `Parser A` | Parser combinators. | `do Parser { x <- literal "if"; _ <- spaces; cond <- expr; pure (If cond) }`   parser composition. |
 
 ### Recommendation for v0.2
 
-Start with **`Option`** and **`Result`** only — they already have `Monad` instances in the spec and address the most common pain points. `List` should get an instance too but its use via `do` overlaps heavily with `generate { ... }`.
+Start with **`Option`** and **`Result`** only   they already have `Monad` instances in the spec and address the most common pain points. `List` should get an instance too but its use via `do` overlaps heavily with `generate { ... }`.
 
 `Validation`, `Reader`, `Writer`, `State`, and `Parser` should be evaluated individually as stdlib additions; they are not required for the `do M` mechanism itself.
 
@@ -194,7 +194,7 @@ Start with **`Option`** and **`Result`** only — they already have `Monad` inst
 
 ### Phase 1: Plumbing (preserve monad identity)
 
-**Scope**: No new user-visible behavior yet — just stop discarding information.
+**Scope**: No new user-visible behavior yet   just stop discarding information.
 
 | Layer | Change |
 | :--- | :--- |
@@ -245,12 +245,12 @@ Start with **`Option`** and **`Result`** only — they already have `Monad` inst
 | `do Result` tests | Pure error chaining |
 | `do List` tests (if instance added) | Cartesian product / non-determinism |
 | Spec updates | Update [§ 9.8](09_effects.md#98-do-notation-scope-v01) to remove the v0.1 restriction |
-| AIVI_LANGUAGE.md | Already mentions `do M { ... }` — verify consistency |
+| AIVI_LANGUAGE.md | Already mentions `do M { ... }`   verify consistency |
 
 ## Open Questions
 
 1. **Should `do M { }` (empty) desugar to `of Unit` or be an error?**
-   Proposal: `of Unit` — consistent with `do Effect { }` → `pure Unit`.
+   Proposal: `of Unit`   consistent with `do Effect { }` → `pure Unit`.
 
 2. **Should `given`/`when`/`unless` be generalizable?**
    `given cond or expr` could work for any `M` that supports short-circuiting (e.g. `Option`, `Result`). However, the semantics differ per monad (Effect: `fail`, Option: `None`, Result: `Err ...`). Keep Effect-only for now; revisit with a `MonadFail` class if needed.
@@ -259,10 +259,10 @@ Start with **`Option`** and **`Result`** only — they already have `Monad` inst
    `loop` in `do Effect` desugars to a local recursive function whose body is an effect block. The same pattern works for any monad. Could be enabled by desugaring `loop` to a `let rec` + `chain` pattern. Defer to a later version to keep scope small.
 
 4. **Should `do (Effect E)` be valid syntax (explicit type application)?**
-   The grammar says `"do" UpperIdent`, so `do (Effect E)` would require a grammar change to `"do" TypeExpr`. Not needed for v0.2 — the compiler infers `E` from context.
+   The grammar says `"do" UpperIdent`, so `do (Effect E)` would require a grammar change to `"do" TypeExpr`. Not needed for v0.2   the compiler infers `E` from context.
 
 5. **Higher-kinded application: `do (Result E) { ... }`?**
-   `Result E` is a partially applied type constructor `Result E *`. The grammar would need to accept type expressions, not just identifiers. Defer — `do Result { ... }` can work if the compiler resolves `Result` as `Result E *` with `E` inferred.
+   `Result E` is a partially applied type constructor `Result E *`. The grammar would need to accept type expressions, not just identifiers. Defer   `do Result { ... }` can work if the compiler resolves `Result` as `Result E *` with `E` inferred.
 
 6. **Name resolution: `do MyModule.MyMonad { ... }`?**
    Qualified names after `do` would require extending the grammar from `UpperIdent` to `QualifiedUpperIdent`. Low priority.
@@ -279,6 +279,6 @@ Start with **`Option`** and **`Result`** only — they already have `Monad` inst
 - Generators: [§ 7](07_generators.md)
 - Type classes: [§ 3.5](03_types.md#35-classes-and-hkts)
 - Monad hierarchy: [aivi.logic](../05_stdlib/00_core/03_logic.md)
-- Desugaring — effects: [§ 7](../04_desugaring/07_effects.md)
-- Desugaring — classes: [§ 8](../04_desugaring/08_classes.md)
+- Desugaring   effects: [§ 7](../04_desugaring/07_effects.md)
+- Desugaring   classes: [§ 8](../04_desugaring/08_classes.md)
 - Current v0.1 restriction: [§ 9.8](09_effects.md#98-do-notation-scope-v01)

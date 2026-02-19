@@ -95,9 +95,9 @@ Domain operators follow standard precedence. Domains do not redefine precedence 
 
 ## 9.5 Desugaring Order
 
-1. **Type inference** — Determine carrier types
-2. **Delta expansion** — Replace literals with constructors
-3. **Domain resolution** — Match `(operator, carrier)` to domain `D`
-4. **RHS-overload selection** — Among `D`'s entries for the operator, pick the one matching the inferred `(LHS, RHS)` pair (§9.2)
-5. **Function substitution** — Replace operator with the selected implementation
+1. **Type inference**   Determine carrier types
+2. **Delta expansion**   Replace literals with constructors
+3. **Domain resolution**   Match `(operator, carrier)` to domain `D`
+4. **RHS-overload selection**   Among `D`'s entries for the operator, pick the one matching the inferred `(LHS, RHS)` pair (§9.2)
+5. **Function substitution**   Replace operator with the selected implementation
 4. **Function substitution**   Replace operator with implementation
