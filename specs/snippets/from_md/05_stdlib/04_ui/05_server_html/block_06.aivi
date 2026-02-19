@@ -1,0 +1,9 @@
+Msg = BecameVisible { sid: SubscriptionId, entries: List IntersectionEntry }
+    | WatchSection
+
+update = msg model => msg match
+  | WatchSection =>
+    (model, [SubIntersect 1
+               { rootMargin: "0px", threshold: [0.0, 1.0] }
+               [{ tid: 1, nodeId: "section-hero" }]])
+  | BecameVisible _ => (model <| { heroVisible: True }, [])

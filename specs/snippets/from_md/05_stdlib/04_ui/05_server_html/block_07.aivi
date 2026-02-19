@@ -1,0 +1,4 @@
+ClipboardError =
+  | PermissionDenied
+  | Unavailable
+  | Other Text
