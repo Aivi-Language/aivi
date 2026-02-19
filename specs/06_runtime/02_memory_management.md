@@ -20,7 +20,7 @@ To handle recursive definitions without leaking memory, the runtime uses one of 
 1.  **Weak Back-References**: The self-reference in a recursive closure is held as a weak reference that does not prevent deallocation.
 2.  **Scope-Based Cycle Breaking**: When a recursive scope exits, the runtime explicitly breaks the cycle to ensure the closure and its environment are freed.
 
-The choice of strategy is transparent to the programmer — recursive definitions simply work without memory leaks.
+The choice of strategy is transparent to the programmer   recursive definitions simply work without memory leaks.
 
 ### Future Work
 

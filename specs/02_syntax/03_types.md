@@ -187,7 +187,7 @@ machine Door = {
 }
 ```
 
-- `-> Closed : init {}` is the **initial transition** — it has no source state and
+- `-> Closed : init {}` is the **initial transition**   it has no source state and
   marks `Closed` as the machine's starting state. Every machine must have exactly one
   initial transition.
 - `Source -> Target : event { payload }` defines a named transition with an optional
@@ -203,7 +203,7 @@ FieldDecl         := lowerIdent ":" TypeExpr
 
 ### Semantics
 
-- States are **inferred** from the set of sources and targets — no `state` keyword.
+- States are **inferred** from the set of sources and targets   no `state` keyword.
 - The initial transition (`-> State : init {}`) designates the starting state and
   may carry a payload for initial data.
 - `Source -> Target : event { fields }` defines a valid transition carrying typed data.

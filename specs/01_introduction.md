@@ -65,7 +65,7 @@ AIVI is built from the ground up to target **WebAssembly (WASM)**.
 - **Security**: The WASM capability-based security model naturally complements AIVI's explicit effect tracking.
 
 ### The Power of Domains
-In AIVI, the language doesn't try to know everything. Instead, it provides **Domains**—a mechanism to extend the language's semantics.
+In AIVI, the language doesn't try to know everything. Instead, it provides **Domains** a mechanism to extend the language's semantics.
 - **Semantic Arithmetic**: Operators like `+` and `-` are not restricted to numbers; they are resolved by domains to perform calendar shifts, color blending, or vector math.
 - **Syntactic Sugar**: Surface-level syntax can desugar into a small kernel, keeping the core language minimal.
 - **Extensibility**: Developers can define their own domains, creating a language that speaks the vocabulary of their specific business area (Finance, IoT, UI) without losing the safety of the AIVI core.

@@ -1,6 +1,6 @@
 # Log Domain
 
-> **Status: Planned** — this module is not yet implemented in the runtime. The spec below is a design document for a future version.
+> **Status: Planned**   this module is not yet implemented in the runtime. The spec below is a design document for a future version.
 
 <!-- quick-info: {"kind":"module","name":"aivi.log"} -->
 The `Log` domain provides **Structured Logging** for modern observability.

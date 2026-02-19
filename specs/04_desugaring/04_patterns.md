@@ -62,4 +62,4 @@ Multi-clause functions:
 | :--- | :--- |
 | `if c then a else b` | `case ⟦c⟧ of \| True -> ⟦a⟧ \| False -> ⟦b⟧` |
 
-The condition must have type `Bool`. There is no `if` without `else` — every `if` is an expression that produces a value.
+The condition must have type `Bool`. There is no `if` without `else`   every `if` is an expression that produces a value.

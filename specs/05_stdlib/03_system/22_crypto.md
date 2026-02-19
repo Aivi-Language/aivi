@@ -29,7 +29,7 @@ HMAC (Hash-based Message Authentication Code) produces a keyed hash that verifie
 
 ## Password Hashing
 
-Password hashing uses deliberately slow algorithms to resist brute-force attacks. Never store passwords with `sha256` — use these instead.
+Password hashing uses deliberately slow algorithms to resist brute-force attacks. Never store passwords with `sha256`   use these instead.
 
 | Function | Explanation |
 | --- | --- |

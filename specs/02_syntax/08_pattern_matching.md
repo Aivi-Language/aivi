@@ -76,7 +76,7 @@ This "constructor chain" rule applies only in pattern context (after `|` and bef
 
 Record patterns use three distinct operators for different purposes:
 
-### `:` — Matching and renaming (instantiation)
+### `:`   Matching and renaming (instantiation)
 
 `{ field: pat }` matches the field and binds the result of the nested pattern `pat`. This is the primary form for both matching and renaming:
 
@@ -86,7 +86,7 @@ Record patterns use three distinct operators for different purposes:
 { name }              // shorthand for { name: name }
 ```
 
-### `as` — Whole-value plus destructuring
+### `as`   Whole-value plus destructuring
 
 `field as { pat }` binds `field` to the **entire** field value *and* destructures it. Both `field` and the contents of `pat` are in scope:
 
@@ -102,7 +102,7 @@ In nested position:
 
 Here `profile` is bound to the full value of the `profile` field, and `name`/`age` are also brought into scope from within that field.
 
-### `.{ }` — Destructuring only (no whole-value binding)
+### `.{ }`   Destructuring only (no whole-value binding)
 
 `field.{ pat }` destructures the field but does **not** bind the field itself. Only the contents of the nested pattern are in scope:
 
@@ -110,7 +110,7 @@ Here `profile` is bound to the full value of the `profile` field, and `name`/`ag
 { profile.{ name, age } }
 ```
 
-Here `name` and `age` are in scope, but `profile` is **not** — it is only used as a path to reach the nested fields.
+Here `name` and `age` are in scope, but `profile` is **not**   it is only used as a path to reach the nested fields.
 
 ### Summary
 
@@ -119,7 +119,7 @@ Here `name` and `age` are in scope, but `profile` is **not** — it is only used
 | `{ field: pat }` | no (renamed) | yes | Match/rename a field |
 | `{ field as { pat } }` | yes | yes | Keep whole field + destructure |
 | `{ field.{ pat } }` | no | yes | Destructure only, discard field |
-| `{ field }` | yes | — | Shorthand, binds field by name |
+| `{ field }` | yes |   | Shorthand, binds field by name |
 
 ## 8.6 Guards
 

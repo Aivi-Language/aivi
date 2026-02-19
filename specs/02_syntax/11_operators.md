@@ -31,7 +31,7 @@ For full concrete syntax, see the grammar: [02_syntax/00_grammar.md](00_grammar.
 The v0.1 parser recognizes these infix operators (from lowest to highest precedence):
 
 1. `|>` (forward pipe)
-2. `??` (coalesce — unwrap `Option` with fallback)
+2. `??` (coalesce   unwrap `Option` with fallback)
 3. `||` (logical or)
 4. `&&` (logical and)
 5. `==`, `!=` (equality)
@@ -41,7 +41,7 @@ The v0.1 parser recognizes these infix operators (from lowest to highest precede
 9. `<<`, `>>` (shift)
 10. `+`, `-`, `++` (additive / concatenation)
 11. `*`, `×`, `/`, `%` (multiplicative)
-12. `<|` (patch — binds tighter than arithmetic, just below application; see [Patching](05_patching.md))
+12. `<|` (patch   binds tighter than arithmetic, just below application; see [Patching](05_patching.md))
 
 Unary prefix operators (not infix): `!` (not), `-` (negate), `~` (bitwise complement).
 

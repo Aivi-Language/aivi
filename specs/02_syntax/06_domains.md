@@ -1,6 +1,6 @@
 # Domains
 
-Domains are AIVI's mechanism for context-aware semantics. They allow the language to adapt to specific problem spaces—like time, geometry, or UI styling—by providing custom interpretations for operators, literals, and type interactions.
+Domains are AIVI's mechanism for context-aware semantics. They allow the language to adapt to specific problem spaces like time, geometry, or UI styling by providing custom interpretations for operators, literals, and type interactions.
 
 Instead of baking specific logic (like "days often have 24 hours but not always") into the core compiler, AIVI delegates this to **Domains**.
 

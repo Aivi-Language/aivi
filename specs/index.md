@@ -67,10 +67,10 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Tree](05_stdlib/01_math/19_tree)
 
 #### Chronos (Time)
-- [Instant](05_stdlib/02_chronos/01_instant) *(planned — not yet implemented)*
+- [Instant](05_stdlib/02_chronos/01_instant) *(planned   not yet implemented)*
 - [Calendar](05_stdlib/02_chronos/02_calendar)
 - [Duration](05_stdlib/02_chronos/03_duration)
-- [TimeZone](05_stdlib/02_chronos/04_timezone) *(planned — not yet implemented)*
+- [TimeZone](05_stdlib/02_chronos/04_timezone) *(planned   not yet implemented)*
 
 #### Network
 - [HTTP Utils](05_stdlib/03_network/01_http)
@@ -87,13 +87,13 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Path](05_stdlib/03_system/24_path)
 - [URL](05_stdlib/03_system/25_url)
 - [System](05_stdlib/03_system/26_system)
-- [Log](05_stdlib/03_system/27_log) *(planned — not yet implemented)*
+- [Log](05_stdlib/03_system/27_log) *(planned   not yet implemented)*
 - [Concurrency](05_stdlib/03_system/30_concurrency)
 
 #### UI
 - [Layout](05_stdlib/04_ui/01_layout)
-- [Virtual DOM](05_stdlib/04_ui/02_vdom) *(planned — not yet implemented)*
-- [HTML Sigil](05_stdlib/04_ui/03_html) *(planned — not yet implemented)*
+- [Virtual DOM](05_stdlib/04_ui/02_vdom) *(planned   not yet implemented)*
+- [HTML Sigil](05_stdlib/04_ui/03_html) *(planned   not yet implemented)*
 - [Color](05_stdlib/04_ui/04_color)
 - [ServerHtml (server-driven HTML)](05_stdlib/04_ui/05_server_html)
 

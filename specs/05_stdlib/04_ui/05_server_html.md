@@ -5,7 +5,7 @@
 `aivi.ui.ServerHtml` is a server-driven UI runtime. The server renders HTML from
 a `VNode msg` tree, the browser forwards delegated DOM and platform events over a
 WebSocket as typed JSON messages, and the server diffs the VDOM to stream patch ops
-back. No client-side VDOM is needed — patches target stable `data-aivi-node` ids.
+back. No client-side VDOM is needed   patches target stable `data-aivi-node` ids.
 
 <!-- /quick-info -->
 
@@ -62,7 +62,7 @@ app =
   }
 
 main = do Effect {
-  req <- receiveHttpRequest   // pseudo — depends on httpServer.listen
+  req <- receiveHttpRequest   // pseudo   depends on httpServer.listen
   resp <- serveHttp app req
   pure resp
 }
@@ -351,7 +351,7 @@ The implementation is split across helper modules:
 
 The browser client lives in `ui-client/` as TypeScript compiled with Vite into
 a single IIFE bundle (`ui-client/dist/aivi-server-html-client.js`). It is
-embedded via `@static` at compile time — no raw JS strings in AIVI source.
+embedded via `@static` at compile time   no raw JS strings in AIVI source.
 
 The client:
 

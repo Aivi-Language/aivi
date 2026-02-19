@@ -4,11 +4,11 @@
 <!-- quick-info: {"kind":"module","name":"aivi.collections"} -->
 The collections family provides persistent data structures for functional code. Each data structure lives in its own module:
 
-- `aivi.list` — ordered sequences (built-in type, standard API)
-- `aivi.map` — key-value maps
-- `aivi.set` — unique value sets
-- `aivi.queue` — FIFO queues and double-ended queues
-- `aivi.heap` — priority queues
+- `aivi.list`   ordered sequences (built-in type, standard API)
+- `aivi.map`   key-value maps
+- `aivi.set`   unique value sets
+- `aivi.queue`   FIFO queues and double-ended queues
+- `aivi.heap`   priority queues
 
 The facade module `aivi.collections` re-exports all of the above for convenience:
 
