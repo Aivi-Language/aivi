@@ -89,7 +89,7 @@ export default defineConfig({
       provider: 'local'
     },
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/mendrik/aivi' }
+      { icon: 'github', link: 'https://github.com/Aivi-Language/aivi' }
     ],
     sidebar: [
       {

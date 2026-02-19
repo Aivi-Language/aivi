@@ -283,7 +283,7 @@ result = do Option {
   y <- Map.get "b" myMap
   Some (x + y)
 }
-// result : Option Int — None if either lookup fails
+// result : Option Int   None if either lookup fails
 ```
 
 ### `do Result { ... }`
@@ -296,7 +296,7 @@ result = do Result {
   y <- validate x
   Ok (x + y)
 }
-// result : Result E Float — Err if parsing or validation fails
+// result : Result E Float   Err if parsing or validation fails
 ```
 
 ### Restricted statement set

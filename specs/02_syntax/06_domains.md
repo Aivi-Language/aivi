@@ -66,7 +66,7 @@ A single domain body may contain **multiple entries for the same operator token*
 
 Rules:
 
-1. Domain declarations remain `domain D over Carrier` — exactly **one** carrier type per declaration.
+1. Domain declarations remain `domain D over Carrier`   exactly **one** carrier type per declaration.
 2. Multiple operator entries with the **same token** are allowed as long as their full `LHS -> RHS -> Result` types are pairwise distinct.
 3. Resolution requires that exactly **one** overload matches the inferred `(LHS, RHS)` pair (see [Desugaring: Domains and Operators](../04_desugaring/09_domains.md#92-rhs-typed-overload-selection)).
 
@@ -131,7 +131,7 @@ Some domains cover multiple types (e.g., `Vector` over `Vec2` and `Vec3`). In v0
 
 Domains may define **sigils** (see [Sigils](13_sigils.md)) that produce domain-typed values. For example, the `Url` domain provides `~u(https://example.com)` and the `Path` domain provides `~path[/usr/local/bin]`. These sigils are validated at compile time and construct typed values, not raw strings.
 
-In v0.1 domains do not support defining custom sigils via the `domain` block — sigils are compiler-provided for stdlib domains. User-defined sigil–domain associations are planned for a future version.
+In v0.1 domains do not support defining custom sigils via the `domain` block   sigils are compiler-provided for stdlib domains. User-defined sigil–domain associations are planned for a future version.
 
 ## Interaction with type coercion
 

@@ -36,8 +36,8 @@ AIVI provides:
 3. **Open structural records** with row polymorphism (extend/shrink via patching `<|`)
 4. **Type classes and higher-kinded types** (Fantasy Land algebraic hierarchy)
 5. **Typed effects** (`Effect E A`) with compositional error handling (`bind`, `pure`, `fail`)
-6. **Domains as static rewrites** — operator/literal resolution chains (e.g., calendar deltas, color ops)
-7. **Patching operator `<|`** — desugars to nested updates/removals, supporting deep-key literals with `{ a.b.c: value }`
+6. **Domains as static rewrites**   operator/literal resolution chains (e.g., calendar deltas, color ops)
+7. **Patching operator `<|`**   desugars to nested updates/removals, supporting deep-key literals with `{ a.b.c: value }`
 
 ## Syntax Examples
 

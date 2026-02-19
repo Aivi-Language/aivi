@@ -10,24 +10,24 @@ This report documents mistakes, inconsistencies, and gaps found across the `spec
 
 | Category | Count |
 |:---------|------:|
-| **Critical** — contradictions, broken semantics, parse errors in examples | 28 |
-| **High** — missing from index, wrong types, naming violations at scale | 35 |
-| **Medium** — incomplete sections, formatting, unclear semantics | 52 |
-| **Low** — minor prose issues, style nits | 30 |
+| **Critical**   contradictions, broken semantics, parse errors in examples | 28 |
+| **High**   missing from index, wrong types, naming violations at scale | 35 |
+| **Medium**   incomplete sections, formatting, unclear semantics | 52 |
+| **Low**   minor prose issues, style nits | 30 |
 | **Total** | **~145** |
 
 **Top systemic problems** (ordered by impact):
 
-1. **Parenthesized function calls `f(a, b)` pollute ~25 code examples** across stdlib — AIVI uses whitespace application `f a b`
-2. **`Effect` and `Resource` used with wrong arity** — should be `Effect E A` (2 params), many files use `Effect A` (1 param)
+1. **Parenthesized function calls `f(a, b)` pollute ~25 code examples** across stdlib   AIVI uses whitespace application `f a b`
+2. **`Effect` and `Resource` used with wrong arity**   should be `Effect E A` (2 params), many files use `Effect A` (1 param)
 3. **`String` used instead of `Text`** in console, crypto, and URL specs
-4. **`case` referenced as syntax in 3+ files** but is not an AIVI keyword — should be `?`
+4. **`case` referenced as syntax in 3+ files** but is not an AIVI keyword   should be `?`
 5. **Operator precedence contradictions** between grammar and 11_operators.md
 6. **Functor/class method argument order** incompatible with `|>` piping convention
 7. **`=> =` garbled syntax** in 6+ predicate/generator examples (should be `==`)
 8. **Haskell lambda syntax `\x -> ...`** in signal and linear algebra snippets (should be `x => ...`)
 9. **`if ... { }` instead of `if ... then ... else ...`** in multiple chronos/geometry examples
-10. **Kernel spec is severely underspecified** — missing wildcards, no type application, no formal rules
+10. **Kernel spec is severely underspecified**   missing wildcards, no type application, no formal rules
 
 ---
 
@@ -106,7 +106,7 @@ AIVI's keyword list does not include `case`. The construct is `?`.
 
 ### 2.6 Medium: Effects spec issues
 
-- `attempt : Effect E A -> Effect E (Result E A)` — logically, the outer `Effect` should not be able to fail with `E` anymore after catching it
+- `attempt : Effect E A -> Effect E (Result E A)`   logically, the outer `Effect` should not be able to fail with `E` anymore after catching it
 - `case` listed as branching expression (should be `?`)
 - `or` disambiguation between effect-fallback and Result-fallback is fragile and under-documented
 
@@ -141,7 +141,7 @@ Grammar defines `RecordPatField := RecordPatKey [ (":" Pattern) | ("@" Pattern) 
 ### 3.1 Critical: Missing fundamental patterns
 
 `04_patterns.md` pattern grammar omits:
-- **`_` (wildcard)** — fundamental for catch-all arms, cannot be derived
+- **`_` (wildcard)**   fundamental for catch-all arms, cannot be derived
 - **Literal patterns** (matching `42`, `"hello"`, `True`)
 - **Tuple patterns** `(p₁, ..., pₙ)`
 - **List patterns** `[p₁, ..., pₖ, ...rest]`
@@ -150,8 +150,8 @@ Grammar defines `RecordPatField := RecordPatKey [ (":" Pattern) | ("@" Pattern) 
 
 | Issue | File | Description |
 |:---|:---|:---|
-| Predicate desugaring | `05_predicates.md` | General rule says `λ_. e` (wildcard) but field example correctly uses `λx. x.price > 80` — should be `λx. e` |
-| Multi-arg lambda | `07_generators.md` | `yield x ≡ λk acc. k acc x` — kernel specifies single-argument lambdas only. Should be curried: `λk. λacc. k acc x` |
+| Predicate desugaring | `05_predicates.md` | General rule says `λ_. e` (wildcard) but field example correctly uses `λx. x.price > 80`   should be `λx. e` |
+| Multi-arg lambda | `07_generators.md` | `yield x ≡ λk acc. k acc x`   kernel specifies single-argument lambdas only. Should be curried: `λk. λacc. k acc x` |
 
 ### 3.3 High: Missing specifications
 
@@ -189,7 +189,7 @@ Missing entries: Classes, Resources, Let binding, ADT constructors. "HKTs → �
 
 ### 4.2 Critical: Circular desugaring
 
-`10_patching.md`: `patch { a: v }` desugars to `λx. x <| { a: v }` — still contains the `<|` surface operator. Should fully expand to kernel `update`.
+`10_patching.md`: `patch { a: v }` desugars to `λx. x <| { a: v }`   still contains the `<|` surface operator. Should fully expand to kernel `update`.
 
 ### 4.3 High: Contradictions with kernel/syntax
 
@@ -237,9 +237,9 @@ Similarly, `Resource` should take an error type but is used as `Resource Handle`
 ### 5.3 Critical: `String` vs `Text`
 
 AIVI's canonical text type is `Text`. These files use `String`:
-- `21_console.md` — `log`, `println`, `print`, `error`, `readLine` signatures
-- `22_crypto.md` — `sha256`, `randomUuid` signatures
-- `25_url.md` — `parse`, `toString` signatures and `Url` record fields
+- `21_console.md`   `log`, `println`, `print`, `error`, `readLine` signatures
+- `22_crypto.md`   `sha256`, `randomUuid` signatures
+- `25_url.md`   `parse`, `toString` signatures and `Url` record fields
 
 ### 5.4 High: Dead references (functions/types used in examples but not defined)
 
@@ -259,31 +259,31 @@ AIVI's canonical text type is `Text`. These files use `String`:
 | Chronos | `aivi.chronos.instant` vs `aivi.calendar` (no chronos prefix) vs `aivi.duration` (no chronos prefix) vs `aivi.chronos.timezone` |
 | Linear algebra | `aivi.linalg` (quick-info) vs `aivi.linear_algebra` (snippet block_04) |
 | Network | `aivi.net.http_server` (snake_case) should be `aivi.net.httpServer` |
-| Log | quick-info says `"name":"aivi"` — should be `"aivi.log"` |
-| Timezone | quick-info says `"name":"aivi.calendar"` — should be `"aivi.chronos.timezone"` |
+| Log | quick-info says `"name":"aivi"`   should be `"aivi.log"` |
+| Timezone | quick-info says `"name":"aivi.calendar"`   should be `"aivi.chronos.timezone"` |
 
 ### 5.6 High: `Result` parameter order
 
-`30_concurrency.md`: `recv : Receiver A -> Effect E (Result A ChannelError)` — parameters are backwards. AIVI's `Result` is `Result E A` (error first), so should be `Result ChannelError A`.
+`30_concurrency.md`: `recv : Receiver A -> Effect E (Result A ChannelError)`   parameters are backwards. AIVI's `Result` is `Result E A` (error first), so should be `Result ChannelError A`.
 
 ### 5.7 Medium: Logical/semantic issues
 
 | File | Issue |
 |:---|:---|
-| `02_text.md` | `toText : A -> Text` unconstrained — should require `ToText A =>` class constraint |
-| `05_vector.md` | `v1 = (1.0, 2.0) v2` — circular self-reference and tuple vs record mismatch |
+| `02_text.md` | `toText : A -> Text` unconstrained   should require `ToText A =>` class constraint |
+| `05_vector.md` | `v1 = (1.0, 2.0) v2`   circular self-reference and tuple vs record mismatch |
 | `09_matrix.md` | `m * translation` uses `*` but domain defines `*` as scalar multiplication, not matrix-matrix |
 | `13_probability.md` | `domain Probability over Probability` would shadow `Float` arithmetic for all `Float` values |
-| `10_number.md` | `toInt : BigInt -> Int` may overflow — should return `Option Int` or `Result` per AIVI no-exceptions principle |
-| `04_color.md` | `10lightness` — domain defines `1l` as the suffix, so should be `10l` |
-| `29_i18n.md` | `~dt(...)` sigil undefined — should be `~zdt(...)` or bare ISO literal |
+| `10_number.md` | `toInt : BigInt -> Int` may overflow   should return `Option Int` or `Result` per AIVI no-exceptions principle |
+| `04_color.md` | `10lightness`   domain defines `1l` as the suffix, so should be `10l` |
+| `29_i18n.md` | `~dt(...)` sigil undefined   should be `~zdt(...)` or bare ISO literal |
 
 ### 5.8 Medium: Incomplete specs
 
 | File | What's missing |
 |:---|:---|
 | `27_testing.md` | No function/type tables, no assertion docs, no test runner behavior |
-| `30_generator.md` | Only 6 functions — missing `take`, `drop`, `zip`, `flatMap`, `head`, etc. |
+| `30_generator.md` | Only 6 functions   missing `take`, `drop`, `zip`, `flatMap`, `head`, etc. |
 | `04_sockets.md` | Overview says "TCP/UDP" but no UDP functions documented |
 | `05_streams.md` | `Stream A` opaque type never defined; no `map`/`filter`/`fold` |
 | `15_geometry.md` | No 3D types despite examples using Ray, Sphere |
@@ -310,7 +310,7 @@ AIVI's canonical text type is `Text`. These files use `String`:
 
 ### 6.2 High: Pure binding for effectful operation
 
-`01_concurrency.md` block_03: `(tx, rx) = channel.make ()` inside `effect { }` — should use `<-` not `=` since channel creation is effectful.
+`01_concurrency.md` block_03: `(tx, rx) = channel.make ()` inside `effect { }`   should use `<-` not `=` since channel creation is effectful.
 
 ### 6.3 High: Undocumented functions used in runtime spec
 
@@ -318,7 +318,7 @@ AIVI's canonical text type is `Text`. These files use `String`:
 
 ### 6.4 Medium: Section numbering
 
-`01_concurrency.md` uses `20.1`, `20.2`, `20.3` — should be `1.1`, `1.2`, `1.3`.
+`01_concurrency.md` uses `20.1`, `20.2`, `20.3`   should be `1.1`, `1.2`, `1.3`.
 
 ### 6.5 Medium: Memory management spec issues
 
@@ -337,7 +337,7 @@ AIVI's canonical text type is `Text`. These files use `String`:
 
 ### 6.8 Low: Terminology
 
-- "traits" used in LSP spec (`02_lsp_server.md`) — AIVI uses "classes"
+- "traits" used in LSP spec (`02_lsp_server.md`)   AIVI uses "classes"
 - "Aivi" vs "AIVI" inconsistency across all `07_tools/` files
 
 ---

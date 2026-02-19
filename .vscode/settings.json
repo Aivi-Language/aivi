@@ -1,4 +1,12 @@
 {
+    "search.exclude": {
+        "**/.git": true,
+        "**/node_modules": true,
+        "**/bower_components": true,
+        "**/tmp": true,
+        "**/.vitepress/dist": true,
+        "**/.vitepress/cache": true
+    },
     "chat.tools.terminal.enableAutoApprove": true,
     "chat.tools.terminal.autoApprove": {
         "/.*/": true,

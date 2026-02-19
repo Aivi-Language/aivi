@@ -21,7 +21,7 @@ This folder contains the browser micro-client for `aivi.ui.ServerHtml`.
 | `intersection.ts` | `IntersectionObserver` manager (subscribe/unsubscribe by `sid`) |
 | `clipboard.ts` | Clipboard effect executor (read/write) |
 | `ws.ts` | WebSocket lifecycle, reconnect, message dispatch |
-| `main.ts` | Entry point (IIFE) — boots WS, installs event + platform listeners |
+| `main.ts` | Entry point (IIFE)   boots WS, installs event + platform listeners |
 
 ## Build
 
@@ -54,15 +54,15 @@ full protocol documentation.
 
 ### Client → Server messages (discriminator: `"t"`)
 
-- `hello` — sent on connection open
-- `event` — DOM event with handler id, kind, and typed payload
-- `platform` — browser platform signal (popstate, visibility, etc.)
-- `effectResult` — response to a server-initiated effect (clipboard)
+- `hello`   sent on connection open
+- `event`   DOM event with handler id, kind, and typed payload
+- `platform`   browser platform signal (popstate, visibility, etc.)
+- `effectResult`   response to a server-initiated effect (clipboard)
 
 ### Server → Client messages (discriminator: `"t"`)
 
-- `patch` — DOM patch ops (replace, setText, setAttr, removeAttr)
-- `subscribeIntersect` / `unsubscribeIntersect` — IntersectionObserver management
-- `effectReq` — clipboard read/write request
-- `error` — server-side error notification
+- `patch`   DOM patch ops (replace, setText, setAttr, removeAttr)
+- `subscribeIntersect` / `unsubscribeIntersect`   IntersectionObserver management
+- `effectReq`   clipboard read/write request
+- `error`   server-side error notification
 
