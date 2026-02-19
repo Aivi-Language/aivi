@@ -507,10 +507,18 @@ impl Backend {
         workspace_modules: &HashMap<String, IndexedModule>,
         doc_index: &DocIndex,
     ) -> Option<Hover> {
-        let ident = Self::extract_identifier(text, position)?;
+        let ident = Self::extract_identifier(text, position);
+        #[cfg(test)]
+        eprintln!("build_hover_ws: ident={ident:?}");
+        let ident = ident?;
         let path = PathBuf::from(Self::path_from_uri(uri));
         let (modules, _) = parse_modules(&path, text);
-        let current_module = Self::module_at_position(&modules, position)?;
+        #[cfg(test)]
+        eprintln!("build_hover_ws: modules={}", modules.len());
+        let current_module = Self::module_at_position(&modules, position);
+        #[cfg(test)]
+        eprintln!("build_hover_ws: current_module={}", current_module.map(|m| m.name.name.as_str()).unwrap_or("None"));
+        let current_module = current_module?;
 
         // Only infer types for the current file's modules + direct imports (not the
         // entire workspace) to keep hover responsive in large projects.
