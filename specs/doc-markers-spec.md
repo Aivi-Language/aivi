@@ -38,7 +38,7 @@ Notes:
 - `module` is the parent module for non-module items (e.g. `aivi.text`).
 - `signature` can be provided explicitly when extraction is ambiguous.
 - `extractSignature` defaults to `true`; when enabled, tooling may infer a signature from:
-  - A fenced AIVI code block (```aivi ... ```)
+  - A fenced AIVI code block (\\`\\`\\`aivi ... \\`\\`\\`)
   - Inline code spans that look like a type (e.g. `` `Text -> Bool` ``)
 
 ## Examples
@@ -56,4 +56,3 @@ Table cell documentation:
 ```md
 | **isEmpty** text<br><pre><code>`Text -> Bool`</code></pre> | <!-- quick-info: {"kind":"function","name":"isEmpty","module":"aivi.text"} -->Returns `true` when `text` has zero length.<!-- /quick-info --> |
 ```
-

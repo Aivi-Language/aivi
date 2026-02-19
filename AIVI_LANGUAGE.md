@@ -757,12 +757,14 @@ Custom literals with `~tag` and a delimiter:
 ~r/[a-z]+/i                    // Regex
 ~map{ "a" => 1, "b" => 2 }    // Map K V literal
 ~set[1, 2, 3]                  // Set A literal
+~mat[1.0 0.0                   // Matrix literal (Mat2/Mat3/Mat4)
+     0.0 1.0]
 ~d(2024-05-21)                 // Date
 ~t(12:00:00)                   // Time
 ~tz(Europe/Paris)              // TimeZone
 ```
 
-`~map{...}` and `~set[...]` are **structured** (parsed as AIVI expressions). Other sigils are raw text until the closing delimiter.
+`~map{...}`, `~set[...]`, and `~mat[...]` are **structured** (parsed as AIVI expressions). Other sigils are raw text until the closing delimiter.
 
 ---
 
