@@ -35,7 +35,6 @@ graph TD
     warning: *
     --> crates/aivi/*.rs:*:*
 - Use shorter logs (--quiet, --no-verbose)    
-- consider running them with timeout prefix to limit runtime to 20s    
 - Avoid massive build outputs
 
 ## 2. Development Workflow

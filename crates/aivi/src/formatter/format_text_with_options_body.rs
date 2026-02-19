@@ -392,6 +392,230 @@
         out
     }
 
+    #[derive(Debug, Clone)]
+    struct MatrixSigil {
+        tag: String,
+        rows: Vec<Vec<String>>,
+    }
+
+    fn parse_matrix_sigil(text: &str) -> Option<MatrixSigil> {
+        let mut iter = text.chars();
+        if iter.next()? != '~' {
+            return None;
+        }
+        let mut tag = String::new();
+        for ch in iter.by_ref() {
+            if ch.is_ascii_alphanumeric() || ch == '_' {
+                tag.push(ch);
+                continue;
+            }
+            if ch != '[' {
+                return None;
+            }
+            break;
+        }
+        if tag != "mat" {
+            return None;
+        }
+
+        let mut body = String::new();
+        let mut escaped = false;
+        for ch in iter.by_ref() {
+            if escaped {
+                body.push(ch);
+                escaped = false;
+                continue;
+            }
+            if ch == '\\' {
+                escaped = true;
+                continue;
+            }
+            if ch == ']' {
+                break;
+            }
+            body.push(ch);
+        }
+
+        let mut rows: Vec<Vec<String>> = Vec::new();
+        let mut row: Vec<String> = Vec::new();
+        let mut token = String::new();
+        let mut push_token = |row: &mut Vec<String>, token: &mut String| {
+            if !token.is_empty() {
+                row.push(token.clone());
+                token.clear();
+            }
+        };
+        let mut push_row = |rows: &mut Vec<Vec<String>>, row: &mut Vec<String>| {
+            if !row.is_empty() {
+                rows.push(row.clone());
+                row.clear();
+            }
+        };
+
+        for ch in body.chars() {
+            match ch {
+                '\r' => {}
+                '\n' | ';' => {
+                    push_token(&mut row, &mut token);
+                    push_row(&mut rows, &mut row);
+                }
+                ',' | ' ' | '\t' => {
+                    push_token(&mut row, &mut token);
+                }
+                _ => token.push(ch),
+            }
+        }
+        push_token(&mut row, &mut token);
+        push_row(&mut rows, &mut row);
+
+        if rows.is_empty() {
+            return None;
+        }
+        Some(MatrixSigil { tag, rows })
+    }
+
+    fn format_matrix_rows(rows: &[Vec<String>]) -> Vec<String> {
+        let mut max_cols = 0usize;
+        for row in rows {
+            max_cols = max_cols.max(row.len());
+        }
+        if max_cols == 0 {
+            return Vec::new();
+        }
+        let mut widths = vec![0usize; max_cols];
+        for row in rows {
+            for (i, value) in row.iter().enumerate() {
+                widths[i] = widths[i].max(value.chars().count());
+            }
+        }
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            let mut line = String::new();
+            for col in 0..max_cols {
+                let value = row.get(col).map(String::as_str).unwrap_or("");
+                let value_len = value.chars().count();
+                let pad = widths[col].saturating_sub(value_len);
+                if pad > 0 {
+                    line.push_str(&" ".repeat(pad));
+                }
+                line.push_str(value);
+                if col + 1 < max_cols {
+                    line.push(' ');
+                }
+            }
+            out.push(line);
+        }
+        out
+    }
+
+    fn advance_column(col: &mut usize, text: &str) {
+        for ch in text.chars() {
+            if ch == '\n' {
+                *col = 0;
+            } else {
+                *col += 1;
+            }
+        }
+    }
+
+    fn format_tokens_with_matrix(
+        tokens: &[&crate::cst::CstToken],
+        top_delim: Option<char>,
+        base_indent: &str,
+    ) -> String {
+        let strip_commas = top_delim != Some('(');
+        let trailing_comma_idx = {
+            let mut idx = None;
+            for (i, t) in tokens.iter().enumerate() {
+                if t.kind != "comment" && t.text != "\n" {
+                    idx = Some(i);
+                }
+            }
+            idx.filter(|&i| strip_commas && tokens[i].text == ",")
+        };
+
+        let mut out = String::new();
+        let mut prevprev: Option<(&str, &str)> = None;
+        let mut prev: Option<(&str, &str)> = None;
+        let mut prev_token: Option<&crate::cst::CstToken> = None;
+        let mut current_col = 0usize;
+        let leading_comma_idx = first_code_index(tokens)
+            .filter(|&i| strip_commas && tokens[i].text == ",");
+
+        for (i, t) in tokens.iter().enumerate() {
+            if leading_comma_idx == Some(i) {
+                continue;
+            }
+            if trailing_comma_idx == Some(i) {
+                continue;
+            }
+            if t.kind == "comment" {
+                if !out.is_empty() && !out.ends_with(' ') {
+                    out.push(' ');
+                    current_col += 1;
+                }
+                out.push_str(&t.text);
+                advance_column(&mut current_col, &t.text);
+                prevprev = prev;
+                prev = Some((t.kind.as_str(), t.text.as_str()));
+                continue;
+            }
+
+            let curr = (t.kind.as_str(), t.text.as_str());
+            let adjacent_in_input = prev_token.is_some_and(|p| {
+                p.span.start.line == t.span.start.line
+                    && p.span.end.column + 1 == t.span.start.column
+            });
+            if wants_space_between(prevprev, prev, curr, adjacent_in_input) && !out.is_empty() {
+                out.push(' ');
+                current_col += 1;
+            }
+
+            if t.kind == "sigil" {
+                if let Some(matrix) = parse_matrix_sigil(&t.text) {
+                    let rows = format_matrix_rows(&matrix.rows);
+                    if !rows.is_empty() {
+                        let prefix = format!("~{}[", matrix.tag);
+                        let row_start_col = current_col + prefix.chars().count();
+                        out.push_str(&prefix);
+                        advance_column(&mut current_col, &prefix);
+                        out.push_str(&rows[0]);
+                        advance_column(&mut current_col, &rows[0]);
+                        if rows.len() == 1 {
+                            out.push(']');
+                            current_col += 1;
+                        } else {
+                            for row in rows.iter().skip(1) {
+                                out.push('\n');
+                                advance_column(&mut current_col, "\n");
+                                out.push_str(base_indent);
+                                advance_column(&mut current_col, base_indent);
+                                let pad = " ".repeat(row_start_col);
+                                out.push_str(&pad);
+                                advance_column(&mut current_col, &pad);
+                                out.push_str(row);
+                                advance_column(&mut current_col, row);
+                            }
+                            out.push(']');
+                            current_col += 1;
+                        }
+                        prev_token = Some(t);
+                        prevprev = prev;
+                        prev = Some(curr);
+                        continue;
+                    }
+                }
+            }
+
+            out.push_str(curr.1);
+            advance_column(&mut current_col, curr.1);
+            prev_token = Some(t);
+            prevprev = prev;
+            prev = Some(curr);
+        }
+        out
+    }
+
     fn leading_indent(line: &str) -> (String, usize) {
         let mut bytes = 0usize;
         for (i, ch) in line.char_indices() {
@@ -1147,7 +1371,11 @@
 
         if state.degraded {
             out.push_str(state.indent.as_str());
-            out.push_str(&format_tokens_simple(&state.tokens, state.top_delim));
+            out.push_str(&format_tokens_with_matrix(
+                &state.tokens,
+                state.top_delim,
+                state.indent.as_str(),
+            ));
             rendered_lines.push(out);
             pipe_block_stack.clear();
             pipeop_block_base_indent = None;
@@ -1166,7 +1394,11 @@
 
         let Some(first_idx) = first_code_index(&state.tokens) else {
             out.push_str(state.indent.as_str());
-            out.push_str(&format_tokens_simple(&state.tokens, state.top_delim));
+            out.push_str(&format_tokens_with_matrix(
+                &state.tokens,
+                state.top_delim,
+                state.indent.as_str(),
+            ));
             rendered_lines.push(out);
             pipe_block_stack.clear();
             pipeop_block_base_indent = None;
@@ -1778,7 +2010,11 @@
         }
 
         out.push_str(&effective_indent);
-        out.push_str(&format_tokens_simple(&state.tokens, state.top_delim));
+        out.push_str(&format_tokens_with_matrix(
+            &state.tokens,
+            state.top_delim,
+            &effective_indent,
+        ));
         rendered_lines.push(out);
         prev_effective_indent_len = effective_indent_len;
 
