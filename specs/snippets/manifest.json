@@ -2374,6 +2374,254 @@
       "verify": [
         "fmt"
       ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/11_operators/block_01.aivi",
+      "module": "docs.snippets.02_syntax.11_operators.block_01",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/16_do_notation/block_01.aivi",
+      "module": "docs.snippets.02_syntax.16_do_notation.block_01",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/16_do_notation/block_02.aivi",
+      "module": "docs.snippets.02_syntax.16_do_notation.block_02",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/16_do_notation/block_03.aivi",
+      "module": "docs.snippets.02_syntax.16_do_notation.block_03",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/16_do_notation/block_04.aivi",
+      "module": "docs.snippets.02_syntax.16_do_notation.block_04",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/16_do_notation/block_05.aivi",
+      "module": "docs.snippets.02_syntax.16_do_notation.block_05",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/17_comments/block_01.aivi",
+      "module": "docs.snippets.02_syntax.17_comments.block_01",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/17_comments/block_02.aivi",
+      "module": "docs.snippets.02_syntax.17_comments.block_02",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/17_comments/block_03.aivi",
+      "module": "docs.snippets.02_syntax.17_comments.block_03",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/04_desugaring/08_classes/block_01.aivi",
+      "module": "docs.snippets.04_desugaring.08_classes.block_01",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/28_collections/block_06.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.28_collections.block_06",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/00_core/28_collections/block_07.aivi",
+      "module": "docs.snippets.05_stdlib.00_core.28_collections.block_07",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/19_tree/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.19_tree.block_01",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/19_tree/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.19_tree.block_02",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/19_tree/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.19_tree.block_03",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/01_math/19_tree/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.01_math.19_tree.block_04",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_01.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_01",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_02.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_02",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_03.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_03",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_04.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_04",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_05.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_05",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_06.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_06",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_07.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_07",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_08.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_08",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_09.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_09",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_10.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_10",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_11.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_11",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_12.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_12",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/05_stdlib/04_ui/05_server_html/block_13.aivi",
+      "module": "docs.snippets.05_stdlib.04_ui.05_server_html.block_13",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/06_runtime/03_package_manager/block_01.aivi",
+      "module": "docs.snippets.06_runtime.03_package_manager.block_01",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/06_runtime/03_package_manager/block_02.aivi",
+      "module": "docs.snippets.06_runtime.03_package_manager.block_02",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
     }
   ]
 }

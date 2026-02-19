@@ -10,12 +10,15 @@ Some sigils are compiler-provided and backed by stdlib domains, for example:
 
 - `~u(https://example.com)` / `~url(https://example.com)` for `aivi.url.Url`
 - `~path[/usr/local/bin]` for `aivi.path.Path`
+- `~mat[...]` for matrix literals (`aivi.matrix.Mat2`, `aivi.matrix.Mat3`, `aivi.matrix.Mat4`)
 
 ## Structured sigils
 
 Some domains parse sigils as **AIVI expressions** rather than raw text. The `Collections` domain defines:
 
 <<< ../snippets/02_syntax/13_sigils/structured.aivi{aivi}
+
+The `Matrix` domain defines a structured matrix literal sigil, `~mat[...]`; see [Matrix](../05_stdlib/01_math/09_matrix.md).
 
 In addition, the UI layer defines a structured HTML sigil:
 
