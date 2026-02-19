@@ -427,15 +427,21 @@ fn generate_project_rust(project_root: &Path, cfg: &aivi::AiviToml) -> Result<()
         .ok_or_else(|| AiviError::InvalidPath(entry_path.display().to_string()))?;
 
     let _modules = load_checked_modules(entry_str)?;
-    let program = aivi::desugar_target_typed(entry_str)?;
+    let (program, cg_types) = aivi::desugar_target_with_cg_types(entry_str)?;
 
     let gen_dir = project_root.join(&cfg.build.gen_dir);
     let src_out = gen_dir.join("src");
     std::fs::create_dir_all(&src_out)?;
 
     let (out_path, rust) = match cfg.project.kind {
-        ProjectKind::Bin => (src_out.join("main.rs"), compile_rust_native(program)?),
-        ProjectKind::Lib => (src_out.join("lib.rs"), compile_rust_native_lib(program)?),
+        ProjectKind::Bin => (
+            src_out.join("main.rs"),
+            compile_rust_native_typed(program, cg_types)?,
+        ),
+        ProjectKind::Lib => (
+            src_out.join("lib.rs"),
+            compile_rust_native_lib_typed(program, cg_types)?,
+        ),
     };
     std::fs::write(&out_path, rust)?;
     write_build_stamp(project_root, cfg, &gen_dir, &entry_path)?;

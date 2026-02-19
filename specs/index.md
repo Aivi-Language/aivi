@@ -60,7 +60,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Math](05_stdlib/01_math/01_math)
 - [Vector](05_stdlib/01_math/05_vector)
 - [Matrix](05_stdlib/01_math/09_matrix)
-- [Number](05_stdlib/01_math/10_number)
+- [Numbers](05_stdlib/01_math/10_number)
 - [Probability](05_stdlib/01_math/13_probability)
 - [FFT & Signal](05_stdlib/01_math/14_signal)
 - [Geometry](05_stdlib/01_math/15_geometry)

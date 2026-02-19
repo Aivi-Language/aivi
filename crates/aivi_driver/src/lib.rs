@@ -203,6 +203,48 @@ pub fn desugar_target_typed(target: &str) -> Result<HirProgram, AiviError> {
     Ok(aivi_core::desugar_modules(&stdlib_modules))
 }
 
+/// Like `desugar_target_typed` but also runs type inference and returns the `CgType` map
+/// for each module/definition. Used by the typed codegen path.
+pub fn desugar_target_with_cg_types(
+    target: &str,
+) -> Result<
+    (
+        HirProgram,
+        std::collections::HashMap<
+            String,
+            std::collections::HashMap<String, aivi_core::cg_type::CgType>,
+        >,
+    ),
+    AiviError,
+> {
+    let diagnostics = load_module_diagnostics(target)?;
+    if file_diagnostics_have_errors(&diagnostics) {
+        return Err(AiviError::Diagnostics);
+    }
+
+    let paths = workspace::expand_target(target)?;
+    let mut modules = Vec::new();
+    for path in &paths {
+        let content = fs::read_to_string(path)?;
+        let (mut parsed, _) = parse_modules(path.as_path(), &content);
+        modules.append(&mut parsed);
+    }
+    let mut stdlib_modules = embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+
+    let mut diagnostics = check_modules(&stdlib_modules);
+    if diagnostics.is_empty() {
+        diagnostics.extend(elaborate_expected_coercions(&mut stdlib_modules));
+    }
+    if file_diagnostics_have_errors(&diagnostics) {
+        return Err(AiviError::Diagnostics);
+    }
+
+    let infer_result = aivi_core::infer_value_types_full(&stdlib_modules);
+    let program = aivi_core::desugar_modules(&stdlib_modules);
+    Ok((program, infer_result.cg_types))
+}
+
 pub fn kernel_target(target: &str) -> Result<aivi_core::KernelProgram, AiviError> {
     let hir = desugar_target_typed(target)?;
     Ok(aivi_core::lower_kernel(hir))

@@ -5082,6 +5082,46 @@ fn def______09e73117f6b9fd87_clause_15(rt: &mut Runtime) -> R {
 }
 
 fn def______09e73117f6b9fd87_clause_16(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v1: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v2: Value, rt: &mut Runtime| {
+            let v1 = v1.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("w".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def______09e73117f6b9fd87_clause_17(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5121,7 +5161,7 @@ fn def______09e73117f6b9fd87_clause_16(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_17(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_18(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5196,7 +5236,7 @@ fn def______09e73117f6b9fd87_clause_17(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_18(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_19(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5320,7 +5360,7 @@ fn def______09e73117f6b9fd87_clause_18(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_19(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_20(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5341,7 +5381,7 @@ fn def______09e73117f6b9fd87_clause_19(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_20(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_21(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5356,7 +5396,7 @@ fn def______09e73117f6b9fd87_clause_20(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_21(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_22(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5377,7 +5417,7 @@ fn def______09e73117f6b9fd87_clause_21(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_22(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_23(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5403,7 +5443,7 @@ fn def______09e73117f6b9fd87_clause_22(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_23(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_24(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5436,7 +5476,7 @@ fn def______09e73117f6b9fd87_clause_23(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_24(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_25(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5467,7 +5507,7 @@ fn def______09e73117f6b9fd87_clause_24(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_25(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_26(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |value: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
             let value = value.clone();
@@ -5511,7 +5551,7 @@ fn def______09e73117f6b9fd87_clause_25(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_26(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_27(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |table: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |delta: Value, rt: &mut Runtime| {
             let table = table.clone();
@@ -5526,7 +5566,7 @@ fn def______09e73117f6b9fd87_clause_26(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_27(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_28(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5541,7 +5581,7 @@ fn def______09e73117f6b9fd87_clause_27(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_28(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_29(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5556,7 +5596,7 @@ fn def______09e73117f6b9fd87_clause_28(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_29(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_30(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5571,7 +5611,7 @@ fn def______09e73117f6b9fd87_clause_29(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_30(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_31(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5597,7 +5637,7 @@ fn def______09e73117f6b9fd87_clause_30(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_31(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_32(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5671,6 +5711,7 @@ fn def______09e73117f6b9fd87(rt: &mut Runtime) -> R {
         (def______09e73117f6b9fd87_clause_29(rt))?,
         (def______09e73117f6b9fd87_clause_30(rt))?,
         (def______09e73117f6b9fd87_clause_31(rt))?,
+        (def______09e73117f6b9fd87_clause_32(rt))?,
     ]))
 }
 
@@ -5834,6 +5875,46 @@ fn def______09e09517f6b488c5_clause_5(rt: &mut Runtime) -> R {
 }
 
 fn def______09e09517f6b488c5_clause_6(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v1: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v2: Value, rt: &mut Runtime| {
+            let v1 = v1.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("w".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def______09e09517f6b488c5_clause_7(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5873,7 +5954,7 @@ fn def______09e09517f6b488c5_clause_6(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_7(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_8(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5948,7 +6029,7 @@ fn def______09e09517f6b488c5_clause_7(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_8(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_9(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6072,7 +6153,7 @@ fn def______09e09517f6b488c5_clause_8(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_9(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_10(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6093,7 +6174,7 @@ fn def______09e09517f6b488c5_clause_9(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_10(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_11(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6108,7 +6189,7 @@ fn def______09e09517f6b488c5_clause_10(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_11(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_12(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6134,7 +6215,7 @@ fn def______09e09517f6b488c5_clause_11(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_12(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_13(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6167,7 +6248,7 @@ fn def______09e09517f6b488c5_clause_12(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_13(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_14(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |value: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |key: Value, rt: &mut Runtime| {
             let value = value.clone();
@@ -6192,7 +6273,7 @@ fn def______09e09517f6b488c5_clause_13(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_14(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_15(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6207,7 +6288,7 @@ fn def______09e09517f6b488c5_clause_14(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_15(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_16(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6222,7 +6303,7 @@ fn def______09e09517f6b488c5_clause_15(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_16(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_17(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6237,7 +6318,7 @@ fn def______09e09517f6b488c5_clause_16(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_17(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_18(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6263,7 +6344,7 @@ fn def______09e09517f6b488c5_clause_17(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_18(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_19(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6324,6 +6405,7 @@ fn def______09e09517f6b488c5(rt: &mut Runtime) -> R {
         (def______09e09517f6b488c5_clause_16(rt))?,
         (def______09e09517f6b488c5_clause_17(rt))?,
         (def______09e09517f6b488c5_clause_18(rt))?,
+        (def______09e09517f6b488c5_clause_19(rt))?,
     ]))
 }
 
@@ -6427,6 +6509,46 @@ fn def______09ea9517f6bcdd4a_clause_2(rt: &mut Runtime) -> R {
 }
 
 fn def______09ea9517f6bcdd4a_clause_3(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s: Value, rt: &mut Runtime| {
+            let v = v.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("w".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def______09ea9517f6bcdd4a_clause_4(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s: Value, rt: &mut Runtime| {
             let m = m.clone();
@@ -6466,7 +6588,7 @@ fn def______09ea9517f6bcdd4a_clause_3(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09ea9517f6bcdd4a_clause_4(rt: &mut Runtime) -> R {
+fn def______09ea9517f6bcdd4a_clause_5(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s: Value, rt: &mut Runtime| {
             let m = m.clone();
@@ -6541,7 +6663,7 @@ fn def______09ea9517f6bcdd4a_clause_4(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09ea9517f6bcdd4a_clause_5(rt: &mut Runtime) -> R {
+fn def______09ea9517f6bcdd4a_clause_6(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s: Value, rt: &mut Runtime| {
             let m = m.clone();
@@ -6665,7 +6787,7 @@ fn def______09ea9517f6bcdd4a_clause_5(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09ea9517f6bcdd4a_clause_6(rt: &mut Runtime) -> R {
+fn def______09ea9517f6bcdd4a_clause_7(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s: Value, rt: &mut Runtime| {
             let v = v.clone();
@@ -6694,7 +6816,7 @@ fn def______09ea9517f6bcdd4a_clause_6(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09ea9517f6bcdd4a_clause_7(rt: &mut Runtime) -> R {
+fn def______09ea9517f6bcdd4a_clause_8(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6709,7 +6831,7 @@ fn def______09ea9517f6bcdd4a_clause_7(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09ea9517f6bcdd4a_clause_8(rt: &mut Runtime) -> R {
+fn def______09ea9517f6bcdd4a_clause_9(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |k: Value, rt: &mut Runtime| {
             let s = s.clone();
@@ -6738,7 +6860,7 @@ fn def______09ea9517f6bcdd4a_clause_8(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09ea9517f6bcdd4a_clause_9(rt: &mut Runtime) -> R {
+fn def______09ea9517f6bcdd4a_clause_10(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6753,7 +6875,7 @@ fn def______09ea9517f6bcdd4a_clause_9(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09ea9517f6bcdd4a_clause_10(rt: &mut Runtime) -> R {
+fn def______09ea9517f6bcdd4a_clause_11(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6768,7 +6890,7 @@ fn def______09ea9517f6bcdd4a_clause_10(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09ea9517f6bcdd4a_clause_11(rt: &mut Runtime) -> R {
+fn def______09ea9517f6bcdd4a_clause_12(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6783,7 +6905,7 @@ fn def______09ea9517f6bcdd4a_clause_11(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09ea9517f6bcdd4a_clause_12(rt: &mut Runtime) -> R {
+fn def______09ea9517f6bcdd4a_clause_13(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6833,7 +6955,7 @@ fn def______09ea9517f6bcdd4a_clause_12(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09ea9517f6bcdd4a_clause_13(rt: &mut Runtime) -> R {
+fn def______09ea9517f6bcdd4a_clause_14(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -7033,6 +7155,7 @@ fn def______09ea9517f6bcdd4a(rt: &mut Runtime) -> R {
         (def______09ea9517f6bcdd4a_clause_11(rt))?,
         (def______09ea9517f6bcdd4a_clause_12(rt))?,
         (def______09ea9517f6bcdd4a_clause_13(rt))?,
+        (def______09ea9517f6bcdd4a_clause_14(rt))?,
     ]))
 }
 
@@ -7136,6 +7259,46 @@ fn def______09d98917f6ae55b3_clause_2(rt: &mut Runtime) -> R {
 }
 
 fn def______09d98917f6ae55b3_clause_3(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s: Value, rt: &mut Runtime| {
+            let v = v.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("w".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def______09d98917f6ae55b3_clause_4(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |base: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |other: Value, rt: &mut Runtime| {
             let base = base.clone();
@@ -7160,7 +7323,7 @@ fn def______09d98917f6ae55b3_clause_3(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09d98917f6ae55b3_clause_4(rt: &mut Runtime) -> R {
+fn def______09d98917f6ae55b3_clause_5(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -7175,7 +7338,7 @@ fn def______09d98917f6ae55b3_clause_4(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09d98917f6ae55b3_clause_5(rt: &mut Runtime) -> R {
+fn def______09d98917f6ae55b3_clause_6(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -7190,7 +7353,7 @@ fn def______09d98917f6ae55b3_clause_5(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09d98917f6ae55b3_clause_6(rt: &mut Runtime) -> R {
+fn def______09d98917f6ae55b3_clause_7(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |z: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s: Value, rt: &mut Runtime| {
             let z = z.clone();
@@ -7216,7 +7379,7 @@ fn def______09d98917f6ae55b3_clause_6(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09d98917f6ae55b3_clause_7(rt: &mut Runtime) -> R {
+fn def______09d98917f6ae55b3_clause_8(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |q: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s: Value, rt: &mut Runtime| {
             let q = q.clone();
@@ -7266,6 +7429,7 @@ fn def______09d98917f6ae55b3(rt: &mut Runtime) -> R {
         (def______09d98917f6ae55b3_clause_5(rt))?,
         (def______09d98917f6ae55b3_clause_6(rt))?,
         (def______09d98917f6ae55b3_clause_7(rt))?,
+        (def______09d98917f6ae55b3_clause_8(rt))?,
     ]))
 }
 
@@ -9235,6 +9399,122 @@ fn def_aivi_color_1b__0205cc15e9901e2c(rt: &mut Runtime) -> R {
     }) })))
 }
 
+fn def_vec2__670b9501024b9ff5(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |x: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |y: Value, rt: &mut Runtime| {
+            let x = x.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (aivi_ok(x.clone()))?);
+                map.insert("y".to_string(), (aivi_ok(y.clone()))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_vec2__b6d5d87d1438a307(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |x: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |y: Value, rt: &mut Runtime| {
+            let x = x.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (aivi_ok(x.clone()))?);
+                map.insert("y".to_string(), (aivi_ok(y.clone()))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def_vec3__670b9401024b9e42(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |x: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |y: Value, rt: &mut Runtime| {
+            let x = x.clone();
+            aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |z: Value, rt: &mut Runtime| {
+                let x = x.clone();
+                let y = y.clone();
+                {
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (aivi_ok(x.clone()))?);
+                    map.insert("y".to_string(), (aivi_ok(y.clone()))?);
+                    map.insert("z".to_string(), (aivi_ok(z.clone()))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                }
+            }) })))
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_vec3__b6d5d77d1438a154(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |x: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |y: Value, rt: &mut Runtime| {
+            let x = x.clone();
+            aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |z: Value, rt: &mut Runtime| {
+                let x = x.clone();
+                let y = y.clone();
+                {
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (aivi_ok(x.clone()))?);
+                    map.insert("y".to_string(), (aivi_ok(y.clone()))?);
+                    map.insert("z".to_string(), (aivi_ok(z.clone()))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                }
+            }) })))
+        }) })))
+    }) })))
+}
+
+fn def_vec4__670b8f01024b95c3(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |x: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |y: Value, rt: &mut Runtime| {
+            let x = x.clone();
+            aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |z: Value, rt: &mut Runtime| {
+                let x = x.clone();
+                let y = y.clone();
+                aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |w: Value, rt: &mut Runtime| {
+                    let x = x.clone();
+                    let y = y.clone();
+                    let z = z.clone();
+                    {
+                        let mut map = HashMap::new();
+                        map.insert("x".to_string(), (aivi_ok(x.clone()))?);
+                        map.insert("y".to_string(), (aivi_ok(y.clone()))?);
+                        map.insert("z".to_string(), (aivi_ok(z.clone()))?);
+                        map.insert("w".to_string(), (aivi_ok(w.clone()))?);
+                        aivi_ok(Value::Record(Arc::new(map)))
+                    }
+                }) })))
+            }) })))
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_vec4__b6d5d67d14389fa1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |x: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |y: Value, rt: &mut Runtime| {
+            let x = x.clone();
+            aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |z: Value, rt: &mut Runtime| {
+                let x = x.clone();
+                let y = y.clone();
+                aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |w: Value, rt: &mut Runtime| {
+                    let x = x.clone();
+                    let y = y.clone();
+                    let z = z.clone();
+                    {
+                        let mut map = HashMap::new();
+                        map.insert("x".to_string(), (aivi_ok(x.clone()))?);
+                        map.insert("y".to_string(), (aivi_ok(y.clone()))?);
+                        map.insert("z".to_string(), (aivi_ok(z.clone()))?);
+                        map.insert("w".to_string(), (aivi_ok(w.clone()))?);
+                        aivi_ok(Value::Record(Arc::new(map)))
+                    }
+                }) })))
+            }) })))
+        }) })))
+    }) })))
+}
+
 fn def_magnitude__51bb22db9bbc7b95_clause_0(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
         {
@@ -9265,6 +9545,100 @@ fn def_magnitude__51bb22db9bbc7b95_clause_0(rt: &mut Runtime) -> R {
 }
 
 fn def_magnitude__51bb22db9bbc7b95_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let f = (def_sqrt__9614cf190fc8d7cf(rt))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((((((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def_magnitude__51bb22db9bbc7b95_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let f = (def_sqrt__9614cf190fc8d7cf(rt))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push(((((((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def_magnitude__51bb22db9bbc7b95_clause_3(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |q: Value, rt: &mut Runtime| {
         {
             let f = (def_sqrt__9614cf190fc8d7cf(rt))?;
@@ -9321,10 +9695,12 @@ fn def_magnitude__51bb22db9bbc7b95(rt: &mut Runtime) -> R {
     aivi_ok(Value::MultiClause(vec![
         (def_magnitude__51bb22db9bbc7b95_clause_0(rt))?,
         (def_magnitude__51bb22db9bbc7b95_clause_1(rt))?,
+        (def_magnitude__51bb22db9bbc7b95_clause_2(rt))?,
+        (def_magnitude__51bb22db9bbc7b95_clause_3(rt))?,
     ]))
 }
 
-fn def_aivi_vector_magnitude__f715e41e9d4ca3d7(rt: &mut Runtime) -> R {
+fn def_aivi_vector_magnitude__f715e41e9d4ca3d7_clause_0(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
         {
             let f = (def_sqrt__9614cf190fc8d7cf(rt))?;
@@ -9351,6 +9727,108 @@ fn def_aivi_vector_magnitude__f715e41e9d4ca3d7(rt: &mut Runtime) -> R {
             rt.call(f, __aivi_call_args)
         }
     }) })))
+}
+
+fn def_aivi_vector_magnitude__f715e41e9d4ca3d7_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let f = (def_sqrt__9614cf190fc8d7cf(rt))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((((((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def_aivi_vector_magnitude__f715e41e9d4ca3d7_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let f = (def_sqrt__9614cf190fc8d7cf(rt))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push(((((((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def_aivi_vector_magnitude__f715e41e9d4ca3d7(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_aivi_vector_magnitude__f715e41e9d4ca3d7_clause_0(rt))?,
+        (def_aivi_vector_magnitude__f715e41e9d4ca3d7_clause_1(rt))?,
+        (def_aivi_vector_magnitude__f715e41e9d4ca3d7_clause_2(rt))?,
+    ]))
 }
 
 fn def_normalize__eabe8385437e66cc_clause_0(rt: &mut Runtime) -> R {
@@ -9395,6 +9873,54 @@ fn def_normalize__eabe8385437e66cc_clause_0(rt: &mut Runtime) -> R {
 }
 
 fn def_normalize__eabe8385437e66cc_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let __v = ({
+                let f = (def_magnitude__51bb22db9bbc7b95(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(v.clone()))?);
+                rt.call(f, __aivi_call_args)
+            })?;
+            let mut __b0: HashMap<&'static str, Value> = HashMap::new();
+            let __ok0 = (|v: &Value, b: &mut HashMap<&'static str, Value>| -> bool {
+                    {
+                        use Value::*;
+                        { b.insert("len", v.clone()); true }
+                    }
+
+            })(&__v, &mut __b0);
+            if !__ok0 { return Err(RuntimeError::Message("pattern match failed".to_string())); }
+            let len = __b0.remove("len").expect("pattern binder");
+            ((aivi_ok(len.clone())).and_then(|a| (aivi_ok(Value::Float(0.0))).map(|b| Value::Bool(aivi_native_runtime::values_equal(&a, &b))))).and_then(|c| match c { Value::Bool(true) => aivi_ok(v.clone()), Value::Bool(false) => {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(len.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(len.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(len.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }, other => Err(RuntimeError::Message(format!("expected Bool, got {}", aivi_native_runtime::format_value(&other)))), })
+        }
+    }) })))
+}
+
+fn def_normalize__eabe8385437e66cc_clause_2(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |sig: Value, rt: &mut Runtime| {
         {
             let f = ((aivi_ok(__builtin("signal"))).and_then(|b| match b { Value::Record(map) => map.get("normalize").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
@@ -9405,7 +9931,7 @@ fn def_normalize__eabe8385437e66cc_clause_1(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def_normalize__eabe8385437e66cc_clause_2(rt: &mut Runtime) -> R {
+fn def_normalize__eabe8385437e66cc_clause_3(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |g: Value, rt: &mut Runtime| {
         {
             let __v = ({
@@ -9445,7 +9971,7 @@ fn def_normalize__eabe8385437e66cc_clause_2(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def_normalize__eabe8385437e66cc_clause_3(rt: &mut Runtime) -> R {
+fn def_normalize__eabe8385437e66cc_clause_4(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |p: Value, rt: &mut Runtime| {
         {
             let mut map = HashMap::new();
@@ -9462,7 +9988,7 @@ fn def_normalize__eabe8385437e66cc_clause_3(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def_normalize__eabe8385437e66cc_clause_4(rt: &mut Runtime) -> R {
+fn def_normalize__eabe8385437e66cc_clause_5(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |value: Value, rt: &mut Runtime| {
         {
             let f = ((aivi_ok(__builtin("rational"))).and_then(|b| match b { Value::Record(map) => map.get("normalize").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
@@ -9473,7 +9999,7 @@ fn def_normalize__eabe8385437e66cc_clause_4(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def_normalize__eabe8385437e66cc_clause_5(rt: &mut Runtime) -> R {
+fn def_normalize__eabe8385437e66cc_clause_6(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |q: Value, rt: &mut Runtime| {
         {
             let __v = ({
@@ -9511,10 +10037,11 @@ fn def_normalize__eabe8385437e66cc(rt: &mut Runtime) -> R {
         (def_normalize__eabe8385437e66cc_clause_3(rt))?,
         (def_normalize__eabe8385437e66cc_clause_4(rt))?,
         (def_normalize__eabe8385437e66cc_clause_5(rt))?,
+        (def_normalize__eabe8385437e66cc_clause_6(rt))?,
     ]))
 }
 
-fn def_aivi_vector_normalize__1c28c6df260a9676(rt: &mut Runtime) -> R {
+fn def_aivi_vector_normalize__1c28c6df260a9676_clause_0(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
         {
             let __v = ({
@@ -9555,6 +10082,61 @@ fn def_aivi_vector_normalize__1c28c6df260a9676(rt: &mut Runtime) -> R {
     }) })))
 }
 
+fn def_aivi_vector_normalize__1c28c6df260a9676_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let __v = ({
+                let f = (def_magnitude__51bb22db9bbc7b95(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(v.clone()))?);
+                rt.call(f, __aivi_call_args)
+            })?;
+            let mut __b0: HashMap<&'static str, Value> = HashMap::new();
+            let __ok0 = (|v: &Value, b: &mut HashMap<&'static str, Value>| -> bool {
+                    {
+                        use Value::*;
+                        { b.insert("len", v.clone()); true }
+                    }
+
+            })(&__v, &mut __b0);
+            if !__ok0 { return Err(RuntimeError::Message("pattern match failed".to_string())); }
+            let len = __b0.remove("len").expect("pattern binder");
+            ((aivi_ok(len.clone())).and_then(|a| (aivi_ok(Value::Float(0.0))).map(|b| Value::Bool(aivi_native_runtime::values_equal(&a, &b))))).and_then(|c| match c { Value::Bool(true) => aivi_ok(v.clone()), Value::Bool(false) => {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(len.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(len.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(len.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }, other => Err(RuntimeError::Message(format!("expected Bool, got {}", aivi_native_runtime::format_value(&other)))), })
+        }
+    }) })))
+}
+
+fn def_aivi_vector_normalize__1c28c6df260a9676(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_aivi_vector_normalize__1c28c6df260a9676_clause_0(rt))?,
+        (def_aivi_vector_normalize__1c28c6df260a9676_clause_1(rt))?,
+    ]))
+}
+
 fn def_dot__caaf2818f47458a0_clause_0(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
@@ -9586,6 +10168,45 @@ fn def_dot__caaf2818f47458a0_clause_1(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
+            ((((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def_dot__caaf2818f47458a0_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
             {
                 let f = ((aivi_ok(__builtin("linalg"))).and_then(|b| match b { Value::Record(map) => map.get("dot").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
@@ -9601,10 +10222,11 @@ fn def_dot__caaf2818f47458a0(rt: &mut Runtime) -> R {
     aivi_ok(Value::MultiClause(vec![
         (def_dot__caaf2818f47458a0_clause_0(rt))?,
         (def_dot__caaf2818f47458a0_clause_1(rt))?,
+        (def_dot__caaf2818f47458a0_clause_2(rt))?,
     ]))
 }
 
-fn def_aivi_vector_dot__2e0c5d1d77594856(rt: &mut Runtime) -> R {
+fn def_aivi_vector_dot__2e0c5d1d77594856_clause_0(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -9629,6 +10251,52 @@ fn def_aivi_vector_dot__2e0c5d1d77594856(rt: &mut Runtime) -> R {
     }))
         }) })))
     }) })))
+}
+
+fn def_aivi_vector_dot__2e0c5d1d77594856_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            ((((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_dot__2e0c5d1d77594856(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_aivi_vector_dot__2e0c5d1d77594856_clause_0(rt))?,
+        (def_aivi_vector_dot__2e0c5d1d77594856_clause_1(rt))?,
+    ]))
 }
 
 fn def_cross__0c36469f09fb69fb(rt: &mut Runtime) -> R {
@@ -9769,6 +10437,1971 @@ fn def_aivi_vector_cross__95b19ff2615c2f49(rt: &mut Runtime) -> R {
     }) })))
 }
 
+fn def_negate__160720ef70b2d29b_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let mut map = HashMap::new();
+            map.insert("x".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("y".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            aivi_ok(Value::Record(Arc::new(map)))
+        }
+    }) })))
+}
+
+fn def_negate__160720ef70b2d29b_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let mut map = HashMap::new();
+            map.insert("x".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("y".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("z".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            aivi_ok(Value::Record(Arc::new(map)))
+        }
+    }) })))
+}
+
+fn def_negate__160720ef70b2d29b_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let mut map = HashMap::new();
+            map.insert("x".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("y".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("z".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("w".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            aivi_ok(Value::Record(Arc::new(map)))
+        }
+    }) })))
+}
+
+fn def_negate__160720ef70b2d29b(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_negate__160720ef70b2d29b_clause_0(rt))?,
+        (def_negate__160720ef70b2d29b_clause_1(rt))?,
+        (def_negate__160720ef70b2d29b_clause_2(rt))?,
+    ]))
+}
+
+fn def_aivi_vector_negate__f29d5e3f6e015e71_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let mut map = HashMap::new();
+            map.insert("x".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("y".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            aivi_ok(Value::Record(Arc::new(map)))
+        }
+    }) })))
+}
+
+fn def_aivi_vector_negate__f29d5e3f6e015e71_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let mut map = HashMap::new();
+            map.insert("x".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("y".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("z".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            aivi_ok(Value::Record(Arc::new(map)))
+        }
+    }) })))
+}
+
+fn def_aivi_vector_negate__f29d5e3f6e015e71_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        {
+            let mut map = HashMap::new();
+            map.insert("x".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("y".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("z".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            map.insert("w".to_string(), ((aivi_ok(Value::Float(0.0))).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+            aivi_ok(Value::Record(Arc::new(map)))
+        }
+    }) })))
+}
+
+fn def_aivi_vector_negate__f29d5e3f6e015e71(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_aivi_vector_negate__f29d5e3f6e015e71_clause_0(rt))?,
+        (def_aivi_vector_negate__f29d5e3f6e015e71_clause_1(rt))?,
+        (def_aivi_vector_negate__f29d5e3f6e015e71_clause_2(rt))?,
+    ]))
+}
+
+fn def_lerp__24d97cada2273628_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |t: Value, rt: &mut Runtime| {
+                let a = a.clone();
+                let b = b.clone();
+                {
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(t.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("y".to_string(), (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(t.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                }
+            }) })))
+        }) })))
+    }) })))
+}
+
+fn def_lerp__24d97cada2273628_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |t: Value, rt: &mut Runtime| {
+                let a = a.clone();
+                let b = b.clone();
+                {
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(t.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("y".to_string(), (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(t.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("z".to_string(), (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(t.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                }
+            }) })))
+        }) })))
+    }) })))
+}
+
+fn def_lerp__24d97cada2273628(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_lerp__24d97cada2273628_clause_0(rt))?,
+        (def_lerp__24d97cada2273628_clause_1(rt))?,
+    ]))
+}
+
+fn def_aivi_vector_lerp__f59ae4d07173b0c2_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |t: Value, rt: &mut Runtime| {
+                let a = a.clone();
+                let b = b.clone();
+                {
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(t.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("y".to_string(), (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(t.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                }
+            }) })))
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_lerp__f59ae4d07173b0c2_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |t: Value, rt: &mut Runtime| {
+                let a = a.clone();
+                let b = b.clone();
+                {
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(t.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("y".to_string(), (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(t.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("z".to_string(), (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(t.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                }
+            }) })))
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_lerp__f59ae4d07173b0c2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_aivi_vector_lerp__f59ae4d07173b0c2_clause_0(rt))?,
+        (def_aivi_vector_lerp__f59ae4d07173b0c2_clause_1(rt))?,
+    ]))
+}
+
+fn def_distance__dd6fbd38986b7842_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            {
+                let f = (def_magnitude__51bb22db9bbc7b95(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push(({
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("y".to_string(), (((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                })?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_distance__dd6fbd38986b7842_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            {
+                let f = (def_magnitude__51bb22db9bbc7b95(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push(({
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("y".to_string(), (((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("z".to_string(), (((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                })?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_distance__dd6fbd38986b7842_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            {
+                let __v = (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?;
+                let mut __b0: HashMap<&'static str, Value> = HashMap::new();
+                let __ok0 = (|v: &Value, b: &mut HashMap<&'static str, Value>| -> bool {
+                        {
+                            use Value::*;
+                            { b.insert("dx", v.clone()); true }
+                        }
+
+                })(&__v, &mut __b0);
+                if !__ok0 { return Err(RuntimeError::Message("pattern match failed".to_string())); }
+                let dx = __b0.remove("dx").expect("pattern binder");
+                let __v = (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?;
+                let mut __b1: HashMap<&'static str, Value> = HashMap::new();
+                let __ok1 = (|v: &Value, b: &mut HashMap<&'static str, Value>| -> bool {
+                        {
+                            use Value::*;
+                            { b.insert("dy", v.clone()); true }
+                        }
+
+                })(&__v, &mut __b1);
+                if !__ok1 { return Err(RuntimeError::Message("pattern match failed".to_string())); }
+                let dy = __b1.remove("dy").expect("pattern binder");
+                {
+                    let f = (def_sqrt__9614cf190fc8d7cf(rt))?;
+                    let mut __aivi_call_args: Vec<Value> = Vec::new();
+                    __aivi_call_args.push((((aivi_ok(dx.clone())).and_then(|l| (aivi_ok(dx.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| ((aivi_ok(dy.clone())).and_then(|l| (aivi_ok(dy.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    rt.call(f, __aivi_call_args)
+                }
+            }
+        }) })))
+    }) })))
+}
+
+fn def_distance__dd6fbd38986b7842(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_distance__dd6fbd38986b7842_clause_0(rt))?,
+        (def_distance__dd6fbd38986b7842_clause_1(rt))?,
+        (def_distance__dd6fbd38986b7842_clause_2(rt))?,
+    ]))
+}
+
+fn def_aivi_vector_distance__e113d29cbd4d0674_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            {
+                let f = (def_magnitude__51bb22db9bbc7b95(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push(({
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("y".to_string(), (((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                })?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_distance__e113d29cbd4d0674_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            {
+                let f = (def_magnitude__51bb22db9bbc7b95(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push(({
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("y".to_string(), (((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("z".to_string(), (((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                })?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_distance__e113d29cbd4d0674(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_aivi_vector_distance__e113d29cbd4d0674_clause_0(rt))?,
+        (def_aivi_vector_distance__e113d29cbd4d0674_clause_1(rt))?,
+    ]))
+}
+
+fn def_transform2__ba2a36db966df72b(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), ((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m00").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m01").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), ((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m10").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m11").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_transform2__d1119713b2be270d(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), ((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m00").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m01").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), ((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m10").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m11").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def_transform3__ba2a35db966df578(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m00").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m01").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m02").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m10").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m11").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m12").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m20").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m21").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m22").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_transform3__d1119613b2be255a(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m00").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m01").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m02").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m10").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m11").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m12").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m20").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m21").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m22").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def_transform4__ba2a3cdb966e015d(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), ((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m00").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m01").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m02").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m03").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), ((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m10").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m11").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m12").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m13").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), ((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m20").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m21").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m22").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m23").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("w".to_string(), ((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m30").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m31").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m32").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m33").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_transform4__d1119113b2be1cdb(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), ((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m00").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m01").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m02").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m03").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), ((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m10").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m11").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m12").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m13").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), ((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m20").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m21").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m22").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m23").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("w".to_string(), ((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m30").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m31").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m32").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m33").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def_transformPoint3__7d553e839cd81550(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |p: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let __v = ((aivi_ok(Value::Float(1.0))).and_then(|l| ((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m30").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m31").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m32").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| ((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m33").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?;
+                let mut __b0: HashMap<&'static str, Value> = HashMap::new();
+                let __ok0 = (|v: &Value, b: &mut HashMap<&'static str, Value>| -> bool {
+                        {
+                            use Value::*;
+                            { b.insert("invW", v.clone()); true }
+                        }
+
+                })(&__v, &mut __b0);
+                if !__ok0 { return Err(RuntimeError::Message("pattern match failed".to_string())); }
+                let invW = __b0.remove("invW").expect("pattern binder");
+                {
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m00").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m01").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m02").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| ((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m03").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(invW.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("y".to_string(), (((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m10").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m11").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m12").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| ((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m13").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(invW.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("z".to_string(), (((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m20").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m21").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m22").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| ((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m23").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(invW.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                }
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_transformPoint3__28db6a64d7dcc43e(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |p: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let __v = ((aivi_ok(Value::Float(1.0))).and_then(|l| ((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m30").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m31").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m32").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| ((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m33").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?;
+                let mut __b0: HashMap<&'static str, Value> = HashMap::new();
+                let __ok0 = (|v: &Value, b: &mut HashMap<&'static str, Value>| -> bool {
+                        {
+                            use Value::*;
+                            { b.insert("invW", v.clone()); true }
+                        }
+
+                })(&__v, &mut __b0);
+                if !__ok0 { return Err(RuntimeError::Message("pattern match failed".to_string())); }
+                let invW = __b0.remove("invW").expect("pattern binder");
+                {
+                    let mut map = HashMap::new();
+                    map.insert("x".to_string(), (((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m00").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m01").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m02").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| ((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m03").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(invW.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("y".to_string(), (((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m10").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m11").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m12").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| ((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m13").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(invW.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    map.insert("z".to_string(), (((((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m20").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m21").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m22").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(p.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| ((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m23").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (aivi_ok(invW.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                    aivi_ok(Value::Record(Arc::new(map)))
+                }
+            }
+        }) })))
+    }) })))
+}
+
+fn def_transformDir3__b570f3c57683c36b(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |d: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m00").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m01").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m02").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m10").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m11").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m12").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m20").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m21").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m22").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_vector_transformDir3__7b6863078aaca15d(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |d: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m00").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m01").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m02").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m10").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m11").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m12").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m20").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m21").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|l| (((aivi_ok(m.clone())).and_then(|b| match b { Value::Record(map) => map.get("m22").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(d.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
 fn def_aivi_vector______f086ee1e76848a9d_clause_0(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v1: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v2: Value, rt: &mut Runtime| {
@@ -9828,10 +12461,51 @@ fn def_aivi_vector______f086ee1e76848a9d_clause_1(rt: &mut Runtime) -> R {
     }) })))
 }
 
+fn def_aivi_vector______f086ee1e76848a9d_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v1: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v2: Value, rt: &mut Runtime| {
+            let v1 = v1.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("w".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
 fn def_aivi_vector______f086ee1e76848a9d(rt: &mut Runtime) -> R {
     aivi_ok(Value::MultiClause(vec![
         (def_aivi_vector______f086ee1e76848a9d_clause_0(rt))?,
         (def_aivi_vector______f086ee1e76848a9d_clause_1(rt))?,
+        (def_aivi_vector______f086ee1e76848a9d_clause_2(rt))?,
     ]))
 }
 
@@ -9894,10 +12568,51 @@ fn def_aivi_vector______f08d6a1e7689c8ff_clause_1(rt: &mut Runtime) -> R {
     }) })))
 }
 
+fn def_aivi_vector______f08d6a1e7689c8ff_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v1: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v2: Value, rt: &mut Runtime| {
+            let v1 = v1.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("w".to_string(), (((aivi_ok(v1.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(v2.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
 fn def_aivi_vector______f08d6a1e7689c8ff(rt: &mut Runtime) -> R {
     aivi_ok(Value::MultiClause(vec![
         (def_aivi_vector______f08d6a1e7689c8ff_clause_0(rt))?,
         (def_aivi_vector______f08d6a1e7689c8ff_clause_1(rt))?,
+        (def_aivi_vector______f08d6a1e7689c8ff_clause_2(rt))?,
     ]))
 }
 
@@ -9960,10 +12675,51 @@ fn def_aivi_vector______f08a021e7686e270_clause_1(rt: &mut Runtime) -> R {
     }) })))
 }
 
+fn def_aivi_vector______f08a021e7686e270_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s: Value, rt: &mut Runtime| {
+            let v = v.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("w".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
 fn def_aivi_vector______f08a021e7686e270(rt: &mut Runtime) -> R {
     aivi_ok(Value::MultiClause(vec![
         (def_aivi_vector______f08a021e7686e270_clause_0(rt))?,
         (def_aivi_vector______f08a021e7686e270_clause_1(rt))?,
+        (def_aivi_vector______f08a021e7686e270_clause_2(rt))?,
     ]))
 }
 
@@ -10026,10 +12782,51 @@ fn def_aivi_vector______f094861e76901741_clause_1(rt: &mut Runtime) -> R {
     }) })))
 }
 
+fn def_aivi_vector______f094861e76901741_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s: Value, rt: &mut Runtime| {
+            let v = v.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("x".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("y".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("z".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("z").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                map.insert("w".to_string(), (((aivi_ok(v.clone())).and_then(|b| match b { Value::Record(map) => map.get("w").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(s.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a / b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a / b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) / b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a / (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for /: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
 fn def_aivi_vector______f094861e76901741(rt: &mut Runtime) -> R {
     aivi_ok(Value::MultiClause(vec![
         (def_aivi_vector______f094861e76901741_clause_0(rt))?,
         (def_aivi_vector______f094861e76901741_clause_1(rt))?,
+        (def_aivi_vector______f094861e76901741_clause_2(rt))?,
     ]))
 }
 
@@ -13144,6 +15941,208 @@ fn def_aivi_matrix______8d72ce37c11d11c2(rt: &mut Runtime) -> R {
     ]))
 }
 
+fn def______b43e85bb294c2ba8_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            {
+                let f = (def_multiply2__7ab313d659909555(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(a.clone()))?);
+                __aivi_call_args.push((aivi_ok(b.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def______b43e85bb294c2ba8_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let f = (def_transform2__ba2a36db966df72b(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(m.clone()))?);
+                __aivi_call_args.push((aivi_ok(v.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def______b43e85bb294c2ba8_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            {
+                let f = (def_multiply3__7ab312d6599093a2(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(a.clone()))?);
+                __aivi_call_args.push((aivi_ok(b.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def______b43e85bb294c2ba8_clause_3(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let f = (def_transform3__ba2a35db966df578(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(m.clone()))?);
+                __aivi_call_args.push((aivi_ok(v.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def______b43e85bb294c2ba8_clause_4(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            {
+                let f = (def_multiply4__7ab30dd659908b23(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(a.clone()))?);
+                __aivi_call_args.push((aivi_ok(b.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def______b43e85bb294c2ba8_clause_5(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let f = (def_transform4__ba2a3cdb966e015d(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(m.clone()))?);
+                __aivi_call_args.push((aivi_ok(v.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def______b43e85bb294c2ba8(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def______b43e85bb294c2ba8_clause_0(rt))?,
+        (def______b43e85bb294c2ba8_clause_1(rt))?,
+        (def______b43e85bb294c2ba8_clause_2(rt))?,
+        (def______b43e85bb294c2ba8_clause_3(rt))?,
+        (def______b43e85bb294c2ba8_clause_4(rt))?,
+        (def______b43e85bb294c2ba8_clause_5(rt))?,
+    ]))
+}
+
+fn def_aivi_matrix______21148eb8fd188340_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            {
+                let f = (def_multiply2__7ab313d659909555(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(a.clone()))?);
+                __aivi_call_args.push((aivi_ok(b.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_matrix______21148eb8fd188340_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let f = (def_transform2__ba2a36db966df72b(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(m.clone()))?);
+                __aivi_call_args.push((aivi_ok(v.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_matrix______21148eb8fd188340_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            {
+                let f = (def_multiply3__7ab312d6599093a2(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(a.clone()))?);
+                __aivi_call_args.push((aivi_ok(b.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_matrix______21148eb8fd188340_clause_3(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let f = (def_transform3__ba2a35db966df578(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(m.clone()))?);
+                __aivi_call_args.push((aivi_ok(v.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_matrix______21148eb8fd188340_clause_4(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
+            let a = a.clone();
+            {
+                let f = (def_multiply4__7ab30dd659908b23(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(a.clone()))?);
+                __aivi_call_args.push((aivi_ok(b.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_matrix______21148eb8fd188340_clause_5(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |m: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v: Value, rt: &mut Runtime| {
+            let m = m.clone();
+            {
+                let f = (def_transform4__ba2a3cdb966e015d(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(m.clone()))?);
+                __aivi_call_args.push((aivi_ok(v.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_matrix______21148eb8fd188340(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_aivi_matrix______21148eb8fd188340_clause_0(rt))?,
+        (def_aivi_matrix______21148eb8fd188340_clause_1(rt))?,
+        (def_aivi_matrix______21148eb8fd188340_clause_2(rt))?,
+        (def_aivi_matrix______21148eb8fd188340_clause_3(rt))?,
+        (def_aivi_matrix______21148eb8fd188340_clause_4(rt))?,
+        (def_aivi_matrix______21148eb8fd188340_clause_5(rt))?,
+    ]))
+}
+
 fn def_aivi_linear_algebra_map__e873ded811657ef2(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |f: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |items: Value, rt: &mut Runtime| {
@@ -13621,6 +16620,20 @@ fn def_sub__82719d195d0fc2f5(rt: &mut Runtime) -> R {
     }))
         }) })))
     }) })))
+}
+
+#[allow(dead_code)]
+fn def_sub__82719d195d0fc2f5_typed(rt: &mut Runtime) -> Result<Box<dyn Fn(f64) -> Result<Box<dyn Fn(f64) -> Result<f64, RuntimeError>>, RuntimeError>>, RuntimeError> {
+    Ok({
+        Box::new(move |a: f64| -> Result<Box<dyn Fn(f64) -> Result<f64, RuntimeError>>, RuntimeError> {
+            Ok({
+            let a = a.clone();
+            Box::new(move |b: f64| -> Result<f64, RuntimeError> {
+                Ok((a - b))
+            })
+        })
+        })
+    })
 }
 
 fn def_aivi_linear_algebra_sub__ec78a2d8a4b741fe(rt: &mut Runtime) -> R {
@@ -14501,74 +17514,6 @@ fn def_aivi_geometry______28c6659c6f035140(rt: &mut Runtime) -> R {
         (def_aivi_geometry______28c6659c6f035140_clause_0(rt))?,
         (def_aivi_geometry______28c6659c6f035140_clause_1(rt))?,
     ]))
-}
-
-fn def_distance__dd6fbd38986b7842(rt: &mut Runtime) -> R {
-    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
-        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
-            let a = a.clone();
-            {
-                let __v = (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("x").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
-        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
-        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
-        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
-        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
-        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
-    })))?;
-                let mut __b0: HashMap<&'static str, Value> = HashMap::new();
-                let __ok0 = (|v: &Value, b: &mut HashMap<&'static str, Value>| -> bool {
-                        {
-                            use Value::*;
-                            { b.insert("dx", v.clone()); true }
-                        }
-
-                })(&__v, &mut __b0);
-                if !__ok0 { return Err(RuntimeError::Message("pattern match failed".to_string())); }
-                let dx = __b0.remove("dx").expect("pattern binder");
-                let __v = (((aivi_ok(a.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(b.clone())).and_then(|b| match b { Value::Record(map) => map.get("y").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
-        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
-        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
-        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
-        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
-        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
-    })))?;
-                let mut __b1: HashMap<&'static str, Value> = HashMap::new();
-                let __ok1 = (|v: &Value, b: &mut HashMap<&'static str, Value>| -> bool {
-                        {
-                            use Value::*;
-                            { b.insert("dy", v.clone()); true }
-                        }
-
-                })(&__v, &mut __b1);
-                if !__ok1 { return Err(RuntimeError::Message("pattern match failed".to_string())); }
-                let dy = __b1.remove("dy").expect("pattern binder");
-                {
-                    let f = (def_sqrt__9614cf190fc8d7cf(rt))?;
-                    let mut __aivi_call_args: Vec<Value> = Vec::new();
-                    __aivi_call_args.push((((aivi_ok(dx.clone())).and_then(|l| (aivi_ok(dx.clone())).and_then(|r| match (l, r) {
-        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
-        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
-        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
-        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
-        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
-    }))).and_then(|l| ((aivi_ok(dy.clone())).and_then(|l| (aivi_ok(dy.clone())).and_then(|r| match (l, r) {
-        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
-        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
-        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
-        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
-        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
-    }))).and_then(|r| match (l, r) {
-        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
-        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
-        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
-        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
-        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
-    })))?);
-                    rt.call(f, __aivi_call_args)
-                }
-            }
-        }) })))
-    }) })))
 }
 
 fn def_aivi_geometry_distance__a0d39cd2cbca85a9(rt: &mut Runtime) -> R {
@@ -31304,6 +34249,15 @@ fn def_absInt__512a13c4441365f4(rt: &mut Runtime) -> R {
     }) })))
 }
 
+#[allow(dead_code)]
+fn def_absInt__512a13c4441365f4_typed(rt: &mut Runtime) -> Result<Box<dyn Fn(i64) -> Result<i64, RuntimeError>>, RuntimeError> {
+    Ok({
+        Box::new(move |n: i64| -> Result<i64, RuntimeError> {
+            Ok(if (n < 0_i64) { (0_i64 - n) } else { n })
+        })
+    })
+}
+
 fn def_aivi_number_bigint_absInt__fbfe4508a72be76d(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |n: Value, rt: &mut Runtime| {
         ((aivi_ok(n.clone())).and_then(|l| (aivi_ok(Value::Int(0))).and_then(|r| match (l, r) {
@@ -35125,7 +38079,7 @@ fn def_main__1f5962a2ce9803c8(rt: &mut Runtime) -> R {
                     let __e = ({
                     let f = (aivi_ok(__builtin("print")))?;
                     let mut __aivi_call_args: Vec<Value> = Vec::new();
-                    __aivi_call_args.push((aivi_ok(Value::Text("Hello from AIVI!".to_string())))?);
+                    __aivi_call_args.push((aivi_ok(Value::Text("Hello from typed codegen!".to_string())))?);
                     rt.call(f, __aivi_call_args)
                 })?;
                     rt.run_effect_value(__e)
@@ -35153,7 +38107,7 @@ fn def_app_main_main__e7e51e602520a022(rt: &mut Runtime) -> R {
                     let __e = ({
                     let f = (aivi_ok(__builtin("print")))?;
                     let mut __aivi_call_args: Vec<Value> = Vec::new();
-                    __aivi_call_args.push((aivi_ok(Value::Text("Hello from AIVI!".to_string())))?);
+                    __aivi_call_args.push((aivi_ok(Value::Text("Hello from typed codegen!".to_string())))?);
                     rt.call(f, __aivi_call_args)
                 })?;
                     rt.run_effect_value(__e)

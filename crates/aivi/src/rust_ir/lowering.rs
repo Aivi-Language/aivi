@@ -2,6 +2,8 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::rust_ir::cg_type::CgType;
+
 use crate::kernel::{
     KernelBlockItem, KernelBlockKind, KernelDef, KernelExpr, KernelMatchArm, KernelModule,
     KernelPathSegment, KernelPattern, KernelProgram, KernelRecordField,
@@ -25,6 +27,11 @@ pub struct RustIrDef {
     #[serde(default)]
     pub inline: bool,
     pub expr: RustIrExpr,
+    /// Codegen-friendly type annotation. `Some(ty)` when the type checker was able to
+    /// resolve this definition to a concrete ground type; `None` when the definition is
+    /// polymorphic or the type was not available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cg_type: Option<CgType>,
 }
 
 pub type BuiltinName = String;
@@ -325,6 +332,7 @@ fn lower_def(def: KernelDef, globals: &[String]) -> Result<RustIrDef, AiviError>
         name: def.name,
         inline: def.inline,
         expr,
+        cg_type: None,
     })
 }
 

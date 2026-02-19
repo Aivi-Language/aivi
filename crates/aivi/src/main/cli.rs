@@ -1,8 +1,7 @@
 use aivi::{
-    check_modules, check_types, compile_rust_native, compile_rust_native_lib,
-    desugar_target, embedded_stdlib_source, ensure_aivi_dependency,
-    format_target, kernel_target, load_module_diagnostics, load_modules, parse_target,
-    render_diagnostics, run_native,
+    check_modules, check_types, compile_rust_native_lib_typed, compile_rust_native_typed,
+    desugar_target, embedded_stdlib_source, ensure_aivi_dependency, format_target, kernel_target,
+    load_module_diagnostics, load_modules, parse_target, render_diagnostics, run_native,
     rust_ir_target, serve_mcp_stdio_with_policy, validate_publish_preflight, write_scaffold,
     AiviError, CargoDepSpec, McpPolicy, ProjectKind,
 };
@@ -403,12 +402,13 @@ fn run() -> Result<(), AiviError> {
                         )));
                     }
                     let _modules = load_checked_modules_with_progress(&opts.input)?;
-                    let program = aivi::desugar_target_typed(&opts.input)?;
+                    let (program, cg_types) =
+                        aivi::desugar_target_with_cg_types(&opts.input)?;
                     if opts.target == "rust" || opts.target == "rust-native" {
                         let rust = if opts.target == "rust" {
-                            compile_rust_native_lib(program)?
+                            compile_rust_native_lib_typed(program, cg_types)?
                         } else {
-                            compile_rust_native(program)?
+                            compile_rust_native_typed(program, cg_types)?
                         };
                         let out_dir = opts
                             .output
