@@ -1,0 +1,19 @@
+ClickPayload = { button: Int, alt: Bool, ctrl: Bool, shift: Bool, meta: Bool }
+
+InputPayload = { value: Text }
+
+KeyPayload = { key: Text, code: Text, alt: Bool, ctrl: Bool,
+               shift: Bool, meta: Bool, repeat: Bool, isComposing: Bool }
+
+PointerPayload = { pointerId: Int, pointerType: Text, button: Int, buttons: Int,
+                   clientX: Int, clientY: Int,
+                   alt: Bool, ctrl: Bool, shift: Bool, meta: Bool }
+
+EventPayload =
+  | ClickEvt   ClickPayload
+  | InputEvt   InputPayload
+  | KeyDownEvt KeyPayload
+  | KeyUpEvt   KeyPayload
+  | PtrDownEvt PointerPayload
+  | PtrUpEvt   PointerPayload
+  | PtrMoveEvt PointerPayload
