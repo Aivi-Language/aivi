@@ -275,7 +275,10 @@ mod tests {
 
     #[test]
     fn rust_type_list() {
-        assert_eq!(CgType::ListOf(Box::new(CgType::Int)).rust_type(), "Vec<i64>");
+        assert_eq!(
+            CgType::ListOf(Box::new(CgType::Int)).rust_type(),
+            "Vec<i64>"
+        );
     }
 
     #[test]

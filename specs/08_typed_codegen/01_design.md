@@ -121,15 +121,47 @@ Boxing/unboxing functions for each CgType:
 - `fn cg_unbox_int(v: Value) -> Result<i64, RuntimeError> { ... }`
 - etc.
 
-## Implementation Plan
+## Implementation Status
 
-1. **Add `CgType` to `rust_ir`** — new type, annotate `RustIrDef` with `Option<CgType>`
-2. **Extract `CgType` from type checker** — modify `infer_value_types` to return structured types alongside strings; convert `Type` → `CgType`
-3. **Typed emitter** — new `emit_typed_expr` in `native_rust_backend` that emits unboxed Rust
-4. **Boxing/unboxing helpers** — emit conversion functions in prelude
-5. **Modify `emit_module`** — choose typed vs dynamic path per definition
-6. **Tests** — typed codegen integration tests
-7. **Documentation** — spec updates
+### Completed
+
+1. **`CgType` enum** — [`crates/aivi_core/src/cg_type.rs`](../../crates/aivi_core/src/cg_type.rs)
+   - Variants: `Dynamic`, `Int`, `Float`, `Bool`, `Text`, `Unit`, `DateTime`, `Func`, `ListOf`, `Tuple`, `Record`, `Adt`
+   - Methods: `is_closed()`, `rust_type()` (Rust type string), `emit_box()` (typed→Value), `emit_unbox()` (Value→typed)
+
+2. **Type → CgType lowering** — [`crates/aivi/src/typecheck/checker/cg_type_lowering.rs`](../../crates/aivi/src/typecheck/checker/cg_type_lowering.rs)
+   - Converts the type checker's internal `Type` to `CgType` via substitution
+   - Monomorphic defs get concrete CgTypes; polymorphic defs get `CgType::Dynamic`
+
+3. **InferResult with CgTypes** — [`crates/aivi/src/typecheck/infer.rs`](../../crates/aivi/src/typecheck/infer.rs)
+   - `infer_value_types_full()` returns `InferResult { diagnostics, type_strings, cg_types }`
+   - CgType map: `HashMap<String, HashMap<String, CgType>>` (module → def → type)
+
+4. **Typed expression emitter** — [`crates/aivi/src/native_rust_backend/typed_expr.rs`](../../crates/aivi/src/native_rust_backend/typed_expr.rs)
+   - `emit_typed_expr()` produces unboxed Rust code for closed types
+   - Supports: literals, variables, binary ops, if/else, lambda, app, tuple, record, field access, match, block, list
+   - Falls back to `None` (Value path) for unsupported expressions
+
+5. **Pipeline wiring** — [`crates/aivi/src/rust_codegen.rs`](../../crates/aivi/src/rust_codegen.rs)
+   - `compile_rust_native_typed()` injects CgType into RustIrDef before emission
+   - `emit_module()` emits both Value-returning and `_typed` variants for closed-type defs
+
+6. **Driver integration** — [`crates/aivi_driver/src/lib.rs`](../../crates/aivi_driver/src/lib.rs)
+   - `desugar_target_with_cg_types()` returns `(HirProgram, CgType map)` for the build pipeline
+   - CLI `compile` and `build` commands use the typed pipeline
+
+7. **Tests** — [`crates/aivi/tests/typed_codegen.rs`](../../crates/aivi/tests/typed_codegen.rs)
+   - CgType collection verification
+   - `_typed` function emission for closed types
+   - No `_typed` for polymorphic definitions
+   - End-to-end compilation and execution
+
+### Not Yet Implemented
+
+- **Typed call chain emission** — multi-arg calls currently fall back to Value path
+- **Boxing/unboxing at boundaries** — `emit_box()`/`emit_unbox()` methods exist but aren't used yet for boundary crossings (e.g., typed function calling builtin)
+- **ADT typed emission** — ADT constructors in CgType exist but type-to-cg-type lowering returns empty constructor args
+- **Typed `main` rewrite** — `main` is always emitted via the Value path
 
 ## Performance Impact
 

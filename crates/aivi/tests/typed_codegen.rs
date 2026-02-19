@@ -33,7 +33,7 @@ fn typed_codegen_cg_types_collected() {
         "main.aivi",
         r#"module app.main
 add : Int -> Int -> Int
-add a b = a + b
+add = a b => a + b
 
 main : Effect Text Unit
 main = do Effect {
@@ -65,7 +65,7 @@ fn typed_codegen_int_arithmetic_emits_typed_fn() {
     let rust = compile_typed(
         r#"module app.main
 add : Int -> Int -> Int
-add a b = a + b
+add = a b => a + b
 
 main : Effect Text Unit
 main = do Effect {
@@ -74,10 +74,12 @@ main = do Effect {
 "#,
     );
 
-    // The typed path should emit a _typed variant for 'add'
+    // The typed path should emit a _typed variant for 'add'.
+    // Global function names have the form `def_add__<hash>`, so the typed variant is
+    // `def_add__<hash>_typed`.
     assert!(
-        rust.contains("fn aivi__add_typed"),
-        "expected _typed function for `add`; generated Rust:\n{rust}"
+        rust.contains("_typed(rt: &mut Runtime)"),
+        "expected _typed function for a closed-type def; generated Rust:\n{rust}"
     );
 }
 
@@ -87,7 +89,7 @@ fn typed_codegen_still_has_value_fn() {
     let rust = compile_typed(
         r#"module app.main
 add : Int -> Int -> Int
-add a b = a + b
+add = a b => a + b
 
 main : Effect Text Unit
 main = do Effect {
@@ -96,8 +98,9 @@ main = do Effect {
 "#,
     );
 
+    // Value-returning functions have the form: fn def_add__<hash>(rt: &mut Runtime) -> R
     assert!(
-        rust.contains("fn aivi__add(rt: &mut Runtime) -> R"),
+        rust.contains("(rt: &mut Runtime) -> R {"),
         "Value-returning function must always be present; generated Rust:\n{rust}"
     );
 }
@@ -108,7 +111,7 @@ fn typed_codegen_polymorphic_no_typed_fn() {
     let rust = compile_typed(
         r#"module app.main
 identity : a -> a
-identity x = x
+identity = x => x
 
 main : Effect Text Unit
 main = do Effect {

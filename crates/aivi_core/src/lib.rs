@@ -4,6 +4,8 @@
 // For now it reuses the existing module implementation files via `#[path = "..")]` to avoid a
 // huge, noisy move diff. Once the crate boundary is stable, we can physically move files.
 
+pub mod cg_type;
+
 #[path = "../../aivi/src/cst.rs"]
 mod cst;
 #[path = "../../aivi/src/diagnostics.rs"]
@@ -57,6 +59,7 @@ pub use surface::{
 };
 pub use typecheck::{
     check_types, check_types_including_stdlib, elaborate_expected_coercions, infer_value_types,
+    infer_value_types_full, InferResult,
 };
 
 pub fn desugar_modules(modules: &[Module]) -> HirProgram {

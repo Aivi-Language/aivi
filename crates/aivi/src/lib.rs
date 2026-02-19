@@ -63,7 +63,12 @@ pub mod resolver {
 pub mod typecheck {
     pub use aivi_core::{
         check_types, check_types_including_stdlib, elaborate_expected_coercions, infer_value_types,
+        infer_value_types_full, InferResult,
     };
+}
+
+pub mod cg_type {
+    pub use aivi_core::cg_type::*;
 }
 
 pub mod stdlib {
@@ -84,6 +89,7 @@ pub use aivi_core::lex_cst;
 pub use aivi_core::check_modules;
 pub use aivi_core::{
     check_types, check_types_including_stdlib, elaborate_expected_coercions, infer_value_types,
+    infer_value_types_full, InferResult,
 };
 pub use aivi_core::{
     embedded_stdlib_modules, embedded_stdlib_source, parse_modules, parse_modules_from_tokens,
@@ -119,14 +125,18 @@ pub use pm::{
     CargoDepSpecParseError, CargoManifestEdits, ProjectKind,
 };
 pub use runtime::{run_native, run_native_with_fuel, run_test_suite, TestFailure, TestReport};
-pub use rust_codegen::{compile_rust_native, compile_rust_native_lib};
+pub use rust_codegen::{
+    compile_rust_native, compile_rust_native_lib, compile_rust_native_lib_typed,
+    compile_rust_native_typed,
+};
+pub use rust_ir::cg_type::CgType;
 pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
 pub use rustc_backend::{build_with_rustc, emit_rustc_source};
 
 pub use aivi_driver::{
-    desugar_target, desugar_target_typed, format_target, kernel_target, load_module_diagnostics,
-    load_modules, load_modules_from_paths, parse_file, parse_target, resolve_target,
-    test_target_program_and_names, AiviError,
+    desugar_target, desugar_target_typed, desugar_target_with_cg_types, format_target,
+    kernel_target, load_module_diagnostics, load_modules, load_modules_from_paths, parse_file,
+    parse_target, resolve_target, test_target_program_and_names, AiviError,
 };
 
 pub fn rust_ir_target(target: &str) -> Result<rust_ir::RustIrProgram, AiviError> {

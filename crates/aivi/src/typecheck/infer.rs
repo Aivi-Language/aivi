@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::cg_type::CgType;
 use crate::diagnostics::FileDiagnostic;
 use crate::surface::{DomainItem, Module, ModuleItem};
 
@@ -13,12 +14,27 @@ use super::class_env::{
 use super::global::collect_global_type_info;
 use super::ordering::ordered_modules;
 
+/// Result of type inference: diagnostics, pretty-printed type strings, and codegen-friendly
+/// type annotations.
+pub struct InferResult {
+    pub diagnostics: Vec<FileDiagnostic>,
+    /// Module → definition name → rendered type string (for LSP / display).
+    pub type_strings: HashMap<String, HashMap<String, String>>,
+    /// Module → definition name → codegen-friendly type (for the typed codegen path).
+    pub cg_types: HashMap<String, HashMap<String, CgType>>,
+}
+
 pub fn infer_value_types(
     modules: &[Module],
 ) -> (
     Vec<FileDiagnostic>,
     HashMap<String, HashMap<String, String>>,
 ) {
+    let result = infer_value_types_full(modules);
+    (result.diagnostics, result.type_strings)
+}
+
+pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
     let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
@@ -29,6 +45,7 @@ pub fn infer_value_types(
     > = HashMap::new();
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
     let mut inferred: HashMap<String, HashMap<String, String>> = HashMap::new();
+    let mut cg_types: HashMap<String, HashMap<String, CgType>> = HashMap::new();
 
     let (global_type_constructors, global_aliases) =
         collect_global_type_info(&mut checker, modules);
@@ -87,10 +104,17 @@ pub fn infer_value_types(
         }
 
         let mut module_types = HashMap::new();
+        let mut module_cg_types = HashMap::new();
         for name in local_names {
             if let Some(schemes) = env.get_all(&name) {
                 if schemes.len() == 1 {
-                    module_types.insert(name, checker.type_to_string(&schemes[0].ty));
+                    module_types.insert(name.clone(), checker.type_to_string(&schemes[0].ty));
+                    // Monomorphic (no quantified vars) → try to produce a CgType.
+                    if schemes[0].vars.is_empty() {
+                        module_cg_types.insert(name, checker.type_to_cg_type(&schemes[0].ty));
+                    } else {
+                        module_cg_types.insert(name, CgType::Dynamic);
+                    }
                 } else {
                     let mut rendered = String::new();
                     for (idx, scheme) in schemes.iter().enumerate() {
@@ -99,11 +123,14 @@ pub fn infer_value_types(
                         }
                         rendered.push_str(&checker.type_to_string(&scheme.ty));
                     }
-                    module_types.insert(name, rendered);
+                    module_types.insert(name.clone(), rendered);
+                    // Multi-clause overloads are always Dynamic for now.
+                    module_cg_types.insert(name, CgType::Dynamic);
                 }
             }
         }
         inferred.insert(module.name.name.clone(), module_types);
+        cg_types.insert(module.name.name.clone(), module_cg_types);
 
         let mut exports = HashMap::new();
         for export in &module.exports {
@@ -150,5 +177,9 @@ pub fn infer_value_types(
         module_instance_exports.insert(module.name.name.clone(), instance_exports);
     }
 
-    (diagnostics, inferred)
+    InferResult {
+        diagnostics,
+        type_strings: inferred,
+        cg_types,
+    }
 }

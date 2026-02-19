@@ -175,4 +175,3 @@ domain Vector over Vec4 = {
   (/) : Vec4 -> Float -> Vec4
   (/) = v s => { x: v.x / s, y: v.y / s, z: v.z / s, w: v.w / s }
 }"#;
-

@@ -13,7 +13,6 @@ use crate::rust_ir::cg_type::CgType;
 use crate::rust_ir::{RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrMatchArm, RustIrPattern};
 use crate::AiviError;
 
-use super::expr::emit_expr;
 use super::utils::{collect_free_locals_in_expr, rust_global_fn_name, rust_local_name};
 use std::collections::HashSet;
 
@@ -132,9 +131,7 @@ pub(super) fn emit_typed_expr(
             let then_code = emit_typed_expr(then_branch, ty, ctx, indent)?;
             let else_code = emit_typed_expr(else_branch, ty, ctx, indent)?;
             match (cond_code, then_code, else_code) {
-                (Some(c), Some(t), Some(e)) => {
-                    Some(format!("if {c} {{ {t} }} else {{ {e} }}"))
-                }
+                (Some(c), Some(t), Some(e)) => Some(format!("if {c} {{ {t} }} else {{ {e} }}")),
                 _ => None,
             }
         }
@@ -212,8 +209,8 @@ pub(super) fn emit_typed_expr(
                         }
                     }
                     if cur == ty {
-                        let ind = "    ".repeat(indent);
-                        let ind2 = "    ".repeat(indent + 1);
+                        let _ind = "    ".repeat(indent);
+                        let _ind2 = "    ".repeat(indent + 1);
                         let mut rendered_args = Vec::new();
                         for (arg, pty) in args.iter().zip(param_types.iter()) {
                             if let Some(a) = emit_typed_expr(arg, pty, ctx, indent + 1)? {
@@ -222,7 +219,7 @@ pub(super) fn emit_typed_expr(
                                 return Ok(None);
                             }
                         }
-                        let fn_name = format!("{}_typed", rust_global_fn_name(name));
+                        let _fn_name = format!("{}_typed", rust_global_fn_name(name));
                         // For multi-arg, we chain: fn_typed(arg1)?(arg2)?...(argN)?
                         // But actually, we need to generate a different calling convention.
                         // For now, fall back for multi-arg calls.
@@ -462,7 +459,9 @@ fn emit_typed_match(
     let ind = "    ".repeat(indent);
     let ind2 = "    ".repeat(indent + 1);
     let mut out = String::new();
-    out.push_str(&format!("{{\n{ind2}let __scrut = {scrut_code};\n{ind2}match __scrut {{\n"));
+    out.push_str(&format!(
+        "{{\n{ind2}let __scrut = {scrut_code};\n{ind2}match __scrut {{\n"
+    ));
 
     for arm in arms {
         if arm.guard.is_some() {
@@ -497,7 +496,10 @@ fn emit_typed_pattern(
         RustIrPattern::Wildcard { .. } => Ok((Some("_".to_string()), vec![])),
         RustIrPattern::Var { name, .. } => {
             let rust_name = rust_local_name(name);
-            Ok((Some(rust_name.clone()), vec![(name.clone(), scrutinee_ty.clone())]))
+            Ok((
+                Some(rust_name.clone()),
+                vec![(name.clone(), scrutinee_ty.clone())],
+            ))
         }
         RustIrPattern::Literal { value, .. } => {
             let code = match value {
@@ -614,11 +616,12 @@ fn infer_expr_type(expr: &RustIrExpr, ctx: &TypedCtx) -> Option<CgType> {
                 _ => None,
             }
         }
-        RustIrExpr::If {
-            then_branch, ..
-        } => infer_expr_type(then_branch, ctx),
+        RustIrExpr::If { then_branch, .. } => infer_expr_type(then_branch, ctx),
         RustIrExpr::Tuple { items, .. } => {
-            let types: Vec<_> = items.iter().filter_map(|i| infer_expr_type(i, ctx)).collect();
+            let types: Vec<_> = items
+                .iter()
+                .filter_map(|i| infer_expr_type(i, ctx))
+                .collect();
             if types.len() == items.len() {
                 Some(CgType::Tuple(types))
             } else {
