@@ -178,7 +178,7 @@ fn lower_literal(lit: HirLiteral) -> KernelLiteral {
 fn lower_block_kind(kind: HirBlockKind) -> KernelBlockKind {
     match kind {
         HirBlockKind::Plain => KernelBlockKind::Plain,
-        HirBlockKind::Effect => KernelBlockKind::Effect,
+        HirBlockKind::Do { monad } => KernelBlockKind::Do { monad },
         HirBlockKind::Generate => KernelBlockKind::Generate,
         HirBlockKind::Resource => KernelBlockKind::Resource,
     }

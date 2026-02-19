@@ -1052,7 +1052,10 @@ impl TypeChecker {
     ) -> Result<Type, TypeError> {
         match kind {
             BlockKind::Plain => self.infer_plain_block(items, env),
-            BlockKind::Do { .. } => self.infer_effect_block(items, env),
+            BlockKind::Do { monad } if monad.name == "Effect" => {
+                self.infer_effect_block(items, env)
+            }
+            BlockKind::Do { monad } => self.infer_generic_do_block(&monad.name, &monad.span, items, env),
             BlockKind::Generate => self.infer_generate_block(items, env),
             BlockKind::Resource => self.infer_resource_block(items, env),
         }

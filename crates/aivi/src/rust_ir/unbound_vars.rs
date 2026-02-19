@@ -437,7 +437,7 @@ fn rewrite_implicit_field_vars(
 fn lower_block_kind(kind: KernelBlockKind) -> Result<RustIrBlockKind, AiviError> {
     match kind {
         KernelBlockKind::Plain => Ok(RustIrBlockKind::Plain),
-        KernelBlockKind::Effect => Ok(RustIrBlockKind::Effect),
+        KernelBlockKind::Do { monad } => Ok(RustIrBlockKind::Do { monad }),
         KernelBlockKind::Generate => Ok(RustIrBlockKind::Generate),
         KernelBlockKind::Resource => Ok(RustIrBlockKind::Resource),
     }

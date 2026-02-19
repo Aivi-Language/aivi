@@ -38,6 +38,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Sigils](02_syntax/13_sigils)
 - [Decorators](02_syntax/14_decorators)
 - [Resources](02_syntax/15_resources)
+- [Generic `do` Notation](02_syntax/16_do_notation)
 - [Operators and Context](02_syntax/11_operators)
 - [Concrete Syntax (EBNF draft)](02_syntax/00_grammar)
 

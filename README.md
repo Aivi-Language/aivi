@@ -155,6 +155,13 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 ## Todo
 
 - bug fixes
+- do M {} notation
+- ServerHTML fixes
+- how would a wizard work in aivi.ui
+- optimize other complex/** algorithms to use AIVI utils
+- test coverage?
+- what is "export *" in docs
+
 
 ## License
 

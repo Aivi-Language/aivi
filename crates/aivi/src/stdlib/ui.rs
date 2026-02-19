@@ -21,6 +21,10 @@ export renderHtml, diff, patchToJson
 
 use aivi
 
+// Short aliases for event payload records (re-exported for convenience).
+Click = ClickEvent
+Input = InputEvent
+
 // A typed Virtual DOM. Rendering is backend/runtime-specific.
 VNode msg = Element Text (List (Attr msg)) (List (VNode msg)) | TextNode Text | Keyed Text (VNode msg)
 

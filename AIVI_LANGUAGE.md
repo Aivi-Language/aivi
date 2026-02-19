@@ -488,16 +488,25 @@ main = do Effect {
 
 ### `do M { ... }` - General monadic blocks
 
-`do Monad { ... }` is the general form; `do Effect { ... }` is the most common specialisation. Any type with a `Monad` instance can be used:
+`do Monad { ... }` is the general form; `do Effect { ... }` is the most common specialisation. `Option` and `Result` are also supported:
 
 ```aivi
-safeDivide = a b => do Option {
-  given b != 0 or None
-  pure (a / b)
+// do Option: short-circuits on None
+safeLookup = key1 key2 map => do Option {
+  x <- Map.get key1 map
+  y <- Map.get key2 map
+  Some (x + y)
+}
+
+// do Result: short-circuits on Err
+validateAge = input => do Result {
+  n <- parseInt input
+  ok <- if n >= 0 && n <= 150 then Ok n else Err "out of range"
+  Ok ok
 }
 ```
 
-The same bind (`<-`) and pure-bind (`=`) syntax applies. The available statements depend on the monad.
+The same bind (`<-`) and pure-bind (`=`) syntax applies. Generic `do M` blocks support only the common monadic subset (`<-`, `=`, expression sequencing). Effect-specific statements (`or`, `when`, `unless`, `given`, `on`, `loop`/`recurse`) are **not** available in generic blocks.
 
 ### `machine { ... }` - State machines
 

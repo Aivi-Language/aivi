@@ -1,6 +1,6 @@
 # Generic Monadic `do` Blocks
 
-> **Status**: Future feature — planning phase.  
+> **Status**: Implemented (v0.1) — `do Option { ... }` and `do Result { ... }` are supported in the interpreter runtime. Native codegen is stubbed. Full instance-driven resolution is deferred to v0.2.  
 > **Depends on**: Type classes ([§ 3.5](03_types.md#35-classes-and-hkts)), `Monad` hierarchy ([aivi.logic](../05_stdlib/00_core/03_logic.md)), effects ([§ 9](09_effects.md)), instance resolution (compiler).
 
 ## Overview

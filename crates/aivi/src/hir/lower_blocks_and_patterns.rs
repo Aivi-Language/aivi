@@ -14,7 +14,7 @@ fn lower_block_item_ctx(
         BlockItem::Let { pattern, expr, .. } => {
             let lowered_expr = lower_expr_ctx(expr, id_gen, ctx, false);
             let expr = if matches!(surface_kind, BlockKind::Do { .. })
-                && matches!(hir_kind, HirBlockKind::Effect)
+                && matches!(hir_kind, HirBlockKind::Do { monad } if monad == "Effect")
             {
                 // `name = expr` inside `effect { ... }` is a pure let-binding and must not
                 // implicitly run effects even if `expr` produces an `Effect` value.
@@ -23,6 +23,22 @@ fn lower_block_item_ctx(
                     func: Box::new(HirExpr::Var {
                         id: id_gen.next(),
                         name: "pure".to_string(),
+                    }),
+                    args: vec![lowered_expr],
+                }
+            } else if let BlockKind::Do { monad } = surface_kind {
+                // Generic `do M { ... }` block: wrap pure let-value in the
+                // monad's constructor so the bind machinery works correctly.
+                let wrapper = match monad.name.as_str() {
+                    "Option" => "Some",
+                    "Result" => "Ok",
+                    _ => "pure", // fallback for unknown monads
+                };
+                HirExpr::Call {
+                    id: id_gen.next(),
+                    func: Box::new(HirExpr::Var {
+                        id: id_gen.next(),
+                        name: wrapper.to_string(),
                     }),
                     args: vec![lowered_expr],
                 }
