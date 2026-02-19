@@ -1,0 +1,149 @@
+//! Tests for the typed codegen path.
+//!
+//! Verifies that definitions with closed types (Int, Float, Bool, etc.) produce additional
+//! `_typed` function variants alongside the standard `Value`-returning functions.
+
+mod native_fixture;
+
+use aivi::{compile_rust_native_typed, desugar_target, infer_value_types_full, load_modules};
+use native_fixture::write_aivi_source;
+use tempfile::tempdir;
+
+/// Helper: compile AIVI source through the typed codegen pipeline and return the generated Rust.
+fn compile_typed(source: &str) -> String {
+    let dir = tempdir().expect("tempdir");
+    let source_path_str = write_aivi_source(dir.path(), "main.aivi", source);
+
+    // Desugar without full checking (consistent with other native codegen tests)
+    let program = desugar_target(&source_path_str).expect("desugar");
+
+    // Load modules (with stdlib) for type inference
+    let modules = load_modules(&source_path_str).expect("load_modules");
+    let infer_result = infer_value_types_full(&modules);
+
+    compile_rust_native_typed(program, infer_result.cg_types).expect("compile_rust_native_typed")
+}
+
+#[test]
+fn typed_codegen_cg_types_collected() {
+    // Verify that infer_value_types_full collects CgType info for a simple definition.
+    let dir = tempdir().expect("tempdir");
+    let source_path_str = write_aivi_source(
+        dir.path(),
+        "main.aivi",
+        r#"module app.main
+add : Int -> Int -> Int
+add a b = a + b
+
+main : Effect Text Unit
+main = do Effect {
+  print "done"
+}
+"#,
+    );
+    let modules = load_modules(&source_path_str).expect("load_modules");
+    let infer_result = infer_value_types_full(&modules);
+    let cg_types = &infer_result.cg_types;
+
+    // Should have a CgType entry for the app.main module containing "add"
+    let mod_names: Vec<_> = cg_types.keys().collect();
+    assert!(
+        cg_types.contains_key("app.main"),
+        "module app.main not found in cg_types keys: {mod_names:?}"
+    );
+
+    let mod_types = cg_types.get("app.main").expect("app.main module");
+    assert!(
+        mod_types.contains_key("add"),
+        "add not found in module cg_types: {:?}",
+        mod_types.keys().collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn typed_codegen_int_arithmetic_emits_typed_fn() {
+    let rust = compile_typed(
+        r#"module app.main
+add : Int -> Int -> Int
+add a b = a + b
+
+main : Effect Text Unit
+main = do Effect {
+  print "done"
+}
+"#,
+    );
+
+    // The typed path should emit a _typed variant for 'add'
+    assert!(
+        rust.contains("fn aivi__add_typed"),
+        "expected _typed function for `add`; generated Rust:\n{rust}"
+    );
+}
+
+#[test]
+fn typed_codegen_still_has_value_fn() {
+    // Typed codegen must always preserve the Value-returning function.
+    let rust = compile_typed(
+        r#"module app.main
+add : Int -> Int -> Int
+add a b = a + b
+
+main : Effect Text Unit
+main = do Effect {
+  print "done"
+}
+"#,
+    );
+
+    assert!(
+        rust.contains("fn aivi__add(rt: &mut Runtime) -> R"),
+        "Value-returning function must always be present; generated Rust:\n{rust}"
+    );
+}
+
+#[test]
+fn typed_codegen_polymorphic_no_typed_fn() {
+    // Polymorphic definitions should NOT get a _typed variant.
+    let rust = compile_typed(
+        r#"module app.main
+identity : a -> a
+identity x = x
+
+main : Effect Text Unit
+main = do Effect {
+  print "done"
+}
+"#,
+    );
+
+    assert!(
+        !rust.contains("identity_typed"),
+        "polymorphic function should not get _typed variant; generated Rust:\n{rust}"
+    );
+}
+
+#[test]
+fn typed_codegen_compiles_and_runs() {
+    // End-to-end: typed codegen produces valid Rust that compiles and runs.
+    let rust = compile_typed(
+        r#"module app.main
+main : Effect Text Unit
+main = do Effect {
+  print "Hello from typed codegen!"
+}
+"#,
+    );
+
+    assert!(rust.contains("fn main()"));
+
+    let _lock = native_fixture::FIXTURE_LOCK.lock().expect("lock");
+    let output = native_fixture::cargo_run_fixture(&rust);
+    native_fixture::assert_cargo_success(&output);
+
+    let stdout = native_fixture::stdout_text(&output);
+    assert!(
+        stdout.contains("Hello from typed codegen!"),
+        "unexpected stdout: {stdout}"
+    );
+}
