@@ -61,3 +61,102 @@ small amount of preflight validation.
 - `aivi publish` runs `cargo publish` with the same preflight validation.
   - `--dry-run` forwards to `cargo publish --dry-run`
   - `--allow-dirty` and `--no-verify` forward to Cargo
+
+## Guide: Creating and Publishing an AIVI Package
+
+### 1. Initialize a new library
+
+```sh
+mkdir my-aivi-lib && cd my-aivi-lib
+aivi init --lib
+```
+
+This creates:
+
+```
+my-aivi-lib/
+  aivi.toml          # project manifest
+  Cargo.toml         # auto-generated, includes [package.metadata.aivi]
+  src/
+    lib.aivi          # library entry point
+```
+
+### 2. Write your library
+
+Edit `src/lib.aivi`:
+
+```aivi
+module my.aivi.lib
+
+export *
+
+greet : Text -> Text
+greet = name => "Hello, " ++ name ++ "!"
+```
+
+### 3. Configure metadata
+
+Ensure `Cargo.toml` has:
+
+```toml
+[package]
+name = "my-aivi-lib"
+version = "0.1.0"
+edition = "2024"
+keywords = ["aivi"]
+description = "A small AIVI utility library."
+
+[package.metadata.aivi]
+language_version = "0.1"
+kind = "lib"
+```
+
+### 4. Test locally
+
+```sh
+aivi test
+```
+
+### 5. Publish
+
+```sh
+aivi publish --dry-run    # verify everything first
+aivi publish              # publish to crates.io
+```
+
+## Guide: Using an AIVI Package
+
+### 1. Install a dependency
+
+```sh
+aivi install my-aivi-lib@0.1.0
+```
+
+This adds the dependency to `Cargo.toml` and fetches it.
+
+### 2. Import in your code
+
+```aivi
+module my.app
+
+use my.aivi.lib (greet)
+
+main = do Effect {
+  msg = greet "world"
+  print msg
+}
+```
+
+### 3. Use a Git dependency
+
+```sh
+aivi install "git+https://github.com/user/my-aivi-lib.git#rev=abc123"
+```
+
+### 4. Use a local path dependency
+
+```sh
+aivi install "path:../my-aivi-lib"
+```
+
+This is useful during development when the package is not yet published.

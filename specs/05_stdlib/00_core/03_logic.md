@@ -3,6 +3,8 @@
 <!-- quick-info: {"kind":"module","name":"aivi.logic"} -->
 The `aivi.logic` module defines the standard algebraic hierarchy for AIVI, based on the **Fantasy Land Specification**. These classes provide a universal language for data transformation, equality, and composition.
 <!-- /quick-info -->
+<div class="import-badge">use aivi.logic</div>
+
 <<< ../../snippets/from_md/05_stdlib/00_core/03_logic/block_01.aivi{aivi}
 
 See also:

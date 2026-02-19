@@ -6,6 +6,8 @@ The `Color` domain helps you work with **Colors** the way humans do.
 Screens think in Red, Green, and Blue, but people think in **Hue**, **Saturation**, and **Lightness**. This domain lets you mix colors mathematically (e.g., `primary + 10% lightness` for a hover state) without the mud that comes from raw RGB math.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.color<span class="domain-badge">domain</span></div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_01.aivi{aivi}
@@ -22,10 +24,7 @@ For direct channel edits, prefer record patching instead of deltas (e.g., `color
 | --- | --- | --- |
 | `rgb r g b` | `Int -> Int -> Int -> Rgb` | `{ r: r, g: g, b: b }` |
 
-```aivi
-rgb : Int -> Int -> Int -> Rgb
-rgb = r g b => { r: r, g: g, b: b }
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_05.aivi{aivi}
 
 ## Domain Definition
 

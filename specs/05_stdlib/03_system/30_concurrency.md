@@ -6,6 +6,8 @@ The `Concurrency` domain unlocks the power of doing multiple things at once.
 It provides **Fibers** (lightweight threads) and **Channels** for safe communication. Whether you're fetching two APIs in parallel or building a background worker, this domain gives you the high-level tools (`par`, `scope`) to write concurrent code that doesn't melt your brain.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.concurrency</div>
+
 <<< ../../snippets/from_md/05_stdlib/03_system/30_concurrency/block_01.aivi{aivi}
 
 ## Types

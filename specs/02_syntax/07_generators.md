@@ -87,7 +87,7 @@ Inside the loop body, `recurse next` continues with the next iteration with upda
 
 ```aivi
 loop pattern = initialValue => {
-  -- body: may yield, may recurse
+  // body: may yield, may recurse
   yield someValue
   recurse nextState
 }

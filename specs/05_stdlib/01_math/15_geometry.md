@@ -1,4 +1,3 @@
-````markdown
 # Geometry Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.geometry"} -->
@@ -12,6 +11,8 @@ This is the "physical" side of math. While `Vector` handles movement, `Geometry`
 Almost every visual application needs to know when two things collide. This domain gives you standard shapes and highly optimized algorithms to check for intersections instantly.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.geometry<span class="domain-badge">domain</span></div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/01_math/15_geometry/block_01.aivi{aivi}
@@ -52,5 +53,3 @@ Instead of verbose nested record literals, use convenience constructors:
 ## Usage Examples
 
 <<< ../../snippets/from_md/05_stdlib/01_math/15_geometry/block_04.aivi{aivi}
-
-````

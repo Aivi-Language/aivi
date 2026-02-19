@@ -24,6 +24,8 @@ You can use either the facade module or the specific domain module depending on 
 **Rule of thumb**: Use `Decimal` for money and human-facing decimal values. Use `Rational` for symbolic math where any rounding is unacceptable.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.number</div>
+
 <<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_01.aivi{aivi}
 
 

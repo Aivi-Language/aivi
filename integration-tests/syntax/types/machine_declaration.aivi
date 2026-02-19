@@ -2,23 +2,23 @@
 module integrationTests.syntax.types.machineDeclaration
 
 machine Door = {
-  -> Closed: init {}
-  Closed -> Opened: open {}
-  Opened -> Closed: close {}
-  Opened -> Locked: lock {}
-  Locked -> Closed: unlock {}
+         -> Closed : init {}
+  Closed -> Opened : open {}
+  Opened -> Closed : close {}
+  Opened -> Locked : lock {}
+  Locked -> Closed : unlock {}
 }
 
 machine TrafficLight = {
-  -> Red: init {}
-  Red -> Green: next {}
-  Green -> Yellow: next {}
-  Yellow -> Red: next {}
+         -> Red    : init {}
+  Red    -> Green  : next {}
+  Green  -> Yellow : next {}
+  Yellow -> Red    : next {}
 }
 
 machine OrderFlow = {
-  -> Pending: init {}
-  Pending -> Confirmed: confirm { confirmedAt: Instant }
-  Confirmed -> Shipped: ship { trackingId: Text }
-  Shipped -> Delivered: deliver { deliveredAt: Instant }
+            -> Pending   : init {}
+  Pending   -> Confirmed : confirm { confirmedAt: Instant }
+  Confirmed -> Shipped   : ship { trackingId: Text }
+  Shipped   -> Delivered : deliver { deliveredAt: Instant }
 }

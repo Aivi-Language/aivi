@@ -8,6 +8,8 @@ While `Vector` and `Matrix` are for 3D graphics, this domain is for "hard" scien
 Whether you're simulating heat flow across a computer chip, calculating structural loads on a bridge, or training a neural network, you are solving systems of linear equations. This domain wraps industrial-grade solvers (like LAPACK) to do the heavy lifting for you.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.linearAlgebra<span class="domain-badge">domain</span></div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_01.aivi{aivi}

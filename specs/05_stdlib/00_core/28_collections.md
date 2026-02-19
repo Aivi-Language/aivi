@@ -1,4 +1,3 @@
-````markdown
 # Collections
 
 <!-- quick-info: {"kind":"module","name":"aivi.collections"} -->
@@ -17,6 +16,8 @@ use aivi.collections  // imports list, map, set, queue, heap
 ```
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.collections</div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_01.aivi{aivi}
@@ -186,5 +187,3 @@ use aivi.heap
 | **size** h<br><pre><code>`Heap a -> Int`</code></pre> | Returns the number of elements in the heap. |
 
 `Heap` ordering is determined by `Ord` for the element type. Element types must be comparable primitives or tuples of comparable primitives (lexicographic ordering for tuples).
-
-````

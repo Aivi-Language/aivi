@@ -8,6 +8,8 @@ The `~<html>...</html>` sigil allows embedding HTML inside Aivi code:syntax and 
 `~<html>...</html>` is **typed templating**: it produces `VNode` values, not HTML strings.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.ui</div>
+
 ## Splices
 
 Use `{ expr }` inline:

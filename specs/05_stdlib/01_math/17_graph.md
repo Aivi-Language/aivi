@@ -11,6 +11,8 @@ In computer science, a "Graph" isn't a pie chart. It's a map of connections:
 If you need to find the shortest path between two points or see who is friends with whom, you need a Graph. This domain provides the data structures and algorithms (like BFS and Dijkstra) to solve these problems efficiently.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.graph<span class="domain-badge">domain</span></div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/01_math/17_graph/block_01.aivi{aivi}
