@@ -1,3 +1,3 @@
 failExample : Effect Text Int
 failExample =
-fail "boom"
+  fail "boom"

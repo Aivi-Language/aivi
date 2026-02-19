@@ -1,14 +1,14 @@
 Request = {
-  method: Text,
-  path: Text,
-  headers: List { name: Text, value: Text },
-  body: List Int,
+  method: Text
+  path: Text
+  headers: List { name: Text, value: Text }
+  body: List Int
   remoteAddr: Option Text
 }
 
 Response = {
-  status: Int,
-  headers: List { name: Text, value: Text },
+  status: Int
+  headers: List { name: Text, value: Text }
   body: List Int
 }
 

@@ -9,7 +9,7 @@ getUsersWithPosts = do Effect {
     |> join posts on (_.id == _.authorId)
     |> groupBy { userId = _.id, user = _.left, post = _.right }
     |> map { key, group } => {
-      user: group.head.user,
+      user: group.head.user
       posts: group |> map.post
     }
   )

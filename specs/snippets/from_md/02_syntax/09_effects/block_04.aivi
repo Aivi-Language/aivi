@@ -2,6 +2,6 @@ attemptExample : Effect Text Text
 attemptExample = do Effect {
   res <- attempt (fail "nope")
   res match
-  | Ok _  => pure "unexpected"
-  | Err e => pure e
+    | Ok _  => pure "unexpected"
+    | Err e => pure e
 }

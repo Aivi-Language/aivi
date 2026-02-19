@@ -1,5 +1,4 @@
 domain Path over Path = {
   // Join paths, then normalize (lexically).
-  (/) : Path -> Path -> Path
+  (/): Path -> Path -> Path
 }
-

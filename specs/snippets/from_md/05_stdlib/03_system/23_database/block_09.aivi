@@ -23,6 +23,6 @@ main : Effect Text (Result Pool.PoolError Int)
 main = do Effect {
   poolRes <- Pool.create cfg
   poolRes match
-  | Err e   => pure (Err e)
-  | Ok pool => Pool.withConn pool (_ => pure 123)
+    | Err e   => pure (Err e)
+    | Ok pool => Pool.withConn pool (_ => pure 123)
 }

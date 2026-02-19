@@ -9,7 +9,7 @@ systemLocale = do Effect {
   tagOpt <- localeTag
   tag =
     tagOpt match
-  | Some t => t
-  | None   => defaultLocale.tag
-    pure (parseLocale tag or defaultLocale)
+      | Some t => t
+      | None   => defaultLocale.tag
+      pure (parseLocale tag or defaultLocale)
 }

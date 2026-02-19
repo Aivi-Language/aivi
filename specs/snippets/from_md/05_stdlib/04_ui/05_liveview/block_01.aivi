@@ -16,8 +16,8 @@ view = model =>
   </html>
 
 update = msg model => msg match
-| Inc => (model <| { count: _ + 1 }, [])
-| Dec => (model <| { count: _ - 1 }, [])
+  | Inc => (model <| { count: _ + 1 }, [])
+  | Dec => (model <| { count: _ - 1 }, [])
 
 app : App Model Msg
 app =
