@@ -822,14 +822,34 @@ impl TypeChecker {
                 let left_is_float = matches!(left_applied, Type::Con(ref name, _) if name == "Float");
                 let right_is_float = matches!(right_applied, Type::Con(ref name, _) if name == "Float");
                 let either_float = allow_int_fallback && (left_is_float || right_is_float);
+                // Float shortcut only applies when the non-Float operand is a type variable or also
+                // Float/Int. If the non-Float operand is a concrete domain type (e.g. Vec4), domain
+                // operators must be checked first.
+                let non_float_side_is_domain_type = if left_is_float {
+                    matches!(left_applied, Type::Con(ref name, _) if name == "Float")
+                        && matches!(right_applied, Type::Record { .. } | Type::Con(_, _))
+                        && !right_is_float
+                        && !matches!(right_applied, Type::Var(_))
+                        && !matches!(right_applied, Type::Con(ref name, _) if name == "Int")
+                } else if right_is_float {
+                    matches!(right_applied, Type::Con(ref name, _) if name == "Float")
+                        && matches!(left_applied, Type::Record { .. } | Type::Con(_, _))
+                        && !left_is_float
+                        && !matches!(left_applied, Type::Var(_))
+                        && !matches!(left_applied, Type::Con(ref name, _) if name == "Int")
+                } else {
+                    false
+                };
 
                 // Float arithmetic is built-in like Int
                 if both_float {
                     return Ok(Type::con("Float"));
                 }
 
-                // If one operand is Float and the other is a type variable, unify with Float
-                if either_float && !both_int {
+                // If one operand is Float and the other is a type variable, unify with Float.
+                // Skip if the non-Float side is a concrete domain type — domain operators must
+                // be resolved first.
+                if either_float && !both_int && !non_float_side_is_domain_type {
                     self.unify_with_span(left_ty, Type::con("Float"), expr_span(left))?;
                     self.unify_with_span(right_ty, Type::con("Float"), expr_span(right))?;
                     return Ok(Type::con("Float"));
@@ -900,6 +920,14 @@ impl TypeChecker {
                                     if has_extra_fields {
                                         continue;
                                     }
+                                    // If operand has fields not required by the operator, this
+                                    // overload is for a different carrier type — skip it.
+                                    // This prevents Mat4 from spuriously matching Mat2 overloads
+                                    // because open record unification would otherwise succeed.
+                                    let val_has_extra = val_fields.keys().any(|k| !op_fields.contains_key(k));
+                                    if val_has_extra {
+                                        continue;
+                                    }
                                 }
                             }
 
@@ -927,6 +955,28 @@ impl TypeChecker {
                                 };
                                 let expected_rhs_ty = *expected_rhs;
                                 let expected_result_ty = *expected_result;
+
+                                // Before calling elab_expr, check structural compatibility of the
+                                // expected RHS type against the already-inferred right_ty. Two
+                                // record types with completely different field names (e.g. Vec4 vs
+                                // Mat4) should not unify — but open-record unification would
+                                // accept them both. Apply exact-field-set matching to skip the
+                                // structurally incompatible overloads.
+                                let expected_rhs_expanded = self.expand_alias(expected_rhs_ty.clone());
+                                let right_ty_raw = self.apply(right_ty.clone());
+                                let right_ty_expanded = self.expand_alias(right_ty_raw);
+                                if let (
+                                    Type::Record { fields: exp_fields, .. },
+                                    Type::Record { fields: actual_fields, .. },
+                                ) = (&expected_rhs_expanded, &right_ty_expanded)
+                                {
+                                    let exp_has_extra = exp_fields.keys().any(|k| !actual_fields.contains_key(k));
+                                    let actual_has_extra = actual_fields.keys().any(|k| !exp_fields.contains_key(k));
+                                    if exp_has_extra || actual_has_extra {
+                                        continue;
+                                    }
+                                }
+
                                 if self
                                     .elab_expr(right.clone(), Some(expected_rhs_ty.clone()), env)
                                     .is_err()

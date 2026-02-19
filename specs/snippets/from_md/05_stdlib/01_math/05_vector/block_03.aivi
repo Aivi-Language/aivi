@@ -5,10 +5,10 @@ domain Vector over Vec2 = {
   (-) : Vec2 -> Vec2 -> Vec2
   (-) = v1 v2 => { x: v1.x - v2.x, y: v1.y - v2.y }
 
-  (*) : Vec2 -> Scalar -> Vec2
+  (*) : Vec2 -> Float -> Vec2
   (*) = v s => { x: v.x * s, y: v.y * s }
 
-  (/) : Vec2 -> Scalar -> Vec2
+  (/) : Vec2 -> Float -> Vec2
   (/) = v s => { x: v.x / s, y: v.y / s }
 }
 
@@ -19,9 +19,24 @@ domain Vector over Vec3 = {
   (-) : Vec3 -> Vec3 -> Vec3
   (-) = v1 v2 => { x: v1.x - v2.x, y: v1.y - v2.y, z: v1.z - v2.z }
 
-  (*) : Vec3 -> Scalar -> Vec3
+  (*) : Vec3 -> Float -> Vec3
   (*) = v s => { x: v.x * s, y: v.y * s, z: v.z * s }
 
-  (/) : Vec3 -> Scalar -> Vec3
+  (/) : Vec3 -> Float -> Vec3
   (/) = v s => { x: v.x / s, y: v.y / s, z: v.z / s }
+}
+
+domain Vector over Vec4 = {
+  (+) : Vec4 -> Vec4 -> Vec4
+  (+) = v1 v2 => { x: v1.x + v2.x, y: v1.y + v2.y, z: v1.z + v2.z, w: v1.w + v2.w }
+
+  (-) : Vec4 -> Vec4 -> Vec4
+  (-) = v1 v2 => { x: v1.x - v2.x, y: v1.y - v2.y, z: v1.z - v2.z, w: v1.w - v2.w }
+
+  // Scalar scaling — use `*`
+  (*) : Vec4 -> Float -> Vec4
+  (*) = v s => { x: v.x * s, y: v.y * s, z: v.z * s, w: v.w * s }
+
+  (/) : Vec4 -> Float -> Vec4
+  (/) = v s => { x: v.x / s, y: v.y / s, z: v.z / s, w: v.w / s }
 }

@@ -158,10 +158,9 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 - ServerHTML fixes
 - how would a wizard work in aivi.ui
 - optimize other complex/** algorithms to use AIVI stdlib, syntax.
-- domain operators
 - test coverage?
 - what is "export *" in docs
-
+- implement a typed codegen path for closed types (structs/enums/primitives + direct calls), and fall back to Value only when the program actually needs open-world dynamism.
 
 ## License
 

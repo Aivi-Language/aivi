@@ -23,6 +23,23 @@ Manually calculating the new position of a 3D point after it's been rotated, mov
 
 <<< ../../snippets/from_md/05_stdlib/01_math/09_matrix/block_03.aivi{aivi}
 
+## `×` Operator Overloads
+
+The `Matrix` domain provides two overloads of `×` per carrier, selected by the RHS type (see [Domains: Within-Domain Operator Overloads](../../02_syntax/06_domains.md#within-domain-operator-overloads-rhs-typed)):
+
+| Expression | Resolved as | Returns |
+| --- | --- | --- |
+| `mat2 × mat2` | `multiply2 mat2 mat2` | `Mat2` |
+| `mat2 × vec2` | `transform2 mat2 vec2` | `Vec2` |
+| `mat3 × mat3` | `multiply3 mat3 mat3` | `Mat3` |
+| `mat3 × vec3` | `transform3 mat3 vec3` | `Vec3` |
+| `mat4 × mat4` | `multiply4 mat4 mat4` | `Mat4` |
+| `mat4 × vec4` | `transform4 mat4 vec4` | `Vec4` |
+
+**Convention**: `×` is for structural products; `*` remains for scalar scaling.
+
+Requires `use aivi.matrix (domain Matrix)` (or `use aivi.matrix`) and `use aivi.vector` for the `Vec*` types to be in scope.
+
 ## Helper Functions
 
 | Function | Explanation |
