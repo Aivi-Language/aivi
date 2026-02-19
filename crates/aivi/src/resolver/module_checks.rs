@@ -279,7 +279,8 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                         | BlockItem::Yield { expr, .. }
                         | BlockItem::Recurse { expr, .. }
                         | BlockItem::Expr { expr, .. } => collect_expr(expr, out),
-                        BlockItem::When { cond, effect, .. } => {
+                        BlockItem::When { cond, effect, .. }
+                        | BlockItem::Unless { cond, effect, .. } => {
                             collect_expr(cond, out);
                             collect_expr(effect, out);
                         }

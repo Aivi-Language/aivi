@@ -63,6 +63,7 @@ pub(super) enum Value {
     Stream(Arc<StreamHandle>),
     HttpServer(Arc<ServerHandle>),
     WebSocket(Arc<WebSocketHandle>),
+    MutableMap(Arc<Mutex<ImHashMap<KeyValue, Value>>>),
 }
 
 #[derive(Clone)]
@@ -146,6 +147,7 @@ pub(super) enum KeyValue {
     BigInt(Arc<BigInt>),
     Rational(Arc<BigRational>),
     Decimal(Decimal),
+    Tuple(Vec<KeyValue>),
 }
 
 impl KeyValue {
@@ -161,6 +163,11 @@ impl KeyValue {
             Value::BigInt(value) => Some(KeyValue::BigInt(value.clone())),
             Value::Rational(value) => Some(KeyValue::Rational(value.clone())),
             Value::Decimal(value) => Some(KeyValue::Decimal(*value)),
+            Value::Tuple(items) => {
+                let keys: Option<Vec<KeyValue>> =
+                    items.iter().map(KeyValue::try_from_value).collect();
+                keys.map(KeyValue::Tuple)
+            }
             _ => None,
         }
     }
@@ -177,6 +184,9 @@ impl KeyValue {
             KeyValue::BigInt(value) => Value::BigInt(value.clone()),
             KeyValue::Rational(value) => Value::Rational(value.clone()),
             KeyValue::Decimal(value) => Value::Decimal(*value),
+            KeyValue::Tuple(items) => {
+                Value::Tuple(items.iter().map(KeyValue::to_value).collect())
+            }
         }
     }
 }
@@ -195,6 +205,7 @@ impl Ord for KeyValue {
             BigInt(_) => 7,
             Rational(_) => 8,
             Decimal(_) => 9,
+            Tuple(_) => 10,
         };
         let tag_cmp = tag(self).cmp(&tag(other));
         if tag_cmp != Ordering::Equal {
@@ -211,6 +222,7 @@ impl Ord for KeyValue {
             (BigInt(a), BigInt(b)) => a.cmp(b),
             (Rational(a), Rational(b)) => a.cmp(b),
             (Decimal(a), Decimal(b)) => a.cmp(b),
+            (Tuple(a), Tuple(b)) => a.cmp(b),
             _ => Ordering::Equal,
         }
     }

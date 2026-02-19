@@ -736,7 +736,8 @@ fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                         | aivi::BlockItem::Yield { expr, .. }
                         | aivi::BlockItem::Recurse { expr, .. }
                         | aivi::BlockItem::Expr { expr, .. } => walk_expr(expr, out),
-                        aivi::BlockItem::When { cond, effect, .. } => {
+                        aivi::BlockItem::When { cond, effect, .. }
+                        | aivi::BlockItem::Unless { cond, effect, .. } => {
                             walk_expr(cond, out);
                             walk_expr(effect, out);
                         }
@@ -899,7 +900,8 @@ fn strict_pipe_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                         | aivi::BlockItem::Yield { expr, .. }
                         | aivi::BlockItem::Recurse { expr, .. }
                         | aivi::BlockItem::Expr { expr, .. } => walk_expr(expr, out),
-                        aivi::BlockItem::When { cond, effect, .. } => {
+                        aivi::BlockItem::When { cond, effect, .. }
+                        | aivi::BlockItem::Unless { cond, effect, .. } => {
                             walk_expr(cond, out);
                             walk_expr(effect, out);
                         }
@@ -1048,7 +1050,8 @@ fn strict_record_field_access(file_modules: &[Module], out: &mut Vec<Diagnostic>
                         | aivi::BlockItem::Yield { expr, .. }
                         | aivi::BlockItem::Recurse { expr, .. }
                         | aivi::BlockItem::Expr { expr, .. } => walk_expr(expr, out),
-                        aivi::BlockItem::When { cond, effect, .. } => {
+                        aivi::BlockItem::When { cond, effect, .. }
+                        | aivi::BlockItem::Unless { cond, effect, .. } => {
                             walk_expr(cond, out);
                             walk_expr(effect, out);
                         }
@@ -1219,7 +1222,8 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
                                 return true;
                             }
                         }
-                        aivi::BlockItem::When { cond, effect, .. } => {
+                        aivi::BlockItem::When { cond, effect, .. }
+                        | aivi::BlockItem::Unless { cond, effect, .. } => {
                             if !shadowed && (expr_uses_name_free(cond, name) || expr_uses_name_free(effect, name)) {
                                 return true;
                             }
@@ -1350,7 +1354,8 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
                         | aivi::BlockItem::Yield { expr, .. }
                         | aivi::BlockItem::Recurse { expr, .. }
                         | aivi::BlockItem::Expr { expr, .. } => walk_expr(expr, out),
-                        aivi::BlockItem::When { cond, effect, .. } => {
+                        aivi::BlockItem::When { cond, effect, .. }
+                        | aivi::BlockItem::Unless { cond, effect, .. } => {
                             walk_expr(cond, out);
                             walk_expr(effect, out);
                         }
@@ -1480,7 +1485,8 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                 | aivi::BlockItem::Yield { expr, .. }
                 | aivi::BlockItem::Recurse { expr, .. }
                 | aivi::BlockItem::Expr { expr, .. } => expr_uses_name(expr, name),
-                aivi::BlockItem::When { cond, effect, .. } => {
+                aivi::BlockItem::When { cond, effect, .. }
+                | aivi::BlockItem::Unless { cond, effect, .. } => {
                     expr_uses_name(cond, name) || expr_uses_name(effect, name)
                 }
                 aivi::BlockItem::Given { cond, fail_expr, .. } => {
@@ -1568,7 +1574,8 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                     | aivi::BlockItem::Yield { expr, .. }
                     | aivi::BlockItem::Recurse { expr, .. }
                     | aivi::BlockItem::Expr { expr, .. } => expr_uses_name(expr, &name),
-                    aivi::BlockItem::When { cond, effect, .. } => expr_uses_name(cond, &name) || expr_uses_name(effect, &name),
+                    aivi::BlockItem::When { cond, effect, .. }
+                    | aivi::BlockItem::Unless { cond, effect, .. } => expr_uses_name(cond, &name) || expr_uses_name(effect, &name),
                     aivi::BlockItem::Given { cond, fail_expr, .. } => expr_uses_name(cond, &name) || expr_uses_name(fail_expr, &name),
                     aivi::BlockItem::On { transition, handler, .. } => expr_uses_name(transition, &name) || expr_uses_name(handler, &name),
                 });
@@ -1601,7 +1608,8 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                         | aivi::BlockItem::Yield { expr, .. }
                         | aivi::BlockItem::Recurse { expr, .. }
                         | aivi::BlockItem::Expr { expr, .. } => walk_expr(expr, out),
-                        aivi::BlockItem::When { cond, effect, .. } => {
+                        aivi::BlockItem::When { cond, effect, .. }
+                        | aivi::BlockItem::Unless { cond, effect, .. } => {
                             walk_expr(cond, out);
                             walk_expr(effect, out);
                         }
@@ -1728,7 +1736,8 @@ fn strict_missing_import_suggestions(
                         | aivi::BlockItem::Yield { expr, .. }
                         | aivi::BlockItem::Recurse { expr, .. }
                         | aivi::BlockItem::Expr { expr, .. } => collect_idents(expr, out),
-                        aivi::BlockItem::When { cond, effect, .. } => {
+                        aivi::BlockItem::When { cond, effect, .. }
+                        | aivi::BlockItem::Unless { cond, effect, .. } => {
                             collect_idents(cond, out);
                             collect_idents(effect, out);
                         }
@@ -1961,7 +1970,8 @@ fn strict_expected_type_coercions(
                         | aivi::BlockItem::Yield { expr, .. }
                         | aivi::BlockItem::Recurse { expr, .. }
                         | aivi::BlockItem::Expr { expr, .. } => collect_calls(expr, out),
-                        aivi::BlockItem::When { cond, effect, .. } => {
+                        aivi::BlockItem::When { cond, effect, .. }
+                        | aivi::BlockItem::Unless { cond, effect, .. } => {
                             collect_calls(cond, out);
                             collect_calls(effect, out);
                         }

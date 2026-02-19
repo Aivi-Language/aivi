@@ -175,3 +175,96 @@ Effect blocks can be combined with pipelines and pattern matching to create very
 ### Expressive Error Handling
 
 <<< ../snippets/from_md/02_syntax/09_effects/block_23.aivi{aivi}
+
+## 9.6 Tail-recursive loops
+
+`loop`/`recurse` can also be used inside `do Effect { ... }` blocks for stateful iteration without mutation or explicit recursion. This is the primary way to implement algorithms that need repeated effectful steps (e.g. graph traversal, iterative convergence).
+
+### Syntax
+
+```aivi
+do Effect {
+  -- setup
+  loop state = initialValue => {
+    -- body may use `<-` binds, pure `=` lets, and if/match
+    -- `recurse newState` restarts the loop
+    -- omitting `recurse` in a branch terminates the loop
+  }
+}
+```
+
+### Example: Dijkstra's shortest paths
+
+```aivi
+dijkstra = do Effect {
+  dists <- MutableMap.create (Map.insert source 0.0 Map.empty)
+
+  loop pq = Heap.push (0.0, source) Heap.empty => {
+    result = Heap.popMin pq
+    result match
+      | None              => pure Unit
+      | Some ((d, node), restPq) => do Effect {
+          currentDist <- MutableMap.getOrElse node infinity dists
+          if d > currentDist
+          then do Effect { recurse restPq }
+          else do Effect {
+            edges = edgesFrom graph node
+            newPq <- processEdges dists d edges restPq
+            recurse newPq
+          }
+        }
+  }
+
+  MutableMap.freeze dists
+}
+```
+
+### Desugaring
+
+Inside effect blocks, `loop` desugars to a local recursive function at parse time (same as in generators — see [Generators § 7.6](07_generators.md#76-tail-recursive-loops)):
+
+```
+loop pat = init => { body }
+```
+
+becomes:
+
+```
+__loopN = pat => body'   -- body' has `recurse x` replaced with `__loopN x`
+__loopN init
+```
+
+The loop body's `{ ... }` block is promoted to the parent effect-block kind, so `<-` binds, `when`/`unless` guards, and `recurse` work correctly inside.
+
+## 9.7 Conditional effects
+
+### `when`
+
+`when cond <- eff` runs `eff` only if `cond` is true:
+
+```aivi
+do Effect {
+  when isVerbose <- print "debug info"
+}
+```
+
+### `unless`
+
+`unless cond <- eff` runs `eff` only if `cond` is false:
+
+```aivi
+do Effect {
+  unless isValid <- fail (ValidationError "invalid input")
+}
+```
+
+### `given`
+
+`given cond or failExpr` asserts a precondition. If `cond` is false, `failExpr` is evaluated (typically a `fail` call):
+
+```aivi
+do Effect {
+  given (age >= 18) or fail (AccessDenied "must be 18+")
+  -- continues only if age >= 18
+}
+```

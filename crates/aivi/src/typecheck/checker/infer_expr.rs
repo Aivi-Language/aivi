@@ -1073,6 +1073,13 @@ impl TypeChecker {
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
                 }
                 BlockItem::Let { pattern, expr, .. } => {
+                    // Compiler-generated let bindings (e.g. __loop from
+                    // loop/recurse desugaring) may be self-referential.
+                    // Pre-add a fresh type var so the recursive reference
+                    // inside the lambda body can be inferred.
+                    if matches!(pattern, Pattern::Ident(n) if n.name.starts_with("__")) {
+                        self.infer_pattern(pattern, &mut local_env)?;
+                    }
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
@@ -1083,7 +1090,8 @@ impl TypeChecker {
                 | BlockItem::Expr { expr, .. } => {
                     last_ty = self.infer_expr(expr, &mut local_env)?;
                 }
-                BlockItem::When { cond, effect, .. } => {
+                BlockItem::When { cond, effect, .. }
+                | BlockItem::Unless { cond, effect, .. } => {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(effect, &mut local_env)?;
                 }

@@ -5,6 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.collections
 export Map, Set, Queue, Deque, Heap
 export domain Collections
+export domain MinHeap
 
 use aivi
 
@@ -26,4 +27,19 @@ domain Collections over Map k v = {
 domain Collections over Set a = {
   (++) : Set a -> Set a -> Set a
   (++) = left right => Set.union left right
+}
+
+domain MinHeap over Heap a = {
+  empty    : Heap a
+  empty    = Heap.empty
+  push     : a -> Heap a -> Heap a
+  push     = Heap.push
+  popMin   : Heap a -> Option (a, Heap a)
+  popMin   = Heap.popMin
+  peekMin  : Heap a -> Option a
+  peekMin  = Heap.peekMin
+  size     : Heap a -> Int
+  size     = Heap.size
+  fromList : List a -> Heap a
+  fromList = Heap.fromList
 }"#;

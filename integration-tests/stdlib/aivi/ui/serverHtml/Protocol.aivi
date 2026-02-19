@@ -135,7 +135,8 @@ decodeUrlInfo = json =>
     field "path" decodeText json |> bind (path =>
       field "query" decodeText json |> bind (query =>
         field "hash" decodeText json |> bind (hash =>
-          Ok { href, path, query, hash })))
+          Ok { href, path, query, hash }))
+    )
   )
 
 // ---------------------------------------------------------------------------
@@ -158,7 +159,8 @@ decodeClickPayload = json =>
       field "ctrl" decodeBool json |> bind (ctrl =>
         field "shift" decodeBool json |> bind (shift =>
           field "meta" decodeBool json |> bind (meta =>
-            Ok { button, alt, ctrl, shift, meta }))))
+            Ok { button, alt, ctrl, shift, meta })))
+    )
   )
 
 encodeInputPayload : InputPayload -> JsonValue
@@ -192,7 +194,8 @@ decodeKeyPayload = json =>
             field "meta" decodeBool json |> bind (meta =>
               field "repeat" decodeBool json |> bind (repeat =>
                 field "isComposing" decodeBool json |> bind (isComposing =>
-                  Ok { key, code, alt, ctrl, shift, meta, repeat, isComposing })))))))
+                  Ok { key, code, alt, ctrl, shift, meta, repeat, isComposing }))))))
+    )
   )
 
 encodePointerPayload : PointerPayload -> JsonValue
@@ -222,29 +225,30 @@ decodePointerPayload = json =>
                   field "shift" decodeBool json |> bind (shift =>
                     field "meta" decodeBool json |> bind (meta =>
                       Ok { pointerId, pointerType, button, buttons, clientX, clientY,
-                        alt, ctrl, shift, meta })))))))))
+                        alt, ctrl, shift, meta }))))))))
+    )
   )
 
 encodeEventPayload : EventPayload -> (Text, JsonValue)
 encodeEventPayload = payload => payload match
-| ClickEvt p   => ("click", encodeClickPayload p)
-| InputEvt p   => ("input", encodeInputPayload p)
-| KeyDownEvt p => ("keydown", encodeKeyPayload p)
-| KeyUpEvt p   => ("keyup", encodeKeyPayload p)
-| PtrDownEvt p => ("pointerdown", encodePointerPayload p)
-| PtrUpEvt p   => ("pointerup", encodePointerPayload p)
-| PtrMoveEvt p => ("pointermove", encodePointerPayload p)
+  | ClickEvt p   => ("click", encodeClickPayload p)
+  | InputEvt p   => ("input", encodeInputPayload p)
+  | KeyDownEvt p => ("keydown", encodeKeyPayload p)
+  | KeyUpEvt p   => ("keyup", encodeKeyPayload p)
+  | PtrDownEvt p => ("pointerdown", encodePointerPayload p)
+  | PtrUpEvt p   => ("pointerup", encodePointerPayload p)
+  | PtrMoveEvt p => ("pointermove", encodePointerPayload p)
 
 decodeEventPayload : Text -> JsonValue -> Result JsonError EventPayload
 decodeEventPayload = kind pJson => kind match
-| "click"       => decodeClickPayload pJson |> map ClickEvt
-| "input"       => decodeInputPayload pJson |> map InputEvt
-| "keydown"     => decodeKeyPayload pJson |> map KeyDownEvt
-| "keyup"       => decodeKeyPayload pJson |> map KeyUpEvt
-| "pointerdown" => decodePointerPayload pJson |> map PtrDownEvt
-| "pointerup"   => decodePointerPayload pJson |> map PtrUpEvt
-| "pointermove" => decodePointerPayload pJson |> map PtrMoveEvt
-| _             => Err { message: "unknown event kind: { kind }" }
+  | "click"       => decodeClickPayload pJson |> map ClickEvt
+  | "input"       => decodeInputPayload pJson |> map InputEvt
+  | "keydown"     => decodeKeyPayload pJson |> map KeyDownEvt
+  | "keyup"       => decodeKeyPayload pJson |> map KeyUpEvt
+  | "pointerdown" => decodePointerPayload pJson |> map PtrDownEvt
+  | "pointerup"   => decodePointerPayload pJson |> map PtrUpEvt
+  | "pointermove" => decodePointerPayload pJson |> map PtrMoveEvt
+  | _             => Err { message: "unknown event kind: { kind }" }
 
 // ---------------------------------------------------------------------------
 // IntersectionEntry encode / decode
@@ -262,7 +266,8 @@ decodeIntersectionEntry = json =>
   field "tid" decodeInt json |> bind (tid =>
     field "isIntersecting" decodeBool json |> bind (isIntersecting =>
       field "ratio" decodeFloat json |> bind (ratio =>
-        Ok { tid, isIntersecting, ratio }))
+        Ok { tid, isIntersecting, ratio })
+    )
   )
 
 // ---------------------------------------------------------------------------
@@ -274,31 +279,33 @@ decodePlatformEvent = kind rawPJson => {
   parsed = decode rawPJson
   parsed |> bind (pJson => kind match
     | "popstate" =>
-        decodeUrlInfo pJson |> map PopState
+          decodeUrlInfo pJson |> map PopState
     | "hashchange" =>
-        field "url" decodeUrlInfo pJson |> bind (url =>
-          field "oldURL" decodeText pJson |> bind (oldURL =>
-            field "newURL" decodeText pJson |> bind (newURL =>
-              field "hash" decodeText pJson |> bind (hash =>
-                Ok (HashChange { url, oldURL, newURL, hash }))))
-        )
+          field "url" decodeUrlInfo pJson |> bind (url =>
+            field "oldURL" decodeText pJson |> bind (oldURL =>
+              field "newURL" decodeText pJson |> bind (newURL =>
+                field "hash" decodeText pJson |> bind (hash =>
+                  Ok (HashChange { url, oldURL, newURL, hash })))
+            )
+          )
     | "visibility" =>
-        field "state" decodeText pJson |> bind (state =>
-          Ok (Visibility { state })
-        )
+          field "state" decodeText pJson |> bind (state =>
+            Ok (Visibility { state })
+          )
     | "focus" =>
-        field "focused" decodeBool pJson |> bind (focused =>
-          Ok (WindowFocus { focused })
-        )
+          field "focused" decodeBool pJson |> bind (focused =>
+            Ok (WindowFocus { focused })
+          )
     | "online" =>
-        field "online" decodeBool pJson |> bind (online =>
-          Ok (Online { online })
-        )
+          field "online" decodeBool pJson |> bind (online =>
+            Ok (Online { online })
+          )
     | "intersection" =>
-        field "sid" decodeInt pJson |> bind (sid =>
-          field "entries" (decodeList decodeIntersectionEntry) pJson |> bind (entries =>
-            Ok (Intersection { sid, entries }))
-        )
+          field "sid" decodeInt pJson |> bind (sid =>
+            field "entries" (decodeList decodeIntersectionEntry) pJson |> bind (entries =>
+              Ok (Intersection { sid, entries })
+            )
+          )
     | _ => Err { message: "unknown platform kind: { kind }" }
       )
 }
@@ -317,7 +324,8 @@ decodePlatformEvent = kind rawPJson => {
   decodeIntersectionTarget = json =>
     field "tid" decodeInt json |> bind (tid =>
       field "nodeId" decodeText json |> bind (nodeId =>
-        Ok { tid, nodeId })
+        Ok { tid, nodeId }
+      )
     )
 
   encodeIntersectionOptions : IntersectionOptions -> JsonValue
@@ -330,7 +338,8 @@ decodePlatformEvent = kind rawPJson => {
   decodeIntersectionOptions = json =>
     field "rootMargin" decodeText json |> bind (rootMargin =>
       field "threshold" (decodeList decodeFloat) json |> bind (threshold =>
-        Ok { rootMargin, threshold })
+        Ok { rootMargin, threshold }
+      )
     )
 
 // ---------------------------------------------------------------------------
@@ -339,14 +348,14 @@ decodePlatformEvent = kind rawPJson => {
 
   encodeClipboardOp : ClipboardOp -> JsonValue
   encodeClipboardOp = op => op match
-| ReadText           => encodeObject [("kind", encodeText "clipboard.readText")]
-| WriteText { text } => encodeObject [
-    ("kind", encodeText "clipboard.writeText")
-    ("text", encodeText text)
-]
+    | ReadText           => encodeObject [("kind", encodeText "clipboard.readText")]
+    | WriteText { text } => encodeObject [
+      ("kind", encodeText "clipboard.writeText")
+      ("text", encodeText text)
+    ]
 
-  decodeClipboardOp : JsonValue -> Result JsonError ClipboardOp
-  decodeClipboardOp = json => field "kind" decodeText json |> bind (kind => kind match
+decodeClipboardOp : JsonValue -> Result JsonError ClipboardOp
+decodeClipboardOp = json => field "kind" decodeText json |> bind (kind => kind match
   | "clipboard.readText"  => Ok ReadText
   | "clipboard.writeText" =>
       field "text" decodeText json |> bind (text =>
@@ -361,65 +370,69 @@ decodePlatformEvent = kind rawPJson => {
 
   encodeClientMsg : ClientMsg -> Text
   encodeClientMsg = msg => msg match
-| Hello h => toJsonText [
-    ("t", encodeText "hello")
-    ("viewId", encodeText h.viewId)
-    ("url", encodeText h.url)
-    ("online", encodeBool h.online)
-]
-| Event e => toJsonText [
-    ("t", encodeText "event")
-    ("viewId", encodeText e.viewId)
-    ("hid", encodeInt e.hid)
-    ("kind", encodeText e.kind)
-    ("p", e.p)
-]
-| Platform p => toJsonText [
-    ("t", encodeText "platform")
-    ("viewId", encodeText p.viewId)
-    ("kind", encodeText p.kind)
-    ("p", p.p)
-]
-| EffectResult r => toJsonText [
-    ("t", encodeText "effectResult")
-    ("viewId", encodeText r.viewId)
-    ("rid", encodeInt r.rid)
-    ("kind", encodeText r.kind)
-    ("ok", encodeBool r.ok)
-    ("p", r.p)
-]
+    | Hello h => toJsonText [
+      ("t", encodeText "hello")
+      ("viewId", encodeText h.viewId)
+      ("url", encodeText h.url)
+      ("online", encodeBool h.online)
+    ]
+    | Event e => toJsonText [
+      ("t", encodeText "event")
+      ("viewId", encodeText e.viewId)
+      ("hid", encodeInt e.hid)
+      ("kind", encodeText e.kind)
+      ("p", e.p)
+    ]
+    | Platform p => toJsonText [
+      ("t", encodeText "platform")
+      ("viewId", encodeText p.viewId)
+      ("kind", encodeText p.kind)
+      ("p", p.p)
+    ]
+    | EffectResult r => toJsonText [
+      ("t", encodeText "effectResult")
+      ("viewId", encodeText r.viewId)
+      ("rid", encodeInt r.rid)
+      ("kind", encodeText r.kind)
+      ("ok", encodeBool r.ok)
+      ("p", r.p)
+    ]
 
-  decodeClientMsg : Text -> Result JsonError ClientMsg
-  decodeClientMsg = raw =>
-    decode raw |> bind (json => field "t" decodeText json |> bind (t => t match
-    | "hello" =>
-        field "viewId" decodeText json |> bind (viewId =>
-          field "url" decodeText json |> bind (url =>
-            field "online" decodeBool json |> bind (online =>
-              Ok (Hello { viewId, url, online })))
-        )
-    | "event" =>
-        field "viewId" decodeText json |> bind (viewId =>
-          field "hid" decodeInt json |> bind (hid =>
+decodeClientMsg : Text -> Result JsonError ClientMsg
+decodeClientMsg = raw => decode raw |> bind (json => field "t" decodeText json |> bind (t => t match
+  | "hello" =>
+          field "viewId" decodeText json |> bind (viewId =>
+            field "url" decodeText json |> bind (url =>
+              field "online" decodeBool json |> bind (online =>
+                Ok (Hello { viewId, url, online }))
+            )
+          )
+  | "event" =>
+          field "viewId" decodeText json |> bind (viewId =>
+            field "hid" decodeInt json |> bind (hid =>
+              field "kind" decodeText json |> bind (kind =>
+                decodeField "p" json |> bind (p =>
+                  Ok (Event { viewId, hid, kind, p })))
+            )
+          )
+  | "platform" =>
+          field "viewId" decodeText json |> bind (viewId =>
             field "kind" decodeText json |> bind (kind =>
               decodeField "p" json |> bind (p =>
-                Ok (Event { viewId, hid, kind, p }))))
-        )
-    | "platform" =>
-        field "viewId" decodeText json |> bind (viewId =>
-          field "kind" decodeText json |> bind (kind =>
-            decodeField "p" json |> bind (p =>
-              Ok (Platform { viewId, kind, p })))
-        )
-    | "effectResult" =>
-        field "viewId" decodeText json |> bind (viewId =>
-          field "rid" decodeInt json |> bind (rid =>
-            field "kind" decodeText json |> bind (kind =>
-              field "ok" decodeBool json |> bind (ok =>
-                decodeField "p" json |> bind (p =>
-                  Ok (EffectResult { viewId, rid, kind, ok, p })))))
-        )
-    | _ => Err { message: "unknown ClientMsg type: { t }" })
+                Ok (Platform { viewId, kind, p }))
+            )
+          )
+  | "effectResult" =>
+          field "viewId" decodeText json |> bind (viewId =>
+            field "rid" decodeInt json |> bind (rid =>
+              field "kind" decodeText json |> bind (kind =>
+                field "ok" decodeBool json |> bind (ok =>
+                  decodeField "p" json |> bind (p =>
+                    Ok (EffectResult { viewId, rid, kind, ok, p }))))
+            )
+          )
+  | _ => Err { message: "unknown ClientMsg type: { t }" }
+      )
     )
 
 // ---------------------------------------------------------------------------
@@ -428,59 +441,62 @@ decodePlatformEvent = kind rawPJson => {
 
   encodeServerMsg : ServerMsg -> Text
   encodeServerMsg = msg => msg match
-| Patch { ops } => toJsonText [
-    ("t", encodeText "patch")
-    ("ops", encodeText ops)
-]
-| Error { code, detail } => toJsonText [
-    ("t", encodeText "error")
-    ("code", encodeText code)
-    ("detail", encodeText detail)
-]
-| SubscribeIntersect { sid, options, targets } => toJsonText [
-    ("t", encodeText "subscribeIntersect")
-    ("sid", encodeInt sid)
-    ("options", encodeIntersectionOptions options)
-    ("targets", encodeArray (map encodeIntersectionTarget targets))
-]
-| UnsubscribeIntersect { sid } => toJsonText [
-    ("t", encodeText "unsubscribeIntersect")
-    ("sid", encodeInt sid)
-]
-| EffectReq { rid, op } => toJsonText [
-    ("t", encodeText "effectReq")
-    ("rid", encodeInt rid)
-    ("op", encodeClipboardOp op)
-]
+    | Patch { ops } => toJsonText [
+      ("t", encodeText "patch")
+      ("ops", encodeText ops)
+    ]
+    | Error { code, detail } => toJsonText [
+      ("t", encodeText "error")
+      ("code", encodeText code)
+      ("detail", encodeText detail)
+    ]
+    | SubscribeIntersect { sid, options, targets } => toJsonText [
+      ("t", encodeText "subscribeIntersect")
+      ("sid", encodeInt sid)
+      ("options", encodeIntersectionOptions options)
+      ("targets", encodeArray (map encodeIntersectionTarget targets))
+    ]
+    | UnsubscribeIntersect { sid } => toJsonText [
+      ("t", encodeText "unsubscribeIntersect")
+      ("sid", encodeInt sid)
+    ]
+    | EffectReq { rid, op } => toJsonText [
+      ("t", encodeText "effectReq")
+      ("rid", encodeInt rid)
+      ("op", encodeClipboardOp op)
+    ]
 
-  decodeServerMsg : Text -> Result JsonError ServerMsg
-  decodeServerMsg = raw =>
-    decode raw |> bind (json => field "t" decodeText json |> bind (t => t match
-    | "patch" =>
-        field "ops" decodeText json |> bind (ops =>
-          Ok (Patch { ops })
-        )
-    | "error" =>
-        field "code" decodeText json |> bind (code =>
-          field "detail" decodeText json |> bind (detail =>
-            Ok (Error { code, detail }))
-        )
-    | "subscribeIntersect" =>
-        field "sid" decodeInt json |> bind (sid =>
-          field "options" decodeIntersectionOptions json |> bind (options =>
-            field "targets" (decodeList decodeIntersectionTarget) json |> bind (targets =>
-              Ok (SubscribeIntersect { sid, options, targets })))
-        )
-    | "unsubscribeIntersect" =>
-        field "sid" decodeInt json |> bind (sid =>
-          Ok (UnsubscribeIntersect { sid })
-        )
-    | "effectReq" =>
-        field "rid" decodeInt json |> bind (rid =>
-          field "op" decodeClipboardOp json |> bind (op =>
-            Ok (EffectReq { rid, op }))
-        )
-    | _ => Err { message: "unknown ServerMsg type: { t }" })
+decodeServerMsg : Text -> Result JsonError ServerMsg
+decodeServerMsg = raw => decode raw |> bind (json => field "t" decodeText json |> bind (t => t match
+  | "patch" =>
+          field "ops" decodeText json |> bind (ops =>
+            Ok (Patch { ops })
+          )
+  | "error" =>
+          field "code" decodeText json |> bind (code =>
+            field "detail" decodeText json |> bind (detail =>
+              Ok (Error { code, detail })
+            )
+          )
+  | "subscribeIntersect" =>
+          field "sid" decodeInt json |> bind (sid =>
+            field "options" decodeIntersectionOptions json |> bind (options =>
+              field "targets" (decodeList decodeIntersectionTarget) json |> bind (targets =>
+                Ok (SubscribeIntersect { sid, options, targets }))
+            )
+          )
+  | "unsubscribeIntersect" =>
+          field "sid" decodeInt json |> bind (sid =>
+            Ok (UnsubscribeIntersect { sid })
+          )
+  | "effectReq" =>
+          field "rid" decodeInt json |> bind (rid =>
+            field "op" decodeClipboardOp json |> bind (op =>
+              Ok (EffectReq { rid, op })
+            )
+          )
+  | _ => Err { message: "unknown ServerMsg type: { t }" }
+      )
     )
 
 // ---------------------------------------------------------------------------

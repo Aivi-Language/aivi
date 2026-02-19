@@ -407,7 +407,8 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
             | crate::surface::BlockItem::Yield { expr, .. }
             | crate::surface::BlockItem::Recurse { expr, .. }
             | crate::surface::BlockItem::Expr { expr, .. } => expr_contains_ident(expr, target),
-            crate::surface::BlockItem::When { cond, effect, .. } => {
+            crate::surface::BlockItem::When { cond, effect, .. }
+            | crate::surface::BlockItem::Unless { cond, effect, .. } => {
                 expr_contains_ident(cond, target) || expr_contains_ident(effect, target)
             }
             crate::surface::BlockItem::Given { cond, fail_expr, .. } => {

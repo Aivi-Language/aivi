@@ -9,7 +9,7 @@ use aivi.duration (domain Duration)
 @test
 literals_smoke = do Effect {
   _ms <- 1ms
-  _s  <- 1s
-  _m  <- 1min
+  _s <- 1s
+  _m <- 1min
   assert True
 }

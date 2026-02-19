@@ -154,9 +154,7 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 
 ## Todo
 
-- mcp server doesn't start
-- some imports report problems List.partition
-- LSP server should suggest auto import
+- bug fixes
 
 ## License
 

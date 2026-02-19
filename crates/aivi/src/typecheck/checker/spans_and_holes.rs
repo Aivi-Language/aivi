@@ -218,7 +218,8 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
                             *expr = desugar_holes_inner(expr.clone(), false);
                         }
                         BlockItem::Filter { .. } => {}
-                        BlockItem::When { cond, effect, .. } => {
+                        BlockItem::When { cond, effect, .. }
+                        | BlockItem::Unless { cond, effect, .. } => {
                             *cond = desugar_holes_inner(cond.clone(), false);
                             *effect = desugar_holes_inner(effect.clone(), false);
                         }
@@ -313,7 +314,8 @@ fn contains_hole(expr: &Expr) -> bool {
             | BlockItem::Yield { expr, .. }
             | BlockItem::Recurse { expr, .. }
             | BlockItem::Expr { expr, .. } => contains_hole(expr),
-            BlockItem::When { cond, effect, .. } => contains_hole(cond) || contains_hole(effect),
+            BlockItem::When { cond, effect, .. }
+            | BlockItem::Unless { cond, effect, .. } => contains_hole(cond) || contains_hole(effect),
             BlockItem::Given { cond, fail_expr, .. } => contains_hole(cond) || contains_hole(fail_expr),
             BlockItem::On { transition, handler, .. } => contains_hole(transition) || contains_hole(handler),
         }),
@@ -533,6 +535,11 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                         span,
                     },
                     BlockItem::When { cond, effect, span } => BlockItem::When {
+                        cond: replace_holes_inner(cond, counter, params),
+                        effect: replace_holes_inner(effect, counter, params),
+                        span,
+                    },
+                    BlockItem::Unless { cond, effect, span } => BlockItem::Unless {
                         cond: replace_holes_inner(cond, counter, params),
                         effect: replace_holes_inner(effect, counter, params),
                         span,

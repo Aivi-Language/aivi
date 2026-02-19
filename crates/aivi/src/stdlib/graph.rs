@@ -10,6 +10,7 @@ export addNode, addEdge, removeEdge, removeNode
 export neighbors, inNeighbors, edgesFrom, edgesTo, degreeOut, degreeIn
 export bfs, dfs, shortestPathUnweighted, shortestPath
 export topoSort, hasCycle
+export relax, relaxEdges
 export domain Graph
 
 use aivi
@@ -306,4 +307,32 @@ hasCycle = g => length (topoSort g) != length ((index g).nodes)
 
 shortestPath : Graph -> NodeId -> NodeId -> List NodeId
 shortestPath = g start goal => graph.shortestPath g start goal
+
+-- | Relax a single edge: if going through `currentDist + edge.weight` is shorter
+-- than the known distance to `edge.to`, update the mutable distance map and return True.
+relax : MutableMap NodeId Float -> Float -> Edge -> Effect e Bool
+relax = dists currentDist edge => do Effect {
+  newDist = currentDist + edge.weight
+  maybeDist <- MutableMap.get edge.to dists
+  shouldUpdate = maybeDist ? | None => True | Some oldDist => newDist < oldDist
+  if shouldUpdate
+    then do Effect {
+      _ <- MutableMap.insert edge.to newDist dists
+      pure True
+    }
+    else pure False
+}
+
+-- | Relax all edges in a list, returning the number of edges that were updated.
+relaxEdges : MutableMap NodeId Float -> Float -> List Edge -> Effect e Int
+relaxEdges = dists currentDist edges => relaxEdgesHelp dists currentDist edges 0
+
+relaxEdgesHelp : MutableMap NodeId Float -> Float -> List Edge -> Int -> Effect e Int
+relaxEdgesHelp = dists currentDist edges count => edges match
+  | [] => pure count
+  | [e, ...rest] => do Effect {
+    updated <- relax dists currentDist e
+    next = if updated then count + 1 else count
+    relaxEdgesHelp dists currentDist rest next
+  }
 "#;

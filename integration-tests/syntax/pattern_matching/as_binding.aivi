@@ -7,8 +7,8 @@ use aivi.testing
 getNameAndAge = person as { name, age } => (name, age)
 
 nestedAs = r => r match
-| { user as { name } } => name
-| _                    => "unknown"
+  | { user as { name } } => name
+  | _                    => "unknown"
 
 @test
 asBindingWorks = do Effect {

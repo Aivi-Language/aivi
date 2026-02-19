@@ -368,6 +368,11 @@ fn expand_module_aliases(modules: &mut [Module]) {
                             effect: rewrite_expr(effect, aliases),
                             span,
                         },
+                        BlockItem::Unless { cond, effect, span } => BlockItem::Unless {
+                            cond: rewrite_expr(cond, aliases),
+                            effect: rewrite_expr(effect, aliases),
+                            span,
+                        },
                         BlockItem::Given { cond, fail_expr, span } => BlockItem::Given {
                             cond: rewrite_expr(cond, aliases),
                             fail_expr: rewrite_expr(fail_expr, aliases),

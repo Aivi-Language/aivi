@@ -70,7 +70,7 @@ dijkstra = graph start =>
 
 @test
 shortestPaths = do Effect {
-  graph     <- pure buildGraph
+  graph <- pure buildGraph
   distances <- pure (dijkstra graph 0)
   assert (Map.get 3 distances == Some 4.0)
   assert (Map.get 2 distances == Some 3.0)

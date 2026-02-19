@@ -401,6 +401,25 @@ pub(super) fn build_heap_record() -> Value {
             }
         }),
     );
+    fields.insert(
+        "size".to_string(),
+        builtin("heap.size", 1, |mut args, _| {
+            let heap = expect_heap(args.pop().unwrap(), "heap.size")?;
+            Ok(Value::Int(heap.len() as i64))
+        }),
+    );
+    fields.insert(
+        "fromList".to_string(),
+        builtin("heap.fromList", 1, |mut args, _| {
+            let list = expect_list(args.pop().unwrap(), "heap.fromList")?;
+            let mut heap = BinaryHeap::new();
+            for item in list.iter() {
+                let key = key_from_value(item, "heap.fromList")?;
+                heap.push(Reverse(key));
+            }
+            Ok(Value::Heap(Arc::new(heap)))
+        }),
+    );
     Value::Record(Arc::new(fields))
 }
 

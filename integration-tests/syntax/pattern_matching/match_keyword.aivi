@@ -7,12 +7,12 @@ use aivi.testing
 Option A = None | Some A
 
 safeHead = xs => xs match
-| []       => None
-| [x, ...] => Some x
+  | []       => None
+  | [x, ...] => Some x
 
 describe = opt => opt match
-| None   => "nothing"
-| Some x => "something"
+  | None   => "nothing"
+  | Some x => "something"
 
 @test
 matchKeywordWorks = do Effect {

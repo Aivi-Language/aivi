@@ -255,6 +255,14 @@ fn check_expr(
                         collect_pattern_binding(pattern, &mut block_scope);
                     }
                     BlockItem::Let { pattern, expr, .. } => {
+                        // Compiler-generated let bindings (e.g. `__loop` from
+                        // loop/recurse desugaring) may be self-referential.
+                        // Pre-add them to scope so the recursive reference
+                        // passes the resolver check.  The runtime supports
+                        // this via shared mutable environment capture.
+                        if pattern_is_generated(pattern) {
+                            collect_pattern_binding(pattern, &mut block_scope);
+                        }
                         check_expr(expr, &mut block_scope, diagnostics, module, allow_unknown);
                         collect_pattern_binding(pattern, &mut block_scope);
                     }
@@ -264,7 +272,8 @@ fn check_expr(
                     | BlockItem::Expr { expr, .. } => {
                         check_expr(expr, &mut block_scope, diagnostics, module, allow_unknown);
                     }
-                    BlockItem::When { cond, effect, .. } => {
+                    BlockItem::When { cond, effect, .. }
+                    | BlockItem::Unless { cond, effect, .. } => {
                         check_expr(cond, &mut block_scope, diagnostics, module, allow_unknown);
                         check_expr(effect, &mut block_scope, diagnostics, module, allow_unknown);
                     }
@@ -296,6 +305,11 @@ fn special_unknown_name_message(name: &str) -> Option<String> {
         )),
         _ => None,
     }
+}
+
+/// Returns true if the pattern is a compiler-generated binding (name starts with `__`).
+fn pattern_is_generated(pattern: &Pattern) -> bool {
+    matches!(pattern, Pattern::Ident(name) if name.name.starts_with("__"))
 }
 
 fn collect_pattern_bindings(patterns: &[Pattern], scope: &mut HashMap<String, Option<String>>) {
@@ -450,6 +464,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "Queue"
             | "Deque"
             | "Heap"
+            | "MutableMap"
             | "text"
             | "regex"
             | "math"

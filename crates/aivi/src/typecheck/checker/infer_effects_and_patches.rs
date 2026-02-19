@@ -39,6 +39,10 @@ impl TypeChecker {
                 BlockItem::Let { pattern, expr, .. } => {
                     // `x = expr` inside `effect { ... }` is a pure let-binding and must not run
                     // effects. Reject effect-typed expressions (including `Resource`).
+                    // Pre-add compiler-generated names for self-reference (loop desugaring).
+                    if matches!(pattern, Pattern::Ident(n) if n.name.starts_with("__")) {
+                        self.infer_pattern(pattern, &mut local_env)?;
+                    }
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let expr_ty_applied = self.apply(expr_ty.clone());
                     let expr_ty_applied = self.expand_alias(expr_ty_applied);
@@ -101,7 +105,8 @@ impl TypeChecker {
                 BlockItem::Yield { expr, .. } | BlockItem::Recurse { expr, .. } => {
                     let _ = self.infer_expr(expr, &mut local_env)?;
                 }
-                BlockItem::When { cond, effect, .. } => {
+                BlockItem::When { cond, effect, .. }
+                | BlockItem::Unless { cond, effect, .. } => {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(effect, &mut local_env)?;
                 }
@@ -150,6 +155,9 @@ impl TypeChecker {
                     current_elem = Some(bind_elem);
                 }
                 BlockItem::Let { pattern, expr, .. } => {
+                    if matches!(pattern, Pattern::Ident(n) if n.name.starts_with("__")) {
+                        self.infer_pattern(pattern, &mut local_env)?;
+                    }
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
@@ -176,7 +184,8 @@ impl TypeChecker {
                 BlockItem::Recurse { expr, .. } | BlockItem::Expr { expr, .. } => {
                     let _ = self.infer_expr(expr, &mut local_env)?;
                 }
-                BlockItem::When { cond, effect, .. } => {
+                BlockItem::When { cond, effect, .. }
+                | BlockItem::Unless { cond, effect, .. } => {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(effect, &mut local_env)?;
                 }
@@ -210,6 +219,9 @@ impl TypeChecker {
                     self.unify_with_span(pat_ty, value_ty, pattern_span(pattern))?;
                 }
                 BlockItem::Let { pattern, expr, .. } => {
+                    if matches!(pattern, Pattern::Ident(n) if n.name.starts_with("__")) {
+                        self.infer_pattern(pattern, &mut local_env)?;
+                    }
                     let expr_ty = self.infer_expr(expr, &mut local_env)?;
                     let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
                     self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
@@ -225,7 +237,8 @@ impl TypeChecker {
                 BlockItem::Recurse { expr, .. } | BlockItem::Expr { expr, .. } => {
                     let _ = self.infer_expr(expr, &mut local_env)?;
                 }
-                BlockItem::When { cond, effect, .. } => {
+                BlockItem::When { cond, effect, .. }
+                | BlockItem::Unless { cond, effect, .. } => {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(effect, &mut local_env)?;
                 }

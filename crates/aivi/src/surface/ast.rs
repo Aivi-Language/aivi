@@ -412,6 +412,12 @@ pub enum BlockItem {
         effect: Expr,
         span: Span,
     },
+    /// `unless cond <- eff` — negated conditional effect
+    Unless {
+        cond: Expr,
+        effect: Expr,
+        span: Span,
+    },
     /// `given cond or failExpr` — precondition guard (Change 8)
     Given {
         cond: Expr,

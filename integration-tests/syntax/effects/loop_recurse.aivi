@@ -1,0 +1,55 @@
+@no_prelude
+module integrationTests.syntax.effects.loopRecurse
+
+use aivi
+use aivi.testing
+use aivi.mutableMap
+
+@test
+loop_sumToTen = do Effect {
+  total <- MutableMap.create (Map.insert "sum" 0 Map.empty)
+  loop i = 1 => {
+    if i > 10
+    then pure Unit
+    else do Effect {
+      current <- MutableMap.getOrElse "sum" 0 total
+      _ <- MutableMap.insert "sum" (current + i) total
+      recurse (i + 1)
+    }
+  }
+  result <- MutableMap.freeze total
+  assert (Map.get "sum" result == Some 55)
+}
+
+@test
+loop_basicCounter = do Effect {
+  counter <- MutableMap.create (Map.insert "n" 0 Map.empty)
+  loop _ = Unit => {
+    n <- MutableMap.getOrElse "n" 0 counter
+    if n >= 5
+    then pure Unit
+    else do Effect {
+      _ <- MutableMap.insert "n" (n + 1) counter
+      recurse Unit
+    }
+  }
+  result <- MutableMap.getOrElse "n" 0 counter
+  assert (result == 5)
+}
+
+@test
+loop_patternBinding = do Effect {
+  result <- MutableMap.create (Map.insert "fib" 0 Map.empty)
+  loop (a, b, count) = (0, 1, 0) => {
+    if count >= 10
+    then do Effect {
+      _ <- MutableMap.insert "fib" a result
+      pure Unit
+    }
+    else do Effect {
+      recurse (b, a + b, count + 1)
+    }
+  }
+  fib <- MutableMap.getOrElse "fib" 0 result
+  assert (fib == 55)
+}

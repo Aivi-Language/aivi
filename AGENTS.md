@@ -57,6 +57,7 @@ Maintain hygiene in the codebase and documentation.
 *   **Syntax Correction**: If you see syntax that violates the specs (e.g., `let x =` instead of `x =`, or `def foo()`), fix it immediately to match [`specs/02_syntax`](file:///home/mendrik/desk/mendrik/aivi/specs/02_syntax/).
 *   **Gap Filling**: If you encounter code using features not present in `specs/` or `integration-tests/`, document them or add a test case.
 *   **Refactoring**: Keep files small and readable. Propose splitting large files into logical units with good naming and subfolder structure if needed.
+*   **Pre-existing issues** when you encounter pre-existing problems, fix them up as part of the current task.
 
 ## 3. AIVI Language Best Practices
 

@@ -1,0 +1,61 @@
+@no_prelude
+module integrationTests.stdlib.aivi.mutableMap.tests
+
+use aivi
+use aivi.testing
+use aivi.mutableMap
+
+@test
+mutableMap_createAndFreeze = do Effect {
+  m <- MutableMap.create (Map.insert "a" 1 Map.empty)
+  snapshot <- MutableMap.freeze m
+  assert (Map.get "a" snapshot == Some 1)
+}
+
+@test
+mutableMap_insertAndGet = do Effect {
+  m <- MutableMap.empty Unit
+  _ <- MutableMap.insert "x" 42 m
+  val <- MutableMap.get "x" m
+  assert (val == Some 42)
+}
+
+@test
+mutableMap_getOrElse = do Effect {
+  m <- MutableMap.empty Unit
+  val <- MutableMap.getOrElse "missing" 99 m
+  assert (val == 99)
+  _ <- MutableMap.insert "found" 7 m
+  val2 <- MutableMap.getOrElse "found" 99 m
+  assert (val2 == 7)
+}
+
+@test
+mutableMap_remove = do Effect {
+  m <- MutableMap.empty Unit
+  _ <- MutableMap.insert "a" 1 m
+  _ <- MutableMap.remove "a" m
+  val <- MutableMap.get "a" m
+  assert (val == None)
+}
+
+@test
+mutableMap_has = do Effect {
+  m <- MutableMap.empty Unit
+  _ <- MutableMap.insert "key" 10 m
+  exists <- MutableMap.has "key" m
+  assert exists
+  missing <- MutableMap.has "nope" m
+  assert (missing == False)
+}
+
+@test
+mutableMap_size = do Effect {
+  m <- MutableMap.empty Unit
+  s0 <- MutableMap.size m
+  assert (s0 == 0)
+  _ <- MutableMap.insert "a" 1 m
+  _ <- MutableMap.insert "b" 2 m
+  s2 <- MutableMap.size m
+  assert (s2 == 2)
+}

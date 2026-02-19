@@ -1,0 +1,60 @@
+@no_prelude
+module integrationTests.complex.dijkstraEffectful
+
+use aivi
+use aivi.testing
+use aivi.graph (fromWeightedEdges, edgesFrom, relax)
+use aivi.mutableMap
+use aivi.collections
+
+-- Process edges from the current node: relax each edge
+-- and push updated vertices onto the priority queue.
+processEdges = dists d edges pq => edges match
+| []              => pure pq
+| [edge, ...rest] => do Effect {
+  updated <- relax dists d edge
+  nextPq <- if updated
+  then do Effect {
+    newDist <- MutableMap.getOrElse edge.to 999999.0 dists
+    pure (Heap.push (newDist, edge.to) pq)
+  }
+  else pure pq
+  processEdges dists d rest nextPq
+}
+
+@test
+dijkstra_shortestPaths = do Effect {
+  -- Graph: 0→1 (2.0), 0→2 (5.0), 1→2 (1.0), 1→3 (4.0), 2→3 (1.0)
+  g = fromWeightedEdges [(0, 1, 2.0), (0, 2, 5.0), (1, 2, 1.0), (1, 3, 4.0), (2, 3, 1.0)]
+
+  -- Distance table: source node 0 starts at 0.0
+  dists <- MutableMap.create (Map.insert 0 0.0 Map.empty)
+
+  -- Dijkstra main loop with min-heap priority queue
+  loop pq = Heap.push (0.0, 0) Heap.empty => {
+    result = Heap.popMin pq
+    result match
+    | None                     => pure Unit
+    | Some ((d, node), restPq) => do Effect {
+      currentDist <- MutableMap.getOrElse node 999999.0 dists
+      if d > currentDist
+      then do Effect { recurse restPq }
+      else do Effect {
+        edges = edgesFrom g node
+        newPq <- processEdges dists d edges restPq
+        recurse newPq
+      }
+    }
+  }
+
+  -- Verify shortest distances from node 0
+  d0 <- MutableMap.getOrElse 0 999999.0 dists
+  d1 <- MutableMap.getOrElse 1 999999.0 dists
+  d2 <- MutableMap.getOrElse 2 999999.0 dists
+  d3 <- MutableMap.getOrElse 3 999999.0 dists
+
+  assert (d0 == 0.0)
+  assert (d1 == 2.0)
+  assert (d2 == 3.0)
+  assert (d3 == 4.0)
+}
