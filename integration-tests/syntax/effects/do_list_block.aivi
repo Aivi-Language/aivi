@@ -1,0 +1,57 @@
+@no_prelude
+module integrationTests.syntax.effects.doListBlock
+
+use aivi
+use aivi.testing
+
+// Cartesian product: do List is equivalent to list comprehension
+@test
+doListCartesian = do Effect {
+  result = do List {
+    x <- [1, 2]
+    y <- [10, 20]
+    [x + y]
+  }
+  assertEq result [11, 21, 12, 22]
+}
+
+// Single bind
+@test
+doListSingleBind = do Effect {
+  result = do List {
+    x <- [1, 2, 3]
+    [x * 2]
+  }
+  assertEq result [2, 4, 6]
+}
+
+// Short-circuit on empty list
+@test
+doListEmptyShortCircuit = do Effect {
+  result = do List {
+    x <- [1, 2]
+    y <- []
+    [x + y]
+  }
+  assertEq result []
+}
+
+// Let-binding inside do List
+@test
+doListLetBinding = do Effect {
+  result = do List {
+    x <- [1, 2, 3]
+    y = x * 10
+    [y]
+  }
+  assertEq result [10, 20, 30]
+}
+
+// Single expression block (identity)
+@test
+doListSingleExpr = do Effect {
+  result = do List {
+    [42]
+  }
+  assertEq result [42]
+}
