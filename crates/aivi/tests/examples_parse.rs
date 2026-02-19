@@ -40,7 +40,9 @@ fn examples_parse_without_diagnostics() {
 
     for path in files {
         let file = parse_file(&path).expect("parse integration test");
-        let errors: Vec<_> = file.diagnostics.iter()
+        let errors: Vec<_> = file
+            .diagnostics
+            .iter()
             .filter(|d| d.severity == aivi::DiagnosticSeverity::Error)
             .collect();
         if errors.is_empty() {

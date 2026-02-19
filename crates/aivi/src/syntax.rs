@@ -10,8 +10,8 @@ pub const KEYWORDS_OTHER: &[&str] = &[
 
 pub const KEYWORDS_ALL: &[&str] = &[
     "do", "effect", "generate", "resource", "if", "then", "else", "when", "unless", "yield",
-    "loop", "recurse", "or", "match", "given", "module", "export", "use", "as", "hiding",
-    "domain", "class", "instance", "over", "patch", "with", "machine", "on",
+    "loop", "recurse", "or", "match", "given", "module", "export", "use", "as", "hiding", "domain",
+    "class", "instance", "over", "patch", "with", "machine", "on",
 ];
 
 pub const BOOLEAN_LITERALS: &[&str] = &["True", "False"];

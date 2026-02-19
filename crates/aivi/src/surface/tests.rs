@@ -309,7 +309,10 @@ h = user as { name } => name |> consume
         "expected `user as ...` at-binding param"
     );
 
-    let Expr::Binary { op, left, right, .. } = &**body else {
+    let Expr::Binary {
+        op, left, right, ..
+    } = &**body
+    else {
         panic!("expected pipe");
     };
     assert_eq!(op, "|>");
@@ -411,12 +414,14 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
             | crate::surface::BlockItem::Unless { cond, effect, .. } => {
                 expr_contains_ident(cond, target) || expr_contains_ident(effect, target)
             }
-            crate::surface::BlockItem::Given { cond, fail_expr, .. } => {
-                expr_contains_ident(cond, target) || expr_contains_ident(fail_expr, target)
-            }
-            crate::surface::BlockItem::On { transition, handler, .. } => {
-                expr_contains_ident(transition, target) || expr_contains_ident(handler, target)
-            }
+            crate::surface::BlockItem::Given {
+                cond, fail_expr, ..
+            } => expr_contains_ident(cond, target) || expr_contains_ident(fail_expr, target),
+            crate::surface::BlockItem::On {
+                transition,
+                handler,
+                ..
+            } => expr_contains_ident(transition, target) || expr_contains_ident(handler, target),
         }),
         Expr::Raw { .. } => false,
     }

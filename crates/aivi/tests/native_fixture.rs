@@ -19,8 +19,7 @@ pub static FIXTURE_LOCK: Mutex<()> = Mutex::new(());
 
 /// Absolute path to the fixture crate.
 pub fn fixture_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/native_smoke")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/native_smoke")
 }
 
 /// Write `code` into the fixture's `src/main.rs` and `cargo run --quiet`.
@@ -86,11 +85,7 @@ pub fn stdout_text(output: &Output) -> String {
 
 /// Write an `.aivi` source file to a temporary location and return its path
 /// string.  The caller still owns the `TempDir`.
-pub fn write_aivi_source(
-    dir: &Path,
-    name: &str,
-    source: &str,
-) -> String {
+pub fn write_aivi_source(dir: &Path, name: &str, source: &str) -> String {
     let path = dir.join(name);
     std::fs::write(&path, source).expect("write aivi source");
     path.to_string_lossy().into_owned()

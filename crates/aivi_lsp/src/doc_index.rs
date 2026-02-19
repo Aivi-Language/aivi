@@ -299,8 +299,8 @@ Done.
             "expected `|>` quick-info entry"
         );
         assert!(
-            index.lookup_best("?", None).is_some(),
-            "expected `?` quick-info entry"
+            index.lookup_best("match", None).is_some(),
+            "expected `match` quick-info entry"
         );
     }
 }

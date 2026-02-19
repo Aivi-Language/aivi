@@ -23,11 +23,11 @@ stillGood = 42\n";
     let lines = error_lines(&diagnostics);
 
     // The parser must report at least one error (the unclosed paren on line 7).
+    assert!(!lines.is_empty(), "expected at least one error, got none");
     assert!(
-        !lines.is_empty(),
-        "expected at least one error, got none"
+        lines.contains(&7),
+        "expected error on line 7 (unclosed paren), got {lines:?}"
     );
-    assert!(lines.contains(&7), "expected error on line 7 (unclosed paren), got {lines:?}");
 
     let module = modules.first().expect("parsed module");
     let recovered = module.items.iter().any(|item| match item {

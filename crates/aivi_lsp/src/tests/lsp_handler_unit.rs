@@ -48,7 +48,7 @@ fn definition_handler_serializes_to_json() {
 
 #[test]
 fn completion_handler_serializes_to_json() {
-    let text = "module examples.app\nrun = add ";
+    let text = "module examples.app\nadd = a b => a + b\nrun = add ";
     let uri = sample_uri();
     let item = TextDocumentItem {
         uri: uri.clone(),
