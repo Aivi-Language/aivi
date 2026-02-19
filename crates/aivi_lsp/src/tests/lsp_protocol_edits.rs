@@ -169,7 +169,7 @@ mod lsp_protocol_edits {
             .to_string();
 
         write_lsp_msg(
-            client_write,
+            &mut *client_write,
             &json!({
                 "jsonrpc": "2.0",
                 "id": 1,

@@ -1,0 +1,29 @@
+{
+    "chat.tools.terminal.enableAutoApprove": true,
+    "chat.tools.terminal.autoApprove": {
+        "/.*/": true,
+        "cargo": true,
+        "rm": false,
+        "rmdir": false,
+        "del": false,
+        "ri": false,
+        "rd": false,
+        "erase": false,
+        "dd": false,
+        "kill": false,
+        "ps": false,
+        "top": false,
+        "spps": false,
+        "curl": false,
+        "wget": false,
+        "irm": false,
+        "iwr": false,
+        "chmod": false,
+        "chown": false,
+        "sp": false,
+        "jq": false,
+        "xargs": false,
+        "eval": false,
+        "iex": false
+    }
+}
