@@ -96,8 +96,8 @@ fn cleanups_run_even_when_cancelled() {
 fn boolean_operators_short_circuit_and_unary_not() {
     let source = r#"
 module test.bool
-x = False && (([1])[10] == 0)
-y = True || (([1])[10] == 0)
+x = False && ([1][10] == 0)
+y = True || ([1][10] == 0)
 z = !True
 w = !False
 "#;

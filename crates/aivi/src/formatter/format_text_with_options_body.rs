@@ -445,7 +445,7 @@
                 token.clear();
             }
         };
-        let mut push_row = |rows: &mut Vec<Vec<String>>, row: &mut Vec<String>| {
+        let push_row = |rows: &mut Vec<Vec<String>>, row: &mut Vec<String>| {
             if !row.is_empty() {
                 rows.push(row.clone());
                 row.clear();
