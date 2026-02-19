@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.crypto
 use aivi.text
 
--- Hashing --
+// -- Hashing --
 
 @test
 sha256_hello = do Effect {
@@ -32,7 +32,7 @@ sha256_empty = do Effect {
   assert (s == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
 }
 
--- HMAC --
+// -- HMAC --
 
 @test
 hmacSha256_smoke = do Effect {
@@ -65,7 +65,7 @@ hmacVerify_roundtrip = do Effect {
   assert valid
 }
 
--- Password Hashing --
+// -- Password Hashing --
 
 @test
 hashPassword_and_verify = do Effect {
@@ -81,7 +81,7 @@ verifyPassword_wrong = do Effect {
   assert (not ok)
 }
 
--- Random --
+// -- Random --
 
 @test
 randomBytes_length = do Effect {
@@ -95,7 +95,7 @@ randomUuid_format = do Effect {
   assert (length u == 36)
 }
 
--- Utilities --
+// -- Utilities --
 
 @test
 toHex_fromHex_roundtrip = do Effect {

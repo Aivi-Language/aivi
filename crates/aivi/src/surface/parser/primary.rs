@@ -136,6 +136,8 @@ impl Parser {
                 });
             }
             let expr = self.parse_expr()?;
+            // Newlines are allowed as whitespace; tolerate `(expr\n)` and `(expr\n, ...)`.
+            self.consume_newlines();
             if self.consume_symbol(",") {
                 let mut items = vec![expr];
                 self.consume_newlines();
@@ -154,6 +156,7 @@ impl Parser {
                 let span = merge_span(expr_span(&items[0]), end.unwrap_or(expr_span(&items[0])));
                 return Some(Expr::Tuple { items, span });
             }
+            self.consume_newlines();
             let close_span = self
                 .expect_symbol(")", "expected ')' to close group")
                 .unwrap_or_else(|| expr_span(&expr));

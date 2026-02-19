@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
-use aivi::{infer_value_types, parse_modules, Module};
+use aivi::{infer_value_types, parse_modules, Module, ModuleItem};
 use tower_lsp::lsp_types::{
     Hover, HoverContents, Location, MarkupContent, MarkupKind, Position, TextEdit, Url,
     WorkspaceEdit,
@@ -323,6 +323,183 @@ impl Backend {
         None
     }
 
+    /// Collect only the modules relevant for type inference: the current file's
+    /// modules plus directly imported modules. This avoids running `infer_value_types`
+    /// on the entire workspace (which is too slow for interactive hover).
+    pub(super) fn collect_relevant_modules(
+        file_modules: &[Module],
+        current_module: &Module,
+        workspace_modules: &HashMap<String, IndexedModule>,
+    ) -> Vec<Module> {
+        let mut seen = HashSet::new();
+        let mut result = Vec::new();
+
+        // Add all modules from the current file.
+        for m in file_modules {
+            if seen.insert(m.name.name.clone()) {
+                result.push(m.clone());
+            }
+        }
+
+        // Add directly imported modules (via `use` declarations).
+        for use_decl in current_module.uses.iter() {
+            let module_name = &use_decl.module.name;
+            if seen.insert(module_name.clone()) {
+                if let Some(indexed) = workspace_modules.get(module_name) {
+                    result.push(indexed.module.clone());
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Resolve hover for dotted member access like `Heap.push`, `Map.empty`,
+    /// `MutableMap.create` — looks up the prefix as a type/domain name in imported
+    /// modules and then finds the member in that module.
+    fn hover_for_dotted_member(
+        ident: &str,
+        current_module: &Module,
+        workspace_modules: &HashMap<String, IndexedModule>,
+        inferred: &HashMap<String, HashMap<String, String>>,
+        doc_index: &DocIndex,
+    ) -> Option<Hover> {
+        let dot_pos = ident.find('.')?;
+        let prefix = &ident[..dot_pos];
+        let member = &ident[dot_pos + 1..];
+        if prefix.is_empty() || member.is_empty() {
+            return None;
+        }
+
+        // Look through imported modules for one that exports or defines the prefix
+        // as a type, domain, or type alias. Then look up the member in that module.
+        let modules_to_search = Self::find_modules_exporting(
+            prefix,
+            current_module,
+            workspace_modules,
+        );
+
+        #[cfg(test)]
+        eprintln!("hover_for_dotted_member: prefix={prefix:?}, member={member:?}, modules_found={}", modules_to_search.len());
+
+        for indexed in &modules_to_search {
+            let inf = inferred.get(&indexed.module.name.name);
+            let doc_text = indexed
+                .uri
+                .to_file_path()
+                .ok()
+                .and_then(|p| fs::read_to_string(p).ok());
+            let doc = doc_text
+                .as_deref()
+                .and_then(|text| Self::doc_for_ident(text, &indexed.module, member));
+
+            #[cfg(test)]
+            eprintln!("  checking module={}, has_inferred={}", indexed.module.name.name, inf.is_some());
+
+            // Check domain members with the member name.
+            if let Some(contents) = Self::hover_contents_for_module(
+                &indexed.module,
+                member,
+                inf,
+                doc.as_deref(),
+                doc_index,
+            ) {
+                return Some(Hover {
+                    contents: HoverContents::Markup(MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: contents,
+                    }),
+                    range: None,
+                });
+            }
+        }
+
+        // Also check the current module itself (the prefix might be defined locally).
+        let doc = Self::doc_for_ident("", current_module, member);
+        let inf = inferred.get(&current_module.name.name);
+        if let Some(contents) = Self::hover_contents_for_module(
+            current_module,
+            member,
+            inf,
+            doc.as_deref(),
+            doc_index,
+        ) {
+            return Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: contents,
+                }),
+                range: None,
+            });
+        }
+
+        None
+    }
+
+    /// Find modules that export or define a name (type, domain, type alias, etc.)
+    /// matching the given prefix. Searches the current module's `use` imports.
+    fn find_modules_exporting<'a>(
+        name: &str,
+        current_module: &Module,
+        workspace_modules: &'a HashMap<String, IndexedModule>,
+    ) -> Vec<&'a IndexedModule> {
+        let mut result = Vec::new();
+        for use_decl in current_module.uses.iter() {
+            let imports_name = use_decl.wildcard
+                || use_decl.items.iter().any(|item| item.name.name == name);
+            if !imports_name {
+                continue;
+            }
+            if let Some(indexed) = workspace_modules.get(&use_decl.module.name) {
+                result.push(indexed);
+            }
+        }
+
+        // Also check modules imported without item lists (bare `use aivi.collections`)
+        // where the module itself may export the name.
+        for use_decl in current_module.uses.iter() {
+            if !use_decl.items.is_empty() || use_decl.wildcard {
+                continue;
+            }
+            if let Some(indexed) = workspace_modules.get(&use_decl.module.name) {
+                // Check if this module exports the name.
+                let exports_name = indexed.module.exports.iter().any(|e| e.name.name == name);
+                if exports_name && !result.iter().any(|r| r.uri == indexed.uri) {
+                    result.push(indexed);
+                }
+            }
+        }
+
+        // Also check the prelude module if present.
+        if let Some(prelude) = workspace_modules.get("aivi.prelude") {
+            let exports_name = prelude.module.exports.iter().any(|e| e.name.name == name);
+            if exports_name && !result.iter().any(|r| r.uri == prelude.uri) {
+                result.push(prelude);
+            }
+        }
+
+        // Finally check all workspace modules that define this as a domain/type,
+        // since the name could come from the core module (e.g. `Heap` from `aivi`).
+        if result.is_empty() {
+            for indexed in workspace_modules.values() {
+                let defines_name = indexed.module.items.iter().any(|item| match item {
+                    ModuleItem::TypeDecl(decl) => decl.name.name == name,
+                    ModuleItem::DomainDecl(domain) => {
+                        // Domain's `over` type might match (e.g. domain MinHeap over Heap a)
+                        domain.name.name == name
+                    }
+                    ModuleItem::TypeAlias(alias) => alias.name.name == name,
+                    _ => false,
+                });
+                if defines_name {
+                    result.push(indexed);
+                }
+            }
+        }
+
+        result
+    }
+
     pub(super) fn build_hover_with_workspace(
         text: &str,
         uri: &Url,
@@ -335,13 +512,19 @@ impl Backend {
         let (modules, _) = parse_modules(&path, text);
         let current_module = Self::module_at_position(&modules, position)?;
 
-        let workspace_module_list: Vec<Module> = workspace_modules
-            .values()
-            .map(|indexed| indexed.module.clone())
-            .collect();
-        let (_, inferred) = infer_value_types(&workspace_module_list);
+        // Only infer types for the current file's modules + direct imports (not the
+        // entire workspace) to keep hover responsive in large projects.
+        let relevant_modules = Self::collect_relevant_modules(
+            &modules,
+            current_module,
+            workspace_modules,
+        );
+        let (_, inferred) = infer_value_types(&relevant_modules);
 
+        // Handle dotted identifiers: first check if it's a full module name (e.g.
+        // "aivi.collections"), then check Domain.method / Type.constructor patterns.
         if ident.contains('.') {
+            // 1. Exact module name match.
             if let Some(indexed) = workspace_modules.get(&ident) {
                 let doc_text = indexed
                     .uri
@@ -367,6 +550,17 @@ impl Backend {
                         range: None,
                     });
                 }
+            }
+
+            // 2. Domain.method or Type.constructor (e.g. "Heap.push", "Map.empty").
+            if let Some(hover) = Self::hover_for_dotted_member(
+                &ident,
+                current_module,
+                workspace_modules,
+                &inferred,
+                doc_index,
+            ) {
+                return Some(hover);
             }
         }
 

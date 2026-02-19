@@ -412,6 +412,129 @@ run = id 1"#;
 }
 
 #[test]
+fn build_hover_resolves_dotted_domain_member() {
+    // Simulate a module with a domain that defines a `push` method, and
+    // another module that references it via `MyHeap.push`.
+    let lib_text = r#"@no_prelude
+module examples.lib
+export Map, domain MyHeap
+
+domain MyHeap over Heap a = {
+  push : a -> Heap a -> Heap a
+  push = Heap.push
+}"#;
+    let app_text = r#"@no_prelude
+module examples.app
+use examples.lib (MyHeap)
+
+run = MyHeap.push 1 Heap.empty"#;
+
+    let lib_uri = Url::parse("file:///lib.aivi").expect("valid uri");
+    let app_uri = Url::parse("file:///app.aivi").expect("valid uri");
+
+    let mut workspace = HashMap::new();
+    let lib_path = PathBuf::from("lib.aivi");
+    let (lib_modules, _) = parse_modules(&lib_path, lib_text);
+    for module in &lib_modules {
+        eprintln!("module: {}, items: {}", module.name.name, module.items.len());
+        for item in module.items.iter() {
+            match item {
+                ModuleItem::DomainDecl(d) => {
+                    eprintln!("  domain: {}, items: {}", d.name.name, d.items.len());
+                    for di in d.items.iter() {
+                        match di {
+                            aivi::DomainItem::TypeSig(sig) => {
+                                eprintln!("    type_sig: {}", sig.name.name);
+                            }
+                            aivi::DomainItem::Def(def) | aivi::DomainItem::LiteralDef(def) => {
+                                eprintln!("    def: {}", def.name.name);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    for module in lib_modules {
+        workspace.insert(
+            module.name.name.clone(),
+            IndexedModule {
+                uri: lib_uri.clone(),
+                module,
+                text: Some(lib_text.to_string()),
+            },
+        );
+    }
+
+    // First verify hover works directly within the lib module
+    let lib_hover_pos = position_for(lib_text, "push : a");
+    let doc_index = DocIndex::default();
+    let lib_hover = Backend::build_hover(lib_text, &lib_uri, lib_hover_pos, &doc_index);
+    eprintln!("lib hover: {:?}", lib_hover.as_ref().map(|h| match &h.contents {
+        HoverContents::Markup(m) => m.value.clone(),
+        _ => "not markup".to_string(),
+    }));
+
+    // Now test the workspace hover
+    let position = position_for(app_text, "push 1");
+    eprintln!("position: {:?}", position);
+    let hover =
+        Backend::build_hover_with_workspace(app_text, &app_uri, position, &workspace, &doc_index);
+    eprintln!("workspace hover: {:?}", hover.as_ref().map(|h| match &h.contents {
+        HoverContents::Markup(m) => m.value.clone(),
+        _ => "not markup".to_string(),
+    }));
+    assert!(
+        hover.is_some(),
+        "Should find hover for dotted domain member 'MyHeap.push'"
+    );
+    let hover = hover.unwrap();
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(
+        markup.value.contains("push"),
+        "Hover should mention 'push', got: {}",
+        markup.value
+    );
+}
+
+#[test]
+fn build_hover_with_workspace_is_responsive() {
+    // Verify that hover with workspace modules completes promptly by ensuring
+    // it only type-checks relevant modules (not the entire workspace).
+    let text = r#"@no_prelude
+module examples.responsive
+export run
+
+add : Int -> Int -> Int
+add = x y => x + y
+
+run = add 1 2"#;
+    let uri = sample_uri();
+    let position = position_for(text, "add 1 2");
+    let workspace = workspace_with_stdlib(&["aivi", "aivi.prelude"]);
+    let doc_index = DocIndex::default();
+    let start = std::time::Instant::now();
+    let hover =
+        Backend::build_hover_with_workspace(text, &uri, position, &workspace, &doc_index)
+            .expect("hover found");
+    let elapsed = start.elapsed();
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(markup.value.contains("`add`"));
+    // Hover should complete in well under 1 second (previously it could be 10s+)
+    assert!(
+        elapsed.as_secs() < 5,
+        "Hover took too long: {:?}",
+        elapsed
+    );
+}
+
+#[test]
 fn build_references_finds_symbol_mentions() {
     let text = sample_text();
     let uri = sample_uri();

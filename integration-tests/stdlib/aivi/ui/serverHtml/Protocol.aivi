@@ -2,6 +2,7 @@
 module aivi.ui.serverHtml.Protocol
 
 use aivi
+use aivi.prelude
 use aivi.testing
 use aivi.json
 
@@ -135,7 +136,9 @@ decodeUrlInfo = json =>
     field "path" decodeText json |> bind (path =>
       field "query" decodeText json |> bind (query =>
         field "hash" decodeText json |> bind (hash =>
-          Ok { href, path, query, hash }))
+          Ok { href, path, query, hash }
+        )
+      )
     )
   )
 
@@ -159,7 +162,10 @@ decodeClickPayload = json =>
       field "ctrl" decodeBool json |> bind (ctrl =>
         field "shift" decodeBool json |> bind (shift =>
           field "meta" decodeBool json |> bind (meta =>
-            Ok { button, alt, ctrl, shift, meta })))
+            Ok { button, alt, ctrl, shift, meta }
+          )
+        )
+      )
     )
   )
 
@@ -194,7 +200,13 @@ decodeKeyPayload = json =>
             field "meta" decodeBool json |> bind (meta =>
               field "repeat" decodeBool json |> bind (repeat =>
                 field "isComposing" decodeBool json |> bind (isComposing =>
-                  Ok { key, code, alt, ctrl, shift, meta, repeat, isComposing }))))))
+                  Ok { key, code, alt, ctrl, shift, meta, repeat, isComposing }
+                )
+              )
+            )
+          )
+        )
+      )
     )
   )
 
@@ -225,7 +237,16 @@ decodePointerPayload = json =>
                   field "shift" decodeBool json |> bind (shift =>
                     field "meta" decodeBool json |> bind (meta =>
                       Ok { pointerId, pointerType, button, buttons, clientX, clientY,
-                        alt, ctrl, shift, meta }))))))))
+                        alt, ctrl, shift, meta
+                      }
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
     )
   )
 
@@ -266,7 +287,8 @@ decodeIntersectionEntry = json =>
   field "tid" decodeInt json |> bind (tid =>
     field "isIntersecting" decodeBool json |> bind (isIntersecting =>
       field "ratio" decodeFloat json |> bind (ratio =>
-        Ok { tid, isIntersecting, ratio })
+        Ok { tid, isIntersecting, ratio }
+      )
     )
   )
 
@@ -285,7 +307,9 @@ decodePlatformEvent = kind rawPJson => {
             field "oldURL" decodeText pJson |> bind (oldURL =>
               field "newURL" decodeText pJson |> bind (newURL =>
                 field "hash" decodeText pJson |> bind (hash =>
-                  Ok (HashChange { url, oldURL, newURL, hash })))
+                  Ok (HashChange { url, oldURL, newURL, hash })
+                )
+              )
             )
           )
     | "visibility" =>
@@ -404,7 +428,8 @@ decodeClientMsg = raw => decode raw |> bind (json => field "t" decodeText json |
           field "viewId" decodeText json |> bind (viewId =>
             field "url" decodeText json |> bind (url =>
               field "online" decodeBool json |> bind (online =>
-                Ok (Hello { viewId, url, online }))
+                Ok (Hello { viewId, url, online })
+              )
             )
           )
   | "event" =>
@@ -412,14 +437,17 @@ decodeClientMsg = raw => decode raw |> bind (json => field "t" decodeText json |
             field "hid" decodeInt json |> bind (hid =>
               field "kind" decodeText json |> bind (kind =>
                 decodeField "p" json |> bind (p =>
-                  Ok (Event { viewId, hid, kind, p })))
+                  Ok (Event { viewId, hid, kind, p })
+                )
+              )
             )
           )
   | "platform" =>
           field "viewId" decodeText json |> bind (viewId =>
             field "kind" decodeText json |> bind (kind =>
               decodeField "p" json |> bind (p =>
-                Ok (Platform { viewId, kind, p }))
+                Ok (Platform { viewId, kind, p })
+              )
             )
           )
   | "effectResult" =>
@@ -428,7 +456,10 @@ decodeClientMsg = raw => decode raw |> bind (json => field "t" decodeText json |
               field "kind" decodeText json |> bind (kind =>
                 field "ok" decodeBool json |> bind (ok =>
                   decodeField "p" json |> bind (p =>
-                    Ok (EffectResult { viewId, rid, kind, ok, p }))))
+                    Ok (EffectResult { viewId, rid, kind, ok, p })
+                  )
+                )
+              )
             )
           )
   | _ => Err { message: "unknown ClientMsg type: { t }" }
@@ -482,7 +513,8 @@ decodeServerMsg = raw => decode raw |> bind (json => field "t" decodeText json |
           field "sid" decodeInt json |> bind (sid =>
             field "options" decodeIntersectionOptions json |> bind (options =>
               field "targets" (decodeList decodeIntersectionTarget) json |> bind (targets =>
-                Ok (SubscribeIntersect { sid, options, targets }))
+                Ok (SubscribeIntersect { sid, options, targets })
+              )
             )
           )
   | "unsubscribeIntersect" =>
