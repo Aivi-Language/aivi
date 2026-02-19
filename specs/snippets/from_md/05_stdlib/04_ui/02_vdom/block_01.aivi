@@ -1,5 +1,2 @@
-use aivi.ui (VNode, Element, TextNode, Class)
-
-// `VNode msg` is typed data; it is not HTML text.
-node : VNode Unit
-node = Element "div" [Class "greeting"] [TextNode "Hello"]
+base = { width: 10px, display: "block" }
+next = base <| { width: 12px }

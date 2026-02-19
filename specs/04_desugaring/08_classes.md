@@ -14,11 +14,8 @@ Classes elaborate to records of methods (dictionary passing is compile-time, but
 
 Surface class syntax may declare constraints on member type variables:
 
-```aivi
-class Collection (C *) = with (A: Eq) {
-  unique: C A -> C A
-}
-```
+<<< ../snippets/from_md/04_desugaring/08_classes/block_01.aivi{aivi}
+
 
 Informal elaboration: constraints like `(A: Eq)` behave like additional dictionary requirements
 for methods whose signatures mention `A` (e.g. `unique` elaborates as if it can use an `Eq A`

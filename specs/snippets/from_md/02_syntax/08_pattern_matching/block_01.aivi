@@ -1,3 +1,5 @@
-classify = v => v match
-  | 0 => "zero"
-  | _ => "nonzero"
+value = parse input
+
+value match
+  | Ok x  => x
+  | Err _ => 0

@@ -79,13 +79,8 @@ A single domain body may define **multiple entries** for the same operator token
 
 **Convention**: `×` is reserved for structural products (matrix-matrix, matrix-vector), while `*` is used for scalar scaling:
 
-```aivi
-domain Matrix over Mat4 = {
-  (*) : Mat4 -> Float -> Mat4    // scalar scale
-  (×) : Mat4 -> Mat4  -> Mat4   // matrix-matrix product
-  (×) : Mat4 -> Vec4  -> Vec4   // matrix-vector transform
-}
-```
+<<< ../snippets/from_md/02_syntax/11_operators/block_01.aivi{aivi}
+
 
 Precedence is **not** domain-defined; `×` and `*` share the same precedence level (`11_operators §11.2`).
 

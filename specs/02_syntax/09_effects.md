@@ -182,42 +182,13 @@ Effect blocks can be combined with pipelines and pattern matching to create very
 
 ### Syntax
 
-```aivi
-do Effect {
-  // setup
-  loop state = initialValue => {
-    // body may use `<-` binds, pure `=` lets, and if/match
-    // `recurse newState` restarts the loop
-    // omitting `recurse` in a branch terminates the loop
-  }
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_01.aivi{aivi}
+
 
 ### Example: Dijkstra's shortest paths
 
-```aivi
-dijkstra = do Effect {
-  dists <- MutableMap.create (Map.insert source 0.0 Map.empty)
+<<< ../snippets/from_md/02_syntax/09_effects/block_02.aivi{aivi}
 
-  loop pq = Heap.push (0.0, source) Heap.empty => {
-    result = Heap.popMin pq
-    result match
-      | None              => pure Unit
-      | Some ((d, node), restPq) => do Effect {
-          currentDist <- MutableMap.getOrElse node infinity dists
-          if d > currentDist
-          then do Effect { recurse restPq }
-          else do Effect {
-            edges = edgesFrom graph node
-            newPq <- processEdges dists d edges restPq
-            recurse newPq
-          }
-        }
-  }
-
-  MutableMap.freeze dists
-}
-```
 
 ### Desugaring
 
@@ -242,32 +213,22 @@ The loop body's `{ ... }` block is promoted to the parent effect-block kind, so 
 
 `when cond <- eff` runs `eff` only if `cond` is true:
 
-```aivi
-do Effect {
-  when isVerbose <- print "debug info"
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_03.aivi{aivi}
+
 
 ### `unless`
 
 `unless cond <- eff` runs `eff` only if `cond` is false:
 
-```aivi
-do Effect {
-  unless isValid <- fail (ValidationError "invalid input")
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_04.aivi{aivi}
+
 
 ### `given`
 
 `given cond or failExpr` asserts a precondition. If `cond` is false, `failExpr` is evaluated (typically a `fail` call):
 
-```aivi
-do Effect {
-  given (age >= 18) or fail (AccessDenied "must be 18+")
-  // continues only if age >= 18
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_05.aivi{aivi}
+
 
 ## 9.8 Generic `do` notation
 
@@ -277,27 +238,15 @@ The `do` block syntax generalizes beyond `Effect` to any type constructor with m
 
 Short-circuit chaining: binds unwrap `Some`, and `None` aborts the block early.
 
-```aivi
-result = do Option {
-  x <- Map.get "a" myMap
-  y <- Map.get "b" myMap
-  Some (x + y)
-}
-// result : Option Int   None if either lookup fails
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_06.aivi{aivi}
+
 
 ### `do Result { ... }`
 
 Pure error chaining: binds unwrap `Ok`, and `Err` short-circuits.
 
-```aivi
-result = do Result {
-  x <- parseFloat input
-  y <- validate x
-  Ok (x + y)
-}
-// result : Result E Float   Err if parsing or validation fails
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_07.aivi{aivi}
+
 
 ### Restricted statement set
 
@@ -314,18 +263,12 @@ Attempting to use Effect-specific statements in a generic `do` block produces a 
 
 For `Option` chaining without a full `do` block, `??` (coalesce) and `match` remain idiomatic:
 
-```aivi
-name = user.name ?? "anonymous"
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_08.aivi{aivi}
+
 
 For `List` comprehensions, use [generators](07_generators.md):
 
-```aivi
-pairs = generate {
-  x <- [1, 2, 3]
-  y <- [4, 5, 6]
-  yield (x, y)
-}
-```
+<<< ../snippets/from_md/02_syntax/09_effects/block_09.aivi{aivi}
+
 
 See [Generic Monadic `do` Blocks](16_do_notation.md) for the full specification, desugaring rules, and future plans.

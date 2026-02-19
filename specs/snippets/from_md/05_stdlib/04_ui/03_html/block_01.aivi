@@ -1,12 +1,9 @@
-use aivi.ui
-use aivi.ui.layout
-
-model = { name: "Ada" }
-
 node =
   ~<html>
-    <div class="card" style={ { width: 240px, gap: 2em } }>
+    <div class="card">
       <h1>Hello</h1>
-      { model.name }
+      <p>{ TextNode text }</p>
     </div>
   </html>
+
+type is `VNode msg`.

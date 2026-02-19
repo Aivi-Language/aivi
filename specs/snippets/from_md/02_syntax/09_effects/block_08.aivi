@@ -1,3 +1,1 @@
-txt <- load (file.read path) or
-| NotFound _ => "(missing)"
-| _          => "(other-error)"
+name = user.name ?? "anonymous"

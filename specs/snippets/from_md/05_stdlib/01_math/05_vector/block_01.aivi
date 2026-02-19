@@ -1,4 +1,3 @@
-```aivi
 use aivi.vector (Vec2, Vec3, vec2, vec3)
 
 v1 = vec2 1.0 2.0
@@ -9,4 +8,3 @@ v3 = v1 + v2 // vec2 4.0 6.0
 
 // Or use full record syntax
 v4 = Vec2 { x: 1.0, y: 2.0 }
-```

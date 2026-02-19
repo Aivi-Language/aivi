@@ -1,4 +1,3 @@
-```aivi
 // Short constructors
 vec2 : Float -> Float -> Vec2
 vec2 = x y => { x: x, y: y }
@@ -8,4 +7,3 @@ vec3 = x y z => { x: x, y: y, z: z }
 
 vec4 : Float -> Float -> Float -> Float -> Vec4
 vec4 = x y z w => { x: x, y: y, z: z, w: w }
-```

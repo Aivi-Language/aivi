@@ -33,57 +33,15 @@ back. No client-side VDOM is needed   patches target stable `data-aivi-node` ids
 
 ## Quick Start Example
 
-```aivi
-use aivi.ui
-use aivi.ui.layout
-use aivi.net.httpServer
-use aivi.ui.ServerHtml
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_01.aivi{aivi}
 
-Model = { count: Int }
-Msg = Inc | Dec
-
-view = model =>
-  ~<html>
-    <div style={ { width: 240px } }>
-      <button onClick={ Dec }>-</button>
-      <span>{ model.count }</span>
-      <button onClick={ Inc }>+</button>
-    </div>
-  </html>
-
-update = msg model => msg match
-  | Inc => (model <| { count: _ + 1 }, [])
-  | Dec => (model <| { count: _ - 1 }, [])
-
-app : App Model Msg
-app =
-  { init: _ => { count: 0 }
-    update: update
-    view: view
-    onPlatform: _ => None
-  }
-
-main = do Effect {
-  req <- receiveHttpRequest   // pseudo   depends on httpServer.listen
-  resp <- serveHttp app req
-  pure resp
-}
-```
 
 ## Public API
 
 ### Types
 
-```aivi
-ViewId         = Text        -- opaque; one per WebSocket connection
-HandlerId      = Int
-SubscriptionId = Int
-RequestId      = Int
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_02.aivi{aivi}
 
-UrlInfo = { href: Text, path: Text, query: Text, hash: Text }
-
-InitContext = { viewId: ViewId, url: UrlInfo, online: Bool }
-```
 
 ### App record
 
@@ -91,66 +49,35 @@ The `App` record is the user-facing entry point. It defines how to initialise a
 model, update it when messages arrive, render it to a virtual DOM, and optionally
 react to browser platform events.
 
-```aivi
-App model msg = {
-  init       : InitContext -> model,
-  update     : msg -> model -> (model, List (AppEffect model msg)),
-  view       : model -> VNode msg,
-  onPlatform : PlatformEvent -> Option msg
-}
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_03.aivi{aivi}
+
 
 ### AppEffect
 
 Effects that an `update` function can return alongside the new model:
 
-```aivi
-AppEffect model msg =
-  | ReadClipboard  (Result ClipboardError Text -> msg)
-  | WriteClipboard Text (Result ClipboardError Unit -> msg)
-  | SubIntersect   SubscriptionId IntersectionOptions (List IntersectionTarget)
-  | UnsubIntersect SubscriptionId
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_04.aivi{aivi}
+
 
 #### Clipboard example
 
-```aivi
-Msg = Paste (Result ClipboardError Text) | RequestPaste
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_05.aivi{aivi}
 
-update = msg model => msg match
-  | RequestPaste   => (model, [ReadClipboard Paste])
-  | Paste (Ok txt) => (model <| { clipboard: txt }, [])
-  | Paste (Err _)  => (model, [])
-```
 
 #### IntersectionObserver example
 
-```aivi
-Msg = BecameVisible { sid: SubscriptionId, entries: List IntersectionEntry }
-    | WatchSection
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_06.aivi{aivi}
 
-update = msg model => msg match
-  | WatchSection =>
-    (model, [SubIntersect 1
-               { rootMargin: "0px", threshold: [0.0, 1.0] }
-               [{ tid: 1, nodeId: "section-hero" }]])
-  | BecameVisible _ => (model <| { heroVisible: True }, [])
-```
 
 ### ClipboardError
 
-```aivi
-ClipboardError =
-  | PermissionDenied
-  | Unavailable
-  | Other Text
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_07.aivi{aivi}
+
 
 ### serveHttp
 
-```aivi
-serveHttp : App model msg -> Request -> Effect HttpError Response
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_08.aivi{aivi}
+
 
 Handles an incoming HTTP request by:
 
@@ -163,9 +90,8 @@ Handles an incoming HTTP request by:
 
 ### serveWs
 
-```aivi
-serveWs : App model msg -> WebSocket -> Effect WsError Unit
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_09.aivi{aivi}
+
 
 Handles a WebSocket connection by:
 
@@ -180,27 +106,8 @@ Handles a WebSocket connection by:
 All DOM events are forwarded with typed payloads. Field names match exactly
 between AIVI types, the wire protocol, and the TypeScript client.
 
-```aivi
-ClickPayload = { button: Int, alt: Bool, ctrl: Bool, shift: Bool, meta: Bool }
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_10.aivi{aivi}
 
-InputPayload = { value: Text }
-
-KeyPayload = { key: Text, code: Text, alt: Bool, ctrl: Bool,
-               shift: Bool, meta: Bool, repeat: Bool, isComposing: Bool }
-
-PointerPayload = { pointerId: Int, pointerType: Text, button: Int, buttons: Int,
-                   clientX: Int, clientY: Int,
-                   alt: Bool, ctrl: Bool, shift: Bool, meta: Bool }
-
-EventPayload =
-  | ClickEvt   ClickPayload
-  | InputEvt   InputPayload
-  | KeyDownEvt KeyPayload
-  | KeyUpEvt   KeyPayload
-  | PtrDownEvt PointerPayload
-  | PtrUpEvt   PointerPayload
-  | PtrMoveEvt PointerPayload
-```
 
 Event kind strings on the wire: `"click"`, `"input"`, `"keydown"`, `"keyup"`,
 `"pointerdown"`, `"pointerup"`, `"pointermove"`.
@@ -209,29 +116,16 @@ Event kind strings on the wire: `"click"`, `"input"`, `"keydown"`, `"keyup"`,
 
 Browser-level signals forwarded as typed ADTs:
 
-```aivi
-PlatformEvent =
-  | PopState   UrlInfo
-  | HashChange { url: UrlInfo, oldURL: Text, newURL: Text, hash: Text }
-  | Visibility { state: Text }
-  | WindowFocus { focused: Bool }
-  | Online      { online: Bool }
-  | Intersection { sid: SubscriptionId, entries: List IntersectionEntry }
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_11.aivi{aivi}
+
 
 Platform kind strings: `"popstate"`, `"hashchange"`, `"visibility"`, `"focus"`,
 `"online"`, `"intersection"`.
 
 ### Platform event example
 
-```aivi
-onPlatform = evt => evt match
-  | PopState url       => Some (NavigateTo url.path)
-  | Online { online }  => online match
-    | True  => Some Reconnected
-    | False => Some Disconnected
-  | _                  => None
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_12.aivi{aivi}
+
 
 ## DOM Identity
 
@@ -248,12 +142,8 @@ During rendering, the runtime walks the VDOM and replaces each event-handler
 `Attr` with a `data-aivi-hid-<kind>` attribute, recording a mapping from
 `HandlerId` to the handler function.
 
-```aivi
-assignHandlers
-  : VNode msg
-  -> HandlerId
-  -> (VNode msg, Map HandlerId (EventPayload -> Option msg), HandlerId)
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_13.aivi{aivi}
+
 
 ## WebSocket Protocol (JSON)
 

@@ -1,10 +1,6 @@
-Decimal
-BigInt
-Text
-Bytes
-Duration
-Instant
-Date
-Time
-TimeZone
-ZonedDateTime
+machine OrderFlow = {
+  -> Pending              : init    {}
+  Pending   -> Confirmed  : confirm { confirmedAt : Instant }
+  Confirmed -> Shipped    : ship    { trackingId  : Text }
+  Shipped   -> Delivered  : deliver { deliveredAt : Instant }
+}

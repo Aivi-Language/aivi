@@ -1,3 +1,3 @@
-failExample : Effect Text Int
-failExample =
-  fail "boom"
+do Effect {
+  when isVerbose <- print "debug info"
+}

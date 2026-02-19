@@ -85,14 +85,8 @@ my-aivi-lib/
 
 Edit `src/lib.aivi`:
 
-```aivi
-module my.aivi.lib
+<<< ../snippets/from_md/06_runtime/03_package_manager/block_01.aivi{aivi}
 
-export *
-
-greet : Text -> Text
-greet = name => "Hello, " ++ name ++ "!"
-```
 
 ### 3. Configure metadata
 
@@ -136,16 +130,8 @@ This adds the dependency to `Cargo.toml` and fetches it.
 
 ### 2. Import in your code
 
-```aivi
-module my.app
+<<< ../snippets/from_md/06_runtime/03_package_manager/block_02.aivi{aivi}
 
-use my.aivi.lib (greet)
-
-main = do Effect {
-  msg = greet "world"
-  print msg
-}
-```
 
 ### 3. Use a Git dependency
 

@@ -11,9 +11,8 @@ The collections family provides persistent data structures for functional code. 
 
 The facade module `aivi.collections` re-exports all of the above for convenience:
 
-```aivi
-use aivi.collections  // imports list, map, set, queue, heap
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_01.aivi{aivi}
+
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.collections</div>
@@ -57,9 +56,8 @@ The `++` operator is provided as concatenation for `List`, right-biased merge fo
 
 While `List` is a built-in type, AIVI provides a standard `List` API for pipeline-friendly functional programming.
 
-```aivi
-use aivi.list
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_02.aivi{aivi}
+
 
 | Function | Explanation |
 | --- | --- |
@@ -91,9 +89,8 @@ use aivi.list
 
 ## `aivi.map`
 
-```aivi
-use aivi.map
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_03.aivi{aivi}
+
 
 | Function | Explanation |
 | --- | --- |
@@ -124,9 +121,8 @@ Notes:
 
 ## `aivi.set`
 
-```aivi
-use aivi.set
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_04.aivi{aivi}
+
 
 | Function | Explanation |
 | --- | --- |
@@ -144,9 +140,8 @@ use aivi.set
 
 ## `aivi.queue`
 
-```aivi
-use aivi.queue
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_05.aivi{aivi}
+
 
 | Function | Explanation |
 | --- | --- |
@@ -157,9 +152,8 @@ use aivi.queue
 
 ### Deque
 
-```aivi
-use aivi.queue (Deque)
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_06.aivi{aivi}
+
 
 | Function | Explanation |
 | --- | --- |
@@ -173,9 +167,8 @@ use aivi.queue (Deque)
 
 ## `aivi.heap`
 
-```aivi
-use aivi.heap
-```
+<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_07.aivi{aivi}
+
 
 | Function | Explanation |
 | --- | --- |

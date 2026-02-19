@@ -1,4 +1,1 @@
-greet =
-  | { role: Admin, name } => "Welcome back, Admin {name}!"
-  | { role: Guest }       => "Welcome, guest!"
-  | { name }              => "Hello, {name}!"
+user as { name, age }    // 'user' holds the whole record; 'name' and 'age' are also bound

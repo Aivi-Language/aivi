@@ -1,2 +1,1 @@
-pi = 3.14159
-add = x y => x + y
+{ name: n, age: a } = user

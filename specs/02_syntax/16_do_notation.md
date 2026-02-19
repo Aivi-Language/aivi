@@ -53,12 +53,8 @@ A `do M { ... }` block desugars to calls to `chain` and `of` from the `Chain M` 
 
 #### Bind
 
-```aivi
-do M {
-  x <- expr
-  body
-}
-```
+<<< ../snippets/from_md/02_syntax/16_do_notation/block_01.aivi{aivi}
+
 
 desugars to:
 
@@ -70,12 +66,8 @@ chain (λx. ⟦do M { body }⟧) ⟦expr⟧
 
 #### Pure let-binding
 
-```aivi
-do M {
-  x = expr
-  body
-}
-```
+<<< ../snippets/from_md/02_syntax/16_do_notation/block_02.aivi{aivi}
+
 
 desugars to:
 
@@ -85,12 +77,8 @@ let x = ⟦expr⟧ in ⟦do M { body }⟧
 
 #### Sequencing (expression statement)
 
-```aivi
-do M {
-  expr
-  body
-}
-```
+<<< ../snippets/from_md/02_syntax/16_do_notation/block_03.aivi{aivi}
+
 
 desugars to:
 
@@ -100,17 +88,15 @@ chain (λ_. ⟦do M { body }⟧) ⟦expr⟧
 
 #### Final expression
 
-```aivi
-do M { expr }
-```
+<<< ../snippets/from_md/02_syntax/16_do_notation/block_04.aivi{aivi}
+
 
 desugars to `⟦expr⟧`. It must have type `M A`.
 
 #### Empty block
 
-```aivi
-do M { }
-```
+<<< ../snippets/from_md/02_syntax/16_do_notation/block_05.aivi{aivi}
+
 
 desugars to `of Unit` (using `of : A -> M A` from `Applicative M`).
 

@@ -1,3 +1,8 @@
-pureExample : Effect Text Int
-pureExample =
-  pure 42
+do Effect {
+  // setup
+  loop state = initialValue => {
+    // body may use `<-` binds, pure `=` lets, and if/match
+    // `recurse newState` restarts the loop
+    // omitting `recurse` in a branch terminates the loop
+  }
+}

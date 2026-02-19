@@ -1,4 +1,6 @@
-main = do Effect {
-  cfg <- load (file.read "config.json")
-  print "loaded"
+result = do Option {
+  x <- Map.get "a" myMap
+  y <- Map.get "b" myMap
+  Some (x + y)
 }
+// result : Option Int   None if either lookup fails
