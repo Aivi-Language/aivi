@@ -114,11 +114,11 @@ export default defineConfig({
           { text: 'Pattern Matching', link: '/02_syntax/08_pattern_matching' },
           { text: 'Effects', link: '/02_syntax/09_effects' },
           { text: 'Modules', link: '/02_syntax/10_modules' },
-          { text: 'Operators and Context', link: '/02_syntax/11_operators' },
-          { text: 'Sigils', link: '/02_syntax/13_sigils' },
           { text: 'External Sources', link: '/02_syntax/12_external_sources' },
+          { text: 'Sigils', link: '/02_syntax/13_sigils' },
           { text: 'Decorators', link: '/02_syntax/14_decorators' },
           { text: 'Resources', link: '/02_syntax/15_resources' },
+          { text: 'Operators and Context', link: '/02_syntax/11_operators' },
           { text: 'Concrete Syntax', link: '/02_syntax/00_grammar' },
         ]
       },
@@ -185,7 +185,6 @@ export default defineConfig({
             text: 'Network',
             collapsed: true,
             items: [
-              { text: 'Network', link: '/05_stdlib/03_network/00_network' },
               { text: 'HTTP Utils', link: '/05_stdlib/03_network/01_http' },
               { text: 'HTTPS', link: '/05_stdlib/03_network/02_https' },
               { text: 'HTTP Server', link: '/05_stdlib/03_network/03_http_server' },
