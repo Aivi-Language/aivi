@@ -1,0 +1,5 @@
+// Error: ambiguous overload — the RHS type variable has no constraints
+// that select between Mat4 × Mat4 -> Mat4 and Mat4 × Vec4 -> Vec4.
+use aivi.matrix (domain Matrix)
+
+-- ambiguous m x = m × x   // E4011: ambiguous; add annotation like (x : Vec4)

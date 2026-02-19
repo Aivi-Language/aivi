@@ -1,0 +1,8 @@
+// Error: no overload matches (Vec3, Mat4) — LHS is Vec3, not Mat4.
+// The `×` operator lives in domain Matrix over Mat3, but Mat3 × Vec3 -> Vec3
+// does not match the given (Vec3, Mat4) pair.
+use aivi.vector
+use aivi.matrix (domain Matrix)
+
+-- bad : Vec3
+-- bad = vec3 1.0 2.0 3.0 × identity4   // E4010: no matching operator
