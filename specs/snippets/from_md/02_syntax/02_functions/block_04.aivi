@@ -1,1 +1,1 @@
-xs |> map inc |> filter (_ > 0)
+f a b x

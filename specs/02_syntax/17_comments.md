@@ -6,10 +6,8 @@ AIVI supports two comment styles: line comments and block comments. Comments are
 
 A line comment begins with `//` and extends to the end of the line (the newline character is not part of the comment).
 
-```aivi
-// This is a line comment
-x = 42 // inline comment after an expression
-```
+<<< ../snippets/from_md/02_syntax/17_comments/block_01.aivi{aivi}
+
 
 Line comments are commonly used for:
 - Explaining the intent of a binding or expression
@@ -20,13 +18,8 @@ Line comments are commonly used for:
 
 A block comment begins with `/*` and ends with `*/`. It can span multiple lines. Block comments do **not** nest.
 
-```aivi
-/*
-  This is a block comment.
-  It can span multiple lines.
-*/
-result = /*inline block*/ 42
-```
+<<< ../snippets/from_md/02_syntax/17_comments/block_02.aivi{aivi}
+
 
 > **Note**: Block comments do not nest. `/* outer /* inner */ still open */` — the comment closes at the first `*/`.
 
@@ -39,11 +32,8 @@ Block comments are commonly used for:
 
 Comments may appear anywhere whitespace is allowed — before or after any token, between expressions, and at the top of a file. The formatter preserves comments and does not reorder them.
 
-```aivi
-// Module-level documentation comment
-foo = bar // call bar
-  |> baz  /* pipe to baz */
-```
+<<< ../snippets/from_md/02_syntax/17_comments/block_03.aivi{aivi}
+
 
 ## What Is Not Supported
 

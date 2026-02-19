@@ -12,21 +12,13 @@ This is a concise way to do case analysis, similar to `match` in Rust or `case` 
 `match` matches on the expression immediately to its left.
 <!-- /quick-info -->
 
-```aivi
-value = parse input
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_01.aivi{aivi}
 
-value match
-  | Ok x  => x
-  | Err _ => 0
-```
 
 This rule composes with pipelines because `match` comes *after* the full expression:
 
-```aivi
-input |> parse |> validate match
-  | Ok x  => x
-  | Err e => handle e
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_02.aivi{aivi}
+
 
 In a multi-clause unary function (Section 8.2), the subject is the function's single implicit argument.
 
@@ -80,25 +72,20 @@ Record patterns use three distinct operators for different purposes:
 
 `{ field: pat }` matches the field and binds the result of the nested pattern `pat`. This is the primary form for both matching and renaming:
 
-```aivi
-{ name: n }           // binds field 'name' to variable 'n'
-{ role: Admin }       // matches field 'role' against constructor 'Admin'
-{ name }              // shorthand for { name: name }
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_03.aivi{aivi}
+
 
 ### `as`   Whole-value plus destructuring
 
 `field as { pat }` binds `field` to the **entire** field value *and* destructures it. Both `field` and the contents of `pat` are in scope:
 
-```aivi
-user as { name, age }    // 'user' holds the whole record; 'name' and 'age' are also bound
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_04.aivi{aivi}
+
 
 In nested position:
 
-```aivi
-{ profile as { name, age } }
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_05.aivi{aivi}
+
 
 Here `profile` is bound to the full value of the `profile` field, and `name`/`age` are also brought into scope from within that field.
 
@@ -106,9 +93,8 @@ Here `profile` is bound to the full value of the `profile` field, and `name`/`ag
 
 `field.{ pat }` destructures the field but does **not** bind the field itself. Only the contents of the nested pattern are in scope:
 
-```aivi
-{ profile.{ name, age } }
-```
+<<< ../snippets/from_md/02_syntax/08_pattern_matching/block_06.aivi{aivi}
+
 
 Here `name` and `age` are in scope, but `profile` is **not**   it is only used as a path to reach the nested fields.
 

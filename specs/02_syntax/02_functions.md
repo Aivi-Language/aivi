@@ -33,37 +33,30 @@ Pipelines use `|>`.
 
 `|>` applies the expression on the right to the value on the left:
 
-```aivi
-x |> f
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_01.aivi{aivi}
+
 
 is equivalent to:
 
-```aivi
-f x
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_02.aivi{aivi}
+
 
 If the right-hand side is already an application, the piped value is passed as the **final** argument:
 
-```aivi
-x |> f a b
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_03.aivi{aivi}
+
 
 is equivalent to:
 
-```aivi
-f a b x
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_04.aivi{aivi}
+
 
 This makes pipelines read left-to-right for data flow while keeping ordinary application whitespace-based.
 
 Pipelines often feed directly into `match` branching:
 
-```aivi
-input |> parse match
-  | Ok x  => x
-  | Err _ => 0
-```
+<<< ../snippets/from_md/02_syntax/02_functions/block_05.aivi{aivi}
+
 
 See also: [Pattern Matching](08_pattern_matching.md) for the `match` operator.
 

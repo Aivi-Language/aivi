@@ -1,10 +1,8 @@
-use aivi.matrix (Mat4)
+// 2x2 rotation matrix (90 degrees)
+rot90 = ~mat[0.0 -1.0
+             1.0  0.0]
 
-// A generic "identity" matrix (does nothing)
-m = Mat4.identity
-
-// Create a instruction to move 10 units X
-translation = Mat4.translate 10.0 0.0 0.0
-
-// Combine them
-mPrime = m * translation
+// 3x3 identity
+id3 = ~mat[1.0 0.0 0.0
+           0.0 1.0 0.0
+           0.0 0.0 1.0]

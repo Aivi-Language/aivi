@@ -1,4 +1,3 @@
-```aivi
 use aivi.geometry (ray3, point3, Sphere, intersect)
 
 // A ray firing forwards from origin
@@ -11,4 +10,3 @@ if intersect ray sphere then
   print "Hit!"
 else
   print "Miss!"
-  ```

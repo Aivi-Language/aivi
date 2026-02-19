@@ -43,9 +43,8 @@ Structural patterns may appear in bindings.
 
 To deconstruct a record, use a record pattern on the left-hand side.
 
-```aivi
-{ name: n, age: a } = user
-```
+<<< ../snippets/from_md/02_syntax/01_bindings/block_01.aivi{aivi}
+
 
 You can also destructure nested records using dot-paths (Section 1.5).
 

@@ -1,7 +1,5 @@
-```aivi
 use aivi.color (Color, rgb)
 
 primary = rgb 0 123 255
 // Mathematically correct lightening
 lighter = primary + 10l
-```

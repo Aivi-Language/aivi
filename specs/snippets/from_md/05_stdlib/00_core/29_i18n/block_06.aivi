@@ -1,4 +1,3 @@
-```aivi
 parseLocale: Text -> Result Text Locale
 
 key: Text -> Result Text Key
@@ -26,4 +25,3 @@ tCatalog: Catalog -> Locale -> Key -> {} -> Text
 tCatalogWithDefault: Catalog -> Locale -> Bundle -> Key -> {} -> Text
 
 localize: Locale -> Text -> Effect Text (Key -> {} -> Text)
-```

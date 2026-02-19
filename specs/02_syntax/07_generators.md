@@ -85,13 +85,8 @@ Inside the loop body, `recurse next` continues with the next iteration with upda
 
 ### Syntax
 
-```aivi
-loop pattern = initialValue => {
-  // body: may yield, may recurse
-  yield someValue
-  recurse nextState
-}
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_01.aivi{aivi}
+
 
 - **`pattern`** binds the loop state (may be a tuple, record, or simple name).
 - **`initialValue`** is the starting state.
@@ -102,22 +97,13 @@ loop pattern = initialValue => {
 
 `loop` is syntactic sugar for a local recursive function. The compiler transforms:
 
-```aivi
-loop (a, b) = (0, 1) => {
-  yield a
-  recurse (b, a + b)
-}
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_02.aivi{aivi}
+
 
 into (approximately):
 
-```aivi
-__loop0 = (a, b) => {
-  yield a
-  __loop0 (b, a + b)
-}
-__loop0 (0, 1)
-```
+<<< ../snippets/from_md/02_syntax/07_generators/block_03.aivi{aivi}
+
 
 ### Use in effect blocks
 

@@ -49,10 +49,8 @@ Attributes are typed values, not raw strings:
 
 The `style={ ... }` attribute expects a record, so `<|` patching works naturally:
 
-```aivi
-base = { width: 10px, display: "block" }
-next = base <| { width: 12px }
-```
+<<< ../../snippets/from_md/05_stdlib/04_ui/02_vdom/block_01.aivi{aivi}
+
 
 Style values are not restricted to `Text`. The runtime renderer recognizes common shapes:
 

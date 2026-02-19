@@ -1,4 +1,4 @@
-# Number Domains (BigInt, Rational, Decimal, Complex, Quaternion)
+# Numbers
 
 <!-- quick-info: {"kind":"module","name":"aivi.number"} -->
 The `aivi.number` family groups numeric domains that sit above `Int` and `Float`:

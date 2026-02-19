@@ -177,15 +177,8 @@ at the type level.
 
 ### Declaration
 
-```aivi
-machine Door = {
-  -> Closed   : init   {}
-  Closed  -> Opened : open   {}
-  Opened  -> Closed : close  {}
-  Opened  -> Locked : lock   {}
-  Locked  -> Closed : unlock {}
-}
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_01.aivi{aivi}
+
 
 - `-> Closed : init {}` is the **initial transition**   it has no source state and
   marks `Closed` as the machine's starting state. Every machine must have exactly one
@@ -215,22 +208,10 @@ FieldDecl         := lowerIdent ":" TypeExpr
 
 The LSP formatter aligns `->` arrows and `:` colons for readability:
 
-```aivi
-machine OrderFlow = {
-  -> Pending              : init    {}
-  Pending   -> Confirmed  : confirm { confirmedAt : Instant }
-  Confirmed -> Shipped    : ship    { trackingId  : Text }
-  Shipped   -> Delivered  : deliver { deliveredAt : Instant }
-}
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_02.aivi{aivi}
+
 
 ### Example: Traffic light
 
-```aivi
-machine TrafficLight = {
-  -> Red   : init {}
-  Red    -> Green  : next {}
-  Green  -> Yellow : next {}
-  Yellow -> Red    : next {}
-}
-```
+<<< ../snippets/from_md/02_syntax/03_types/block_03.aivi{aivi}
+

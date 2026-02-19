@@ -1,4 +1,3 @@
-```aivi
 use aivi.i18n
 
 // One-step localization: load bundle + get a lookup function
@@ -10,4 +9,3 @@ main = do Effect {
   print (tr (~k"app.welcome") { name: "Alice" })
   print (tr (~k"app.cartItems") { count: 3 })
 }
-```

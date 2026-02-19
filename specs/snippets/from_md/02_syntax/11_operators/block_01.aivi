@@ -1,9 +1,5 @@
-// Range expressions build lists of Ints:
-xs = 1..3
-
-// Inside list literals, range items splice their elements into the list:
-ys = [0, 1..3, 4]
-zs = [1..3]
-
-// `...` is an explicit spread (splice):
-ws = [0, ...(1..3), 4]
+domain Matrix over Mat4 = {
+  (*) : Mat4 -> Float -> Mat4    // scalar scale
+  (×) : Mat4 -> Mat4  -> Mat4   // matrix-matrix product
+  (×) : Mat4 -> Vec4  -> Vec4   // matrix-vector transform
+}

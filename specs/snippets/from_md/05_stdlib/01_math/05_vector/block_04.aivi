@@ -1,4 +1,3 @@
-```aivi
 use aivi.vector
 use aivi.matrix
 
@@ -11,4 +10,3 @@ direction = normalize velocity
 // Vector × Matrix
 rotation = identity2 // placeholder for a real rotation matrix
 transformed = transform2 rotation position
-```

@@ -1,2 +1,1 @@
-defaults = ~map{ "theme" => "light", "lang" => "en" }
-settings = ~map{ ...defaults, "theme" => "dark" }
+use aivi.map

@@ -1,4 +1,3 @@
-```aivi
 use aivi.i18n
 
 main = do Effect {
@@ -11,4 +10,3 @@ main = do Effect {
 
   print (t bundle (~k"app.welcome") { name: "Alice" })
 }
-```

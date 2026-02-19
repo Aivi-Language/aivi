@@ -58,16 +58,8 @@ Requires `use aivi.matrix (domain Matrix)` (or `use aivi.matrix`) and `use aivi.
 
 For concise matrix literals, use the `~mat` structured sigil:
 
-```aivi
-// 2x2 rotation matrix (90 degrees)
-rot90 = ~mat[0.0 -1.0
-             1.0  0.0]
+<<< ../../snippets/from_md/05_stdlib/01_math/09_matrix/block_01.aivi{aivi}
 
-// 3x3 identity
-id3 = ~mat[1.0 0.0 0.0
-           0.0 1.0 0.0
-           0.0 0.0 1.0]
-```
 
 Rows are separated by newlines; columns by spaces (any whitespace). The formatter aligns columns for readability. The sigil infers `Mat2`, `Mat3`, or `Mat4` from the row/column count.
 

@@ -6,28 +6,21 @@ General-purpose rose tree (multi-way tree) data structure. Each node holds a val
 
 ## Types
 
-```aivi
-Tree A =
-  | Node A (List (Tree A))
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/19_tree/block_01.aivi{aivi}
+
 
 ## Constructors
 
-```aivi
-node : A -> List (Tree A) -> Tree A
-leaf : A -> Tree A
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/19_tree/block_02.aivi{aivi}
+
 
 - `node value children`   creates a tree node with the given value and children.
 - `leaf value`   creates a leaf node (a node with no children).
 
 ## Traversals
 
-```aivi
-dfsPreorder  : Tree A -> List A
-dfsPostorder : Tree A -> List A
-bfs          : Tree A -> List A
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/19_tree/block_03.aivi{aivi}
+
 
 - `dfsPreorder`   depth-first preorder traversal (node, then children left-to-right).
 - `dfsPostorder`   depth-first postorder traversal (children first, then node).
@@ -35,9 +28,8 @@ bfs          : Tree A -> List A
 
 ## Construction from Flat Lists
 
-```aivi
-fromListBy : (A -> K) -> (A -> Option K) -> List A -> Option (Tree A)
-```
+<<< ../../snippets/from_md/05_stdlib/01_math/19_tree/block_04.aivi{aivi}
+
 
 Builds a rooted tree from a flat list of items with `(id, parentId)` relationships.
 
