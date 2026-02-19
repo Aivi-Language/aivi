@@ -25,8 +25,8 @@ apply: always
 
 | Element | Syntax |
 | :--- | :--- |
-| Line comment | `//` |
-| Block comment | `/* ... */` |
+| Line comment | `//` to end of line |
+| Block comment | `/* ... */` — may span multiple lines; **does not nest** |
 | Value / function / field names | `lowerCamelCase` (`lowerIdent`) |
 | Type / constructor / module / domain / class names | `UpperCamelCase` (`UpperIdent`) |
 | Text literal | `"hello { name }"` (interpolation with `{ expr }`) |
@@ -506,7 +506,23 @@ validateAge = input => do Result {
 }
 ```
 
-The same bind (`<-`) and pure-bind (`=`) syntax applies. Generic `do M` blocks support only the common monadic subset (`<-`, `=`, expression sequencing). Effect-specific statements (`or`, `when`, `unless`, `given`, `on`, `loop`/`recurse`) are **not** available in generic blocks.
+The same bind (`<-`) and pure-bind (`=`) syntax applies. Statement availability by block kind:
+
+| Statement | `do Effect` | `do M` (generic) | `generate` |
+| :--- | :---: | :---: | :---: |
+| `x <- expr` | ✓ | ✓ | ✓ (from sequence) |
+| `x = expr` | ✓ | ✓ | ✓ |
+| `expr` (sequencing) | ✓ | ✓ | — |
+| `yield expr` | — | — | ✓ |
+| `x -> pred` (guard) | — | — | ✓ |
+| `or` fallback | ✓ | — | — |
+| `when`/`unless cond <- eff` | ✓ | — | — |
+| `given cond or expr` | ✓ | — | — |
+| `on Event => handler` | ✓ | — | — |
+| `loop`/`recurse` | ✓ | — | ✓ |
+| resource `<-` | ✓ | — | — |
+
+Effect-specific statements (`or`, `when`, `unless`, `given`, `on`, resource `<-`, `loop`/`recurse`) are **only** available in `do Effect` blocks.
 
 ### `machine { ... }` - State machines
 
@@ -779,14 +795,32 @@ deadline = { millis: 0 } + 10min     // + resolved by Duration domain
 
 ### Suffix literals
 
+Suffix literals are numeric literals followed immediately by a suffix identifier. They resolve to domain-defined **template functions** named `1{suffix}`:
+
 ```aivi
 10min  30s  100px  50%  2w  3d
-(x)kg                                // variable suffix application
 ```
 
-Suffixes resolve to template functions: `10ms` uses `1ms` defined by a domain.
+Suffix can also be applied to a parenthesized expression (variable suffix):
+
+```aivi
+(x)kg       // desugars to 1kg applied to x; parentheses required, no space before suffix
+```
+
+Common suffix → domain mapping:
+
+| Suffix | Domain | Type |
+| :--- | :--- | :--- |
+| `10ms`, `1s`, `5min`, `2h` | Duration | `Duration` |
+| `1d`, `2w`, `3mo`, `1y` | Calendar | `CalendarDelta` |
+| `20deg`, `1.2rad` | Angle | `Angle` |
+| `10l`, `5s`, `30h` | Color | `ColorDelta` |
+
+**Collision rule**: if two imported domains define the same suffix (e.g. both define `1m`), the compiler does not disambiguate by carrier. Resolve by importing only one conflicting domain per module, using `hiding`, or using explicit constructors instead.
 
 ### Defining domains
+
+A domain declares one **carrier type** and may contain multiple operator entries for the same token (RHS-typed overloads), provided the full `LHS -> RHS -> Result` types are pairwise distinct. The compiler selects among them by matching the inferred RHS type after the LHS carrier is resolved.
 
 ```aivi
 domain Color over Rgb = {
@@ -796,9 +830,27 @@ domain Color over Rgb = {
   (+) = color (Lightness amount) => adjustLightness color amount
   (+) = color (Hue amount) => adjustHue color amount
 
-  1l = Lightness 1
+  1l = Lightness 1     // suffix template: 3l desugars to Lightness 3
   1h = Hue 1
 }
+```
+
+**`×` convention**: use `×` for structural/transform-style products (matrix × matrix, matrix × vector) and `*` for scalar scaling. This makes the visual intent explicit.
+
+```aivi
+domain LinAlg over Mat3 = {
+  (×) : Mat3 -> Mat3 -> Mat3     // matrix-matrix product
+  (*) : Mat3 -> Float -> Mat3   // scalar scaling
+}
+```
+
+### Multi-carrier domains
+
+For types that need the same domain semantics at different arities (e.g. `Vec2` and `Vec3`), define the domain once per carrier:
+
+```aivi
+domain Vector over Vec2 = { ... }
+domain Vector over Vec3 = { ... }
 ```
 
 ### Import/export
@@ -810,8 +862,10 @@ export domain Color                             // export domain
 
 ### Built-in vs domain-resolved operators
 
-Domain-resolved (when non-`Int`): `+`, `-`, `*`, `x`, `/`, `%`, `<`, `<=`, `>`, `>=`.
+Domain-resolved (when non-`Int`): `+`, `-`, `*`, `×`, `/`, `%`, `<`, `<=`, `>`, `>=`.
 Always built-in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
+
+**Domains are not implicit casts.** They supply operator semantics and literal templates only. No global coercions are introduced by importing a domain.
 
 ---
 
@@ -827,7 +881,7 @@ Always built-in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
 8. `^` (bitwise xor)
 9. `<<`, `>>` (shift)
 10. `+`, `-`, `++` (add, concat)
-11. `*`, `x`, `/`, `%` (multiply)
+11. `*`, `×`, `/`, `%` (multiply)
 12. `<|` (patch)
 
 Unary prefix: `!` (not), `-` (negate), `~` (bitwise complement).
