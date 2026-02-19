@@ -1,13 +1,13 @@
 use aivi.crypto
 
-- - Hashing
-digest = sha256 "hello world" - - hex string
-tag = hmacSha256 myKey myMessage - - keyed hash
+// Hashing
+digest = sha256 "hello world" // hex string
+tag = hmacSha256 myKey myMessage // keyed hash
 
-- - Password handling
-hashed <- hashPassword "s3cret" - - Argon2id PHC string
-ok <- verifyPassword "s3cret" hashed - - True
+// Password handling
+hashed <- hashPassword "s3cret" // Argon2id PHC string
+ok <- verifyPassword "s3cret" hashed // True
 
-- - Random
-id <- randomUuid () - - "550e8400-..."
-nonce <- randomBytes 32- -32 random bytes
+// Random
+id <- randomUuid () // "550e8400-..."
+nonce <- randomBytes 32 // 32 random bytes
