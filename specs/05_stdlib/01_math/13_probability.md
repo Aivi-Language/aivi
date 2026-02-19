@@ -11,6 +11,8 @@ Standard `random()` just gives you a boring uniform number between 0 and 1. But 
 This domain lets you define the *shape* of the chaotic world you want to simulate, and then draw mathematically correct samples from it.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.probability<span class="domain-badge">domain</span></div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/01_math/13_probability/block_01.aivi{aivi}

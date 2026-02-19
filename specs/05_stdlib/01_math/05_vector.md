@@ -1,4 +1,3 @@
-````markdown
 # Vector Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.vector"} -->
@@ -12,6 +11,8 @@ A **Vector** is just a number with a direction. It's the difference between sayi
 Graphics and physics use vectors for clean math (`v1 + v2`) and benefit from hardware acceleration (SIMD).
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.vector<span class="domain-badge">domain</span></div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_01.aivi{aivi}
@@ -72,5 +73,3 @@ These functions bridge vectors and matrices (see [Matrix](09_matrix.md)):
 ## Usage Examples
 
 <<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_04.aivi{aivi}
-
-````

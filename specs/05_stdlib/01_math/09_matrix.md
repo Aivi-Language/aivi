@@ -8,6 +8,8 @@ Think of a Matrix as a "teleporter instruction set" for points. A single 4x4 gri
 Manually calculating the new position of a 3D point after it's been rotated, moved, and scaled is incredibly complex algebra. Matrices simplify this to `Point * Matrix`. They are the mathematical engine behind every 3D game and renderer.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.matrix<span class="domain-badge">domain</span></div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/01_math/09_matrix/block_01.aivi{aivi}

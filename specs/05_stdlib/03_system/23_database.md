@@ -10,6 +10,8 @@ It builds on existing AIVI features:
 - **Effects** for explicit error handling
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.database<span class="domain-badge">domain</span></div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/03_system/23_database/block_01.aivi{aivi}

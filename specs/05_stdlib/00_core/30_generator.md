@@ -9,6 +9,8 @@ A generator is a pure, lazy sequence encoded as:
 
 This makes generators easy to map/filter/fold without loops or mutation.
 <!-- /quick-info -->
+<div class="import-badge">use aivi.generator</div>
+
 
 ## Overview
 

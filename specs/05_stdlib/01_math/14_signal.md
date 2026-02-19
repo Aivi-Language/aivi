@@ -10,6 +10,8 @@ Signals are everything: audio from a mic, vibrations in a bridge, or stock marke
 The **Fast Fourier Transform (FFT)** is a legendary algorithm that converts Time into Frequency. It lets you unbake a cake to find the ingredients. If you want to filter noise from audio, analyze heartbeats, or compress images, you need this domain.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.signal<span class="domain-badge">domain</span></div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/01_math/14_signal/block_01.aivi{aivi}

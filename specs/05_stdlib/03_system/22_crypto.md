@@ -1,4 +1,3 @@
-````markdown
 # Crypto Domain
 
 <!-- quick-info: {"kind":"module","name":"aivi.crypto"} -->
@@ -7,6 +6,8 @@ The `Crypto` domain provides essential tools for security and uniqueness.
 From generating unguessable **UUIDs** for database keys to hashing passwords with **SHA-256**, these functions ensure your program's sensitive data remains secure, unique, and tamper-evident.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.crypto</div>
+
 <<< ../../snippets/from_md/05_stdlib/03_system/22_crypto/block_01.aivi{aivi}
 
 ## Hashing
@@ -50,5 +51,3 @@ Password hashing uses deliberately slow algorithms to resist brute-force attacks
 | **secureEquals** a b<br><pre><code>`Bytes -> Bytes -> Bool`</code></pre> | Constant-time byte comparison (prevents timing attacks). |
 | **toHex** bytes<br><pre><code>`Bytes -> Text`</code></pre> | Encodes bytes as a lowercase hex string. |
 | **fromHex** text<br><pre><code>`Text -> Result CryptoError Bytes`</code></pre> | Decodes a hex string to bytes. |
-
-````

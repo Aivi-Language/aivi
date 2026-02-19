@@ -8,6 +8,8 @@ WebSocket as typed JSON messages, and the server diffs the VDOM to stream patch 
 back. No client-side VDOM is needed   patches target stable `data-aivi-node` ids.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.ui.ServerHtml</div>
+
 
 `aivi.ui.ServerHtml` is the recommended v0.1 backend bootstrap for server-driven UIs.
 

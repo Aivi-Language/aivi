@@ -5,6 +5,8 @@ The `aivi.math` module provides standard numeric functions and constants for `In
 It is intentionally small, predictable, and aligned with common math libraries across languages.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.math</div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/01_math/01_math/block_01.aivi{aivi}

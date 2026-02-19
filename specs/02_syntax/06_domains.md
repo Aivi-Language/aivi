@@ -33,6 +33,15 @@ Deltas represent a relative change or a typed quantity. They are written as nume
 
 These are **not** strings; they are typed values. `10m` might compile to a `Duration` struct or a float tagged as `Meters`, depending on the active domain.
 
+Common stdlib suffix examples:
+
+| Suffix | Domain | Type | Module |
+| --- | --- | --- | --- |
+| `10ms`, `1s`, `5min`, `2h` | Duration | `Duration` | [aivi.chronos.duration](../05_stdlib/02_chronos/03_duration.md) |
+| `1d`, `2w`, `3mo`, `1y` | Calendar | `CalendarDelta` | [aivi.chronos.calendar](../05_stdlib/02_chronos/02_calendar.md) |
+| `20deg`, `1.2rad` | Angle | `Angle` | [aivi.math](../05_stdlib/01_math/01_math.md) |
+| `10l`, `5s`, `30h` | Color | `ColorDelta` | [aivi.color](../05_stdlib/04_ui/04_color.md) |
+
 <<< ../snippets/from_md/02_syntax/06_domains/block_03.aivi{aivi}
 
 ### Suffix Application (Variables)
@@ -103,6 +112,12 @@ This requires the domain to be in scope (e.g. `use aivi.color (domain Color)`), 
 Some domains cover multiple types (e.g., `Vector` over `Vec2` and `Vec3`). In v0.1, this is handled by defining the domain multiple times, once for each carrier.
 
 <<< ../snippets/from_md/02_syntax/06_domains/block_07.aivi{aivi}
+
+## Interaction with Sigils
+
+Domains may define **sigils** (see [Sigils](13_sigils.md)) that produce domain-typed values. For example, the `Url` domain provides `~u(https://example.com)` and the `Path` domain provides `~path[/usr/local/bin]`. These sigils are validated at compile time and construct typed values, not raw strings.
+
+In v0.1 domains do not support defining custom sigils via the `domain` block — sigils are compiler-provided for stdlib domains. User-defined sigil–domain associations are planned for a future version.
 
 ## Interaction with type coercion
 

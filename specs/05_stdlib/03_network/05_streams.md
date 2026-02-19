@@ -4,6 +4,8 @@
 The `Streams` domain provides stream-oriented utilities for processing inbound and outbound data without loading everything into memory.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.net.streams</div>
+
 <<< ../../snippets/from_md/05_stdlib/03_network/05_streams/block_01.aivi{aivi}
 
 ## Types

@@ -6,6 +6,8 @@
 The `TimeZone` and `ZonedDateTime` domains handle geographic time offsets, daylight saving transitions, and global time coordination.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.chronos.timezone<span class="domain-badge">domain</span></div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/02_chronos/04_timezone/block_01.aivi{aivi}

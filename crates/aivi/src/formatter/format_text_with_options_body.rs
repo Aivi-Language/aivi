@@ -28,6 +28,7 @@
         Resource,
         MapSigil,
         SetSigil,
+        Machine,
         Other,
     }
 
@@ -47,6 +48,7 @@
         effect_align_lhs: Option<usize>,
         arm_align_pat: Option<usize>,
         map_align_key: Option<usize>,
+        machine_align: Option<(usize, usize, usize)>,
         degraded: bool,
     }
 
@@ -648,6 +650,7 @@
     let mut degraded = false;
     let mut prev_non_comment_text: Option<String> = None;
     let mut prevprev_non_comment_text: Option<String> = None;
+    let mut machine_pending = false;
 
     let mut lines: Vec<LineState<'_>> = Vec::with_capacity(raw_lines.len());
 
@@ -687,6 +690,7 @@
             effect_align_lhs: None,
             arm_align_pat: None,
             map_align_key: None,
+            machine_align: None,
             degraded,
         });
 
@@ -706,6 +710,9 @@
                 continue;
             }
             let text = t.text.as_str();
+            if text == "machine" {
+                machine_pending = true;
+            }
             if let Some(open) = is_open_sym(text) {
                 let kind = match (
                     open,
@@ -717,7 +724,14 @@
                     ('{', Some("resource"), _) => ContextKind::Resource,
                     ('{', Some("map"), Some("~")) => ContextKind::MapSigil,
                     ('[', Some("set"), Some("~")) => ContextKind::SetSigil,
-                    _ => ContextKind::Other,
+                    _ => {
+                        if machine_pending && open == '{' {
+                            machine_pending = false;
+                            ContextKind::Machine
+                        } else {
+                            ContextKind::Other
+                        }
+                    }
                 };
                 stack.push(OpenFrame { sym: open, kind });
             } else if let Some(close) = is_close_sym(text) {
@@ -861,6 +875,62 @@
                 }
                 i = j;
                 continue;
+            }
+
+            // Machine transition alignment groups (inside `machine ... = { ... }`).
+            if lines[i].top_context == Some(ContextKind::Machine) {
+                if find_top_level_token(&lines[i].tokens, "->", first_idx).is_some() {
+                    let mut j = i;
+                    let mut max_source = 0usize;
+                    let mut max_target = 0usize;
+                    let mut max_event = 0usize;
+                    while j < lines.len() {
+                        if lines[j].tokens.is_empty() || lines[j].degraded {
+                            break;
+                        }
+                        if lines[j].top_context != Some(ContextKind::Machine) {
+                            break;
+                        }
+                        let first_idx_j = match first_code_index(&lines[j].tokens) {
+                            Some(v) => v,
+                            None => break,
+                        };
+                        let Some(arrow_idx) =
+                            find_top_level_token(&lines[j].tokens, "->", first_idx_j)
+                        else {
+                            break;
+                        };
+                        // source = tokens before `->` (may be empty for initial transitions)
+                        let source_tokens = &lines[j].tokens[first_idx_j..arrow_idx];
+                        let source_str =
+                            format_tokens_simple(source_tokens, lines[j].top_delim).trim().to_string();
+                        max_source = max_source.max(source_str.len());
+                        // target = tokens between `->` and first top-level `:`
+                        let colon_idx = find_top_level_token(&lines[j].tokens, ":", arrow_idx + 1);
+                        let target_end = colon_idx.unwrap_or(lines[j].tokens.len());
+                        let target_tokens = &lines[j].tokens[arrow_idx + 1..target_end];
+                        let target_str =
+                            format_tokens_simple(target_tokens, lines[j].top_delim).trim().to_string();
+                        max_target = max_target.max(target_str.len());
+                        // event = tokens between `:` and first top-level `{` (or end)
+                        if let Some(colon_idx) = colon_idx {
+                            let brace_idx = find_top_level_token(&lines[j].tokens, "{", colon_idx + 1);
+                            let event_end = brace_idx.unwrap_or(lines[j].tokens.len());
+                            let event_tokens = &lines[j].tokens[colon_idx + 1..event_end];
+                            let event_str =
+                                format_tokens_simple(event_tokens, lines[j].top_delim).trim().to_string();
+                            max_event = max_event.max(event_str.len());
+                        }
+                        j += 1;
+                    }
+                    if j > i {
+                        for line in lines.iter_mut().take(j).skip(i) {
+                            line.machine_align = Some((max_source, max_target, max_event));
+                        }
+                    }
+                    i = j;
+                    continue;
+                }
             }
         }
 
@@ -1533,6 +1603,86 @@
                         rhs_next_line_depth = Some(depth);
                         rhs_block_base_indent = Some(line_indent_len);
                         rhs_block_base_depth = Some(line_depth);
+                    }
+                }
+                update_open_depth(&mut open_depth, &state.tokens);
+                continue;
+            }
+        }
+
+        if let Some((max_source, max_target, max_event)) = state.machine_align {
+            if let Some(arrow_idx) = find_top_level_token(&state.tokens, "->", first_idx) {
+                // source = tokens before `->`
+                let source_tokens = &state.tokens[first_idx..arrow_idx];
+                let source = format_tokens_simple(source_tokens, state.top_delim)
+                    .trim()
+                    .to_string();
+                // target = tokens between `->` and first top-level `:`
+                let colon_idx = find_top_level_token(&state.tokens, ":", arrow_idx + 1);
+                let target_end = colon_idx.unwrap_or(state.tokens.len());
+                let target_tokens = &state.tokens[arrow_idx + 1..target_end];
+                let target = format_tokens_simple(target_tokens, state.top_delim)
+                    .trim()
+                    .to_string();
+                // event = tokens between `:` and first top-level `{`
+                let (event, payload) = if let Some(colon_idx) = colon_idx {
+                    let brace_idx =
+                        find_top_level_token(&state.tokens, "{", colon_idx + 1);
+                    let event_end = brace_idx.unwrap_or(state.tokens.len());
+                    let event_tokens = &state.tokens[colon_idx + 1..event_end];
+                    let event_str = format_tokens_simple(event_tokens, state.top_delim)
+                        .trim()
+                        .to_string();
+                    let payload_str = if let Some(brace_idx) = brace_idx {
+                        let payload_tokens = &state.tokens[brace_idx..];
+                        format_tokens_simple(payload_tokens, state.top_delim)
+                            .trim()
+                            .to_string()
+                    } else {
+                        String::new()
+                    };
+                    (event_str, payload_str)
+                } else {
+                    (String::new(), String::new())
+                };
+
+                out.push_str(&effective_indent);
+                // Source column (left-aligned, padded to max_source width)
+                if !source.is_empty() {
+                    out.push_str(&source);
+                    out.push_str(&" ".repeat(max_source.saturating_sub(source.len())));
+                } else {
+                    out.push_str(&" ".repeat(max_source));
+                }
+                if max_source > 0 {
+                    out.push(' ');
+                }
+                out.push_str("->");
+                out.push(' ');
+                out.push_str(&target);
+                // Pad target to max_target width
+                let target_pad = max_target.saturating_sub(target.len());
+                out.push_str(&" ".repeat(target_pad));
+                if !event.is_empty() || !payload.is_empty() {
+                    out.push_str(" : ");
+                    out.push_str(&event);
+                    if !payload.is_empty() {
+                        let event_pad = max_event.saturating_sub(event.len());
+                        out.push_str(&" ".repeat(event_pad));
+                        out.push(' ');
+                        out.push_str(&payload);
+                    }
+                }
+
+                rendered_lines.push(out);
+                prev_effective_indent_len = effective_indent_len;
+                prev_non_blank_last_token = last_continuation_token(&state.tokens);
+                if should_pop_hang {
+                    hang_delim_stack.pop();
+                }
+                if let Some(last) = last_code_token(&state.tokens) {
+                    if let Some(open) = is_open_sym(&last) {
+                        hang_delim_stack.push((open, prev_effective_indent_len));
                     }
                 }
                 update_open_depth(&mut open_depth, &state.tokens);

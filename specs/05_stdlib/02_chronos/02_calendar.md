@@ -8,6 +8,8 @@ Handling time is deceptively hard. Ideally, a day is 24 hours. In reality, month
 The `Calendar` domain hides this chaos. Writing `timestamp + 86400` works until a leap second deletes your data. This domain ensures that when you say "Next Month," it handles the math correctly whether it's February or July making your scheduling logic reliable and legible.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.chronos.calendar<span class="domain-badge">domain</span></div>
+
 ## Overview
 
 <<< ../../snippets/from_md/05_stdlib/02_chronos/02_calendar/block_01.aivi{aivi}

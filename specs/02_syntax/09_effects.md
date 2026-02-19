@@ -184,11 +184,11 @@ Effect blocks can be combined with pipelines and pattern matching to create very
 
 ```aivi
 do Effect {
-  -- setup
+  // setup
   loop state = initialValue => {
-    -- body may use `<-` binds, pure `=` lets, and if/match
-    -- `recurse newState` restarts the loop
-    -- omitting `recurse` in a branch terminates the loop
+    // body may use `<-` binds, pure `=` lets, and if/match
+    // `recurse newState` restarts the loop
+    // omitting `recurse` in a branch terminates the loop
   }
 }
 ```
@@ -230,7 +230,7 @@ loop pat = init => { body }
 becomes:
 
 ```
-__loopN = pat => body'   -- body' has `recurse x` replaced with `__loopN x`
+__loopN = pat => body'   // body' has `recurse x` replaced with `__loopN x`
 __loopN init
 ```
 
@@ -265,6 +265,36 @@ do Effect {
 ```aivi
 do Effect {
   given (age >= 18) or fail (AccessDenied "must be 18+")
-  -- continues only if age >= 18
+  // continues only if age >= 18
 }
 ```
+
+## 9.8 `do` notation scope (v0.1)
+
+In v0.1, `do` blocks are limited to **`Effect`** only. There is no `do Option { ... }` or `do List { ... }` syntax, even though `Option` and `List` have `Monad` instances (see [Logic: Monad](../05_stdlib/00_core/03_logic.md)).
+
+For `Option` chaining, use `??` (coalesce), `match`, or explicit `chain`/`flatMap`:
+
+```aivi
+// Option chaining with ?? and match
+name = user.name ?? "anonymous"
+
+// Explicit chain for Option
+result =
+  lookupUser id
+  |> chain (u => u.email)
+  |> chain (e => validateEmail e)
+```
+
+For `List` comprehensions, use [generators](07_generators.md):
+
+```aivi
+// List comprehension via generator
+pairs = generate {
+  x <- [1, 2, 3]
+  y <- [4, 5, 6]
+  yield (x, y)
+}
+```
+
+Generalizing `do` notation to arbitrary `Monad` instances is under consideration for a future version.

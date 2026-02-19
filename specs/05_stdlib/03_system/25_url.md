@@ -6,6 +6,8 @@ The `Url` domain handles **Uniform Resource Locators** without the string-mashin
 A URL isn't just text; it's a structured address with protocols, hosts, and queries. Concatenating strings to build URLs leads to bugs (missing `/`, double `?`, unescaped spaces). This domain treats URLs as safe, structured records, letting you modify protocols or add query parameters without breaking the address.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.url<span class="domain-badge">domain</span></div>
+
 ## Module
 
 <<< ../../snippets/from_md/05_stdlib/03_system/25_url/block_01.aivi{aivi}

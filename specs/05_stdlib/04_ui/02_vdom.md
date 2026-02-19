@@ -6,6 +6,8 @@
 The `aivi.ui` module defines a **typed Virtual DOM** (`VNode msg`). Programs construct `VNode` trees and leave rendering + diffing to the runtime.
 
 <!-- /quick-info -->
+<div class="import-badge">use aivi.ui</div>
+
 ## Core Types
 
 <<< ../../snippets/from_md/05_stdlib/04_ui/02_vdom/block_01.aivi{aivi}

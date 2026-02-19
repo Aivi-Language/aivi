@@ -11,3 +11,28 @@ code, kbd, samp, pre {
   font-family: var(--vp-font-family-mono) !important;
   font-variant-ligatures: contextual;
 }
+
+.import-badge {
+  display: inline-block;
+  margin-bottom: 16px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: var(--vp-font-family-mono);
+  background: var(--vp-badge-tip-bg, rgba(16, 185, 129, 0.14));
+  color: var(--vp-badge-tip-text, #10b981);
+  border: 1px solid var(--vp-badge-tip-border, rgba(16, 185, 129, 0.3));
+}
+
+.domain-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: var(--vp-font-family-mono);
+  background: var(--vp-badge-warning-bg, rgba(234, 179, 8, 0.14));
+  color: var(--vp-badge-warning-text, #d97706);
+  border: 1px solid var(--vp-badge-warning-border, rgba(234, 179, 8, 0.3));
+  vertical-align: middle;
+}

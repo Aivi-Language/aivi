@@ -5,6 +5,8 @@ The `Path` domain provides a **structured filesystem path** type and safe, compo
 
 Use `~path[...]` to build a `Path` literal without string-mashing separators, and `/` to join paths.
 <!-- /quick-info -->
+<div class="import-badge">use aivi.path<span class="domain-badge">domain</span></div>
+
 
 ## Module
 
