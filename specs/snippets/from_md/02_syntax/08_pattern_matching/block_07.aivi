@@ -1,4 +1,4 @@
 // Parsed as: `Err (NotFound m)`
 msg = res match
-| Err NotFound m => m
-| _              => "no-msg"
+  | Err NotFound m => m
+  | _              => "no-msg"

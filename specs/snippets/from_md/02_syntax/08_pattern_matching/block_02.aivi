@@ -5,5 +5,5 @@ greet =
 
 // Equivalent explicit form
 greet2 = u => u match
-| None      => "hi"
-| Some name => "hi {name}"
+  | None      => "hi"
+  | Some name => "hi {name}"

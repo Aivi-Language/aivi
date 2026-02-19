@@ -9,11 +9,13 @@ transfer = fromAccount toAccount amount => do Effect {
 
 // Equivalent functional composition
 transfer = fromAccount toAccount amount =>
-(getBalance fromAccount |> bind) (balance =>
-  if balance >= amount then
-  (withdraw fromAccount amount |> bind) (_ =>
-    (deposit toAccount amount |> bind) (_ =>
-      pure Unit))
-  else
-  fail InsufficientFunds
-)
+  (getBalance fromAccount |> bind) (balance =>
+    if balance >= amount then
+      (withdraw fromAccount amount |> bind) (_ =>
+      (deposit toAccount amount |> bind) (_ =>
+        pure Unit
+      )
+      )
+    else
+      fail InsufficientFunds
+      )

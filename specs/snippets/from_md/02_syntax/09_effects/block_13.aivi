@@ -2,10 +2,10 @@
 main = do Effect {
   res <- attempt (foo x)
   verdict = res match
-  | Ok _  => "ok"
-  | Err _ => "err"
+    | Ok _  => "ok"
+    | Err _ => "err"
 
-  _ <- print verdict
+    _ <- print verdict
 
-  _ <- if cond then print "branch" else pure Unit
+    _ <- if cond then print "branch" else pure Unit
 }

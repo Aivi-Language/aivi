@@ -1,8 +1,7 @@
 use aivi.logic
 
 instance Functor (Option *) = {
-  map: f opt =>
-    opt match
-  | None   => None
-  | Some x => Some (f x)
+  map: f opt => opt match
+    | None   => None
+    | Some x => Some (f x)
 }

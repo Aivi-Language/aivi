@@ -35,9 +35,9 @@ Pred A = A => Bool
 
 // Select the runtime backend.
 Driver =
-| Sqlite
-| Postgresql
-| Mysql
+  | Sqlite
+  | Postgresql
+  | Mysql
 
 // Configure the default database backend used by db.load / db.applyDelta / db.runMigrations.
 // - Sqlite: url is a filesystem path or ":memory:".

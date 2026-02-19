@@ -1,6 +1,6 @@
 // Fetch config, then fetch data, then log
 setup = do Effect {
-  cfg  <- loadConfig "prod.json"
+  cfg <- loadConfig "prod.json"
   data <- fetchRemoteData cfg
   logSuccess data
 }

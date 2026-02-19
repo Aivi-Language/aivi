@@ -9,6 +9,6 @@ newPos = position + velocity * 0.016 // 60fps frame
 direction = normalize velocity
 
 // Vector × Matrix
-rotation = identity2  // placeholder for a real rotation matrix
+rotation = identity2 // placeholder for a real rotation matrix
 transformed = transform2 rotation position
 ```

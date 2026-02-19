@@ -1,2 +1,2 @@
-instance Monad (Option *) = { ... }
-instance Monad (Result E *) = { ... }
+instance Monad (Option *) = { ...}
+instance Monad (Result E *) = { ...}

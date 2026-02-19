@@ -1,6 +1,6 @@
 // Business rule mapping
 discount = user => user match
-| _ when user.age > 65 && user.tier == Gold => 0.3
-| _ when user.tier == Gold                  => 0.2
-| _ when user.tier == Silver                => 0.1
-| _                                         => 0.0
+  | _ when user.age > 65 && user.tier == Gold => 0.3
+  | _ when user.tier == Gold                  => 0.2
+  | _ when user.tier == Silver                => 0.1
+  | _                                         => 0.0

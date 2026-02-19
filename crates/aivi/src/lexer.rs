@@ -121,21 +121,6 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
             });
             continue;
         }
-        if ch == '-' && index + 1 < chars.len() && chars[index + 1] == '-' {
-            let start = index;
-            let start_col = col;
-            while index < chars.len() && chars[index] != '\n' {
-                index += 1;
-                col += 1;
-            }
-            let text: String = chars[start..index].iter().collect();
-            tokens.push(CstToken {
-                kind: "comment".to_string(),
-                text,
-                span: span_single(line, start_col, index - start),
-            });
-            continue;
-        }
 
         if ch == '"' {
             let start = index;
@@ -718,14 +703,14 @@ mod tests {
     }
 
     #[test]
-    fn lex_recognizes_line_comments_for_slashslash_and_dashdash() {
-        let src = "x = 1 // hello\n\ny = 2 -- world\n";
+    fn lex_recognizes_line_comments() {
+        let src = "x = 1 // hello\n\ny = 2 // world\n";
         let (tokens, diags) = lex(src);
         assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
         let comments: Vec<&CstToken> = tokens.iter().filter(|t| t.kind == "comment").collect();
         assert_eq!(comments.len(), 2);
         assert_eq!(comments[0].text, "// hello");
-        assert_eq!(comments[1].text, "-- world");
+        assert_eq!(comments[1].text, "// world");
     }
 
     #[test]

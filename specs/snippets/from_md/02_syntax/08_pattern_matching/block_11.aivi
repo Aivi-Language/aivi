@@ -5,9 +5,9 @@ head =
 
 // Take first n
 take = (n, xs) => (n, xs) match
-| (n, _) when n <= 0 => []
-| (_, [])            => []
-| (n, [x, ...xs])    => [x, ...take (n - 1, xs)]
+  | (n, _) when n <= 0 => []
+  | (_, [])            => []
+  | (n, [x, ...xs])    => [x, ...take (n - 1, xs)]
 
 // Zip two lists
 zip =

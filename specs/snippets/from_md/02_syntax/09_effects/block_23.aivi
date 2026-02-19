@@ -2,8 +2,8 @@
 getUser = id => do Effect {
   res <- attempt (api.fetchUser id)
   res match
-  | Ok user => pure user
-  | Err _   => pure GuestUser
+    | Ok user => pure user
+    | Err _   => pure GuestUser
 }
 
 validatedUser = do Effect {

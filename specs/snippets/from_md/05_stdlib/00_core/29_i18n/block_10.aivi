@@ -12,7 +12,7 @@ main = do Effect {
     bundleFromProperties locale props
     or { locale: locale, entries: Map.empty }
 
-  print (t bundle (~k"app.welcome") { name: "Alice" })
-  print (t bundle (~k"app.lastLogin") { when: "2026-02-12" })
+    print (t bundle (~k"app.welcome") { name: "Alice" })
+    print (t bundle (~k"app.lastLogin") { when: "2026-02-12" })
 }
-```
+  ```
