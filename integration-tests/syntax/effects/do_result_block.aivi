@@ -1,0 +1,56 @@
+@no_prelude
+module integrationTests.syntax.effects.doResultBlock
+
+use aivi
+use aivi.testing
+
+// Happy path: all binds succeed, result is Ok 30
+@test
+doResultHappyPath = do Effect {
+  result = do Result {
+    x <- Ok 10
+    y <- Ok 20
+    Ok (x + y)
+  }
+  assertEq result (Ok 30)
+}
+
+// Short-circuit: Err aborts the block early
+@test
+doResultShortCircuit = do Effect {
+  result = do Result {
+    x <- Ok 1
+    y <- Err "oops"
+    Ok (x + y)
+  }
+  assertEq result (Err "oops")
+}
+
+// Let-binding inside do Result wraps value in Ok
+@test
+doResultLetBinding = do Effect {
+  result = do Result {
+    x = 99
+    Ok x
+  }
+  assertEq result (Ok 99)
+}
+
+// Single expression block
+@test
+doResultSingleExpr = do Effect {
+  result = do Result {
+    Ok "done"
+  }
+  assertEq result (Ok "done")
+}
+
+// Err as the final expression
+@test
+doResultErrFinal = do Effect {
+  result = do Result {
+    x <- Ok 5
+    Err "failed"
+  }
+  assertEq result (Err "failed")
+}

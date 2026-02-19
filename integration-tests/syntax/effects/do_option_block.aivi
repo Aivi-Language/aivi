@@ -1,0 +1,56 @@
+@no_prelude
+module integrationTests.syntax.effects.doOptionBlock
+
+use aivi
+use aivi.testing
+
+// Happy path: both binds succeed, result is Some 3
+@test
+doOptionHappyPath = do Effect {
+  result = do Option {
+    x <- Some 1
+    y <- Some 2
+    Some (x + y)
+  }
+  assertEq result (Some 3)
+}
+
+// Short-circuit: None aborts the block early
+@test
+doOptionShortCircuit = do Effect {
+  result = do Option {
+    x <- Some 10
+    y <- None
+    Some (x + y)
+  }
+  assertEq result None
+}
+
+// Let-binding inside do Option wraps value in Some
+@test
+doOptionLetBinding = do Effect {
+  result = do Option {
+    x = 42
+    Some x
+  }
+  assertEq result (Some 42)
+}
+
+// Single expression block
+@test
+doOptionSingleExpr = do Effect {
+  result = do Option {
+    Some "hello"
+  }
+  assertEq result (Some "hello")
+}
+
+// None as the final expression
+@test
+doOptionNoneFinal = do Effect {
+  result = do Option {
+    x <- Some 1
+    None
+  }
+  assertEq result None
+}
