@@ -20,6 +20,9 @@ jobs:
     defaults:
       run:
         working-directory: vscode
+    env:
+      # Secrets are not available in `if:` expressions; gate publishing via `env`.
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
     steps:
       - uses: actions/checkout@v4
@@ -68,9 +71,7 @@ jobs:
           git push --follow-tags
 
       - name: Publish to VS Code Marketplace
-        if: ${{ secrets.VSCE_PAT != '' }}
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        if: env.VSCE_PAT != ''
         run: pnpm exec vsce publish --no-dependencies --pat "$VSCE_PAT"
 
       - name: Upload VSIX
