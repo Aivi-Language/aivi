@@ -137,6 +137,149 @@ impl TypeChecker {
         Ok(Type::con("Effect").app(vec![err_ty, result_ty]))
     }
 
+    /// Type-check a generic `do M { ... }` block where `M` is not `Effect`.
+    ///
+    /// The block's type is `M result_ty`. Binds (`x <- expr`) unify `expr` with
+    /// `M A` and bind `x : A`. Let-bindings (`x = expr`) are pure. Expression
+    /// statements must be `M Unit` (non-final) or `M A` (final).
+    ///
+    /// Effect-specific statements (`when`, `unless`, `given`, `on`, `recurse`)
+    /// produce type errors since they are not available in generic monadic blocks.
+    fn infer_generic_do_block(
+        &mut self,
+        monad_name: &str,
+        _monad_span: &Span,
+        items: &[BlockItem],
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
+        // Verify the monad type constructor exists (it must be a known type).
+        // For now, we accept Option and Result as known monadic types.
+        // In the future this will resolve a Monad instance via class resolution.
+        let monad_con = monad_name.to_string();
+
+        let mut local_env = env.clone();
+        let mut result_ty = Type::con("Unit");
+
+        for (idx, item) in items.iter().enumerate() {
+            match item {
+                BlockItem::Bind { pattern, expr, .. } => {
+                    let expr_ty = self.infer_expr(expr, &mut local_env)?;
+                    let value_ty = self.fresh_var();
+                    let expected = if monad_con == "Result" {
+                        // Result E A — partially applied, error type is inferred
+                        let err_var = self.fresh_var();
+                        Type::con(&monad_con).app(vec![err_var, value_ty.clone()])
+                    } else {
+                        // Option A, List A, etc.
+                        Type::con(&monad_con).app(vec![value_ty.clone()])
+                    };
+                    self.unify_with_span(expr_ty, expected, expr_span(expr))?;
+                    let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    self.unify_with_span(pat_ty, value_ty, pattern_span(pattern))?;
+                }
+                BlockItem::Let { pattern, expr, .. } => {
+                    let expr_ty = self.infer_expr(expr, &mut local_env)?;
+                    let pat_ty = self.infer_pattern(pattern, &mut local_env)?;
+                    self.unify_with_span(pat_ty, expr_ty, pattern_span(pattern))?;
+                }
+                BlockItem::Expr { expr, .. } => {
+                    let expr_ty = self.infer_expr(expr, &mut local_env)?;
+                    if idx + 1 == items.len() {
+                        // Final expression: must be M A, determines the block's result type
+                        result_ty = self.fresh_var();
+                        let expected = if monad_con == "Result" {
+                            let err_var = self.fresh_var();
+                            Type::con(&monad_con).app(vec![err_var, result_ty.clone()])
+                        } else {
+                            Type::con(&monad_con).app(vec![result_ty.clone()])
+                        };
+                        self.unify_with_span(expr_ty, expected, expr_span(expr))?;
+                    } else {
+                        // Non-final expression: must be M Unit
+                        let expected = if monad_con == "Result" {
+                            let err_var = self.fresh_var();
+                            Type::con(&monad_con).app(vec![err_var, Type::con("Unit")])
+                        } else {
+                            Type::con(&monad_con).app(vec![Type::con("Unit")])
+                        };
+                        self.unify_with_span(expr_ty, expected, expr_span(expr))?;
+                    }
+                }
+                // Effect-specific statements are not allowed in generic do blocks
+                BlockItem::When { span, .. }
+                | BlockItem::Unless { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: format!(
+                            "`when`/`unless` is only available in `do Effect {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
+                        ),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::Given { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: format!(
+                            "`given` is only available in `do Effect {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
+                        ),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::On { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: format!(
+                            "`on` is only available in `do Effect {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
+                        ),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::Recurse { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: format!(
+                            "`recurse` is only available in `do Effect {{ ... }}` or `generate {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
+                        ),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::Filter { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: format!(
+                            "guards are only available in `generate {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
+                        ),
+                        expected: None,
+                        found: None,
+                    });
+                }
+                BlockItem::Yield { span, .. } => {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: format!(
+                            "`yield` is only available in `generate {{ ... }}` blocks, not `do {monad_name} {{ ... }}`"
+                        ),
+                        expected: None,
+                        found: None,
+                    });
+                }
+            }
+        }
+
+        // Build the block's return type: M result_ty
+        let block_ty = if monad_con == "Result" {
+            let err_var = self.fresh_var();
+            Type::con(&monad_con).app(vec![err_var, result_ty])
+        } else {
+            Type::con(&monad_con).app(vec![result_ty])
+        };
+        Ok(block_ty)
+    }
+
     fn infer_generate_block(
         &mut self,
         items: &[BlockItem],

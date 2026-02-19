@@ -269,27 +269,58 @@ do Effect {
 }
 ```
 
-## 9.8 `do` notation scope (v0.1)
+## 9.8 Generic `do` notation
 
-In v0.1, `do` blocks are limited to **`Effect`** only. There is no `do Option { ... }` or `do List { ... }` syntax, even though `Option` and `List` have `Monad` instances (see [Logic: Monad](../05_stdlib/00_core/03_logic.md)).
+The `do` block syntax generalizes beyond `Effect` to any type constructor with monadic behavior. Currently **`Option`** and **`Result`** are supported alongside `Effect`.
 
-For `Option` chaining, use `??` (coalesce), `match`, or explicit `chain`/`flatMap`:
+### `do Option { ... }`
+
+Short-circuit chaining: binds unwrap `Some`, and `None` aborts the block early.
 
 ```aivi
-// Option chaining with ?? and match
-name = user.name ?? "anonymous"
+result = do Option {
+  x <- Map.get "a" myMap
+  y <- Map.get "b" myMap
+  Some (x + y)
+}
+// result : Option Int — None if either lookup fails
+```
 
-// Explicit chain for Option
-result =
-  lookupUser id
-  |> chain (u => u.email)
-  |> chain (e => validateEmail e)
+### `do Result { ... }`
+
+Pure error chaining: binds unwrap `Ok`, and `Err` short-circuits.
+
+```aivi
+result = do Result {
+  x <- parseFloat input
+  y <- validate x
+  Ok (x + y)
+}
+// result : Result E Float — Err if parsing or validation fails
+```
+
+### Restricted statement set
+
+Generic `do M` blocks support only the common monadic subset:
+
+| Statement | Available? |
+| :--- | :---: |
+| `x <- expr` (bind) | yes |
+| `x = expr` (let) | yes |
+| `expr` (sequencing) | yes |
+| `or`, `when`, `unless`, `given`, `on`, `loop`/`recurse`, resource `<-` | **no** (Effect-only) |
+
+Attempting to use Effect-specific statements in a generic `do` block produces a type error.
+
+For `Option` chaining without a full `do` block, `??` (coalesce) and `match` remain idiomatic:
+
+```aivi
+name = user.name ?? "anonymous"
 ```
 
 For `List` comprehensions, use [generators](07_generators.md):
 
 ```aivi
-// List comprehension via generator
 pairs = generate {
   x <- [1, 2, 3]
   y <- [4, 5, 6]
@@ -297,4 +328,4 @@ pairs = generate {
 }
 ```
 
-Generalizing `do` notation to arbitrary `Monad` instances is under consideration for a future version.
+See [Generic Monadic `do` Blocks](16_do_notation.md) for the full specification, desugaring rules, and future plans.

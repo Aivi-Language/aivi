@@ -518,11 +518,14 @@ impl Runtime {
                 block_kind, items, ..
             } => match block_kind {
                 crate::hir::HirBlockKind::Plain => self.eval_plain_block(items, env),
-                crate::hir::HirBlockKind::Effect => {
+                crate::hir::HirBlockKind::Do { ref monad } if monad == "Effect" => {
                     Ok(Value::Effect(Arc::new(EffectValue::Block {
                         env: env.clone(),
                         items: Arc::new(items.clone()),
                     })))
+                }
+                crate::hir::HirBlockKind::Do { ref monad } => {
+                    self.eval_generic_do_block(monad, items, env)
                 }
                 crate::hir::HirBlockKind::Resource => {
                     Ok(Value::Resource(Arc::new(ResourceValue {

@@ -267,7 +267,7 @@ pub(super) fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, Aivi
         }
         RustIrExpr::Block {
             block_kind, items, ..
-        } => emit_block(*block_kind, items, indent)?,
+        } => emit_block(block_kind.clone(), items, indent)?,
         RustIrExpr::Raw { text, .. } => {
             return Err(AiviError::Codegen(format!(
                 "raw expressions are not supported by the native backend yet: {text}"

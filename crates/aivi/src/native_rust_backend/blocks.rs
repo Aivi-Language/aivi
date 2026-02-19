@@ -67,7 +67,7 @@ pub(super) fn emit_block(
             s.push_str(&ind);
             s.push('}');
         }
-        RustIrBlockKind::Effect => {
+        RustIrBlockKind::Do { ref monad } if monad == "Effect" => {
             // Effect blocks manage resource cleanups. We run cleanups even if the body errors,
             // and prefer the original error over cleanup errors.
             let captured = collect_free_locals_in_items(items);
@@ -183,6 +183,11 @@ pub(super) fn emit_block(
             s.push_str("}),\n");
             s.push_str(&ind);
             s.push_str("})))");
+        }
+        RustIrBlockKind::Do { ref monad } => {
+            return Err(AiviError::Codegen(format!(
+                "generic `do {monad} {{ ... }}` blocks are not yet supported in native codegen"
+            )));
         }
         RustIrBlockKind::Generate => {
             s.push_str(&emit_generate_block(items, indent)?);

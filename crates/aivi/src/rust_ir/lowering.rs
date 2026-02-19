@@ -262,10 +262,11 @@ pub enum RustIrLiteral {
     DateTime(String),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum RustIrBlockKind {
     Plain,
-    Effect,
+    /// `do M { ... }` — monadic block. `monad` is the type constructor name.
+    Do { monad: String },
     Generate,
     Resource,
 }

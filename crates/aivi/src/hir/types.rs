@@ -250,9 +250,25 @@ pub enum HirLiteral {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum HirBlockKind {
     Plain,
-    Effect,
+    /// `do M { ... }` — monadic block. `monad` is the type constructor name
+    /// (e.g. `"Effect"`, `"Option"`, `"Result"`).
+    Do { monad: String },
     Generate,
     Resource,
+}
+
+impl HirBlockKind {
+    /// Returns `true` when the block is the special `do Effect { ... }` form
+    /// which supports effect-specific statements (`or`, `when`, `unless`, `given`, `on`,
+    /// resource acquisition, `loop`/`recurse`).
+    pub fn is_effect(&self) -> bool {
+        matches!(self, HirBlockKind::Do { monad } if monad == "Effect")
+    }
+
+    /// Returns `true` for any `do M { ... }` block (generic monadic).
+    pub fn is_do(&self) -> bool {
+        matches!(self, HirBlockKind::Do { .. })
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -583,7 +583,7 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
 fn lower_block_kind(kind: &BlockKind) -> HirBlockKind {
     match kind {
         BlockKind::Plain => HirBlockKind::Plain,
-        BlockKind::Do { .. } => HirBlockKind::Effect,
+        BlockKind::Do { monad } => HirBlockKind::Do { monad: monad.name.clone() },
         BlockKind::Generate => HirBlockKind::Generate,
         BlockKind::Resource => HirBlockKind::Resource,
     }

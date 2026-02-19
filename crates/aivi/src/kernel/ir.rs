@@ -239,7 +239,8 @@ pub enum KernelLiteral {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum KernelBlockKind {
     Plain,
-    Effect,
+    /// `do M { ... }` — monadic block. `monad` is the type constructor name.
+    Do { monad: String },
     Generate,
     Resource,
 }
