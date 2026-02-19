@@ -185,8 +185,10 @@ pub(super) fn emit_block(
             s.push_str("})))");
         }
         RustIrBlockKind::Do { ref monad } => {
+            // Generic `do M` blocks (M ≠ Effect) are desugared into chain/of
+            // calls at HIR lowering. This path should be unreachable.
             return Err(AiviError::Codegen(format!(
-                "generic `do {monad} {{ ... }}` blocks are not yet supported in native codegen"
+                "internal: `do {monad} {{ ... }}` block was not desugared during HIR lowering"
             )));
         }
         RustIrBlockKind::Generate => {

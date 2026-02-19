@@ -439,7 +439,7 @@
         let mut rows: Vec<Vec<String>> = Vec::new();
         let mut row: Vec<String> = Vec::new();
         let mut token = String::new();
-        let mut push_token = |row: &mut Vec<String>, token: &mut String| {
+        let push_token = |row: &mut Vec<String>, token: &mut String| {
             if !token.is_empty() {
                 row.push(token.clone());
                 token.clear();

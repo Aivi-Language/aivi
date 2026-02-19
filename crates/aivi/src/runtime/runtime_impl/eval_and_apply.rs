@@ -79,125 +79,19 @@ impl Runtime {
 
     /// Evaluate a generic `do M { ... }` block (where M is not Effect).
     ///
-    /// For `do Option { ... }`: binds unwrap `Some`, short-circuit on `None`.
-    /// For `do Result { ... }`: binds unwrap `Ok`, short-circuit on `Err`.
-    /// For other monads: look up `chain`/`of` from stdlib (future).
+    /// Since v0.1, generic `do M` blocks are desugared into nested `chain`/`of`
+    /// calls at the HIR lowering stage. This method should no longer be reached
+    /// for well-formed programs. It is kept as a defensive fallback.
     fn eval_generic_do_block(
         &mut self,
         monad: &str,
-        items: &[HirBlockItem],
-        env: &Env,
+        _items: &[HirBlockItem],
+        _env: &Env,
     ) -> Result<Value, RuntimeError> {
-        let local_env = Env::new(Some(env.clone()));
-        let mut result = match monad {
-            "Option" => Value::Constructor {
-                name: "Some".to_string(),
-                args: vec![Value::Unit],
-            },
-            "Result" => Value::Constructor {
-                name: "Ok".to_string(),
-                args: vec![Value::Unit],
-            },
-            other => {
-                return Err(RuntimeError::Message(format!(
-                    "generic `do {other} {{ ... }}` is not yet supported at runtime"
-                )));
-            }
-        };
-
-        for (index, item) in items.iter().enumerate() {
-            let last = index + 1 == items.len();
-            match item {
-                HirBlockItem::Bind { pattern, expr } => {
-                    let value = self.eval_expr(expr, &local_env)?;
-                    // Unwrap the monadic value or short-circuit
-                    match monad {
-                        "Option" => match &value {
-                            Value::Constructor { name, args } if name == "None" && args.is_empty() => {
-                                return Ok(Value::Constructor {
-                                    name: "None".to_string(),
-                                    args: vec![],
-                                });
-                            }
-                            Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
-                                let inner = args[0].clone();
-                                let bindings = collect_pattern_bindings(pattern, &inner)
-                                    .ok_or_else(|| {
-                                        RuntimeError::Message(
-                                            "pattern match failed in do Option bind".to_string(),
-                                        )
-                                    })?;
-                                for (n, val) in bindings {
-                                    local_env.set(n, val);
-                                }
-                            }
-                            _ => {
-                                return Err(RuntimeError::Message(format!(
-                                    "expected Option in `do Option` bind, got {}",
-                                    format_value(&value)
-                                )));
-                            }
-                        },
-                        "Result" => match &value {
-                            Value::Constructor { name, args } if name == "Err" && args.len() == 1 => {
-                                return Ok(value);
-                            }
-                            Value::Constructor { name, args } if name == "Ok" && args.len() == 1 => {
-                                let inner = args[0].clone();
-                                let bindings = collect_pattern_bindings(pattern, &inner)
-                                    .ok_or_else(|| {
-                                        RuntimeError::Message(
-                                            "pattern match failed in do Result bind".to_string(),
-                                        )
-                                    })?;
-                                for (n, val) in bindings {
-                                    local_env.set(n, val);
-                                }
-                            }
-                            _ => {
-                                return Err(RuntimeError::Message(format!(
-                                    "expected Result in `do Result` bind, got {}",
-                                    format_value(&value)
-                                )));
-                            }
-                        },
-                        _ => unreachable!(),
-                    }
-                }
-                HirBlockItem::Expr { expr } => {
-                    let value = self.eval_expr(expr, &local_env)?;
-                    if last {
-                        result = value;
-                    } else {
-                        // Non-final expression: check for short-circuit
-                        match monad {
-                            "Option" => {
-                                if matches!(&value, Value::Constructor { name, args } if name == "None" && args.is_empty())
-                                {
-                                    return Ok(value);
-                                }
-                            }
-                            "Result" => {
-                                if matches!(&value, Value::Constructor { name, args } if name == "Err" && args.len() == 1)
-                                {
-                                    return Ok(value);
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-                HirBlockItem::Filter { .. }
-                | HirBlockItem::Yield { .. }
-                | HirBlockItem::Recurse { .. } => {
-                    return Err(RuntimeError::Message(format!(
-                        "unsupported block item in do {monad} block"
-                    )));
-                }
-            }
-        }
-
-        Ok(result)
+        Err(RuntimeError::Message(format!(
+            "internal error: `do {monad} {{ ... }}` block was not desugared during HIR lowering; \
+             this is a compiler bug"
+        )))
     }
 
     fn eval_generate_block(

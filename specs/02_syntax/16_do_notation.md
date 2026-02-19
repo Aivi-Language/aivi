@@ -1,6 +1,6 @@
 # Generic Monadic `do` Blocks
 
-> **Status**: Implemented (v0.1) — `do Option { ... }` and `do Result { ... }` are supported in the interpreter runtime. Native codegen is stubbed. Full instance-driven resolution is deferred to v0.2.  
+> **Status**: Implemented (v0.1) — `do M { ... }` works for any type constructor with a `Chain` instance (including `Option`, `Result`, and `List`). Blocks are desugared to nested `chain`/lambda calls during HIR lowering. Native codegen is stubbed.  
 > **Depends on**: Type classes ([§ 3.5](03_types.md#35-classes-and-hkts)), `Monad` hierarchy ([aivi.logic](../05_stdlib/00_core/03_logic.md)), effects ([§ 9](09_effects.md)), instance resolution (compiler).
 
 ## Overview
