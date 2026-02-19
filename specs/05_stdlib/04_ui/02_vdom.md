@@ -1,6 +1,6 @@
 # UI Virtual DOM
 
-> **Status: Planned** — the VDOM API described below is not yet implemented. The `aivi.ui` module in the runtime currently provides a partial subset.
+> **Status: Planned**   the VDOM API described below is not yet implemented. The `aivi.ui` module in the runtime currently provides a partial subset.
 
 <!-- quick-info: {"kind":"module","name":"aivi.ui"} -->
 The `aivi.ui` module defines a **typed Virtual DOM** (`VNode msg`). Programs construct `VNode` trees and leave rendering + diffing to the runtime.

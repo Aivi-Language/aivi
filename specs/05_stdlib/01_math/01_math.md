@@ -11,7 +11,7 @@ It is intentionally small, predictable, and aligned with common math libraries a
 
 ## Constants
 
-`inf` is positive infinity and `negInf` is negative infinity. These are IEEE 754 floating-point values — they apply to `Float` only (`Int` has no infinity concept; use `BigInt` for arbitrary precision).
+`inf` is positive infinity and `negInf` is negative infinity. These are IEEE 754 floating-point values   they apply to `Float` only (`Int` has no infinity concept; use `BigInt` for arbitrary precision).
 
 <<< ../../snippets/from_md/05_stdlib/01_math/01_math/block_02.aivi{aivi}
 

@@ -53,14 +53,14 @@ Resolution: Avoid collisions by importing only the needed domain(s) and/or using
 
 ## 9.3 Operator Precedence
 
-Domain operators follow standard precedence. Domains do not redefine precedence — only semantics:
+Domain operators follow standard precedence. Domains do not redefine precedence   only semantics:
 
 <<< ../snippets/from_md/04_desugaring/09_domains/block_04.aivi{aivi}
 
 
 ## 9.4 Desugaring Order
 
-1. **Type inference** — Determine carrier types
-2. **Delta expansion** — Replace literals with constructors
-3. **Domain resolution** — Match (operator, carrier) to domain
-4. **Function substitution** — Replace operator with implementation
+1. **Type inference**   Determine carrier types
+2. **Delta expansion**   Replace literals with constructors
+3. **Domain resolution**   Match (operator, carrier) to domain
+4. **Function substitution**   Replace operator with implementation

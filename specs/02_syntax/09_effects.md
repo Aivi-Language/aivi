@@ -221,7 +221,7 @@ dijkstra = do Effect {
 
 ### Desugaring
 
-Inside effect blocks, `loop` desugars to a local recursive function at parse time (same as in generators — see [Generators § 7.6](07_generators.md#76-tail-recursive-loops)):
+Inside effect blocks, `loop` desugars to a local recursive function at parse time (same as in generators   see [Generators § 7.6](07_generators.md#76-tail-recursive-loops)):
 
 ```
 loop pat = init => { body }

@@ -5,7 +5,7 @@ The `Calendar` domain gives you robust tools for handling **Dates** and **Human 
 
 Handling time is deceptively hard. Ideally, a day is 24 hours. In reality, months have 28-31 days, years have 365 or 366 days, and timezones shift clocks back and forth.
 
-The `Calendar` domain hides this chaos. Writing `timestamp + 86400` works until a leap second deletes your data. This domain ensures that when you say "Next Month," it handles the math correctly—whether it's February or July—making your scheduling logic reliable and legible.
+The `Calendar` domain hides this chaos. Writing `timestamp + 86400` works until a leap second deletes your data. This domain ensures that when you say "Next Month," it handles the math correctly whether it's February or July making your scheduling logic reliable and legible.
 
 <!-- /quick-info -->
 ## Overview

@@ -14,9 +14,9 @@ In v0.1, there is exactly one module per file. The `module` declaration must be 
 ## 10.2 Module Pathing (Dot Separator)
 
 Modules are identified by hierarchical paths using common **dot notation**. This separates logical namespaces. By convention:
-- `aivi.*` — Standard library
-- `vendor.name.*` — Foreign libraries
-- `user.app.*` — Application-specific logic
+- `aivi.*`   Standard library
+- `vendor.name.*`   Foreign libraries
+- `user.app.*`   Application-specific logic
 
 Module resolution is static and determined at compile time based on the project manifest.
 

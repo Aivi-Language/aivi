@@ -11,10 +11,10 @@ AIVI provides a dedicated `Resource` type to manage lifecycles (setup and teardo
 Resource E A
 ```
 
-- `E` — the error type for acquisition failures (e.g. `FileError`, `SocketError`).
-- `A` — the type of the acquired handle (e.g. `Handle`, `Socket`).
+- `E`   the error type for acquisition failures (e.g. `FileError`, `SocketError`).
+- `A`   the type of the acquired handle (e.g. `Handle`, `Socket`).
 
-A `Resource` is **not** a handle itself — it is a *recipe* for obtaining one. The handle only exists within the scope where the resource is acquired.
+A `Resource` is **not** a handle itself   it is a *recipe* for obtaining one. The handle only exists within the scope where the resource is acquired.
 
 
 ## 15.2 Defining Resources
@@ -30,7 +30,7 @@ This declarative approach hides the complexity of error handling and cancellatio
 ### Rules
 
 - A `resource` block must contain exactly **one** `yield` statement. This separates the acquisition phase (before `yield`) from the cleanup phase (after `yield`).
-- If `yield` is never reached (e.g. acquisition fails with an error), no cleanup code runs — there is nothing to clean up.
+- If `yield` is never reached (e.g. acquisition fails with an error), no cleanup code runs   there is nothing to clean up.
 - The cleanup phase runs as a finalizer and **may perform effects** (e.g. closing a file handle, flushing a buffer). Cleanup effects use the same error type `E`; if cleanup itself fails, the error is logged but does not override the original error.
 
 
@@ -40,7 +40,7 @@ Inside an `effect` block, you use the `<-` binder to acquire a resource. This sc
 
 <<< ../snippets/from_md/02_syntax/15_resources/block_02.aivi{aivi}
 
-When the `effect` block exits — whether by normal completion, an error in `E`, or **cancellation** — all acquired resources are released in reverse order.
+When the `effect` block exits   whether by normal completion, an error in `E`, or **cancellation**   all acquired resources are released in reverse order.
 
 ### Multiple Resources
 
@@ -64,7 +64,7 @@ Resources interact with the cancellation system (see [Concurrency](../06_runtime
 
 - Cancellation is checked at `<-` bind points. If a task is cancelled before a resource is acquired, acquisition does not run.
 - If cancellation arrives **during use** of an acquired resource, cleanup still runs. The resource block's finalizer is registered at acquisition time and cannot be skipped.
-- Cleanup code itself runs in a **cancellation-protected** context — it will not be interrupted by a second cancellation signal.
+- Cleanup code itself runs in a **cancellation-protected** context   it will not be interrupted by a second cancellation signal.
 
 
 ## 15.6 Composability and Nesting
@@ -72,5 +72,5 @@ Resources interact with the cancellation system (see [Concurrency](../06_runtime
 Resources compose naturally:
 
 - A `resource` block can acquire other resources internally. Inner resources are released before the outer resource's cleanup runs.
-- Resources can be returned from functions and passed as values — they are inert descriptions until acquired with `<-`.
+- Resources can be returned from functions and passed as values   they are inert descriptions until acquired with `<-`.
 - You can build higher-level resources from lower-level ones by combining acquisition and cleanup steps.

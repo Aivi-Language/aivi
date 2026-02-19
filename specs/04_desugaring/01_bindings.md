@@ -6,7 +6,7 @@ The following conventions are used throughout the desugaring rules:
 | :--- | :--- |
 | `⟦e⟧` | Recursive desugaring of surface expression `e` |
 | `λx. e` | Kernel lambda abstraction |
-| `x#1`, `v#1` | **Fresh binders** — compiler-generated names guaranteed not to clash with user-written identifiers. The `#n` suffix is a disambiguation index (not valid surface syntax). |
+| `x#1`, `v#1` | **Fresh binders**   compiler-generated names guaranteed not to clash with user-written identifiers. The `#n` suffix is a disambiguation index (not valid surface syntax). |
 
 # Bindings, blocks, and shadowing
 

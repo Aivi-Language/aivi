@@ -94,7 +94,7 @@ aivi clean [--all]
 
 Compiles AIVI code. Has two modes:
 
-**Project mode** (no positional path argument — uses `aivi.toml`):
+**Project mode** (no positional path argument   uses `aivi.toml`):
 
 ```bash
 aivi build [--release] [-- <cargo args...>]
@@ -122,7 +122,7 @@ aivi build <path|dir/...> [--debug-trace] [--target rust|rust-native|rustc] [--o
 
 Runs AIVI code. Has two modes:
 
-**Project mode** (no positional path argument — uses `aivi.toml`):
+**Project mode** (no positional path argument   uses `aivi.toml`):
 
 ```bash
 aivi run [--release] [-- <cargo args...>]
