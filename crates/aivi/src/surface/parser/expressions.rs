@@ -52,6 +52,7 @@ impl Parser {
         // This form is result-only (arms must match `Err ...` at the top level).
         loop {
             let checkpoint = self.pos;
+            self.consume_newlines();
             if !self.match_keyword("or") {
                 self.pos = checkpoint;
                 break;
@@ -371,6 +372,21 @@ impl Parser {
                     .peek_span()
                     .is_some_and(|span| !is_adjacent(&expr_span(&expr), &span)))
         {
+            // Don't consume tokens that start at column 1 on a new line – they
+            // are almost certainly new top-level definitions rather than
+            // continuation arguments.  This is especially important for error
+            // recovery when unclosed delimiters cause `consume_newlines()` to
+            // skip past line boundaries inside tuple/group parsing.
+            if let Some(next_span) = self.peek_span() {
+                let last_line = if let Some(last_arg) = args.last() {
+                    expr_span(last_arg).end.line
+                } else {
+                    expr_span(&expr).end.line
+                };
+                if next_span.start.line > last_line && next_span.start.column == 1 {
+                    break;
+                }
+            }
             let arg = self.parse_postfix()?;
             args.push(arg);
         }

@@ -1,5 +1,5 @@
 use serde_json::Value;
-use tower_lsp::lsp_types::{CompletionResponse, HoverContents, TextDocumentItem, Url};
+use tower_lsp::lsp_types::{CompletionResponse, TextDocumentItem};
 
 #[test]
 fn hover_handler_serializes_to_json() {

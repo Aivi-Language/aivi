@@ -622,6 +622,21 @@ impl Parser {
             {
                 break;
             }
+            // Stop at an identifier at column 1 preceded by a newline — this is
+            // likely the start of a new top-level definition (e.g. `name = ...`
+            // or `TypeName`).
+            if let Some(tok) = self.tokens.get(self.pos) {
+                if tok.kind == TokenKind::Ident
+                    && tok.span.start.column == 1
+                    && self.pos > start
+                    && self
+                        .tokens
+                        .get(self.pos.wrapping_sub(1))
+                        .is_some_and(|prev| prev.kind == TokenKind::Newline)
+                {
+                    break;
+                }
+            }
             self.pos += 1;
         }
         // Always advance at least one token to prevent caller loops

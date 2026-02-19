@@ -1,9 +1,12 @@
+mod native_fixture;
+
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Instant;
 
 use aivi::{compile_rust_native_lib, desugar_target};
 use aivi_native_runtime::get_builtin;
+use native_fixture::fixture_dir;
 use tempfile::tempdir;
 use walkdir::WalkDir;
 
@@ -140,19 +143,24 @@ fn native_codegen_examples_compile_with_rustc() {
 
     let dir = tempdir().expect("tempdir");
     let cargo_toml = format!(
-        "[package]\nname = \"aivi-native-examples\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\naivi_native_runtime = {{ path = {:?} }}\n",
+        "[package]\nname = \"aivi-native-examples\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n\n[dependencies]\naivi_native_runtime = {{ path = {:?} }}\n",
         root.join("crates/aivi_native_runtime")
             .display()
             .to_string()
     );
-    if let Err(err) = std::fs::write(dir.path().join("Cargo.toml"), cargo_toml) {
-        panic!("write Cargo.toml failed: {err}");
+    std::fs::write(dir.path().join("Cargo.toml"), cargo_toml).expect("write Cargo.toml");
+
+    // Copy mold linker config from fixture crate
+    let cargo_config_dir = dir.path().join(".cargo");
+    std::fs::create_dir_all(&cargo_config_dir).expect("create .cargo dir");
+    let fixture_config = fixture_dir().join(".cargo/config.toml");
+    if fixture_config.exists() {
+        std::fs::copy(&fixture_config, cargo_config_dir.join("config.toml"))
+            .expect("copy .cargo/config.toml");
     }
 
     let src_dir = dir.path().join("src");
-    if let Err(err) = std::fs::create_dir_all(&src_dir) {
-        panic!("create src dir failed: {err}");
-    }
+    std::fs::create_dir_all(&src_dir).expect("create src dir");
 
     let mut lib_rs = String::new();
 
@@ -201,22 +209,16 @@ fn native_codegen_examples_compile_with_rustc() {
         );
     }
 
-    if let Err(err) = std::fs::write(src_dir.join("lib.rs"), lib_rs) {
-        failures.push(format!("write src/lib.rs failed: {err}"));
-    }
+    std::fs::write(src_dir.join("lib.rs"), lib_rs).expect("write src/lib.rs");
 
-    let output = match Command::new("cargo")
+    let output = Command::new("cargo")
         .arg("build")
+        .arg("--lib")
         .arg("--quiet")
-        .arg("--offline")
+        .env("RUSTFLAGS", "-Awarnings")
         .current_dir(dir.path())
         .output()
-    {
-        Ok(output) => output,
-        Err(err) => {
-            panic!("cargo spawn failed: {err}");
-        }
-    };
+        .expect("cargo build");
 
     if !output.status.success() {
         failures.push(format!(

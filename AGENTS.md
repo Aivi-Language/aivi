@@ -30,6 +30,14 @@ graph TD
     Tests -->|Tests| Binary
 ```
 
+### 1.3 Running terminal commands
+- make sure filter (ie. grep) outout by warnings:
+    warning: *
+    --> crates/aivi/*.rs:*:*
+- Use shorter logs (--quiet, --no-verbose)    
+- consider running them with timeout prefix to limit runtime to 20s    
+- Avoid massive build outputs
+
 ## 2. Development Workflow
 
 ### 2.1 The Golden Rule
@@ -136,3 +144,4 @@ Before submitting changes:
 - [ ] Is the code consistent with AIVI style?
 - [ ] Did I avoid hallucinating features? (Always check [`specs/`](file:///home/mendrik/desk/mendrik/aivi/specs/) first)
 - [ ] Did I update AIVI_LANGUAGE.md for LLM use?
+
