@@ -25,7 +25,7 @@ apply: always
 
 | Element | Syntax |
 | :--- | :--- |
-| Line comment | `//` or `--` |
+| Line comment | `//` |
 | Block comment | `/* ... */` |
 | Value / function / field names | `lowerCamelCase` (`lowerIdent`) |
 | Type / constructor / module / domain / class names | `UpperCamelCase` (`UpperIdent`) |
@@ -65,7 +65,7 @@ user as { name } = getUser       // whole-value + destructure
 | `{ field: pat }` | no (renamed) | yes | Match / rename a field |
 | `{ field as { pat } }` | yes | yes | Keep whole field + destructure |
 | `{ field.{ pat } }` | no | yes | Destructure only, discard field |
-| `{ field }` | yes | — | Shorthand, binds field by name |
+| `{ field }` | yes | - | Shorthand, binds field by name |
 
 Deep path destructuring: `{ data.user.profile as { name } }` reaches nested fields directly.
 
@@ -126,7 +126,7 @@ Rules: `x |> f` = `f x`; `x |> f a b` = `f a b x`.
 A unary function can be written as multiple match arms directly:
 
 ```aivi
-describe = 
+describe =
   | 0 => "zero"
   | 1 => "one"
   | _ => "many"
@@ -364,57 +364,13 @@ result = user <| p
 
 ---
 
-## 9 Domains, Units, and Operators
+## 9 Blocks
 
-Domains define operator semantics and suffix literals for non-`Int` types.
+AIVI has four block forms, each introduced by a keyword and delimited with `{ ... }`.
 
-```aivi
-use aivi.chronos.duration (domain Duration)
+### `generate { ... }` - Pure sequences
 
-deadline = { millis: 0 } + 10min     // + resolved by Duration domain
-```
-
-### Suffix literals
-
-```aivi
-10min  30s  100px  50%  2w  3d
-(x)kg                                // variable suffix application
-```
-
-Suffixes resolve to template functions: `10ms` uses `1ms` defined by a domain.
-
-### Defining domains
-
-```aivi
-domain Color over Rgb = {
-  Delta = Lightness Int | Hue Int
-
-  (+) : Rgb -> Delta -> Rgb
-  (+) = color (Lightness amount) => adjustLightness color amount
-  (+) = color (Hue amount) => adjustHue color amount
-
-  1l = Lightness 1
-  1h = Hue 1
-}
-```
-
-### Import/export
-
-```aivi
-use aivi.chronos.duration (domain Duration)    // import domain
-export domain Color                             // export domain
-```
-
-### Built-in vs domain-resolved operators
-
-Domain-resolved (when non-`Int`): `+`, `-`, `*`, `×`, `/`, `%`, `<`, `<=`, `>`, `>=`.
-Always built-in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
-
----
-
-## 10 Generators
-
-Pure, pull-based sequences. No effects, no suspension.
+Pull-based, lazy sequences. No effects, no suspension.
 
 ```aivi
 gen = generate {
@@ -424,7 +380,7 @@ gen = generate {
 }
 ```
 
-### Bindings, guards, transforms
+**Bindings, guards, transforms:**
 
 ```aivi
 evens = generate {
@@ -434,7 +390,7 @@ evens = generate {
 }
 ```
 
-### Cartesian product
+**Cartesian product:**
 
 ```aivi
 pairs = generate {
@@ -444,7 +400,7 @@ pairs = generate {
 }
 ```
 
-### Tail-recursive loops
+**Tail-recursive loops:**
 
 ```aivi
 fibs = generate {
@@ -455,15 +411,113 @@ fibs = generate {
 }
 ```
 
-- `x <- source` — bind from another generator/list
-- `x = expr` — pure local binding
-- `x -> pred` — guard (filter by predicate)
-- `yield expr` — emit a value
-- `loop pat = init => { ... recurse next }` — local tail recursion
+Summary of statements inside `generate { ... }`:
+- `x <- source` - bind from another generator/list
+- `x = expr` - pure local binding
+- `x -> pred` - guard (filter by predicate)
+- `yield expr` - emit a value
+- `loop pat = init => { ... recurse next }` - local tail recursion
+
+### `do Effect { ... }` - Effectful computation
+
+The most common block form. Sequences effectful operations with typed errors.
+
+```aivi
+main = do Effect {
+  cfg  <- load (file.read "config.json")   // <- runs effect
+  name = cfg.appName                        // = is pure binding
+  print "loaded { name }"
+}
+```
+
+Statements inside `do Effect { ... }`:
+- `x <- eff` - run effect, bind result
+- `x = expr` - pure local binding (`expr` must NOT be `Effect`)
+- `x <- resource` - acquire a `Resource`, released on scope exit
+- `when cond <- eff` - conditional (runs `eff` only when `cond` is true)
+- `given cond or failExpr` - precondition guard
+- Final expression must be `Effect E A` (commonly `pure value`)
+- Statement expressions must be `Effect E Unit`; non-Unit results must be bound
+
+**Tail-recursive loops in effect blocks:**
+
+`loop`/`recurse` works inside `do Effect { ... }` blocks for stateful iteration:
+
+```aivi
+dijkstra = source graph => do Effect {
+  dists <- MutableMap.create (Map.insert source 0.0 Map.empty)
+
+  loop pq = Heap.push (0.0, source) Heap.empty => {
+    result = Heap.popMin pq
+    result match
+      | None                       => pure Unit
+      | Some ((d, node), restPq)   => do Effect {
+          currentDist <- MutableMap.getOrElse node 999999.0 dists
+          if d > currentDist
+          then do Effect { recurse restPq }
+          else do Effect {
+            edges = edgesFrom graph node
+            newPq <- processEdges dists d edges restPq
+            recurse newPq
+          }
+        }
+  }
+
+  MutableMap.freeze dists
+}
+```
+
+- `loop pat = init => { body }` - local tail-recursive loop (same syntax as in generators)
+- `recurse newState` - continue with the next iteration
+- Omitting `recurse` in a branch terminates the loop
+- The loop body `{ ... }` is promoted to the parent effect-block kind, so `<-`, `when`/`unless`, and `recurse` work inside
+
+**Event wiring (`on`):**
+
+Inside `do Effect { ... }`, `on Event => handler` wires event handlers for state machine transitions or UI events:
+
+```aivi
+main = do Effect {
+  on Click => do Effect {
+    count <- getState
+    setState (count + 1)
+  }
+  on KeyPress => handleKey
+}
+```
+
+### `do M { ... }` - General monadic blocks
+
+`do Monad { ... }` is the general form; `do Effect { ... }` is the most common specialisation. Any type with a `Monad` instance can be used:
+
+```aivi
+safeDivide = a b => do Option {
+  given b != 0 or None
+  pure (a / b)
+}
+```
+
+The same bind (`<-`) and pure-bind (`=`) syntax applies. The available statements depend on the monad.
+
+### `machine { ... }` - State machines
+
+`machine` declares a state machine where transitions are first-class and states are inferred.
+
+```aivi
+machine Door = {
+           -> Closed : init   {}
+  Closed   -> Opened : open   {}
+  Opened   -> Closed : close  {}
+  Opened   -> Locked : lock   {}
+  Locked   -> Closed : unlock {}
+}
+```
+
+`-> State : init {}` marks the starting state. `Source -> Target : event { payload }` defines transitions with optional typed payloads. States are inferred from the transition graph. The compiler checks completeness and type safety.
 
 ---
 
-## 11 Effects
+## 10 Effects
 
 `Effect E A` models typed effects where `E` is the error type and `A` is the success type.
 
@@ -475,27 +529,6 @@ fibs = generate {
 | `fail` | `E -> Effect E A` | Abort with error |
 | `bind` | `Effect E A -> (A -> Effect E B) -> Effect E B` | Sequence |
 | `attempt` | `Effect E A -> Effect F (Result E A)` | Catch error as `Result` |
-
-### `do Effect { ... }` blocks
-
-```aivi
-main = do Effect {
-  cfg  <- load (file.read "config.json")   // <- runs effect
-  name = cfg.appName                        // = is pure binding
-  print "loaded { name }"
-}
-```
-
-`do Monad { ... }` is the general form; `do Effect { ... }` is the most common usage.
-
-Rules inside `do Effect { ... }`:
-- `x <- eff` — run effect, bind result
-- `x = expr` — pure local binding (`expr` must NOT be `Effect`)
-- `x <- resource` — acquire a `Resource`, released on scope exit
-- `when cond <- eff` — conditional effect (runs `eff` only when `cond` is true)
-- `given cond or failExpr` — precondition guard (fails with `failExpr` if `cond` is false)
-- Final expression must be `Effect E A` (commonly `pure value`)
-- Statement expressions must be `Effect E Unit`; non-Unit results must be bound
 
 ### Error fallback with `or`
 
@@ -513,23 +546,6 @@ count = result or 0
 ```
 
 `or` arms match the **error value** directly (write `NotFound m`, not `Err NotFound m`).
-
-### Branching in effect blocks
-
-`if`/`then`/`else` is an expression. For multi-step branches, use nested `do Effect { ... }`:
-
-```aivi
-process = input => do Effect {
-  validated <- validate input
-  result <- if validated.needsReview then
-    do Effect {
-      _ <- notifyReviewer validated
-      pure (Pending validated)
-    }
-  else pure (Approved validated)
-  pure result
-}
-```
 
 ### Attempt (error recovery)
 
@@ -552,7 +568,7 @@ getUser = id => do Effect {
 main = do Effect {
   cfg <- loadConfig
   when cfg.verbose <- print "verbose mode enabled"
-  when cfg.dryRun <- print "dry run — no side effects"
+  when cfg.dryRun <- print "dry run, no side effects"
   process cfg
 }
 ```
@@ -584,74 +600,28 @@ main = do Effect {
 
 Desugars to: `_ <- if cond then pure Unit else failExpr`.
 
-### Tail-recursive loops in effect blocks
+### Branching in effect blocks
 
-`loop`/`recurse` works inside `do Effect { ... }` blocks for stateful iteration:
-
-```aivi
-dijkstra = source graph => do Effect {
-  dists <- MutableMap.create (Map.insert source 0.0 Map.empty)
-
-  loop pq = Heap.push (0.0, source) Heap.empty => {
-    result = Heap.popMin pq
-    result match
-      | None                       => pure Unit
-      | Some ((d, node), restPq)   => do Effect {
-          currentDist <- MutableMap.getOrElse node 999999.0 dists
-          if d > currentDist
-          then do Effect { recurse restPq }
-          else do Effect {
-            edges = edgesFrom graph node
-            newPq <- processEdges dists d edges restPq
-            recurse newPq
-          }
-        }
-  }
-
-  MutableMap.freeze dists
-}
-```
-
-- `loop pat = init => { body }` — local tail-recursive loop (same syntax as in generators)
-- `recurse newState` — continue with the next iteration
-- Omitting `recurse` in a branch terminates the loop
-- The loop body `{ ... }` is promoted to the parent effect-block kind, so `<-`, `when`/`unless`, and `recurse` work inside
-
-### State machines (`machine`)
-
-`machine` declares a state machine where transitions are first-class and states are inferred.
+`if`/`then`/`else` is an expression. For multi-step branches, use nested `do Effect { ... }`:
 
 ```aivi
-machine Door = {
-  -> Closed   : init   {}
-  Closed  -> Opened : open   {}
-  Opened  -> Closed : close  {}
-  Opened  -> Locked : lock   {}
-  Locked  -> Closed : unlock {}
-}
-```
-
-`-> State : init {}` marks the starting state. `Source -> Target : event { payload }` defines transitions with optional typed payloads. States are inferred from the transition graph. The compiler checks completeness and type safety.
-
-### Transition wiring (`on`)
-
-Inside `do Effect { ... }`, `on Event => handler` wires event handlers for state machine transitions or UI events:
-
-```aivi
-main = do Effect {
-  on Click => do Effect {
-    count <- getState
-    setState (count + 1)
-  }
-  on KeyPress => handleKey
+process = input => do Effect {
+  validated <- validate input
+  result <- if validated.needsReview then
+    do Effect {
+      _ <- notifyReviewer validated
+      pure (Pending validated)
+    }
+  else pure (Approved validated)
+  pure result
 }
 ```
 
 ---
 
-## 12 Resources
+## 11 Resources
 
-`Resource E A` — a recipe for acquiring a handle of type `A` (with error type `E`), using it, and releasing it.
+`Resource E A` - a recipe for acquiring a handle of type `A` (with error type `E`), using it, and releasing it.
 
 ### Defining
 
@@ -679,7 +649,7 @@ Multiple resources are released in reverse acquisition order. Cleanup runs even 
 
 ---
 
-## 13 Modules and Imports
+## 12 Modules and Imports
 
 One module per file. `module` must be the first non-empty item.
 
@@ -723,20 +693,20 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 
 ### Module path convention
 
-- `aivi.*` — standard library
-- `aivi.chronos.*` — time/date/duration/timezone
-- `aivi.net.*` — networking (http, https, httpServer)
-- `aivi.list` — List operations (map, filter, fold, …)
-- `aivi.map` — Map (ordered key-value)
-- `aivi.set` — Set (ordered unique elements)
-- `aivi.queue` — Queue / Deque
-- `aivi.heap` — Min/Max heap
-- `vendor.name.*` — third-party libraries
-- `user.app.*` — application code
+- `aivi.*` - standard library
+- `aivi.chronos.*` - time/date/duration/timezone
+- `aivi.net.*` - networking (http, https, httpServer)
+- `aivi.list` - List operations (map, filter, fold, ...)
+- `aivi.map` - Map (ordered key-value)
+- `aivi.set` - Set (ordered unique elements)
+- `aivi.queue` - Queue / Deque
+- `aivi.heap` - Min/Max heap
+- `vendor.name.*` - third-party libraries
+- `user.app.*` - application code
 
 ---
 
-## 14 External Sources
+## 13 External Sources
 
 `Source K A` represents typed external data. Load with `load` inside `do Effect { ... }`.
 
@@ -752,7 +722,7 @@ Available sources: `file`, `http`/`https`, `env`, `db`, `email`, `llm`, `image`,
 
 ---
 
-## 15 Sigils
+## 14 Sigils
 
 Custom literals with `~tag` and a delimiter:
 
@@ -771,7 +741,7 @@ Custom literals with `~tag` and a delimiter:
 
 ---
 
-## 16 Decorators (v0.1)
+## 15 Decorators (v0.1)
 
 Compile-time metadata only. No user-defined decorators.
 
@@ -788,6 +758,54 @@ Unknown decorators are compile errors.
 
 ---
 
+## 16 Domains, Units, and Operators
+
+Domains define operator semantics and suffix literals for non-`Int` types.
+
+```aivi
+use aivi.chronos.duration (domain Duration)
+
+deadline = { millis: 0 } + 10min     // + resolved by Duration domain
+```
+
+### Suffix literals
+
+```aivi
+10min  30s  100px  50%  2w  3d
+(x)kg                                // variable suffix application
+```
+
+Suffixes resolve to template functions: `10ms` uses `1ms` defined by a domain.
+
+### Defining domains
+
+```aivi
+domain Color over Rgb = {
+  Delta = Lightness Int | Hue Int
+
+  (+) : Rgb -> Delta -> Rgb
+  (+) = color (Lightness amount) => adjustLightness color amount
+  (+) = color (Hue amount) => adjustHue color amount
+
+  1l = Lightness 1
+  1h = Hue 1
+}
+```
+
+### Import/export
+
+```aivi
+use aivi.chronos.duration (domain Duration)    // import domain
+export domain Color                             // export domain
+```
+
+### Built-in vs domain-resolved operators
+
+Domain-resolved (when non-`Int`): `+`, `-`, `*`, `x`, `/`, `%`, `<`, `<=`, `>`, `>=`.
+Always built-in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
+
+---
+
 ## 17 Operator Precedence (lowest to highest)
 
 1. `|>` (pipe)
@@ -800,7 +818,7 @@ Unknown decorators are compile errors.
 8. `^` (bitwise xor)
 9. `<<`, `>>` (shift)
 10. `+`, `-`, `++` (add, concat)
-11. `*`, `×`, `/`, `%` (multiply)
+11. `*`, `x`, `/`, `%` (multiply)
 12. `<|` (patch)
 
 Unary prefix: `!` (not), `-` (negate), `~` (bitwise complement).

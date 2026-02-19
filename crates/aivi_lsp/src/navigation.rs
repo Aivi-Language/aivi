@@ -326,7 +326,7 @@ impl Backend {
     /// Collect only the modules relevant for type inference: the current file's
     /// modules plus directly imported modules. This avoids running `infer_value_types`
     /// on the entire workspace (which is too slow for interactive hover).
-    pub(super) fn collect_relevant_modules(
+    pub(crate) fn collect_relevant_modules(
         file_modules: &[Module],
         current_module: &Module,
         workspace_modules: &HashMap<String, IndexedModule>,

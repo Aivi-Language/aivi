@@ -34,11 +34,11 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Pattern Matching](02_syntax/08_pattern_matching)
 - [Effects](02_syntax/09_effects)
 - [Modules](02_syntax/10_modules)
-- [Operators and Context](02_syntax/11_operators)
 - [External Sources](02_syntax/12_external_sources)
 - [Sigils](02_syntax/13_sigils)
 - [Decorators](02_syntax/14_decorators)
 - [Resources](02_syntax/15_resources)
+- [Operators and Context](02_syntax/11_operators)
 - [Concrete Syntax (EBNF draft)](02_syntax/00_grammar)
 
 ### Standard Library
