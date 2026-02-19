@@ -69,9 +69,9 @@ fn run_aivi_sources() {
 
     println!("Found {} test file(s)", test_paths.len());
 
-    let mut total_passed = 0u32;
-    let mut total_failed = 0u32;
-    let mut skipped_files = 0u32;
+    let mut total_passed = 0usize;
+    let mut total_failed = 0usize;
+    let mut skipped_files = 0usize;
     let mut test_failures: Vec<(String, String)> = Vec::new();
 
     // Process each file independently to isolate pre-existing type errors
