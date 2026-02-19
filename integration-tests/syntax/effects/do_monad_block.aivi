@@ -10,3 +10,45 @@ doEffectBlockWorks = do Effect {
   y <- pure 2
   assertEq (x + y) 3
 }
+
+// Generic do M works across Option, Result, and List uniformly
+@test
+doMonadOptionChain = do Effect {
+  result = do Option {
+    a <- Some 10
+    b <- Some 20
+    Some (a + b)
+  }
+  assertEq result (Some 30)
+}
+
+@test
+doMonadResultChain = do Effect {
+  result = do Result {
+    a <- Ok 10
+    b <- Ok 20
+    Ok (a + b)
+  }
+  assertEq result (Ok 30)
+}
+
+@test
+doMonadListFlatMap = do Effect {
+  result = do List {
+    x <- [1, 2]
+    y <- [10, 20]
+    [x + y]
+  }
+  assertEq result [11, 21, 12, 22]
+}
+
+// Let-bindings work in all generic do blocks
+@test
+doMonadLetBindings = do Effect {
+  optResult = do Option {
+    x = 5
+    y <- Some 3
+    Some (x + y)
+  }
+  assertEq optResult (Some 8)
+}

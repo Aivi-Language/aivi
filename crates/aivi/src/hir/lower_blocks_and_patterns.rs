@@ -26,23 +26,9 @@ fn lower_block_item_ctx(
                     }),
                     args: vec![lowered_expr],
                 }
-            } else if let BlockKind::Do { monad } = surface_kind {
-                // Generic `do M { ... }` block: wrap pure let-value in the
-                // monad's constructor so the bind machinery works correctly.
-                let wrapper = match monad.name.as_str() {
-                    "Option" => "Some",
-                    "Result" => "Ok",
-                    _ => "pure", // fallback for unknown monads
-                };
-                HirExpr::Call {
-                    id: id_gen.next(),
-                    func: Box::new(HirExpr::Var {
-                        id: id_gen.next(),
-                        name: wrapper.to_string(),
-                    }),
-                    args: vec![lowered_expr],
-                }
             } else {
+                // Plain blocks, generate blocks, resource blocks — just use the expression.
+                // (Generic `do M` blocks are desugared before reaching here.)
                 lowered_expr
             };
             HirBlockItem::Bind {

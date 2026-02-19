@@ -378,6 +378,14 @@ fn lower_expr_inner_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, 
         }
         Expr::Block { kind, items, .. } => {
             let block_kind = lower_block_kind(&kind);
+            // Generic `do M { ... }` blocks (where M ≠ Effect) desugar into
+            // nested `chain` / lambda calls so that the runtime resolves
+            // `chain`/`of` through the normal Monad instance dispatch.
+            if let BlockKind::Do { ref monad } = kind {
+                if monad.name != "Effect" {
+                    return desugar_generic_do_block(items, &kind, &block_kind, id_gen, ctx);
+                }
+            }
             HirExpr::Block {
                 id: id_gen.next(),
                 block_kind: block_kind.clone(),
@@ -578,6 +586,227 @@ fn lower_lambda_hir(params: Vec<Pattern>, body: HirExpr, id_gen: &mut IdGen) -> 
         }
     }
     acc
+}
+
+/// Desugar `do M { ... }` (where M ≠ Effect) into nested `chain`/lambda calls.
+///
+/// - `x <- e; rest`  →  `chain (λx. <rest>) e`
+/// - `x = e; rest`   →  `(λx. <rest>) e`       (plain let)
+/// - `e; rest`        →  `chain (λ_. <rest>) e`
+/// - `e`  (final)     →  `e`
+/// - `{}`  (empty)    →  `of Unit`
+fn desugar_generic_do_block(
+    items: Vec<BlockItem>,
+    surface_kind: &BlockKind,
+    hir_kind: &HirBlockKind,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+) -> HirExpr {
+    if items.is_empty() {
+        // `do M {}` → `of Unit`
+        return HirExpr::Call {
+            id: id_gen.next(),
+            func: Box::new(HirExpr::Var {
+                id: id_gen.next(),
+                name: "of".to_string(),
+            }),
+            args: vec![HirExpr::Var {
+                id: id_gen.next(),
+                name: "Unit".to_string(),
+            }],
+        };
+    }
+
+    desugar_do_items(&items, 0, surface_kind, hir_kind, id_gen, ctx)
+}
+
+/// Recursively desugar do-block items starting at `index`.
+fn desugar_do_items(
+    items: &[BlockItem],
+    index: usize,
+    surface_kind: &BlockKind,
+    hir_kind: &HirBlockKind,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+) -> HirExpr {
+    let item = &items[index];
+    let is_last = index + 1 == items.len();
+
+    match item {
+        // Bind: `x <- e`
+        BlockItem::Bind { pattern, expr, .. } => {
+            let rhs = lower_expr_ctx(expr.clone(), id_gen, ctx, false);
+            if is_last {
+                // Final bind is unusual but we still desugar it as `chain (λx. x) e`
+                // which is equivalent to the expression being the block result.
+                // Actually, a final bind makes no sense semantically; just return the
+                // monadic value as-is (the user is expected to use `<-` in non-tail position).
+                // For pragmatic compat, treat it as `chain (λpat. of pat) e`.
+                let param = format!("__do_bind{}", id_gen.next());
+                let body = HirExpr::Var {
+                    id: id_gen.next(),
+                    name: param.clone(),
+                };
+                // Wrap in `of` for final bind: `chain (λx. of x) e`
+                let wrapped = HirExpr::Call {
+                    id: id_gen.next(),
+                    func: Box::new(HirExpr::Var {
+                        id: id_gen.next(),
+                        name: "of".to_string(),
+                    }),
+                    args: vec![body],
+                };
+                let continuation = make_pattern_lambda(
+                    pattern.clone(),
+                    wrapped,
+                    &param,
+                    id_gen,
+                );
+                // chain continuation rhs
+                HirExpr::Call {
+                    id: id_gen.next(),
+                    func: Box::new(HirExpr::Var {
+                        id: id_gen.next(),
+                        name: "chain".to_string(),
+                    }),
+                    args: vec![continuation, rhs],
+                }
+            } else {
+                let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, id_gen, ctx);
+                let param = format!("__do_bind{}", id_gen.next());
+                let continuation = make_pattern_lambda(
+                    pattern.clone(),
+                    rest,
+                    &param,
+                    id_gen,
+                );
+                // chain continuation rhs
+                HirExpr::Call {
+                    id: id_gen.next(),
+                    func: Box::new(HirExpr::Var {
+                        id: id_gen.next(),
+                        name: "chain".to_string(),
+                    }),
+                    args: vec![continuation, rhs],
+                }
+            }
+        }
+        // Pure let-binding: `x = e`
+        BlockItem::Let { pattern, expr, .. } => {
+            let rhs = lower_expr_ctx(expr.clone(), id_gen, ctx, false);
+            if is_last {
+                // Final let — the value itself becomes the result.
+                // Wrap in `of` since the block must produce `M A`.
+                HirExpr::Call {
+                    id: id_gen.next(),
+                    func: Box::new(HirExpr::Var {
+                        id: id_gen.next(),
+                        name: "of".to_string(),
+                    }),
+                    args: vec![rhs],
+                }
+            } else {
+                let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, id_gen, ctx);
+                let param = format!("__do_let{}", id_gen.next());
+                let body = make_pattern_lambda(
+                    pattern.clone(),
+                    rest,
+                    &param,
+                    id_gen,
+                );
+                // (λpat. rest) rhs
+                HirExpr::App {
+                    id: id_gen.next(),
+                    func: Box::new(body),
+                    arg: Box::new(rhs),
+                }
+            }
+        }
+        // Expression statement: `e`
+        BlockItem::Expr { expr, .. } => {
+            let rhs = lower_expr_ctx(expr.clone(), id_gen, ctx, false);
+            if is_last {
+                // Final expression: must have type `M A`, returned directly.
+                rhs
+            } else {
+                let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, id_gen, ctx);
+                let param = format!("__do_seq{}", id_gen.next());
+                let continuation = HirExpr::Lambda {
+                    id: id_gen.next(),
+                    param,
+                    body: Box::new(rest),
+                };
+                // chain (λ_. rest) rhs
+                HirExpr::Call {
+                    id: id_gen.next(),
+                    func: Box::new(HirExpr::Var {
+                        id: id_gen.next(),
+                        name: "chain".to_string(),
+                    }),
+                    args: vec![continuation, rhs],
+                }
+            }
+        }
+        // Filter, Yield, Recurse, When, Unless, Given, On — not allowed in generic do blocks
+        _ => {
+            // These should have been rejected by the parser. Lower them as-is
+            // (they'll hit a runtime error via the normal block path).
+            let lowered = lower_block_item_ctx(item.clone(), surface_kind, hir_kind, id_gen, ctx);
+            match lowered {
+                HirBlockItem::Expr { expr } => expr,
+                _ => HirExpr::Var {
+                    id: id_gen.next(),
+                    name: "Unit".to_string(),
+                },
+            }
+        }
+    }
+}
+
+/// Build a lambda that binds a pattern: If the pattern is a simple variable,
+/// emit `λname. body`. Otherwise emit `λparam. match param { pat => body }`.
+fn make_pattern_lambda(
+    pattern: Pattern,
+    body: HirExpr,
+    fallback_param: &str,
+    id_gen: &mut IdGen,
+) -> HirExpr {
+    match &pattern {
+        Pattern::Ident(name) => HirExpr::Lambda {
+            id: id_gen.next(),
+            param: name.name.clone(),
+            body: Box::new(body),
+        },
+        Pattern::SubjectIdent(name) => HirExpr::Lambda {
+            id: id_gen.next(),
+            param: name.name.clone(),
+            body: Box::new(body),
+        },
+        Pattern::Wildcard(_) => HirExpr::Lambda {
+            id: id_gen.next(),
+            param: fallback_param.to_string(),
+            body: Box::new(body),
+        },
+        _ => {
+            let match_expr = HirExpr::Match {
+                id: id_gen.next(),
+                scrutinee: Box::new(HirExpr::Var {
+                    id: id_gen.next(),
+                    name: fallback_param.to_string(),
+                }),
+                arms: vec![HirMatchArm {
+                    pattern: lower_pattern(pattern, id_gen),
+                    guard: None,
+                    body,
+                }],
+            };
+            HirExpr::Lambda {
+                id: id_gen.next(),
+                param: fallback_param.to_string(),
+                body: Box::new(match_expr),
+            }
+        }
+    }
 }
 
 fn lower_block_kind(kind: &BlockKind) -> HirBlockKind {
