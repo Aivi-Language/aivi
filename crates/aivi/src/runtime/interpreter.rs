@@ -50,7 +50,7 @@ impl CancelToken {
     }
 
     fn cancel(&self) {
-        self.local.store(true, Ordering::SeqCst);
+        self.local.store(true, Ordering::Release);
     }
 
     fn parent(&self) -> Option<Arc<CancelToken>> {
@@ -58,7 +58,7 @@ impl CancelToken {
     }
 
     fn is_cancelled(&self) -> bool {
-        if self.local.load(Ordering::SeqCst) {
+        if self.local.load(Ordering::Relaxed) {
             return true;
         }
         self.parent
@@ -74,6 +74,8 @@ struct Runtime {
     fuel: Option<u64>,
     rng_state: u64,
     debug_stack: Vec<DebugFrame>,
+    /// Counter used to amortize cancel-token checks (checked every 64 evals).
+    check_counter: u32,
 }
 
 #[derive(Clone)]

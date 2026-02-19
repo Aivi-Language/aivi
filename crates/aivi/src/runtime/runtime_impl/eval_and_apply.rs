@@ -7,8 +7,10 @@ impl Runtime {
         let mut results = Vec::new();
         let mut match_failures = 0;
         let mut last_error = None;
-        for clause in clauses {
-            match self.apply(clause.clone(), arg.clone()) {
+        let n = clauses.len();
+        for (i, clause) in clauses.into_iter().enumerate() {
+            let a = if i + 1 < n { arg.clone() } else { arg.clone() };
+            match self.apply(clause, a) {
                 Ok(value) => results.push(value),
                 Err(RuntimeError::Message(message)) if is_match_failure_message(&message) => {
                     match_failures += 1;
@@ -186,8 +188,9 @@ impl Runtime {
     fn generator_to_list(&mut self, gen: Value) -> Result<Vec<Value>, RuntimeError> {
         // A generator is a function (k -> z -> R).
         // We fold it with a list-append step: k = \acc x -> acc ++ [x], z = []
-        let step = Value::Builtin(BuiltinValue {
-            imp: Arc::new(BuiltinImpl {
+        // Cache the step builtin implementation to avoid re-allocating on every call.
+        thread_local! {
+            static GEN_STEP_IMPL: Arc<BuiltinImpl> = Arc::new(BuiltinImpl {
                 name: "<gen_to_list_step>".to_string(),
                 arity: 2,
                 func: Arc::new(|mut args, _runtime| {
@@ -204,7 +207,10 @@ impl Runtime {
                     list.push(x);
                     Ok(Value::List(Arc::new(list)))
                 }),
-            }),
+            });
+        }
+        let step = Value::Builtin(BuiltinValue {
+            imp: GEN_STEP_IMPL.with(|imp| imp.clone()),
             args: Vec::new(),
         });
         let init = Value::List(Arc::new(Vec::new()));
