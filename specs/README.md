@@ -17,7 +17,6 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 
 ### Syntax
 
-- [Concrete Syntax (EBNF draft)](02_syntax/00_grammar.md)
 - [Bindings and Scope](02_syntax/01_bindings.md)
 - [Functions and Pipes](02_syntax/02_functions.md)
 - [The Type System](02_syntax/03_types.md)
@@ -33,6 +32,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [External Sources](02_syntax/12_external_sources.md)
 - [Decorators](02_syntax/14_decorators.md)
 - [Resources](02_syntax/15_resources.md)
+- [Concrete Syntax (EBNF draft)](02_syntax/00_grammar.md)
 
 ### Kernel (Core Calculus)
 
@@ -80,7 +80,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Math](05_stdlib/01_math/01_math.md)
 - [Vector](05_stdlib/01_math/05_vector.md)
 - [Matrix](05_stdlib/01_math/09_matrix.md)
-- [Number (BigInt, Rational, Decimal, Complex, Quaternion)](05_stdlib/01_math/10_number.md)
+- [Numbers](05_stdlib/01_math/10_number.md)
 - [Probability](05_stdlib/01_math/13_probability.md)
 - [FFT & Signal](05_stdlib/01_math/14_signal.md)
 - [Geometry](05_stdlib/01_math/15_geometry.md)
