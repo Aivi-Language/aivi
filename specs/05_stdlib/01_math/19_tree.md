@@ -1,6 +1,6 @@
 # Tree
 
-Module: `aivi.tree`
+<div class="import-badge">use aivi.tree</div>
 
 General-purpose rose tree (multi-way tree) data structure. Each node holds a value of type `A` and a `List` of child trees.
 
