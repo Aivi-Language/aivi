@@ -46,6 +46,7 @@ dependencies = [
  "num-traits",
  "ordered-float",
  "palette",
+ "parking_lot",
  "postgres",
  "regex",
  "rusqlite",

@@ -298,11 +298,11 @@ impl CancelToken {
     }
 
     pub fn cancel(&self) {
-        self.local.store(true, AtomicOrdering::SeqCst);
+        self.local.store(true, AtomicOrdering::Release);
     }
 
     pub fn is_cancelled(&self) -> bool {
-        if self.local.load(AtomicOrdering::SeqCst) {
+        if self.local.load(AtomicOrdering::Relaxed) {
             return true;
         }
         self.parent

@@ -11,11 +11,24 @@ impl Runtime {
             fuel: None,
             rng_state: seed ^ 0x9E37_79B9_7F4A_7C15,
             debug_stack: Vec::new(),
+            check_counter: 0,
         }
     }
 
     fn check_cancelled(&mut self) -> Result<(), RuntimeError> {
         if self.cancel_mask > 0 {
+            return Ok(());
+        }
+        // Amortize the atomic load: only check the cancel token every 64 evals.
+        self.check_counter = self.check_counter.wrapping_add(1);
+        if self.check_counter & 0x3F != 0 {
+            // Still do fuel accounting every call if fuel is set.
+            if let Some(fuel) = self.fuel.as_mut() {
+                if *fuel == 0 {
+                    return Err(RuntimeError::Cancelled);
+                }
+                *fuel = fuel.saturating_sub(1);
+            }
             return Ok(());
         }
         if let Some(fuel) = self.fuel.as_mut() {
@@ -59,7 +72,7 @@ impl Runtime {
             return Ok(value);
         }
         drop(cached);
-        if thunk.in_progress.swap(true, Ordering::SeqCst) {
+        if thunk.in_progress.swap(true, Ordering::Acquire) {
             return Err(RuntimeError::Message(
                 "recursive definition detected".to_string(),
             ));
@@ -67,7 +80,7 @@ impl Runtime {
         let value = self.eval_expr(&thunk.expr, &thunk.env)?;
         let mut cached = thunk.cached.lock().expect("thunk cache lock");
         *cached = Some(value.clone());
-        thunk.in_progress.store(false, Ordering::SeqCst);
+        thunk.in_progress.store(false, Ordering::Release);
         Ok(value)
     }
 
@@ -510,6 +523,30 @@ impl Runtime {
             HirExpr::Binary {
                 op, left, right, ..
             } => {
+                // Short-circuit logical operators: avoid evaluating the right
+                // operand when the left already determines the result.
+                if op == "&&" {
+                    let left_value = self.eval_expr(left, env)?;
+                    return match left_value {
+                        Value::Bool(false) => Ok(Value::Bool(false)),
+                        Value::Bool(true) => self.eval_expr(right, env),
+                        _ => {
+                            let right_value = self.eval_expr(right, env)?;
+                            self.eval_binary(op, left_value, right_value, env)
+                        }
+                    };
+                }
+                if op == "||" {
+                    let left_value = self.eval_expr(left, env)?;
+                    return match left_value {
+                        Value::Bool(true) => Ok(Value::Bool(true)),
+                        Value::Bool(false) => self.eval_expr(right, env),
+                        _ => {
+                            let right_value = self.eval_expr(right, env)?;
+                            self.eval_binary(op, left_value, right_value, env)
+                        }
+                    };
+                }
                 let left_value = self.eval_expr(left, env)?;
                 let right_value = self.eval_expr(right, env)?;
                 self.eval_binary(op, left_value, right_value, env)

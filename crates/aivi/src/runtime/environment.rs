@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 use super::values::Value;
 
@@ -11,7 +13,7 @@ pub(super) struct Env {
 
 struct EnvInner {
     parent: Option<Env>,
-    values: Mutex<HashMap<String, Value>>,
+    values: RwLock<HashMap<String, Value>>,
 }
 
 impl Env {
@@ -19,13 +21,13 @@ impl Env {
         Self {
             inner: Arc::new(EnvInner {
                 parent,
-                values: Mutex::new(HashMap::new()),
+                values: RwLock::new(HashMap::new()),
             }),
         }
     }
 
     pub(super) fn get(&self, name: &str) -> Option<Value> {
-        if let Some(value) = self.inner.values.lock().expect("env lock").get(name) {
+        if let Some(value) = self.inner.values.read().get(name) {
             return Some(value.clone());
         }
         self.inner
@@ -35,11 +37,7 @@ impl Env {
     }
 
     pub(super) fn set(&self, name: String, value: Value) {
-        self.inner
-            .values
-            .lock()
-            .expect("env lock")
-            .insert(name, value);
+        self.inner.values.write().insert(name, value);
     }
 }
 

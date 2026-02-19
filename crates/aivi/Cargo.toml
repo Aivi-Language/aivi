@@ -34,6 +34,7 @@ include_dir = "0.7.4"
 rusqlite = { version = "0.38.0", features = ["bundled"] }
 postgres = "0.19.9"
 mysql = "27.0.0"
+parking_lot = "0.12"
 
 [dev-dependencies]
 aivi_native_runtime = { path = "../aivi_native_runtime" }
