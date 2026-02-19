@@ -10,6 +10,7 @@ export multiply2, multiply3, multiply4
 export domain Matrix
 
 use aivi
+use aivi.vector (Vec2, Vec3, Vec4, transform2, transform3, transform4)
 
 Mat2 = { m00: Float, m01: Float, m10: Float, m11: Float }
 Mat3 = { m00: Float, m01: Float, m02: Float, m10: Float, m11: Float, m12: Float, m20: Float, m21: Float, m22: Float }
@@ -96,6 +97,12 @@ domain Matrix over Mat2 = {
 
   (*) : Mat2 -> Scalar -> Mat2
   (*) = m s => { m00: m.m00 * s, m01: m.m01 * s, m10: m.m10 * s, m11: m.m11 * s }
+
+  (×) : Mat2 -> Mat2 -> Mat2
+  (×) = a b => multiply2 a b
+
+  (×) : Mat2 -> Vec2 -> Vec2
+  (×) = m v => transform2 m v
 }
 
 domain Matrix over Mat3 = {
@@ -119,6 +126,12 @@ domain Matrix over Mat3 = {
     m10: m.m10 * s, m11: m.m11 * s, m12: m.m12 * s,
     m20: m.m20 * s, m21: m.m21 * s, m22: m.m22 * s
   }
+
+  (×) : Mat3 -> Mat3 -> Mat3
+  (×) = a b => multiply3 a b
+
+  (×) : Mat3 -> Vec3 -> Vec3
+  (×) = m v => transform3 m v
 }
 
 domain Matrix over Mat4 = {
@@ -145,4 +158,10 @@ domain Matrix over Mat4 = {
     m20: m.m20 * s, m21: m.m21 * s, m22: m.m22 * s, m23: m.m23 * s,
     m30: m.m30 * s, m31: m.m31 * s, m32: m.m32 * s, m33: m.m33 * s
   }
+
+  (×) : Mat4 -> Mat4 -> Mat4
+  (×) = a b => multiply4 a b
+
+  (×) : Mat4 -> Vec4 -> Vec4
+  (×) = m v => transform4 m v
 }"#;

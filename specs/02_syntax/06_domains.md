@@ -54,7 +54,21 @@ This form requires parentheses and the suffix must be **adjacent** to the closin
 
 ### Domain-Owned Operators (Including `×`)
 
-Domains may define semantics for operators beyond plain numeric arithmetic, including the `×` operator for product/cross-product style operations.
+Domains may define semantics for operators beyond plain numeric arithmetic, including the `×` operator for transform/matrix-multiplication style operations.
+
+### Within-Domain Operator Overloads (RHS-Typed)
+
+A single domain body may contain **multiple entries for the same operator token** (e.g. two `(*)` definitions), provided their full function types differ. The compiler selects among them by matching the inferred RHS type after the LHS carrier is resolved.
+
+<<< ../snippets/from_md/02_syntax/06_domains/block_09.aivi{aivi}
+
+**Convention**: Use `×` for structural products (matrix-matrix, matrix-vector), and `*` for scalar scaling. This reserves `×` as the visual signal for "transform-style" multiplication.
+
+Rules:
+
+1. Domain declarations remain `domain D over Carrier` — exactly **one** carrier type per declaration.
+2. Multiple operator entries with the **same token** are allowed as long as their full `LHS -> RHS -> Result` types are pairwise distinct.
+3. Resolution requires that exactly **one** overload matches the inferred `(LHS, RHS)` pair (see [Desugaring: Domains and Operators](../04_desugaring/09_domains.md#92-rhs-typed-overload-selection)).
 
 ## Supported operator hooks (v0.1)
 

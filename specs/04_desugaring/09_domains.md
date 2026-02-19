@@ -36,7 +36,42 @@ date + 1m
 
 If `1m` is not in scope, this is a compile-time error. If multiple imports provide a `1m` template, the current compiler does not perform carrier-based disambiguation; prefer avoiding such collisions via selective imports/hiding or explicit constructors.
 
-## 9.2 Ambiguity Errors
+## 9.2 RHS-Typed Overload Selection
+
+When a domain body contains multiple entries for the same operator token (see [Domains: Within-Domain Operator Overloads](../02_syntax/06_domains.md#within-domain-operator-overloads-rhs-typed)), the compiler selects among them by matching the inferred `(LHS, RHS)` operand types:
+
+| Step | Action | Example |
+| :--- | :--- | :--- |
+| 1. Resolve domain | from LHS carrier type (unchanged) | `identity4 × v` → domain `Matrix` (LHS is `Mat4`) |
+| 2. Collect overloads | all entries for the operator token in that domain | `(×)` entries: `Mat4 -> Mat4 -> Mat4`, `Mat4 -> Vec4 -> Vec4` |
+| 3. Infer RHS | type-check the RHS expression | `v : Vec4` |
+| 4. Select | pick the unique entry whose `(LHS, RHS)` matches | `Mat4 -> Vec4 -> Vec4` ✓ |
+
+### Error: No matching overload
+
+If no overload in `D` has an `(LHS, RHS)` type compatible with the inferred operand types:
+
+<<< ../snippets/from_md/04_desugaring/09_domains/block_05.aivi{aivi}
+
+Compiler error (E4010):
+```
+operator not defined for (Vec3, Mat4) in domain Matrix
+available: (*) : Mat4 -> Mat4 -> Mat4, (×) : Mat4 -> Mat4 -> Mat4, (×) : Mat4 -> Vec4 -> Vec4, ...
+```
+
+### Error: Ambiguous overload
+
+If two or more overloads remain equally valid after type inference (typically when operand types are still type variables):
+
+<<< ../snippets/from_md/04_desugaring/09_domains/block_06.aivi{aivi}
+
+Compiler error (E4011):
+```
+ambiguous domain operator '×' for these operand types; candidates: ... vs ...
+add a type annotation to disambiguate
+```
+
+## 9.3 Ambiguity Errors (Suffix Literal Templates)
 
 When a suffix literal template is missing:
 
@@ -51,16 +86,18 @@ Resolution: Avoid collisions by importing only the needed domain(s) and/or using
 <<< ../snippets/from_md/04_desugaring/09_domains/block_03.aivi{aivi}
 
 
-## 9.3 Operator Precedence
+## 9.4 Operator Precedence
 
 Domain operators follow standard precedence. Domains do not redefine precedence   only semantics:
 
 <<< ../snippets/from_md/04_desugaring/09_domains/block_04.aivi{aivi}
 
 
-## 9.4 Desugaring Order
+## 9.5 Desugaring Order
 
-1. **Type inference**   Determine carrier types
-2. **Delta expansion**   Replace literals with constructors
-3. **Domain resolution**   Match (operator, carrier) to domain
+1. **Type inference** — Determine carrier types
+2. **Delta expansion** — Replace literals with constructors
+3. **Domain resolution** — Match `(operator, carrier)` to domain `D`
+4. **RHS-overload selection** — Among `D`'s entries for the operator, pick the one matching the inferred `(LHS, RHS)` pair (§9.2)
+5. **Function substitution** — Replace operator with the selected implementation
 4. **Function substitution**   Replace operator with implementation

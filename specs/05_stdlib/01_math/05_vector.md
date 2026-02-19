@@ -40,6 +40,10 @@ Full record syntax is always available as well: `Vec2 { x: 1.0, y: 2.0 }`.
 
 <<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_03.aivi{aivi}
 
+`domain Vector` is defined for `Vec2`, `Vec3`, and `Vec4`. Each carrier gets `(+)`, `(-)`, `(*) : VecN -> Float -> VecN` (scalar scale), and `(/) : VecN -> Float -> VecN`.
+
+For matrix-vector transforms, use `×` from the `Matrix` domain (see [Matrix: `×` Operator Overloads](09_matrix.md#matrix-operator-overloads)).
+
 ## Helper Functions
 
 | Function | Explanation |
@@ -57,10 +61,11 @@ Full record syntax is always available as well: `Vec2 { x: 1.0, y: 2.0 }`.
 | **distance** a b<br><pre><code>`Vec3 -> Vec3 -> Float`</code></pre> | Euclidean distance between two points. |
 | **negate** v<br><pre><code>`Vec2 -> Vec2`</code></pre> | Returns `-v`. |
 | **negate** v<br><pre><code>`Vec3 -> Vec3`</code></pre> | Returns `-v`. |
+| **negate** v<br><pre><code>`Vec4 -> Vec4`</code></pre> | Returns `-v`. |
 
 ## Vector × Matrix
 
-These functions bridge vectors and matrices (see [Matrix](09_matrix.md)):
+These functions bridge vectors and matrices (see [Matrix](09_matrix.md)). They are also the implementations behind the `×` domain operator in the `Matrix` domain when the RHS is a vector type:
 
 | Function | Explanation |
 | --- | --- |
@@ -69,6 +74,8 @@ These functions bridge vectors and matrices (see [Matrix](09_matrix.md)):
 | **transform4** m v<br><pre><code>`Mat4 -> Vec4 -> Vec4`</code></pre> | Multiplies a 4×4 matrix by a 4D vector (homogeneous). |
 | **transformPoint3** m p<br><pre><code>`Mat4 -> Vec3 -> Vec3`</code></pre> | Transforms a 3D point by a 4×4 matrix (w=1, perspective divide). |
 | **transformDir3** m d<br><pre><code>`Mat4 -> Vec3 -> Vec3`</code></pre> | Transforms a 3D direction by a 4×4 matrix (w=0, no translation). |
+
+> The `×` operator in the `Matrix` domain desugars to `transform4 m v` (or `transform2`/`transform3` for the respective sizes). Use `×` in domain-active contexts; use these functions directly when calling from module-qualified paths.
 
 ## Usage Examples
 

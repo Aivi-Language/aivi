@@ -73,6 +73,22 @@ Some operators are **domain-resolved** when operand types are not plain `Int`. I
 
 Domain operator resolution is a static rewrite to an in-scope function named like `(+)` or `(<)` (see [Desugaring: Domains and Operators](../04_desugaring/09_domains.md)).
 
+### Within-domain overloads (RHS-typed)
+
+A single domain body may define **multiple entries** for the same operator token, differentiated by their full `LHS -> RHS -> Result` types. The compiler selects among them based on the inferred RHS type after the LHS carrier is resolved (see [Desugaring §9.2](../04_desugaring/09_domains.md#92-rhs-typed-overload-selection)).
+
+**Convention**: `×` is reserved for structural products (matrix-matrix, matrix-vector), while `*` is used for scalar scaling:
+
+```aivi
+domain Matrix over Mat4 = {
+  (*) : Mat4 -> Float -> Mat4    // scalar scale
+  (×) : Mat4 -> Mat4  -> Mat4   // matrix-matrix product
+  (×) : Mat4 -> Vec4  -> Vec4   // matrix-vector transform
+}
+```
+
+Precedence is **not** domain-defined; `×` and `*` share the same precedence level (`11_operators §11.2`).
+
 ## 11.5 Units, suffix literals, and template functions
 
 Suffix literals are **not strings**. They elaborate as applying an in-scope *template function*:

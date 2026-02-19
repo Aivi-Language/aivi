@@ -740,3 +740,105 @@ main = 1.0
         mismatch_diag.diagnostic.message
     );
 }
+
+#[test]
+fn typecheck_vec4_domain_scalar_mul() {
+    let source = r#"
+@no_prelude
+module test.vec4_domain_scalar
+export result
+
+use aivi
+use aivi.vector (Vec4, vec4, domain Vector)
+
+result : Vec4
+result = vec4 1.0 2.0 3.0 1.0 * 2.0
+"#;
+    check_ok_with_embedded(source, &["aivi", "aivi.vector", "aivi.math"]);
+}
+
+#[test]
+fn typecheck_mat4_vec4_cross_transform() {
+    let source = r#"
+@no_prelude
+module test.mat4_vec4_cross
+export result
+
+use aivi
+use aivi.vector (Vec4, vec4, domain Vector)
+use aivi.matrix (Mat4, identity4, domain Matrix)
+
+result : Vec4
+result = identity4 × vec4 1.0 2.0 3.0 1.0
+"#;
+    check_ok_with_embedded(source, &["aivi", "aivi.vector", "aivi.math", "aivi.matrix"]);
+}
+
+#[test]
+fn typecheck_mat4_mat4_cross_product() {
+    let source = r#"
+@no_prelude
+module test.mat4_mat4_cross
+export result
+
+use aivi
+use aivi.vector (Vec4)
+use aivi.matrix (Mat4, identity4, domain Matrix)
+
+result : Mat4
+result = identity4 × identity4
+"#;
+    check_ok_with_embedded(source, &["aivi", "aivi.vector", "aivi.math", "aivi.matrix"]);
+}
+
+#[test]
+fn typecheck_error_custom_type_no_cross_operator() {
+    // A user-defined type with no (×) in its domain should fail.
+    let source = r#"
+module test.no_cross_for_custom
+
+MyVec = { x: Float, y: Float }
+
+domain V over MyVec = {
+  (+) : MyVec -> MyVec -> MyVec
+  (+) = a b => { x: a.x + b.x, y: a.y + b.y }
+}
+
+v : MyVec
+v = { x: 1.0, y: 2.0 }
+
+bad = v × v
+"#;
+    check_err(source);
+}
+
+#[test]
+fn typecheck_error_vec3_cross_needs_vec3_not_mat4() {
+    // Vec3 domain has no (×) at all; applying × where LHS is Vec3 should error.
+    let source = r#"
+module test.vec3_no_cross
+
+Vec3 = { x: Float, y: Float, z: Float }
+Mat4 = { m00: Float, m01: Float, m02: Float, m03: Float,
+         m10: Float, m11: Float, m12: Float, m13: Float,
+         m20: Float, m21: Float, m22: Float, m23: Float,
+         m30: Float, m31: Float, m32: Float, m33: Float }
+
+domain Vector over Vec3 = {
+  (+) : Vec3 -> Vec3 -> Vec3
+  (+) = a b => { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z }
+}
+
+v : Vec3
+v = { x: 1.0, y: 2.0, z: 3.0 }
+
+m : Mat4
+m = { m00: 1.0, m01: 0.0, m02: 0.0, m03: 0.0,
+      m10: 0.0, m11: 1.0, m12: 0.0, m13: 0.0,
+      m20: 0.0, m21: 0.0, m22: 1.0, m23: 0.0,
+      m30: 0.0, m31: 0.0, m32: 0.0, m33: 1.0 }
+
+bad = v × m
+"#;
+    check_err(source);
+}
