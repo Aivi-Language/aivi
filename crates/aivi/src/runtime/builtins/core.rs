@@ -21,6 +21,7 @@ use super::system::{
     build_env_source_record, build_system_record,
 };
 use super::text::build_text_record;
+use super::timezone::build_timezone_record;
 use super::ui::build_ui_record;
 use super::url_http::{build_http_client_record, build_url_record, HttpClientMode};
 use super::util::{builtin, builtin_constructor};
@@ -303,6 +304,7 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("math".to_string(), build_math_record());
     env.set("calendar".to_string(), build_calendar_record());
     env.set("instant".to_string(), build_instant_record());
+    env.set("timezone".to_string(), build_timezone_record());
     env.set("color".to_string(), build_color_record());
     env.set("linalg".to_string(), build_linalg_record());
     env.set("signal".to_string(), build_signal_record());
