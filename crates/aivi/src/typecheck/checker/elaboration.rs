@@ -572,16 +572,6 @@ impl TypeChecker {
                 // Save substitution state AFTER arg inference so operand type
                 // constraints (e.g. Vec2 from domain `-`) are preserved.
                 let base_subst = self.subst.clone();
-
-                // Debug: show inferred arg types
-                if std::env::var("AIVI_DEBUG_OVERLOAD").is_ok() {
-                    for (i, at) in arg_tys.iter().enumerate() {
-                        let applied = self.apply(at.clone());
-                        let s = self.type_to_string(&applied);
-                        eprintln!("DEBUG elab_call overload: arg[{}] type = {}", i, s);
-                    }
-                }
-
                 let mut selected: Option<(Type, Vec<Type>, std::collections::HashMap<TypeVarId, Type>)> =
                     None;
 
@@ -600,19 +590,12 @@ impl TypeChecker {
                             let param_expanded = self.expand_alias((**param).clone());
                             let arg_applied = self.apply(arg_ty.clone());
                             let arg_expanded = self.expand_alias(arg_applied);
-                            if std::env::var("AIVI_DEBUG_OVERLOAD").is_ok() {
-                                eprintln!("DEBUG elab_call: candidate param = {:?}", param_expanded);
-                                eprintln!("DEBUG elab_call: arg type       = {:?}", arg_expanded);
-                            }
                             if let (
                                 Type::Record { fields: param_fields, .. },
                                 Type::Record { fields: arg_fields, .. },
                             ) = (&param_expanded, &arg_expanded)
                             {
                                 let param_has_extra = param_fields.keys().any(|k| !arg_fields.contains_key(k));
-                                if std::env::var("AIVI_DEBUG_OVERLOAD").is_ok() {
-                                    eprintln!("DEBUG elab_call: param_has_extra = {} (param keys: {:?}, arg keys: {:?})", param_has_extra, param_fields.keys().collect::<Vec<_>>(), arg_fields.keys().collect::<Vec<_>>());
-                                }
                                 if param_has_extra {
                                     ok = false;
                                     break;
@@ -642,10 +625,6 @@ impl TypeChecker {
                         continue;
                     }
                     let applied = self.apply(func_ty.clone());
-                    if std::env::var("AIVI_DEBUG_OVERLOAD").is_ok() {
-                        let sig = self.type_to_string(&scheme.ty);
-                        eprintln!("DEBUG elab_call: candidate PASSED: {} (already_selected: {})", sig, selected.is_some());
-                    }
                     if selected.is_some() {
                         self.subst = base_subst;
                         return Err(TypeError {

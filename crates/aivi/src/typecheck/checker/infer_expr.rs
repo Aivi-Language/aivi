@@ -214,6 +214,28 @@ impl TypeChecker {
                     let mut func_ty = self.instantiate(scheme);
                     let mut ok = true;
                     for (arg_ty, arg_expr) in arg_tys.iter().zip(args.iter()) {
+                        // Structurally check record field sets before unification.
+                        // An open record `{ x, y, .. }` should NOT match a candidate
+                        // expecting `{ x, y, z }` — the extra field disqualifies it.
+                        let func_ty_applied = self.apply(func_ty.clone());
+                        let func_ty_expanded = self.expand_alias(func_ty_applied);
+                        if let Type::Func(ref param, _) = func_ty_expanded {
+                            let param_expanded = self.expand_alias((**param).clone());
+                            let arg_applied = self.apply(arg_ty.clone());
+                            let arg_expanded = self.expand_alias(arg_applied);
+                            if let (
+                                Type::Record { fields: param_fields, .. },
+                                Type::Record { fields: arg_fields, .. },
+                            ) = (&param_expanded, &arg_expanded)
+                            {
+                                let param_has_extra = param_fields.keys().any(|k| !arg_fields.contains_key(k));
+                                if param_has_extra {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                        }
+
                         let result_ty = self.fresh_var();
                         if self
                             .unify_with_span(
