@@ -2,7 +2,7 @@
   <img width="320" height="auto" alt="Gemini_Generated_Image_q6tbnqq6tbnqq6tb_birefnet" src="https://github.com/user-attachments/assets/29f1856e-8047-45d5-b858-bb86ab53b64f" />
 </p>
 
-# AIVI Language Specification & Implementation
+# A purely functional programming language
 
 > [!WARNING]
 > The whole project has been vibe-coded and is not fit for production as of today.
