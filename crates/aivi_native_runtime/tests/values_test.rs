@@ -39,11 +39,7 @@ fn format_text() {
 
 #[test]
 fn format_list() {
-    let list = Value::List(Arc::new(vec![
-        Value::Int(1),
-        Value::Int(2),
-        Value::Int(3),
-    ]));
+    let list = Value::List(Arc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]));
     assert_eq!(format_value(&list), "[1, 2, 3]");
 }
 

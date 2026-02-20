@@ -68,11 +68,12 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
         }
     }
 
-    let mut adt_definitions: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    let mut adt_definitions: std::collections::BTreeMap<String, String> =
+        std::collections::BTreeMap::new();
     for cg_ty in global_cg_types.values() {
         collect_adt_definitions(cg_ty, &mut adt_definitions);
     }
-    
+
     for def_code in adt_definitions.values() {
         out.push_str(def_code);
         out.push_str("\n");
@@ -226,12 +227,16 @@ fn emit_typed_def(
     Ok(true)
 }
 
-fn collect_adt_definitions(cg_ty: &CgType, output: &mut std::collections::BTreeMap<String, String>) {
+fn collect_adt_definitions(
+    cg_ty: &CgType,
+    output: &mut std::collections::BTreeMap<String, String>,
+) {
     match cg_ty {
         CgType::Adt { name, constructors } => {
             let enum_name = CgType::enum_name(name, constructors);
             if !output.contains_key(&enum_name) {
-                let mut def = format!("#[derive(Clone, Debug, PartialEq)]\npub enum {enum_name} {{\n");
+                let mut def =
+                    format!("#[derive(Clone, Debug, PartialEq)]\npub enum {enum_name} {{\n");
                 for (ctor_name, args) in constructors {
                     if args.is_empty() {
                         def.push_str(&format!("    {ctor_name},\n"));
@@ -265,4 +270,3 @@ fn collect_adt_definitions(cg_ty: &CgType, output: &mut std::collections::BTreeM
         _ => {}
     }
 }
-

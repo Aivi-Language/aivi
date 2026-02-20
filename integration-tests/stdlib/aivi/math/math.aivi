@@ -90,7 +90,7 @@ ceil_smoke = do Effect {
 
 @test
 round_smoke = do Effect {
-  assert (round 2.5 == 2.0)  // banker's rounding: ties to even
+  assert (round 2.5 == 2.0) // banker's rounding: ties to even
   assert (round 3.5 == 4.0)
   assert (round 2.3 == 2.0)
 }
@@ -105,25 +105,25 @@ trunc_smoke = do Effect {
 
 @test
 pow_smoke = do Effect {
-  assert (abs (pow 2.0 3.0 - 8.0) < 0.0001)
-  assert (abs (pow 3.0 2.0 - 9.0) < 0.0001)
+  assert (abs (pow 2.0 3.0-8.0) < 0.0001)
+  assert (abs (pow 3.0 2.0-9.0) < 0.0001)
 }
 
 @test
 sqrt_smoke = do Effect {
-  assert (abs (sqrt 4.0 - 2.0) < 0.0001)
-  assert (abs (sqrt 9.0 - 3.0) < 0.0001)
+  assert (abs (sqrt 4.0-2.0) < 0.0001)
+  assert (abs (sqrt 9.0-3.0) < 0.0001)
 }
 
 @test
 cbrt_smoke = do Effect {
-  assert (abs (cbrt 27.0 - 3.0) < 0.0001)
-  assert (abs (cbrt 8.0 - 2.0) < 0.0001)
+  assert (abs (cbrt 27.0-3.0) < 0.0001)
+  assert (abs (cbrt 8.0-2.0) < 0.0001)
 }
 
 @test
 hypot_smoke = do Effect {
-  assert (abs (hypot 3.0 4.0 - 5.0) < 0.0001)
+  assert (abs (hypot 3.0 4.0-5.0) < 0.0001)
 }
 
 // -- Logarithms --
@@ -131,14 +131,14 @@ hypot_smoke = do Effect {
 @test
 log_smoke = do Effect {
   assert (abs (log (exp 1.0) - 1.0) < 0.0001)
-  assert (abs (log2 8.0 - 3.0) < 0.0001)
-  assert (abs (log10 100.0 - 2.0) < 0.0001)
+  assert (abs (log2 8.0-3.0) < 0.0001)
+  assert (abs (log10 100.0-2.0) < 0.0001)
 }
 
 @test
 exp_smoke = do Effect {
-  assert (abs (exp 0.0 - 1.0) < 0.0001)
-  assert (abs (exp 1.0 - e) < 0.0001)
+  assert (abs (exp 0.0-1.0) < 0.0001)
+  assert (abs (exp 1.0- e) < 0.0001)
 }
 
 // -- Trigonometry --

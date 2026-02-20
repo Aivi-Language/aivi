@@ -535,7 +535,6 @@ fn lex_sigil_multiline(
         return Some((text, line, end_col, closed));
     }
 
-
     // Default: single-line sigils (to avoid swallowing the rest of the file on a missing close).
     index += 1; // consume opener
     let line = start_line;
