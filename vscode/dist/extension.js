@@ -18032,9 +18032,11 @@ function discoverTestsFromText(text) {
   const tests2 = [];
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
-    if (!/^\s*@test\b/.test(lines[i])) {
+    const testMatch = /^\s*@test\s*(?:"([^"]*)")?\s*$/.exec(lines[i]);
+    if (!testMatch) {
       continue;
     }
+    const description = testMatch[1] ?? "";
     let j = i + 1;
     while (j < lines.length && /^\s*$/.test(lines[j])) {
       j++;
@@ -18045,7 +18047,7 @@ function discoverTestsFromText(text) {
     }
     const defName = m[1];
     const fullName = `${moduleName}.${defName}`;
-    tests2.push({ moduleName, defName, fullName, decoratorLine: i });
+    tests2.push({ moduleName, defName, fullName, description: description || defName, decoratorLine: i });
   }
   return { moduleName, tests: tests2 };
 }
@@ -18171,7 +18173,7 @@ function activate(context) {
       folderItem.children.add(fileItem);
       for (const t of discovered.tests) {
         const testId = `aiviTest:${uri.toString()}::${t.fullName}`;
-        const testItem = testController.createTestItem(testId, t.defName, uri);
+        const testItem = testController.createTestItem(testId, t.description, uri);
         testItem.range = new vscode.Range(
           new vscode.Position(t.decoratorLine, 0),
           new vscode.Position(t.decoratorLine, linesAt(text, t.decoratorLine).length)

@@ -173,6 +173,19 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 
 - aivi build should build a binary
 
+- The legacy formatter lives in `formatter/format_text_with_options_body.rs` and is included -> can this be removed?
+
+- split hir files into smaller chunks?
+
+- use include_str! instead of push_str
+
+- add docs to crate code
+
+- find and remove legacy code
+
+- better way than eval and apply?
+
+
 ## License
 
 MIT License. See `LICENCE.md`.

@@ -478,9 +478,10 @@ fn build_runtime_from_program_scoped(
                                         name.clone(),
                                         merge_method_binding(existing, value),
                                     );
+                                    continue;
                                 }
-                                continue;
                             }
+                            // Non-methods: last import wins (allows more-specific modules to shadow)
                             module_env.set(name.clone(), value);
                         }
                     }
@@ -499,8 +500,8 @@ fn build_runtime_from_program_scoped(
                                         name.clone(),
                                         merge_method_binding(existing, value),
                                     );
+                                    continue;
                                 }
-                                continue;
                             }
                             module_env.set(name, value);
                         }
@@ -518,8 +519,8 @@ fn build_runtime_from_program_scoped(
                                                 member.clone(),
                                                 merge_method_binding(existing, value),
                                             );
+                                            continue;
                                         }
-                                        continue;
                                     }
                                     module_env.set(member.clone(), value);
                                 }

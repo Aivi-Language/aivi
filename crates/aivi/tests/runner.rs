@@ -44,6 +44,22 @@ fn collect_test_entries(modules: &[Module]) -> Vec<(String, String)> {
 
 #[test]
 fn run_aivi_sources() {
+    // Spawn on a thread with a 32 MiB stack so deeply-recursive AIVI programs
+    // (which use recursion for all iteration) don't overflow the default 8 MiB
+    // test-thread stack.
+    let result = std::thread::Builder::new()
+        .name("aivi-tests".into())
+        .stack_size(32 * 1024 * 1024)
+        .spawn(run_aivi_sources_inner)
+        .expect("spawn test thread")
+        .join();
+    match result {
+        Ok(()) => {}
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
+fn run_aivi_sources_inner() {
     let root = set_workspace_root();
     let tests_dir = root.join("integration-tests");
 

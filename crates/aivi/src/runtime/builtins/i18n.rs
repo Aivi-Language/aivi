@@ -51,7 +51,12 @@ pub(super) fn build_i18n_record() -> Value {
     fields.insert(
         "render".to_string(),
         builtin("i18n.render", 2, |mut args, _| {
-            let args_rec = expect_record(args.pop().unwrap(), "i18n.render")?;
+            // Accept Unit as an empty record (AIVI parses `{}` as Unit).
+            let raw_args = args.pop().unwrap();
+            let args_rec = match &raw_args {
+                Value::Unit => Arc::new(std::collections::HashMap::new()),
+                _ => expect_record(raw_args, "i18n.render")?,
+            };
             let msg = expect_record(args.pop().unwrap(), "i18n.render")?;
             let body = match msg.get("body") {
                 Some(Value::Text(text)) => text.clone(),

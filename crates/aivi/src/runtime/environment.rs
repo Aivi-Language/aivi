@@ -39,6 +39,10 @@ impl Env {
     pub(super) fn set(&self, name: String, value: Value) {
         self.inner.values.write().insert(name, value);
     }
+
+    pub(super) fn has_local(&self, name: &str) -> bool {
+        self.inner.values.read().contains_key(name)
+    }
 }
 
 pub(super) struct RuntimeContext {
