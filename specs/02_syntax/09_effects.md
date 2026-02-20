@@ -29,29 +29,29 @@ For *handling* an effect error as a value, the standard library provides:
 
 `pure` lifts a value into an effect:
 
-<<< ../snippets/from_md/02_syntax/09_effects/block_01.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/09_effects/block_24.aivi{aivi}
 
 `bind` sequences effects explicitly (the `do Effect { ... }` block desugars to `bind`):
 
-<<< ../snippets/from_md/02_syntax/09_effects/block_02.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/09_effects/block_25.aivi{aivi}
 
 `fail` aborts an effect with an error value:
 
-<<< ../snippets/from_md/02_syntax/09_effects/block_03.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/09_effects/block_26.aivi{aivi}
 
 `attempt` runs an effect and captures success/failure as a `Result`:
 
-<<< ../snippets/from_md/02_syntax/09_effects/block_04.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/09_effects/block_27.aivi{aivi}
 
 ### `load`
 
 The standard library function `load` lifts a typed `Source` (see [External Sources](12_external_sources.md)) into an `Effect`.
 
-<<< ../snippets/from_md/02_syntax/09_effects/block_05.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/09_effects/block_28.aivi{aivi}
 
 ## 9.2 `do Effect` blocks
 
-<<< ../snippets/from_md/02_syntax/09_effects/block_06.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/09_effects/block_29.aivi{aivi}
 
 This is syntax sugar for monadic binding (see Desugaring section). All effectful operations within these blocks are automatically sequenced.
 
@@ -80,17 +80,17 @@ Two forms exist:
 
 1) **Effect fallback** (inside `do Effect {}` and only after `<-`):
 
-<<< ../snippets/from_md/02_syntax/09_effects/block_07.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/09_effects/block_30.aivi{aivi}
 
 This runs the effect; if it fails, it produces the fallback value instead.
 
 You can also match on the error value using arms (patterns match the **error**, not `Err`):
 
-<<< ../snippets/from_md/02_syntax/09_effects/block_08.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/09_effects/block_31.aivi{aivi}
 
 2) **Result fallback** (expression form):
 
-<<< ../snippets/from_md/02_syntax/09_effects/block_09.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/09_effects/block_32.aivi{aivi}
 
 Or with explicit `Err ...` arms:
 
@@ -230,7 +230,29 @@ The loop body's `{ ... }` block is promoted to the parent effect-block kind, so 
 <<< ../snippets/from_md/02_syntax/09_effects/block_05.aivi{aivi}
 
 
-## 9.8 Generic `do` notation
+## 9.8 Transition event wiring (`on`)
+
+`on Transition => handler` registers a handler for a machine state transition event inside a `do Effect { ... }` block. This is the mechanism for wiring [Machine Types (§ 3.7)](03_types.md#37-machine-types-state-machines) to effectful handlers.
+
+### Syntax
+
+```text
+on PostfixExpr => Expr
+```
+
+- **`PostfixExpr`** evaluates to a machine transition (constructor).
+- **`Expr`** is the handler effect to run when the transition fires.
+
+### Example
+
+```aivi
+on Click => pure Unit
+```
+
+`on` is only allowed inside `do Effect { ... }` blocks. Using it in a generic `do M { ... }` block is a type error.
+
+
+## 9.9 Generic `do` notation
 
 The `do` block syntax generalizes beyond `Effect` to any type constructor with monadic behavior. Currently **`Option`** and **`Result`** are supported alongside `Effect`.
 

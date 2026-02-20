@@ -96,7 +96,7 @@ impl CgType {
             CgType::DateTime => "String".to_string(),
             CgType::Func(a, b) => {
                 format!(
-                    "Box<dyn Fn({}) -> Result<{}, RuntimeError>>",
+                    "Box<dyn Fn({}, &mut aivi_native_runtime::Runtime) -> Result<{}, RuntimeError>>",
                     a.rust_type(),
                     b.rust_type()
                 )
@@ -177,7 +177,7 @@ impl CgType {
                         match_arms.push(format!("{enum_name}::{ctor_name} => Value::Constructor {{ name: {ctor_name:?}.to_string(), args: vec![] }}"));
                     } else {
                         let binds: Vec<_> = (0..args.len()).map(|i| format!("a{i}")).collect();
-                        let boxed_args: Vec<_> = args.iter().enumerate().map(|(i, t)| t.emit_box(&format!("*a{i}"))).collect();
+                        let boxed_args: Vec<_> = args.iter().enumerate().map(|(i, t)| t.emit_box(&format!("a{i}.clone()"))).collect();
                         match_arms.push(format!(
                             "{enum_name}::{ctor_name}({}) => Value::Constructor {{ name: {ctor_name:?}.to_string(), args: vec![{}] }}",
                             binds.join(", "),

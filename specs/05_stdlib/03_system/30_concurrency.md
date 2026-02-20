@@ -19,7 +19,9 @@ It provides **Fibers** (lightweight threads) and **Channels** for safe communica
 | Function | Explanation |
 | --- | --- |
 | **par** left right<br><pre><code>`Effect E A -> Effect E B -> Effect E (A, B)`</code></pre> | Runs both effects concurrently and returns both results; fails if either fails. |
-| **scope** run<br><pre><code>`(Scope -> Effect E A) -> Effect E A`</code></pre> | Creates a structured concurrency scope and runs `run` (current `Scope` is `Unit`). |
+| **race** left right<br><pre><code>`Effect E A -> Effect E A -> Effect E A`</code></pre> | Runs both effects concurrently and returns the first to complete; the other is cancelled. |
+| **scope** run<br><pre><code>`(Scope -> Effect E A) -> Effect E A`</code></pre> | Creates a structured concurrency scope. The `Scope` handle is passed to `run` and can be used to spawn child tasks that are guaranteed to complete (or be cancelled) before `scope` returns. |
+| **sleep** duration<br><pre><code>`Duration -> Effect E Unit`</code></pre> | Suspends the current fiber for at least `duration`. |
 
 ## Channels
 

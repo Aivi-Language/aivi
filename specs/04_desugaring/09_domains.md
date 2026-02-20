@@ -100,4 +100,3 @@ Domain operators follow standard precedence. Domains do not redefine precedence 
 3. **Domain resolution**   Match `(operator, carrier)` to domain `D`
 4. **RHS-overload selection**   Among `D`'s entries for the operator, pick the one matching the inferred `(LHS, RHS)` pair (§9.2)
 5. **Function substitution**   Replace operator with the selected implementation
-4. **Function substitution**   Replace operator with implementation

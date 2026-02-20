@@ -57,7 +57,7 @@ Inside a list literal, there are three ways to contribute elements:
 2. **Spread**: `...xs` splices the elements of `xs` into the list.
 3. **Range item**: `a..b` is treated like an implicit spread of a range list.
 
-<<< ../snippets/from_md/02_syntax/11_operators/block_01.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/11_operators/block_04.aivi{aivi}
 
 Notes:
 

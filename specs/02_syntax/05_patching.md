@@ -89,7 +89,7 @@ Intermediate records are created if missing.
 Removal is structural and reflected in the resulting type.
 
 
-## 5.7 Expressive Data Manipulation
+## 5.6 Expressive Data Manipulation
 
 Patching allows for very concise updates to deeply nested data structures and collections.
 

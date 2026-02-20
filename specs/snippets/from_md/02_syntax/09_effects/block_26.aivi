@@ -1,0 +1,1 @@
+checkAge = age => if age < 0 then fail (InvalidAge "negative") else pure age

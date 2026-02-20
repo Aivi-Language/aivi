@@ -1,6 +1,1 @@
-machine TrafficLight = {
-  -> Red   : init {}
-  Red    -> Green  : next {}
-  Green  -> Yellow : next {}
-  Yellow -> Red    : next {}
-}
+Bool = True | False

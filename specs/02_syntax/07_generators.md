@@ -85,7 +85,7 @@ Inside the loop body, `recurse next` continues with the next iteration with upda
 
 ### Syntax
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_01.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/07_generators/block_10.aivi{aivi}
 
 
 - **`pattern`** binds the loop state (may be a tuple, record, or simple name).
@@ -97,12 +97,12 @@ Inside the loop body, `recurse next` continues with the next iteration with upda
 
 `loop` is syntactic sugar for a local recursive function. The compiler transforms:
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_02.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/07_generators/block_11.aivi{aivi}
 
 
 into (approximately):
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_03.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/07_generators/block_12.aivi{aivi}
 
 
 ### Use in effect blocks

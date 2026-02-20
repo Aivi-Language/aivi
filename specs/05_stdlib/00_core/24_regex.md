@@ -1,7 +1,7 @@
-# Regex Domain
+# Regex Module
 
 <!-- quick-info: {"kind":"module","name":"aivi.regex"} -->
-The `Regex` domain handles **Pattern Matching** for text. Whether you're validating emails, scraping data, or searching logs, simple substring checks often aren't enough. Regex gives you a powerful, concise language to describe *shapes* of text. AIVI's regex support is safe (checked at compile-time with `~r/.../`) and fast (compiling to native matching engines), so you don't have to worry about runtime crashes from bad patterns.
+The `Regex` module handles **Pattern Matching** for text. Whether you're validating emails, scraping data, or searching logs, simple substring checks often aren't enough. Regex gives you a powerful, concise language to describe *shapes* of text. AIVI's regex support is safe (checked at compile-time with `~r/.../`) and fast (compiling to native matching engines), so you don't have to worry about runtime crashes from bad patterns.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.regex</div>

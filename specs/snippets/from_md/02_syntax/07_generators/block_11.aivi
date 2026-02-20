@@ -1,0 +1,4 @@
+loop (a, b) = (0, 1) => {
+  yield a
+  recurse (b, a + b)
+}

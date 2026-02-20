@@ -1,0 +1,22 @@
+   Compiling aivi v0.1.0 (/home/mendrik/desk/mendrik/aivi/crates/aivi)
+warning: function `cargo_build_fixture_lib` is never used
+  --> crates/aivi/tests/native_fixture.rs:46:8
+   |
+46 | pub fn cargo_build_fixture_lib(code: &str) -> Output {
+   |        ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: `aivi` (test "typed_codegen") generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 5.33s
+     Running tests/typed_codegen.rs (target/debug/deps/typed_codegen-34a5646a43370c13)
+
+running 5 tests
+test typed_codegen_cg_types_collected ... ok
+test typed_codegen_int_arithmetic_emits_typed_fn ... ok
+test typed_codegen_polymorphic_no_typed_fn ... ok
+test typed_codegen_still_has_value_fn ... ok
+test typed_codegen_compiles_and_runs ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.87s
+

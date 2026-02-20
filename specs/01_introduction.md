@@ -56,7 +56,7 @@ AIVI is a statically typed, purely functional language designed for **high-integ
 AIVI is designed to solve the complexity of modern data-heavy applications by shifting the focus from **how** data is moved to **what** data means. 
 
 ### High Integrity by Design
-By eliminating `null`, exceptions, and mutable state, AIVI ensures that if a program compiles, it is fundamentally sound. Its exhaustive pattern matching and totality requirements for bindings make "unhandled state" a impossibility at the type level.
+By eliminating `null`, exceptions, and mutable state, AIVI ensures that if a program compiles, it is fundamentally sound. Its exhaustive pattern matching and totality requirements for bindings make "unhandled state" an impossibility at the type level.
 
 ### Universal Portability (WASM & WASI)
 AIVI is built from the ground up to target **WebAssembly (WASM)**. 

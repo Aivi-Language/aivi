@@ -1,0 +1,5 @@
+__loop0 = (a, b) => {
+  yield a
+  __loop0 (b, a + b)
+}
+__loop0 (0, 1)

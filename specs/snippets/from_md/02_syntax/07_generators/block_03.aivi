@@ -1,5 +1,2 @@
-__loop0 = (a, b) => {
-  yield a
-  __loop0 (b, a + b)
-}
-__loop0 (0, 1)
+// Haskell: [x * 2 | x <- [1..10], even x]
+// AIVI does NOT have this syntax.

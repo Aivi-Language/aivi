@@ -125,6 +125,13 @@
       ]
     },
     {
+      "path": "specs/snippets/from_md/02_syntax/01_bindings/block_13.aivi",
+      "module": "docs.snippets.02_syntax.01_bindings.block_13",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
       "path": "specs/snippets/from_md/02_syntax/02_functions/block_01.aivi",
       "module": "docs.snippets.02_syntax.02_functions.block_01",
       "verify": [
@@ -330,6 +337,27 @@
     {
       "path": "specs/snippets/from_md/02_syntax/03_types/block_20.aivi",
       "module": "docs.snippets.02_syntax.03_types.block_20",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_22.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_22",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_23.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_23",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/03_types/block_24.aivi",
+      "module": "docs.snippets.02_syntax.03_types.block_24",
       "verify": [
         "fmt"
       ]
@@ -615,6 +643,27 @@
       ]
     },
     {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_10.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_10",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_11.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_11",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/07_generators/block_12.aivi",
+      "module": "docs.snippets.02_syntax.07_generators.block_12",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
       "path": "specs/snippets/from_md/02_syntax/08_pattern_matching/block_01.aivi",
       "module": "docs.snippets.02_syntax.08_pattern_matching.block_01",
       "verify": [
@@ -883,6 +932,69 @@
     {
       "path": "specs/snippets/from_md/02_syntax/09_effects/block_23.aivi",
       "module": "docs.snippets.02_syntax.09_effects.block_23",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_24.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_24",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_25.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_25",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_26.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_26",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_27.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_27",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_28.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_28",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_29.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_29",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_30.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_30",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_31.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_31",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_32.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_32",
       "verify": [
         "fmt"
       ]
@@ -2381,6 +2493,13 @@
       "verify": [
         "fmt",
         "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/02_syntax/11_operators/block_04.aivi",
+      "module": "docs.snippets.02_syntax.11_operators.block_04",
+      "verify": [
+        "fmt"
       ]
     },
     {

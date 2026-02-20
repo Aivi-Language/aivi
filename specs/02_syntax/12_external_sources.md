@@ -15,7 +15,7 @@ External data enters AIVI through typed **Sources**. A source represents a persi
 - `K`   the **kind** of source (File, Http, Db, etc.)
 - `A`   the **decoded type** of the content
 
-Sources are effectful. Loading a source performs I/O and returns an `Effect E A` (where `E` captures the possible source errors). All source interactions must occur within an `effect` block.
+Sources are effectful. Loading a source performs I/O and returns an `Effect E A` (where `E` captures the possible source errors). All source interactions must occur within a `do Effect { ... }` block.
 
 Typical API shape:
 
