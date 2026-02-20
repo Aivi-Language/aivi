@@ -728,8 +728,6 @@ mod text {
 
 mod collections {
     use super::*;
-    use im::{HashMap as ImHashMap, HashSet as ImHashSet, Vector as ImVector};
-    use aivi_native_runtime::KeyValue;
 
     fn collections() -> Value {
         get("collections")
@@ -921,7 +919,8 @@ mod collections {
 
             let dequeued = call(rt, field(&queue_rec(), "dequeue"), vec![q]);
             assert_eq!(ctor_name(&dequeued), "Some");
-            let pair = as_tuple(&ctor_arg(&dequeued, 0));
+            let inner = ctor_arg(&dequeued, 0);
+            let pair = as_tuple(&inner);
             assert_eq!(as_int(&pair[0]), 1);
         }
 
@@ -987,7 +986,8 @@ mod collections {
 
             let popped = call(rt, field(&heap_rec(), "popMin"), vec![h]);
             assert_eq!(ctor_name(&popped), "Some");
-            let pair = as_tuple(&ctor_arg(&popped, 0));
+            let inner = ctor_arg(&popped, 0);
+            let pair = as_tuple(&inner);
             assert_eq!(as_int(&pair[0]), 1); // min element
         }
 
@@ -1250,7 +1250,8 @@ mod regex_tests {
         let m = call(rt, field(&regex(), "match"), vec![rx, Value::Text("abc 42-hello xyz".into())]);
         assert_eq!(ctor_name(&m), "Some");
         let rec = ctor_arg(&m, 0);
-        let full = as_text(&field(&rec, "full"));
+        let full_val = field(&rec, "full");
+        let full = as_text(&full_val);
         assert_eq!(full, "42-hello");
     }
 
@@ -1262,7 +1263,8 @@ mod regex_tests {
 
         let found = call(rt, field(&regex(), "find"), vec![rx, Value::Text("abc123def".into())]);
         assert_eq!(ctor_name(&found), "Some");
-        let pair = as_tuple(&ctor_arg(&found, 0));
+        let inner = ctor_arg(&found, 0);
+        let pair = as_tuple(&inner);
         assert_eq!(as_int(&pair[0]), 3); // start
         assert_eq!(as_int(&pair[1]), 6); // end
     }
@@ -1395,7 +1397,7 @@ mod number {
     #[test]
     fn rational_arithmetic() {
         let rt = &mut Runtime::new();
-        let make_rat = |n: i64, d: i64| {
+        let mut make_rat = |n: i64, d: i64| {
             let n = call(rt, field(&bigint(), "fromInt"), vec![Value::Int(n)]);
             let d = call(rt, field(&bigint(), "fromInt"), vec![Value::Int(d)]);
             call(rt, field(&rational(), "fromBigInts"), vec![n, d])
@@ -1460,7 +1462,6 @@ mod number {
 
 mod core_builtins {
     use super::*;
-    use aivi_native_runtime::values_equal;
 
     #[test]
     fn unit_true_false_none() {
@@ -1620,7 +1621,7 @@ mod core_builtins {
         // A simple generator: \step z -> step z 1 |> step  2
         // foldGen gen step init => gen step init
         let gen = Value::Closure(std::sync::Arc::new(aivi_native_runtime::ClosureValue {
-            func: std::sync::Arc::new(|step, rt| {
+            func: std::sync::Arc::new(|step, _rt| {
                 // returns a closure that takes `z` and folds [1, 2]
                 let step2 = step.clone();
                 Ok(Value::Closure(std::sync::Arc::new(aivi_native_runtime::ClosureValue {
