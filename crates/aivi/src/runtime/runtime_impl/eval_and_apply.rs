@@ -461,7 +461,7 @@ impl Runtime {
                             cleanups.push(cleanup);
                             Ok(Value::Unit)
                         }
-                        Value::Effect(_) => {
+                        Value::Effect(_) | Value::Source(_) => {
                             let value = self.run_effect_value(value)?;
                             let bindings =
                                 collect_pattern_bindings(pattern, &value).ok_or_else(|| {

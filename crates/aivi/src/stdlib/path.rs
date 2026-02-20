@@ -46,9 +46,9 @@ normalize = p => { ...p, segments: normalizeSegments p.absolute p.segments }
 parse : Text -> Path
 parse = raw => {
   cleaned = text.trim raw
-  cleaned = text.replaceAll "\\" "/" cleaned
-  absolute = text.startsWith "/" cleaned
-  parts = text.split "/" cleaned
+  cleaned = text.replaceAll cleaned "\\" "/"
+  absolute = text.startsWith cleaned "/"
+  parts = text.split cleaned "/"
   { absolute: absolute, segments: normalizeSegments absolute parts }
 }
 

@@ -83,16 +83,16 @@ compare : Text -> Text -> Int
 compare = left right => text.compare left right
 
 slice : Int -> Int -> Text -> Text
-slice = start end value => text.slice start end value
+slice = start end value => text.slice value start end
 
 split : Text -> Text -> List Text
-split = sep value => text.split sep value
+split = sep value => text.split value sep
 
 splitLines : Text -> List Text
 splitLines = value => text.splitLines value
 
 chunk : Int -> Text -> List Text
-chunk = size value => text.chunk size value
+chunk = size value => text.chunk value size
 
 trim : Text -> Text
 trim = value => text.trim value
@@ -104,10 +104,10 @@ trimEnd : Text -> Text
 trimEnd = value => text.trimEnd value
 
 padStart : Int -> Text -> Text -> Text
-padStart = width fill value => text.padStart width fill value
+padStart = width fill value => text.padStart value width fill
 
 padEnd : Int -> Text -> Text -> Text
-padEnd = width fill value => text.padEnd width fill value
+padEnd = width fill value => text.padEnd value width fill
 
 replace : Text -> Text -> Text -> Text
 replace = needle replacement value => text.replace value needle replacement
@@ -119,7 +119,7 @@ remove : Text -> Text -> Text
 remove = needle value => text.remove value needle
 
 repeat : Int -> Text -> Text
-repeat = count value => text.repeat count value
+repeat = count value => text.repeat value count
 
 reverse : Text -> Text
 reverse = value => text.reverse value

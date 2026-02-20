@@ -109,6 +109,8 @@ impl Parser {
                 if self.consume_symbol("...") {
                     if let Some(pattern) = self.parse_pattern() {
                         rest = Some(Box::new(pattern));
+                    } else {
+                        rest = Some(Box::new(Pattern::Wildcard(self.previous_span())));
                     }
                 } else if let Some(pattern) = self.parse_pattern() {
                     items.push(pattern);

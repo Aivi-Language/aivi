@@ -450,9 +450,8 @@ fn build_env_record() -> Value {
             let key = expect_text(args.pop().unwrap(), "system.env.get")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| match std::env::var(&key) {
-                    Ok(value) => Ok(make_some(Value::Text(value))),
-                    Err(std::env::VarError::NotPresent) => Ok(make_none()),
-                    Err(err) => Err(RuntimeError::Error(Value::Text(err.to_string()))),
+                    Ok(value) => Ok(Value::Text(value)),
+                    Err(_) => Err(RuntimeError::Error(Value::Text(format!("env var not found: {key}")))),
                 }),
             };
             Ok(Value::Source(Arc::new(SourceValue {
@@ -500,16 +499,40 @@ pub(super) fn build_env_source_record() -> Value {
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| match std::env::var(&key) {
                     Ok(value) => Ok(Value::Text(value)),
-                    Err(std::env::VarError::NotPresent) => Err(RuntimeError::Error(Value::Text(
-                        format!("env var not set: {key}"),
-                    ))),
-                    Err(err) => Err(RuntimeError::Error(Value::Text(err.to_string()))),
+                    Err(_) => Err(RuntimeError::Error(Value::Text(format!("env var not found: {key}")))),
                 }),
             };
             Ok(Value::Source(Arc::new(SourceValue {
                 kind: "Env".to_string(),
                 effect: Arc::new(effect),
             })))
+        }),
+    );
+    fields.insert(
+        "set".to_string(),
+        builtin("env.set", 2, |mut args, _| {
+            let value = expect_text(args.pop().unwrap(), "env.set")?;
+            let key = expect_text(args.pop().unwrap(), "env.set")?;
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    std::env::set_var(&key, &value);
+                    Ok(Value::Unit)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
+        "remove".to_string(),
+        builtin("env.remove", 1, |mut args, _| {
+            let key = expect_text(args.pop().unwrap(), "env.remove")?;
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    std::env::remove_var(&key);
+                    Ok(Value::Unit)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
         }),
     );
     Value::Record(Arc::new(fields))
