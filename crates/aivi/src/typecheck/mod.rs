@@ -13,11 +13,11 @@ mod infer;
 mod ordering;
 
 #[cfg(test)]
+mod builtins_parity_tests;
+#[cfg(test)]
 mod class_constraints_tests;
 #[cfg(test)]
 mod expected_coercions_tests;
-#[cfg(test)]
-mod builtins_parity_tests;
 
 pub use check::{check_types, check_types_including_stdlib};
 pub use elaborate::elaborate_expected_coercions;

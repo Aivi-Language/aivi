@@ -78,6 +78,9 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
         entry.push(def);
     }
 
+    // Track whether main has a typed variant for the entry point.
+    let mut main_typed_cg: Option<CgType> = None;
+
     for name in &order {
         let defs = groups.get(name).expect("def group");
         if *name == "main" && defs.len() != 1 {
@@ -100,8 +103,12 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
 
             // Additionally emit a typed version if CgType is closed.
             if let Some(ref cg_ty) = defs[0].cg_type {
-                if cg_ty.is_closed() && *name != "main" {
-                    emit_typed_def(&mut out, name, defs[0], cg_ty, &global_cg_types, def_vis)?;
+                if cg_ty.is_closed() {
+                    let emitted =
+                        emit_typed_def(&mut out, name, defs[0], cg_ty, &global_cg_types, def_vis)?;
+                    if emitted && *name == "main" {
+                        main_typed_cg = Some(cg_ty.clone());
+                    }
                 }
             }
             continue;
@@ -141,8 +148,17 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
         out.push_str("fn main() {\n");
         out.push_str("    let mut rt = Runtime::new();\n");
         out.push_str("    let result: Result<(), RuntimeError> = (|| {\n");
-        out.push_str(&format!("        let v = {main_fn}(&mut rt)?;\n"));
-        out.push_str("        let _ = rt.run_effect_value(v)?;\n");
+        if let Some(ref cg_ty) = main_typed_cg {
+            // Typed main: call the typed version and box the result for run_effect_value.
+            let typed_fn = format!("{main_fn}_typed");
+            let box_expr = cg_ty.emit_box("__typed_v");
+            out.push_str(&format!("        let __typed_v = {typed_fn}(&mut rt)?;\n"));
+            out.push_str(&format!("        let v = {box_expr};\n"));
+            out.push_str("        let _ = rt.run_effect_value(v)?;\n");
+        } else {
+            out.push_str(&format!("        let v = {main_fn}(&mut rt)?;\n"));
+            out.push_str("        let _ = rt.run_effect_value(v)?;\n");
+        }
         out.push_str("        Ok(())\n");
         out.push_str("    })();\n");
         out.push_str("    match result {\n");
@@ -166,6 +182,7 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
 ///
 /// If typed emission fails for any reason (unsupported expression, type mismatch), the function
 /// is silently skipped — the Value-returning version is always available as fallback.
+/// Returns `true` if a `_typed` variant was actually emitted.
 fn emit_typed_def(
     out: &mut String,
     name: &str,
@@ -173,14 +190,14 @@ fn emit_typed_def(
     cg_ty: &CgType,
     global_cg_types: &HashMap<String, CgType>,
     vis: &str,
-) -> Result<(), AiviError> {
+) -> Result<bool, AiviError> {
     let mut ctx = typed_expr::TypedCtx::new(global_cg_types.clone());
 
     // Try to emit the typed body
     let body_code = match typed_expr::emit_typed_expr(&def.expr, cg_ty, &mut ctx, 1) {
         Ok(Some(code)) => code,
-        Ok(None) => return Ok(()), // Can't emit typed — silently skip
-        Err(_) => return Ok(()),   // Error — silently skip
+        Ok(None) => return Ok(false), // Can't emit typed — silently skip
+        Err(_) => return Ok(false),   // Error — silently skip
     };
 
     let rust_ty = cg_ty.rust_type();
@@ -196,5 +213,5 @@ fn emit_typed_def(
     out.push_str(&format!("    Ok({body_code})\n"));
     out.push_str("}\n\n");
 
-    Ok(())
+    Ok(true)
 }

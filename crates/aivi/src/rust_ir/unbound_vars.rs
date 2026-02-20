@@ -704,6 +704,8 @@ fn resolve_builtin(name: &str) -> Option<BuiltinName> {
             | "https"
             | "sockets"
             | "streams"
+            | "instant"
+            | "List"
             | "collections"
             | "console"
             | "crypto"

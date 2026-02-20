@@ -13,8 +13,36 @@ use crate::rust_ir::cg_type::CgType;
 use crate::rust_ir::{RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrMatchArm, RustIrPattern};
 use crate::AiviError;
 
+use super::expr;
 use super::utils::{collect_free_locals_in_expr, rust_global_fn_name, rust_local_name};
 use std::collections::HashSet;
+
+/// Try to emit a typed expression; if it cannot be typed, fall back to the Value path
+/// (`emit_expr`) and unbox the result to the expected `CgType`.
+///
+/// This bridges the typed↔Value boundary so typed code can call into non-typed globals,
+/// builtins, and complex expressions without giving up entirely.
+fn emit_typed_or_unbox(
+    expr: &RustIrExpr,
+    ty: &CgType,
+    ctx: &mut TypedCtx,
+    indent: usize,
+) -> Result<Option<String>, AiviError> {
+    // First try the fully typed path.
+    if let Some(code) = emit_typed_expr(expr, ty, ctx, indent)? {
+        return Ok(Some(code));
+    }
+    // Fall back to Value path + unbox.
+    // Dynamic/Adt types can't be meaningfully unboxed to a typed representation.
+    if matches!(ty, CgType::Dynamic | CgType::Adt { .. }) {
+        return Ok(None);
+    }
+    let value_code = expr::emit_expr(expr, indent)?;
+    Ok(Some(format!(
+        "({})?",
+        ty.emit_unbox(&format!("({value_code})?"))
+    )))
+}
 
 /// Context tracking the types of local variables during typed emission.
 pub(super) struct TypedCtx {
@@ -127,9 +155,9 @@ pub(super) fn emit_typed_expr(
             else_branch,
             ..
         } => {
-            let cond_code = emit_typed_expr(cond, &CgType::Bool, ctx, indent)?;
-            let then_code = emit_typed_expr(then_branch, ty, ctx, indent)?;
-            let else_code = emit_typed_expr(else_branch, ty, ctx, indent)?;
+            let cond_code = emit_typed_or_unbox(cond, &CgType::Bool, ctx, indent)?;
+            let then_code = emit_typed_or_unbox(then_branch, ty, ctx, indent)?;
+            let else_code = emit_typed_or_unbox(else_branch, ty, ctx, indent)?;
             match (cond_code, then_code, else_code) {
                 (Some(c), Some(t), Some(e)) => Some(format!("if {c} {{ {t} }} else {{ {e} }}")),
                 _ => None,
@@ -151,7 +179,7 @@ pub(super) fn emit_typed_expr(
 
                 // Register param type
                 ctx.with_local(param, *param_ty.clone());
-                let body_code = emit_typed_expr(body, ret_ty, ctx, indent + 1)?;
+                let body_code = emit_typed_or_unbox(body, ret_ty, ctx, indent + 1)?;
 
                 if let Some(body_code) = body_code {
                     let ind = "    ".repeat(indent);
@@ -181,8 +209,8 @@ pub(super) fn emit_typed_expr(
             if let Some(func_ty) = infer_expr_type(func, ctx) {
                 if let CgType::Func(param_ty, ret_ty) = &func_ty {
                     if ret_ty.as_ref() == ty {
-                        let func_code = emit_typed_expr(func, &func_ty, ctx, indent)?;
-                        let arg_code = emit_typed_expr(arg, param_ty, ctx, indent)?;
+                        let func_code = emit_typed_or_unbox(func, &func_ty, ctx, indent)?;
+                        let arg_code = emit_typed_or_unbox(arg, param_ty, ctx, indent)?;
                         if let (Some(f), Some(a)) = (func_code, arg_code) {
                             return Ok(Some(format!("({f})({a})?")));
                         }
@@ -209,21 +237,21 @@ pub(super) fn emit_typed_expr(
                         }
                     }
                     if cur == ty {
-                        let _ind = "    ".repeat(indent);
-                        let _ind2 = "    ".repeat(indent + 1);
                         let mut rendered_args = Vec::new();
                         for (arg, pty) in args.iter().zip(param_types.iter()) {
-                            if let Some(a) = emit_typed_expr(arg, pty, ctx, indent + 1)? {
+                            if let Some(a) = emit_typed_or_unbox(arg, pty, ctx, indent + 1)? {
                                 rendered_args.push(a);
                             } else {
                                 return Ok(None);
                             }
                         }
-                        let _fn_name = format!("{}_typed", rust_global_fn_name(name));
-                        // For multi-arg, we chain: fn_typed(arg1)?(arg2)?...(argN)?
-                        // But actually, we need to generate a different calling convention.
-                        // For now, fall back for multi-arg calls.
-                        return Ok(None);
+                        let fn_name = format!("{}_typed", rust_global_fn_name(name));
+                        // Chain calls: fn_typed(rt)?(arg1)?(arg2)?...
+                        let mut code = format!("{fn_name}(rt)?");
+                        for a in &rendered_args {
+                            code = format!("({code})({a})?");
+                        }
+                        return Ok(Some(code));
                     }
                 }
             }
@@ -236,7 +264,7 @@ pub(super) fn emit_typed_expr(
                 if items.len() == item_types.len() {
                     let mut parts = Vec::new();
                     for (item, item_ty) in items.iter().zip(item_types.iter()) {
-                        if let Some(code) = emit_typed_expr(item, item_ty, ctx, indent)? {
+                        if let Some(code) = emit_typed_or_unbox(item, item_ty, ctx, indent)? {
                             parts.push(code);
                         } else {
                             return Ok(None);
@@ -266,7 +294,8 @@ pub(super) fn emit_typed_expr(
                     }
                     if let crate::rust_ir::RustIrPathSegment::Field(name) = &field.path[0] {
                         if let Some(ft) = field_types.get(name) {
-                            if let Some(code) = emit_typed_expr(&field.value, ft, ctx, indent)? {
+                            if let Some(code) = emit_typed_or_unbox(&field.value, ft, ctx, indent)?
+                            {
                                 field_exprs.insert(name.clone(), code);
                             } else {
                                 return Ok(None);
@@ -304,7 +333,7 @@ pub(super) fn emit_typed_expr(
                         if let Some(ft) = fields.get(field) {
                             if ft == ty {
                                 if let Some(base_code) =
-                                    emit_typed_expr(base, &base_ty, ctx, indent)?
+                                    emit_typed_or_unbox(base, &base_ty, ctx, indent)?
                                 {
                                     return Ok(Some(format!("({base_code}).{idx}")));
                                 }
@@ -341,7 +370,7 @@ pub(super) fn emit_typed_expr(
                     if item.spread {
                         return Ok(None);
                     }
-                    if let Some(code) = emit_typed_expr(&item.expr, elem_ty, ctx, indent)? {
+                    if let Some(code) = emit_typed_or_unbox(&item.expr, elem_ty, ctx, indent)? {
                         rendered.push(code);
                     } else {
                         return Ok(None);
@@ -408,8 +437,8 @@ fn emit_typed_binary(
         _ => return Ok(None),
     };
 
-    let left_code = emit_typed_expr(left, &left_ty, ctx, indent)?;
-    let right_code = emit_typed_expr(right, &right_ty, ctx, indent)?;
+    let left_code = emit_typed_or_unbox(left, &left_ty, ctx, indent)?;
+    let right_code = emit_typed_or_unbox(right, &right_ty, ctx, indent)?;
 
     match (left_code, right_code) {
         (Some(l), Some(r)) => {
@@ -450,7 +479,7 @@ fn emit_typed_match(
         _ => return Ok(None),
     };
 
-    let scrut_code = emit_typed_expr(scrutinee, &scrut_ty, ctx, indent)?;
+    let scrut_code = emit_typed_or_unbox(scrutinee, &scrut_ty, ctx, indent)?;
     let scrut_code = match scrut_code {
         Some(c) => c,
         None => return Ok(None),
@@ -476,7 +505,7 @@ fn emit_typed_match(
         for (name, bty) in &bindings {
             ctx.with_local(name, bty.clone());
         }
-        let body_code = emit_typed_expr(&arm.body, result_ty, ctx, indent + 2)?;
+        let body_code = emit_typed_or_unbox(&arm.body, result_ty, ctx, indent + 2)?;
         let body_code = match body_code {
             Some(b) => b,
             None => return Ok(None),
@@ -550,7 +579,7 @@ fn emit_typed_block(
                 // For binds, try to infer the expr type and emit typed
                 if let RustIrPattern::Var { name, .. } = pattern {
                     if let Some(expr_ty) = infer_expr_type(expr, ctx) {
-                        if let Some(code) = emit_typed_expr(expr, &expr_ty, ctx, indent + 1)? {
+                        if let Some(code) = emit_typed_or_unbox(expr, &expr_ty, ctx, indent + 1)? {
                             let rust_name = rust_local_name(name);
                             out.push_str(&format!("{ind2}let {rust_name} = {code};\n"));
                             ctx.with_local(name, expr_ty);
@@ -562,14 +591,14 @@ fn emit_typed_block(
             }
             RustIrBlockItem::Expr { expr } => {
                 if last {
-                    if let Some(code) = emit_typed_expr(expr, result_ty, ctx, indent + 1)? {
+                    if let Some(code) = emit_typed_or_unbox(expr, result_ty, ctx, indent + 1)? {
                         out.push_str(&format!("{ind2}{code}\n"));
                     } else {
                         return Ok(None);
                     }
                 } else {
                     // Non-last expressions: emit for side effects (Unit type)
-                    if let Some(code) = emit_typed_expr(expr, &CgType::Unit, ctx, indent + 1)? {
+                    if let Some(code) = emit_typed_or_unbox(expr, &CgType::Unit, ctx, indent + 1)? {
                         out.push_str(&format!("{ind2}{code};\n"));
                     } else {
                         return Ok(None);

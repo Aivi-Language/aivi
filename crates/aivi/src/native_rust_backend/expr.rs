@@ -348,24 +348,32 @@ fn emit_record(fields: &[RustIrRecordField], indent: usize) -> Result<String, Ai
             ));
             continue;
         }
-        if field.path.len() != 1 {
+        // Verify all path segments are Field (index paths in record literals are unsupported).
+        let field_names: Vec<&str> = field
+            .path
+            .iter()
+            .map(|seg| match seg {
+                RustIrPathSegment::Field(name) => Ok(name.as_str()),
+                _ => Err(AiviError::Codegen(
+                    "index paths are not supported in record literals".to_string(),
+                )),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        if field_names.is_empty() {
             return Err(AiviError::Codegen(
-                "nested record paths are not supported in record literals yet".to_string(),
+                "record field path must not be empty".to_string(),
             ));
         }
-        match &field.path[0] {
-            RustIrPathSegment::Field(name) => {
-                let value_code = emit_expr(&field.value, indent)?;
-                stmts.push(format!(
-                    "map.insert({:?}.to_string(), ({value_code})?);",
-                    name
-                ));
-            }
-            _ => {
-                return Err(AiviError::Codegen(
-                    "index paths are not supported in record literals yet".to_string(),
-                ))
-            }
+        let value_code = emit_expr(&field.value, indent)?;
+        if field_names.len() == 1 {
+            // Simple case: flat field insertion.
+            stmts.push(format!(
+                "map.insert({:?}.to_string(), ({value_code})?);",
+                field_names[0]
+            ));
+        } else {
+            // Nested record path: e.g. `person.name = "Alice"` creates intermediate records.
+            stmts.push(emit_nested_record_insert(&field_names, &value_code));
         }
     }
     let ind = "    ".repeat(indent);
@@ -384,6 +392,55 @@ fn emit_record(fields: &[RustIrRecordField], indent: usize) -> Result<String, Ai
     out.push_str(&ind);
     out.push('}');
     Ok(out)
+}
+
+/// Emit Rust code that inserts a value into a nested record path.
+///
+/// For `["person", "address", "city"]`, generates code that:
+/// 1. Navigates/creates `map["person"]["address"]` as nested Records
+/// 2. Inserts the value at the leaf key `"city"`
+fn emit_nested_record_insert(field_names: &[&str], value_code: &str) -> String {
+    // Build a nested insertion using a helper closure. The generated code:
+    // { let __val = (VALUE)?;
+    //   let mut __cur = &mut map;
+    //   // for each intermediate segment, ensure a Record entry exists:
+    //   __cur = Arc::make_mut(__cur.entry("a").or_insert_with(|| Value::Record(Arc::new(HashMap::new())))...);
+    //   // insert at leaf
+    // }
+    let mut s = String::new();
+    s.push_str(&format!("{{ let __val = ({value_code})?; "));
+
+    // Navigate intermediates
+    let (intermediates, leaf) = field_names.split_at(field_names.len() - 1);
+    let leaf = leaf[0];
+
+    // We need to drill into nested records. Each intermediate gets or creates a Record entry.
+    // We operate on the top-level `map` directly.
+    let mut depth = 0;
+    for name in intermediates {
+        let var = if depth == 0 {
+            "map".to_string()
+        } else {
+            format!("__nested_{}", depth - 1)
+        };
+        s.push_str(&format!(
+            "let __entry_{depth} = {var}.entry({name:?}.to_string()).or_insert_with(|| Value::Record(Arc::new(HashMap::new()))); "
+        ));
+        s.push_str(&format!(
+            "let __nested_{depth} = match __entry_{depth} {{ Value::Record(ref mut m) => Arc::make_mut(m), _ => return Err(RuntimeError::Message(format!(\"record path conflict at {name}\"))), }}; "
+        ));
+        depth += 1;
+    }
+
+    let final_var = if depth == 0 {
+        "map".to_string()
+    } else {
+        format!("__nested_{}", depth - 1)
+    };
+    s.push_str(&format!(
+        "{final_var}.insert({leaf:?}.to_string(), __val); }}"
+    ));
+    s
 }
 
 fn emit_patch_fields(fields: &[RustIrRecordField], indent: usize) -> Result<String, AiviError> {
