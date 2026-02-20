@@ -531,6 +531,17 @@ fn build_runtime_from_program_scoped(
             }
         }
 
+        // Re-apply local defs after imports so that local definitions always
+        // shadow imported names (including domain members).  Without this,
+        // a wildcard `use` that brings in a domain method with the same name
+        // as a local binding would silently overwrite the local definition.
+        for def in &module.defs {
+            let qualified = format!("{module_name}.{}", def.name);
+            if let Some(value) = globals.get(&qualified) {
+                module_env.set(def.name.clone(), value);
+            }
+        }
+
         // Re-export forwarding: a module can `export x` where `x` is brought into scope via `use`
         // (e.g. facade modules like `aivi.linalg`). Ensure qualified access `Module.x` resolves by
         // registering exported bindings that exist in the module env, even when they aren't local
@@ -566,6 +577,7 @@ fn format_runtime_error(err: RuntimeError) -> String {
 include!("runtime_impl/lifecycle_and_cancel.rs");
 include!("runtime_impl/eval_and_apply.rs");
 include!("runtime_impl/resources.rs");
+include!("runtime_impl/trampoline.rs");
 
 impl BuiltinValue {
     fn apply(&self, arg: Value, runtime: &mut Runtime) -> Result<Value, RuntimeError> {

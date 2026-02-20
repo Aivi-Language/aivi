@@ -635,23 +635,10 @@ impl Runtime {
     }
 
     fn apply(&mut self, func: Value, arg: Value) -> Result<Value, RuntimeError> {
-        let func = self.force_value(func)?;
-        match func {
-            Value::Closure(closure) => {
-                let new_env = Env::new(Some(closure.env.clone()));
-                new_env.set(closure.param.clone(), arg);
-                self.eval_expr(&closure.body, &new_env)
-            }
-            Value::Builtin(builtin) => builtin.apply(arg, self),
-            Value::MultiClause(clauses) => self.apply_multi_clause(clauses, arg),
-            Value::Constructor { name, mut args } => {
-                args.push(arg);
-                Ok(Value::Constructor { name, args })
-            }
-            other => Err(RuntimeError::Message(format!(
-                "attempted to call a non-function: {}",
-                format_value(&other)
-            ))),
+        let step = self.apply_step(func, arg)?;
+        match step {
+            Step::Return(value) => Ok(value),
+            other => self.trampoline(other),
         }
     }
 }

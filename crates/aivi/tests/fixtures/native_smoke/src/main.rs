@@ -748,9 +748,9 @@ fn def_slice__d4a6e26ba7a1d8b1(rt: &mut Runtime) -> R {
                 {
                     let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("slice").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                     let mut __aivi_call_args: Vec<Value> = Vec::new();
+                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     __aivi_call_args.push((aivi_ok(start.clone()))?);
                     __aivi_call_args.push((aivi_ok(end.clone()))?);
-                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     rt.call(f, __aivi_call_args)
                 }
             }) })))
@@ -768,9 +768,9 @@ fn def_aivi_text_slice__e6c2a9145243ed0b(rt: &mut Runtime) -> R {
                 {
                     let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("slice").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                     let mut __aivi_call_args: Vec<Value> = Vec::new();
+                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     __aivi_call_args.push((aivi_ok(start.clone()))?);
                     __aivi_call_args.push((aivi_ok(end.clone()))?);
-                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     rt.call(f, __aivi_call_args)
                 }
             }) })))
@@ -785,8 +785,8 @@ fn def_split__5fdb7a8ac3147783_clause_0(rt: &mut Runtime) -> R {
             {
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("split").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
-                __aivi_call_args.push((aivi_ok(sep.clone()))?);
                 __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push((aivi_ok(sep.clone()))?);
                 rt.call(f, __aivi_call_args)
             }
         }) })))
@@ -822,8 +822,8 @@ fn def_aivi_text_split__80a3c02af28574b9(rt: &mut Runtime) -> R {
             {
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("split").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
-                __aivi_call_args.push((aivi_ok(sep.clone()))?);
                 __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push((aivi_ok(sep.clone()))?);
                 rt.call(f, __aivi_call_args)
             }
         }) })))
@@ -859,8 +859,8 @@ fn def_chunk__0f838176873c8e22(rt: &mut Runtime) -> R {
             {
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("chunk").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
-                __aivi_call_args.push((aivi_ok(size.clone()))?);
                 __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push((aivi_ok(size.clone()))?);
                 rt.call(f, __aivi_call_args)
             }
         }) })))
@@ -874,8 +874,8 @@ fn def_aivi_text_chunk__16ece2618919fcb0(rt: &mut Runtime) -> R {
             {
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("chunk").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
-                __aivi_call_args.push((aivi_ok(size.clone()))?);
                 __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push((aivi_ok(size.clone()))?);
                 rt.call(f, __aivi_call_args)
             }
         }) })))
@@ -958,9 +958,9 @@ fn def_padStart__327376c3f4b203b2(rt: &mut Runtime) -> R {
                 {
                     let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("padStart").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                     let mut __aivi_call_args: Vec<Value> = Vec::new();
+                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     __aivi_call_args.push((aivi_ok(width.clone()))?);
                     __aivi_call_args.push((aivi_ok(fill.clone()))?);
-                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     rt.call(f, __aivi_call_args)
                 }
             }) })))
@@ -978,9 +978,9 @@ fn def_aivi_text_padStart__a00237c043c90ab8(rt: &mut Runtime) -> R {
                 {
                     let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("padStart").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                     let mut __aivi_call_args: Vec<Value> = Vec::new();
+                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     __aivi_call_args.push((aivi_ok(width.clone()))?);
                     __aivi_call_args.push((aivi_ok(fill.clone()))?);
-                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     rt.call(f, __aivi_call_args)
                 }
             }) })))
@@ -998,9 +998,9 @@ fn def_padEnd__3d3af185317a0417(rt: &mut Runtime) -> R {
                 {
                     let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("padEnd").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                     let mut __aivi_call_args: Vec<Value> = Vec::new();
+                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     __aivi_call_args.push((aivi_ok(width.clone()))?);
                     __aivi_call_args.push((aivi_ok(fill.clone()))?);
-                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     rt.call(f, __aivi_call_args)
                 }
             }) })))
@@ -1018,9 +1018,9 @@ fn def_aivi_text_padEnd__428ac571b37cdd89(rt: &mut Runtime) -> R {
                 {
                     let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("padEnd").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                     let mut __aivi_call_args: Vec<Value> = Vec::new();
+                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     __aivi_call_args.push((aivi_ok(width.clone()))?);
                     __aivi_call_args.push((aivi_ok(fill.clone()))?);
-                    __aivi_call_args.push((aivi_ok(value.clone()))?);
                     rt.call(f, __aivi_call_args)
                 }
             }) })))
@@ -1210,8 +1210,8 @@ fn def_repeat__573bb1642d08280a(rt: &mut Runtime) -> R {
             {
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("repeat").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
-                __aivi_call_args.push((aivi_ok(count.clone()))?);
                 __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push((aivi_ok(count.clone()))?);
                 rt.call(f, __aivi_call_args)
             }
         }) })))
@@ -1225,8 +1225,8 @@ fn def_aivi_text_repeat__80184ac0180bdb74(rt: &mut Runtime) -> R {
             {
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("repeat").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
-                __aivi_call_args.push((aivi_ok(count.clone()))?);
                 __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push((aivi_ok(count.clone()))?);
                 rt.call(f, __aivi_call_args)
             }
         }) })))
@@ -30360,9 +30360,9 @@ fn def_parse__0c4e87a7a1f6fd8c_clause_1(rt: &mut Runtime) -> R {
             let __v = ({
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("replaceAll").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(cleaned.clone()))?);
                 __aivi_call_args.push((aivi_ok(Value::Text("\\".to_string())))?);
                 __aivi_call_args.push((aivi_ok(Value::Text("/".to_string())))?);
-                __aivi_call_args.push((aivi_ok(cleaned.clone()))?);
                 rt.call(f, __aivi_call_args)
             })?;
             let mut __b1: HashMap<&'static str, Value> = HashMap::new();
@@ -30378,8 +30378,8 @@ fn def_parse__0c4e87a7a1f6fd8c_clause_1(rt: &mut Runtime) -> R {
             let __v = ({
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("startsWith").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
-                __aivi_call_args.push((aivi_ok(Value::Text("/".to_string())))?);
                 __aivi_call_args.push((aivi_ok(cleaned.clone()))?);
+                __aivi_call_args.push((aivi_ok(Value::Text("/".to_string())))?);
                 rt.call(f, __aivi_call_args)
             })?;
             let mut __b2: HashMap<&'static str, Value> = HashMap::new();
@@ -30395,8 +30395,8 @@ fn def_parse__0c4e87a7a1f6fd8c_clause_1(rt: &mut Runtime) -> R {
             let __v = ({
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("split").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
-                __aivi_call_args.push((aivi_ok(Value::Text("/".to_string())))?);
                 __aivi_call_args.push((aivi_ok(cleaned.clone()))?);
+                __aivi_call_args.push((aivi_ok(Value::Text("/".to_string())))?);
                 rt.call(f, __aivi_call_args)
             })?;
             let mut __b3: HashMap<&'static str, Value> = HashMap::new();
@@ -31301,9 +31301,9 @@ fn def_aivi_path_parse__c126b92b2073cb46(rt: &mut Runtime) -> R {
             let __v = ({
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("replaceAll").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(cleaned.clone()))?);
                 __aivi_call_args.push((aivi_ok(Value::Text("\\".to_string())))?);
                 __aivi_call_args.push((aivi_ok(Value::Text("/".to_string())))?);
-                __aivi_call_args.push((aivi_ok(cleaned.clone()))?);
                 rt.call(f, __aivi_call_args)
             })?;
             let mut __b1: HashMap<&'static str, Value> = HashMap::new();
@@ -31319,8 +31319,8 @@ fn def_aivi_path_parse__c126b92b2073cb46(rt: &mut Runtime) -> R {
             let __v = ({
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("startsWith").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
-                __aivi_call_args.push((aivi_ok(Value::Text("/".to_string())))?);
                 __aivi_call_args.push((aivi_ok(cleaned.clone()))?);
+                __aivi_call_args.push((aivi_ok(Value::Text("/".to_string())))?);
                 rt.call(f, __aivi_call_args)
             })?;
             let mut __b2: HashMap<&'static str, Value> = HashMap::new();
@@ -31336,8 +31336,8 @@ fn def_aivi_path_parse__c126b92b2073cb46(rt: &mut Runtime) -> R {
             let __v = ({
                 let f = ((aivi_ok(__builtin("text"))).and_then(|b| match b { Value::Record(map) => map.get("split").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
                 let mut __aivi_call_args: Vec<Value> = Vec::new();
-                __aivi_call_args.push((aivi_ok(Value::Text("/".to_string())))?);
                 __aivi_call_args.push((aivi_ok(cleaned.clone()))?);
+                __aivi_call_args.push((aivi_ok(Value::Text("/".to_string())))?);
                 rt.call(f, __aivi_call_args)
             })?;
             let mut __b3: HashMap<&'static str, Value> = HashMap::new();
