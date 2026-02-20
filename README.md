@@ -1,5 +1,5 @@
 <p align="center">
-  <img width="128" height="128" alt="image" src="https://github.com/user-attachments/assets/f2815310-861c-454d-a37c-9dd4f4bd0aed" />
+  <img width="320" height="auto" alt="Gemini_Generated_Image_q6tbnqq6tbnqq6tb_birefnet" src="https://github.com/user-attachments/assets/29f1856e-8047-45d5-b858-bb86ab53b64f" />
 </p>
 
 # AIVI Language Specification & Implementation
