@@ -970,6 +970,59 @@ topoSmoke = do Effect {
 | Acquire resource | `handle <- managedFile "data.txt"` (inside `do Effect`) |
 | Write a test | `@test "adds correctly" myTest = do Effect { assertEq (f 1) 2 }` |
 
+### 19.1 Worked mini-examples (algorithms + real-world fragments)
+
+These are small, practical examples you can lift into real modules. For larger complete versions, see `integration-tests/complex/*.aivi`.
+
+#### Kahn topological sort step (graph processing)
+
+```aivi
+neighbors = node graph => Map.get node graph.adj match
+  | Some ns => ns
+  | None    => []
+
+sortLoop = graph indeg q outRev => (Queue.dequeue q) match
+  | None => {
+    out = reverseList outRev
+    if List.length out == List.length graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg)
+  }
+  | Some (node, q2) => {
+    res = relax (neighbors node graph) indeg q2
+    sortLoop graph res.indeg res.q [node, ...outRev]
+  }
+```
+
+#### Fenwick tree query/update (streaming aggregates)
+
+```aivi
+rangeSum : Fenwick -> Int -> Int -> Option Int
+rangeSum = fenwick l r =>
+  if l > r || l < 1 || r > fenwick.size then None
+  else Some (prefix fenwick r - prefix fenwick (l - 1))
+
+update : Fenwick -> Int -> Int -> Fenwick
+update = fenwick idx value =>
+  if idx < 1 || idx > fenwick.size then fenwick
+  else {
+    prev = rangeSum fenwick idx idx
+    delta = prev match
+      | Some v => value - v
+      | None   => value
+    fenwick <| { tree: addDelta fenwick.size idx delta fenwick.tree }
+  }
+```
+
+#### Result workflow (input validation / service boundary)
+
+```aivi
+validatedTotal = do Result {
+  subtotal <- Ok 120
+  discount <- Ok 15
+  shipping <- Ok 9
+  Ok (subtotal - discount + shipping)
+}
+```
+
 ---
 
 ## 20 Anti-Patterns (Do NOT write these)
