@@ -63,7 +63,7 @@ prefixGo = fenwick i acc => {
 // Query range sum [l..r]
 rangeSum : Fenwick -> Int -> Int -> Option Int
 rangeSum = fenwick l r =>
-  if l > r || l < 1 then None
+  if l > r || l < 1 || r > fenwick.size then None
   else Some (prefix fenwick r - prefix fenwick (l - 1))
 
 // Point update at index
@@ -113,5 +113,6 @@ behaviors = do Effect {
   assert (rangeSum updated 3 3 == Some 9)
   assert (rangeSum fenwick 3 3 == Some 4)
 
-  assert (verifyIndices [1, 2, 3, 4, 5] updated values)
+  assert (verifyIndices [1, 2, 3, 4, 5] fenwick values)
+  assert (verifyIndices [1, 2, 3, 4, 5] updated [3, 1, 9, 1, 5])
 }

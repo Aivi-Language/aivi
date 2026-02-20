@@ -148,6 +148,7 @@ pub(super) enum KeyValue {
     Rational(Arc<BigRational>),
     Decimal(Decimal),
     Tuple(Vec<KeyValue>),
+    Record(Vec<(String, KeyValue)>),
 }
 
 impl KeyValue {
@@ -168,6 +169,14 @@ impl KeyValue {
                     items.iter().map(KeyValue::try_from_value).collect();
                 keys.map(KeyValue::Tuple)
             }
+            Value::Record(fields) => {
+                let mut pairs: Vec<(String, KeyValue)> = fields
+                    .iter()
+                    .map(|(k, v)| KeyValue::try_from_value(v).map(|kv| (k.clone(), kv)))
+                    .collect::<Option<Vec<_>>>()?;
+                pairs.sort_by(|a, b| a.0.cmp(&b.0));
+                Some(KeyValue::Record(pairs))
+            }
             _ => None,
         }
     }
@@ -186,6 +195,13 @@ impl KeyValue {
             KeyValue::Decimal(value) => Value::Decimal(*value),
             KeyValue::Tuple(items) => {
                 Value::Tuple(items.iter().map(KeyValue::to_value).collect())
+            }
+            KeyValue::Record(pairs) => {
+                let fields: HashMap<String, Value> = pairs
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.to_value()))
+                    .collect();
+                Value::Record(Arc::new(fields))
             }
         }
     }
@@ -206,6 +222,7 @@ impl Ord for KeyValue {
             Rational(_) => 8,
             Decimal(_) => 9,
             Tuple(_) => 10,
+            Record(_) => 11,
         };
         let tag_cmp = tag(self).cmp(&tag(other));
         if tag_cmp != Ordering::Equal {
@@ -223,6 +240,7 @@ impl Ord for KeyValue {
             (Rational(a), Rational(b)) => a.cmp(b),
             (Decimal(a), Decimal(b)) => a.cmp(b),
             (Tuple(a), Tuple(b)) => a.cmp(b),
+            (Record(a), Record(b)) => a.cmp(b),
             _ => Ordering::Equal,
         }
     }

@@ -125,32 +125,32 @@ Boxing/unboxing functions for each CgType:
 
 ### Completed
 
-1. **`CgType` enum** — [`crates/aivi_core/src/cg_type.rs`](../../crates/aivi_core/src/cg_type.rs)
+1. **`CgType` enum** — `crates/aivi_core/src/cg_type.rs`
    - Variants: `Dynamic`, `Int`, `Float`, `Bool`, `Text`, `Unit`, `DateTime`, `Func`, `ListOf`, `Tuple`, `Record`, `Adt`
    - Methods: `is_closed()`, `rust_type()` (Rust type string), `emit_box()` (typed→Value), `emit_unbox()` (Value→typed)
 
-2. **Type → CgType lowering** — [`crates/aivi/src/typecheck/checker/cg_type_lowering.rs`](../../crates/aivi/src/typecheck/checker/cg_type_lowering.rs)
+2. **Type → CgType lowering** — `crates/aivi/src/typecheck/checker/cg_type_lowering.rs`
    - Converts the type checker's internal `Type` to `CgType` via substitution
    - Monomorphic defs get concrete CgTypes; polymorphic defs get `CgType::Dynamic`
 
-3. **InferResult with CgTypes** — [`crates/aivi/src/typecheck/infer.rs`](../../crates/aivi/src/typecheck/infer.rs)
+3. **InferResult with CgTypes** — `crates/aivi/src/typecheck/infer.rs`
    - `infer_value_types_full()` returns `InferResult { diagnostics, type_strings, cg_types }`
    - CgType map: `HashMap<String, HashMap<String, CgType>>` (module → def → type)
 
-4. **Typed expression emitter** — [`crates/aivi/src/native_rust_backend/typed_expr.rs`](../../crates/aivi/src/native_rust_backend/typed_expr.rs)
+4. **Typed expression emitter** — `crates/aivi/src/native_rust_backend/typed_expr.rs`
    - `emit_typed_expr()` produces unboxed Rust code for closed types
    - Supports: literals, variables, binary ops, if/else, lambda, app, tuple, record, field access, match, block, list
    - Falls back to `None` (Value path) for unsupported expressions
 
-5. **Pipeline wiring** — [`crates/aivi/src/rust_codegen.rs`](../../crates/aivi/src/rust_codegen.rs)
+5. **Pipeline wiring** — `crates/aivi/src/rust_codegen.rs`
    - `compile_rust_native_typed()` injects CgType into RustIrDef before emission
    - `emit_module()` emits both Value-returning and `_typed` variants for closed-type defs
 
-6. **Driver integration** — [`crates/aivi_driver/src/lib.rs`](../../crates/aivi_driver/src/lib.rs)
+6. **Driver integration** — `crates/aivi_driver/src/lib.rs`
    - `desugar_target_with_cg_types()` returns `(HirProgram, CgType map)` for the build pipeline
    - CLI `compile` and `build` commands use the typed pipeline
 
-7. **Tests** — [`crates/aivi/tests/typed_codegen.rs`](../../crates/aivi/tests/typed_codegen.rs)
+7. **Tests** — `crates/aivi/tests/typed_codegen.rs`
    - CgType collection verification
    - `_typed` function emission for closed types
    - No `_typed` for polymorphic definitions

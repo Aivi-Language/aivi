@@ -449,7 +449,7 @@ fn emit_binary(op: &str, left_code: String, right_code: String) -> String {
         "!=" => format!(
             "({left_code}).and_then(|a| ({right_code}).map(|b| Value::Bool(!aivi_native_runtime::values_equal(&a, &b))))"
         ),
-        "+" | "-" | "*" | "/" => {
+        "+" | "-" | "*" | "/" | "%" => {
             let template = r#"({LEFT}).and_then(|l| ({RIGHT}).and_then(|r| match (l, r) {
         (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a <OP> b)),
         (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a <OP> b)),
