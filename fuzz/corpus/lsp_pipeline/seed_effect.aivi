@@ -1,0 +1,8 @@
+module fuzz.seed.lsp.effect
+export main
+
+main : Effect Text Unit
+main = effect {
+  x <- pure 42
+  pure Unit
+}

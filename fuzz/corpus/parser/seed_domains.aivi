@@ -1,0 +1,7 @@
+module fuzz.seed.parser.domains
+export Celsius, toFahrenheit
+
+domain Celsius = Float
+
+toFahrenheit : Celsius -> Float
+toFahrenheit c = c * 9.0 / 5.0 + 32.0

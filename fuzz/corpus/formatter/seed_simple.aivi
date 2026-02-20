@@ -1,0 +1,7 @@
+module fuzz.seed.fmt.simple
+export x, greet
+
+x = 1 + 2 * 3
+
+greet : Text -> Text
+greet name = "Hello, \{name}!"

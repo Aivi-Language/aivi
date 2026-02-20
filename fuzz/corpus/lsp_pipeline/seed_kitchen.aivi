@@ -1,0 +1,15 @@
+module fuzz.seed.lsp.kitchen
+export add, greet, result, Point, origin
+
+add : Int -> Int -> Int
+add a b = a + b
+
+greet : Text -> Text
+greet name = "Hello, \{name}!"
+
+type Point = { x: Float, y: Float }
+
+origin : Point
+origin = { x = 0.0, y = 0.0 }
+
+result = add 1 2
