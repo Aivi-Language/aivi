@@ -52,10 +52,12 @@ jobs:
         run: pnpm run build
 
       - name: Commit version bump and regenerated assets
+        id: version
         run: |
           set -euo pipefail
           cd ..
           version="$(node -p "require('./vscode/package.json').version")"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -79,3 +81,11 @@ jobs:
         with:
           name: aivi-vscode.vsix
           path: vscode/*.vsix
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: vscode-v${{ steps.version.outputs.version }}
+          name: VS Code Extension v${{ steps.version.outputs.version }}
+          files: vscode/*.vsix
+          generate_release_notes: true

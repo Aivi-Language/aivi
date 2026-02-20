@@ -5,6 +5,7 @@ use crate::AiviError;
 use super::resolve::resolve_target_path;
 use super::walk::{collect_files, is_aivi_source};
 
+/// Expands CLI target patterns into concrete sorted source paths used by all driver pipeline stages.
 pub(crate) fn expand_target(target: &str) -> Result<Vec<PathBuf>, AiviError> {
     let mut paths = Vec::new();
     let (base, recursive) = if let Some(base) = target.strip_suffix("/...") {

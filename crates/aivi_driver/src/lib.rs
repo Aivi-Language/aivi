@@ -33,6 +33,7 @@ pub enum AiviError {
     Cargo(String),
 }
 
+/// Expands a user target and parses each file into a CST bundle for editor/tooling entrypoints.
 pub fn parse_target(target: &str) -> Result<CstBundle, AiviError> {
     let mut files = Vec::new();
     let paths = workspace::expand_target(target)?;
@@ -42,6 +43,7 @@ pub fn parse_target(target: &str) -> Result<CstBundle, AiviError> {
     Ok(CstBundle { files })
 }
 
+/// Reads one source file, lexes/parses it, and returns file metadata plus diagnostics.
 pub fn parse_file(path: &Path) -> Result<CstFile, AiviError> {
     let content = fs::read_to_string(path)?;
     let lines: Vec<String> = content.lines().map(|line| line.to_string()).collect();
@@ -64,11 +66,13 @@ pub fn parse_file(path: &Path) -> Result<CstFile, AiviError> {
     })
 }
 
+/// Resolves a target and loads parsed modules, including embedded stdlib modules for full compilation context.
 pub fn load_modules(target: &str) -> Result<Vec<Module>, AiviError> {
     let paths = workspace::expand_target(target)?;
     load_modules_from_paths(&paths)
 }
 
+/// Parses modules from explicit file paths and prepends embedded stdlib modules for downstream phases.
 pub fn load_modules_from_paths(paths: &[PathBuf]) -> Result<Vec<Module>, AiviError> {
     let mut modules = Vec::new();
     for path in paths {
@@ -81,6 +85,7 @@ pub fn load_modules_from_paths(paths: &[PathBuf]) -> Result<Vec<Module>, AiviErr
     Ok(stdlib_modules)
 }
 
+/// Collects parser diagnostics for all files in a target before semantic/type phases run.
 pub fn load_module_diagnostics(target: &str) -> Result<Vec<FileDiagnostic>, AiviError> {
     let paths = workspace::expand_target(target)?;
     let mut diagnostics = Vec::new();
@@ -92,6 +97,7 @@ pub fn load_module_diagnostics(target: &str) -> Result<Vec<FileDiagnostic>, Aivi
     Ok(diagnostics)
 }
 
+/// Produces desugared HIR for a target after ensuring syntax diagnostics are clean.
 pub fn desugar_target(target: &str) -> Result<HirProgram, AiviError> {
     let diagnostics = load_module_diagnostics(target)?;
     if file_diagnostics_have_errors(&diagnostics) {
@@ -110,6 +116,7 @@ pub fn desugar_target(target: &str) -> Result<HirProgram, AiviError> {
     Ok(aivi_core::desugar_modules(&stdlib_modules))
 }
 
+/// Builds a test-only program view by finding `@test` definitions and validating their modules.
 pub fn test_target_program_and_names(
     target: &str,
     check_stdlib: bool,
@@ -181,6 +188,7 @@ pub fn test_target_program_and_names(
     Ok((program, test_entries, diagnostics))
 }
 
+/// Produces typed desugared HIR by running syntax checks, type checks, and expected coercion elaboration.
 pub fn desugar_target_typed(target: &str) -> Result<HirProgram, AiviError> {
     let diagnostics = load_module_diagnostics(target)?;
     if file_diagnostics_have_errors(&diagnostics) {
@@ -250,11 +258,13 @@ pub fn desugar_target_with_cg_types(
     Ok((program, infer_result.cg_types))
 }
 
+/// Lowers a typed HIR program into kernel IR for backend code generation.
 pub fn kernel_target(target: &str) -> Result<aivi_core::KernelProgram, AiviError> {
     let hir = desugar_target_typed(target)?;
     Ok(aivi_core::lower_kernel(hir))
 }
 
+/// Formats exactly one target file via the shared formatter used by CLI and tooling.
 pub fn format_target(target: &str) -> Result<String, AiviError> {
     let paths = workspace::expand_target(target)?;
     if paths.len() != 1 {
@@ -266,6 +276,7 @@ pub fn format_target(target: &str) -> Result<String, AiviError> {
     Ok(format_text(&content))
 }
 
+/// Resolves a target string into concrete source file paths consumed by driver commands.
 pub fn resolve_target(target: &str) -> Result<Vec<PathBuf>, AiviError> {
     workspace::expand_target(target)
 }
