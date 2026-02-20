@@ -8,19 +8,11 @@ use aivi.collections
 // Fenwick tree (Binary Indexed Tree) for efficient prefix sums
 Fenwick = { size: Int, tree: Map Int Int }
 
-listLength = xs => xs match
-  | []        => 0
-  | [_, ...t] => 1 + listLength t
-
-at = xs idx => xs match
-  | []        => None
-  | [h, ...t] => if idx == 0 then Some h else at t (idx - 1)
-
-// Extract lowest set bit
+// Extract lowest set bit via recursive halving
 lowbit : Int -> Int
-lowbit = idx => idx match
-  | _ when idx % 2 == 1 => 1
-  | _                   => 2 * lowbit (idx / 2)
+lowbit = _ match
+  | idx when idx % 2 == 1 => 1
+  | idx                   => 2 * lowbit (idx / 2)
 
 // Add delta to all affected indices
 addDelta = size idx delta tree =>
@@ -34,31 +26,27 @@ addDelta = size idx delta tree =>
 // Build Fenwick tree from list
 buildFromList : List Int -> Fenwick
 buildFromList = arr => {
-  size = listLength arr
+  size = List.length arr
   { size: size, tree: buildTree arr size 1 Map.empty }
 }
 
-buildTree = arr size idx tree => {
-  if idx > size then
-    tree
+buildTree = arr size idx tree =>
+  if idx > size then tree
   else
-    at arr (idx - 1) match
-      | None       => buildTree arr size (idx + 1) tree
-      | Some value => buildTree arr size (idx + 1) (addDelta size idx value tree)
-}
+  List.at (idx - 1) arr match
+    | None       => buildTree arr size (idx + 1) tree
+    | Some value => buildTree arr size (idx + 1) (addDelta size idx value tree)
 
 // Query prefix sum [1..idx]
 prefix : Fenwick -> Int -> Int
 prefix = fenwick idx => prefixGo fenwick idx 0
 
-prefixGo = fenwick i acc => {
-  if i == 0 then
-    acc
+prefixGo = fenwick i acc =>
+  if i == 0 then acc
   else {
     val = Map.getOrElse i 0 fenwick.tree
     prefixGo fenwick (i - lowbit i) (acc + val)
   }
-}
 
 // Query range sum [l..r]
 rangeSum : Fenwick -> Int -> Int -> Option Int
@@ -85,16 +73,17 @@ naiveSum = arr l r => arr match
   | [h, ...t] when l <= 1 && r >= 1 => h + naiveSum t (l - 1) (r - 1)
   | [_, ...t]                       => naiveSum t (l - 1) (r - 1)
 
-// Verify indices match naive implementation
-verifyIndices = indices fen arr => indices match
-  | []        => True
-  | [h, ...t] => {
-    expected = naiveSum arr h h
-    matches = rangeSum fen h h match
+// Verify indices match naive implementation using a generator
+verifyIndices = indices fen arr =>
+  generate {
+    i <- indices
+    expected = naiveSum arr i i
+    result = rangeSum fen i i match
       | Some got => got == expected
       | None     => False
-    matches && verifyIndices t fen arr
+    yield result
   }
+|> List.foldl (acc ok => acc && ok) True
 
 @test
 behaviors = do Effect {

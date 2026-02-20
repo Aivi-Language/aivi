@@ -159,6 +159,8 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 - how would a wizard work in aivi.ui
 - optimize other complex/** algorithms to use AIVI stdlib, syntax.
 - test coverage?
+- typechecker should support selective imports as bare names.
+- aivi build should build a binary
 
 ## License
 

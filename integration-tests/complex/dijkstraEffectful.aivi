@@ -24,13 +24,13 @@ processEdges = dists d edges pq => edges match
 
 @test
 dijkstra_shortestPaths = do Effect {
-  // Graph: 0→1 (2.0), 0→2 (5.0), 1→2 (1.0), 1→3 (4.0), 2→3 (1.0)
+  // Graph: 0->1 (2.0), 0->2 (5.0), 1->2 (1.0), 1->3 (4.0), 2->3 (1.0)
   g = fromWeightedEdges [(0, 1, 2.0), (0, 2, 5.0), (1, 2, 1.0), (1, 3, 4.0), (2, 3, 1.0)]
 
   // Distance table: source node 0 starts at 0.0
   dists <- MutableMap.create (Map.insert 0 0.0 Map.empty)
 
-  // Dijkstra main loop with min-heap priority queue
+  // Dijkstra main loop with min-heap priority queue and loop/recurse
   loop pq = Heap.push (0.0, 0) Heap.empty => {
     result = Heap.popMin pq
     result match
