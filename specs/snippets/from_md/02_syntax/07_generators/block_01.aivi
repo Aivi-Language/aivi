@@ -1,1 +1,1 @@
-Generator A = forall R.(R -> A -> R) -> R -> R
+Generator A = (R -> A -> R) -> R -> R

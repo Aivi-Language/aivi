@@ -1,0 +1,57 @@
+use aivi.file (readText, writeText)
+use aivi.list as List
+use aivi.text as Text
+
+Todo = { id: Int, text: Text, done: Bool }
+
+machine TodoFlow = {
+          -> Ready : init {}
+  Ready   -> Ready : addTodo    { text: Text }
+  Ready   -> Ready : toggleTodo { id: Int }
+  Ready   -> Ready : removeTodo { id: Int }
+  Ready   -> Ready : clearDone  {}
+}
+
+encodeTodo = t =>
+  if t.done
+  then "{t.id}|1|{t.text}"
+  else "{t.id}|0|{t.text}"
+
+decodeTodo = line =>
+  Text.split "|" line match
+    | [idText, doneText, text] =>
+        Text.parseInt idText match
+          | Some id => Some { id, text, done: doneText == "1" }
+          | None    => None
+    | _ => None
+
+encodeTodos = todos =>
+  todos
+    |> List.map encodeTodo
+    |> List.intersperse "\n"
+    |> Text.concat
+
+decodeTodos = raw =>
+  raw
+    |> Text.splitLines
+    |> List.flatMap (line =>
+        decodeTodo line match
+          | Some todo => [todo]
+          | None      => []
+      )
+
+loadTodos = path => do Effect {
+  raw <- readText path or ""
+  pure (decodeTodos raw)
+}
+
+saveTodos = path => todos =>
+  writeText path (encodeTodos todos)
+
+wirePersistence = path => todos => do Effect {
+  on addTodo    => saveTodos path todos
+  on toggleTodo => saveTodos path todos
+  on removeTodo => saveTodos path todos
+  on clearDone  => saveTodos path todos
+  pure Unit
+}
