@@ -5,7 +5,191 @@ use aivi
 use aivi.testing
 use aivi.text
 
+// -- Length and Inspection --
+
 @test
-smoke = do Effect {
-  assert (length "abc" == 3)
+length_smoke = do Effect {
+  assertEq (length "abc") 3
+  assertEq (length "") 0
+  assertEq (length "hello world") 11
+}
+
+@test
+isEmpty_smoke = do Effect {
+  assert (isEmpty "")
+  assert (!(isEmpty "a"))
+}
+
+// -- Search and Comparison --
+
+@test
+contains_smoke = do Effect {
+  assert (contains "ell" "hello")
+  assert (!(contains "xyz" "hello"))
+}
+
+@test
+startsWith_smoke = do Effect {
+  assert (startsWith "hel" "hello")
+  assert (!(startsWith "xyz" "hello"))
+}
+
+@test
+endsWith_smoke = do Effect {
+  assert (endsWith "llo" "hello")
+  assert (!(endsWith "xyz" "hello"))
+}
+
+@test
+indexOf_smoke = do Effect {
+  assertEq (indexOf "ll" "hello") (Some 2)
+  assertEq (indexOf "xyz" "hello") None
+}
+
+@test
+lastIndexOf_smoke = do Effect {
+  assertEq (lastIndexOf "l" "hello world") (Some 9)
+  assertEq (lastIndexOf "xyz" "hello") None
+}
+
+@test
+count_smoke = do Effect {
+  assertEq (count "l" "hello world") 3
+  assertEq (count "xyz" "hello") 0
+}
+
+@test
+compare_smoke = do Effect {
+  assertEq (compare "abc" "abc") 0
+  assert (compare "abc" "abd" < 0)
+  assert (compare "abd" "abc" > 0)
+}
+
+// -- Slicing and Splitting --
+
+@test
+slice_smoke = do Effect {
+  assertEq (slice 1 3 "hello") "el"
+  assertEq (slice 0 5 "hello") "hello"
+}
+
+@test
+split_smoke = do Effect {
+  parts = split "," "a,b,c"
+  assertEq parts ["a", "b", "c"]
+}
+
+@test
+splitLines_smoke = do Effect {
+  lines = splitLines "a\nb\nc"
+  assertEq (List.length lines) 3
+}
+
+// -- Trimming and Padding --
+
+@test
+trim_smoke = do Effect {
+  assertEq (trim "  hello  ") "hello"
+  assertEq (trim "hello") "hello"
+}
+
+@test
+trimStart_smoke = do Effect {
+  assertEq (trimStart "  hello") "hello"
+}
+
+@test
+trimEnd_smoke = do Effect {
+  assertEq (trimEnd "hello  ") "hello"
+}
+
+@test
+padStart_smoke = do Effect {
+  assertEq (padStart 5 "0" "42") "00042"
+}
+
+@test
+padEnd_smoke = do Effect {
+  assertEq (padEnd 5 "0" "42") "42000"
+}
+
+// -- Modification --
+
+@test
+replace_smoke = do Effect {
+  assertEq (replace "world" "AIVI" "hello world") "hello AIVI"
+}
+
+@test
+replaceAll_smoke = do Effect {
+  assertEq (replaceAll "o" "0" "foo boo") "f00 b00"
+}
+
+@test
+remove_smoke = do Effect {
+  assertEq (remove "l" "hello") "heo"
+}
+
+@test
+repeat_smoke = do Effect {
+  assertEq (repeat 3 "ab") "ababab"
+  assertEq (repeat 0 "ab") ""
+}
+
+@test
+reverse_smoke = do Effect {
+  assertEq (reverse "abc") "cba"
+  assertEq (reverse "") ""
+}
+
+@test
+concat_smoke = do Effect {
+  assertEq (concat ["a", "b", "c"]) "abc"
+  assertEq (concat []) ""
+}
+
+// -- Case --
+
+@test
+toLower_smoke = do Effect {
+  assertEq (toLower "HELLO") "hello"
+}
+
+@test
+toUpper_smoke = do Effect {
+  assertEq (toUpper "hello") "HELLO"
+}
+
+@test
+capitalize_smoke = do Effect {
+  assertEq (capitalize "hello") "Hello"
+}
+
+// -- Formatting --
+
+@test
+parseInt_smoke = do Effect {
+  assertEq (parseInt "42") (Some 42)
+  assertEq (parseInt "-7") (Some (-7))
+  assertEq (parseInt "abc") None
+}
+
+@test
+parseFloat_smoke = do Effect {
+  pf = parseFloat "3.14"
+  pf match
+    | Some f => assert (abs (f - 3.14) < 0.001)
+    | None   => assert False
+}
+
+// -- Encoding --
+
+@test
+bytes_roundtrip = do Effect {
+  original = "hello"
+  b = toBytes Utf8 original
+  result = fromBytes Utf8 b
+  result match
+    | Ok s  => assertEq s original
+    | Err _ => assert False
 }

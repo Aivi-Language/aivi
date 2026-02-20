@@ -1,0 +1,74 @@
+@no_prelude
+module integrationTests.stdlib.aivi.regex.tests
+
+use aivi
+use aivi.testing
+use aivi.regex
+
+@test
+compile_valid = do Effect {
+  res = compile "^hello"
+  res match
+    | Ok _  => assert True
+    | Err _ => assert False
+}
+
+@test
+compile_invalid = do Effect {
+  res = compile "[invalid"
+  res match
+    | Ok _  => assert False
+    | Err _ => assert True
+}
+
+@test
+test_match = do Effect {
+  r = compile "\\d+" or (fail "compile failed")
+  assert (test r "abc123def")
+  assert (test r "42")
+  assert (!(test r "no digits"))
+}
+
+@test
+test_no_match = do Effect {
+  r = compile "^hello$" or (fail "compile failed")
+  assert (test r "hello")
+  assert (!(test r "say hello"))
+}
+
+@test
+match_first = do Effect {
+  r = compile "\\d+" or (fail "compile failed")
+  m = match r "abc 123 def 456"
+  m match
+    | Some _ => assert True
+    | None   => assert False
+}
+
+@test
+matches_all = do Effect {
+  r = compile "\\d+" or (fail "compile failed")
+  ms = matches r "a1b2c3"
+  assert (List.length ms == 3)
+}
+
+@test
+split_smoke = do Effect {
+  r = compile "[,;]" or (fail "compile failed")
+  parts = split r "a,b;c,d"
+  assert (List.length parts == 4)
+}
+
+@test
+replace_smoke = do Effect {
+  r = compile "\\d+" or (fail "compile failed")
+  result = replace r "abc123def456" "NUM"
+  assert (result == "abcNUMdef456")
+}
+
+@test
+replaceAll_smoke = do Effect {
+  r = compile "\\d+" or (fail "compile failed")
+  result = replaceAll r "abc123def456" "NUM"
+  assert (result == "abcNUMdefNUM")
+}

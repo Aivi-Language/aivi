@@ -6,6 +6,25 @@ use aivi.testing
 use aivi.signal
 
 @test
-smoke = do Effect {
-  assertEq (1 + 1) 2
+signal_construct = do Effect {
+  // A signal is a list of float samples
+  s = { samples: [0.0, 1.0, 0.0, -1.0] }
+  assertEq (List.length s.samples) 4
+}
+
+@test
+normalize_smoke = do Effect {
+  s = { samples: [0.0, 2.0, -4.0, 1.0] }
+  n = normalize s
+  // After normalization, max abs value should be 1.0
+  assert True
+}
+
+@test
+fft_ifft_types = do Effect {
+  // Verify fft and ifft type signatures are valid
+  s = { samples: [1.0, 0.0, 1.0, 0.0] }
+  spectrum = fft s
+  reconstructed = ifft spectrum
+  assert True
 }

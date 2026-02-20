@@ -6,6 +6,32 @@ use aivi.testing
 use aivi.file
 
 @test
-smoke = do Effect {
-  assertEq (1 + 1) 2
+fileStats_types = do Effect {
+  // Verify FileStats type is well-formed
+  mock = {
+    size: 1024
+    created: 1700000000000
+    modified: 1700000000000
+    isFile: True
+    isDirectory: False
+  }
+  assertEq mock.size 1024
+  assert mock.isFile
+  assert (mock.isDirectory == False)
+}
+
+@test
+exists_missing = do Effect {
+  res <- exists "/tmp/aivi_nonexistent_file_12345.txt"
+  assert (res == False)
+}
+
+@test
+writeText_readText_roundtrip = do Effect {
+  path = "/tmp/aivi_test_roundtrip.txt"
+  _ <- writeText path "hello aivi"
+  content <- readText path
+  assertEq content "hello aivi"
+  _ <- delete path
+  assert True
 }

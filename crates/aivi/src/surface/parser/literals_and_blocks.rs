@@ -158,13 +158,12 @@ impl Parser {
         let mut segments = Vec::new();
         let mut absolute = false;
         
-        let mut first = true;
-        let mut is_closed = false;
+        let mut absolute = false;
 
         let mut current_segment_span: Option<Span> = None;
         let mut current_segment_text = String::new();
 
-        let mut finish_segment = |text: &mut String, segments: &mut Vec<Expr>, text_span: &Option<Span>| {
+        let finish_segment = |text: &mut String, segments: &mut Vec<Expr>, text_span: &Option<Span>| {
             if !text.is_empty() {
                 segments.push(Expr::Literal(crate::surface::Literal::String {
                     text: text.clone(),
@@ -180,17 +179,16 @@ impl Parser {
 
         while self.pos < self.tokens.len() {
             if self.check_symbol("]") {
-                is_closed = true;
                 break;
             }
 
-            let token = &self.tokens[self.pos];
-            if token.kind == "symbol" && token.text == "/" {
+            if self.consume_symbol("/") {
                 finish_segment(&mut current_segment_text, &mut segments, &current_segment_span);
                 current_segment_span = None;
-                self.pos += 1;
                 continue;
             }
+
+            let token = &self.tokens[self.pos];
 
             // Path sigils might include interpolations later, but for now we just take the literal text
             // of the token.

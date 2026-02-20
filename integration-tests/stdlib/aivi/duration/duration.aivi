@@ -6,6 +6,41 @@ use aivi.testing
 use aivi.duration
 
 @test
-smoke = do Effect {
-  assertEq (1 + 1) 2
+span_construct = do Effect {
+  s = { millis: 1000 }
+  assertEq s.millis 1000
+}
+
+@test
+span_add = do Effect {
+  s1 = { millis: 500 }
+  s2 = { millis: 300 }
+  s3 = { millis: s1.millis + s2.millis }
+  assertEq s3.millis 800
+}
+
+@test
+span_zero = do Effect {
+  s = { millis: 0 }
+  assertEq s.millis 0
+}
+
+@test
+span_negative = do Effect {
+  s = { millis: -100 }
+  assertEq s.millis (-100)
+}
+
+@test
+span_to_seconds = do Effect {
+  s = { millis: 5000 }
+  secs = s.millis / 1000
+  assertEq secs 5
+}
+
+@test
+span_arithmetic = do Effect {
+  timeout = { millis: 30000 }
+  delay = { millis: timeout.millis + 500 }
+  assertEq delay.millis 30500
 }

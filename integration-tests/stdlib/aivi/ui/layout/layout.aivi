@@ -6,6 +6,23 @@ use aivi.testing
 use aivi.ui.layout
 
 @test
-smoke = do Effect {
-  assertEq (1 + 1) 2
+length_types = do Effect {
+  px = Px 100
+  em = Em 2
+  rem = Rem 1
+  vh = Vh 50
+  vw = Vw 100
+  assert True
+}
+
+@test
+percentage_type = do Effect {
+  p = Pct 50
+  assert True
+}
+
+@test
+unitVal_construct = do Effect {
+  u = { val: 42 }
+  assertEq u.val 42
 }

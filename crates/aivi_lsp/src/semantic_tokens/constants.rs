@@ -12,6 +12,7 @@ impl Backend {
         "~path[]",
         "~map{}",
         "~set[]",
+        "~mat[]",
         "~<html></html>",
     ];
 
@@ -277,7 +278,9 @@ impl Backend {
             "sigil" => Some(Self::SEM_TOKEN_SIGIL),
             "number" => Some(Self::SEM_TOKEN_NUMBER),
             "symbol" => {
-                if token.text == "@" {
+                if token.text == "~" && next.is_some_and(|n| n.kind == "ident" && matches!(n.text.as_str(), "map" | "set" | "mat" | "path")) {
+                    Some(Self::SEM_TOKEN_SIGIL)
+                } else if token.text == "@" {
                     Some(Self::SEM_TOKEN_DECORATOR)
                 } else if token.text == "." {
                     Some(Self::SEM_TOKEN_DOT)
@@ -294,6 +297,9 @@ impl Backend {
                 }
             }
             "ident" => {
+                if prev.is_some_and(|p| p.kind == "symbol" && p.text == "~") && matches!(token.text.as_str(), "map" | "set" | "mat" | "path") {
+                    return Some(Self::SEM_TOKEN_SIGIL);
+                }
                 if prev.is_some_and(|prev| Self::is_unit_suffix(prev, token)) {
                     return Some(Self::SEM_TOKEN_UNIT);
                 }
