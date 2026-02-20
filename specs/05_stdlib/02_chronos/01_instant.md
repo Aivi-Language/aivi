@@ -1,11 +1,13 @@
 # Instant Domain
 
-> **Status: Planned**   this module is not yet implemented in the runtime. The spec below is a design document for a future version.
+> **Status: Implemented**   available in the stdlib and runtime.
 
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.instant"} -->
 The `Instant` domain represents **a specific moment in time** on the timeline, independent of time zones or calendars.
 
 It corresponds to a UTC timestamp (Unix epoch). While `DateTime` (in `Calendar`) is about "Human Time" (what the clock says on the wall), `Instant` is about "Physics Time" (when the event actually happened).
+
+**Implementation note (v0.1):** `Timestamp` is represented as `DateTime` (RFC3339 text) at runtime, and Instant operations parse/format that representation. Durations use `Span` from `aivi.chronos.duration` (millisecond precision).
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.instant<span class="domain-badge">domain</span></div>

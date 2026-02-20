@@ -1,0 +1,19 @@
+@no_prelude
+module integrationTests.stdlib.aivi.chronos.instant.domain_Instant.tests
+
+use aivi
+use aivi.testing
+use aivi.chronos.duration (Span)
+use aivi.chronos.instant (domain Instant)
+
+@test
+span_ops = do Effect {
+  base = 2024-01-01T00:00:00Z
+
+  span : Span
+  span = { millis: 250 }
+
+  shifted = base + span
+
+  assertEq (shifted - base).millis 250
+}

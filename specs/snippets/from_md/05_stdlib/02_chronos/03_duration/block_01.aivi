@@ -2,7 +2,7 @@ use aivi.chronos.duration (Duration)
 
 // Clear, unambiguous literals
 timeout = 500ms
-delay = 2seconds
+delay = 2s
 
 // Type-safe comparison
 if delay > timeout then

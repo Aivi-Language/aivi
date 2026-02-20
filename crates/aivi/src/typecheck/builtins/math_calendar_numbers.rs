@@ -394,6 +394,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     env.insert("math".to_string(), Scheme::mono(math_record));
 
     let date_ty = Type::con("Date");
+    let date_time_ty = Type::con("DateTime");
     let calendar_record = Type::Record {
         fields: vec![
             (
@@ -444,6 +445,53 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         open: true,
     };
     env.insert("calendar".to_string(), Scheme::mono(calendar_record));
+
+    let instant_record = Type::Record {
+        fields: vec![
+            (
+                "toNanos".to_string(),
+                Type::Func(Box::new(date_time_ty.clone()), Box::new(int_ty.clone())),
+            ),
+            (
+                "fromNanos".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(date_time_ty.clone())),
+            ),
+            (
+                "addMillis".to_string(),
+                Type::Func(
+                    Box::new(date_time_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(date_time_ty.clone()),
+                    )),
+                ),
+            ),
+            (
+                "diffMillis".to_string(),
+                Type::Func(
+                    Box::new(date_time_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(date_time_ty.clone()),
+                        Box::new(int_ty.clone()),
+                    )),
+                ),
+            ),
+            (
+                "compare".to_string(),
+                Type::Func(
+                    Box::new(date_time_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(date_time_ty.clone()),
+                        Box::new(int_ty.clone()),
+                    )),
+                ),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+        open: true,
+    };
+    env.insert("instant".to_string(), Scheme::mono(instant_record));
 
     let rgb_ty = Type::con("Rgb");
     let hsl_ty = Type::con("Hsl");
