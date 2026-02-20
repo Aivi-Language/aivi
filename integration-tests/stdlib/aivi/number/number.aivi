@@ -1,0 +1,60 @@
+@no_prelude
+module integrationTests.stdlib.aivi.number.tests
+
+use aivi
+use aivi.testing
+use aivi.number
+
+// -- BigInt --
+
+@test
+bigint_fromInt = do Effect {
+  b = BigInt.fromInt 42
+  assertEq (BigInt.toInt b) (Some 42)
+}
+
+@test
+bigint_roundtrip = do Effect {
+  b = BigInt.fromInt 0
+  assertEq (BigInt.toInt b) (Some 0)
+
+  n = BigInt.fromInt (-99)
+  assertEq (BigInt.toInt n) (Some (-99))
+}
+
+@test
+bigint_arithmetic = do Effect {
+  a = BigInt.fromInt 10
+  b = BigInt.fromInt 20
+  c = a + b
+  assertEq (BigInt.toInt c) (Some 30)
+}
+
+// -- Decimal --
+
+@test
+decimal_fromFloat = do Effect {
+  d = Decimal.fromFloat 3.14
+  f = Decimal.toFloat d
+  assert (abs (f - 3.14) < 0.01)
+}
+
+@test
+decimal_round = do Effect {
+  d = Decimal.fromFloat 3.14159
+  r = Decimal.round d 2
+  f = Decimal.toFloat r
+  assert (abs (f - 3.14) < 0.01)
+}
+
+// -- Rational --
+
+@test
+rational_normalize = do Effect {
+  // 2/4 should normalize to 1/2
+  n = BigInt.fromInt 2
+  d = BigInt.fromInt 4
+  r = Rational.normalize { numerator: n, denominator: d }
+  assertEq (BigInt.toInt (Rational.numerator r)) (Some 1)
+  assertEq (BigInt.toInt (Rational.denominator r)) (Some 2)
+}

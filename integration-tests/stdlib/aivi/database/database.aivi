@@ -5,7 +5,63 @@ use aivi
 use aivi.testing
 use aivi.database
 
+// Test that types are well-formed
+
 @test
-smoke = do Effect {
-  assertEq (1 + 1) 2
+columnType_construct = do Effect {
+  ct1 = IntType
+  ct2 = BoolType
+  ct3 = TimestampType
+  ct4 = Varchar 255
+  assert True
+}
+
+@test
+columnConstraint_construct = do Effect {
+  c1 = AutoIncrement
+  c2 = NotNull
+  assert True
+}
+
+@test
+columnDefault_construct = do Effect {
+  d1 = DefaultBool True
+  d2 = DefaultInt 0
+  d3 = DefaultText "hello"
+  d4 = DefaultNow
+  assert True
+}
+
+@test
+driver_construct = do Effect {
+  d1 = Sqlite
+  d2 = Postgresql
+  d3 = Mysql
+  assert True
+}
+
+@test
+dbConfig_construct = do Effect {
+  cfg = { driver: Sqlite, url: ":memory:" }
+  assertEq cfg.driver Sqlite
+  assertEq cfg.url ":memory:"
+}
+
+@test
+column_construct = do Effect {
+  col = {
+    name: "id"
+    type: IntType
+    constraints: [AutoIncrement, NotNull]
+    default: None
+  }
+  assertEq col.name "id"
+}
+
+@test
+delta_construct = do Effect {
+  user = { id: 1, name: "Alice" }
+  ins = Insert user
+  del = Delete (u => u.id == 1)
+  assert True
 }

@@ -1,0 +1,49 @@
+@no_prelude
+module integrationTests.stdlib.aivi.path.tests
+
+use aivi
+use aivi.testing
+use aivi.path
+
+@test
+parse_smoke = do Effect {
+  p = parse "/usr/local/bin"
+  assert (p.absolute == True)
+}
+
+@test
+parse_relative = do Effect {
+  p = parse "src/main.aivi"
+  assert (p.absolute == False)
+}
+
+@test
+toString_smoke = do Effect {
+  p = parse "/usr/local/bin"
+  s = toString p
+  assert (s == "/usr/local/bin")
+}
+
+@test
+parent_smoke = do Effect {
+  p = parse "/usr/local/bin"
+  parent p match
+    | Some par => assert (toString par == "/usr/local")
+    | None     => assert False
+}
+
+@test
+fileName_smoke = do Effect {
+  p = parse "/home/user/file.txt"
+  fileName p match
+    | Some name => assertEq name "file.txt"
+    | None      => assert False
+}
+
+@test
+normalize_smoke = do Effect {
+  p = parse "./a/../b/./c"
+  n = normalize p
+  s = toString n
+  assert (s == "b/c")
+}

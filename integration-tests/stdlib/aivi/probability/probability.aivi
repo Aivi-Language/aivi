@@ -1,0 +1,32 @@
+@no_prelude
+module integrationTests.stdlib.aivi.probability.tests
+
+use aivi
+use aivi.testing
+use aivi.probability
+
+@test
+probability_clamp = do Effect {
+  p1 = clamp 0.5
+  assert (p1 == 0.5)
+
+  p2 = clamp 1.5
+  assert (p2 == 1.0)
+
+  p3 = clamp (-0.5)
+  assert (p3 == 0.0)
+}
+
+@test
+bernoulli_smoke = do Effect {
+  dist = bernoulli 0.5
+  // Just verify it constructs without error
+  assert True
+}
+
+@test
+uniform_smoke = do Effect {
+  dist = uniform 0.0 10.0
+  // Just verify it constructs without error
+  assert True
+}

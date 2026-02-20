@@ -6,6 +6,34 @@ use aivi.testing
 use aivi.database.pool
 
 @test
-smoke = do Effect {
-  assertEq (1 + 1) 2
+config_construct = do Effect {
+  cfg = {
+    maxSize: 4
+    minIdle: 1
+    acquireTimeout: { millis: 1000 }
+    idleTimeout: None
+    maxLifetime: None
+    healthCheckInterval: None
+    backoffPolicy: Pool.Fixed ({ millis: 25 })
+    queuePolicy: Pool.Fifo
+    acquire: _ => pure { id: 0 }
+    release: _ => pure Unit
+    healthCheck: _ => pure True
+  }
+  assertEq cfg.maxSize 4
+  assertEq cfg.minIdle 1
+}
+
+@test
+backoffPolicy_types = do Effect {
+  p1 = Pool.Fixed ({ millis: 100 })
+  p2 = Pool.Exponential ({ millis: 50 })
+  assert True
+}
+
+@test
+queuePolicy_types = do Effect {
+  q1 = Pool.Fifo
+  q2 = Pool.Lifo
+  assert True
 }
