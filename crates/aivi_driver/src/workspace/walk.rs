@@ -3,10 +3,12 @@ use std::path::{Path, PathBuf};
 
 use crate::AiviError;
 
+/// Filters filesystem entries to AIVI source files so workspace expansion only returns compilable inputs.
 pub(super) fn is_aivi_source(path: &Path) -> bool {
     path.extension().and_then(|ext| ext.to_str()) == Some("aivi")
 }
 
+/// Recursively walks directories and accumulates `.aivi` files for target expansion.
 pub(super) fn collect_files(dir: &Path, paths: &mut Vec<PathBuf>) -> Result<(), AiviError> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
