@@ -5,6 +5,7 @@ use crate::surface::{parse_modules, Module};
 
 mod bigint;
 mod calendar;
+mod chronos_calendar;
 mod chronos_duration;
 mod chronos_instant;
 mod chronos_timezone;
@@ -100,6 +101,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: calendar::MODULE_NAME,
         source: calendar::SOURCE,
+    },
+    EmbeddedModule {
+        name: chronos_calendar::MODULE_NAME,
+        source: chronos_calendar::SOURCE,
     },
     EmbeddedModule {
         name: chronos_duration::MODULE_NAME,

@@ -8,6 +8,7 @@ aivi_core = { path = "../aivi_core" }
 aivi_driver = { path = "../aivi_driver" }
 aivi_http_server = { path = "../aivi_http_server" }
 chrono = "0.4.38"
+chrono-tz = "0.8.6"
 num-bigint = "0.4.6"
 num-rational = "0.4.2"
 num-traits = "0.2.19"

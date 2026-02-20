@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use chrono::{TimeZone as ChronoTimeZone, Utc};
+use chrono::{
+    offset::Offset as ChronoOffset, Datelike, TimeZone as ChronoTimeZone, Timelike, Utc,
+};
 use chrono_tz::Tz;
 
 use super::util::{builtin, expect_record, expect_text};
@@ -22,7 +24,7 @@ pub(super) fn build_timezone_record() -> Value {
             let dt = Utc.timestamp_millis_opt(timestamp).single().ok_or_else(|| RuntimeError::Message("invalid timestamp".to_string()))?;
 
             let offset = tz.offset_from_utc_datetime(&dt.naive_utc());
-            let millis = offset.base_utc_offset().num_milliseconds();
+            let millis = i64::from(offset.fix().local_minus_utc()) * 1000;
 
             let mut span_map = HashMap::new();
             span_map.insert("millis".to_string(), Value::Int(millis));
@@ -96,10 +98,10 @@ pub(super) fn build_timezone_record() -> Value {
             let target_tz: Tz = target_zone_id.parse().map_err(|_| RuntimeError::Message(format!("invalid target timezone id: {}", target_zone_id)))?;
 
             let target_zdt = source_zdt.with_timezone(&target_tz);
-            let offset_millis = target_zdt.offset().base_utc_offset().num_milliseconds();
+            let offset_millis = i64::from(target_zdt.offset().fix().local_minus_utc()) * 1000;
 
             let mut result = HashMap::new();
-            result.insert("dateTime".to_string(), datetime_to_value(target_zdt.with_timezone(&Utc)));
+            result.insert("dateTime".to_string(), datetime_to_value(target_zdt));
             result.insert("zone".to_string(), target_zone_val);
 
             let mut offset_map = HashMap::new();
@@ -143,7 +145,7 @@ fn get_int_field(fields: &HashMap<String, Value>, name: &str) -> Result<i64, Run
     }
 }
 
-fn datetime_to_value(dt: chrono::DateTime<Utc>) -> Value {
+fn datetime_to_value<Tz: chrono::TimeZone>(dt: chrono::DateTime<Tz>) -> Value {
     let mut map = HashMap::new();
     map.insert("year".to_string(), Value::Int(dt.year() as i64));
     map.insert("month".to_string(), Value::Int(dt.month() as i64));

@@ -209,6 +209,63 @@ impl Runtime {
                     })?;
                     Ok(Value::DateTime(body.clone()))
                 }
+                "tz" => {
+                    let zone_id = body.trim();
+                    let _: chrono_tz::Tz = zone_id.parse().map_err(|_| {
+                        RuntimeError::Message(format!("invalid timezone id: {zone_id}"))
+                    })?;
+                    let mut map = HashMap::new();
+                    map.insert("id".to_string(), Value::Text(zone_id.to_string()));
+                    Ok(Value::Record(Arc::new(map)))
+                }
+                "zdt" => {
+                    let text = body.trim();
+                    let (dt_text, zone_id) = parse_zdt_parts(text)?;
+                    let tz: chrono_tz::Tz = zone_id.parse().map_err(|_| {
+                        RuntimeError::Message(format!("invalid timezone id: {zone_id}"))
+                    })?;
+
+                    let zdt = if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(dt_text) {
+                        parsed.with_timezone(&tz)
+                    } else {
+                        let naive = parse_naive_datetime(dt_text)?;
+                        tz.from_local_datetime(&naive)
+                            .single()
+                            .ok_or_else(|| {
+                                RuntimeError::Message(
+                                    "ambiguous or invalid local time".to_string(),
+                                )
+                            })?
+                    };
+
+                    let offset_millis =
+                        i64::from(chrono::offset::Offset::fix(zdt.offset()).local_minus_utc())
+                            * 1000;
+
+                    let mut dt_map = HashMap::new();
+                    dt_map.insert("year".to_string(), Value::Int(zdt.year() as i64));
+                    dt_map.insert("month".to_string(), Value::Int(zdt.month() as i64));
+                    dt_map.insert("day".to_string(), Value::Int(zdt.day() as i64));
+                    dt_map.insert("hour".to_string(), Value::Int(zdt.hour() as i64));
+                    dt_map.insert("minute".to_string(), Value::Int(zdt.minute() as i64));
+                    dt_map.insert("second".to_string(), Value::Int(zdt.second() as i64));
+                    dt_map.insert(
+                        "millisecond".to_string(),
+                        Value::Int(zdt.timestamp_subsec_millis() as i64),
+                    );
+
+                    let mut zone_map = HashMap::new();
+                    zone_map.insert("id".to_string(), Value::Text(zone_id.to_string()));
+
+                    let mut offset_map = HashMap::new();
+                    offset_map.insert("millis".to_string(), Value::Int(offset_millis));
+
+                    let mut map = HashMap::new();
+                    map.insert("dateTime".to_string(), Value::Record(Arc::new(dt_map)));
+                    map.insert("zone".to_string(), Value::Record(Arc::new(zone_map)));
+                    map.insert("offset".to_string(), Value::Record(Arc::new(offset_map)));
+                    Ok(Value::Record(Arc::new(map)))
+                }
                 "k" => {
                     validate_key_text(body).map_err(|msg| {
                         RuntimeError::Message(format!("invalid i18n key literal: {msg}"))
@@ -597,4 +654,89 @@ impl Runtime {
             ))),
         }
     }
+}
+
+fn parse_zdt_parts(text: &str) -> Result<(&str, &str), RuntimeError> {
+    let (dt_text, zone_part) = text.rsplit_once('[').ok_or_else(|| {
+        RuntimeError::Message("invalid zoned datetime literal: missing [Zone]".to_string())
+    })?;
+    let zone_id = zone_part.strip_suffix(']').ok_or_else(|| {
+        RuntimeError::Message("invalid zoned datetime literal: missing closing ]".to_string())
+    })?;
+    let dt_text = dt_text.trim();
+    let zone_id = zone_id.trim();
+    if dt_text.is_empty() || zone_id.is_empty() {
+        return Err(RuntimeError::Message(
+            "invalid zoned datetime literal".to_string(),
+        ));
+    }
+    Ok((dt_text, zone_id))
+}
+
+fn parse_naive_datetime(text: &str) -> Result<chrono::NaiveDateTime, RuntimeError> {
+    let (date_part, time_part) = text.split_once('T').ok_or_else(|| {
+        RuntimeError::Message("invalid zoned datetime literal".to_string())
+    })?;
+
+    let mut date_iter = date_part.splitn(3, '-');
+    let year = parse_i32(date_iter.next())?;
+    let month = parse_u32(date_iter.next())?;
+    let day = parse_u32(date_iter.next())?;
+    if date_iter.next().is_some() {
+        return Err(RuntimeError::Message(
+            "invalid zoned datetime literal".to_string(),
+        ));
+    }
+
+    let (time_main, frac_part) = time_part.split_once('.').unwrap_or((time_part, ""));
+    let time_main = time_main.strip_suffix('Z').unwrap_or(time_main);
+    let mut time_iter = time_main.splitn(3, ':');
+    let hour = parse_u32(time_iter.next())?;
+    let minute = parse_u32(time_iter.next())?;
+    let second = parse_u32(time_iter.next())?;
+    if time_iter.next().is_some() {
+        return Err(RuntimeError::Message(
+            "invalid zoned datetime literal".to_string(),
+        ));
+    }
+
+    let millis = parse_millis(frac_part)?;
+    chrono::NaiveDate::from_ymd_opt(year, month, day)
+        .and_then(|d| d.and_hms_milli_opt(hour, minute, second, millis))
+        .ok_or_else(|| RuntimeError::Message("invalid zoned datetime literal".to_string()))
+}
+
+fn parse_i32(value: Option<&str>) -> Result<i32, RuntimeError> {
+    let value = value.ok_or_else(|| {
+        RuntimeError::Message("invalid zoned datetime literal".to_string())
+    })?;
+    value.parse::<i32>().map_err(|_| {
+        RuntimeError::Message("invalid zoned datetime literal".to_string())
+    })
+}
+
+fn parse_u32(value: Option<&str>) -> Result<u32, RuntimeError> {
+    let value = value.ok_or_else(|| {
+        RuntimeError::Message("invalid zoned datetime literal".to_string())
+    })?;
+    value.parse::<u32>().map_err(|_| {
+        RuntimeError::Message("invalid zoned datetime literal".to_string())
+    })
+}
+
+fn parse_millis(text: &str) -> Result<u32, RuntimeError> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Ok(0);
+    }
+    if !trimmed.chars().all(|ch| ch.is_ascii_digit()) || trimmed.len() > 3 {
+        return Err(RuntimeError::Message(
+            "invalid zoned datetime literal".to_string(),
+        ));
+    }
+    let value: u32 = trimmed.parse().map_err(|_| {
+        RuntimeError::Message("invalid zoned datetime literal".to_string())
+    })?;
+    let scale = 10u32.pow((3 - trimmed.len()) as u32);
+    Ok(value.saturating_mul(scale))
 }
