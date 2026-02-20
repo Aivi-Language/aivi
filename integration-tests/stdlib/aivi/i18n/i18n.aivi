@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.i18n
 use aivi.map
 
-@test
+@test "parse locale"
 parseLocale_smoke = do Effect {
   locale = parseLocale "en-US"
   or { language: "en", region: Some "US", variants: [], tag: "en-US" }
@@ -15,7 +15,7 @@ parseLocale_smoke = do Effect {
   assertEq locale.tag "en-US"
 }
 
-@test
+@test "parse locale underscore"
 parseLocale_underscore = do Effect {
   locale = parseLocale "pt_BR"
   or { language: "pt", region: Some "BR", variants: [], tag: "pt-BR" }
@@ -23,7 +23,7 @@ parseLocale_underscore = do Effect {
   assertEq locale.region (Some "BR")
 }
 
-@test
+@test "key valid"
 key_valid = do Effect {
   k = key "app.welcome"
   k match
@@ -31,7 +31,7 @@ key_valid = do Effect {
     | Err _ => assert False
 }
 
-@test
+@test "key invalid empty"
 key_invalid_empty = do Effect {
   k = key ""
   k match
@@ -39,7 +39,7 @@ key_invalid_empty = do Effect {
     | Err _ => assert True
 }
 
-@test
+@test "key invalid double dot"
 key_invalid_double_dot = do Effect {
   k = key "app..welcome"
   k match
@@ -47,13 +47,13 @@ key_invalid_double_dot = do Effect {
     | Err _ => assert True
 }
 
-@test
+@test "sigil key"
 sigil_key = do Effect {
   k = ~k"user.settings.theme"
   assertEq k.body "user.settings.theme"
 }
 
-@test
+@test "sigil message render"
 sigil_message_render = do Effect {
   m = ~m"You have {count:Int} items in your cart."
   result = render m { count: 5 }
@@ -62,7 +62,7 @@ sigil_message_render = do Effect {
     | Err _  => assert False
 }
 
-@test
+@test "sigil message no placeholders"
 sigil_message_no_placeholders = do Effect {
   m = ~m"Plain hello"
   result = render m {}
@@ -71,14 +71,14 @@ sigil_message_no_placeholders = do Effect {
     | Err _  => assert False
 }
 
-@test
+@test "fallback tags"
 fallbackTags_smoke = do Effect {
   locale = { language: "en", region: Some "US", variants: [], tag: "en-US" }
   tags = fallbackTags locale
   assert (List.length tags >= 1)
 }
 
-@test
+@test "fallback tags no region"
 fallbackTags_no_region = do Effect {
   locale = { language: "ja", region: None, variants: [], tag: "ja" }
   tags = fallbackTags locale

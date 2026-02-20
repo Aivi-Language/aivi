@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 use aivi.file
 
-@test
+@test "file stats types"
 fileStats_types = do Effect {
   // Verify FileStats type is well-formed
   mock = {
@@ -20,13 +20,13 @@ fileStats_types = do Effect {
   assert (mock.isDirectory == False)
 }
 
-@test
+@test "exists missing"
 exists_missing = do Effect {
   res <- exists "/tmp/aivi_nonexistent_file_12345.txt"
   assert (res == False)
 }
 
-@test
+@test "write text read text roundtrip"
 writeText_readText_roundtrip = do Effect {
   path = "/tmp/aivi_test_roundtrip.txt"
   _ <- writeText path "hello aivi"

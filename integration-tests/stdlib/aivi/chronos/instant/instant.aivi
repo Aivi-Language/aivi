@@ -7,7 +7,7 @@ use aivi.chronos.instant
 use aivi.chronos.duration (Span)
 use aivi.chronos.instant (domain Instant)
 
-@test
+@test "compare and diff"
 compare_and_diff = do Effect {
   start = 2024-01-01T00:00:00Z
   end = 2024-01-01T00:00:10Z
@@ -21,7 +21,7 @@ compare_and_diff = do Effect {
   assertEq elapsed.millis 10000
 }
 
-@test
+@test "add sub roundtrip"
 add_sub_roundtrip = do Effect {
   base = 2024-01-01T00:00:00Z
 

@@ -7,7 +7,7 @@ use aivi.testing
 @static
 embedded = "ok"
 
-@test
+@test "static decorator access"
 staticIsAvailable = do Effect {
   assertEq embedded "ok"
 }

@@ -113,7 +113,7 @@ pub fn desugar_target(target: &str) -> Result<HirProgram, AiviError> {
 pub fn test_target_program_and_names(
     target: &str,
     check_stdlib: bool,
-) -> Result<(HirProgram, Vec<String>, Vec<FileDiagnostic>), AiviError> {
+) -> Result<(HirProgram, Vec<(String, String)>, Vec<FileDiagnostic>), AiviError> {
     let paths = workspace::expand_target(target)?;
     let mut test_paths = Vec::new();
     for path in &paths {
@@ -126,7 +126,7 @@ pub fn test_target_program_and_names(
         }
     }
 
-    let mut test_names = Vec::new();
+    let mut test_entries: Vec<(String, String)> = Vec::new();
     for path in &test_paths {
         let content = fs::read_to_string(path)?;
         let (modules, _) = parse_modules(path.as_path(), &content);
@@ -135,15 +135,20 @@ pub fn test_target_program_and_names(
                 let ModuleItem::Def(def) = item else {
                     continue;
                 };
-                if def.decorators.iter().any(|d| d.name.name == "test") {
-                    test_names.push(format!("{}.{}", module.name.name, def.name.name));
+                if let Some(dec) = def.decorators.iter().find(|d| d.name.name == "test") {
+                    let name = format!("{}.{}", module.name.name, def.name.name);
+                    let description = match &dec.arg {
+                        Some(aivi_core::Expr::Literal(aivi_core::Literal::String { text, .. })) => text.clone(),
+                        _ => name.clone(),
+                    };
+                    test_entries.push((name, description));
                 }
             }
         }
     }
-    test_names.sort();
-    test_names.dedup();
-    if test_names.is_empty() {
+    test_entries.sort();
+    test_entries.dedup();
+    if test_entries.is_empty() {
         return Err(AiviError::InvalidCommand(format!(
             "no @test definitions found under {target}"
         )));
@@ -173,7 +178,7 @@ pub fn test_target_program_and_names(
     }
 
     let program = aivi_core::desugar_modules(&modules);
-    Ok((program, test_names, diagnostics))
+    Ok((program, test_entries, diagnostics))
 }
 
 pub fn desugar_target_typed(target: &str) -> Result<HirProgram, AiviError> {

@@ -4,14 +4,14 @@ module integrationTests.syntax.effects.whenConditional
 use aivi
 use aivi.testing
 
-@test
+@test "when true runs"
 whenTrueRuns = do Effect {
   x = True
   when x <- print "yes"
   pure Unit
 }
 
-@test
+@test "when false skips"
 whenFalseSkips = do Effect {
   x = False
   when x <- print "never"

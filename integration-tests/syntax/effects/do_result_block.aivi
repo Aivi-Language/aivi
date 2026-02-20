@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 
 // Happy path: all binds succeed, result is Ok 30
-@test
+@test "do result happy path"
 doResultHappyPath = do Effect {
   result = do Result {
     x <- Ok 10
@@ -16,7 +16,7 @@ doResultHappyPath = do Effect {
 }
 
 // Short-circuit: Err aborts the block early
-@test
+@test "do result short circuit"
 doResultShortCircuit = do Effect {
   result = do Result {
     x <- Ok 1
@@ -27,7 +27,7 @@ doResultShortCircuit = do Effect {
 }
 
 // Let-binding inside do Result wraps value in Ok
-@test
+@test "do result let binding"
 doResultLetBinding = do Effect {
   result = do Result {
     x = 99
@@ -37,7 +37,7 @@ doResultLetBinding = do Effect {
 }
 
 // Single expression block
-@test
+@test "do result single expr"
 doResultSingleExpr = do Effect {
   result = do Result {
     Ok "done"
@@ -46,7 +46,7 @@ doResultSingleExpr = do Effect {
 }
 
 // Err as the final expression
-@test
+@test "do result err final"
 doResultErrFinal = do Effect {
   result = do Result {
     x <- Ok 5

@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 use aivi.database.pool
 
-@test
+@test "pool error construct"
 poolError_construct = do Effect {
   e1 = Timeout
   e2 = Closed
@@ -14,14 +14,14 @@ poolError_construct = do Effect {
   assert True
 }
 
-@test
+@test "queue policy construct"
 queuePolicy_construct = do Effect {
   q1 = Fifo
   q2 = Lifo
   assert True
 }
 
-@test
+@test "pool stats type"
 poolStats_type = do Effect {
   s = { size: 4, idle: 2, inUse: 2, waiters: 0, closed: False }
   assertEq s.size 4

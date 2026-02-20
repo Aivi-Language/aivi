@@ -14,7 +14,7 @@ describe = opt => opt match
   | None   => "nothing"
   | Some x => "something"
 
-@test
+@test "match keyword"
 matchKeywordWorks = do Effect {
   assertEq (safeHead [1, 2, 3]) (Some 1)
   assertEq (safeHead []) None

@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.duration
 use aivi.duration (domain Duration)
 
-@test
+@test "literals"
 literals_smoke = do Effect {
   _ms <- 1ms
   _s <- 1s

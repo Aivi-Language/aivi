@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 
 // Cartesian product: do List is equivalent to list comprehension
-@test
+@test "do list cartesian"
 doListCartesian = do Effect {
   result = do List {
     x <- [1, 2]
@@ -16,7 +16,7 @@ doListCartesian = do Effect {
 }
 
 // Single bind
-@test
+@test "do list single bind"
 doListSingleBind = do Effect {
   result = do List {
     x <- [1, 2, 3]
@@ -26,7 +26,7 @@ doListSingleBind = do Effect {
 }
 
 // Short-circuit on empty list
-@test
+@test "do list empty short circuit"
 doListEmptyShortCircuit = do Effect {
   result = do List {
     x <- [1, 2]
@@ -37,7 +37,7 @@ doListEmptyShortCircuit = do Effect {
 }
 
 // Let-binding inside do List
-@test
+@test "do list let binding"
 doListLetBinding = do Effect {
   result = do List {
     x <- [1, 2, 3]
@@ -48,7 +48,7 @@ doListLetBinding = do Effect {
 }
 
 // Single expression block (identity)
-@test
+@test "do list single expr"
 doListSingleExpr = do Effect {
   result = do List {
     [42]

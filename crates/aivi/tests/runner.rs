@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use aivi::{
     check_modules, desugar_modules, elaborate_expected_coercions, file_diagnostics_have_errors,
-    load_modules_from_paths, run_test_suite, Module, ModuleItem,
+    load_modules_from_paths, run_test_suite, Expr, Literal, Module, ModuleItem,
 };
 use walkdir::WalkDir;
 
@@ -16,8 +16,8 @@ fn set_workspace_root() -> PathBuf {
     workspace_root.to_path_buf()
 }
 
-fn collect_test_names(modules: &[Module]) -> Vec<String> {
-    let mut names = Vec::new();
+fn collect_test_entries(modules: &[Module]) -> Vec<(String, String)> {
+    let mut entries = Vec::new();
     for module in modules {
         // skip embedded stdlib modules
         if module.name.name.starts_with("aivi.") || module.name.name == "aivi" {
@@ -27,14 +27,19 @@ fn collect_test_names(modules: &[Module]) -> Vec<String> {
             let ModuleItem::Def(def) = item else {
                 continue;
             };
-            if def.decorators.iter().any(|d| d.name.name == "test") {
-                names.push(format!("{}.{}", module.name.name, def.name.name));
+            if let Some(dec) = def.decorators.iter().find(|d| d.name.name == "test") {
+                let name = format!("{}.{}", module.name.name, def.name.name);
+                let description = match &dec.arg {
+                    Some(Expr::Literal(Literal::String { text, .. })) => text.clone(),
+                    _ => name.clone(),
+                };
+                entries.push((name, description));
             }
         }
     }
-    names.sort();
-    names.dedup();
-    names
+    entries.sort();
+    entries.dedup();
+    entries
 }
 
 #[test]
@@ -101,20 +106,20 @@ fn run_aivi_sources() {
             continue;
         }
 
-        // Collect qualified test names
-        let test_names = collect_test_names(&modules);
-        if test_names.is_empty() {
+        // Collect qualified test entries (name, description)
+        let test_entries = collect_test_entries(&modules);
+        if test_entries.is_empty() {
             continue;
         }
 
         // Desugar and run
         let program = desugar_modules(&modules);
-        match run_test_suite(program, &test_names, &modules) {
+        match run_test_suite(program, &test_entries, &modules) {
             Ok(report) => {
                 total_passed += report.passed;
                 total_failed += report.failed;
                 for failure in &report.failures {
-                    println!("  FAIL: {} — {}", failure.name, failure.message);
+                    println!("  FAIL: {} — {}", failure.description, failure.message);
                     test_failures.push((failure.name.clone(), failure.message.clone()));
                 }
                 if report.failed == 0 {

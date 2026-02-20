@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.prelude
 use aivi.text
 
-@test
+@test "bool"
 bool_smoke = do Effect {
   assert (True && True)
   assert (True || False)
@@ -17,7 +17,7 @@ bool_smoke = do Effect {
   assert (True == True)
 }
 
-@test
+@test "bytes"
 bytes_smoke = do Effect {
   b = toBytes Utf8 "abc"
   res = fromBytes Utf8 b
@@ -26,12 +26,12 @@ bytes_smoke = do Effect {
     | Err _ => assert False
 }
 
-@test
+@test "char"
 char_smoke = do Effect {
   assertEq (1 + 1) 2
 }
 
-@test
+@test "float"
 float_smoke = do Effect {
   assert (1.0 + 2.0 == 3.0)
   assert (2.0 * 3.0 == 6.0)
@@ -42,7 +42,7 @@ float_smoke = do Effect {
   assert (1.0 >= 1.0)
 }
 
-@test
+@test "int"
 int_smoke = do Effect {
   assertEq (1 + 2) 3
   assertEq (2 * 3) 6
@@ -65,14 +65,14 @@ map = f xs => xs match
   | []           => []
   | [x, ...rest] => [f x, ...(map f rest)]
 
-@test
+@test "list"
 list_smoke = do Effect {
   l = [1, 2, 3]
   assertEq (len l) 3
   assertEq (map (x => x + 1) l)[2, 3, 4]
 }
 
-@test
+@test "option"
 option_smoke = do Effect {
   some = Some 1
   some match
@@ -85,14 +85,14 @@ option_smoke = do Effect {
       | None   => assert True
 }
 
-@test
+@test "patch"
 patch_smoke = do Effect {
   user = { name: "A", age: 30 }
   older = user <| { age: _ + 1 }
   assertEq older.age 31
 }
 
-@test
+@test "result"
 result_smoke = do Effect {
   ok = Ok 1
   ok match
@@ -105,7 +105,7 @@ result_smoke = do Effect {
       | Err e => assertEq e "nope"
 }
 
-@test
+@test "attempt"
 attempt_smoke = do Effect {
   ok <- attempt (pure 42)
   ok match
@@ -118,7 +118,7 @@ attempt_smoke = do Effect {
       | Err e => assertEq e "boom"
 }
 
-@test
+@test "text"
 text_smoke = do Effect {
   t = "Hello"
   assertEq (length t) 5
@@ -128,13 +128,13 @@ text_smoke = do Effect {
   assert (isEmpty t == False)
 }
 
-@test
+@test "to text"
 toText_smoke = do Effect {
   assertEq (toText "abc") "abc"
   assertEq (toText 123) "123"
 }
 
-@test
+@test "tuple"
 tuple_smoke = do Effect {
   t = (1, "two")
   res = t match
@@ -143,7 +143,7 @@ tuple_smoke = do Effect {
     assert (res == True)
 }
 
-@test
+@test "to text 2"
 toText_smoke_2 = do Effect {
   assertEq (toText 0) "0"
 }

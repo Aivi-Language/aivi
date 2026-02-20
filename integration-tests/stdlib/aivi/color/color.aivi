@@ -7,7 +7,7 @@ use aivi.color
 use aivi.math
 use aivi.text
 
-@test
+@test "hex"
 hex_smoke = do Effect {
   rgb = { r: 255, g: 0, b: 0 }
   hex = toHex rgb
@@ -15,7 +15,7 @@ hex_smoke = do Effect {
   assert (text.length hex == 7)
 }
 
-@test
+@test "hsl"
 hsl_smoke = do Effect {
   h = { h: 240.0, s: 0.5, l: 0.5 }
   assert (h.s == 0.5)
@@ -23,21 +23,21 @@ hsl_smoke = do Effect {
   assert (rgb.b >= rgb.r)
 }
 
-@test
+@test "rgb"
 rgb_smoke = do Effect {
   rgb = { r: 10, g: 20, b: 30 }
   assert (rgb.g > rgb.r)
   assert (rgb.b > rgb.g)
 }
 
-@test
+@test "adjust hue"
 adjustHue_smoke = do Effect {
   rgb = { r: 255, g: 0, b: 0 }
   shifted = adjustHue rgb 120
   assert (shifted.g > 0 || shifted.b > 0)
 }
 
-@test
+@test "adjust lightness"
 adjustLightness_smoke = do Effect {
   rgb = { r: 20, g: 40, b: 60 }
   lighter = adjustLightness rgb 10
@@ -46,7 +46,7 @@ adjustLightness_smoke = do Effect {
   assert (darker.r <= rgb.r)
 }
 
-@test
+@test "adjust saturation"
 adjustSaturation_smoke = do Effect {
   rgb = { r: 100, g: 100, b: 100 }
   more = adjustSaturation rgb 20
@@ -55,12 +55,12 @@ adjustSaturation_smoke = do Effect {
   assert (less.r <= rgb.r)
 }
 
-@test
+@test "negate delta"
 negateDelta_smoke = do Effect {
   assertEq (1 + 1) 2
 }
 
-@test
+@test "to hex"
 toHex_smoke = do Effect {
   rgb = { r: 255, g: 255, b: 255 }
   hex = toHex rgb
@@ -68,7 +68,7 @@ toHex_smoke = do Effect {
   assert (text.startsWith hex "#")
 }
 
-@test
+@test "to hsl"
 toHsl_smoke = do Effect {
   rgb = { r: 100, g: 150, b: 200 }
   hsl = toHsl rgb
@@ -78,7 +78,7 @@ toHsl_smoke = do Effect {
   assert (abs (recon.b - rgb.b) < 10)
 }
 
-@test
+@test "to rgb"
 toRgb_smoke = do Effect {
   hsl = { h: 120.0, s: 0.5, l: 0.5 }
   rgb = toRgb hsl

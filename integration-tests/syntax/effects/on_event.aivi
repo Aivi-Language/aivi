@@ -4,7 +4,7 @@ module integrationTests.syntax.effects.onEvent
 use aivi
 use aivi.testing
 
-@test
+@test "on event wiring"
 onEventWiring = do Effect {
   on Click => pure Unit
   pure Unit

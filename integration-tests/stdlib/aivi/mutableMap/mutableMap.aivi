@@ -5,14 +5,14 @@ use aivi
 use aivi.testing
 use aivi.mutableMap
 
-@test
+@test "mutable map create and freeze"
 mutableMap_createAndFreeze = do Effect {
   m <- MutableMap.create (Map.insert "a" 1 Map.empty)
   snapshot <- MutableMap.freeze m
   assert (Map.get "a" snapshot == Some 1)
 }
 
-@test
+@test "mutable map insert and get"
 mutableMap_insertAndGet = do Effect {
   m <- MutableMap.empty Unit
   _ <- MutableMap.insert "x" 42 m
@@ -20,7 +20,7 @@ mutableMap_insertAndGet = do Effect {
   assert (val == Some 42)
 }
 
-@test
+@test "mutable map get or else"
 mutableMap_getOrElse = do Effect {
   m <- MutableMap.empty Unit
   val <- MutableMap.getOrElse "missing" 99 m
@@ -30,7 +30,7 @@ mutableMap_getOrElse = do Effect {
   assert (val2 == 7)
 }
 
-@test
+@test "mutable map remove"
 mutableMap_remove = do Effect {
   m <- MutableMap.empty Unit
   _ <- MutableMap.insert "a" 1 m
@@ -39,7 +39,7 @@ mutableMap_remove = do Effect {
   assert (val == None)
 }
 
-@test
+@test "mutable map has"
 mutableMap_has = do Effect {
   m <- MutableMap.empty Unit
   _ <- MutableMap.insert "key" 10 m
@@ -49,7 +49,7 @@ mutableMap_has = do Effect {
   assert (missing == False)
 }
 
-@test
+@test "mutable map size"
 mutableMap_size = do Effect {
   m <- MutableMap.empty Unit
   s0 <- MutableMap.size m

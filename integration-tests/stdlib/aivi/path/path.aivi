@@ -6,25 +6,25 @@ use aivi.testing
 use aivi.path
 use aivi.text
 
-@test
+@test "parse absolute"
 parse_absolute = do Effect {
   p = parse "/usr/local/bin"
   assert (isAbsolute p)
 }
 
-@test
+@test "parse relative"
 parse_relative = do Effect {
   p = parse "src/main.aivi"
   assert (!(isAbsolute p))
 }
 
-@test
+@test "path segments"
 path_segments = do Effect {
   p = parse "a/b/c"
   assert (List.length p.segments >= 1)
 }
 
-@test
+@test "file name"
 fileName_smoke = do Effect {
   p = parse "home/user/file.txt"
   fileName p match
@@ -32,7 +32,7 @@ fileName_smoke = do Effect {
     | None      => assert False
 }
 
-@test
+@test "parent"
 parent_smoke = do Effect {
   p = parse "a/b/c"
   parent p match
@@ -45,7 +45,7 @@ parent_smoke = do Effect {
     | None => assert False
 }
 
-@test
+@test "to string roundtrip"
   toString_roundtrip = do Effect {
     p = parse "a/b/c"
     s = toString p

@@ -11,7 +11,7 @@ gen = generate {
   yield 3
 }
 
-@test
+@test "generate/yield to list"
 generatorsExist = do Effect {
   assert (toList gen == [1, 2, 3])
 }

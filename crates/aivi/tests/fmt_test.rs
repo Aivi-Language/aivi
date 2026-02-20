@@ -168,10 +168,10 @@ fn test_fmt_decorator_aligns_with_following_binding_in_rhs_block() {
 module demo
 
 bar =
-  @test
+  @test "baz test"
   baz = 2
 "#;
-    let expected = "module demo\n\nbar =\n  @test\n  baz = 2\n";
+    let expected = "module demo\n\nbar =\n  @test \"baz test\"\n  baz = 2\n";
     assert_eq!(format_text(input), expected);
 
     let input = r#"
@@ -179,10 +179,10 @@ module demo
 
 bar =
   @static
-  @test
+  @test "baz test"
   baz = 2
 "#;
-    let expected = "module demo\n\nbar =\n  @static\n  @test\n  baz = 2\n";
+    let expected = "module demo\n\nbar =\n  @static\n  @test \"baz test\"\n  baz = 2\n";
     assert_eq!(format_text(input), expected);
 }
 
@@ -195,12 +195,12 @@ sum = xs => xs match
   | []           => 0
   | [x, ...rest] => x + sum rest
 
-@test
+@test "recursion works"
 recursionWorks = do Effect {
   _ <- assertEq (sum[1, 2, 3]) 6
 }
 "#;
-    let expected = "module demo\n\nsum = xs => xs match\n  | []           => 0\n  | [x, ...rest] => x + sum rest\n\n@test\nrecursionWorks = do Effect {\n  _ <- assertEq (sum[1, 2, 3]) 6\n}\n";
+    let expected = "module demo\n\nsum = xs => xs match\n  | []           => 0\n  | [x, ...rest] => x + sum rest\n\n@test \"recursion works\"\nrecursionWorks = do Effect {\n  _ <- assertEq (sum[1, 2, 3]) 6\n}\n";
     assert_eq!(format_text(input), expected);
 }
 

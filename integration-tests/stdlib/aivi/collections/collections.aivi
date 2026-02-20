@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 use aivi.collections
 
-@test
+@test "deque"
 deque_smoke = do Effect {
   d0 = Deque.empty
   d1 = Deque.pushBack 1 d0
@@ -23,7 +23,7 @@ deque_smoke = do Effect {
     | None => assert False
 }
 
-@test
+@test "heap"
   heap_smoke = do Effect {
     h0 = Heap.empty
     h1 = Heap.push 3 h0
@@ -41,7 +41,7 @@ deque_smoke = do Effect {
       | None => assert False
   }
 
-@test
+@test "heap size"
   heapSize = do Effect {
     h0 = Heap.empty
     h1 = Heap.push 3 h0
@@ -51,14 +51,14 @@ deque_smoke = do Effect {
     assert (Heap.size h0 == 0)
   }
 
-@test
+@test "heap from list"
   heapFromList = do Effect {
     h <- Heap.fromList [5, 1, 3, 2, 4]
     assert (Heap.size h == 5)
     assert (Heap.peekMin h == Some 1)
   }
 
-@test
+@test "heap tuple priority"
   heapTuplePriority = do Effect {
     h0 = Heap.empty
     h1 = Heap.push (3, "c") h0
@@ -73,7 +73,7 @@ deque_smoke = do Effect {
       | None => assert False
   }
 
-@test
+@test "map"
   map_smoke = do Effect {
     m0 = Map.empty
     m1 = Map.insert 1 "one" m0
@@ -88,7 +88,7 @@ deque_smoke = do Effect {
     assert (Map.get 1 m2 == None)
   }
 
-@test
+@test "queue"
   queue_smoke = do Effect {
     q0 = Queue.empty
     q1 = Queue.enqueue 1 q0
@@ -105,7 +105,7 @@ deque_smoke = do Effect {
       | None => assert False
   }
 
-@test
+@test "set"
   set_smoke = do Effect {
     s0 = Set.empty
     s1 = Set.insert 1 s0

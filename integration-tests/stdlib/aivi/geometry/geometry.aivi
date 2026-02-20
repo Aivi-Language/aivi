@@ -6,14 +6,14 @@ use aivi.testing
 use aivi.math
 use aivi.geometry
 
-@test
+@test "point2 constructor"
 point2_constructor = do Effect {
   p = point2 3.0 4.0
   assertEq p.x 3.0
   assertEq p.y 4.0
 }
 
-@test
+@test "point3 constructor"
 point3_constructor = do Effect {
   p = point3 1.0 2.0 3.0
   assertEq p.x 1.0
@@ -21,35 +21,35 @@ point3_constructor = do Effect {
   assertEq p.z 3.0
 }
 
-@test
+@test "line2 constructor"
 line2_constructor = do Effect {
   l = line2 0.0 0.0 1.0 0.0
   assertEq l.origin.x 0.0
   assertEq l.direction.x 1.0
 }
 
-@test
+@test "segment2 constructor"
 segment2_constructor = do Effect {
   s = segment2 0.0 0.0 3.0 4.0
   assertEq s.start.x 0.0
   assertEq s.end.x 3.0
 }
 
-@test
+@test "ray3 constructor"
 ray3_constructor = do Effect {
   r = ray3 0.0 0.0 0.0 0.0 0.0 1.0
   assertEq r.origin.x 0.0
   assertEq r.dir.z 1.0
 }
 
-@test
+@test "distance 2d"
 distance_2d = do Effect {
   p1 = point2 0.0 0.0
   p2 = point2 3.0 4.0
   assert (abs (distance p1 p2 - 5.0) < 0.0001)
 }
 
-@test
+@test "midpoint"
 midpoint_smoke = do Effect {
   seg = segment2 0.0 0.0 4.0 6.0
   mid = midpoint seg
@@ -57,7 +57,7 @@ midpoint_smoke = do Effect {
   assert (abs (mid.y - 3.0) < 0.0001)
 }
 
-@test
+@test "point2 arithmetic"
 point2_arithmetic = do Effect {
   a = point2 1.0 2.0
   b = point2 3.0 4.0
@@ -66,7 +66,7 @@ point2_arithmetic = do Effect {
   assertEq s.y 6.0
 }
 
-@test
+@test "point3 arithmetic"
 point3_arithmetic = do Effect {
   a = point3 1.0 2.0 3.0
   b = point3 4.0 5.0 6.0

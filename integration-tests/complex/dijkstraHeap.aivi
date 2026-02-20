@@ -20,7 +20,6 @@ buildGraph = fromWeightedEdges [
 ]
 
 // Expand all neighbors using List.foldl, returning updated (queue, dist)
-expandNeighbors : List { to: Int, weight: Float } -> Heap (Float, Int) -> Map Int Float -> Float -> (Heap (Float, Int), Map Int Float)
 expandNeighbors = edges queue dist currentDist =>
   List.foldl ((q, d) edge => {
       tentative = currentDist + edge.weight
@@ -49,7 +48,7 @@ dijkstra : Graph -> Int -> Map Int Float
 dijkstra = graph start =>
   search (Heap.push (0.0, start) Heap.empty) (~map{ start => 0.0 }) Set.empty graph
 
-@test
+@test "Dijkstra with immutable heap"
 shortestPaths = do Effect {
   graph <- pure buildGraph
   distances <- pure (dijkstra graph 0)

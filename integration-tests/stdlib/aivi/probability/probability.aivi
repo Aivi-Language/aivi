@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 use aivi.probability
 
-@test
+@test "probability clamp"
 probability_clamp = do Effect {
   p1 = clamp 0.5
   assert (p1 == 0.5)
@@ -17,14 +17,14 @@ probability_clamp = do Effect {
   assert (p3 == 0.0)
 }
 
-@test
+@test "bernoulli"
 bernoulli_smoke = do Effect {
   dist = bernoulli 0.5
   // Just verify it constructs without error
   assert True
 }
 
-@test
+@test "uniform"
 uniform_smoke = do Effect {
   dist = uniform 0.0 10.0
   // Just verify it constructs without error

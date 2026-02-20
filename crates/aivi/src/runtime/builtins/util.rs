@@ -8,6 +8,46 @@ use rust_decimal::Decimal;
 use crate::runtime::values::{BuiltinImpl, BuiltinValue};
 use crate::runtime::{Runtime, RuntimeError, Value};
 
+/// Return a human-readable type name for a runtime value.
+pub(super) fn value_type_name(value: &Value) -> &'static str {
+    match value {
+        Value::Unit => "Unit",
+        Value::Bool(_) => "Bool",
+        Value::Int(_) => "Int",
+        Value::Float(_) => "Float",
+        Value::Text(_) => "Text",
+        Value::DateTime(_) => "DateTime",
+        Value::Bytes(_) => "Bytes",
+        Value::Regex(_) => "Regex",
+        Value::BigInt(_) => "BigInt",
+        Value::Rational(_) => "Rational",
+        Value::Decimal(_) => "Decimal",
+        Value::Map(_) => "Map",
+        Value::Set(_) => "Set",
+        Value::Queue(_) => "Queue",
+        Value::Deque(_) => "Deque",
+        Value::Heap(_) => "Heap",
+        Value::List(_) => "List",
+        Value::Tuple(_) => "Tuple",
+        Value::Record(_) => "Record",
+        Value::Constructor { .. } => "Constructor",
+        Value::Closure(_) | Value::Builtin(_) | Value::MultiClause(_) => "Function",
+        Value::Effect(_) => "Effect",
+        Value::Source(_) => "Source",
+        Value::Resource(_) => "Resource",
+        Value::Thunk(_) => "Thunk",
+        Value::ChannelSend(_) => "ChannelSend",
+        Value::ChannelRecv(_) => "ChannelRecv",
+        Value::FileHandle(_) => "FileHandle",
+        Value::Listener(_) => "Listener",
+        Value::Connection(_) => "Connection",
+        Value::Stream(_) => "Stream",
+        Value::HttpServer(_) => "HttpServer",
+        Value::WebSocket(_) => "WebSocket",
+        Value::MutableMap(_) => "MutableMap",
+    }
+}
+
 pub(crate) fn builtin(
     name: &str,
     arity: usize,
@@ -68,21 +108,30 @@ pub(super) fn list_value(items: Vec<Value>) -> Value {
 pub(super) fn expect_text(value: Value, ctx: &str) -> Result<String, RuntimeError> {
     match value {
         Value::Text(text) => Ok(text),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Text"))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx}: expected Text, but received {}",
+            value_type_name(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_int(value: Value, ctx: &str) -> Result<i64, RuntimeError> {
     match value {
         Value::Int(value) => Ok(value),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Int"))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx}: expected Int, but received {}",
+            value_type_name(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_float(value: Value, ctx: &str) -> Result<f64, RuntimeError> {
     match value {
         Value::Float(value) => Ok(value),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Float"))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx}: expected Float, but received {}",
+            value_type_name(&other)
+        ))),
     }
 }
 
@@ -91,14 +140,20 @@ pub(super) fn expect_char(value: Value, ctx: &str) -> Result<char, RuntimeError>
     let mut chars = text.chars();
     match (chars.next(), chars.next()) {
         (Some(ch), None) => Ok(ch),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Char"))),
+        _ => Err(RuntimeError::Message(format!(
+            "{ctx}: expected a single character, but received a string of length {}",
+            text.len()
+        ))),
     }
 }
 
 pub(super) fn expect_list(value: Value, ctx: &str) -> Result<Arc<Vec<Value>>, RuntimeError> {
     match value {
         Value::List(items) => Ok(items),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects List"))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx}: expected List, but received {}",
+            value_type_name(&other)
+        ))),
     }
 }
 
@@ -108,7 +163,10 @@ pub(super) fn expect_record(
 ) -> Result<Arc<std::collections::HashMap<String, Value>>, RuntimeError> {
     match value {
         Value::Record(fields) => Ok(fields),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Record"))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx}: expected Record, but received {}",
+            value_type_name(&other)
+        ))),
     }
 }
 
@@ -117,7 +175,12 @@ pub(super) fn list_floats(values: &[Value], ctx: &str) -> Result<Vec<f64>, Runti
     for value in values {
         match value {
             Value::Float(value) => out.push(*value),
-            _ => return Err(RuntimeError::Message(format!("{ctx} expects List Float"))),
+            other => {
+                return Err(RuntimeError::Message(format!(
+                    "{ctx}: expected List Float, but element is {}",
+                    value_type_name(other)
+                )))
+            }
         }
     }
     Ok(out)
@@ -128,7 +191,12 @@ pub(super) fn list_ints(values: &[Value], ctx: &str) -> Result<Vec<i64>, Runtime
     for value in values {
         match value {
             Value::Int(value) => out.push(*value),
-            _ => return Err(RuntimeError::Message(format!("{ctx} expects List Int"))),
+            other => {
+                return Err(RuntimeError::Message(format!(
+                    "{ctx}: expected List Int, but element is {}",
+                    value_type_name(other)
+                )))
+            }
         }
     }
     Ok(out)
@@ -137,34 +205,49 @@ pub(super) fn list_ints(values: &[Value], ctx: &str) -> Result<Vec<i64>, Runtime
 pub(super) fn expect_bytes(value: Value, ctx: &str) -> Result<Arc<Vec<u8>>, RuntimeError> {
     match value {
         Value::Bytes(bytes) => Ok(bytes),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Bytes"))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx}: expected Bytes, but received {}",
+            value_type_name(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_regex(value: Value, ctx: &str) -> Result<Arc<Regex>, RuntimeError> {
     match value {
         Value::Regex(regex) => Ok(regex),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Regex"))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx}: expected Regex, but received {}",
+            value_type_name(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_bigint(value: Value, ctx: &str) -> Result<Arc<BigInt>, RuntimeError> {
     match value {
         Value::BigInt(value) => Ok(value),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects BigInt"))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx}: expected BigInt, but received {}",
+            value_type_name(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_rational(value: Value, ctx: &str) -> Result<Arc<BigRational>, RuntimeError> {
     match value {
         Value::Rational(value) => Ok(value),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Rational"))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx}: expected Rational, but received {}",
+            value_type_name(&other)
+        ))),
     }
 }
 
 pub(super) fn expect_decimal(value: Value, ctx: &str) -> Result<Decimal, RuntimeError> {
     match value {
         Value::Decimal(value) => Ok(value),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Decimal"))),
+        other => Err(RuntimeError::Message(format!(
+            "{ctx}: expected Decimal, but received {}",
+            value_type_name(&other)
+        ))),
     }
 }

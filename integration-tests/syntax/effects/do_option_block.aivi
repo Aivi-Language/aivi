@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 
 // Happy path: both binds succeed, result is Some 3
-@test
+@test "do option happy path"
 doOptionHappyPath = do Effect {
   result = do Option {
     x <- Some 1
@@ -16,7 +16,7 @@ doOptionHappyPath = do Effect {
 }
 
 // Short-circuit: None aborts the block early
-@test
+@test "do option short circuit"
 doOptionShortCircuit = do Effect {
   result = do Option {
     x <- Some 10
@@ -27,7 +27,7 @@ doOptionShortCircuit = do Effect {
 }
 
 // Let-binding inside do Option wraps value in Some
-@test
+@test "do option let binding"
 doOptionLetBinding = do Effect {
   result = do Option {
     x = 42
@@ -37,7 +37,7 @@ doOptionLetBinding = do Effect {
 }
 
 // Single expression block
-@test
+@test "do option single expr"
 doOptionSingleExpr = do Effect {
   result = do Option {
     Some "hello"
@@ -46,7 +46,7 @@ doOptionSingleExpr = do Effect {
 }
 
 // None as the final expression
-@test
+@test "do option none final"
 doOptionNoneFinal = do Effect {
   result = do Option {
     x <- Some 1

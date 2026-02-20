@@ -4,7 +4,7 @@ module integrationTests.syntax.externalSources.envGetAndDefault
 use aivi
 use aivi.testing
 
-@test
+@test "env load with fallback"
 envDefaultWorks = do Effect {
   port <- load (env.get "AIVI__MISSING_TEST_PORT__") or "3000"
   assertEq port "3000"

@@ -4,130 +4,120 @@ module integrationTests.complex.EdmondsKarp
 use aivi
 use aivi.testing
 use aivi.collections
-use aivi.graph (Graph, fromEdges, edgesFrom)
+use aivi.graph (fromEdges, edgesFrom)
 
-// Edge with capacity
-Edge = { from: Int, to: Int, cap: Float }
+// Edge with integer capacity
+Edge = { from: Int, to: Int, cap: Int }
 
-// Residual key for capacity lookup
-ResidualKey = { from: Int, to: Int }
+// Helpers -- text keys avoid record-key issues in Map
+edgeKey = from to => "{ from }:{ to }"
+getCap = from to caps => Map.getOrElse (edgeKey from to) 0 caps
+setCap = from to value caps => Map.insert (edgeKey from to) value caps
+addCap = from to delta caps => setCap from to (getCap from to caps + delta) caps
 
-// Residual network state
-Residual = {
-  graph: Graph
-  capacities: Map ResidualKey Float
-}
-
-// Get capacity or 0 from map
-getOrZero = key map => Map.getOrElse key 0.0 map
-
-bigCap : Float
-bigCap = 1000000000.0
-
-// Build residual network from edges using List.map and ++
-buildResidual : List Edge -> Residual
+// Build residual network from edges
 buildResidual = edges => {
-  backward = List.map (e => { from: e.to, to: e.from, cap: 0.0 }) edges
+  backward = List.map (e => { from: e.to, to: e.from, cap: 0 }) edges
   allEdges = edges ++ backward
   graph = fromEdges (List.map (e => (e.from, e.to)) allEdges)
-  { graph: graph, capacities: List.foldl (caps e => Map.insert { from: e.from, to: e.to } e.cap caps) Map.empty allEdges }
+  caps = List.foldl (acc e => addCap e.from e.to e.cap acc) Map.empty allEdges
+  { graph: graph, capacities: caps }
 }
 
-// BFS to find augmenting path using foldl for neighbor exploration
-bfs = residual source sink =>
-  bfsVisit residual sink (Queue.enqueue source Queue.empty) (Set.insert source Set.empty) Map.empty
+// BFS from source to sink, returns Option (Map Int Int) parent map
+bfs = residual source sink => {
+  q0 = Queue.enqueue source Queue.empty
+  bfsLoop residual source sink q0 Map.empty
+}
 
-bfsVisit = residual sink q visited parents => (Queue.dequeue q) match
+bfsLoop = residual source sink q parents => (Queue.dequeue q) match
   | None               => None
   | Some (current, q2) =>
-    if current == sink then
-      Some parents
+    if current == sink then Some parents
     else {
-      edges = edgesFrom residual.graph current
-      (q3, visited3, parents3) = List.foldl ((q0, vis, par) edge => {
+      neighbors = edgesFrom residual.graph current
+      (q3, parents3) = List.foldl ((q0, par) edge => {
         next = edge.to
-        cap = getOrZero { from: current, to: next } residual.capacities
-        if cap > 0.0 && !(Set.has next vis) then
-          (Queue.enqueue next q0, Set.insert next vis, Map.insert next current par)
+        cap = getCap current next residual.capacities
+        isVisited = next == source || Map.has next par
+        if cap > 0 && !isVisited then
+          (Queue.enqueue next q0, Map.insert next current par)
         else
-          (q0, vis, par)
-      }) (q2, visited, parents) edges
-          bfsVisit residual sink q3 visited3 parents3
+          (q0, par)
+      }) (q2, parents) neighbors
+          bfsLoop residual source sink q3 parents3
     }
 
-// Reconstruct path from parents map
-reconstruct : Map Int Int -> Int -> Int -> List Int -> List Int
-reconstruct = parents sink source acc =>
-  if sink == source then [source, ...acc]
-  else (Map.get sink parents) match
-    | Some prev => reconstruct parents prev source [sink, ...acc]
-    | None      => []
+// Reconstruct path from parent map
+reconstructPath = parents source sink =>
+  buildPath sink source parents [sink]
 
-// Calculate bottleneck capacity along path
-pathCapacity : Residual -> List Int -> Float
-pathCapacity = residual path => path match
-  | []              => 0.0
-  | [_]             => bigCap
+buildPath = node source parents acc =>
+  if node == source then acc
+  else (Map.get node parents) match
+    | None        => []
+    | Some parent => buildPath parent source parents ([parent] ++ acc)
+
+// Find minimum capacity along a path
+pathCapacity = path caps => walkMin path caps 0
+
+walkMin = path caps best => path match
+  | []              => best
+  | [_]             => best
   | [a, b, ...rest] => {
-    cap = getOrZero { from: a, to: b } residual.capacities
-    restCap = pathCapacity residual [b, ...rest]
-    if cap < restCap then cap else restCap
+    c = getCap a b caps
+    newBest = if best == 0 then c else if c < best then c else best
+    walkMin ([b] ++ rest) caps newBest
   }
 
-// Update capacities along path
-updatePath = residual path delta =>
-  residual <| { capacities: updatePathGo delta path residual.capacities }
-
-updatePathGo = delta nodes caps => nodes match
+// Update capacities along a path (push delta flow)
+updateCaps = path delta caps => path match
   | []              => caps
   | [_]             => caps
   | [a, b, ...rest] => {
-    forward = getOrZero { from: a, to: b } caps
-    backward = getOrZero { from: b, to: a } caps
-    updated =
-    caps
-    |> Map.insert { from: a, to: b } (forward - delta)
-    |> Map.insert { from: b, to: a } (backward + delta)
-    updatePathGo delta [b, ...rest] updated
+    fwd = getCap a b caps
+    bwd = getCap b a caps
+    caps2 = caps |> setCap a b (fwd - delta) |> setCap b a (bwd + delta)
+    updateCaps ([b] ++ rest) delta caps2
   }
-
-// Main augmenting path loop
-augment = residual source sink parents total => {
-  path = reconstruct parents sink source []
-  delta = pathCapacity residual path
-  if delta == 0.0 then (total, residual)
-  else (total + delta, updatePath residual path delta)
-}
 
 // Edmonds-Karp max flow algorithm
-maxFlow : List Edge -> Int -> Int -> (Float, Residual)
-maxFlow = edges source sink => maxFlowGo (buildResidual edges) source sink 0.0
+edmondsKarp = edges source sink => {
+  residual = buildResidual edges
+  ekLoop residual source sink 0
+}
 
-maxFlowGo = state source sink total => bfs state source sink match
-  | None         => (total, state)
+ekLoop = residual source sink totalFlow => (bfs residual source sink) match
+  | None         => totalFlow
   | Some parents => {
-    (newTotal, updated) = augment state source sink parents total
-    maxFlowGo updated source sink newTotal
+    path = reconstructPath parents source sink
+    delta = pathCapacity path residual.capacities
+    if delta == 0 then totalFlow
+    else {
+      newCaps = updateCaps path delta residual.capacities
+      ekLoop (residual <| { capacities: newCaps }) source sink (totalFlow + delta)
+    }
   }
 
-@test
-maxFlowTest = do Effect {
+@test "Edmonds-Karp max-flow"
+flowTest = do Effect {
+  // CLRS max-flow example (6 nodes, expected max flow = 23)
   edges = [
-    { from: 0, to: 1, cap: 16.0 }
-    { from: 0, to: 2, cap: 13.0 }
-    { from: 1, to: 2, cap: 10.0 }
-    { from: 2, to: 1, cap: 4.0 }
-    { from: 1, to: 3, cap: 12.0 }
-    { from: 3, to: 2, cap: 9.0 }
-    { from: 2, to: 4, cap: 14.0 }
-    { from: 4, to: 3, cap: 7.0 }
-    { from: 3, to: 5, cap: 20.0 }
-    { from: 4, to: 5, cap: 4.0 }
+    { from: 0, to: 1, cap: 16 }
+    { from: 0, to: 2, cap: 13 }
+    { from: 1, to: 2, cap: 10 }
+    { from: 2, to: 1, cap: 4 }
+    { from: 1, to: 3, cap: 12 }
+    { from: 3, to: 2, cap: 9 }
+    { from: 2, to: 4, cap: 14 }
+    { from: 4, to: 3, cap: 7 }
+    { from: 3, to: 5, cap: 20 }
+    { from: 4, to: 5, cap: 4 }
   ]
 
-  (flow, _) = maxFlow edges 0 5
-  assert (flow == 23.0)
+  result <- pure (edmondsKarp edges 0 5)
+  assert (result == 23)
 
-  (zeroFlow, _) = maxFlow [] 0 1
-  assert (zeroFlow == 0.0)
+  zero <- pure (edmondsKarp [] 0 1)
+  assert (zero == 0)
 }

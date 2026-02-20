@@ -31,7 +31,8 @@ pub(super) fn build_math_record() -> Value {
                 Value::Int(value) => Ok(Value::Int(value.wrapping_abs())),
                 Value::Float(value) => Ok(Value::Float(value.abs())),
                 _ => Err(RuntimeError::Message(
-                    "math.abs expects Int or Float".to_string(),
+                    format!("math.abs: expected Int or Float, but received {}",
+                        super::util::value_type_name(&value)),
                 )),
             }
         }),

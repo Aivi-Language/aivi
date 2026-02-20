@@ -37,7 +37,7 @@ MCP decorators are not supported in v0.1.
 
 | Decorator | Usage | Meaning |
 | :--- | :--- | :--- |
-| `@test` | `@test add_is_commutative = ...` | Mark a definition as a test case |
+| `@test` | `@test "adds two numbers" add_is_commutative = ...` | Mark a definition as a test case (description is mandatory) |
 
 ### Pragmas (Module-level)
 | Decorator | Usage | Meaning |

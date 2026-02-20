@@ -773,7 +773,7 @@ Compile-time metadata only. No user-defined decorators.
 
 | Decorator | Purpose |
 | :--- | :--- |
-| `@test` | Mark as test case |
+| `@test "desc"` | Mark as test case (mandatory description) |
 | `@static` | Embed at compile time |
 | `@inline` | Always inline |
 | `@deprecated` | Emit warning on use |
@@ -929,7 +929,7 @@ topologicalSort = graph => {
   sortLoop graph indeg q0 []
 }
 
-@test
+@test "Kahn topological sort"
 topoSmoke = do Effect {
   adj = ~map{
     0 => [1, 2]
@@ -968,7 +968,7 @@ topoSmoke = do Effect {
 | Infinite sequence | `generate { loop s = init => { yield s; recurse (next s) } }` |
 | State machine | `machine Name = { -> Idle : init {}; Idle -> Running : start {}; ... }` |
 | Acquire resource | `handle <- managedFile "data.txt"` (inside `do Effect`) |
-| Write a test | `@test myTest = do Effect { assertEq (f 1) 2 }` |
+| Write a test | `@test "adds correctly" myTest = do Effect { assertEq (f 1) 2 }` |
 
 ---
 

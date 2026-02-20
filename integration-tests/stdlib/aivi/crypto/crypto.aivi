@@ -8,25 +8,25 @@ use aivi.text
 
 // -- Hashing --
 
-@test
+@test "sha256 hello"
 sha256_hello = do Effect {
   s = sha256 "hello"
   assert (s == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
 }
 
-@test
+@test "sha384 hello"
 sha384_hello = do Effect {
   s = sha384 "hello"
   assert (length s == 96)
 }
 
-@test
+@test "sha512 hello"
 sha512_hello = do Effect {
   s = sha512 "hello"
   assert (length s == 128)
 }
 
-@test
+@test "sha256 empty"
 sha256_empty = do Effect {
   s = sha256 ""
   assert (s == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
@@ -34,7 +34,7 @@ sha256_empty = do Effect {
 
 // -- HMAC --
 
-@test
+@test "hmac sha256"
 hmacSha256_smoke = do Effect {
   key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
   ? { Err _ => panic "bad hex" }
@@ -44,7 +44,7 @@ hmacSha256_smoke = do Effect {
   assert (length tag > 0)
 }
 
-@test
+@test "hmac sha512"
 hmacSha512_smoke = do Effect {
   key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
   ? { Err _ => panic "bad hex" }
@@ -54,7 +54,7 @@ hmacSha512_smoke = do Effect {
   assert (length tag > 0)
 }
 
-@test
+@test "hmac verify roundtrip"
 hmacVerify_roundtrip = do Effect {
   key = fromHex "aabbccdd"
   ? { Err _ => panic "bad hex" }
@@ -67,14 +67,14 @@ hmacVerify_roundtrip = do Effect {
 
 // -- Password Hashing --
 
-@test
+@test "hash password and verify"
 hashPassword_and_verify = do Effect {
   hashed <- hashPassword "myS3cret!"
   ok <- verifyPassword "myS3cret!" hashed
   assert ok
 }
 
-@test
+@test "verify password wrong"
 verifyPassword_wrong = do Effect {
   hashed <- hashPassword "correct"
   ok <- verifyPassword "wrong" hashed
@@ -83,13 +83,13 @@ verifyPassword_wrong = do Effect {
 
 // -- Random --
 
-@test
+@test "random bytes length"
 randomBytes_length = do Effect {
   b <- randomBytes 32
   assert (length b == 32)
 }
 
-@test
+@test "random uuid format"
 randomUuid_format = do Effect {
   u <- randomUuid ()
   assert (length u == 36)
@@ -97,7 +97,7 @@ randomUuid_format = do Effect {
 
 // -- Utilities --
 
-@test
+@test "to hex from hex roundtrip"
 toHex_fromHex_roundtrip = do Effect {
   original <- randomBytes 16
   hex = toHex original
@@ -106,13 +106,13 @@ toHex_fromHex_roundtrip = do Effect {
   assert (secureEquals original decoded)
 }
 
-@test
+@test "secure equals same"
 secureEquals_same = do Effect {
   a <- randomBytes 8
   assert (secureEquals a a)
 }
 
-@test
+@test "secure equals different"
 secureEquals_different = do Effect {
   a <- randomBytes 8
   b <- randomBytes 8

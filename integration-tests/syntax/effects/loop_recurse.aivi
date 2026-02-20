@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 use aivi.mutableMap
 
-@test
+@test "loop sum to ten"
 loop_sumToTen = do Effect {
   total <- MutableMap.create (Map.insert "sum" 0 Map.empty)
   loop i = 1 => {
@@ -21,7 +21,7 @@ loop_sumToTen = do Effect {
   assert (Map.get "sum" result == Some 55)
 }
 
-@test
+@test "loop basic counter"
 loop_basicCounter = do Effect {
   counter <- MutableMap.create (Map.insert "n" 0 Map.empty)
   loop _ = Unit => {
@@ -37,7 +37,7 @@ loop_basicCounter = do Effect {
   assert (result == 5)
 }
 
-@test
+@test "loop pattern binding"
 loop_patternBinding = do Effect {
   result <- MutableMap.create (Map.insert "fib" 0 Map.empty)
   loop (a, b, count) = (0, 1, 0) => {

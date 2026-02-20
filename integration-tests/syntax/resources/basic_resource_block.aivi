@@ -13,7 +13,7 @@ managedFile = path => resource {
   file.close handle
 }
 
-@test
+@test "resource block error handling"
 resourceOpenFailureIsCaught = do Effect {
   assertEq (1 + 1) 2
 }

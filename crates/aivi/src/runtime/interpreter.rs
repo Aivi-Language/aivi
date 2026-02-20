@@ -95,7 +95,14 @@ enum RuntimeError {
 #[derive(Debug, Clone)]
 pub struct TestFailure {
     pub name: String,
+    pub description: String,
     pub message: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct TestSuccess {
+    pub name: String,
+    pub description: String,
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +110,7 @@ pub struct TestReport {
     pub passed: usize,
     pub failed: usize,
     pub failures: Vec<TestFailure>,
+    pub successes: Vec<TestSuccess>,
 }
 
 pub fn run_native(program: HirProgram) -> Result<(), AiviError> {
@@ -169,7 +177,7 @@ pub fn run_native_with_fuel(program: HirProgram, fuel: u64) -> Result<(), AiviEr
 
 pub fn run_test_suite(
     program: HirProgram,
-    test_names: &[String],
+    test_entries: &[(String, String)],
     surface_modules: &[crate::surface::Module],
 ) -> Result<TestReport, AiviError> {
     let mut runtime = build_runtime_from_program_scoped(program, surface_modules)?;
@@ -177,13 +185,15 @@ pub fn run_test_suite(
         passed: 0,
         failed: 0,
         failures: Vec::new(),
+        successes: Vec::new(),
     };
 
-    for name in test_names {
+    for (name, description) in test_entries {
         let Some(value) = runtime.ctx.globals.get(name) else {
             report.failed += 1;
             report.failures.push(TestFailure {
                 name: name.clone(),
+                description: description.clone(),
                 message: "missing definition".to_string(),
             });
             continue;
@@ -195,6 +205,7 @@ pub fn run_test_suite(
                 report.failed += 1;
                 report.failures.push(TestFailure {
                     name: name.clone(),
+                    description: description.clone(),
                     message: format_runtime_error(err),
                 });
                 continue;
@@ -207,6 +218,7 @@ pub fn run_test_suite(
                 report.failed += 1;
                 report.failures.push(TestFailure {
                     name: name.clone(),
+                    description: description.clone(),
                     message: format!("test must be an Effect value, got {}", format_value(&other)),
                 });
                 continue;
@@ -214,11 +226,18 @@ pub fn run_test_suite(
         };
 
         match runtime.run_effect_value(effect) {
-            Ok(_) => report.passed += 1,
+            Ok(_) => {
+                report.passed += 1;
+                report.successes.push(TestSuccess {
+                    name: name.clone(),
+                    description: description.clone(),
+                });
+            }
             Err(err) => {
                 report.failed += 1;
                 report.failures.push(TestFailure {
                     name: name.clone(),
+                    description: description.clone(),
                     message: format_runtime_error(err),
                 });
             }

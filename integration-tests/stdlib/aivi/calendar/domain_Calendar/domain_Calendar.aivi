@@ -6,28 +6,28 @@ use aivi.testing
 use aivi.calendar
 use aivi.calendar (domain Calendar)
 
-@test
+@test "literal eom"
 literal_eom_smoke = do Effect {
   d = { year: 2024, month: 2, day: 1 }
   e <- eom
   assert ((d + e).day == 29)
 }
 
-@test
+@test "suffix d"
 suffix_d_smoke = do Effect {
   d = { year: 2024, month: 2, day: 28 }
   delta <- 1d
   assert ((d + delta).day == 29)
 }
 
-@test
+@test "suffix m"
 suffix_m_smoke = do Effect {
   d = { year: 2024, month: 1, day: 31 }
   delta <- 1m
   assert ((d + delta).month == 2)
 }
 
-@test
+@test "suffix y"
 suffix_y_smoke = do Effect {
   d = { year: 2024, month: 2, day: 29 }
   delta <- 1y

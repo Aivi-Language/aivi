@@ -897,3 +897,71 @@ value = (Ok 1) or
     let (_, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(diag_codes(&diags).contains(&"E1530".to_string()));
 }
+
+#[test]
+fn rejects_test_without_argument() {
+    let src = r#"
+module Example
+
+@test
+x = do Effect { _ <- assert True }
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1511".to_string()),
+        "expected E1511 for @test without argument, got: {:?}",
+        diag_codes(&diags)
+    );
+}
+
+#[test]
+fn accepts_test_with_string_argument() {
+    let src = r#"
+module Example
+
+@test "adds two numbers"
+x = do Effect { _ <- assertEq (1 + 1) 2 }
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    assert_eq!(def.decorators.len(), 1);
+    assert_eq!(def.decorators[0].name.name, "test");
+    assert!(
+        matches!(
+            def.decorators[0].arg,
+            Some(Expr::Literal(Literal::String { .. }))
+        ),
+        "expected @test string literal argument"
+    );
+}
+
+#[test]
+fn rejects_test_with_non_string_argument() {
+    let src = r#"
+module Example
+
+@test 42
+x = do Effect { _ <- assert True }
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diag_codes(&diags).contains(&"E1510".to_string()),
+        "expected E1510 for @test with non-string argument, got: {:?}",
+        diag_codes(&diags)
+    );
+}

@@ -7,7 +7,7 @@ use aivi.database
 
 // Test that types are well-formed
 
-@test
+@test "column type construct"
 columnType_construct = do Effect {
   ct1 = IntType
   ct2 = BoolType
@@ -16,14 +16,14 @@ columnType_construct = do Effect {
   assert True
 }
 
-@test
+@test "column constraint construct"
 columnConstraint_construct = do Effect {
   c1 = AutoIncrement
   c2 = NotNull
   assert True
 }
 
-@test
+@test "column default construct"
 columnDefault_construct = do Effect {
   d1 = DefaultBool True
   d2 = DefaultInt 0
@@ -32,7 +32,7 @@ columnDefault_construct = do Effect {
   assert True
 }
 
-@test
+@test "driver construct"
 driver_construct = do Effect {
   d1 = Sqlite
   d2 = Postgresql
@@ -40,14 +40,14 @@ driver_construct = do Effect {
   assert True
 }
 
-@test
+@test "db config construct"
 dbConfig_construct = do Effect {
   cfg = { driver: Sqlite, url: ":memory:" }
   assertEq cfg.driver Sqlite
   assertEq cfg.url ":memory:"
 }
 
-@test
+@test "column construct"
 column_construct = do Effect {
   col = {
     name: "id"
@@ -58,7 +58,7 @@ column_construct = do Effect {
   assertEq col.name "id"
 }
 
-@test
+@test "delta construct"
 delta_construct = do Effect {
   user = { id: 1, name: "Alice" }
   ins = Insert user

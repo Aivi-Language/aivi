@@ -9,7 +9,7 @@ positiveOnly = n => do Effect {
   pure n
 }
 
-@test
+@test "given ok continues"
 givenOkContinues = do Effect {
   res <- attempt (positiveOnly 5)
   res match
@@ -17,7 +17,7 @@ givenOkContinues = do Effect {
     | Err _ => fail "unexpected error"
 }
 
-@test
+@test "given fails on bad input"
 givenFailsOnBadInput = do Effect {
   res <- attempt (positiveOnly (-1))
   res match
