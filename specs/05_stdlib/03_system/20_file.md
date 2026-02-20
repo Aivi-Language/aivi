@@ -82,3 +82,27 @@ For more control or large files, use the resource-based API.
 | Function | Explanation |
 | --- | --- |
 | **delete** path<br><pre><code>`Text -> Effect FileError Unit`</code></pre> | Removes the file at `path`. |
+
+## Directory Operations
+
+| Function | Explanation |
+| --- | --- |
+| **listDir** path<br><pre><code>`Text -> Effect FileError (List Text)`</code></pre> | Returns the names of entries in the directory at `path`. |
+| **mkdir** path<br><pre><code>`Text -> Effect FileError Unit`</code></pre> | Creates a directory at `path`. Fails when parent directories are missing. |
+| **mkdirAll** path<br><pre><code>`Text -> Effect FileError Unit`</code></pre> | Creates a directory and all missing parents. |
+| **rmdir** path<br><pre><code>`Text -> Effect FileError Unit`</code></pre> | Removes an empty directory. |
+
+## Additional Path Operations
+
+| Function | Explanation |
+| --- | --- |
+| **readBytes** path<br><pre><code>`Text -> Effect FileError Bytes`</code></pre> | Reads the entire contents of `path` as raw `Bytes`. |
+| **writeBytes** path bytes<br><pre><code>`Text -> Bytes -> Effect FileError Unit`</code></pre> | Writes raw `bytes` to `path`, overwriting if it exists. |
+| **appendText** path contents<br><pre><code>`Text -> Text -> Effect FileError Unit`</code></pre> | Appends `contents` to the end of the file at `path`. |
+| **copy** src dest<br><pre><code>`Text -> Text -> Effect FileError Unit`</code></pre> | Copies the file at `src` to `dest`. |
+| **move** src dest<br><pre><code>`Text -> Text -> Effect FileError Unit`</code></pre> | Moves (or renames) the file at `src` to `dest`. |
+| **readLines** path<br><pre><code>`Text -> Effect FileError (Generator Text)`</code></pre> | Returns a lazy generator of lines in the file. |
+
+Notes:
+- All path operations resolve relative paths against the current working directory.
+- `readLines` returns a [Generator](/05_stdlib/00_core/30_generator) that reads lines lazily — useful for large files.

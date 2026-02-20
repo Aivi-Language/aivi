@@ -1,5 +1,1 @@
-loop pattern = initialValue => {
-  // body: may yield, may recurse
-  yield someValue
-  recurse nextState
-}
+Generator A = forall R.(R -> A -> R) -> R -> R

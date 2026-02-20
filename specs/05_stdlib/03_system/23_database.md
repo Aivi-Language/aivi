@@ -66,3 +66,35 @@ and `withConn` guarantees deterministic release via AIVI resources even on failu
 - `Database` compiles predicate expressions into `WHERE` clauses and patch instructions into `SET` clauses.
 - Joins are translated into single SQL queries to avoid N+1 patterns.
 - Advanced SQL remains available via `db.query` in [External Sources](../../02_syntax/12_external_sources.md).
+
+## Core API (v0.1)
+
+### Table management
+
+| Function | Explanation |
+| --- | --- |
+| **db.table** name columns<br><pre><code>`Text -> List Column -> Table A`</code></pre> | Creates a table definition. The row type `A` is inferred from the binding's type annotation. |
+| **db.configure** config<br><pre><code>`DbConfig -> Effect DbError Unit`</code></pre> | Selects the runtime backend (Sqlite, Postgresql, Mysql). |
+| **db.runMigrations** tables<br><pre><code>`List (Table A) -> Effect DbError Unit`</code></pre> | Creates or updates tables to match their column definitions. |
+
+### Data loading
+
+| Function | Explanation |
+| --- | --- |
+| **db.load** table<br><pre><code>`Table A -> Effect DbError (List A)`</code></pre> | Loads all rows from `table`. |
+| **db.applyDelta** table delta<br><pre><code>`Table A -> Delta A -> Effect DbError (Table A)`</code></pre> | Applies an insert, update, or delete delta. Also available as the domain `+` operator. |
+
+### Delta constructors
+
+| Constructor | Explanation |
+| --- | --- |
+| **Insert** row<br><pre><code>`A -> Delta A`</code></pre> | Inserts a new row. |
+| **Update** pred patch<br><pre><code>`Pred A -> Patch A -> Delta A`</code></pre> | Updates rows matching `pred` with `patch`. |
+| **Delete** pred<br><pre><code>`Pred A -> Delta A`</code></pre> | Deletes rows matching `pred`. |
+
+### Pooling (`aivi.database.pool`)
+
+| Function | Explanation |
+| --- | --- |
+| **Pool.create** config<br><pre><code>`Pool.Config Conn -> Effect E (Result Pool.PoolError (Pool Conn))`</code></pre> | Creates a connection pool from the given configuration. |
+| **Pool.withConn** pool f<br><pre><code>`Pool Conn -> (Conn -> Effect E A) -> Effect E (Result Pool.PoolError A)`</code></pre> | Acquires a connection, runs `f`, and guarantees release even on failure. |

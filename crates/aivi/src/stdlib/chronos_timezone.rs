@@ -14,6 +14,8 @@ use aivi.chronos.instant (Timestamp)
 
 TimeZone = { id: Text }
 
+timezone = {}
+
 ZonedDateTime = {
   dateTime: DateTime
   zone: TimeZone

@@ -177,7 +177,7 @@ at the type level.
 
 ### Declaration
 
-<<< ../snippets/from_md/02_syntax/03_types/block_01.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/03_types/block_22.aivi{aivi}
 
 
 - `-> Closed : init {}` is the **initial transition**   it has no source state and
@@ -208,10 +208,10 @@ FieldDecl         := lowerIdent ":" TypeExpr
 
 The LSP formatter aligns `->` arrows and `:` colons for readability:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_02.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/03_types/block_23.aivi{aivi}
 
 
 ### Example: Traffic light
 
-<<< ../snippets/from_md/02_syntax/03_types/block_03.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/03_types/block_24.aivi{aivi}
 

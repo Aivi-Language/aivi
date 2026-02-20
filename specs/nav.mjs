@@ -78,7 +78,8 @@ export const sidebar = [
           { text: 'Testing', link: '/05_stdlib/00_core/27_testing' },
           { text: 'Collections', link: '/05_stdlib/00_core/28_collections' },
           { text: 'I18n', link: '/05_stdlib/00_core/29_i18n' },
-          { text: 'Generator', link: '/05_stdlib/00_core/30_generator' }
+          { text: 'Generator', link: '/05_stdlib/00_core/30_generator' },
+          { text: 'MutableMap', link: '/05_stdlib/00_core/31_mutable_map' }
         ]
       },
       {

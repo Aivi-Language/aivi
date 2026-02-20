@@ -11,7 +11,7 @@ All bindings use `=`
 * instances
 * modules
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_01.aivi{aivi}
+<<< ../snippets/from_md/02_syntax/01_bindings/block_13.aivi{aivi}
 
 
 ## 1.2 Shadowing

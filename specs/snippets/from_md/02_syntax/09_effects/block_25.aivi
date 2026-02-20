@@ -1,0 +1,1 @@
+readAndPrint = bind (load (file.read "config.json")) (content => print content)

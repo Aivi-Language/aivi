@@ -42,7 +42,7 @@ Full record syntax is always available as well: `Vec2 { x: 1.0, y: 2.0 }`.
 
 `domain Vector` is defined for `Vec2`, `Vec3`, and `Vec4`. Each carrier gets `(+)`, `(-)`, `(*) : VecN -> Float -> VecN` (scalar scale), and `(/) : VecN -> Float -> VecN`.
 
-For matrix-vector transforms, use `×` from the `Matrix` domain (see [Matrix: `×` Operator Overloads](09_matrix.md#matrix-operator-overloads)).
+For matrix-vector transforms, use `×` from the `Matrix` domain (see [Matrix: `×` Operator Overloads](09_matrix.md#×-operator-overloads)).
 
 ## Helper Functions
 

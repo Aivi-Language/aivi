@@ -1,0 +1,3 @@
+val <- riskyOp or
+  | NotFound msg => pure default
+  | Timeout _    => fail "timed out"

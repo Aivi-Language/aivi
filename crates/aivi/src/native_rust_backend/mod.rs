@@ -68,6 +68,16 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
         }
     }
 
+    let mut adt_definitions: std::collections::BTreeMap<String, String> = std::collections::BTreeMap::new();
+    for cg_ty in global_cg_types.values() {
+        collect_adt_definitions(cg_ty, &mut adt_definitions);
+    }
+    
+    for def_code in adt_definitions.values() {
+        out.push_str(def_code);
+        out.push_str("\n");
+    }
+
     let mut order: Vec<String> = Vec::new();
     let mut groups: HashMap<String, Vec<&RustIrDef>> = HashMap::new();
     for def in &module.defs {
@@ -215,3 +225,44 @@ fn emit_typed_def(
 
     Ok(true)
 }
+
+fn collect_adt_definitions(cg_ty: &CgType, output: &mut std::collections::BTreeMap<String, String>) {
+    match cg_ty {
+        CgType::Adt { name, constructors } => {
+            let enum_name = CgType::enum_name(name, constructors);
+            if !output.contains_key(&enum_name) {
+                let mut def = format!("#[derive(Clone, Debug, PartialEq)]\npub enum {enum_name} {{\n");
+                for (ctor_name, args) in constructors {
+                    if args.is_empty() {
+                        def.push_str(&format!("    {ctor_name},\n"));
+                    } else {
+                        let arg_types: Vec<_> = args.iter().map(|a| a.rust_type()).collect();
+                        def.push_str(&format!("    {ctor_name}({}),\n", arg_types.join(", ")));
+                    }
+                    for arg in args {
+                        collect_adt_definitions(arg, output);
+                    }
+                }
+                def.push_str("}\n");
+                output.insert(enum_name, def);
+            }
+        }
+        CgType::ListOf(inner) => collect_adt_definitions(inner, output),
+        CgType::Tuple(items) => {
+            for item in items {
+                collect_adt_definitions(item, output);
+            }
+        }
+        CgType::Record(fields) => {
+            for ty in fields.values() {
+                collect_adt_definitions(ty, output);
+            }
+        }
+        CgType::Func(a, b) => {
+            collect_adt_definitions(a, output);
+            collect_adt_definitions(b, output);
+        }
+        _ => {}
+    }
+}
+

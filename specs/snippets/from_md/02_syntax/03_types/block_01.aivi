@@ -1,7 +1,1 @@
-machine Door = {
-  -> Closed   : init   {}
-  Closed  -> Opened : open   {}
-  Opened  -> Closed : close  {}
-  Opened  -> Locked : lock   {}
-  Locked  -> Closed : unlock {}
-}
+Unit Bool Int Float

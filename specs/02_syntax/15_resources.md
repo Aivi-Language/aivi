@@ -36,11 +36,11 @@ This declarative approach hides the complexity of error handling and cancellatio
 
 ## 15.3 Using Resources
 
-Inside an `effect` block, you use the `<-` binder to acquire a resource. This scopes the resource handle to the enclosing block.
+Inside a `do Effect { ... }` block, you use the `<-` binder to acquire a resource. This scopes the resource handle to the enclosing block.
 
 <<< ../snippets/from_md/02_syntax/15_resources/block_02.aivi{aivi}
 
-When the `effect` block exits   whether by normal completion, an error in `E`, or **cancellation**   all acquired resources are released in reverse order.
+When the `do Effect { ... }` block exits   whether by normal completion, an error in `E`, or **cancellation**   all acquired resources are released in reverse order.
 
 ### Multiple Resources
 

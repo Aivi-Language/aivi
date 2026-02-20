@@ -33,15 +33,43 @@ fn emit_typed_or_unbox(
         return Ok(Some(code));
     }
     // Fall back to Value path + unbox.
-    // Dynamic/Adt types can't be meaningfully unboxed to a typed representation.
-    if matches!(ty, CgType::Dynamic | CgType::Adt { .. }) {
+    // Dynamic types can't be meaningfully unboxed to a typed representation.
+    if matches!(ty, CgType::Dynamic) {
         return Ok(None);
     }
-    let value_code = expr::emit_expr(expr, indent)?;
-    Ok(Some(format!(
-        "({})?",
-        ty.emit_unbox(&format!("({value_code})?"))
-    )))
+
+    // Any free variable in `expr` that is typed in `ctx` MUST be boxed first!
+    let mut bound = Vec::new();
+    let mut captured = std::collections::HashSet::new();
+    crate::native_rust_backend::utils::collect_free_locals_in_expr(expr, &mut bound, &mut captured);
+
+    let mut captured_vec: Vec<_> = captured.into_iter().collect();
+    captured_vec.sort();
+
+    let ind = "    ".repeat(indent);
+    let ind2 = "    ".repeat(indent + 1);
+    let mut boxing_code = String::new();
+    for var in captured_vec {
+        if let Some(var_ty) = ctx.locals.get(&var) {
+            let rname = crate::native_rust_backend::utils::rust_local_name(&var);
+            // We clone primitive variables so we can box them into `Value` without moving
+            let boxed = var_ty.emit_box(&format!("{rname}.clone()"));
+            boxing_code.push_str(&format!("{ind2}let {rname} = {boxed};\n"));
+        }
+    }
+
+    let value_code = expr::emit_expr(expr, indent + 1)?;
+    if boxing_code.is_empty() {
+        Ok(Some(format!(
+            "({})?",
+            ty.emit_unbox(&format!("({value_code})?"))
+        )))
+    } else {
+        Ok(Some(format!(
+            "({})?",
+            ty.emit_unbox(&format!("({{\n{boxing_code}{ind2}({value_code})?\n{ind}}})"))
+        )))
+    }
 }
 
 /// Context tracking the types of local variables during typed emission.
@@ -142,6 +170,24 @@ pub(super) fn emit_typed_expr(
                 None
             }
         }
+        RustIrExpr::ConstructorValue { name: ctor_name, .. } => {
+            if let CgType::Adt { name: _, constructors } = ty {
+                if let Some((_, args)) = constructors.iter().find(|(n, _)| n == ctor_name) {
+                    if args.is_empty() {
+                         Some(format!("{}::{ctor_name}", CgType::enum_name(
+                             match ty { CgType::Adt { name, .. } => name, _ => unreachable!() },
+                             constructors
+                         )))
+                    } else {
+                         None // Functions/Multi-arg constructors need App or Call around them
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
 
         // ── Binary operators ────────────────────────────────────────────
         RustIrExpr::Binary {
@@ -190,9 +236,9 @@ pub(super) fn emit_typed_expr(
                         capture_lines.push_str(&format!("{ind2}let {rn} = {rn}.clone();\n"));
                     }
                     // Lambdas must be Box::new(...) because CgType::Func maps to
-                    // Box<dyn Fn(A) -> Result<B, RuntimeError>>.
+                    // Box<dyn Fn(A, &mut aivi_native_runtime::Runtime) -> Result<B, RuntimeError>>.
                     Some(format!(
-                        "{{\n{capture_lines}{ind2}Box::new(move |{param_name}: {param_rust_ty}| -> Result<{ret_ty}, RuntimeError> {{\n{ind2}    Ok({body_code})\n{ind2}}})\n{ind}}}",
+                        "{{\n{capture_lines}{ind2}Box::new(move |{param_name}: {param_rust_ty}, rt: &mut aivi_native_runtime::Runtime| -> Result<{ret_ty}, RuntimeError> {{\n{ind2}    Ok({body_code})\n{ind2}}})\n{ind}}}",
                         ret_ty = ret_ty.rust_type()
                     ))
                 } else {
@@ -212,7 +258,7 @@ pub(super) fn emit_typed_expr(
                         let func_code = emit_typed_or_unbox(func, &func_ty, ctx, indent)?;
                         let arg_code = emit_typed_or_unbox(arg, param_ty, ctx, indent)?;
                         if let (Some(f), Some(a)) = (func_code, arg_code) {
-                            return Ok(Some(format!("({f})({a})?")));
+                            return Ok(Some(format!("({f})({a}, rt)?")));
                         }
                     }
                 }
@@ -222,6 +268,32 @@ pub(super) fn emit_typed_expr(
 
         // ── Multi-arg call ──────────────────────────────────────────────
         RustIrExpr::Call { func, args, .. } => {
+            if let RustIrExpr::ConstructorValue { name: ctor_name, .. } = func.as_ref() {
+                 if let CgType::Adt { name: _, constructors } = ty {
+                     if let Some((_, ctor_args)) = constructors.iter().find(|(n, _)| n == ctor_name) {
+                         if args.len() == ctor_args.len() {
+                             let mut param_types = Vec::new();
+                             for arg in ctor_args {
+                                 param_types.push(arg.clone());
+                             }
+                             let mut rendered_args = Vec::new();
+                             for (arg, pty) in args.iter().zip(param_types.iter()) {
+                                 if let Some(a) = emit_typed_or_unbox(arg, pty, ctx, indent + 1)? {
+                                     rendered_args.push(a);
+                                 } else {
+                                     return Ok(None);
+                                 }
+                             }
+                             return Ok(Some(format!("{}::{ctor_name}({})", CgType::enum_name(
+                                 match ty { CgType::Adt { name, .. } => name, _ => unreachable!() },
+                                 constructors
+                             ), rendered_args.join(", "))));
+                         }
+                     }
+                 }
+                return Ok(None);
+            }
+            
             // For direct calls to known globals
             if let RustIrExpr::Global { name, .. } = func.as_ref() {
                 if let Some(func_ty) = ctx.globals.get(name).cloned() {
@@ -249,7 +321,7 @@ pub(super) fn emit_typed_expr(
                         // Chain calls: fn_typed(rt)?(arg1)?(arg2)?...
                         let mut code = format!("{fn_name}(rt)?");
                         for a in &rendered_args {
-                            code = format!("({code})({a})?");
+                            code = format!("({code})({a}, rt)?");
                         }
                         return Ok(Some(code));
                     }
@@ -551,6 +623,40 @@ fn emit_typed_pattern(
                 }
             };
             Ok((Some(code), vec![]))
+        }
+        RustIrPattern::Constructor { name: ctor_name, args, .. } => {
+             if let CgType::Adt { name: _, constructors } = scrutinee_ty {
+                  if let Some((_, ctor_types)) = constructors.iter().find(|(n, _)| n == ctor_name) {
+                       if args.len() == ctor_types.len() {
+                           if args.is_empty() {
+                               return Ok((Some(format!("{}::{ctor_name}", CgType::enum_name(
+                                   match scrutinee_ty { CgType::Adt { name, .. } => name, _ => unreachable!() },
+                                   constructors
+                               ))), vec![]));
+                           }
+                           
+                           let mut sub_pats = Vec::new();
+                           let mut all_bindings = Vec::new();
+                           for (arg_pat, arg_ty) in args.iter().zip(ctor_types.iter()) {
+                               if let (Some(pat_code), bindings) = emit_typed_pattern(arg_pat, arg_ty)? {
+                                   sub_pats.push(pat_code);
+                                   all_bindings.extend(bindings);
+                               } else {
+                                   return Ok((None, vec![]));
+                               }
+                           }
+                           
+                           return Ok((
+                               Some(format!("{}::{ctor_name}({})", CgType::enum_name(
+                                   match scrutinee_ty { CgType::Adt { name, .. } => name, _ => unreachable!() },
+                                   constructors
+                               ), sub_pats.join(", "))),
+                               all_bindings
+                           ));
+                       }
+                  }
+             }
+             Ok((None, vec![]))
         }
         _ => Ok((None, vec![])), // Complex patterns fall back
     }
