@@ -977,10 +977,12 @@ These are small, practical examples you can lift into real modules. For larger c
 #### Kahn topological sort step (graph processing)
 
 ```aivi
+neighbors : Int -> Graph -> List Int
 neighbors = node graph => Map.get node graph.adj match
   | Some ns => ns
   | None    => []
 
+sortLoop : Graph -> Map Int Int -> Queue Int -> List Int -> Result (List Int) (List Int)
 sortLoop = graph indeg q outRev => (Queue.dequeue q) match
   | None => {
     out = reverseList outRev
@@ -1015,11 +1017,12 @@ update = fenwick idx value =>
 #### Result workflow (input validation / service boundary)
 
 ```aivi
-validatedTotal = do Result {
-  subtotal <- Ok 120
-  discount <- Ok 15
-  shipping <- Ok 9
-  Ok (subtotal - discount + shipping)
+validatedTotal = subtotal discount shipping => do Result {
+  checkedSubtotal <- if subtotal >= 0 then Ok subtotal else Err "subtotal must be >= 0"
+  checkedDiscount <- if discount >= 0 then Ok discount else Err "discount must be >= 0"
+  checkedShipping <- if shipping >= 0 then Ok shipping else Err "shipping must be >= 0"
+  finalDiscount <- if checkedDiscount > checkedSubtotal then Err "discount cannot exceed subtotal" else Ok checkedDiscount
+  Ok (checkedSubtotal - finalDiscount + checkedShipping)
 }
 ```
 
