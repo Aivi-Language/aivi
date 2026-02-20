@@ -111,7 +111,7 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
                     module_types.insert(name.clone(), checker.type_to_string(&schemes[0].ty));
                     // Monomorphic (no quantified vars) → try to produce a CgType.
                     if schemes[0].vars.is_empty() {
-                        module_cg_types.insert(name, checker.type_to_cg_type(&schemes[0].ty));
+                        module_cg_types.insert(name, checker.type_to_cg_type(&schemes[0].ty, &env));
                     } else {
                         module_cg_types.insert(name, CgType::Dynamic);
                     }

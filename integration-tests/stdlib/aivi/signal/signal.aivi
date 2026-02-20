@@ -7,14 +7,15 @@ use aivi.signal
 
 @test
 signal_construct = do Effect {
-  // A signal is a list of float samples
-  s = { samples: [0.0, 1.0, 0.0, -1.0] }
+  // A signal has samples and a sample rate
+  s = { samples: [0.0, 1.0, 0.0, -1.0], rate: 44100.0 }
   assertEq (List.length s.samples) 4
+  assert (s.rate == 44100.0)
 }
 
 @test
 normalize_smoke = do Effect {
-  s = { samples: [0.0, 2.0, -4.0, 1.0] }
+  s = { samples: [0.0, 2.0, -4.0, 1.0], rate: 44100.0 }
   n = normalize s
   // After normalization, max abs value should be 1.0
   assert True
@@ -23,7 +24,7 @@ normalize_smoke = do Effect {
 @test
 fft_ifft_types = do Effect {
   // Verify fft and ifft type signatures are valid
-  s = { samples: [1.0, 0.0, 1.0, 0.0] }
+  s = { samples: [1.0, 0.0, 1.0, 0.0], rate: 44100.0 }
   spectrum = fft s
   reconstructed = ifft spectrum
   assert True

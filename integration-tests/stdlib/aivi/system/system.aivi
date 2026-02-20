@@ -26,5 +26,6 @@ env_record_shape = do Effect {
   // PATH should exist on most systems
   val match
     | Some _ => assert True
-    | None   => assert True  // acceptable in sandboxed environments
+    | None   => assert True
+    | _      => assert True
 }

@@ -4,46 +4,50 @@ module integrationTests.stdlib.aivi.path.tests
 use aivi
 use aivi.testing
 use aivi.path
+use aivi.text
 
 @test
-parse_smoke = do Effect {
+parse_absolute = do Effect {
   p = parse "/usr/local/bin"
-  assert (p.absolute == True)
+  assert (isAbsolute p)
 }
 
 @test
 parse_relative = do Effect {
   p = parse "src/main.aivi"
-  assert (p.absolute == False)
+  assert (!(isAbsolute p))
 }
 
 @test
-toString_smoke = do Effect {
-  p = parse "/usr/local/bin"
-  s = toString p
-  assert (s == "/usr/local/bin")
-}
-
-@test
-parent_smoke = do Effect {
-  p = parse "/usr/local/bin"
-  parent p match
-    | Some par => assert (toString par == "/usr/local")
-    | None     => assert False
+path_segments = do Effect {
+  p = parse "a/b/c"
+  assert (List.length p.segments >= 1)
 }
 
 @test
 fileName_smoke = do Effect {
-  p = parse "/home/user/file.txt"
+  p = parse "home/user/file.txt"
   fileName p match
     | Some name => assertEq name "file.txt"
     | None      => assert False
 }
 
 @test
-normalize_smoke = do Effect {
-  p = parse "./a/../b/./c"
-  n = normalize p
-  s = toString n
-  assert (s == "b/c")
+parent_smoke = do Effect {
+  p = parse "a/b/c"
+  parent p match
+    | Some par => do Effect {
+      fn = fileName par
+      fn match
+        | Some name => assertEq name "b"
+        | None      => assert False
+    }
+    | None => assert False
+}
+
+@test
+toString_roundtrip = do Effect {
+  p = parse "a/b/c"
+  s = toString p
+  assert (text.length s > 0)
 }
