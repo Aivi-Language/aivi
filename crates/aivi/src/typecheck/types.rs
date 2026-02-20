@@ -111,6 +111,11 @@ impl TypeEnv {
         }
         vars
     }
+
+    #[cfg(test)]
+    pub(super) fn raw_values(&self) -> &HashMap<String, Vec<Scheme>> {
+        &self.values
+    }
 }
 
 #[derive(Debug)]

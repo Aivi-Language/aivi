@@ -21,6 +21,27 @@ impl TypeChecker {
             "Text",
             "Char",
             "Bytes",
+            // Core stdlib types referenced by builtin value signatures.
+            "Encoding",
+            "TextError",
+            "RegexError",
+            "Match",
+            "Angle",
+            "Date",
+            "Rgb",
+            "Hsl",
+            "Hex",
+            "Url",
+            "Request",
+            "Response",
+            "Error",
+            "AnsiColor",
+            "AnsiStyle",
+            "Level",
+            "PatchOp",
+            "Column",
+            "DbConfig",
+            "DbError",
             // Source kinds (used at type-level only; v0.1 keeps SourceError as Text).
             "File",
             "Http",
@@ -75,6 +96,14 @@ impl TypeChecker {
             .insert("List".to_string(), arrow(star.clone(), star.clone()));
         self.builtin_types
             .insert("Option".to_string(), arrow(star.clone(), star.clone()));
+        self.builtin_types
+            .insert("VNode".to_string(), arrow(star.clone(), star.clone()));
+        self.builtin_types
+            .insert("Table".to_string(), arrow(star.clone(), star.clone()));
+        self.builtin_types
+            .insert("Pred".to_string(), arrow(star.clone(), star.clone()));
+        self.builtin_types
+            .insert("Delta".to_string(), arrow(star.clone(), star.clone()));
         // `Resource E A` mirrors `Effect E A`: acquisition may fail with `E`.
         self.builtin_types.insert(
             "Resource".to_string(),
