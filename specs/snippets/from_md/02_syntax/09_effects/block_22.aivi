@@ -1,6 +1,7 @@
 // Resolve tenant config, call two services, and persist a combined report
 setup = tenantId => do Effect {
-  cfg <- loadConfig "tenants/{ tenantId }.json"
+  cfgPath = tenantConfigPath tenantId
+  cfg <- loadConfig cfgPath
   profile <- fetchProfile cfg.api tenantId
   orders <- fetchRecentOrders cfg.api tenantId
 
@@ -12,5 +13,5 @@ setup = tenantId => do Effect {
   }
 
   _ <- storeReport report
-  logSuccess "stored report for { tenantId }"
+  logSuccess "stored tenant report"
 }

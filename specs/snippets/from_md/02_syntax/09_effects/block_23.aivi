@@ -1,9 +1,11 @@
 // Typed error handling at a service boundary
+minAdminAge = 18
+
 loadUserForSession = id => do Effect {
   res <- attempt (api.fetchUser id)
   res match
     | Ok user                => pure user
-    | Err NotFound           => pure GuestUser
+    | Err NotFound           => fail SessionUserMissing
     | Err (Unauthorized _)   => fail SessionExpired
     | Err (NetworkTimeout _) => fail RetryLater
     | Err _                  => fail UpstreamUnavailable
@@ -11,5 +13,5 @@ loadUserForSession = id => do Effect {
 
 validatedUser = do Effect {
   u <- loadUserForSession 123
-  if u.age >= 18 then pure (toAdmin u) else fail TooYoung
+  if u.age >= minAdminAge then pure (toAdmin u) else fail TooYoung
 }

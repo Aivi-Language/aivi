@@ -4,12 +4,13 @@ reminders = generate {
   customer -> status == Active && isValidEmail email
 
   invoice <- customer.invoices
-  invoice -> !paid && daysOverdue > 7
+  invoice -> !isPaid && daysOverdue > 7
 
   yield {
     customerId: customer.id
+    invoiceId: invoice.id
     email: toLower customer.email
-    subject: "Invoice #{ invoice.id } is overdue"
+    subject: "Invoice overdue"
     priority: if invoice.daysOverdue > 30 then "high" else "normal"
   }
 }
