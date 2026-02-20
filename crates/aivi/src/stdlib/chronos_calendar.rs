@@ -10,16 +10,16 @@ export now
 export domain Calendar
 
 use aivi.calendar (
-  Date
-  DateTime
-  EndOfMonth
-  isLeapYear
-  daysInMonth
-  endOfMonth
-  addDays
-  addMonths
-  addYears
-  negateDelta
+  Date,
+  DateTime,
+  EndOfMonth,
+  isLeapYear,
+  daysInMonth,
+  endOfMonth,
+  addDays,
+  addMonths,
+  addYears,
+  negateDelta,
   now
 )
 use aivi.calendar (domain Calendar)
