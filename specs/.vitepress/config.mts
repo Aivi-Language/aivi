@@ -93,9 +93,10 @@ export default defineConfig({
     ],
     sidebar: [
       {
-        text: 'Core Specification',
+        text: 'Overview',
         collapsed: false,
         items: [
+          { text: 'Spec Home', link: '/' },
           { text: 'Introduction', link: '/01_introduction' },
           { text: 'Missing Features (v0.1)', link: '/missing_features_v0.1' }
         ]
@@ -104,22 +105,104 @@ export default defineConfig({
         text: 'Syntax',
         collapsed: true,
         items: [
-          { text: 'Bindings and Scope', link: '/02_syntax/01_bindings' },
-          { text: 'Functions and Pipes', link: '/02_syntax/02_functions' },
-          { text: 'The Type System', link: '/02_syntax/03_types' },
-          { text: 'Predicates', link: '/02_syntax/04_predicates' },
-          { text: 'Patching Records', link: '/02_syntax/05_patching' },
-          { text: 'Domains, Units, and Deltas', link: '/02_syntax/06_domains' },
-          { text: 'Generators', link: '/02_syntax/07_generators' },
-          { text: 'Pattern Matching', link: '/02_syntax/08_pattern_matching' },
-          { text: 'Effects', link: '/02_syntax/09_effects' },
-          { text: 'Modules', link: '/02_syntax/10_modules' },
-          { text: 'External Sources', link: '/02_syntax/12_external_sources' },
-          { text: 'Sigils', link: '/02_syntax/13_sigils' },
-          { text: 'Decorators', link: '/02_syntax/14_decorators' },
-          { text: 'Resources', link: '/02_syntax/15_resources' },
-          { text: 'Operators and Context', link: '/02_syntax/11_operators' },
-          { text: 'Concrete Syntax', link: '/02_syntax/00_grammar' },
+          {
+            text: 'Core Forms',
+            collapsed: true,
+            items: [
+              { text: 'Bindings and Scope', link: '/02_syntax/01_bindings' },
+              { text: 'Functions and Pipes', link: '/02_syntax/02_functions' },
+              { text: 'The Type System', link: '/02_syntax/03_types' },
+              { text: 'Predicates', link: '/02_syntax/04_predicates' },
+            ]
+          },
+          {
+            text: 'Data & Flow',
+            collapsed: true,
+            items: [
+              { text: 'Patching Records', link: '/02_syntax/05_patching' },
+              { text: 'Domains, Units, and Deltas', link: '/02_syntax/06_domains' },
+              { text: 'Generators', link: '/02_syntax/07_generators' },
+              { text: 'Pattern Matching', link: '/02_syntax/08_pattern_matching' },
+            ]
+          },
+          {
+            text: 'Effects & Control',
+            collapsed: true,
+            items: [
+              { text: 'Effects', link: '/02_syntax/09_effects' },
+              { text: 'Resources', link: '/02_syntax/15_resources' },
+              { text: 'Generic `do` Notation', link: '/02_syntax/16_do_notation' },
+            ]
+          },
+          {
+            text: 'Modules & Interop',
+            collapsed: true,
+            items: [
+              { text: 'Modules', link: '/02_syntax/10_modules' },
+              { text: 'External Sources', link: '/02_syntax/12_external_sources' },
+            ]
+          },
+          {
+            text: 'Notation & Grammar',
+            collapsed: true,
+            items: [
+              { text: 'Operators and Context', link: '/02_syntax/11_operators' },
+              { text: 'Sigils', link: '/02_syntax/13_sigils' },
+              { text: 'Decorators', link: '/02_syntax/14_decorators' },
+              { text: 'Comments', link: '/02_syntax/17_comments' },
+              { text: 'Concrete Syntax', link: '/02_syntax/00_grammar' },
+            ]
+          }
+        ]
+      },
+      {
+        text: 'Semantics',
+        collapsed: true,
+        items: [
+          {
+            text: 'Kernel (Core Calculus)',
+            collapsed: true,
+            items: [
+              { text: 'Core Terms', link: '/03_kernel/01_core_terms' },
+              { text: 'Types', link: '/03_kernel/02_types' },
+              { text: 'Records', link: '/03_kernel/03_records' },
+              { text: 'Patterns', link: '/03_kernel/04_patterns' },
+              { text: 'Predicates', link: '/03_kernel/05_predicates' },
+              { text: 'Traversals', link: '/03_kernel/06_traversals' },
+              { text: 'Generators', link: '/03_kernel/07_generators' },
+              { text: 'Effects', link: '/03_kernel/08_effects' },
+              { text: 'Classes', link: '/03_kernel/09_classes' },
+              { text: 'Domains', link: '/03_kernel/10_domains' },
+              { text: 'Patching', link: '/03_kernel/11_patching' },
+              { text: 'Minimality Proof', link: '/03_kernel/12_minimality' },
+            ]
+          },
+          {
+            text: 'Desugaring (Surface → Kernel)',
+            collapsed: true,
+            items: [
+              { text: 'Bindings', link: '/04_desugaring/01_bindings' },
+              { text: 'Functions', link: '/04_desugaring/02_functions' },
+              { text: 'Records', link: '/04_desugaring/03_records' },
+              { text: 'Patterns', link: '/04_desugaring/04_patterns' },
+              { text: 'Predicates', link: '/04_desugaring/05_predicates' },
+              { text: 'Generators', link: '/04_desugaring/06_generators' },
+              { text: 'Effects', link: '/04_desugaring/07_effects' },
+              { text: 'Classes', link: '/04_desugaring/08_classes' },
+              { text: 'Domains and Operators', link: '/04_desugaring/09_domains' },
+              { text: 'Patching', link: '/04_desugaring/10_patching' },
+              { text: 'Resources', link: '/04_desugaring/11_resources' },
+            ]
+          }
+        ]
+      },
+      {
+        text: 'Runtime',
+        collapsed: true,
+        items: [
+          { text: 'Concurrency', link: '/06_runtime/01_concurrency' },
+          { text: 'Memory Management', link: '/06_runtime/02_memory_management' },
+          { text: 'Package Manager (Cargo-backed)', link: '/06_runtime/03_package_manager' },
         ]
       },
       {
@@ -138,6 +221,7 @@ export default defineConfig({
               { text: 'Testing', link: '/05_stdlib/00_core/27_testing' },
               { text: 'Collections', link: '/05_stdlib/00_core/28_collections' },
               { text: 'I18n', link: '/05_stdlib/00_core/29_i18n' },
+              { text: 'Generator', link: '/05_stdlib/00_core/30_generator' },
             ]
           },
           {
@@ -157,7 +241,7 @@ export default defineConfig({
             ]
           },
           {
-            text: 'Time',
+            text: 'Time (Chronos)',
             collapsed: true,
             items: [
               { text: 'Instant', link: '/05_stdlib/02_chronos/01_instant' },
@@ -185,7 +269,7 @@ export default defineConfig({
             text: 'Network',
             collapsed: true,
             items: [
-              { text: 'HTTP Utils', link: '/05_stdlib/03_network/01_http' },
+              { text: 'HTTP', link: '/05_stdlib/03_network/01_http' },
               { text: 'HTTPS', link: '/05_stdlib/03_network/02_https' },
               { text: 'HTTP Server', link: '/05_stdlib/03_network/03_http_server' },
               { text: 'Sockets', link: '/05_stdlib/03_network/04_sockets' },
@@ -206,57 +290,21 @@ export default defineConfig({
         ]
       },
       {
-        text: 'Execution & Concurrency',
-        collapsed: true,
-        items: [
-          { text: 'Concurrency', link: '/06_runtime/01_concurrency' },
-          { text: 'Memory Management', link: '/06_runtime/02_memory_management' },
-          { text: 'Package Manager (Cargo-backed)', link: '/06_runtime/03_package_manager' },
-        ]
-      },
-      {
-        text: 'Tools & Ecosystem',
+        text: 'Tooling',
         collapsed: true,
         items: [
           { text: 'CLI', link: '/07_tools/01_cli' },
           { text: 'LSP Server', link: '/07_tools/02_lsp_server' },
           { text: 'VSCode Extension', link: '/07_tools/03_vscode_extension' },
           { text: 'Packaging', link: '/07_tools/04_packaging' },
+          { text: 'Spec Doc Markers', link: '/doc-markers-spec' },
         ]
       },
       {
-        text: 'Kernel (Core Calculus)',
+        text: 'Compiler & Backend',
         collapsed: true,
         items: [
-          { text: 'Core Terms', link: '/03_kernel/01_core_terms' },
-          { text: 'Types', link: '/03_kernel/02_types' },
-          { text: 'Records', link: '/03_kernel/03_records' },
-          { text: 'Patterns', link: '/03_kernel/04_patterns' },
-          { text: 'Predicates', link: '/03_kernel/05_predicates' },
-          { text: 'Traversals', link: '/03_kernel/06_traversals' },
-          { text: 'Generators', link: '/03_kernel/07_generators' },
-          { text: 'Effects', link: '/03_kernel/08_effects' },
-          { text: 'Classes', link: '/03_kernel/09_classes' },
-          { text: 'Domains', link: '/03_kernel/10_domains' },
-          { text: 'Patching', link: '/03_kernel/11_patching' },
-          { text: 'Minimality Proof', link: '/03_kernel/12_minimality' },
-        ]
-      },
-      {
-        text: 'Desugaring',
-        collapsed: true,
-        items: [
-          { text: 'Bindings', link: '/04_desugaring/01_bindings' },
-          { text: 'Functions', link: '/04_desugaring/02_functions' },
-          { text: 'Records', link: '/04_desugaring/03_records' },
-          { text: 'Patterns', link: '/04_desugaring/04_patterns' },
-          { text: 'Predicates', link: '/04_desugaring/05_predicates' },
-          { text: 'Generators', link: '/04_desugaring/06_generators' },
-          { text: 'Effects', link: '/04_desugaring/07_effects' },
-          { text: 'Classes', link: '/04_desugaring/08_classes' },
-          { text: 'Domains and Operators', link: '/04_desugaring/09_domains' },
-          { text: 'Patching', link: '/04_desugaring/10_patching' },
-          { text: 'Resources', link: '/04_desugaring/11_resources' },
+          { text: 'Typed Codegen Design', link: '/08_typed_codegen/01_design' },
         ]
       }
     ]
