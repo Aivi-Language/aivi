@@ -1,6 +1,4 @@
-<p align="center">
-  <img width="320" height="auto" alt="Gemini_Generated_Image_q6tbnqq6tbnqq6tb_birefnet" src="https://github.com/user-attachments/assets/29f1856e-8047-45d5-b858-bb86ab53b64f" />
-</p>
+<img width="256" height="auto" alt="Gemini_Generated_Image_q6tbnqq6tbnqq6tb_birefnet" src="https://github.com/user-attachments/assets/29f1856e-8047-45d5-b858-bb86ab53b64f" />
 
 # A purely functional programming language
 
