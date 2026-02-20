@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+/// Resolves target paths relative to cwd and, for legacy compatibility, parent Cargo workspaces.
 pub(super) fn resolve_target_path(target: &str) -> Option<PathBuf> {
     let target_path = Path::new(target);
     if target_path.is_absolute() {
