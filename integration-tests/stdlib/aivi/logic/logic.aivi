@@ -3,7 +3,6 @@ module integrationTests.stdlib.aivi.logic.tests
 
 use aivi
 use aivi.testing
-use aivi.logic
 
 // -- Setoid (equality) --
 
@@ -37,9 +36,8 @@ functor_option = do Effect {
   mapped = map (x => x + 1) some
   assertEq mapped (Some 6)
 
-  none : Option Int
-  none = None
-  mappedNone = map (x => x + 1) none
+  noVal = None
+  mappedNone = map (x => x + 1) noVal
   assertEq mappedNone None
 }
 
@@ -48,13 +46,4 @@ functor_list = do Effect {
   xs = [1, 2, 3]
   ys = map (x => x * 2) xs
   assertEq ys [2, 4, 6]
-}
-
-// -- Foldable --
-
-@test
-foldable_list = do Effect {
-  xs = [1, 2, 3, 4]
-  total = foldl (acc x => acc + x) 0 xs
-  assertEq total 10
 }

@@ -66,6 +66,22 @@ impl CgType {
         }
     }
 
+    /// Helper to generate a unique Rust enum name for an ADT based on its signature.
+    pub fn enum_name(name: &str, constructors: &[(String, Vec<CgType>)]) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        name.hash(&mut hasher);
+        for (ctor_name, args) in constructors {
+            ctor_name.hash(&mut hasher);
+            for arg in args {
+                arg.rust_type().hash(&mut hasher);
+            }
+        }
+        format!("__Adt_{}_{:x}", name.replace('.', "_"), hasher.finish())
+    }
+
     /// Emit the Rust type string for this `CgType`.
     ///
     /// For `Dynamic`, returns `"Value"` (the boxed enum).
@@ -101,10 +117,8 @@ impl CgType {
                 let parts: Vec<_> = fields.values().map(|t| t.rust_type()).collect();
                 format!("({})", parts.join(", "))
             }
-            CgType::Adt { .. } => {
-                // ADTs fall back to Value for now — full enum generation is a future
-                // enhancement.
-                "Value".to_string()
+            CgType::Adt { name, constructors } => {
+                Self::enum_name(name, constructors)
             }
         }
     }
@@ -148,7 +162,32 @@ impl CgType {
                     parts.join(", ")
                 )
             }
-            CgType::Func(_, _) | CgType::Adt { .. } => {
+            CgType::Adt { name: _, constructors } => {
+                let enum_name = Self::enum_name(
+                    match self {
+                        CgType::Adt { name, .. } => name,
+                        _ => unreachable!(),
+                    },
+                    constructors,
+                );
+                
+                let mut match_arms = Vec::new();
+                for (ctor_name, args) in constructors {
+                    if args.is_empty() {
+                        match_arms.push(format!("{enum_name}::{ctor_name} => Value::Constructor {{ name: {ctor_name:?}.to_string(), args: vec![] }}"));
+                    } else {
+                        let binds: Vec<_> = (0..args.len()).map(|i| format!("a{i}")).collect();
+                        let boxed_args: Vec<_> = args.iter().enumerate().map(|(i, t)| t.emit_box(&format!("*a{i}"))).collect();
+                        match_arms.push(format!(
+                            "{enum_name}::{ctor_name}({}) => Value::Constructor {{ name: {ctor_name:?}.to_string(), args: vec![{}] }}",
+                            binds.join(", "),
+                            boxed_args.join(", ")
+                        ));
+                    }
+                }
+                format!("match &{expr} {{ {} }}", match_arms.join(", "))
+            }
+            CgType::Func(_, _) => {
                 // For complex types, fall back to identity (already Value).
                 expr.to_string()
             }
@@ -210,7 +249,29 @@ impl CgType {
                     parts.join(", ")
                 )
             }
-            CgType::Func(_, _) | CgType::Adt { .. } => {
+            CgType::Adt { name: _, constructors } => {
+                let enum_name = Self::enum_name(
+                    match self {
+                        CgType::Adt { name, .. } => name,
+                        _ => unreachable!(),
+                    },
+                    constructors,
+                );
+                let mut ctor_arms = Vec::new();
+                for (ctor_name, args) in constructors {
+                    if args.is_empty() {
+                         ctor_arms.push(format!("({ctor_name:?}, args) if args.is_empty() => Ok({enum_name}::{ctor_name})"));
+                    } else {
+                         let unboxed_args: Vec<_> = args.iter().enumerate().map(|(i, t)| format!("({})?", t.emit_unbox(&format!("args[{i}].clone()")))).collect();
+                         ctor_arms.push(format!("({ctor_name:?}, args) if args.len() == {} => Ok({enum_name}::{ctor_name}({}))", args.len(), unboxed_args.join(", ")));
+                    }
+                }
+                format!(
+                    "match {expr} {{ Value::Constructor {{ name, args }} => match (name.as_str(), args) {{ {}, _ => Err(RuntimeError::Message(format!(\"invalid Constructor payload for {{name}}, got {{:?}}\", args))) }}, other => Err(RuntimeError::Message(format!(\"expected Constructor, got {{}}\", aivi_native_runtime::format_value(&other)))) }}",
+                    ctor_arms.join(", ")
+                )
+            }
+            CgType::Func(_, _) => {
                 // Complex types stay as Value
                 format!("Ok({expr})")
             }

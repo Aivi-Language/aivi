@@ -157,8 +157,6 @@ impl Parser {
         
         let mut segments = Vec::new();
         let mut absolute = false;
-        
-        let mut absolute = false;
 
         let mut current_segment_span: Option<Span> = None;
         let mut current_segment_text = String::new();
