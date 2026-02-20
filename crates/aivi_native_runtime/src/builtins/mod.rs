@@ -8,6 +8,7 @@ mod database;
 mod graph;
 mod http_server;
 mod i18n;
+mod instant;
 mod linalg;
 mod log;
 mod math;

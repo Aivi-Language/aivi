@@ -1,6 +1,6 @@
 domain Instant over Timestamp = {
   // Parsing ISO-8601 literals
-  // 2024-05-21T12:00:00Z -> { nanos: ... }
+  // 2024-05-21T12:00:00Z -> Timestamp
 
   // Comparison (Temporal order)
   (<): params Timestamp -> Timestamp -> Bool
@@ -9,7 +9,7 @@ domain Instant over Timestamp = {
   (>=): params Timestamp -> Timestamp -> Bool
 
   // Duration arithmetic
-  (+): Timestamp -> Duration -> Timestamp
-  (-): Timestamp -> Duration -> Timestamp
-  (-): Timestamp -> Timestamp -> Duration
+  (+): Timestamp -> Span -> Timestamp
+  (-): Timestamp -> Span -> Timestamp
+  (-): Timestamp -> Timestamp -> Span
 }

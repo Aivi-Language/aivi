@@ -5,6 +5,8 @@ use crate::surface::{parse_modules, Module};
 
 mod bigint;
 mod calendar;
+mod chronos_duration;
+mod chronos_instant;
 mod collections;
 mod color;
 mod complex;
@@ -97,6 +99,14 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: calendar::MODULE_NAME,
         source: calendar::SOURCE,
+    },
+    EmbeddedModule {
+        name: chronos_duration::MODULE_NAME,
+        source: chronos_duration::SOURCE,
+    },
+    EmbeddedModule {
+        name: chronos_instant::MODULE_NAME,
+        source: chronos_instant::SOURCE,
     },
     EmbeddedModule {
         name: duration::MODULE_NAME,

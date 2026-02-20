@@ -11,5 +11,5 @@ export pure, fail, attempt, load
 
 export text, regex, math, calendar, color
 export bigint, rational, decimal
-export url, console, crypto, env, system, logger, database, file, clock, random, channel, concurrent, httpServer, ui, http, https, sockets, streams, collections, i18n
+export url, console, crypto, env, system, logger, database, file, clock, instant, random, channel, concurrent, httpServer, ui, http, https, sockets, streams, collections, i18n
 export linalg, signal, graph, tree"#;

@@ -7,6 +7,7 @@ mod crypto;
 mod database;
 mod graph;
 mod i18n;
+mod instant;
 mod linalg;
 mod list;
 mod log;

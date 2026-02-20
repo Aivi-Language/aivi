@@ -1,0 +1,36 @@
+@no_prelude
+module integrationTests.stdlib.aivi.chronos.instant.tests
+
+use aivi
+use aivi.testing
+use aivi.chronos.instant
+use aivi.chronos.duration (Span)
+use aivi.chronos.instant (domain Instant)
+
+@test
+compare_and_diff = do Effect {
+  start = 2024-01-01T00:00:00Z
+  end = 2024-01-01T00:00:10Z
+
+  assert (start < end)
+  assert (end > start)
+  assert (start <= start)
+  assert (end >= end)
+
+  elapsed = end - start
+  assertEq elapsed.millis 10000
+}
+
+@test
+add_sub_roundtrip = do Effect {
+  base = 2024-01-01T00:00:00Z
+
+  step : Span
+  step = { millis: 1500 }
+
+  later = base + step
+  roundtrip = later - step
+
+  assertEq (later - base).millis 1500
+  assertEq (roundtrip - base).millis 0
+}

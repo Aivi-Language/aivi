@@ -1,2 +1,2 @@
-// Wraps a 64-bit integer (nanoseconds since epoch)
-Timestamp = { nanos: Int }
+// RFC3339-backed timestamp (UTC)
+Timestamp = DateTime

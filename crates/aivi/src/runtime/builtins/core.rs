@@ -8,6 +8,7 @@ use super::concurrency::build_concurrent_record;
 use super::crypto::build_crypto_record;
 use super::graph::build_graph_record;
 use super::i18n::build_i18n_record;
+use super::instant::build_instant_record;
 use super::linalg::build_linalg_record;
 use super::list::build_list_record;
 use super::math::build_math_record;
@@ -301,6 +302,7 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("regex".to_string(), build_regex_record());
     env.set("math".to_string(), build_math_record());
     env.set("calendar".to_string(), build_calendar_record());
+    env.set("instant".to_string(), build_instant_record());
     env.set("color".to_string(), build_color_record());
     env.set("linalg".to_string(), build_linalg_record());
     env.set("signal".to_string(), build_signal_record());

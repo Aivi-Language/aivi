@@ -14,6 +14,7 @@ use super::database::build_database_record;
 use super::graph::build_graph_record;
 use super::http_server::build_http_server_record;
 use super::i18n::build_i18n_record;
+use super::instant::build_instant_record;
 use super::linalg::build_linalg_record;
 use super::log::build_log_record;
 use super::math::build_math_record;
@@ -303,6 +304,7 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
     env.insert("regex".to_string(), build_regex_record());
     env.insert("math".to_string(), build_math_record());
     env.insert("calendar".to_string(), build_calendar_record());
+    env.insert("instant".to_string(), build_instant_record());
     env.insert("color".to_string(), build_color_record());
     env.insert("linalg".to_string(), build_linalg_record());
     env.insert("signal".to_string(), build_signal_record());
