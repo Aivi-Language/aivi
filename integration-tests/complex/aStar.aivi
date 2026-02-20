@@ -28,7 +28,7 @@ reconstructGo = cameFrom current acc => Map.get current cameFrom match
   | None      => [current, ...acc]
 reconstructPath = cameFrom goal => reconstructGo cameFrom goal []
 
-priority3 = item => item ? | (p, _, _) => p
+priority3 = (p, _, _) => p
 
 popMin3 = items => items match
   | []        => None

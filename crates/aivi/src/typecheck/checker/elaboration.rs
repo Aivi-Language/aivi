@@ -546,6 +546,147 @@ impl TypeChecker {
             }
         }
 
+        // Overloaded (non-method) identifiers: resolve by inferring argument types
+        // and selecting the unique matching overload, mirroring infer_call logic.
+        if let Expr::Ident(name) = &func {
+            if env
+                .get_all(&name.name)
+                .is_some_and(|items| items.len() > 1)
+            {
+                // Infer argument types first (on the original exprs) to select the
+                // right overload, then elaborate arguments with the resolved param types.
+                let arg_tys: Vec<Type> = args
+                    .iter()
+                    .map(|arg| self.infer_expr(arg, env))
+                    .collect::<Result<_, _>>()?;
+
+                let Some(candidates) = env.get_all(&name.name) else {
+                    return Err(TypeError {
+                        span: name.span.clone(),
+                        message: format!("unknown name '{}'", name.name),
+                        expected: None,
+                        found: None,
+                    });
+                };
+
+                // Save substitution state AFTER arg inference so operand type
+                // constraints (e.g. Vec2 from domain `-`) are preserved.
+                let base_subst = self.subst.clone();
+
+                // Debug: show inferred arg types
+                if std::env::var("AIVI_DEBUG_OVERLOAD").is_ok() {
+                    for (i, at) in arg_tys.iter().enumerate() {
+                        let applied = self.apply(at.clone());
+                        let s = self.type_to_string(&applied);
+                        eprintln!("DEBUG elab_call overload: arg[{}] type = {}", i, s);
+                    }
+                }
+
+                let mut selected: Option<(Type, Vec<Type>, std::collections::HashMap<TypeVarId, Type>)> =
+                    None;
+
+                for scheme in candidates {
+                    self.subst = base_subst.clone();
+                    let mut func_ty = self.instantiate(scheme);
+                    let mut ok = true;
+                    let mut param_tys = Vec::new();
+                    for (arg_ty, arg_expr) in arg_tys.iter().zip(args.iter()) {
+                        // Before unification, structurally check record field sets.
+                        // An open record `{ x, y, .. }` should NOT match a candidate
+                        // expecting `{ x, y, z }` — the extra field `z` disqualifies it.
+                        let func_ty_applied = self.apply(func_ty.clone());
+                        let func_ty_expanded = self.expand_alias(func_ty_applied);
+                        if let Type::Func(ref param, _) = func_ty_expanded {
+                            let param_expanded = self.expand_alias((**param).clone());
+                            let arg_applied = self.apply(arg_ty.clone());
+                            let arg_expanded = self.expand_alias(arg_applied);
+                            if std::env::var("AIVI_DEBUG_OVERLOAD").is_ok() {
+                                eprintln!("DEBUG elab_call: candidate param = {:?}", param_expanded);
+                                eprintln!("DEBUG elab_call: arg type       = {:?}", arg_expanded);
+                            }
+                            if let (
+                                Type::Record { fields: param_fields, .. },
+                                Type::Record { fields: arg_fields, .. },
+                            ) = (&param_expanded, &arg_expanded)
+                            {
+                                let param_has_extra = param_fields.keys().any(|k| !arg_fields.contains_key(k));
+                                if std::env::var("AIVI_DEBUG_OVERLOAD").is_ok() {
+                                    eprintln!("DEBUG elab_call: param_has_extra = {} (param keys: {:?}, arg keys: {:?})", param_has_extra, param_fields.keys().collect::<Vec<_>>(), arg_fields.keys().collect::<Vec<_>>());
+                                }
+                                if param_has_extra {
+                                    ok = false;
+                                    break;
+                                }
+                            }
+                        }
+
+                        let result_ty = self.fresh_var();
+                        if self
+                            .unify_with_span(
+                                func_ty.clone(),
+                                Type::Func(
+                                    Box::new(arg_ty.clone()),
+                                    Box::new(result_ty.clone()),
+                                ),
+                                expr_span(arg_expr),
+                            )
+                            .is_err()
+                        {
+                            ok = false;
+                            break;
+                        }
+                        param_tys.push(self.apply(arg_ty.clone()));
+                        func_ty = result_ty;
+                    }
+                    if !ok {
+                        continue;
+                    }
+                    let applied = self.apply(func_ty.clone());
+                    if std::env::var("AIVI_DEBUG_OVERLOAD").is_ok() {
+                        let sig = self.type_to_string(&scheme.ty);
+                        eprintln!("DEBUG elab_call: candidate PASSED: {} (already_selected: {})", sig, selected.is_some());
+                    }
+                    if selected.is_some() {
+                        self.subst = base_subst;
+                        return Err(TypeError {
+                            span: expr_span(&func),
+                            message: format!(
+                                "ambiguous call to '{}' (multiple overloads match)",
+                                name.name
+                            ),
+                            expected: None,
+                            found: None,
+                        });
+                    }
+                    selected = Some((applied, param_tys, self.subst.clone()));
+                }
+
+                if let Some((result_ty, param_tys, subst)) = selected {
+                    self.subst = subst;
+                    let mut new_args = Vec::new();
+                    for (arg, expected_arg_ty) in args.into_iter().zip(param_tys.into_iter()) {
+                        let expected_arg_ty = self.apply(expected_arg_ty);
+                        let (elab_arg, _ty) = self.elab_expr(arg, Some(expected_arg_ty), env)?;
+                        new_args.push(elab_arg);
+                    }
+                    let out = Expr::Call {
+                        func: Box::new(func),
+                        args: new_args,
+                        span,
+                    };
+                    return Ok((out, result_ty));
+                }
+
+                self.subst = base_subst;
+                return Err(TypeError {
+                    span: expr_span(&func),
+                    message: format!("no matching overload for '{}'", name.name),
+                    expected: None,
+                    found: None,
+                });
+            }
+        }
+
         let (func, _func_ty) = self.elab_expr(func, None, env)?;
         let func_ty = self.infer_expr(&func, env)?;
 

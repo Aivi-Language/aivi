@@ -1,6 +1,6 @@
 module my.aivi.lib
 
-export *
+export greet
 
 greet : Text -> Text
 greet = name => "Hello, " ++ name ++ "!"

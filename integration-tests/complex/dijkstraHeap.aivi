@@ -11,7 +11,7 @@ use aivi.graph (Graph, fromWeightedEdges, edgesFrom)
 infinity : Float
 infinity = 1000000.0
 
-priority2 = item => item ? | (p, _) => p
+priority2 = (p, _) => p
 
 popMin2 = items => items match
   | []        => None

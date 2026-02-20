@@ -707,7 +707,6 @@ use aivi.chronos.duration (domain Duration)  // import domain
 ### Export forms
 
 ```aivi
-export *                                 // export everything
 export add, subtract, pi                 // selective
 export domain Color                      // export domain
 ```

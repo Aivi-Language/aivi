@@ -159,7 +159,6 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 - how would a wizard work in aivi.ui
 - optimize other complex/** algorithms to use AIVI stdlib, syntax.
 - test coverage?
-- what is "export *" in docs
 
 ## License
 
