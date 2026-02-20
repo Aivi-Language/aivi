@@ -126,6 +126,11 @@ Please:
 - Reference specific spec sections in [`specs/`](specs/)
 - For type system issues, include expected vs. actual inferred types
 
+## Code of Conduct
+
+This project follows the Contributor Covenant. Please read `CODE_OF_CONDUCT.md`
+before participating.
+
 ## CLI Usage (Experimental)
 
 The `aivi` CLI supports project scaffolding, building, and introspection:
@@ -172,4 +177,4 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 
 ## License
 
-[License information to be determined]
+MIT License. See `LICENCE.md`.

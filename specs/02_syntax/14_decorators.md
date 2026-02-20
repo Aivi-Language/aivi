@@ -43,6 +43,7 @@ MCP decorators are not supported in v0.1.
 | Decorator | Usage | Meaning |
 | :--- | :--- | :--- |
 | `@no_prelude` | `@no_prelude module M` | Skip implicit prelude import |
+| `@test` | `@test module M` | Mark module as test-only (excluded from production builds) |
 ## 14.3 Decorator Desugaring
 
 Decorators desugar to compile-time metadata:

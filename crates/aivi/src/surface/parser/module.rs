@@ -414,7 +414,7 @@ impl Parser {
 
     fn validate_module_decorators(&mut self, decorators: &[Decorator]) {
         for decorator in decorators {
-            if decorator.name.name != "no_prelude" {
+            if !matches!(decorator.name.name.as_str(), "no_prelude" | "test") {
                 self.emit_diag(
                     "E1506",
                     &format!("unknown module decorator `@{}`", decorator.name.name),
@@ -422,10 +422,17 @@ impl Parser {
                 );
                 continue;
             }
-            if decorator.arg.is_some() {
+            if decorator.name.name == "no_prelude" && decorator.arg.is_some() {
                 self.emit_diag(
                     "E1512",
                     "`@no_prelude` does not take an argument",
+                    decorator.span.clone(),
+                );
+            }
+            if decorator.name.name == "test" && decorator.arg.is_some() {
+                self.emit_diag(
+                    "E1512",
+                    "`@test` on a module does not take an argument",
                     decorator.span.clone(),
                 );
             }
