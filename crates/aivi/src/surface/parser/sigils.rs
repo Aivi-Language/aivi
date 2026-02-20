@@ -12,6 +12,12 @@ impl Parser {
         if self.consume_ident_text("set").is_some() {
             return self.parse_set_literal(start_span);
         }
+        if self.consume_ident_text("mat").is_some() {
+            return self.parse_mat_literal(start_span);
+        }
+        if self.consume_ident_text("path").is_some() {
+            return self.parse_path_literal(start_span);
+        }
         self.pos = checkpoint;
         None
     }

@@ -201,19 +201,48 @@ fn render_attrs(attrs: &Value, node_id: &str, state: &mut RenderState) -> String
                 }
             }
             Value::Constructor { name, args } if name == "OnClick" && args.len() == 1 => {
-                let id = event_id("click", node_id);
-                state.handlers.insert(id, ());
-                out.push_str(&format!(" data-aivi-onclick=\"{}\"", id));
+                render_handler_attr(&mut out, state, node_id, "click");
             }
             Value::Constructor { name, args } if name == "OnInput" && args.len() == 1 => {
-                let id = event_id("input", node_id);
-                state.handlers.insert(id, ());
-                out.push_str(&format!(" data-aivi-oninput=\"{}\"", id));
+                render_handler_attr(&mut out, state, node_id, "input");
+            }
+            Value::Constructor { name, args } if name == "OnClickE" && args.len() == 1 => {
+                render_handler_attr(&mut out, state, node_id, "click");
+            }
+            Value::Constructor { name, args } if name == "OnInputE" && args.len() == 1 => {
+                render_handler_attr(&mut out, state, node_id, "input");
+            }
+            Value::Constructor { name, args } if name == "OnKeyDown" && args.len() == 1 => {
+                render_handler_attr(&mut out, state, node_id, "keydown");
+            }
+            Value::Constructor { name, args } if name == "OnKeyUp" && args.len() == 1 => {
+                render_handler_attr(&mut out, state, node_id, "keyup");
+            }
+            Value::Constructor { name, args } if name == "OnPointerDown" && args.len() == 1 => {
+                render_handler_attr(&mut out, state, node_id, "pointerdown");
+            }
+            Value::Constructor { name, args } if name == "OnPointerUp" && args.len() == 1 => {
+                render_handler_attr(&mut out, state, node_id, "pointerup");
+            }
+            Value::Constructor { name, args } if name == "OnPointerMove" && args.len() == 1 => {
+                render_handler_attr(&mut out, state, node_id, "pointermove");
+            }
+            Value::Constructor { name, args } if name == "OnFocus" && args.len() == 1 => {
+                render_handler_attr(&mut out, state, node_id, "focus");
+            }
+            Value::Constructor { name, args } if name == "OnBlur" && args.len() == 1 => {
+                render_handler_attr(&mut out, state, node_id, "blur");
             }
             _ => {}
         }
     }
     out
+}
+
+fn render_handler_attr(out: &mut String, state: &mut RenderState, node_id: &str, kind: &str) {
+    let id = event_id(kind, node_id);
+    state.handlers.insert(id, ());
+    out.push_str(&format!(" data-aivi-hid-{}=\"{}\"", kind, id));
 }
 
 fn is_safe_attr_name(name: &str) -> bool {

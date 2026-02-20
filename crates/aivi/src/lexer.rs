@@ -443,7 +443,11 @@ fn lex_sigil_multiline(
     }
     let open = *chars.get(index)?;
     let tag: String = chars[start + 1..index].iter().collect();
-    if (tag == "map" && open == '{') || (tag == "set" && open == '[') {
+    if (tag == "map" && open == '{')
+        || (tag == "set" && open == '[')
+        || (tag == "mat" && open == '[')
+        || (tag == "path" && open == '[')
+    {
         return None;
     }
     let close = match open {
@@ -531,58 +535,6 @@ fn lex_sigil_multiline(
         return Some((text, line, end_col, closed));
     }
 
-    // Matrix sigils (`~mat[...]`) may span multiple lines.
-    if tag == "mat" && open == '[' {
-        index += 1; // consume opener
-        let mut line = start_line;
-        let mut col = start_col + (index - start);
-        let mut escaped = false;
-        let mut closed = false;
-        while index < chars.len() {
-            let ch = chars[index];
-            if ch == '\n' {
-                line += 1;
-                col = 1;
-                escaped = false;
-                index += 1;
-                continue;
-            }
-            if escaped {
-                escaped = false;
-                index += 1;
-                col += 1;
-                continue;
-            }
-            if ch == '\\' {
-                escaped = true;
-                index += 1;
-                col += 1;
-                continue;
-            }
-            if ch == close {
-                index += 1;
-                col += 1;
-                closed = true;
-                break;
-            }
-            index += 1;
-            col += 1;
-        }
-
-        if closed {
-            while index < chars.len() && chars[index].is_ascii_alphabetic() {
-                if chars[index] == '\n' {
-                    break;
-                }
-                index += 1;
-                col += 1;
-            }
-        }
-
-        let text: String = chars[start..index.min(chars.len())].iter().collect();
-        let end_col = col.saturating_sub(1).max(1);
-        return Some((text, line, end_col, closed));
-    }
 
     // Default: single-line sigils (to avoid swallowing the rest of the file on a missing close).
     index += 1; // consume opener
