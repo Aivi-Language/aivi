@@ -148,3 +148,13 @@ Build static site:
 ```bash
 npm run docs:build
 ```
+
+## Code of Conduct
+
+This project follows the Contributor Covenant. Please read `../CODE_OF_CONDUCT.md`
+before participating in discussions or contributions that touch the
+specification.
+
+## License
+
+MIT License. See `../LICENCE.md`.
