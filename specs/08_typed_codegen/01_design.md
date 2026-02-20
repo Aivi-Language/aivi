@@ -158,10 +158,13 @@ Boxing/unboxing functions for each CgType:
 
 ### Not Yet Implemented
 
-- **Typed call chain emission** — multi-arg calls currently fall back to Value path
-- **Boxing/unboxing at boundaries** — `emit_box()`/`emit_unbox()` methods exist but aren't used yet for boundary crossings (e.g., typed function calling builtin)
 - **ADT typed emission** — ADT constructors in CgType exist but type-to-cg-type lowering returns empty constructor args
-- **Typed `main` rewrite** — `main` is always emitted via the Value path
+
+### Recently Implemented
+
+- **Typed call chain emission** — multi-arg calls to known typed globals now chain: `fn_typed(rt)?(arg1)?(arg2)?`
+- **Boxing/unboxing at boundaries** — typed subexpressions that can't be emitted in typed mode fall back to `emit_expr` + `emit_unbox()`, allowing typed code to cross into Value territory
+- **Typed `main` rewrite** — `main` gets a `_typed` variant when its CgType is closed; the entry point calls the typed version and boxes the result
 
 ## Performance Impact
 

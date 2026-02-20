@@ -4834,6 +4834,218 @@ fn def______09e73117f6b9fd87_clause_9(rt: &mut Runtime) -> R {
 }
 
 fn def______09e73117f6b9fd87_clause_10(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |value: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+            let value = value.clone();
+            {
+                let f = (def_addMillis__97b531592bac19aa(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push(((aivi_ok(span.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def______09e73117f6b9fd87_clause_11(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
+            let span = span.clone();
+            (aivi_ok(_arg0.clone())).and_then(|__scrut| {
+                fn __match_arm_0(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                    {
+                        use Value::*;
+                        match v { Value::Constructor { name, args } if name == "Millisecond" && args.len() == 1 => {
+                            let v0 = &args[0];
+                            if !({ b.insert("n", v0.clone()); true }) { return false; }
+                            true
+                        }, _ => false }
+                    }
+                }
+
+                {
+                    let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                    if __match_arm_0(&__scrut, &mut __b) {
+                        let n = __b.remove("n").expect("pattern binder");
+                        return {
+                            let mut map = HashMap::new();
+                            map.insert("millis".to_string(), (((aivi_ok(span.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(n.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                            aivi_ok(Value::Record(Arc::new(map)))
+                        };
+                    }
+                }
+
+                Err(RuntimeError::Message("non-exhaustive match".to_string()))
+            })
+        }) })))
+    }) })))
+}
+
+fn def______09e73117f6b9fd87_clause_12(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
+            let span = span.clone();
+            (aivi_ok(_arg0.clone())).and_then(|__scrut| {
+                fn __match_arm_0(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                    {
+                        use Value::*;
+                        match v { Value::Constructor { name, args } if name == "Second" && args.len() == 1 => {
+                            let v0 = &args[0];
+                            if !({ b.insert("n", v0.clone()); true }) { return false; }
+                            true
+                        }, _ => false }
+                    }
+                }
+
+                {
+                    let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                    if __match_arm_0(&__scrut, &mut __b) {
+                        let n = __b.remove("n").expect("pattern binder");
+                        return {
+                            let mut map = HashMap::new();
+                            map.insert("millis".to_string(), (((aivi_ok(span.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(n.clone())).and_then(|l| (aivi_ok(Value::Int(1000))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                            aivi_ok(Value::Record(Arc::new(map)))
+                        };
+                    }
+                }
+
+                Err(RuntimeError::Message("non-exhaustive match".to_string()))
+            })
+        }) })))
+    }) })))
+}
+
+fn def______09e73117f6b9fd87_clause_13(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
+            let span = span.clone();
+            (aivi_ok(_arg0.clone())).and_then(|__scrut| {
+                fn __match_arm_0(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                    {
+                        use Value::*;
+                        match v { Value::Constructor { name, args } if name == "Minute" && args.len() == 1 => {
+                            let v0 = &args[0];
+                            if !({ b.insert("n", v0.clone()); true }) { return false; }
+                            true
+                        }, _ => false }
+                    }
+                }
+
+                {
+                    let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                    if __match_arm_0(&__scrut, &mut __b) {
+                        let n = __b.remove("n").expect("pattern binder");
+                        return {
+                            let mut map = HashMap::new();
+                            map.insert("millis".to_string(), (((aivi_ok(span.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(n.clone())).and_then(|l| (aivi_ok(Value::Int(60000))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                            aivi_ok(Value::Record(Arc::new(map)))
+                        };
+                    }
+                }
+
+                Err(RuntimeError::Message("non-exhaustive match".to_string()))
+            })
+        }) })))
+    }) })))
+}
+
+fn def______09e73117f6b9fd87_clause_14(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
+            let span = span.clone();
+            (aivi_ok(_arg0.clone())).and_then(|__scrut| {
+                fn __match_arm_0(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                    {
+                        use Value::*;
+                        match v { Value::Constructor { name, args } if name == "Hour" && args.len() == 1 => {
+                            let v0 = &args[0];
+                            if !({ b.insert("n", v0.clone()); true }) { return false; }
+                            true
+                        }, _ => false }
+                    }
+                }
+
+                {
+                    let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                    if __match_arm_0(&__scrut, &mut __b) {
+                        let n = __b.remove("n").expect("pattern binder");
+                        return {
+                            let mut map = HashMap::new();
+                            map.insert("millis".to_string(), (((aivi_ok(span.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(n.clone())).and_then(|l| (aivi_ok(Value::Int(3600000))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                            aivi_ok(Value::Record(Arc::new(map)))
+                        };
+                    }
+                }
+
+                Err(RuntimeError::Message("non-exhaustive match".to_string()))
+            })
+        }) })))
+    }) })))
+}
+
+fn def______09e73117f6b9fd87_clause_15(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s1: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s2: Value, rt: &mut Runtime| {
+            let s1 = s1.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("millis".to_string(), (((aivi_ok(s1.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(s2.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def______09e73117f6b9fd87_clause_16(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |col: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
             let col = col.clone();
@@ -4869,7 +5081,7 @@ fn def______09e73117f6b9fd87_clause_10(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_11(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_17(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |col: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
             let col = col.clone();
@@ -4905,7 +5117,7 @@ fn def______09e73117f6b9fd87_clause_11(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_12(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_18(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |col: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
             let col = col.clone();
@@ -4941,7 +5153,7 @@ fn def______09e73117f6b9fd87_clause_12(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_13(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_19(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
             let left = left.clone();
@@ -5022,7 +5234,7 @@ fn def______09e73117f6b9fd87_clause_13(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_14(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_20(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v1: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v2: Value, rt: &mut Runtime| {
             let v1 = v1.clone();
@@ -5048,7 +5260,7 @@ fn def______09e73117f6b9fd87_clause_14(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_15(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_21(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v1: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v2: Value, rt: &mut Runtime| {
             let v1 = v1.clone();
@@ -5081,7 +5293,7 @@ fn def______09e73117f6b9fd87_clause_15(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_16(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_22(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v1: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v2: Value, rt: &mut Runtime| {
             let v1 = v1.clone();
@@ -5121,7 +5333,7 @@ fn def______09e73117f6b9fd87_clause_16(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_17(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_23(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5161,7 +5373,7 @@ fn def______09e73117f6b9fd87_clause_17(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_18(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_24(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5236,7 +5448,7 @@ fn def______09e73117f6b9fd87_clause_18(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_19(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_25(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5360,7 +5572,7 @@ fn def______09e73117f6b9fd87_clause_19(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_20(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_26(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5381,7 +5593,7 @@ fn def______09e73117f6b9fd87_clause_20(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_21(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_27(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5396,7 +5608,7 @@ fn def______09e73117f6b9fd87_clause_21(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_22(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_28(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5417,7 +5629,7 @@ fn def______09e73117f6b9fd87_clause_22(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_23(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_29(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5443,7 +5655,7 @@ fn def______09e73117f6b9fd87_clause_23(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_24(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_30(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5476,7 +5688,7 @@ fn def______09e73117f6b9fd87_clause_24(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_25(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_31(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5507,7 +5719,7 @@ fn def______09e73117f6b9fd87_clause_25(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_26(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_32(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |value: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
             let value = value.clone();
@@ -5551,7 +5763,7 @@ fn def______09e73117f6b9fd87_clause_26(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_27(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_33(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |table: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |delta: Value, rt: &mut Runtime| {
             let table = table.clone();
@@ -5566,7 +5778,7 @@ fn def______09e73117f6b9fd87_clause_27(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_28(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_34(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5581,7 +5793,7 @@ fn def______09e73117f6b9fd87_clause_28(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_29(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_35(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5596,7 +5808,7 @@ fn def______09e73117f6b9fd87_clause_29(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_30(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_36(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5611,7 +5823,7 @@ fn def______09e73117f6b9fd87_clause_30(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_31(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_37(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5637,7 +5849,7 @@ fn def______09e73117f6b9fd87_clause_31(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e73117f6b9fd87_clause_32(rt: &mut Runtime) -> R {
+fn def______09e73117f6b9fd87_clause_38(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5712,6 +5924,12 @@ fn def______09e73117f6b9fd87(rt: &mut Runtime) -> R {
         (def______09e73117f6b9fd87_clause_30(rt))?,
         (def______09e73117f6b9fd87_clause_31(rt))?,
         (def______09e73117f6b9fd87_clause_32(rt))?,
+        (def______09e73117f6b9fd87_clause_33(rt))?,
+        (def______09e73117f6b9fd87_clause_34(rt))?,
+        (def______09e73117f6b9fd87_clause_35(rt))?,
+        (def______09e73117f6b9fd87_clause_36(rt))?,
+        (def______09e73117f6b9fd87_clause_37(rt))?,
+        (def______09e73117f6b9fd87_clause_38(rt))?,
     ]))
 }
 
@@ -5796,6 +6014,66 @@ fn def______09e09517f6b488c5_clause_2(rt: &mut Runtime) -> R {
 }
 
 fn def______09e09517f6b488c5_clause_3(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |value: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+            let value = value.clone();
+            {
+                let f = (def_addMillis__97b531592bac19aa(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push((((aivi_ok(Value::Int(0))).and_then(|l| (aivi_ok(span.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def______09e09517f6b488c5_clause_4(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("millis".to_string(), ({
+                let f = (def_diffMillis__f0cdb676a7160de4(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            })?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def______09e09517f6b488c5_clause_5(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |delta: Value, rt: &mut Runtime| {
+            let span = span.clone();
+            (aivi_ok(span.clone())).and_then(|l| ({
+                let f = (def_negateDelta__62390cb65750aabb(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(delta.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def______09e09517f6b488c5_clause_6(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |col: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |delta: Value, rt: &mut Runtime| {
             let col = col.clone();
@@ -5815,7 +6093,7 @@ fn def______09e09517f6b488c5_clause_3(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_4(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_7(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v1: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v2: Value, rt: &mut Runtime| {
             let v1 = v1.clone();
@@ -5841,7 +6119,7 @@ fn def______09e09517f6b488c5_clause_4(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_5(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_8(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v1: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v2: Value, rt: &mut Runtime| {
             let v1 = v1.clone();
@@ -5874,7 +6152,7 @@ fn def______09e09517f6b488c5_clause_5(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_6(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_9(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v1: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |v2: Value, rt: &mut Runtime| {
             let v1 = v1.clone();
@@ -5914,7 +6192,7 @@ fn def______09e09517f6b488c5_clause_6(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_7(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_10(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -5954,7 +6232,7 @@ fn def______09e09517f6b488c5_clause_7(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_8(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_11(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6029,7 +6307,7 @@ fn def______09e09517f6b488c5_clause_8(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_9(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_12(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6153,7 +6431,7 @@ fn def______09e09517f6b488c5_clause_9(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_10(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_13(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6174,7 +6452,7 @@ fn def______09e09517f6b488c5_clause_10(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_11(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_14(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6189,7 +6467,7 @@ fn def______09e09517f6b488c5_clause_11(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_12(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_15(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6215,7 +6493,7 @@ fn def______09e09517f6b488c5_clause_12(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_13(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_16(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6248,7 +6526,7 @@ fn def______09e09517f6b488c5_clause_13(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_14(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_17(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |value: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |key: Value, rt: &mut Runtime| {
             let value = value.clone();
@@ -6273,7 +6551,7 @@ fn def______09e09517f6b488c5_clause_14(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_15(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_18(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6288,7 +6566,7 @@ fn def______09e09517f6b488c5_clause_15(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_16(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_19(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6303,7 +6581,7 @@ fn def______09e09517f6b488c5_clause_16(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_17(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_20(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6318,7 +6596,7 @@ fn def______09e09517f6b488c5_clause_17(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_18(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_21(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6344,7 +6622,7 @@ fn def______09e09517f6b488c5_clause_18(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def______09e09517f6b488c5_clause_19(rt: &mut Runtime) -> R {
+fn def______09e09517f6b488c5_clause_22(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |a: Value, rt: &mut Runtime| {
         aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |b: Value, rt: &mut Runtime| {
             let a = a.clone();
@@ -6406,6 +6684,9 @@ fn def______09e09517f6b488c5(rt: &mut Runtime) -> R {
         (def______09e09517f6b488c5_clause_17(rt))?,
         (def______09e09517f6b488c5_clause_18(rt))?,
         (def______09e09517f6b488c5_clause_19(rt))?,
+        (def______09e09517f6b488c5_clause_20(rt))?,
+        (def______09e09517f6b488c5_clause_21(rt))?,
+        (def______09e09517f6b488c5_clause_22(rt))?,
     ]))
 }
 
@@ -7857,6 +8138,134 @@ fn def_negateDelta__62390cb65750aabb_clause_2(rt: &mut Runtime) -> R {
             fn __match_arm_0(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
                 {
                     use Value::*;
+                    match v { Value::Constructor { name, args } if name == "Millisecond" && args.len() == 1 => {
+                        let v0 = &args[0];
+                        if !({ b.insert("n", v0.clone()); true }) { return false; }
+                        true
+                    }, _ => false }
+                }
+            }
+
+            {
+                let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                if __match_arm_0(&__scrut, &mut __b) {
+                    let n = __b.remove("n").expect("pattern binder");
+                    return {
+                        let f = (aivi_ok(Value::Constructor { name: "Millisecond".to_string(), args: Vec::new() }))?;
+                        let mut __aivi_call_args: Vec<Value> = Vec::new();
+                        __aivi_call_args.push(((aivi_ok(Value::Int(0))).and_then(|l| (aivi_ok(n.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                        rt.call(f, __aivi_call_args)
+                    };
+                }
+            }
+
+            fn __match_arm_1(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                {
+                    use Value::*;
+                    match v { Value::Constructor { name, args } if name == "Second" && args.len() == 1 => {
+                        let v0 = &args[0];
+                        if !({ b.insert("n", v0.clone()); true }) { return false; }
+                        true
+                    }, _ => false }
+                }
+            }
+
+            {
+                let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                if __match_arm_1(&__scrut, &mut __b) {
+                    let n = __b.remove("n").expect("pattern binder");
+                    return {
+                        let f = (aivi_ok(Value::Constructor { name: "Second".to_string(), args: Vec::new() }))?;
+                        let mut __aivi_call_args: Vec<Value> = Vec::new();
+                        __aivi_call_args.push(((aivi_ok(Value::Int(0))).and_then(|l| (aivi_ok(n.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                        rt.call(f, __aivi_call_args)
+                    };
+                }
+            }
+
+            fn __match_arm_2(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                {
+                    use Value::*;
+                    match v { Value::Constructor { name, args } if name == "Minute" && args.len() == 1 => {
+                        let v0 = &args[0];
+                        if !({ b.insert("n", v0.clone()); true }) { return false; }
+                        true
+                    }, _ => false }
+                }
+            }
+
+            {
+                let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                if __match_arm_2(&__scrut, &mut __b) {
+                    let n = __b.remove("n").expect("pattern binder");
+                    return {
+                        let f = (aivi_ok(Value::Constructor { name: "Minute".to_string(), args: Vec::new() }))?;
+                        let mut __aivi_call_args: Vec<Value> = Vec::new();
+                        __aivi_call_args.push(((aivi_ok(Value::Int(0))).and_then(|l| (aivi_ok(n.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                        rt.call(f, __aivi_call_args)
+                    };
+                }
+            }
+
+            fn __match_arm_3(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                {
+                    use Value::*;
+                    match v { Value::Constructor { name, args } if name == "Hour" && args.len() == 1 => {
+                        let v0 = &args[0];
+                        if !({ b.insert("n", v0.clone()); true }) { return false; }
+                        true
+                    }, _ => false }
+                }
+            }
+
+            {
+                let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                if __match_arm_3(&__scrut, &mut __b) {
+                    let n = __b.remove("n").expect("pattern binder");
+                    return {
+                        let f = (aivi_ok(Value::Constructor { name: "Hour".to_string(), args: Vec::new() }))?;
+                        let mut __aivi_call_args: Vec<Value> = Vec::new();
+                        __aivi_call_args.push(((aivi_ok(Value::Int(0))).and_then(|l| (aivi_ok(n.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                        rt.call(f, __aivi_call_args)
+                    };
+                }
+            }
+
+            Err(RuntimeError::Message("non-exhaustive match".to_string()))
+        })
+    }) })))
+}
+
+fn def_negateDelta__62390cb65750aabb_clause_3(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |delta: Value, rt: &mut Runtime| {
+        (aivi_ok(delta.clone())).and_then(|__scrut| {
+            fn __match_arm_0(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                {
+                    use Value::*;
                     match v { Value::Constructor { name, args } if name == "Lightness" && args.len() == 1 => {
                         let v0 = &args[0];
                         if !({ b.insert("n", v0.clone()); true }) { return false; }
@@ -7954,6 +8363,7 @@ fn def_negateDelta__62390cb65750aabb(rt: &mut Runtime) -> R {
         (def_negateDelta__62390cb65750aabb_clause_0(rt))?,
         (def_negateDelta__62390cb65750aabb_clause_1(rt))?,
         (def_negateDelta__62390cb65750aabb_clause_2(rt))?,
+        (def_negateDelta__62390cb65750aabb_clause_3(rt))?,
     ]))
 }
 
@@ -8332,6 +8742,835 @@ fn def_aivi_calendar_eom__592cc47f11e326c7(rt: &mut Runtime) -> R {
     aivi_ok(Value::Constructor { name: "End".to_string(), args: Vec::new() })
 }
 
+fn def_aivi_chronos_duration_negateDelta__a4479f19cfb29dec(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |delta: Value, rt: &mut Runtime| {
+        (aivi_ok(delta.clone())).and_then(|__scrut| {
+            fn __match_arm_0(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                {
+                    use Value::*;
+                    match v { Value::Constructor { name, args } if name == "Millisecond" && args.len() == 1 => {
+                        let v0 = &args[0];
+                        if !({ b.insert("n", v0.clone()); true }) { return false; }
+                        true
+                    }, _ => false }
+                }
+            }
+
+            {
+                let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                if __match_arm_0(&__scrut, &mut __b) {
+                    let n = __b.remove("n").expect("pattern binder");
+                    return {
+                        let f = (aivi_ok(Value::Constructor { name: "Millisecond".to_string(), args: Vec::new() }))?;
+                        let mut __aivi_call_args: Vec<Value> = Vec::new();
+                        __aivi_call_args.push(((aivi_ok(Value::Int(0))).and_then(|l| (aivi_ok(n.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                        rt.call(f, __aivi_call_args)
+                    };
+                }
+            }
+
+            fn __match_arm_1(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                {
+                    use Value::*;
+                    match v { Value::Constructor { name, args } if name == "Second" && args.len() == 1 => {
+                        let v0 = &args[0];
+                        if !({ b.insert("n", v0.clone()); true }) { return false; }
+                        true
+                    }, _ => false }
+                }
+            }
+
+            {
+                let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                if __match_arm_1(&__scrut, &mut __b) {
+                    let n = __b.remove("n").expect("pattern binder");
+                    return {
+                        let f = (aivi_ok(Value::Constructor { name: "Second".to_string(), args: Vec::new() }))?;
+                        let mut __aivi_call_args: Vec<Value> = Vec::new();
+                        __aivi_call_args.push(((aivi_ok(Value::Int(0))).and_then(|l| (aivi_ok(n.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                        rt.call(f, __aivi_call_args)
+                    };
+                }
+            }
+
+            fn __match_arm_2(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                {
+                    use Value::*;
+                    match v { Value::Constructor { name, args } if name == "Minute" && args.len() == 1 => {
+                        let v0 = &args[0];
+                        if !({ b.insert("n", v0.clone()); true }) { return false; }
+                        true
+                    }, _ => false }
+                }
+            }
+
+            {
+                let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                if __match_arm_2(&__scrut, &mut __b) {
+                    let n = __b.remove("n").expect("pattern binder");
+                    return {
+                        let f = (aivi_ok(Value::Constructor { name: "Minute".to_string(), args: Vec::new() }))?;
+                        let mut __aivi_call_args: Vec<Value> = Vec::new();
+                        __aivi_call_args.push(((aivi_ok(Value::Int(0))).and_then(|l| (aivi_ok(n.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                        rt.call(f, __aivi_call_args)
+                    };
+                }
+            }
+
+            fn __match_arm_3(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                {
+                    use Value::*;
+                    match v { Value::Constructor { name, args } if name == "Hour" && args.len() == 1 => {
+                        let v0 = &args[0];
+                        if !({ b.insert("n", v0.clone()); true }) { return false; }
+                        true
+                    }, _ => false }
+                }
+            }
+
+            {
+                let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                if __match_arm_3(&__scrut, &mut __b) {
+                    let n = __b.remove("n").expect("pattern binder");
+                    return {
+                        let f = (aivi_ok(Value::Constructor { name: "Hour".to_string(), args: Vec::new() }))?;
+                        let mut __aivi_call_args: Vec<Value> = Vec::new();
+                        __aivi_call_args.push(((aivi_ok(Value::Int(0))).and_then(|l| (aivi_ok(n.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                        rt.call(f, __aivi_call_args)
+                    };
+                }
+            }
+
+            Err(RuntimeError::Message("non-exhaustive match".to_string()))
+        })
+    }) })))
+}
+
+fn def_aivi_chronos_duration______e6afaf7628123030_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
+            let span = span.clone();
+            (aivi_ok(_arg0.clone())).and_then(|__scrut| {
+                fn __match_arm_0(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                    {
+                        use Value::*;
+                        match v { Value::Constructor { name, args } if name == "Millisecond" && args.len() == 1 => {
+                            let v0 = &args[0];
+                            if !({ b.insert("n", v0.clone()); true }) { return false; }
+                            true
+                        }, _ => false }
+                    }
+                }
+
+                {
+                    let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                    if __match_arm_0(&__scrut, &mut __b) {
+                        let n = __b.remove("n").expect("pattern binder");
+                        return {
+                            let mut map = HashMap::new();
+                            map.insert("millis".to_string(), (((aivi_ok(span.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| (aivi_ok(n.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                            aivi_ok(Value::Record(Arc::new(map)))
+                        };
+                    }
+                }
+
+                Err(RuntimeError::Message("non-exhaustive match".to_string()))
+            })
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_duration______e6afaf7628123030_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
+            let span = span.clone();
+            (aivi_ok(_arg0.clone())).and_then(|__scrut| {
+                fn __match_arm_0(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                    {
+                        use Value::*;
+                        match v { Value::Constructor { name, args } if name == "Second" && args.len() == 1 => {
+                            let v0 = &args[0];
+                            if !({ b.insert("n", v0.clone()); true }) { return false; }
+                            true
+                        }, _ => false }
+                    }
+                }
+
+                {
+                    let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                    if __match_arm_0(&__scrut, &mut __b) {
+                        let n = __b.remove("n").expect("pattern binder");
+                        return {
+                            let mut map = HashMap::new();
+                            map.insert("millis".to_string(), (((aivi_ok(span.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(n.clone())).and_then(|l| (aivi_ok(Value::Int(1000))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                            aivi_ok(Value::Record(Arc::new(map)))
+                        };
+                    }
+                }
+
+                Err(RuntimeError::Message("non-exhaustive match".to_string()))
+            })
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_duration______e6afaf7628123030_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
+            let span = span.clone();
+            (aivi_ok(_arg0.clone())).and_then(|__scrut| {
+                fn __match_arm_0(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                    {
+                        use Value::*;
+                        match v { Value::Constructor { name, args } if name == "Minute" && args.len() == 1 => {
+                            let v0 = &args[0];
+                            if !({ b.insert("n", v0.clone()); true }) { return false; }
+                            true
+                        }, _ => false }
+                    }
+                }
+
+                {
+                    let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                    if __match_arm_0(&__scrut, &mut __b) {
+                        let n = __b.remove("n").expect("pattern binder");
+                        return {
+                            let mut map = HashMap::new();
+                            map.insert("millis".to_string(), (((aivi_ok(span.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(n.clone())).and_then(|l| (aivi_ok(Value::Int(60000))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                            aivi_ok(Value::Record(Arc::new(map)))
+                        };
+                    }
+                }
+
+                Err(RuntimeError::Message("non-exhaustive match".to_string()))
+            })
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_duration______e6afaf7628123030_clause_3(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |_arg0: Value, rt: &mut Runtime| {
+            let span = span.clone();
+            (aivi_ok(_arg0.clone())).and_then(|__scrut| {
+                fn __match_arm_0(v: &Value, b: &mut HashMap<&'static str, Value>) -> bool {
+                    {
+                        use Value::*;
+                        match v { Value::Constructor { name, args } if name == "Hour" && args.len() == 1 => {
+                            let v0 = &args[0];
+                            if !({ b.insert("n", v0.clone()); true }) { return false; }
+                            true
+                        }, _ => false }
+                    }
+                }
+
+                {
+                    let mut __b: HashMap<&'static str, Value> = HashMap::new();
+                    if __match_arm_0(&__scrut, &mut __b) {
+                        let n = __b.remove("n").expect("pattern binder");
+                        return {
+                            let mut map = HashMap::new();
+                            map.insert("millis".to_string(), (((aivi_ok(span.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(n.clone())).and_then(|l| (aivi_ok(Value::Int(3600000))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a * b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a * b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) * b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a * (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for *: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                            aivi_ok(Value::Record(Arc::new(map)))
+                        };
+                    }
+                }
+
+                Err(RuntimeError::Message("non-exhaustive match".to_string()))
+            })
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_duration______e6afaf7628123030_clause_4(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s1: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |s2: Value, rt: &mut Runtime| {
+            let s1 = s1.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("millis".to_string(), (((aivi_ok(s1.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|l| ((aivi_ok(s2.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), })).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    })))?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_duration______e6afaf7628123030(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_aivi_chronos_duration______e6afaf7628123030_clause_0(rt))?,
+        (def_aivi_chronos_duration______e6afaf7628123030_clause_1(rt))?,
+        (def_aivi_chronos_duration______e6afaf7628123030_clause_2(rt))?,
+        (def_aivi_chronos_duration______e6afaf7628123030_clause_3(rt))?,
+        (def_aivi_chronos_duration______e6afaf7628123030_clause_4(rt))?,
+    ]))
+}
+
+fn def_aivi_chronos_duration______e6b6bb7628186342(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |delta: Value, rt: &mut Runtime| {
+            let span = span.clone();
+            (aivi_ok(span.clone())).and_then(|l| ({
+                let f = (def_negateDelta__62390cb65750aabb(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(delta.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a + b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a + b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) + b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a + (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for +: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def__1ms__449ff2181771c730_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_ms: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Millisecond".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_ms.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1ms__449ff2181771c730_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_ms: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Millisecond".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_ms.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1ms__449ff2181771c730(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def__1ms__449ff2181771c730_clause_0(rt))?,
+        (def__1ms__449ff2181771c730_clause_1(rt))?,
+    ]))
+}
+
+fn def_aivi_chronos_duration_1ms__1fac3a75b768e08b(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_ms: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Millisecond".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_ms.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1s__07f85507b4b9a0fd_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_s: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Second".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_s.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1s__07f85507b4b9a0fd_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_s: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Second".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_s.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1s__07f85507b4b9a0fd_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |n: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Saturation".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(n.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1s__07f85507b4b9a0fd(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def__1s__07f85507b4b9a0fd_clause_0(rt))?,
+        (def__1s__07f85507b4b9a0fd_clause_1(rt))?,
+        (def__1s__07f85507b4b9a0fd_clause_2(rt))?,
+    ]))
+}
+
+fn def_aivi_chronos_duration_1s__a1872bd2f4a696c0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_s: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Second".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_s.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1min__0d7abcefd64368b0_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_min: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Minute".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_min.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1min__0d7abcefd64368b0_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_min: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Minute".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_min.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1min__0d7abcefd64368b0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def__1min__0d7abcefd64368b0_clause_0(rt))?,
+        (def__1min__0d7abcefd64368b0_clause_1(rt))?,
+    ]))
+}
+
+fn def_aivi_chronos_duration_1min__3aaa3b06a7530b85(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_min: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Minute".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_min.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1h__07f85a07b4b9a97c_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_h: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Hour".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_h.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1h__07f85a07b4b9a97c_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_h: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Hour".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_h.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1h__07f85a07b4b9a97c_clause_2(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |n: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Hue".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(n.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def__1h__07f85a07b4b9a97c(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def__1h__07f85a07b4b9a97c_clause_0(rt))?,
+        (def__1h__07f85a07b4b9a97c_clause_1(rt))?,
+        (def__1h__07f85a07b4b9a97c_clause_2(rt))?,
+    ]))
+}
+
+fn def_aivi_chronos_duration_1h__a18746d2f4a6c4a1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_h: Value, rt: &mut Runtime| {
+        {
+            let f = (aivi_ok(Value::Constructor { name: "Hour".to_string(), args: Vec::new() }))?;
+            let mut __aivi_call_args: Vec<Value> = Vec::new();
+            __aivi_call_args.push((aivi_ok(__lit_h.clone()))?);
+            rt.call(f, __aivi_call_args)
+        }
+    }) })))
+}
+
+fn def_addMillis__97b531592bac19aa(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |value: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |millis: Value, rt: &mut Runtime| {
+            let value = value.clone();
+            {
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("addMillis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push((aivi_ok(millis.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_instant_addMillis__5bfbb228db38ff94(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |value: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |millis: Value, rt: &mut Runtime| {
+            let value = value.clone();
+            {
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("addMillis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push((aivi_ok(millis.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_diffMillis__f0cdb676a7160de4(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            {
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("diffMillis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_instant_diffMillis__60816b9fec9c5ffa(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            {
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("diffMillis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def______09ada917f6895128(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            ({
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("compare").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }).and_then(|l| (aivi_ok(Value::Int(0))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Bool(a < b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Bool(a < b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Bool((a as f64) < b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Bool(a < (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for <: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_instant______5fbd2850caa823f6(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            ({
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("compare").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }).and_then(|l| (aivi_ok(Value::Int(0))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Bool(a < b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Bool(a < b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Bool((a as f64) < b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Bool(a < (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for <: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def_______fb3edcb7eb3286b7(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            ({
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("compare").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }).and_then(|l| (aivi_ok(Value::Int(0))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Bool(a <= b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Bool(a <= b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Bool((a as f64) <= b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Bool(a <= (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for <=: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_instant_______5666d8485b92bac1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            ({
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("compare").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }).and_then(|l| (aivi_ok(Value::Int(0))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Bool(a <= b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Bool(a <= b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Bool((a as f64) <= b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Bool(a <= (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for <=: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def______09a68d17f68302e6(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            ({
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("compare").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }).and_then(|l| (aivi_ok(Value::Int(0))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Bool(a > b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Bool(a > b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Bool((a as f64) > b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Bool(a > (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for >: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_instant______5fc40450caae0578(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            ({
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("compare").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }).and_then(|l| (aivi_ok(Value::Int(0))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Bool(a > b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Bool(a > b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Bool((a as f64) > b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Bool(a > (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for >: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def_______e94886b7e0d784f1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            ({
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("compare").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }).and_then(|l| (aivi_ok(Value::Int(0))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Bool(a >= b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Bool(a >= b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Bool((a as f64) >= b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Bool(a >= (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for >=: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_instant_______685cae4865ece307(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            ({
+                let f = ((aivi_ok(__builtin("instant"))).and_then(|b| match b { Value::Record(map) => map.get("compare").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            }).and_then(|l| (aivi_ok(Value::Int(0))).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Bool(a >= b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Bool(a >= b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Bool((a as f64) >= b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Bool(a >= (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for >=: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_instant______5f978850ca87f7d9(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |value: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+            let value = value.clone();
+            {
+                let f = (def_addMillis__97b531592bac19aa(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push(((aivi_ok(span.clone())).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_instant______5f832450ca76a4e3_clause_0(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |value: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |span: Value, rt: &mut Runtime| {
+            let value = value.clone();
+            {
+                let f = (def_addMillis__97b531592bac19aa(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(value.clone()))?);
+                __aivi_call_args.push((((aivi_ok(Value::Int(0))).and_then(|l| (aivi_ok(span.clone())).and_then(|r| match (l, r) {
+        (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a - b)),
+        (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a - b)),
+        (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) - b)),
+        (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a - (b as f64))),
+        (l, r) => Err(RuntimeError::Message(format!("unsupported operands for -: {} and {}", aivi_native_runtime::format_value(&l), aivi_native_runtime::format_value(&r)))),
+    }))).and_then(|b| match b { Value::Record(map) => map.get("millis").cloned().ok_or_else(|| RuntimeError::Message("missing field".to_string())), other => Err(RuntimeError::Message(format!("expected Record, got {}", aivi_native_runtime::format_value(&other)))), }))?);
+                rt.call(f, __aivi_call_args)
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_instant______5f832450ca76a4e3_clause_1(rt: &mut Runtime) -> R {
+    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |left: Value, rt: &mut Runtime| {
+        aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |right: Value, rt: &mut Runtime| {
+            let left = left.clone();
+            {
+                let mut map = HashMap::new();
+                map.insert("millis".to_string(), ({
+                let f = (def_diffMillis__f0cdb676a7160de4(rt))?;
+                let mut __aivi_call_args: Vec<Value> = Vec::new();
+                __aivi_call_args.push((aivi_ok(left.clone()))?);
+                __aivi_call_args.push((aivi_ok(right.clone()))?);
+                rt.call(f, __aivi_call_args)
+            })?);
+                aivi_ok(Value::Record(Arc::new(map)))
+            }
+        }) })))
+    }) })))
+}
+
+fn def_aivi_chronos_instant______5f832450ca76a4e3(rt: &mut Runtime) -> R {
+    aivi_ok(Value::MultiClause(vec![
+        (def_aivi_chronos_instant______5f832450ca76a4e3_clause_0(rt))?,
+        (def_aivi_chronos_instant______5f832450ca76a4e3_clause_1(rt))?,
+    ]))
+}
+
 fn def_aivi_duration_negateDelta__3ba9e9f027428002(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |delta: Value, rt: &mut Runtime| {
         (aivi_ok(delta.clone())).and_then(|__scrut| {
@@ -8687,17 +9926,6 @@ fn def_aivi_duration______967552ccf80c0970(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def__1ms__449ff2181771c730(rt: &mut Runtime) -> R {
-    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_ms: Value, rt: &mut Runtime| {
-        {
-            let f = (aivi_ok(Value::Constructor { name: "Millisecond".to_string(), args: Vec::new() }))?;
-            let mut __aivi_call_args: Vec<Value> = Vec::new();
-            __aivi_call_args.push((aivi_ok(__lit_ms.clone()))?);
-            rt.call(f, __aivi_call_args)
-        }
-    }) })))
-}
-
 fn def_aivi_duration_1ms__cd9c65cc85d372fd(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_ms: Value, rt: &mut Runtime| {
         {
@@ -8709,52 +9937,12 @@ fn def_aivi_duration_1ms__cd9c65cc85d372fd(rt: &mut Runtime) -> R {
     }) })))
 }
 
-fn def__1s__07f85507b4b9a0fd_clause_0(rt: &mut Runtime) -> R {
-    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_s: Value, rt: &mut Runtime| {
-        {
-            let f = (aivi_ok(Value::Constructor { name: "Second".to_string(), args: Vec::new() }))?;
-            let mut __aivi_call_args: Vec<Value> = Vec::new();
-            __aivi_call_args.push((aivi_ok(__lit_s.clone()))?);
-            rt.call(f, __aivi_call_args)
-        }
-    }) })))
-}
-
-fn def__1s__07f85507b4b9a0fd_clause_1(rt: &mut Runtime) -> R {
-    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |n: Value, rt: &mut Runtime| {
-        {
-            let f = (aivi_ok(Value::Constructor { name: "Saturation".to_string(), args: Vec::new() }))?;
-            let mut __aivi_call_args: Vec<Value> = Vec::new();
-            __aivi_call_args.push((aivi_ok(n.clone()))?);
-            rt.call(f, __aivi_call_args)
-        }
-    }) })))
-}
-
-fn def__1s__07f85507b4b9a0fd(rt: &mut Runtime) -> R {
-    aivi_ok(Value::MultiClause(vec![
-        (def__1s__07f85507b4b9a0fd_clause_0(rt))?,
-        (def__1s__07f85507b4b9a0fd_clause_1(rt))?,
-    ]))
-}
-
 fn def_aivi_duration_1s__f87231eed0a36ffe(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_s: Value, rt: &mut Runtime| {
         {
             let f = (aivi_ok(Value::Constructor { name: "Second".to_string(), args: Vec::new() }))?;
             let mut __aivi_call_args: Vec<Value> = Vec::new();
             __aivi_call_args.push((aivi_ok(__lit_s.clone()))?);
-            rt.call(f, __aivi_call_args)
-        }
-    }) })))
-}
-
-fn def__1min__0d7abcefd64368b0(rt: &mut Runtime) -> R {
-    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_min: Value, rt: &mut Runtime| {
-        {
-            let f = (aivi_ok(Value::Constructor { name: "Minute".to_string(), args: Vec::new() }))?;
-            let mut __aivi_call_args: Vec<Value> = Vec::new();
-            __aivi_call_args.push((aivi_ok(__lit_min.clone()))?);
             rt.call(f, __aivi_call_args)
         }
     }) })))
@@ -8769,35 +9957,6 @@ fn def_aivi_duration_1min__34486d87665dd573(rt: &mut Runtime) -> R {
             rt.call(f, __aivi_call_args)
         }
     }) })))
-}
-
-fn def__1h__07f85a07b4b9a97c_clause_0(rt: &mut Runtime) -> R {
-    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |__lit_h: Value, rt: &mut Runtime| {
-        {
-            let f = (aivi_ok(Value::Constructor { name: "Hour".to_string(), args: Vec::new() }))?;
-            let mut __aivi_call_args: Vec<Value> = Vec::new();
-            __aivi_call_args.push((aivi_ok(__lit_h.clone()))?);
-            rt.call(f, __aivi_call_args)
-        }
-    }) })))
-}
-
-fn def__1h__07f85a07b4b9a97c_clause_1(rt: &mut Runtime) -> R {
-    aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |n: Value, rt: &mut Runtime| {
-        {
-            let f = (aivi_ok(Value::Constructor { name: "Hue".to_string(), args: Vec::new() }))?;
-            let mut __aivi_call_args: Vec<Value> = Vec::new();
-            __aivi_call_args.push((aivi_ok(n.clone()))?);
-            rt.call(f, __aivi_call_args)
-        }
-    }) })))
-}
-
-fn def__1h__07f85a07b4b9a97c(rt: &mut Runtime) -> R {
-    aivi_ok(Value::MultiClause(vec![
-        (def__1h__07f85a07b4b9a97c_clause_0(rt))?,
-        (def__1h__07f85a07b4b9a97c_clause_1(rt))?,
-    ]))
 }
 
 fn def_aivi_duration_1h__f87238eed0a37be3(rt: &mut Runtime) -> R {
@@ -16620,20 +17779,6 @@ fn def_sub__82719d195d0fc2f5(rt: &mut Runtime) -> R {
     }))
         }) })))
     }) })))
-}
-
-#[allow(dead_code)]
-fn def_sub__82719d195d0fc2f5_typed(rt: &mut Runtime) -> Result<Box<dyn Fn(f64) -> Result<Box<dyn Fn(f64) -> Result<f64, RuntimeError>>, RuntimeError>>, RuntimeError> {
-    Ok({
-        Box::new(move |a: f64| -> Result<Box<dyn Fn(f64) -> Result<f64, RuntimeError>>, RuntimeError> {
-            Ok({
-            let a = a.clone();
-            Box::new(move |b: f64| -> Result<f64, RuntimeError> {
-                Ok((a - b))
-            })
-        })
-        })
-    })
 }
 
 fn def_aivi_linear_algebra_sub__ec78a2d8a4b741fe(rt: &mut Runtime) -> R {
@@ -34249,15 +35394,6 @@ fn def_absInt__512a13c4441365f4(rt: &mut Runtime) -> R {
     }) })))
 }
 
-#[allow(dead_code)]
-fn def_absInt__512a13c4441365f4_typed(rt: &mut Runtime) -> Result<Box<dyn Fn(i64) -> Result<i64, RuntimeError>>, RuntimeError> {
-    Ok({
-        Box::new(move |n: i64| -> Result<i64, RuntimeError> {
-            Ok(if (n < 0_i64) { (0_i64 - n) } else { n })
-        })
-    })
-}
-
 fn def_aivi_number_bigint_absInt__fbfe4508a72be76d(rt: &mut Runtime) -> R {
     aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue { func: Arc::new(move |n: Value, rt: &mut Runtime| {
         ((aivi_ok(n.clone())).and_then(|l| (aivi_ok(Value::Int(0))).and_then(|r| match (l, r) {
@@ -38079,7 +39215,7 @@ fn def_main__1f5962a2ce9803c8(rt: &mut Runtime) -> R {
                     let __e = ({
                     let f = (aivi_ok(__builtin("print")))?;
                     let mut __aivi_call_args: Vec<Value> = Vec::new();
-                    __aivi_call_args.push((aivi_ok(Value::Text("Hello from typed codegen!".to_string())))?);
+                    __aivi_call_args.push((aivi_ok(Value::Text("Hello from AIVI!".to_string())))?);
                     rt.call(f, __aivi_call_args)
                 })?;
                     rt.run_effect_value(__e)
@@ -38107,7 +39243,7 @@ fn def_app_main_main__e7e51e602520a022(rt: &mut Runtime) -> R {
                     let __e = ({
                     let f = (aivi_ok(__builtin("print")))?;
                     let mut __aivi_call_args: Vec<Value> = Vec::new();
-                    __aivi_call_args.push((aivi_ok(Value::Text("Hello from typed codegen!".to_string())))?);
+                    __aivi_call_args.push((aivi_ok(Value::Text("Hello from AIVI!".to_string())))?);
                     rt.call(f, __aivi_call_args)
                 })?;
                     rt.run_effect_value(__e)
