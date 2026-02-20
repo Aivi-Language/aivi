@@ -1,0 +1,9 @@
+module fuzz.seed.fmt.effect
+export main
+
+main : Effect Text Unit
+main = effect {
+  x <- pure 42
+  y <- pure (x + 1)
+  pure Unit
+}

@@ -87,11 +87,15 @@ jobs:
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
       - name: Fuzz parser (short)
-        run: cargo +nightly fuzz run parser -- -max_total_time=30
+        run: cargo +nightly fuzz run parser -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
       - name: Fuzz frontend (short)
-        run: cargo +nightly fuzz run frontend -- -max_total_time=30
+        run: cargo +nightly fuzz run frontend -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
       - name: Fuzz runtime (short)
-        run: cargo +nightly fuzz run runtime -- -max_total_time=30
+        run: cargo +nightly fuzz run runtime -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+      - name: Fuzz formatter (short)
+        run: cargo +nightly fuzz run formatter -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+      - name: Fuzz LSP pipeline (short)
+        run: cargo +nightly fuzz run lsp_pipeline -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
 
   docs:
     name: Docs (build)

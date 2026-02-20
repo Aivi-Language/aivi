@@ -1,0 +1,11 @@
+module fuzz.seed.fmt.nested
+export result
+
+type Tree a = Leaf a | Branch (Tree a) (Tree a)
+
+depth : Tree a -> Int
+depth tree = case tree of
+Leaf _ => 0
+Branch l r => 1 + max (depth l) (depth r)
+
+result = depth (Branch (Leaf 1) (Branch (Leaf 2) (Leaf 3)))

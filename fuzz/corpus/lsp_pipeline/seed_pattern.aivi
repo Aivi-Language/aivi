@@ -1,0 +1,10 @@
+module fuzz.seed.lsp.pattern
+export classify
+
+type Shape = Circle Float | Rect Float Float | Point
+
+classify : Shape -> Text
+classify shape = case shape of
+Circle r => "circle"
+Rect w h => "rect"
+Point => "point"

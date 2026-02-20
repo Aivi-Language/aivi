@@ -1,0 +1,7 @@
+module fuzz.seed.parser.records
+export Point, translate
+
+type Point = { x: Float, y: Float }
+
+translate : Float -> Float -> Point -> Point
+translate dx dy p = p { x = p.x + dx, y = p.y + dy }

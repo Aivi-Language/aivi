@@ -1,0 +1,9 @@
+module fuzz.seed.parser.types
+export Maybe, map
+
+type Maybe a = None | Some a
+
+map : (a -> b) -> Maybe a -> Maybe b
+map f m = case m of
+None => None
+Some x => Some (f x)
