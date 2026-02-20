@@ -201,6 +201,40 @@ impl Parser {
 
         finish_segment(&mut current_segment_text, &mut segments, &current_segment_span);
 
+        // Normalize `.` and `..` segments at parse time (mirrors `aivi.path.normalizeSegments`).
+        let segments = {
+            let mut acc: Vec<Expr> = Vec::new();
+            for seg in segments {
+                if let Expr::Literal(crate::surface::Literal::String { ref text, .. }) = seg {
+                    if text == "." || text.is_empty() {
+                        continue;
+                    } else if text == ".." {
+                        if absolute {
+                            // absolute path: drop `..` at root
+                            if acc.last().map_or(true, |e| matches!(e, Expr::Literal(crate::surface::Literal::String { text, .. }) if text == "..")) {
+                                // nothing to pop or already `..`; skip for absolute
+                            } else {
+                                acc.pop();
+                            }
+                        } else {
+                            // relative path: keep `..` when nothing to pop
+                            if acc.last().map_or(true, |e| matches!(e, Expr::Literal(crate::surface::Literal::String { text, .. }) if text == "..")) {
+                                acc.push(seg);
+                            } else {
+                                acc.pop();
+                            }
+                        }
+                    } else {
+                        acc.push(seg);
+                    }
+                } else {
+                    // non-literal segment (e.g. interpolation) – keep as-is
+                    acc.push(seg);
+                }
+            }
+            acc
+        };
+
         let end = self.expect_symbol("]", "expected ']' to close path literal");
         let span = merge_span(
             start_span.clone(),

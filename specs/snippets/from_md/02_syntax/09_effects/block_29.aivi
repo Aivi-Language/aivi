@@ -1,5 +1,5 @@
 main = do Effect {
-  cfg  <- load (file.read "config.json")   // <- runs effect
-  name = cfg.appName                        // = is pure binding
+  cfg <- load (file.read "config.json") // <- runs effect
+  name = cfg.appName // = is pure binding
   print "loaded { name }"
 }

@@ -243,54 +243,14 @@ on PostfixExpr => Expr
 - **`PostfixExpr`** evaluates to a machine transition (constructor).
 - **`Expr`** is the handler effect to run when the transition fires.
 
-### Example
+### Example (minimal)
 
 ```aivi
 on Click => pure Unit
 ```
 
+### Example: persistent todo list
+
+<<< ../snippets/from_md/02_syntax/09_effects/block_33.aivi{aivi}
+
 `on` is only allowed inside `do Effect { ... }` blocks. Using it in a generic `do M { ... }` block is a type error.
-
-
-## 9.9 Generic `do` notation
-
-The `do` block syntax generalizes beyond `Effect` to any type constructor with monadic behavior. Currently **`Option`** and **`Result`** are supported alongside `Effect`.
-
-### `do Option { ... }`
-
-Short-circuit chaining: binds unwrap `Some`, and `None` aborts the block early.
-
-<<< ../snippets/from_md/02_syntax/09_effects/block_06.aivi{aivi}
-
-
-### `do Result { ... }`
-
-Pure error chaining: binds unwrap `Ok`, and `Err` short-circuits.
-
-<<< ../snippets/from_md/02_syntax/09_effects/block_07.aivi{aivi}
-
-
-### Restricted statement set
-
-Generic `do M` blocks support only the common monadic subset:
-
-| Statement | Available? |
-| :--- | :---: |
-| `x <- expr` (bind) | yes |
-| `x = expr` (let) | yes |
-| `expr` (sequencing) | yes |
-| `or`, `when`, `unless`, `given`, `on`, `loop`/`recurse`, resource `<-` | **no** (Effect-only) |
-
-Attempting to use Effect-specific statements in a generic `do` block produces a type error.
-
-For `Option` chaining without a full `do` block, `??` (coalesce) and `match` remain idiomatic:
-
-<<< ../snippets/from_md/02_syntax/09_effects/block_08.aivi{aivi}
-
-
-For `List` comprehensions, use [generators](07_generators.md):
-
-<<< ../snippets/from_md/02_syntax/09_effects/block_09.aivi{aivi}
-
-
-See [Generic Monadic `do` Blocks](16_do_notation.md) for the full specification, desugaring rules, and future plans.

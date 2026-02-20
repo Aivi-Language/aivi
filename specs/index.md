@@ -2,19 +2,13 @@
 title: AIVI Language Specification
 ---
 
-<p style="
-    background-color: #334;
-    border-radius: 20px;
-    width: fit-content;
-    padding: 1rem;
-    margin: 0 auto 3rem auto;
-">
-    <img src="../assets/aivi-128.png" alt="AIVI Logo" width="128" height="128">
+<p>
+    <img src="./aivi-logo.png" alt="AIVI Logo" width="256" height="auto">
 </p>
 
-# AIVI Language Specification
+# domain-driven & purely functional
 
-A high-integrity functional language with a Rust-first compilation pipeline.
+A high-integrity purely functional language with a Rust-first compilation pipeline.
 
 ## Table of Contents
 

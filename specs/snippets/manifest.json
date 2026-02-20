@@ -1000,6 +1000,13 @@
       ]
     },
     {
+      "path": "specs/snippets/from_md/02_syntax/09_effects/block_33.aivi",
+      "module": "docs.snippets.02_syntax.09_effects.block_33",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
       "path": "specs/snippets/from_md/02_syntax/10_modules/block_01.aivi",
       "module": "docs.snippets.02_syntax.10_modules.block_01",
       "verify": [

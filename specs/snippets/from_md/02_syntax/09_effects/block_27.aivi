@@ -2,6 +2,6 @@ safeRead = do Effect {
   res <- attempt (load (file.read "config.json"))
   // res : Result FileError Config
   res match
-    | Ok cfg  => pure cfg
-    | Err _   => pure defaultConfig
+    | Ok cfg => pure cfg
+    | Err _  => pure defaultConfig
 }

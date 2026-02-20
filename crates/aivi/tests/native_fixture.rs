@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Shared helpers for native-codegen integration tests.
 //!
 //! The fixture crate at `tests/fixtures/native_smoke/` provides a **stable**
