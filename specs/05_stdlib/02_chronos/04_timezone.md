@@ -1,9 +1,11 @@
 # TimeZone and ZonedDateTime
 
-> **Status: Planned**   this module is not yet implemented in the runtime. The spec below is a design document for a future version.
+> **Status: Implemented**   available in the stdlib and runtime.
 
 <!-- quick-info: {"kind":"module","name":"aivi.chronos.timezone"} -->
 The `TimeZone` and `ZonedDateTime` domains handle geographic time offsets, daylight saving transitions, and global time coordination.
+
+**Implementation note (v0.1):** time zone rules come from the IANA database (via `chrono-tz`); offsets include DST and ambiguous/invalid local times are runtime errors. `ZonedDateTime` literals use millisecond precision.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.chronos.timezone<span class="domain-badge">domain</span></div>

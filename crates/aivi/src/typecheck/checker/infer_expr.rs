@@ -41,6 +41,8 @@ impl TypeChecker {
                 "p" | "path" => Type::con("Path"),
                 "d" => Type::con("Date"),
                 "t" | "dt" => Type::con("DateTime"),
+                "tz" => Type::con("TimeZone"),
+                "zdt" => Type::con("ZonedDateTime"),
                 "k" => Type::con("Key"),
                 "m" => Type::con("Message"),
                 _ => Type::con("Text"),
