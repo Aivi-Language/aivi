@@ -3,7 +3,7 @@ title: AIVI Language Specification
 ---
 
 <p>
-    <img src="./aivi-logo.png" alt="AIVI Logo" width="256" height="auto">
+    <img src="/aivi-logo.png" alt="AIVI Logo" width="256" height="auto">
 </p>
 
 # domain-driven & purely functional
