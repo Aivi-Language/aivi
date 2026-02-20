@@ -117,9 +117,7 @@ impl CgType {
                 let parts: Vec<_> = fields.values().map(|t| t.rust_type()).collect();
                 format!("({})", parts.join(", "))
             }
-            CgType::Adt { name, constructors } => {
-                Self::enum_name(name, constructors)
-            }
+            CgType::Adt { name, constructors } => Self::enum_name(name, constructors),
         }
     }
 
@@ -162,7 +160,10 @@ impl CgType {
                     parts.join(", ")
                 )
             }
-            CgType::Adt { name: _, constructors } => {
+            CgType::Adt {
+                name: _,
+                constructors,
+            } => {
                 let enum_name = Self::enum_name(
                     match self {
                         CgType::Adt { name, .. } => name,
@@ -170,14 +171,18 @@ impl CgType {
                     },
                     constructors,
                 );
-                
+
                 let mut match_arms = Vec::new();
                 for (ctor_name, args) in constructors {
                     if args.is_empty() {
                         match_arms.push(format!("{enum_name}::{ctor_name} => Value::Constructor {{ name: {ctor_name:?}.to_string(), args: vec![] }}"));
                     } else {
                         let binds: Vec<_> = (0..args.len()).map(|i| format!("a{i}")).collect();
-                        let boxed_args: Vec<_> = args.iter().enumerate().map(|(i, t)| t.emit_box(&format!("a{i}.clone()"))).collect();
+                        let boxed_args: Vec<_> = args
+                            .iter()
+                            .enumerate()
+                            .map(|(i, t)| t.emit_box(&format!("a{i}.clone()")))
+                            .collect();
                         match_arms.push(format!(
                             "{enum_name}::{ctor_name}({}) => Value::Constructor {{ name: {ctor_name:?}.to_string(), args: vec![{}] }}",
                             binds.join(", "),

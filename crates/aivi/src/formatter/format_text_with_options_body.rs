@@ -610,17 +610,27 @@
                     let content_start = mat_start + 3; // after `~`, `mat`, `[`
                     let mut rows: Vec<Vec<String>> = Vec::new();
                     let mut row: Vec<String> = Vec::new();
-                    for ct in &tokens[content_start..mat_end] {
+                    let content_tokens = &tokens[content_start..mat_end];
+                    let mut ci = 0;
+                    while ci < content_tokens.len() {
+                        let ct = &content_tokens[ci];
                         if ct.text == ";" {
                             if !row.is_empty() {
                                 rows.push(row);
                                 row = Vec::new();
                             }
                         } else if ct.text == "," {
-                            // cell separator, ignore (already splitting on whitespace/comma)
-                        } else if ct.kind != "comment" {
+                            // cell separator, skip
+                        } else if ct.kind == "comment" {
+                            // skip comments
+                        } else if ct.text == "-" && ci + 1 < content_tokens.len() && content_tokens[ci + 1].kind == "number" {
+                            // Merge unary minus with following number
+                            row.push(format!("-{}", content_tokens[ci + 1].text));
+                            ci += 1; // skip the number token
+                        } else {
                             row.push(ct.text.clone());
                         }
+                        ci += 1;
                     }
                     if !row.is_empty() {
                         rows.push(row);

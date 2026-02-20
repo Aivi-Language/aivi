@@ -28,12 +28,12 @@ diff_smoke = do Effect {
 renderHtml_eventHandlers = do Effect {
   node =
     vElement "button"
-      [ vOnClick 1
-      , vOnFocus 2
-      , vOnKeyDown (k => 3)
-      , vOnInputE (i => 4)
-      ]
-      [vText "hi"]
+    [vOnClick 1
+      vOnFocus 2
+      vOnKeyDown (k => 3)
+      vOnInputE (i => 4)
+    ]
+    [vText "hi"]
   html = renderHtml node
   assert (text.contains "data-aivi-hid-click" html)
   assert (text.contains "data-aivi-hid-focus" html)
