@@ -157,9 +157,12 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 - bug fixes
 - ServerHTML fixes
 - how would a wizard work in aivi.ui
-- optimize other complex/** algorithms to use AIVI stdlib, syntax.
-- test coverage?
-- typechecker should support selective imports as bare names.
+- aivi_native_runtime — Most impactful gap. The native runtime builtins have zero coverage.
+- stdlib/ definitions — 47 modules with no unit tests; at least smoke-test that type signatures are valid.
+- runtime/builtins/ — The interpreter builtins mirror the native runtime ones; both need tests.
+surface/parser/ sub-modules — Parser logic is tested via integration tests, but no targeted unit tests for individual grammar productions.
+- typecheck/checker/ — Core type inference/checking logic with no direct unit tests.
+
 - aivi build should build a binary
 
 ## License
