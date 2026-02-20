@@ -3,7 +3,6 @@ module integrationTests.complex.PersistentSegmentTree
 
 use aivi
 use aivi.testing
-use aivi.collections
 
 // Int-specific min/max (math.min/max expect Float)
 minInt = a b => if a < b then a else b
