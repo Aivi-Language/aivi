@@ -20,6 +20,7 @@ mod sockets;
 mod streams;
 mod system;
 mod text;
+mod timezone;
 mod ui;
 mod url_http;
 mod util;

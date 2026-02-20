@@ -1,0 +1,65 @@
+@test
+module aivi.chronos.timezone.test
+
+use aivi.chronos.calendar (DateTime)
+use aivi.chronos.timezone (TimeZone, ZonedDateTime, getOffset, toInstant, atZone)
+use aivi.chronos.instant (Timestamp)
+use aivi.chronos.duration (Span)
+use aivi.testing (assert, assertEq)
+
+timezone_smoke = do Effect {
+  // Test basic timezone creation and offset
+  utc = ~tz(UTC)
+  paris = ~tz(Europe/Paris)
+
+  // Test ZonedDateTime creation
+  // 2024-05-21T12:00:00 in Paris (CEST = UTC+2)
+  // Should be 10:00:00 UTC
+  zdt = ~zdt(2024-05-21T12:00:00[Europe/Paris])
+
+  // Check fields
+  assertEq zdt.zone.id "Europe/Paris"
+  assertEq zdt.dateTime.year 2024
+  assertEq zdt.dateTime.month 5
+  assertEq zdt.dateTime.day 21
+  assertEq zdt.dateTime.hour 12
+
+  // Check offset (CEST is +2 hours = 7200000ms)
+  assertEq zdt.offset.millis 7200000
+
+  // Test toInstant (should be UTC timestamp)
+  // 2024-05-21T10:00:00Z
+  ts = toInstant zdt
+  assertEq ts.year 2024
+  assertEq ts.month 5
+  assertEq ts.day 21
+  assertEq ts.hour 10
+  assertEq ts.minute 0
+  assertEq ts.second 0
+
+  // Test getOffset
+  offset = getOffset paris ts
+  assertEq offset.millis 7200000
+
+  // Test atZone conversion
+  // Convert Paris time (12:00 CEST) to Tokyo (JST = UTC+9)
+  // 10:00 UTC + 9 hours = 19:00 JST
+  tokyo = ~tz(Asia/Tokyo)
+  zdtTokyo = atZone zdt tokyo
+
+  assertEq zdtTokyo.zone.id "Asia/Tokyo"
+  assertEq zdtTokyo.dateTime.year 2024
+  assertEq zdtTokyo.dateTime.month 5
+  assertEq zdtTokyo.dateTime.day 21
+  assertEq zdtTokyo.dateTime.hour 19
+  assertEq zdtTokyo.offset.millis 32400000 // 9 * 3600 * 1000
+
+  // Verify instant is preserved
+  tsTokyo = toInstant zdtTokyo
+  assertEq ts.year tsTokyo.year
+  assertEq ts.month tsTokyo.month
+  assertEq ts.day tsTokyo.day
+  assertEq ts.hour tsTokyo.hour
+  assertEq ts.minute tsTokyo.minute
+  assertEq ts.second tsTokyo.second
+}
