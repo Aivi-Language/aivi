@@ -385,6 +385,338 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     };
     let heap_record_value = heap_record.clone();
 
+    // ── List record ─────────────────────────────────────────────────
+    let list_a = checker.fresh_var_id();
+    let list_b = checker.fresh_var_id();
+    let list_c = checker.fresh_var_id();
+    let list_ty = Type::con("List").app(vec![Type::Var(list_a)]);
+    let list_ty_b = Type::con("List").app(vec![Type::Var(list_b)]);
+    let option_a = Type::con("Option").app(vec![Type::Var(list_a)]);
+    let option_b = Type::con("Option").app(vec![Type::Var(list_b)]);
+
+    let list_record = Type::Record {
+        fields: vec![
+            // empty : List a
+            ("empty".to_string(), list_ty.clone()),
+            // isEmpty : List a -> Bool
+            (
+                "isEmpty".to_string(),
+                Type::Func(Box::new(list_ty.clone()), Box::new(bool_ty.clone())),
+            ),
+            // length : List a -> Int
+            (
+                "length".to_string(),
+                Type::Func(Box::new(list_ty.clone()), Box::new(int_ty.clone())),
+            ),
+            // map : (a -> b) -> List a -> List b
+            (
+                "map".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_a)),
+                        Box::new(Type::Var(list_b)),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(list_ty_b.clone()),
+                    )),
+                ),
+            ),
+            // filter : (a -> Bool) -> List a -> List a
+            (
+                "filter".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_a)),
+                        Box::new(bool_ty.clone()),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(list_ty.clone()),
+                    )),
+                ),
+            ),
+            // flatMap : (a -> List b) -> List a -> List b
+            (
+                "flatMap".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_a)),
+                        Box::new(list_ty_b.clone()),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(list_ty_b.clone()),
+                    )),
+                ),
+            ),
+            // foldl : (b -> a -> b) -> b -> List a -> b
+            (
+                "foldl".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_b)),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(list_a)),
+                            Box::new(Type::Var(list_b)),
+                        )),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_b)),
+                        Box::new(Type::Func(
+                            Box::new(list_ty.clone()),
+                            Box::new(Type::Var(list_b)),
+                        )),
+                    )),
+                ),
+            ),
+            // foldr : (a -> b -> b) -> b -> List a -> b
+            (
+                "foldr".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_a)),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(list_b)),
+                            Box::new(Type::Var(list_b)),
+                        )),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_b)),
+                        Box::new(Type::Func(
+                            Box::new(list_ty.clone()),
+                            Box::new(Type::Var(list_b)),
+                        )),
+                    )),
+                ),
+            ),
+            // scanl : (b -> a -> b) -> b -> List a -> List b
+            (
+                "scanl".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_b)),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(list_a)),
+                            Box::new(Type::Var(list_b)),
+                        )),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_b)),
+                        Box::new(Type::Func(
+                            Box::new(list_ty.clone()),
+                            Box::new(list_ty_b.clone()),
+                        )),
+                    )),
+                ),
+            ),
+            // take : Int -> List a -> List a
+            (
+                "take".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(list_ty.clone()),
+                    )),
+                ),
+            ),
+            // drop : Int -> List a -> List a
+            (
+                "drop".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(list_ty.clone()),
+                    )),
+                ),
+            ),
+            // takeWhile : (a -> Bool) -> List a -> List a
+            (
+                "takeWhile".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_a)),
+                        Box::new(bool_ty.clone()),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(list_ty.clone()),
+                    )),
+                ),
+            ),
+            // dropWhile : (a -> Bool) -> List a -> List a
+            (
+                "dropWhile".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_a)),
+                        Box::new(bool_ty.clone()),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(list_ty.clone()),
+                    )),
+                ),
+            ),
+            // partition : (a -> Bool) -> List a -> (List a, List a)
+            (
+                "partition".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_a)),
+                        Box::new(bool_ty.clone()),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(Type::Tuple(vec![list_ty.clone(), list_ty.clone()])),
+                    )),
+                ),
+            ),
+            // find : (a -> Bool) -> List a -> Option a
+            (
+                "find".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_a)),
+                        Box::new(bool_ty.clone()),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(option_a.clone()),
+                    )),
+                ),
+            ),
+            // findMap : (a -> Option b) -> List a -> Option b
+            (
+                "findMap".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_a)),
+                        Box::new(option_b.clone()),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(option_b.clone()),
+                    )),
+                ),
+            ),
+            // at : Int -> List a -> Option a
+            (
+                "at".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(option_a.clone()),
+                    )),
+                ),
+            ),
+            // indexOf : a -> List a -> Option Int
+            (
+                "indexOf".to_string(),
+                Type::Func(
+                    Box::new(Type::Var(list_a)),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(Type::con("Option").app(vec![int_ty.clone()])),
+                    )),
+                ),
+            ),
+            // zip : List a -> List b -> List (a, b)
+            (
+                "zip".to_string(),
+                Type::Func(
+                    Box::new(list_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(list_ty_b.clone()),
+                        Box::new(Type::con("List").app(vec![Type::Tuple(vec![
+                            Type::Var(list_a),
+                            Type::Var(list_b),
+                        ])])),
+                    )),
+                ),
+            ),
+            // zipWith : (a -> b -> c) -> List a -> List b -> List c
+            (
+                "zipWith".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_a)),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(list_b)),
+                            Box::new(Type::Var(list_c)),
+                        )),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(list_ty_b.clone()),
+                            Box::new(Type::con("List").app(vec![Type::Var(list_c)])),
+                        )),
+                    )),
+                ),
+            ),
+            // unzip : List (a, b) -> (List a, List b)
+            (
+                "unzip".to_string(),
+                Type::Func(
+                    Box::new(Type::con("List").app(vec![Type::Tuple(vec![
+                        Type::Var(list_a),
+                        Type::Var(list_b),
+                    ])])),
+                    Box::new(Type::Tuple(vec![list_ty.clone(), list_ty_b.clone()])),
+                ),
+            ),
+            // intersperse : a -> List a -> List a
+            (
+                "intersperse".to_string(),
+                Type::Func(
+                    Box::new(Type::Var(list_a)),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(list_ty.clone()),
+                    )),
+                ),
+            ),
+            // chunk : Int -> List a -> List (List a)
+            (
+                "chunk".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(Type::con("List").app(vec![list_ty.clone()])),
+                    )),
+                ),
+            ),
+            // dedup : List a -> List a
+            (
+                "dedup".to_string(),
+                Type::Func(Box::new(list_ty.clone()), Box::new(list_ty.clone())),
+            ),
+            // uniqueBy : (a -> b) -> List a -> List a
+            (
+                "uniqueBy".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(list_a)),
+                        Box::new(Type::Var(list_b)),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(list_ty.clone()),
+                        Box::new(list_ty.clone()),
+                    )),
+                ),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+        open: true,
+    };
+    let list_record_value = list_record.clone();
+
     let collections_record = Type::Record {
         fields: vec![
             ("map".to_string(), map_record),
@@ -392,6 +724,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             ("queue".to_string(), queue_record),
             ("deque".to_string(), deque_record),
             ("heap".to_string(), heap_record),
+            ("list".to_string(), list_record),
         ]
         .into_iter()
         .collect(),
@@ -442,6 +775,14 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![heap_a],
             ty: heap_record_value,
+            origin: None,
+        },
+    );
+    env.insert(
+        "List".to_string(),
+        Scheme {
+            vars: vec![list_a, list_b, list_c],
+            ty: list_record_value,
             origin: None,
         },
     );

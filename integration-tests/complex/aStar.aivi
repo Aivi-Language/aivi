@@ -23,31 +23,15 @@ heuristic = goal node => (Map.get goal positions, Map.get node positions) match
   | _                           => 0.0
 
 // Path reconstruction helper - walks the cameFrom map backwards
+reconstructPath = cameFrom goal => reconstructGo cameFrom goal []
+
 reconstructGo = cameFrom current acc => Map.get current cameFrom match
   | Some prev => reconstructGo cameFrom prev [current, ...acc]
   | None      => [current, ...acc]
-reconstructPath = cameFrom goal => reconstructGo cameFrom goal []
-
-priority3 = (p, _, _) => p
-
-popMin3 = items => items match
-  | []        => None
-  | [h, ...t] => Some (popMin3Go h [] t)
-
-popMin3Go = best restAcc items => items match
-  | []        => (best, restAcc)
-  | [x, ...t] => {
-    bestP = priority3 best
-    xP = priority3 x
-    if xP < bestP then
-      popMin3Go x [best, ...restAcc] t
-    else
-      popMin3Go best [x, ...restAcc] t
-  }
 
 // State record type alias
 AStarState = {
-  queue: List (Float, Int, Float)
+  queue: Heap (Float, Int, Float)
   scores: Map Int Float
   parents: Map Int Int
 }
@@ -56,50 +40,41 @@ AStarState = {
 infinity : Float
 infinity = 1000000.0
 
-// Expand a single neighbor
-expandNeighbor : Int -> Float -> Int -> (Int -> Int -> Float) -> AStarState -> { to: Int, weight: Float } -> AStarState
-expandNeighbor = current currentG goal heuristicFunc state edge => {
-  tentative = sum [currentG, edge.weight]
-  prevScore = Map.get edge.to state.scores match
-    | Some v => v
-    | None   => infinity
-    if tentative < prevScore then {
-      queue: [(sum [tentative, heuristicFunc goal edge.to], edge.to, tentative), ...state.queue]
-      scores: Map.insert edge.to tentative state.scores
-      parents: Map.insert edge.to current state.parents
-    }
-    else
-      state
-}
+// Expand all neighbors using List.foldl
+expandNeighbors = current currentG goal heuristicFunc state edges =>
+  List.foldl (s edge => {
+      tentative = sum [currentG, edge.weight]
+      prevScore = Map.get edge.to s.scores match
+        | Some v => v
+        | None   => infinity
+        if tentative < prevScore then {
+          queue: Heap.push (sum [tentative, heuristicFunc goal edge.to], edge.to, tentative) s.queue
+          scores: Map.insert edge.to tentative s.scores
+          parents: Map.insert edge.to current s.parents
+        }
+        else s
+  }) state edges
 
-// Expand all neighbors
-expandNeighbors = edges current currentG goal heuristicFunc state => edges match
-  | []              => state
-  | [edge, ...tail] => {
-    nextState = expandNeighbor current currentG goal heuristicFunc state edge
-    expandNeighbors tail current currentG goal heuristicFunc nextState
-  }
-
-// Main search loop
-search = state graph goal heuristicFunc => popMin3 state.queue match
+// Main search loop using Heap.popMin
+search = state graph goal heuristicFunc => Heap.popMin state.queue match
   | None                                => None
   | Some ((_, current, currentG), rest) =>
     if current == goal then
       Some (reconstructPath state.parents goal)
     else {
       edges = edgesFrom graph current
-      nextState = expandNeighbors edges current currentG goal heuristicFunc {
+      nextState = expandNeighbors current currentG goal heuristicFunc {
         queue: rest
         scores: state.scores
         parents: state.parents
-      }
+      } edges
       search nextState graph goal heuristicFunc
     }
 
 // A* entry point
 astar = graph start goal heuristicFunc =>
   search {
-    queue: [(heuristicFunc goal start, start, 0.0)]
+    queue: Heap.push (heuristicFunc goal start, start, 0.0) Heap.empty
     scores: ~map{ start => 0.0 }
     parents: Map.empty
   } graph goal heuristicFunc

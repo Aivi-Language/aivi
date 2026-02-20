@@ -4,19 +4,7 @@ module integrationTests.complex.PersistentSegmentTree
 use aivi
 use aivi.testing
 use aivi.collections
-
-minInt = a b => if a < b then a else b
-maxInt = a b => if a > b then a else b
-
-len = xs => xs match
-  | []           => 0
-  | [_, ...rest] => 1 + len rest
-
-isEmpty = xs => len xs == 0
-
-at = xs i => xs match
-  | []           => None
-  | [x, ...rest] => if i == 0 then Some x else at rest (i - 1)
+use aivi.math (min, max)
 
 // Segment metadata for aggregate queries
 SegmentMeta = { sum: Int, min: Int, max: Int }
@@ -36,7 +24,7 @@ SegmentTree =
 
 // Extract metadata from a tree node
 nodeMeta : SegmentTree -> Option SegmentMeta
-nodeMeta = tree => tree match
+nodeMeta = _ match
   | Empty                  => None
   | Node { sum, min, max } => Some { sum: sum, min: min, max: max }
 
@@ -47,8 +35,8 @@ combineMeta = leftMeta rightMeta => (leftMeta, rightMeta) match
   | (None, Some rm)    => Some rm
   | (Some lm, Some rm) => Some {
     sum: lm.sum + rm.sum
-    min: minInt lm.min rm.min
-    max: maxInt lm.max rm.max
+    min: min lm.min rm.min
+    max: max lm.max rm.max
   }
 
 // Rebuild node from children
@@ -65,9 +53,9 @@ nodeFromChildren = start end left right => combineMeta (nodeMeta left) (nodeMeta
   }
 
 // Build tree from a range of the array
-buildRange = arr start end => {
+buildRange = arr start end =>
   if start == end then
-    at arr start match
+    List.at start arr match
       | Some value => Node {
         start: start
         end: end
@@ -79,18 +67,17 @@ buildRange = arr start end => {
       }
       | None => Empty
   else {
-        mid = (start + end) / 2
-        left = buildRange arr start mid
-        right = buildRange arr (mid + 1) end
-        nodeFromChildren start end left right
+    mid = (start + end) / 2
+    left = buildRange arr start mid
+    right = buildRange arr (mid + 1) end
+    nodeFromChildren start end left right
   }
-}
 
 // Create tree from list
   fromList : List Int -> SegmentTree
   fromList = arr =>
-    if isEmpty arr then Empty
-    else buildRange arr 0 (len arr - 1)
+    if List.isEmpty arr then Empty
+    else buildRange arr 0 (List.length arr - 1)
 
 // Query range [l..r] for metadata
   queryRange : SegmentTree -> Int -> Int -> Option SegmentMeta

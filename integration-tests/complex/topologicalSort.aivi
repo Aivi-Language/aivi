@@ -5,10 +5,6 @@ use aivi
 use aivi.testing
 use aivi.collections
 
-len = xs => xs match
-  | []           => 0
-  | [_, ...rest] => 1 + len rest
-
 // Type alias for adjacency list graph
 Graph = { nodes: List Int, adj: Map Int (List Int) }
 
@@ -17,65 +13,35 @@ neighbors = node graph => Map.get node graph.adj match
   | Some ns => ns
   | None    => []
 
-reverseList = xs => reverseGo xs []
-
-reverseGo = list acc => list match
-  | []        => acc
-  | [h, ...t] => reverseGo t [h, ...acc]
-
-initIndegree = nodes acc => nodes match
-  | []        => acc
-  | [n, ...t] => initIndegree t (Map.insert n 0 acc)
-
-incIndegree = node indeg => {
-  cur = Map.getOrElse node 0 indeg
-  Map.insert node (cur + 1) indeg
-}
-
-addIncoming = ns indeg => ns match
-  | []        => indeg
-  | [n, ...t] => addIncoming t (incIndegree n indeg)
+reverseList = xs => List.foldl (acc x => [x, ...acc])[] xs
 
 buildIndegree : Graph -> Map Int Int
 buildIndegree = graph => {
-  start = initIndegree graph.nodes (Map.empty)
-  buildIndegreeNodes graph graph.nodes start
+  zeros = List.foldl (acc n => Map.insert n 0 acc) Map.empty graph.nodes
+  List.foldl (acc u => List.foldl (ind n => Map.insert n (Map.getOrElse n 0 ind + 1) ind) acc (neighbors u graph)) zeros graph.nodes
 }
 
-buildIndegreeNodes = graph nodes indeg => nodes match
-  | []        => indeg
-  | [u, ...t] => buildIndegreeNodes graph t (addIncoming (neighbors u graph) indeg)
+enqueueZero = nodes indeg q =>
+  List.foldl (q2 n => if Map.getOrElse n 0 indeg == 0 then Queue.enqueue n q2 else q2) q nodes
 
-enqueueZero = nodes indeg q => nodes match
-  | []        => q
-  | [n, ...t] =>
-    if Map.getOrElse n 0 indeg == 0 then
-      enqueueZero t indeg (Queue.enqueue n q)
-    else
-      enqueueZero t indeg q
+relax = ns indeg q =>
+  List.foldl (state n => {
+      next = Map.getOrElse n 0 state.indeg - 1
+      {
+        indeg: Map.insert n next state.indeg
+        q: if next == 0 then Queue.enqueue n state.q else state.q
+      }
+  }) { indeg: indeg, q: q } ns
 
-relax = ns indeg q => ns match
-  | []        => { indeg: indeg, q: q }
-  | [n, ...t] => {
-    cur = Map.getOrElse n 0 indeg
-    next = cur - 1
-    indeg2 = Map.insert n next indeg
-    q2 = if next == 0 then Queue.enqueue n q else q
-    relax t indeg2 q2
-  }
-
-cycleNodes = nodes indeg acc => nodes match
-  | []        => reverseList acc
-  | [n, ...t] =>
-    if Map.getOrElse n 0 indeg > 0 then
-      cycleNodes t indeg [n, ...acc]
-    else
-      cycleNodes t indeg acc
+cycleNodes = nodes indeg =>
+  nodes
+|> List.foldl (acc n => if Map.getOrElse n 0 indeg > 0 then [n, ...acc] else acc)[]
+|> reverseList
 
 sortLoop = graph indeg q outRev => (Queue.dequeue q) match
   | None => {
     out = reverseList outRev
-    if len out == len graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg [])
+    if List.length out == List.length graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg)
   }
   | Some (node, q2) => {
     res = relax (neighbors node graph) indeg q2
@@ -85,7 +51,7 @@ sortLoop = graph indeg q outRev => (Queue.dequeue q) match
 topologicalSort : Graph -> Result (List Int) (List Int)
 topologicalSort = graph => {
   indeg = buildIndegree graph
-  q0 = enqueueZero graph.nodes indeg (Queue.empty)
+  q0 = enqueueZero graph.nodes indeg Queue.empty
   sortLoop graph indeg q0 []
 }
 
