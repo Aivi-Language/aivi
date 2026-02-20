@@ -31,7 +31,7 @@ graph TD
 ```
 
 ### 1.3 Running terminal commands
-- make sure filter (ie. grep) output by warnings:
+- make sure to filter (ie. grep) output by warnings and errors:
     warning: *
     --> crates/aivi/*.rs:*:*
 - Use shorter logs (--quiet, --no-verbose)    
