@@ -9,7 +9,7 @@ use aivi.url
 pattern = ~r/\w+@\w+\.\w+/
 endpoint = ~u(https://api.example.com)
 
-@test
+@test "sigils work"
 sigilsWork = do Effect {
   assert (regex.test pattern "a@b.com")
   assertEq endpoint.protocol "https"

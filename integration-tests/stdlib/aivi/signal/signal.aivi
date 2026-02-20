@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 use aivi.signal
 
-@test
+@test "signal construct"
 signal_construct = do Effect {
   // A signal has samples and a sample rate
   s = { samples: [0.0, 1.0, 0.0, -1.0], rate: 44100.0 }
@@ -13,7 +13,7 @@ signal_construct = do Effect {
   assert (s.rate == 44100.0)
 }
 
-@test
+@test "normalize"
 normalize_smoke = do Effect {
   s = { samples: [0.0, 2.0, -4.0, 1.0], rate: 44100.0 }
   n = normalize s
@@ -21,7 +21,7 @@ normalize_smoke = do Effect {
   assert True
 }
 
-@test
+@test "fft ifft types"
 fft_ifft_types = do Effect {
   // Verify fft and ifft type signatures are valid
   s = { samples: [1.0, 0.0, 1.0, 0.0], rate: 44100.0 }

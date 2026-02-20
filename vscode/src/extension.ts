@@ -24,6 +24,7 @@ type DiscoveredTest = {
   moduleName: string;
   defName: string;
   fullName: string;
+  description: string;
   decoratorLine: number; // 0-based
 };
 
@@ -34,9 +35,12 @@ function discoverTestsFromText(text: string): { moduleName: string; tests: Disco
   const tests: DiscoveredTest[] = [];
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
-    if (!/^\s*@test\b/.test(lines[i])) {
+    // Match @test "description" or bare @test (legacy)
+    const testMatch = /^\s*@test\s*(?:"([^"]*)")?\s*$/.exec(lines[i]);
+    if (!testMatch) {
       continue;
     }
+    const description = testMatch[1] ?? "";
 
     // Find the next binding name: `foo = ...` (skip blank lines).
     let j = i + 1;
@@ -49,7 +53,7 @@ function discoverTestsFromText(text: string): { moduleName: string; tests: Disco
     }
     const defName = m[1];
     const fullName = `${moduleName}.${defName}`;
-    tests.push({ moduleName, defName, fullName, decoratorLine: i });
+    tests.push({ moduleName, defName, fullName, description: description || defName, decoratorLine: i });
   }
 
   return { moduleName, tests };
@@ -208,7 +212,7 @@ export function activate(context: vscode.ExtensionContext) {
 
       for (const t of discovered.tests) {
         const testId = `aiviTest:${uri.toString()}::${t.fullName}`;
-        const testItem = testController.createTestItem(testId, t.defName, uri);
+        const testItem = testController.createTestItem(testId, t.description, uri);
         testItem.range = new vscode.Range(
           new vscode.Position(t.decoratorLine, 0),
           new vscode.Position(t.decoratorLine, linesAt(text, t.decoratorLine).length)

@@ -13,7 +13,7 @@ values = [1, 2, 3, 4, 5]
 gt2 = values |> filter (_ > 2)
 expected = [3, 4, 5]
 
-@test
+@test "predicate filtering"
 predicatesWork = do Effect {
   assertEq gt2 expected
 }

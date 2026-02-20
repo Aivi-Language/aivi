@@ -5,21 +5,21 @@ use aivi
 use aivi.testing
 use aivi.system
 
-@test
+@test "args"
 args_smoke = do Effect {
   a <- args
   // args returns a list of text, may be empty in test context
   assert True
 }
 
-@test
+@test "locale tag"
 localeTag_smoke = do Effect {
   tag <- localeTag
   // localeTag returns Option Text, may be None in some environments
   assert True
 }
 
-@test
+@test "env record shape"
 env_record_shape = do Effect {
   // Verify env record has expected fields
   val <- env.get "PATH"

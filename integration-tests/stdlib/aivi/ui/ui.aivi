@@ -9,14 +9,14 @@ len = xs => xs match
   | []           => 0
   | [_, ...rest] => 1 + len rest
 
-@test
+@test "render html"
 renderHtml_smoke = do Effect {
   node = vElement "p" [vAttr "data-x" "1"] [vText "hi"]
   html = renderHtml node
   assert (text.length html > 0)
 }
 
-@test
+@test "diff"
 diff_smoke = do Effect {
   old = vElement "p" [vAttr "data-x" "1"] [vText "hi"]
   neu = vElement "p" [vAttr "data-x" "2"] [vText "hi"]
@@ -24,7 +24,7 @@ diff_smoke = do Effect {
   assert (len ops >= 0)
 }
 
-@test
+@test "render html event handlers"
 renderHtml_eventHandlers = do Effect {
   node =
     vElement "button"

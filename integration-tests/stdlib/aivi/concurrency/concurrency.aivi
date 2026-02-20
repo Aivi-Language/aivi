@@ -5,17 +5,17 @@ use aivi
 use aivi.testing
 use aivi.concurrency
 
-@test
+@test "channel error"
 channelError_smoke = do Effect {
   assertEq (1 + 1) 2
 }
 
-@test
+@test "scope"
 scope_smoke = do Effect {
   assertEq (1 + 1) 2
 }
 
-@test
+@test "close"
 close_smoke = do Effect {
   (tx, rx) <- make Unit
   send tx Unit
@@ -26,7 +26,7 @@ close_smoke = do Effect {
     close tx
 }
 
-@test
+@test "make"
 make_smoke = do Effect {
   (tx, rx) <- make Unit
   send tx Unit
@@ -37,14 +37,14 @@ make_smoke = do Effect {
     close tx
 }
 
-@test
+@test "par"
 par_smoke = do Effect {
   // Just ensure both branches run without throwing.
   _ <- par (pure 1) (pure 2)
   assert True
 }
 
-@test
+@test "recv"
 recv_smoke = do Effect {
   (tx, rx) <- make Unit
   send tx Unit
@@ -55,14 +55,14 @@ recv_smoke = do Effect {
     close tx
 }
 
-@test
+@test "scope 2"
 scope_smoke_2 = do Effect {
   // Scope should run the callback and return its result.
   x <- scope (_ => pure 123)
   assert (x == 123)
 }
 
-@test
+@test "send"
 send_smoke = do Effect {
   (tx, rx) <- make Unit
   send tx Unit

@@ -7,17 +7,17 @@ use aivi.math
 
 // -- Constants --
 
-@test
+@test "constants pi"
 constants_pi = do Effect {
   assert (abs (pi - 3.14159265358979) < 0.00001)
 }
 
-@test
+@test "constants e"
 constants_e = do Effect {
   assert (abs (e - 2.71828182845904) < 0.00001)
 }
 
-@test
+@test "constants inf"
 constants_inf = do Effect {
   assert (isInf inf)
   assert (isInf negInf)
@@ -27,48 +27,48 @@ constants_inf = do Effect {
 
 // -- Basic Helpers --
 
-@test
+@test "abs int"
 abs_int = do Effect {
   assertEq (abs 5) 5
   assertEq (abs (-3)) 3
   assertEq (abs 0) 0
 }
 
-@test
+@test "abs float"
 abs_float = do Effect {
   assert (abs 1.5 == 1.5)
   assert (abs (-2.5) == 2.5)
   assert (abs 0.0 == 0.0)
 }
 
-@test
+@test "sign"
 sign_smoke = do Effect {
   assert (sign 5.0 == 1.0)
   assert (sign (-3.0) == -1.0)
   assert (sign 0.0 == 0.0)
 }
 
-@test
+@test "min max"
 min_max = do Effect {
   assert (min 3.0 5.0 == 3.0)
   assert (max 3.0 5.0 == 5.0)
   assert (min (-1.0) 0.0 == -1.0)
 }
 
-@test
+@test "clamp"
 clamp_smoke = do Effect {
   assert (clamp 0.0 10.0 5.0 == 5.0)
   assert (clamp 0.0 10.0 (-1.0) == 0.0)
   assert (clamp 0.0 10.0 15.0 == 10.0)
 }
 
-@test
+@test "sum"
 sum_smoke = do Effect {
   assert (sum [1.0, 2.0, 3.0] == 6.0)
   assert (sum [] == 0.0)
 }
 
-@test
+@test "sum int"
 sumInt_smoke = do Effect {
   assertEq (sumInt [1, 2, 3, 4]) 10
   assertEq (sumInt []) 0
@@ -76,26 +76,26 @@ sumInt_smoke = do Effect {
 
 // -- Rounding --
 
-@test
+@test "floor"
 floor_smoke = do Effect {
   assert (floor 2.7 == 2.0)
   assert (floor (-2.3) == -3.0)
 }
 
-@test
+@test "ceil"
 ceil_smoke = do Effect {
   assert (ceil 2.3 == 3.0)
   assert (ceil (-2.7) == -2.0)
 }
 
-@test
+@test "round"
 round_smoke = do Effect {
   assert (round 2.5 == 2.0) // banker's rounding: ties to even
   assert (round 3.5 == 4.0)
   assert (round 2.3 == 2.0)
 }
 
-@test
+@test "trunc"
 trunc_smoke = do Effect {
   assert (trunc 2.9 == 2.0)
   assert (trunc (-2.9) == -2.0)
@@ -103,39 +103,39 @@ trunc_smoke = do Effect {
 
 // -- Powers and Roots --
 
-@test
+@test "pow"
 pow_smoke = do Effect {
   assert (abs (pow 2.0 3.0-8.0) < 0.0001)
   assert (abs (pow 3.0 2.0-9.0) < 0.0001)
 }
 
-@test
+@test "sqrt"
 sqrt_smoke = do Effect {
   assert (abs (sqrt 4.0-2.0) < 0.0001)
   assert (abs (sqrt 9.0-3.0) < 0.0001)
 }
 
-@test
+@test "cbrt"
 cbrt_smoke = do Effect {
   assert (abs (cbrt 27.0-3.0) < 0.0001)
   assert (abs (cbrt 8.0-2.0) < 0.0001)
 }
 
-@test
+@test "hypot"
 hypot_smoke = do Effect {
   assert (abs (hypot 3.0 4.0-5.0) < 0.0001)
 }
 
 // -- Logarithms --
 
-@test
+@test "log"
 log_smoke = do Effect {
   assert (abs (log (exp 1.0) - 1.0) < 0.0001)
   assert (abs (log2 8.0-3.0) < 0.0001)
   assert (abs (log10 100.0-2.0) < 0.0001)
 }
 
-@test
+@test "exp"
 exp_smoke = do Effect {
   assert (abs (exp 0.0-1.0) < 0.0001)
   assert (abs (exp 1.0- e) < 0.0001)
@@ -143,14 +143,14 @@ exp_smoke = do Effect {
 
 // -- Trigonometry --
 
-@test
+@test "sin cos"
 sin_cos_smoke = do Effect {
   angle = radians 0.0
   assert (abs (sin angle) < 0.0001)
   assert (abs (cos angle - 1.0) < 0.0001)
 }
 
-@test
+@test "tan"
 tan_smoke = do Effect {
   angle = radians 0.0
   assert (abs (tan angle) < 0.0001)
@@ -158,20 +158,20 @@ tan_smoke = do Effect {
 
 // -- Integer Math --
 
-@test
+@test "gcd"
 gcd_smoke = do Effect {
   assertEq (gcd 12 8) 4
   assertEq (gcd 7 5) 1
   assertEq (gcd 0 5) 5
 }
 
-@test
+@test "lcm"
 lcm_smoke = do Effect {
   assertEq (lcm 4 6) 12
   assertEq (lcm 3 5) 15
 }
 
-@test
+@test "divmod"
 divmod_smoke = do Effect {
   (q, r) = divmod 7 3
   assertEq q 2
@@ -180,7 +180,7 @@ divmod_smoke = do Effect {
 
 // -- Floating-point checks --
 
-@test
+@test "is na n"
 isNaN_smoke = do Effect {
   assert (isNaN (0.0 / 0.0))
   assert (isFinite 42.0)
@@ -189,7 +189,7 @@ isNaN_smoke = do Effect {
 
 // -- Min/Max All --
 
-@test
+@test "min all max all"
 minAll_maxAll = do Effect {
   assertEq (minAll [3.0, 1.0, 2.0]) (Some 1.0)
   assertEq (maxAll [3.0, 1.0, 2.0]) (Some 3.0)

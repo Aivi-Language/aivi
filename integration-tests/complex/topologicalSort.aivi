@@ -55,7 +55,7 @@ topologicalSort = graph => {
   sortLoop graph indeg q0 []
 }
 
-@test
+@test "Kahn topological sort"
 topoSmoke = do Effect {
   adj = ~map{
     0 => [1, 2]

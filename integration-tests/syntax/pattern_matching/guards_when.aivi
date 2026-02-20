@@ -11,7 +11,7 @@ classify =
   | n when n < 100 => "medium"
   | _              => "large"
 
-@test
+@test "guards work"
 guardsWork = do Effect {
   assertEq (classify (-1)) "negative"
   assertEq (classify 0) "zero"

@@ -8,13 +8,13 @@ use aivi.math
 
 // -- BigInt --
 
-@test
+@test "bigint from int"
 bigint_fromInt = do Effect {
   b = fromInt 42
   assertEq (toInt b) (Some 42)
 }
 
-@test
+@test "bigint roundtrip"
 bigint_roundtrip = do Effect {
   b = fromInt 0
   assertEq (toInt b) (Some 0)
@@ -23,7 +23,7 @@ bigint_roundtrip = do Effect {
   assertEq (toInt n) (Some (-99))
 }
 
-@test
+@test "bigint arithmetic"
 bigint_arithmetic = do Effect {
   a = fromInt 10
   b = fromInt 20
@@ -33,14 +33,14 @@ bigint_arithmetic = do Effect {
 
 // -- Decimal --
 
-@test
+@test "decimal from float"
 decimal_fromFloat = do Effect {
   d = fromFloat 3.14
   f = toFloat d
   assert (abs (f - 3.14) < 0.01)
 }
 
-@test
+@test "decimal round"
 decimal_round = do Effect {
   d = fromFloat 3.14159
   r = round d 2
@@ -50,7 +50,7 @@ decimal_round = do Effect {
 
 // -- Rational --
 
-@test
+@test "rational construct"
 rational_construct = do Effect {
   n = fromInt 2
   d = fromInt 4

@@ -1,6 +1,6 @@
 use aivi.testing (assert, assertEq)
 
-@test
+@test "addition works"
 additionWorks = _ => {
   assertEq (1 + 1) 2
 }

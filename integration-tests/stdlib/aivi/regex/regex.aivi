@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 use aivi.regex
 
-@test
+@test "compile valid"
 compile_valid = do Effect {
   res = compile "^hello"
   res match
@@ -13,7 +13,7 @@ compile_valid = do Effect {
     | Err _ => assert False
 }
 
-@test
+@test "compile invalid"
 compile_invalid = do Effect {
   res = compile "[invalid"
   res match
@@ -21,7 +21,7 @@ compile_invalid = do Effect {
     | Err _ => assert True
 }
 
-@test
+@test "test match"
 test_match = do Effect {
   r = compile "\\d+" or (fail "compile failed")
   assert (test r "abc123def")
@@ -29,14 +29,14 @@ test_match = do Effect {
   assert (!(test r "no digits"))
 }
 
-@test
+@test "test no match"
 test_no_match = do Effect {
   r = compile "^hello$" or (fail "compile failed")
   assert (test r "hello")
   assert (!(test r "say hello"))
 }
 
-@test
+@test "match first"
 match_first = do Effect {
   r = compile "\\d+" or (fail "compile failed")
   m = match r "abc 123 def 456"
@@ -45,28 +45,28 @@ match_first = do Effect {
     | None   => assert False
 }
 
-@test
+@test "matches all"
 matches_all = do Effect {
   r = compile "\\d+" or (fail "compile failed")
   ms = matches r "a1b2c3"
   assert (List.length ms == 3)
 }
 
-@test
+@test "split"
 split_smoke = do Effect {
   r = compile "[,;]" or (fail "compile failed")
   parts = split r "a,b;c,d"
   assert (List.length parts == 4)
 }
 
-@test
+@test "replace"
 replace_smoke = do Effect {
   r = compile "\\d+" or (fail "compile failed")
   result = replace r "abc123def456" "NUM"
   assert (result == "abcNUMdef456")
 }
 
-@test
+@test "replace all"
 replaceAll_smoke = do Effect {
   r = compile "\\d+" or (fail "compile failed")
   result = replaceAll r "abc123def456" "NUM"

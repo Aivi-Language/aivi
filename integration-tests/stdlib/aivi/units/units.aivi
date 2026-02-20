@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.math
 use aivi.units
 
-@test
+@test "quantity"
 quantity_smoke = do Effect {
   m = defineUnit "m" 1.0
   a = { value: 2.0, unit: m }
@@ -20,14 +20,14 @@ quantity_smoke = do Effect {
   assert (abs (scaled.value - 8.0) < 0.0000001)
 }
 
-@test
+@test "unit"
 unit_smoke = do Effect {
   u = defineUnit "s" 1.0
   assert (u.name == "s")
   assert (u.factor == 1.0)
 }
 
-@test
+@test "convert"
 convert_smoke = do Effect {
   m = defineUnit "m" 1.0
   km = defineUnit "km" 1000.0
@@ -37,7 +37,7 @@ convert_smoke = do Effect {
   assert (qKm.unit.name == "km")
 }
 
-@test
+@test "define unit"
 defineUnit_smoke = do Effect {
   m = defineUnit "m" 1.0
   km = defineUnit "km" 1000.0
@@ -45,7 +45,7 @@ defineUnit_smoke = do Effect {
   assert (km.factor == 1000.0)
 }
 
-@test
+@test "same unit"
 sameUnit_smoke = do Effect {
   m = defineUnit "m" 1.0
   km = defineUnit "km" 1000.0

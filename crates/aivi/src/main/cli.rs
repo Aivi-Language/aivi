@@ -188,7 +188,7 @@ fn run() -> Result<(), AiviError> {
             }
 
             // Discover @test definitions from user sources only.
-            let mut test_names = Vec::new();
+            let mut test_entries: Vec<(String, String)> = Vec::new();
             let mut test_name_to_path = HashMap::<String, PathBuf>::new();
             for path in &test_paths {
                 let text = std::fs::read_to_string(path)?;
@@ -198,30 +198,36 @@ fn run() -> Result<(), AiviError> {
                         let aivi::ModuleItem::Def(def) = item else {
                             continue;
                         };
-                        if def.decorators.iter().any(|d| d.name.name == "test") {
+                        if let Some(dec) = def.decorators.iter().find(|d| d.name.name == "test") {
                             let name = format!("{}.{}", module.name.name, def.name.name);
+                            let description = match &dec.arg {
+                                Some(aivi::Expr::Literal(aivi::Literal::String { text, .. })) => text.clone(),
+                                _ => name.clone(),
+                            };
                             test_name_to_path.insert(name.clone(), path.clone());
-                            test_names.push(name);
+                            test_entries.push((name, description));
                         }
                     }
                 }
             }
-            test_names.sort();
-            test_names.dedup();
-            debug_assert!(!test_names.is_empty());
+            test_entries.sort();
+            test_entries.dedup();
+            debug_assert!(!test_entries.is_empty());
 
             if !only_tests.is_empty() {
                 let mut filtered = Vec::new();
                 let mut missing = Vec::new();
                 for wanted in &only_tests {
-                    if test_names.iter().any(|n| n == wanted) {
-                        filtered.push(wanted.clone());
+                    if test_entries.iter().any(|(n, _)| n == wanted) {
+                        if let Some(entry) = test_entries.iter().find(|(n, _)| n == wanted) {
+                            filtered.push(entry.clone());
+                        }
                         continue;
                     }
                     // Convenience: allow passing an unqualified def name (suffix match).
                     let suffix = format!(".{wanted}");
-                    if let Some(found) = test_names.iter().find(|n| n.ends_with(&suffix)) {
-                        filtered.push(found.clone());
+                    if let Some(entry) = test_entries.iter().find(|(n, _)| n.ends_with(&suffix)) {
+                        filtered.push(entry.clone());
                     } else {
                         missing.push(wanted.clone());
                     }
@@ -234,7 +240,7 @@ fn run() -> Result<(), AiviError> {
                 }
                 filtered.sort();
                 filtered.dedup();
-                test_names = filtered;
+                test_entries = filtered;
             }
 
             // Check and print module diagnostics (optionally including embedded stdlib).
@@ -259,7 +265,7 @@ fn run() -> Result<(), AiviError> {
             }
 
             let program = aivi::desugar_modules(&modules);
-            let report = aivi::run_test_suite(program, &test_names, &modules)?;
+            let report = aivi::run_test_suite(program, &test_entries, &modules)?;
 
             // Write out deterministic report files for CI and tooling:
             // - passed files: all tests in file passed
@@ -269,7 +275,7 @@ fn run() -> Result<(), AiviError> {
                 failed_names.insert(failure.name.clone());
             }
             let mut file_to_tests = BTreeMap::<PathBuf, Vec<String>>::new();
-            for name in &test_names {
+            for (name, _) in &test_entries {
                 if let Some(path) = test_name_to_path.get(name) {
                     file_to_tests.entry(path.clone()).or_default().push(name.clone());
                 }
@@ -310,16 +316,25 @@ fn run() -> Result<(), AiviError> {
             }
 
             if report.failed == 0 {
+                for success in &report.successes {
+                    println!("\x1b[32m\u{2714}\x1b[0m {}", success.description);
+                }
                 println!("\x1b[32m\u{2714}\x1b[0m ok: {} passed", report.passed);
                 Ok(())
             } else {
+                for success in &report.successes {
+                    println!("\x1b[32m\u{2714}\x1b[0m {}", success.description);
+                }
+                for failure in &report.failures {
+                    eprintln!(
+                        "\x1b[31m\u{2718}\x1b[0m {}: {}",
+                        failure.description, failure.message
+                    );
+                }
                 eprintln!(
                     "\x1b[31m\u{2718}\x1b[0m FAILED: {} failed, {} passed",
                     report.failed, report.passed
                 );
-                for failure in report.failures {
-                    eprintln!("{}: {}", failure.name, failure.message);
-                }
                 Err(AiviError::Diagnostics)
             }
         }

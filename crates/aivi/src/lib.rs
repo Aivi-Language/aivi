@@ -124,7 +124,7 @@ pub use pm::{
     AiviCargoMetadata, AiviToml, AiviTomlBuild, AiviTomlProject, CargoDepSpec,
     CargoDepSpecParseError, CargoManifestEdits, ProjectKind,
 };
-pub use runtime::{run_native, run_native_with_fuel, run_test_suite, TestFailure, TestReport};
+pub use runtime::{run_native, run_native_with_fuel, run_test_suite, TestFailure, TestReport, TestSuccess};
 pub use rust_codegen::{
     compile_rust_native, compile_rust_native_lib, compile_rust_native_lib_typed,
     compile_rust_native_typed,

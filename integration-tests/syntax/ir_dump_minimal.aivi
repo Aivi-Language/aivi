@@ -20,7 +20,7 @@ result =
 
 expected = [2, 0, 42]
 
-@test
+@test "basic IR pipeline end-to-end"
 irDumpMinimalRuns = do Effect {
   assertEq value 3
   assertEq pair (3, "ok")

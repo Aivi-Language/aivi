@@ -4,7 +4,10 @@ module integrationTests.complex.PersistentSegmentTree
 use aivi
 use aivi.testing
 use aivi.collections
-use aivi.math (min, max)
+
+// Int-specific min/max (math.min/max expect Float)
+minInt = a b => if a < b then a else b
+maxInt = a b => if a > b then a else b
 
 // Segment metadata for aggregate queries
 SegmentMeta = { sum: Int, min: Int, max: Int }
@@ -35,8 +38,8 @@ combineMeta = leftMeta rightMeta => (leftMeta, rightMeta) match
   | (None, Some rm)    => Some rm
   | (Some lm, Some rm) => Some {
     sum: lm.sum + rm.sum
-    min: min lm.min rm.min
-    max: max lm.max rm.max
+    min: minInt lm.min rm.min
+    max: maxInt lm.max rm.max
   }
 
 // Rebuild node from children
@@ -108,7 +111,7 @@ buildRange = arr start end =>
       nodeFromChildren start end newLeft newRight
     }
 
-@test
+@test "Persistent segment tree queries"
 persistency = do Effect {
   arr = [1, 2, 3, 4]
   tree <- pure (fromList arr)

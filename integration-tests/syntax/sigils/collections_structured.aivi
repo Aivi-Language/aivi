@@ -13,7 +13,7 @@ users = ~map{
 baseTags = ~set["base"]
 tags = ~set[...baseTags, "hot", "new"]
 
-@test
+@test "structured sigils work"
 structuredSigilsWork = do Effect {
   assertEq (Map.size users) 2
   assert (Set.has "hot" tags)

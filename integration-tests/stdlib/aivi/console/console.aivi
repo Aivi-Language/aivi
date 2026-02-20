@@ -5,37 +5,37 @@ use aivi
 use aivi.testing
 use aivi.console
 
-@test
+@test "error"
 error_smoke = do Effect {
   _ <- error "err"
   assert True
 }
 
-@test
+@test "log"
 log_smoke = do Effect {
   _ <- log "log"
   assert True
 }
 
-@test
+@test "print"
 print_smoke = do Effect {
   _ <- print "p"
   assert True
 }
 
-@test
+@test "println"
 println_smoke = do Effect {
   _ <- println "pl"
   assert True
 }
 
-@test
+@test "read line"
 readLine_smoke = do Effect {
   assert True
   assert True
 }
 
-@test
+@test "strip"
 strip_smoke = do Effect {
   assertEq (strip "plain") "plain"
 }

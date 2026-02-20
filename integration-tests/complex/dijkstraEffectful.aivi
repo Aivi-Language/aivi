@@ -22,7 +22,7 @@ processEdges = dists d edges pq => edges match
     processEdges dists d rest nextPq
   }
 
-@test
+@test "Dijkstra with mutable state"
 dijkstra_shortestPaths = do Effect {
   // Graph: 0->1 (2.0), 0->2 (5.0), 1->2 (1.0), 1->3 (4.0), 2->3 (1.0)
   g = fromWeightedEdges [(0, 1, 2.0), (0, 2, 5.0), (1, 2, 1.0), (1, 3, 4.0), (2, 3, 1.0)]

@@ -10,7 +10,7 @@ The `Testing` module is built right into the language because reliability should
 
 <<< ../../snippets/from_md/05_stdlib/00_core/27_testing/block_01.aivi{aivi}
 
-Tests are ordinary bindings annotated with the `@test` [decorator](../../02_syntax/14_decorators.md). The test runner discovers all `@test` bindings and executes them. A test passes when it completes without raising an assertion error.
+Tests are ordinary bindings annotated with the `@test` [decorator](../../02_syntax/14_decorators.md). The `@test` decorator requires a mandatory description string that names the test case (e.g. `@test "adds two numbers"`). The test runner discovers all `@test` bindings and executes them, printing the description for each success and failure. A test passes when it completes without raising an assertion error.
 
 ## Core API (v0.1)
 

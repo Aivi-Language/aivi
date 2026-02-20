@@ -6,13 +6,13 @@ use aivi.testing
 
 // -- Setoid (equality) --
 
-@test
+@test "setoid int"
 setoid_int = do Effect {
   assert (1 == 1)
   assert (1 != 2)
 }
 
-@test
+@test "setoid text"
 setoid_text = do Effect {
   assert ("hello" == "hello")
   assert ("hello" != "world")
@@ -20,7 +20,7 @@ setoid_text = do Effect {
 
 // -- Ord (ordering) --
 
-@test
+@test "ord int"
 ord_int = do Effect {
   assert (1 < 2)
   assert (2 > 1)
@@ -30,7 +30,7 @@ ord_int = do Effect {
 
 // -- Functor --
 
-@test
+@test "functor option"
 functor_option = do Effect {
   some = Some 5
   mapped = map (x => x + 1) some
@@ -41,7 +41,7 @@ functor_option = do Effect {
   assertEq mappedNone None
 }
 
-@test
+@test "functor list"
 functor_list = do Effect {
   xs = [1, 2, 3]
   ys = map (x => x * 2) xs

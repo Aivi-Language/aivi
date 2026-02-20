@@ -7,7 +7,7 @@ use aivi.vector
 use aivi.matrix
 
 // Test 1: Vec4 domain scalar scaling with *
-@test
+@test "vec4 scalar mul"
 vec4_scalar_mul = do Effect {
   v = vec4 1.0 2.0 3.0 1.0
   r = v * 2.0
@@ -18,7 +18,7 @@ vec4_scalar_mul = do Effect {
 }
 
 // Test 2: Mat4 × Vec4 transform (domain Matrix, RHS = Vec4)
-@test
+@test "mat4 vec4 transform"
 mat4_vec4_transform = do Effect {
   v = vec4 1.0 2.0 3.0 1.0
   result = identity4 × v
@@ -29,7 +29,7 @@ mat4_vec4_transform = do Effect {
 }
 
 // Test 3: Mat4 × Mat4 product (domain Matrix, RHS = Mat4)
-@test
+@test "mat4 mat4 product"
 mat4_mat4_product = do Effect {
   m = identity4 × identity4
   assert (m.m00 == 1.0)
@@ -39,7 +39,7 @@ mat4_mat4_product = do Effect {
 }
 
 // Test 4: Vec4 arithmetic ops
-@test
+@test "vec4 add"
 vec4_add = do Effect {
   a = vec4 1.0 2.0 3.0 0.0
   b = vec4 4.0 5.0 6.0 1.0
@@ -51,7 +51,7 @@ vec4_add = do Effect {
 }
 
 // Test 5: Verify independent overloads —* is scalar, × is structural
-@test
+@test "star vs cross are distinct"
 star_vs_cross_are_distinct = do Effect {
   v = vec4 1.0 1.0 1.0 1.0
   scaled = v * 3.0 // (*) : Vec4 -> Float -> Vec4

@@ -5,7 +5,7 @@ use aivi
 use aivi.testing
 use aivi.url
 
-@test
+@test "parse"
 parse_smoke = do Effect {
   res = parse "https://example.com:8080/path?q=v#hash"
   r <- res match
@@ -16,7 +16,7 @@ parse_smoke = do Effect {
     assert (r.port == Some 8080)
 }
 
-@test
+@test "to string"
 toString_smoke = do Effect {
   u = { protocol: "http", host: "example.com", port: None, path: "/", query: [], hash: None }
   s = toString u

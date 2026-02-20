@@ -9,14 +9,14 @@ len = xs => xs match
   | []           => 0
   | [_, ...rest] => 1 + len rest
 
-@test
+@test "range"
 range_smoke = do Effect {
   xs = toList (range 0 5)
   assertEq (len xs) 5
   assertEq xs [0, 1, 2, 3, 4]
 }
 
-@test
+@test "range empty"
 range_empty = do Effect {
   xs = toList (range 5 5)
   assertEq xs []
@@ -25,14 +25,14 @@ range_empty = do Effect {
   assertEq ys []
 }
 
-@test
+@test "from list to list"
 fromList_toList = do Effect {
   g = fromList [10, 20, 30]
   xs = toList g
   assertEq xs [10, 20, 30]
 }
 
-@test
+@test "map"
 map_smoke = do Effect {
   g = range 1 4
   doubled = map (x => x * 2) g
@@ -40,7 +40,7 @@ map_smoke = do Effect {
   assertEq xs [2, 4, 6]
 }
 
-@test
+@test "filter"
 filter_smoke = do Effect {
   g = range 1 6
   evens = filter (x => x % 2 == 0) g
@@ -48,14 +48,14 @@ filter_smoke = do Effect {
   assertEq xs [2, 4]
 }
 
-@test
+@test "foldl sum"
 foldl_sum = do Effect {
   g = range 1 4
   total = foldl (acc x => acc + x) 0 g
   assertEq total 6
 }
 
-@test
+@test "foldl empty"
 foldl_empty = do Effect {
   g = range 0 0
   total = foldl (acc x => acc + x) 42 g

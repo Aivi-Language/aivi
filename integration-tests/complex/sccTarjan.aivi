@@ -97,7 +97,7 @@ strongComponents = graph => {
   finalState.components
 }
 
-@test
+@test "Tarjan SCC detection"
 sccSmoke = do Effect {
   adj = ~map{
     0 => [1]

@@ -15,7 +15,7 @@ toInt = c => c match
   | Green => 2
   | Blue  => 3
 
-@test
+@test "union types and type aliases"
 typesWork = do Effect {
   assertEq (mk 1 "x") (1, "x")
   assertEq (toInt Red) 1

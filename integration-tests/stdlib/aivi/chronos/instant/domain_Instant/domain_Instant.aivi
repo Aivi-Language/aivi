@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.chronos.duration (Span)
 use aivi.chronos.instant (domain Instant)
 
-@test
+@test "span ops"
 span_ops = do Effect {
   base = 2024-01-01T00:00:00Z
 

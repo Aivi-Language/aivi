@@ -6,7 +6,7 @@ use aivi.testing
 use aivi.graph
 use aivi.mutableMap
 
-@test
+@test "relax updates when shorter"
 relax_updatesWhenShorter = do Effect {
   dists <- MutableMap.create (Map.insert 1 0.0 Map.empty)
   edge = { from: 1, to: 2, weight: 3.5 }
@@ -16,7 +16,7 @@ relax_updatesWhenShorter = do Effect {
   assert (val == Some 3.5)
 }
 
-@test
+@test "relax skips when longer"
 relax_skipsWhenLonger = do Effect {
   dists <- MutableMap.create (Map.insert 1 0.0 (Map.insert 2 1.0 Map.empty))
   edge = { from: 1, to: 2, weight: 5.0 }
@@ -26,7 +26,7 @@ relax_skipsWhenLonger = do Effect {
   assert (val == Some 1.0)
 }
 
-@test
+@test "relax edges counts updates"
 relaxEdges_countsUpdates = do Effect {
   dists <- MutableMap.create (Map.insert 0 0.0 Map.empty)
   edges = [

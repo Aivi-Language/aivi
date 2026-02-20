@@ -13,7 +13,7 @@ delta : Delta
 delta = (x)min
 span1 = span0 + delta
 
-@test
+@test "suffix application"
 suffixApplicationWorks = do Effect {
   assertEq span1.millis 120000
 }

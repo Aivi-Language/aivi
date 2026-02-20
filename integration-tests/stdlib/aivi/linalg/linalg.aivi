@@ -5,19 +5,19 @@ use aivi
 use aivi.testing
 use aivi.linalg
 
-@test
+@test "mat"
 mat_smoke = do Effect {
   m = { rows: 2, cols: 2, data: [1.0, 0.0, 0.0, 1.0] }
   assert (m.rows == 2)
 }
 
-@test
+@test "vec"
 vec_smoke = do Effect {
   v = { size: 3, data: [1.0, 2.0, 3.0] }
   assert (v.size == 3)
 }
 
-@test
+@test "dot"
 dot_smoke = do Effect {
   v1 = { size: 2, data: [1.0, 2.0] }
   v2 = { size: 2, data: [3.0, 4.0] }
@@ -25,7 +25,7 @@ dot_smoke = do Effect {
   assert (d == 11.0)
 }
 
-@test
+@test "mat mul"
 matMul_smoke = do Effect {
   m1 = { rows: 1, cols: 2, data: [1.0, 2.0] }
   m2 = { rows: 2, cols: 1, data: [3.0, 4.0] }
@@ -35,7 +35,7 @@ matMul_smoke = do Effect {
   assert (m3.data == [11.0])
 }
 
-@test
+@test "solve2x2"
 solve2x2_smoke = do Effect {
   // x + y = 3
   // x - y = 1

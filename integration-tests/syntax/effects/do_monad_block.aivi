@@ -4,7 +4,7 @@ module integrationTests.syntax.effects.doMonadBlock
 use aivi
 use aivi.testing
 
-@test
+@test "do effect block"
 doEffectBlockWorks = do Effect {
   x = 1
   y <- pure 2
@@ -12,7 +12,7 @@ doEffectBlockWorks = do Effect {
 }
 
 // Generic do M works across Option, Result, and List uniformly
-@test
+@test "do monad option chain"
 doMonadOptionChain = do Effect {
   result = do Option {
     a <- Some 10
@@ -22,7 +22,7 @@ doMonadOptionChain = do Effect {
   assertEq result (Some 30)
 }
 
-@test
+@test "do monad result chain"
 doMonadResultChain = do Effect {
   result = do Result {
     a <- Ok 10
@@ -32,7 +32,7 @@ doMonadResultChain = do Effect {
   assertEq result (Ok 30)
 }
 
-@test
+@test "do monad list flat map"
 doMonadListFlatMap = do Effect {
   result = do List {
     x <- [1, 2]
@@ -43,7 +43,7 @@ doMonadListFlatMap = do Effect {
 }
 
 // Let-bindings work in all generic do blocks
-@test
+@test "do monad let bindings"
 doMonadLetBindings = do Effect {
   optResult = do Option {
     x = 5

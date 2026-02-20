@@ -479,6 +479,27 @@ impl Parser {
                         );
                     }
                 }
+                "test" => {
+                    if decorator.arg.is_none() {
+                        self.emit_diag(
+                            "E1511",
+                            "`@test` expects a description string (e.g. `@test \"adds two numbers\"`)",
+                            decorator.span.clone(),
+                        );
+                    } else if !matches!(decorator.arg, Some(Expr::Literal(Literal::String { .. })))
+                    {
+                        let span = decorator
+                            .arg
+                            .as_ref()
+                            .map(expr_span)
+                            .unwrap_or_else(|| decorator.span.clone());
+                        self.emit_diag(
+                            "E1510",
+                            "`@test` expects a string literal argument",
+                            span,
+                        );
+                    }
+                }
                 "debug" => {
                     // `@debug` supports an optional argument list (validated during module checks).
                 }

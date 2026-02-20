@@ -12,7 +12,7 @@ getName = user => user match
   | { name } => Some name
   | _        => None
 
-@test
+@test "patterns work"
 patternsWork = do Effect {
   assertEq (head([1, 2])) (Some 1)
   assertEq (head([])) None

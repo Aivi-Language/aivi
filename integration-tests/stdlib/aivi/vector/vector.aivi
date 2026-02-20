@@ -7,40 +7,40 @@ use aivi.math
 use aivi.vector
 use aivi.matrix
 
-@test
+@test "vec2 constructor"
 vec2_constructor = do Effect {
   v = vec2 3.0 4.0
   assertEq v.x 3.0
   assertEq v.y 4.0
 }
 
-@test
+@test "vec3 constructor"
 vec3_constructor = do Effect {
   v = vec3 1.0 2.0 3.0
   assertEq v.x 1.0
   assertEq v.z 3.0
 }
 
-@test
+@test "vec2 record"
 vec2_record = do Effect {
   v = Vec2 { x: 3.0, y: 4.0 }
   assertEq v.x 3.0
   assertEq v.y 4.0
 }
 
-@test
+@test "vec2 magnitude"
 vec2_magnitude = do Effect {
   v = vec2 3.0 4.0
   assert (abs (magnitude v - 5.0) < 0.0001)
 }
 
-@test
+@test "vec3 magnitude"
 vec3_magnitude = do Effect {
   v = vec3 1.0 2.0 2.0
   assert (abs (magnitude v - 3.0) < 0.0001)
 }
 
-@test
+@test "vec2 dot"
 vec2_dot = do Effect {
   v1 = vec2 1.0 0.0
   v2 = vec2 0.0 1.0
@@ -50,7 +50,7 @@ vec2_dot = do Effect {
   assert (abs (dot v1 v3 - 1.0) < 0.0001)
 }
 
-@test
+@test "vec3 cross"
 vec3_cross = do Effect {
   v1 = vec3 1.0 0.0 0.0
   v2 = vec3 0.0 1.0 0.0
@@ -60,7 +60,7 @@ vec3_cross = do Effect {
   assert (abs (c.z - 1.0) < 0.0001)
 }
 
-@test
+@test "vec2 normalize"
 vec2_normalize = do Effect {
   v = vec2 3.0 4.0
   n = normalize v
@@ -68,7 +68,7 @@ vec2_normalize = do Effect {
   assert (abs (n.y - 0.8) < 0.0001)
 }
 
-@test
+@test "vec2 arithmetic"
 vec2_arithmetic = do Effect {
   a = vec2 1.0 2.0
   b = vec2 3.0 4.0
@@ -80,7 +80,7 @@ vec2_arithmetic = do Effect {
   assertEq d.y 2.0
 }
 
-@test
+@test "vec2 scalar mul"
 vec2_scalar_mul = do Effect {
   v = vec2 2.0 3.0
   r = v * 2.0
@@ -88,7 +88,7 @@ vec2_scalar_mul = do Effect {
   assertEq r.y 6.0
 }
 
-@test
+@test "vec2 negate"
 vec2_negate = do Effect {
   v = vec2 1.0-2.0
   n = negate v
@@ -96,7 +96,7 @@ vec2_negate = do Effect {
   assertEq n.y 2.0
 }
 
-@test
+@test "vec2 lerp"
 vec2_lerp = do Effect {
   a = vec2 0.0 0.0
   b = vec2 10.0 10.0
@@ -105,20 +105,20 @@ vec2_lerp = do Effect {
   assert (abs (mid.y - 5.0) < 0.0001)
 }
 
-@test
+@test "vec2 distance"
 vec2_distance = do Effect {
   a = vec2 0.0 0.0
   b = vec2 3.0 4.0
   assert (abs (distance a b - 5.0) < 0.0001)
 }
 
-@test
+@test "vec4"
 vec4_smoke = do Effect {
   v = vec4 1.0 2.0 3.0 4.0
   assertEq v.w 4.0
 }
 
-@test
+@test "transform2 identity"
 transform2_identity = do Effect {
   v = vec2 3.0 4.0
   result = transform2 identity2 v
@@ -126,7 +126,7 @@ transform2_identity = do Effect {
   assert (abs (result.y - 4.0) < 0.0001)
 }
 
-@test
+@test "transform3 identity"
 transform3_identity = do Effect {
   v = vec3 1.0 2.0 3.0
   result = transform3 identity3 v
@@ -135,7 +135,7 @@ transform3_identity = do Effect {
   assert (abs (result.z - 3.0) < 0.0001)
 }
 
-@test
+@test "transform4 identity"
 transform4_identity = do Effect {
   v = vec4 1.0 2.0 3.0 1.0
   result = transform4 identity4 v
@@ -144,7 +144,7 @@ transform4_identity = do Effect {
   assert (abs (result.z - 3.0) < 0.0001)
 }
 
-@test
+@test "transform point3 identity"
 transformPoint3_identity = do Effect {
   p = vec3 5.0 6.0 7.0
   result = transformPoint3 identity4 p
