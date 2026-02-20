@@ -9,9 +9,6 @@
         if token.kind == "whitespace" {
             continue;
         }
-        if token.text == ";" {
-            continue;
-        }
         let line = token.span.start.line;
         if line == 0 {
             continue;
@@ -28,6 +25,7 @@
         Resource,
         MapSigil,
         SetSigil,
+        MatSigil,
         Machine,
         Other,
     }
@@ -534,6 +532,42 @@
             idx.filter(|&i| strip_commas && tokens[i].text == ",")
         };
 
+        // Detect inline matrix sigil pattern: `~` `mat` `[` ... `;` ... `]`
+        // Returns (start_of_~_index, end_of_]_index) if found.
+        let mat_range = {
+            let mut found = None;
+            let mut i = 0;
+            while i + 2 < tokens.len() {
+                if tokens[i].text == "~"
+                    && tokens[i + 1].text == "mat"
+                    && tokens[i + 2].text == "["
+                {
+                    // Find matching `]` at the same bracket depth.
+                    let mut depth = 1usize;
+                    let mut j = i + 3;
+                    let mut has_semi = false;
+                    while j < tokens.len() && depth > 0 {
+                        if tokens[j].text == "[" {
+                            depth += 1;
+                        } else if tokens[j].text == "]" {
+                            depth -= 1;
+                        } else if tokens[j].text == ";" {
+                            has_semi = true;
+                        }
+                        if depth > 0 {
+                            j += 1;
+                        }
+                    }
+                    if depth == 0 && has_semi {
+                        found = Some((i, j));
+                    }
+                    break;
+                }
+                i += 1;
+            }
+            found
+        };
+
         let mut out = String::new();
         let mut prevprev: Option<(&str, &str)> = None;
         let mut prev: Option<(&str, &str)> = None;
@@ -542,7 +576,15 @@
         let leading_comma_idx = first_code_index(tokens)
             .filter(|&i| strip_commas && tokens[i].text == ",");
 
+        let mut skip_until: Option<usize> = None;
+
         for (i, t) in tokens.iter().enumerate() {
+            if let Some(skip) = skip_until {
+                if i <= skip {
+                    continue;
+                }
+                skip_until = None;
+            }
             if leading_comma_idx == Some(i) {
                 continue;
             }
@@ -559,6 +601,77 @@
                 prevprev = prev;
                 prev = Some((t.kind.as_str(), t.text.as_str()));
                 continue;
+            }
+
+            // Handle inline matrix sigil from separate tokens.
+            if let Some((mat_start, mat_end)) = mat_range {
+                if i == mat_start {
+                    // Collect cell values between `[` and `]`.
+                    let content_start = mat_start + 3; // after `~`, `mat`, `[`
+                    let mut rows: Vec<Vec<String>> = Vec::new();
+                    let mut row: Vec<String> = Vec::new();
+                    for ct in &tokens[content_start..mat_end] {
+                        if ct.text == ";" {
+                            if !row.is_empty() {
+                                rows.push(row);
+                                row = Vec::new();
+                            }
+                        } else if ct.text == "," {
+                            // cell separator, ignore (already splitting on whitespace/comma)
+                        } else if ct.kind != "comment" {
+                            row.push(ct.text.clone());
+                        }
+                    }
+                    if !row.is_empty() {
+                        rows.push(row);
+                    }
+
+                    let formatted_rows = format_matrix_rows(&rows);
+                    if !formatted_rows.is_empty() {
+                        // Add space before `~` if needed.
+                        let curr = (t.kind.as_str(), t.text.as_str());
+                        let adjacent_in_input = prev_token.is_some_and(|p| {
+                            p.span.start.line == t.span.start.line
+                                && p.span.end.column + 1 == t.span.start.column
+                        });
+                        if wants_space_between(prevprev, prev, curr, adjacent_in_input)
+                            && !out.is_empty()
+                        {
+                            out.push(' ');
+                            current_col += 1;
+                        }
+
+                        let prefix = "~mat[";
+                        let row_start_col = current_col + prefix.len();
+                        out.push_str(prefix);
+                        advance_column(&mut current_col, prefix);
+                        out.push_str(&formatted_rows[0]);
+                        advance_column(&mut current_col, &formatted_rows[0]);
+                        if formatted_rows.len() == 1 {
+                            out.push(']');
+                            current_col += 1;
+                        } else {
+                            for frow in formatted_rows.iter().skip(1) {
+                                out.push('\n');
+                                advance_column(&mut current_col, "\n");
+                                out.push_str(base_indent);
+                                advance_column(&mut current_col, base_indent);
+                                let pad = " ".repeat(row_start_col);
+                                out.push_str(&pad);
+                                advance_column(&mut current_col, &pad);
+                                out.push_str(frow);
+                                advance_column(&mut current_col, frow);
+                            }
+                            out.push(']');
+                            current_col += 1;
+                        }
+                        skip_until = Some(mat_end);
+                        prev_token = Some(tokens[mat_end]);
+                        prevprev = prev;
+                        prev = Some(("symbol", "]"));
+                        continue;
+                    }
+                }
             }
 
             let curr = (t.kind.as_str(), t.text.as_str());
@@ -605,6 +718,11 @@
                         continue;
                     }
                 }
+            }
+
+            // Skip stray `;` tokens (they're not part of AIVI syntax outside matrix literals).
+            if t.text == ";" {
+                continue;
             }
 
             out.push_str(curr.1);
@@ -948,6 +1066,7 @@
                     ('{', Some("resource"), _) => ContextKind::Resource,
                     ('{', Some("map"), Some("~")) => ContextKind::MapSigil,
                     ('[', Some("set"), Some("~")) => ContextKind::SetSigil,
+                    ('[', Some("mat"), Some("~")) => ContextKind::MatSigil,
                     _ => {
                         if machine_pending && open == '{' {
                             machine_pending = false;
