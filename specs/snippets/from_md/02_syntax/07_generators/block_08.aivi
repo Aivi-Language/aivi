@@ -1,6 +1,15 @@
-// Find active premium users with valid emails
-processed = generate {
-  u <- users
-  u -> active && tier == Premium && isValidEmail email
-  yield { name: u.name, email: toLower u.email }
+// Build invoice reminders for overdue, contactable customers
+reminders = generate {
+  customer <- customers
+  customer -> status == Active && isValidEmail email
+
+  invoice <- customer.invoices
+  invoice -> !paid && daysOverdue > 7
+
+  yield {
+    customerId: customer.id
+    email: toLower customer.email
+    subject: "Invoice #{ invoice.id } is overdue"
+    priority: if invoice.daysOverdue > 30 then "high" else "normal"
+  }
 }

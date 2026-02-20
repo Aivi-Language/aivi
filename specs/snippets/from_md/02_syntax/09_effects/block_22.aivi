@@ -1,6 +1,16 @@
-// Fetch config, then fetch data, then log
-setup = do Effect {
-  cfg <- loadConfig "prod.json"
-  data <- fetchRemoteData cfg
-  logSuccess data
+// Resolve tenant config, call two services, and persist a combined report
+setup = tenantId => do Effect {
+  cfg <- loadConfig "tenants/{ tenantId }.json"
+  profile <- fetchProfile cfg.api tenantId
+  orders <- fetchRecentOrders cfg.api tenantId
+
+  report = {
+    tenantId: tenantId
+    profile: profile
+    orderCount: List.length orders
+    totalSpend: List.foldl (sum o => sum + o.total) 0 orders
+  }
+
+  _ <- storeReport report
+  logSuccess "stored report for { tenantId }"
 }

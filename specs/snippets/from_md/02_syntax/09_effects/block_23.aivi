@@ -1,12 +1,15 @@
-// Attempt operation, providing a typed default on error
-getUser = id => do Effect {
+// Typed error handling at a service boundary
+loadUserForSession = id => do Effect {
   res <- attempt (api.fetchUser id)
   res match
-    | Ok user => pure user
-    | Err _   => pure GuestUser
+    | Ok user                => pure user
+    | Err NotFound           => pure GuestUser
+    | Err (Unauthorized _)   => fail SessionExpired
+    | Err (NetworkTimeout _) => fail RetryLater
+    | Err _                  => fail UpstreamUnavailable
 }
 
 validatedUser = do Effect {
-  u <- getUser 123
-  if u.age > 18 then pure (toAdmin u) else fail TooYoung
+  u <- loadUserForSession 123
+  if u.age >= 18 then pure (toAdmin u) else fail TooYoung
 }
