@@ -302,18 +302,12 @@ impl Runtime {
                 body: Arc::new((**body).clone()),
                 env: env.clone(),
             }))),
-            HirExpr::App { func, arg, .. } => {
-                let func_value = self.eval_expr(func, env)?;
-                let arg_value = self.eval_expr(arg, env)?;
-                self.apply(func_value, arg_value)
-            }
-            HirExpr::Call { func, args, .. } => {
-                let mut func_value = self.eval_expr(func, env)?;
-                for arg in args {
-                    let arg_value = self.eval_expr(arg, env)?;
-                    func_value = self.apply(func_value, arg_value)?;
+            HirExpr::App { .. } | HirExpr::Call { .. } => {
+                let step = self.eval_expr_step(expr, env, &mut Vec::new())?;
+                match step {
+                    Step::Return(value) => Ok(value),
+                    other => self.trampoline(other),
                 }
-                Ok(func_value)
             }
             HirExpr::DebugFn {
                 fn_name,
@@ -558,23 +552,11 @@ impl Runtime {
                     )),
                 }
             }
-            HirExpr::Match {
-                scrutinee, arms, ..
-            } => {
-                let value = self.eval_expr(scrutinee, env)?;
-                self.eval_match(&value, arms, env)
-            }
-            HirExpr::If {
-                cond,
-                then_branch,
-                else_branch,
-                ..
-            } => {
-                let cond_value = self.eval_expr(cond, env)?;
-                if matches!(cond_value, Value::Bool(true)) {
-                    self.eval_expr(then_branch, env)
-                } else {
-                    self.eval_expr(else_branch, env)
+            HirExpr::Match { .. } | HirExpr::If { .. } => {
+                let step = self.eval_expr_step(expr, env, &mut Vec::new())?;
+                match step {
+                    Step::Return(value) => Ok(value),
+                    other => self.trampoline(other),
                 }
             }
             HirExpr::Binary {
@@ -611,7 +593,13 @@ impl Runtime {
             HirExpr::Block {
                 block_kind, items, ..
             } => match block_kind {
-                crate::hir::HirBlockKind::Plain => self.eval_plain_block(items, env),
+                crate::hir::HirBlockKind::Plain => {
+                    let step = self.eval_expr_step(expr, env, &mut Vec::new())?;
+                    match step {
+                        Step::Return(value) => Ok(value),
+                        other => self.trampoline(other),
+                    }
+                }
                 crate::hir::HirBlockKind::Do { ref monad } if monad == "Effect" => {
                     Ok(Value::Effect(Arc::new(EffectValue::Block {
                         env: env.clone(),
