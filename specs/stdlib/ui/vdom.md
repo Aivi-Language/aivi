@@ -10,7 +10,7 @@ The `aivi.ui` module defines a **typed Virtual DOM** (`VNode msg`). Programs con
 
 ## Core Types
 
-<<< ../../snippets/from_md/stdlib/ui/vdom/core_types.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/vdom/style_records_typed_css_data.aivi{aivi}
 
 ### `VNode msg`
 
