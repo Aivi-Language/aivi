@@ -4,5 +4,5 @@
 use aivi.vector
 use aivi.matrix (domain Matrix)
 
--- bad : Vec3
--- bad = vec3 1.0 2.0 3.0 × identity4   // E4010: no matching operator
+// bad : Vec3
+// bad = vec3 1.0 2.0 3.0 × identity4   // E4010: no matching operator
