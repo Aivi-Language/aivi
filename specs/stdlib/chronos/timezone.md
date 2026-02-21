@@ -12,16 +12,16 @@ The `TimeZone` and `ZonedDateTime` domains handle geographic time offsets, dayli
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/04_timezone/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/timezone/overview.aivi{aivi}
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/04_timezone/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/timezone/features.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/04_timezone/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/timezone/domain_definition.aivi{aivi}
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/04_timezone/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/timezone/usage_examples.aivi{aivi}

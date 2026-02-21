@@ -38,7 +38,7 @@ If `1m` is not in scope, this is a compile-time error. If multiple imports provi
 
 ## 9.2 RHS-Typed Overload Selection
 
-When a domain body contains multiple entries for the same operator token (see [Domains: Within-Domain Operator Overloads](../02_syntax/06_domains.md#within-domain-operator-overloads-rhs-typed)), the compiler selects among them by matching the inferred `(LHS, RHS)` operand types:
+When a domain body contains multiple entries for the same operator token (see [Domains: Within-Domain Operator Overloads](../syntax/domains.md#within-domain-operator-overloads-rhs-typed)), the compiler selects among them by matching the inferred `(LHS, RHS)` operand types:
 
 | Step | Action | Example |
 | :--- | :--- | :--- |
@@ -51,7 +51,7 @@ When a domain body contains multiple entries for the same operator token (see [D
 
 If no overload in `D` has an `(LHS, RHS)` type compatible with the inferred operand types:
 
-<<< ../snippets/from_md/04_desugaring/09_domains/block_05.aivi{aivi}
+<<< ../snippets/from_md/desugaring/domains/error_no_matching_overload.aivi{aivi}
 
 Compiler error (E4010):
 ```
@@ -63,7 +63,7 @@ available: (*) : Mat4 -> Mat4 -> Mat4, (×) : Mat4 -> Mat4 -> Mat4, (×) : Mat4 
 
 If two or more overloads remain equally valid after type inference (typically when operand types are still type variables):
 
-<<< ../snippets/from_md/04_desugaring/09_domains/block_06.aivi{aivi}
+<<< ../snippets/from_md/desugaring/domains/error_ambiguous_overload.aivi{aivi}
 
 Compiler error (E4011):
 ```
@@ -75,22 +75,22 @@ add a type annotation to disambiguate
 
 When a suffix literal template is missing:
 
-<<< ../snippets/from_md/04_desugaring/09_domains/block_01.aivi{aivi}
+<<< ../snippets/from_md/desugaring/domains/ambiguity_errors_suffix_literal_templates_01.aivi{aivi}
 
 When multiple imports provide the same template name:
 
-<<< ../snippets/from_md/04_desugaring/09_domains/block_02.aivi{aivi}
+<<< ../snippets/from_md/desugaring/domains/ambiguity_errors_suffix_literal_templates_02.aivi{aivi}
 
 Resolution: Avoid collisions by importing only the needed domain(s) and/or using explicit constructors/functions.
 
-<<< ../snippets/from_md/04_desugaring/09_domains/block_03.aivi{aivi}
+<<< ../snippets/from_md/desugaring/domains/ambiguity_errors_suffix_literal_templates_03.aivi{aivi}
 
 
 ## 9.4 Operator Precedence
 
 Domain operators follow standard precedence. Domains do not redefine precedence   only semantics:
 
-<<< ../snippets/from_md/04_desugaring/09_domains/block_04.aivi{aivi}
+<<< ../snippets/from_md/desugaring/domains/operator_precedence.aivi{aivi}
 
 
 ## 9.5 Desugaring Order

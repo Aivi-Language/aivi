@@ -1,7 +1,7 @@
 # Generic Monadic `do` Blocks
 
 > **Status**: Implemented (v0.1)   `do M { ... }` works for any type constructor with a `Chain` instance (including `Option`, `Result`, and `List`). Blocks are desugared to nested `chain`/lambda calls during HIR lowering. Native codegen is stubbed.  
-> **Depends on**: Type classes ([§ 3.5](03_types.md#35-classes-and-hkts)), `Monad` hierarchy ([aivi.logic](../05_stdlib/00_core/03_logic.md)), effects ([§ 9](09_effects.md)), instance resolution (compiler).
+> **Depends on**: Type classes ([§ 3.5](types.md#35-classes-and-hkts)), `Monad` hierarchy ([aivi.logic](../stdlib/core/logic.md)), effects ([§ 9](effects.md)), instance resolution (compiler).
 
 ## Overview
 
@@ -53,7 +53,7 @@ A `do M { ... }` block desugars to calls to `chain` and `of` from the `Chain M` 
 
 #### Bind
 
-<<< ../snippets/from_md/02_syntax/16_do_notation/block_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/do_notation/bind.aivi{aivi}
 
 
 desugars to:
@@ -66,7 +66,7 @@ chain (λx. ⟦do M { body }⟧) ⟦expr⟧
 
 #### Pure let-binding
 
-<<< ../snippets/from_md/02_syntax/16_do_notation/block_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/do_notation/pure_let_binding.aivi{aivi}
 
 
 desugars to:
@@ -77,7 +77,7 @@ let x = ⟦expr⟧ in ⟦do M { body }⟧
 
 #### Sequencing (expression statement)
 
-<<< ../snippets/from_md/02_syntax/16_do_notation/block_03.aivi{aivi}
+<<< ../snippets/from_md/syntax/do_notation/sequencing_expression_statement.aivi{aivi}
 
 
 desugars to:
@@ -88,14 +88,14 @@ chain (λ_. ⟦do M { body }⟧) ⟦expr⟧
 
 #### Final expression
 
-<<< ../snippets/from_md/02_syntax/16_do_notation/block_04.aivi{aivi}
+<<< ../snippets/from_md/syntax/do_notation/final_expression.aivi{aivi}
 
 
 desugars to `⟦expr⟧`. It must have type `M A`.
 
 #### Empty block
 
-<<< ../snippets/from_md/02_syntax/16_do_notation/block_05.aivi{aivi}
+<<< ../snippets/from_md/syntax/do_notation/empty_block.aivi{aivi}
 
 
 desugars to `of Unit` (using `of : A -> M A` from `Applicative M`).
@@ -106,7 +106,7 @@ desugars to `of Unit` (using `of : A -> M A` from `Applicative M`).
 
 - `chain` for `Effect E` is `bind : Effect E A -> (A -> Effect E B) -> Effect E B`
 - `of` for `Effect E` is `pure : A -> Effect E A`
-- The additional statements (`or`, `when`, `given`, `on`, `loop`, resource `<-`) are desugared as specified in [Effects § 9](09_effects.md) and [Desugaring § 7](../04_desugaring/07_effects.md).
+- The additional statements (`or`, `when`, `given`, `on`, `loop`, resource `<-`) are desugared as specified in [Effects § 9](effects.md) and [Desugaring § 7](../desugaring/effects.md).
 
 The compiler detects `do Effect` specifically (by name) to enable the extended statement set. All other `do M` blocks get the generic subset only.
 
@@ -230,7 +230,7 @@ Start with **`Option`** and **`Result`** only   they already have `Monad` instan
 | `do Option` tests | Short-circuit None propagation |
 | `do Result` tests | Pure error chaining |
 | `do List` tests (if instance added) | Cartesian product / non-determinism |
-| Spec updates | Update [§ 9.8](09_effects.md#98-do-notation-scope-v01) to remove the v0.1 restriction |
+| Spec updates | Update [§ 9.8](effects.md#98-do-notation-scope-v01) to remove the v0.1 restriction |
 | AIVI_LANGUAGE.md | Already mentions `do M { ... }`   verify consistency |
 
 ## Open Questions
@@ -261,10 +261,10 @@ Start with **`Option`** and **`Result`** only   they already have `Monad` instan
 
 ## References
 
-- Effects: [§ 9](09_effects.md)
-- Generators: [§ 7](07_generators.md)
-- Type classes: [§ 3.5](03_types.md#35-classes-and-hkts)
-- Monad hierarchy: [aivi.logic](../05_stdlib/00_core/03_logic.md)
-- Desugaring   effects: [§ 7](../04_desugaring/07_effects.md)
-- Desugaring   classes: [§ 8](../04_desugaring/08_classes.md)
-- Current v0.1 restriction: [§ 9.8](09_effects.md#98-do-notation-scope-v01)
+- Effects: [§ 9](effects.md)
+- Generators: [§ 7](generators.md)
+- Type classes: [§ 3.5](types.md#35-classes-and-hkts)
+- Monad hierarchy: [aivi.logic](../stdlib/core/logic.md)
+- Desugaring   effects: [§ 7](../desugaring/effects.md)
+- Desugaring   classes: [§ 8](../desugaring/classes.md)
+- Current v0.1 restriction: [§ 9.8](effects.md#98-do-notation-scope-v01)

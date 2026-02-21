@@ -10,13 +10,13 @@ This prevents mixing up "10 pixels" with "10 percent" or "10 apples".
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/01_layout/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/layout/overview.aivi{aivi}
 
-The layout domain uses AIVI's [domain](../../02_syntax/06_domains.md) system to give numeric literals physical meaning. Writing `100px` is not a magic string — it constructs a typed `Length (Px 100)` value that the compiler can check.
+The layout domain uses AIVI's [domain](../../syntax/domains.md) system to give numeric literals physical meaning. Writing `100px` is not a magic string — it constructs a typed `Length (Px 100)` value that the compiler can check.
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/01_layout/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/layout/domain_definition.aivi{aivi}
 
 ## Types
 
@@ -42,7 +42,7 @@ The layout domain uses AIVI's [domain](../../02_syntax/06_domains.md) system to 
 
 ### Underlying representation
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/01_layout/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/layout/underlying_representation.aivi{aivi}
 
 ## Sigils
 

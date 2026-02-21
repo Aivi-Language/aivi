@@ -6,7 +6,7 @@ The `Http` domain connects your program to the world. Whether you're fetching da
 <!-- /quick-info -->
 <div class="import-badge">use aivi.net.http</div>
 
-<<< ../../snippets/from_md/05_stdlib/03_network/01_http/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/network/http/http_domain.aivi{aivi}
 
 ## Functions
 
@@ -20,8 +20,8 @@ The `Http` domain connects your program to the world. Whether you're fetching da
 
 ### `Response`
 
-<<< ../../snippets/from_md/05_stdlib/03_network/01_http/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/network/http/response.aivi{aivi}
 
 ### `Request`
 
-<<< ../../snippets/from_md/05_stdlib/03_network/01_http/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/network/http/request.aivi{aivi}

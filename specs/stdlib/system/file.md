@@ -15,11 +15,11 @@ Direct file access is dangerous (locks, missing files, permissions). AIVI wraps 
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/03_system/20_file/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/file/overview.aivi{aivi}
 
 ## Types
 
-<<< ../../snippets/from_md/05_stdlib/03_system/20_file/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/file/types.aivi{aivi}
 
 ## Resource Operations
 
@@ -105,4 +105,4 @@ For more control or large files, use the resource-based API.
 
 Notes:
 - All path operations resolve relative paths against the current working directory.
-- `readLines` returns a [Generator](/05_stdlib/00_core/30_generator) that reads lines lazily — useful for large files.
+- `readLines` returns a [Generator](/stdlib/core/generator) that reads lines lazily — useful for large files.

@@ -6,7 +6,7 @@ AIVI uses **Reference Counting (RC)** as its primary memory management strategy.
 
 *   **Immutable Values**: Most values in AIVI (`List`, `Record`, `Text`, `BigInt`) are immutable and shared via reference counting.
 *   **No Tracing GC**: There is no "stop-the-world" tracing garbage collector. Memory is reclaimed immediately when the last reference is dropped.
-*   **Determinism**: Resource cleanup (file handles, network sockets) is deterministic and tied to the scope of the value owning the resource (see [Resources](../02_syntax/15_resources.md)).
+*   **Determinism**: Resource cleanup (file handles, network sockets) is deterministic and tied to the scope of the value owning the resource (see [Resources](../syntax/resources.md)).
 
 ## Cycle Handling
 

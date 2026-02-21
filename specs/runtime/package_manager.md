@@ -85,7 +85,7 @@ my-aivi-lib/
 
 Edit `src/lib.aivi`:
 
-<<< ../snippets/from_md/06_runtime/03_package_manager/block_01.aivi{aivi}
+<<< ../snippets/from_md/runtime/package_manager/write_your_library.aivi{aivi}
 
 
 ### 3. Configure metadata
@@ -130,7 +130,7 @@ This adds the dependency to `Cargo.toml` and fetches it.
 
 ### 2. Import in your code
 
-<<< ../snippets/from_md/06_runtime/03_package_manager/block_02.aivi{aivi}
+<<< ../snippets/from_md/runtime/package_manager/import_in_your_code.aivi{aivi}
 
 
 ### 3. Use a Git dependency

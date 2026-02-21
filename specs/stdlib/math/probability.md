@@ -15,16 +15,16 @@ This domain lets you define the *shape* of the chaotic world you want to simulat
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/01_math/13_probability/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/probability/overview.aivi{aivi}
 
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/01_math/13_probability/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/probability/features.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/01_math/13_probability/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/probability/domain_definition.aivi{aivi}
 
 ## Helper Functions
 
@@ -37,4 +37,4 @@ This domain lets you define the *shape* of the chaotic world you want to simulat
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/01_math/13_probability/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/probability/usage_examples.aivi{aivi}

@@ -2,7 +2,7 @@
 
 This chapter is an index of AIVI's **operator tokens** (and a few pieces of punctuation that act like operators), explaining what each one means **in context**.
 
-> AIVI’s operator *syntax* is fixed (tokens + precedence). Domains can provide **semantics** for some operators when a non-`Int` carrier type is involved (see [Domains](06_domains.md)).
+> AIVI’s operator *syntax* is fixed (tokens + precedence). Domains can provide **semantics** for some operators when a non-`Int` carrier type is involved (see [Domains](domains.md)).
 
 ## 11.1 Operator and punctuation index (v0.1)
 
@@ -24,7 +24,7 @@ This chapter is an index of AIVI's **operator tokens** (and a few pieces of punc
 | `()`        | group / tuple / call | expressions, types | Grouping `(e)`, tuple `(a, b)`, call `f(x)`, and suffix application `(e)px`. |
 | `~tag[...]` | sigil | literals | Structured literals such as `~path[...]`, `~map{...}`, `~r/.../`. |
 
-For full concrete syntax, see the grammar: [02_syntax/00_grammar.md](00_grammar.md).
+For full concrete syntax, see the grammar: [syntax/grammar.md](grammar.md).
 
 ## 11.2 Infix operators and precedence (v0.1 surface)
 
@@ -41,7 +41,7 @@ The v0.1 parser recognizes these infix operators (from lowest to highest precede
 9. `<<`, `>>` (shift)
 10. `+`, `-`, `++` (additive / concatenation)
 11. `*`, `×`, `/`, `%` (multiplicative)
-12. `<|` (patch   binds tighter than arithmetic, just below application; see [Patching](05_patching.md))
+12. `<|` (patch   binds tighter than arithmetic, just below application; see [Patching](patching.md))
 
 Unary prefix operators (not infix): `!` (not), `-` (negate), `~` (bitwise complement).
 
@@ -57,7 +57,7 @@ Inside a list literal, there are three ways to contribute elements:
 2. **Spread**: `...xs` splices the elements of `xs` into the list.
 3. **Range item**: `a..b` is treated like an implicit spread of a range list.
 
-<<< ../snippets/from_md/02_syntax/11_operators/block_04.aivi{aivi}
+<<< ../snippets/from_md/syntax/operators/lists_literals_range_items_and_spread.aivi{aivi}
 
 Notes:
 
@@ -71,15 +71,15 @@ Some operators are **domain-resolved** when operand types are not plain `Int`. I
 - Domain-resolved (when non-`Int` is involved): `+`, `-`, `*`, `×`, `/`, `%`, `<`, `<=`, `>`, `>=`
 - Not domain-resolved in v0.1 (built-in): `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`, `??`, `++`
 
-Domain operator resolution is a static rewrite to an in-scope function named like `(+)` or `(<)` (see [Desugaring: Domains and Operators](../04_desugaring/09_domains.md)).
+Domain operator resolution is a static rewrite to an in-scope function named like `(+)` or `(<)` (see [Desugaring: Domains and Operators](../desugaring/domains.md)).
 
 ### Within-domain overloads (RHS-typed)
 
-A single domain body may define **multiple entries** for the same operator token, differentiated by their full `LHS -> RHS -> Result` types. The compiler selects among them based on the inferred RHS type after the LHS carrier is resolved (see [Desugaring §9.2](../04_desugaring/09_domains.md#92-rhs-typed-overload-selection)).
+A single domain body may define **multiple entries** for the same operator token, differentiated by their full `LHS -> RHS -> Result` types. The compiler selects among them based on the inferred RHS type after the LHS carrier is resolved (see [Desugaring §9.2](../desugaring/domains.md#92-rhs-typed-overload-selection)).
 
 **Convention**: `×` is reserved for structural products (matrix-matrix, matrix-vector), while `*` is used for scalar scaling:
 
-<<< ../snippets/from_md/02_syntax/11_operators/block_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/operators/within_domain_overloads_rhs_typed.aivi{aivi}
 
 
 Precedence is **not** domain-defined; `×` and `*` share the same precedence level (`11_operators §11.2`).
@@ -93,11 +93,11 @@ Suffix literals are **not strings**. They elaborate as applying an in-scope *tem
 
 These templates are usually provided by a domain (e.g. `aivi.chronos.duration` defines `1ms`, `1s`, `1min`, `1h`).
 
-<<< ../snippets/from_md/02_syntax/11_operators/block_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/operators/units_suffix_literals_and_template_functions.aivi{aivi}
 
 ## 11.6 Type coercion (expected-type only)
 
-AIVI does not have global implicit casts. The only implicit conversions in v0.1 are **expected-type coercions** that are explicitly authorized by an in-scope instance (see [Types: Expected-Type Coercions](03_types.md#36-expected-type-coercions-instance-driven)).
+AIVI does not have global implicit casts. The only implicit conversions in v0.1 are **expected-type coercions** that are explicitly authorized by an in-scope instance (see [Types: Expected-Type Coercions](types.md#36-expected-type-coercions-instance-driven)).
 
 Practical consequences:
 
@@ -113,7 +113,7 @@ Domains live in modules and are imported/exported explicitly:
 - `use some.module (domain D)` imports only the domain members (operator functions like `(+)` and literal templates like `1ms`) into scope.
 - `use some.module` imports the module’s exported values/types; if it exports domains and you want their operator/literal behavior, import the domain explicitly (or rely on the prelude’s default domains).
 
-<<< ../snippets/from_md/02_syntax/11_operators/block_03.aivi{aivi}
+<<< ../snippets/from_md/syntax/operators/importing_and_exporting_domains_operator_units_scope.aivi{aivi}
 
 Limitations (v0.1):
 

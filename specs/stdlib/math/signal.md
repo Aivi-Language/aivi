@@ -14,16 +14,16 @@ The **Fast Fourier Transform (FFT)** is a legendary algorithm that converts Time
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/01_math/14_signal/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/signal/overview.aivi{aivi}
 
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/01_math/14_signal/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/signal/features.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/01_math/14_signal/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/signal/domain_definition.aivi{aivi}
 
 ## Helper Functions
 
@@ -36,4 +36,4 @@ The **Fast Fourier Transform (FFT)** is a legendary algorithm that converts Time
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/01_math/14_signal/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/signal/usage_examples.aivi{aivi}

@@ -15,18 +15,18 @@ Graphics and physics use vectors for clean math (`v1 + v2`) and benefit from har
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/vector/overview.aivi{aivi}
 
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/vector/features.aivi{aivi}
 
 ## Short Constructors
 
 Instead of writing full record literals, use convenience constructors:
 
-<<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_05.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/vector/short_constructors.aivi{aivi}
 
 | Constructor | Type | Equivalent |
 | --- | --- | --- |
@@ -38,11 +38,11 @@ Full record syntax is always available as well: `Vec2 { x: 1.0, y: 2.0 }`.
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/vector/domain_definition.aivi{aivi}
 
 `domain Vector` is defined for `Vec2`, `Vec3`, and `Vec4`. Each carrier gets `(+)`, `(-)`, `(*) : VecN -> Float -> VecN` (scalar scale), and `(/) : VecN -> Float -> VecN`.
 
-For matrix-vector transforms, use `×` from the `Matrix` domain (see [Matrix: `×` Operator Overloads](09_matrix.md#×-operator-overloads)).
+For matrix-vector transforms, use `×` from the `Matrix` domain (see [Matrix: `×` Operator Overloads](matrix.md#×-operator-overloads)).
 
 ## Helper Functions
 
@@ -65,7 +65,7 @@ For matrix-vector transforms, use `×` from the `Matrix` domain (see [Matrix: `�
 
 ## Vector × Matrix
 
-These functions bridge vectors and matrices (see [Matrix](09_matrix.md)). They are also the implementations behind the `×` domain operator in the `Matrix` domain when the RHS is a vector type:
+These functions bridge vectors and matrices (see [Matrix](matrix.md)). They are also the implementations behind the `×` domain operator in the `Matrix` domain when the RHS is a vector type:
 
 | Function | Explanation |
 | --- | --- |
@@ -79,4 +79,4 @@ These functions bridge vectors and matrices (see [Matrix](09_matrix.md)). They a
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/01_math/05_vector/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/vector/usage_examples.aivi{aivi}

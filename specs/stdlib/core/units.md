@@ -8,15 +8,15 @@ The `Units` domain brings **Dimensional Analysis** to your code, solving the "Ma
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/00_core/16_units/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/units/overview.aivi{aivi}
 
 ## Supported Dimensions
 
-<<< ../../snippets/from_md/05_stdlib/00_core/16_units/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/units/supported_dimensions.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/00_core/16_units/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/units/domain_definition.aivi{aivi}
 
 ## Helper Functions
 
@@ -28,4 +28,4 @@ The `Units` domain brings **Dimensional Analysis** to your code, solving the "Ma
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/00_core/16_units/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/units/usage_examples.aivi{aivi}

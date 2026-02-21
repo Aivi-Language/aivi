@@ -235,14 +235,14 @@ mod tests {
             manifest
                 .resources
                 .iter()
-                .any(|res| res.binding == "02_syntax/14_decorators.md"),
-            "expected 02_syntax/14_decorators.md to be bundled"
+                .any(|res| res.binding == "syntax/decorators.md"),
+            "expected syntax/decorators.md to be bundled"
         );
     }
 
     #[test]
     fn resources_read_returns_markdown_text() {
-        let uri = "aivi://specs/02_syntax/14_decorators.md";
+        let uri = "aivi://specs/syntax/decorators.md";
         let (mime_type, text) = read_bundled_spec(uri).expect("read bundled spec");
         assert_eq!(mime_type, "text/markdown");
         assert!(text.contains("# Decorators"));

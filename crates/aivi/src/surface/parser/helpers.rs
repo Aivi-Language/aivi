@@ -1,5 +1,5 @@
 fn binary_prec(op: &str) -> u8 {
-    // Precedence (low → high), matching specs/02_syntax/00_grammar.md:
+    // Precedence (low → high), matching specs/syntax/grammar.md:
     //  1  ..        range (only valid in list literals)
     //  2  |>        pipe
     //  3  ??        coalesce

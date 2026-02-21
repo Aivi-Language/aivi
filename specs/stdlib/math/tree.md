@@ -6,12 +6,12 @@ General-purpose rose tree (multi-way tree) data structure. Each node holds a val
 
 ## Types
 
-<<< ../../snippets/from_md/05_stdlib/01_math/19_tree/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/tree/types.aivi{aivi}
 
 
 ## Constructors
 
-<<< ../../snippets/from_md/05_stdlib/01_math/19_tree/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/tree/constructors.aivi{aivi}
 
 
 - `node value children`   creates a tree node with the given value and children.
@@ -19,7 +19,7 @@ General-purpose rose tree (multi-way tree) data structure. Each node holds a val
 
 ## Traversals
 
-<<< ../../snippets/from_md/05_stdlib/01_math/19_tree/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/tree/traversals.aivi{aivi}
 
 
 - `dfsPreorder`   depth-first preorder traversal (node, then children left-to-right).
@@ -28,7 +28,7 @@ General-purpose rose tree (multi-way tree) data structure. Each node holds a val
 
 ## Construction from Flat Lists
 
-<<< ../../snippets/from_md/05_stdlib/01_math/19_tree/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/tree/construction_from_flat_lists.aivi{aivi}
 
 
 Builds a rooted tree from a flat list of items with `(id, parentId)` relationships.

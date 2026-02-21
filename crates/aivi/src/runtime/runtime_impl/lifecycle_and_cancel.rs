@@ -125,8 +125,8 @@ impl Runtime {
             HirExpr::LitSigil {
                 tag, body, flags, ..
             } => match tag.as_str() {
-                // Keep the runtime behavior aligned with `specs/02_syntax/13_sigils.md` and
-                // `specs/05_stdlib/00_core/29_i18n.md`:
+                // Keep the runtime behavior aligned with `specs/syntax/sigils.md` and
+                // `specs/stdlib/core/i18n.md`:
                 // - ~k/~m are record-shaped values.
                 // - ~m includes compiled `parts` for `i18n.render`.
                 "r" => {

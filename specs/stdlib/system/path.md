@@ -10,15 +10,15 @@ Use `~path[...]` to build a `Path` literal without string-mashing separators, an
 
 ## Module
 
-<<< ../../snippets/from_md/05_stdlib/03_system/24_path/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/path/module.aivi{aivi}
 
 ## Types
 
-<<< ../../snippets/from_md/05_stdlib/03_system/24_path/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/path/types.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/03_system/24_path/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/path/domain_definition.aivi{aivi}
 
 ## Helper Functions
 
@@ -32,4 +32,4 @@ Use `~path[...]` to build a `Path` literal without string-mashing separators, an
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/03_system/24_path/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/path/usage_examples.aivi{aivi}

@@ -6,7 +6,7 @@ The `<|` operator applies a **declarative structural patch**.
 The compiler enforces that the patch shape matches the target record's type, ensuring that only existing fields are updated or new fields are added according to the record's openness. When a patch path selects a `Map` entry, the patch applies to the **value** stored at that key.
 <!-- /quick-info -->
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/patching_records_01.aivi{aivi}
 
 Patching is:
 
@@ -19,7 +19,7 @@ Applying a patch is done with `<|`.
 
 Patch literals can be lifted into patch functions:
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/patching_records_02.aivi{aivi}
 
 `patch { ... }` produces a patch value that can be applied later with `<|`.
 
@@ -35,27 +35,27 @@ Compiler checks:
 
 ### Dot paths
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_03.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/dot_paths.aivi{aivi}
 
 ### Traversals
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_04.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/traversals.aivi{aivi}
 
 ### Predicates
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_05.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/predicates.aivi{aivi}
 
 ### Map key selectors
 
 When the focused value is a `Map`, selectors address entries by key. After selection, the focus is the **value** at that key.
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_06.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/map_key_selectors.aivi{aivi}
 
 In map predicates, the current element is an entry record `{ key, value }`, so `key == "id-1"` is shorthand for `_.key == "id-1"`.
 
 ### Sum-type focus (prisms)
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_07.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/sum_type_focus_prisms.aivi{aivi}
 
 If the constructor does not match, the value is unchanged.
 
@@ -72,19 +72,19 @@ If the constructor does not match, the value is unchanged.
 
 ## 5.3 Replace / insert
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_08.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/replace_insert.aivi{aivi}
 
 Intermediate records are created if missing.
 
 
 ## 5.4 Transform
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_09.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/transform.aivi{aivi}
 
 
 ## 5.5 Removal
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_10.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/removal.aivi{aivi}
 
 Removal is structural and reflected in the resulting type.
 
@@ -95,14 +95,14 @@ Patching allows for very concise updates to deeply nested data structures and co
 
 ### Deep Collection Updates
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_11.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/deep_collection_updates_01.aivi{aivi}
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_12.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/deep_collection_updates_02.aivi{aivi}
 
 ### Complex Sum-Type Patching
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_13.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/complex_sum_type_patching.aivi{aivi}
 
 ### Record Bulk Update
 
-<<< ../snippets/from_md/02_syntax/05_patching/block_14.aivi{aivi}
+<<< ../snippets/from_md/syntax/patching/record_bulk_update.aivi{aivi}

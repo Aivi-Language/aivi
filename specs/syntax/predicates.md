@@ -13,7 +13,7 @@ is a **predicate expression**.
 
 Examples:
 
-<<< ../snippets/from_md/02_syntax/04_predicates/block_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/predicates/predicate_expressions.aivi{aivi}
 
 Pattern predicates like `Ok { value } when value > 10` are “match tests”: they succeed if the current value matches the pattern, and the `when` guard can refer to names bound by the pattern.
 
@@ -29,7 +29,7 @@ These operators may appear inside any predicate position (including generator gu
 
 If you want to name predicate functions explicitly, you can treat them as ordinary functions:
 
-<<< ../snippets/from_md/02_syntax/04_predicates/block_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/predicates/predicate_combinators.aivi{aivi}
 
 
 ## 4.2 Implicit binding rule
@@ -43,14 +43,14 @@ Inside a predicate expression:
 > [!TIP]
 > `filter active` is shorthand for `filter (_.active)` when `active` is a boolean field. If `active` is bound in scope, it refers to that binding instead.
 
-<<< ../snippets/from_md/02_syntax/04_predicates/block_03.aivi{aivi}
+<<< ../snippets/from_md/syntax/predicates/implicit_binding_rule.aivi{aivi}
 
 
 ## 4.3 Predicate lifting
 
 Whenever a function expects:
 
-<<< ../snippets/from_md/02_syntax/04_predicates/block_04.aivi{aivi}
+<<< ../snippets/from_md/syntax/predicates/predicate_lifting_01.aivi{aivi}
 
 a predicate expression may be supplied.
 
@@ -74,19 +74,19 @@ Applies to:
 
 Examples:
 
-<<< ../snippets/from_md/02_syntax/04_predicates/block_05.aivi{aivi}
+<<< ../snippets/from_md/syntax/predicates/predicate_lifting_02.aivi{aivi}
 
-<<< ../snippets/from_md/02_syntax/04_predicates/block_06.aivi{aivi}
+<<< ../snippets/from_md/syntax/predicates/predicate_lifting_03.aivi{aivi}
 
-<<< ../snippets/from_md/02_syntax/04_predicates/block_07.aivi{aivi}
+<<< ../snippets/from_md/syntax/predicates/predicate_lifting_04.aivi{aivi}
 
-<<< ../snippets/from_md/02_syntax/04_predicates/block_08.aivi{aivi}
+<<< ../snippets/from_md/syntax/predicates/predicate_lifting_05.aivi{aivi}
 
 
 ## 4.4 No automatic lifting in predicates
 
 Predicates do **not** auto-lift over `Option` or `Result`.
 
-<<< ../snippets/from_md/02_syntax/04_predicates/block_09.aivi{aivi}
+<<< ../snippets/from_md/syntax/predicates/no_automatic_lifting_in_predicates.aivi{aivi}
 
 Reason: predicates affect **cardinality**.

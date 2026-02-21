@@ -12,16 +12,16 @@ In many systems, a timeout is just an integer like `500`. But is that 500 millis
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/03_duration/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/duration/overview.aivi{aivi}
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/03_duration/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/duration/features.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/03_duration/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/duration/domain_definition.aivi{aivi}
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/03_duration/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/duration/usage_examples.aivi{aivi}

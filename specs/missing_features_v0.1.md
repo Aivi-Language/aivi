@@ -20,14 +20,14 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 
 ### Syntax
 
-- `on` statement in `do Effect { ... }` blocks: listed in the [grammar](02_syntax/00_grammar.md) but semantics are not documented in any syntax chapter.
-- Generic `do M { ... }`: parser accepts it, but HIR lowering currently discards the monad name and hardcodes `Effect` (see [do notation § Type Checking](02_syntax/16_do_notation.md#type-checking)).
+- `on` statement in `do Effect { ... }` blocks: listed in the [grammar](syntax/grammar.md) but semantics are not documented in any syntax chapter.
+- Generic `do M { ... }`: parser accepts it, but HIR lowering currently discards the monad name and hardcodes `Effect` (see [do notation § Type Checking](syntax/do_notation.md#type-checking)).
 
 
 ### Standard Library
 
 - A calculus module.
-- Structured codecs (`file.json`, `file.csv`) and streaming sources — specified in [External Sources § 12.1](02_syntax/12_external_sources.md) but not yet implemented.
+- Structured codecs (`file.json`, `file.csv`) and streaming sources — specified in [External Sources § 12.1](syntax/external_sources.md) but not yet implemented.
 - `env.decode` (structured environment decoding) — specified but not implemented.
 - Several stdlib modules have **stub or incomplete specs** (see below).
 
@@ -35,18 +35,18 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 
 | Module | File | Status |
 | :--- | :--- | :--- |
-| Log | [03_system/27_log.md](05_stdlib/03_system/27_log.md) | Stub — "Planned" status |
+| Log | [system/log.md](stdlib/system/log.md) | Stub — "Planned" status |
 
 #### Incomplete specs (thin API coverage)
 
 | Module | File | Gap |
 | :--- | :--- | :--- |
-| Tree | [01_math/19_tree.md](05_stdlib/01_math/19_tree.md) | No API table, no quick-info marker |
-| File | [03_system/20_file.md](05_stdlib/03_system/20_file.md) | No directory operations; no usage examples |
-| Sockets | [03_network/04_sockets.md](05_stdlib/03_network/04_sockets.md) | No UDP functions |
-| Streams | [03_network/05_streams.md](05_stdlib/03_network/05_streams.md) | No stream combinators |
-| HTTP | [03_network/01_http.md](05_stdlib/03_network/01_http.md) | Only 3 functions; no headers/timeouts |
-| HTTP Server | [03_network/03_http_server.md](05_stdlib/03_network/03_http_server.md) | No routing or middleware |
+| Tree | [math/tree.md](stdlib/math/tree.md) | No API table, no quick-info marker |
+| File | [system/file.md](stdlib/system/file.md) | No directory operations; no usage examples |
+| Sockets | [network/sockets.md](stdlib/network/sockets.md) | No UDP functions |
+| Streams | [network/streams.md](stdlib/network/streams.md) | No stream combinators |
+| HTTP | [network/http.md](stdlib/network/http.md) | Only 3 functions; no headers/timeouts |
+| HTTP Server | [network/http_server.md](stdlib/network/http_server.md) | No routing or middleware |
 
 ### Runtime
 

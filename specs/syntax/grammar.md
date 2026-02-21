@@ -46,7 +46,7 @@ instance machine match module on or over patch recurse resource then use when wi
 
 Text literals are delimited by `"` and support interpolation segments `{ Expr }`:
 
-<<< ../snippets/from_md/02_syntax/00_grammar/block_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/grammar/text_literals_and_interpolation.aivi{aivi}
 
 Inside a `TextLit`, `{` starts interpolation and `}` ends it; braces must be balanced within the interpolated expression.
 Each `{ Expr }` splice is treated as an expected-`Text` position, so the compiler may insert a `toText` coercion (see `ToText` in Types).
@@ -281,7 +281,7 @@ Literal        := "True"
   - If the first non-newline token begins a record entry (`...` spread, or a field name followed by `:`), parse as `RecordLit`.
   - Otherwise parse as `Block`.
 - `.field` is shorthand for `x => x.field` (a unary accessor function).
-- `_` is *not* a value. It only appears in expressions as part of the placeholder-lambda sugar (see [Desugaring: Functions](../04_desugaring/02_functions.md)).
+- `_` is *not* a value. It only appears in expressions as part of the placeholder-lambda sugar (see [Desugaring: Functions](../desugaring/functions.md)).
 - `RawSigilLit` content (`SigilText` / `SigilRegexText`) is lexed as raw text until the matching delimiter; `~map{}` and `~set[]` are parsed as structured literals (`MapLit` / `SetLit`).
 - `RecordSpread` (`...expr`) merges fields left-to-right; later fields override earlier ones.
 
@@ -315,11 +315,11 @@ ValueBinding   := lowerIdent "=" FunArms Sep
 FunArms        := "|" Arm { Sep "|" Arm }
 ```
 
-This form desugars to a single-argument function that performs pattern matching (`match`) on its input (see [Desugaring: Patterns](../04_desugaring/04_patterns.md)).
+This form desugars to a single-argument function that performs pattern matching (`match`) on its input (see [Desugaring: Patterns](../desugaring/patterns.md)).
 
 If you want multi-argument matching, match on a tuple:
 
-<<< ../snippets/from_md/02_syntax/00_grammar/block_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/grammar/multi_clause_unary_functions.aivi{aivi}
 
 ## 0.6 Types
 

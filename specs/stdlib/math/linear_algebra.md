@@ -12,16 +12,16 @@ Whether you're simulating heat flow across a computer chip, calculating structur
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/linear_algebra/overview.aivi{aivi}
 
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/linear_algebra/features.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/linear_algebra/domain_definition.aivi{aivi}
 
 ## Helper Functions
 
@@ -33,4 +33,4 @@ Whether you're simulating heat flow across a computer chip, calculating structur
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/01_math/18_linear_algebra/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/linear_algebra/usage_examples.aivi{aivi}

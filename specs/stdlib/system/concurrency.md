@@ -8,11 +8,11 @@ It provides **Fibers** (lightweight threads) and **Channels** for safe communica
 <!-- /quick-info -->
 <div class="import-badge">use aivi.concurrency</div>
 
-<<< ../../snippets/from_md/05_stdlib/03_system/30_concurrency/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/concurrency/concurrency_domain.aivi{aivi}
 
 ## Types
 
-<<< ../../snippets/from_md/05_stdlib/03_system/30_concurrency/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/concurrency/types.aivi{aivi}
 
 ## Functions
 

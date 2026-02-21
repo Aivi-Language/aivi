@@ -1,6 +1,6 @@
 onPlatform = evt => evt match
-  | PopState url       => Some (NavigateTo url.path)
-  | Online { online }  => online match
-    | True  => Some Reconnected
-    | False => Some Disconnected
-  | _                  => None
+  | PopState url      => Some (NavigateTo url.path)
+  | Online { online } => online match
+    | True              => Some Reconnected
+    | False             => Some Disconnected
+    | _                 => None

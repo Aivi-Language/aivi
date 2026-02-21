@@ -4,17 +4,17 @@ dijkstra = do Effect {
   loop pq = Heap.push (0.0, source) Heap.empty => {
     result = Heap.popMin pq
     result match
-      | None              => pure Unit
+      | None                     => pure Unit
       | Some ((d, node), restPq) => do Effect {
-          currentDist <- MutableMap.getOrElse node infinity dists
-          if d > currentDist
-          then do Effect { recurse restPq }
-          else do Effect {
-            edges = edgesFrom graph node
-            newPq <- processEdges dists d edges restPq
-            recurse newPq
-          }
+        currentDist <- MutableMap.getOrElse node infinity dists
+        if d > currentDist
+        then do Effect { recurse restPq }
+        else do Effect {
+          edges = edgesFrom graph node
+          newPq <- processEdges dists d edges restPq
+          recurse newPq
         }
+      }
   }
 
   MutableMap.freeze dists

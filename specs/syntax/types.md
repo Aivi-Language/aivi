@@ -9,11 +9,11 @@ AIVI distinguishes:
 
 In v0.1, the recommended minimal set of **compiler primitives** is:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/primitive_types_01.aivi{aivi}
 
 Everything else below should be treated as a **standard library type** (even if an implementation chooses to represent it specially at first for performance/interop).
 
-<<< ../snippets/from_md/02_syntax/03_types/block_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/primitive_types_02.aivi{aivi}
 
 Numeric suffixes:
 
@@ -30,7 +30,7 @@ Numeric suffixes:
 
 `Bool` has exactly two values:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_03.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/bool.aivi{aivi}
 
 `if ... then ... else ...` requires a `Bool` condition, and can be understood as desugaring to a `case` on `True`/`False`.
 
@@ -42,11 +42,11 @@ AIVI does not have “objects” in the OO sense. You create values using:
 - **Literals** for primitives and records
 - **Domain-owned literals/operators** for domain types (e.g. `2w + 3d` for `Duration`)
 
-<<< ../snippets/from_md/02_syntax/03_types/block_04.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/creating_values_objects_01.aivi{aivi}
 
 To create ADT values, apply constructors like ordinary functions:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_05.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/creating_values_objects_02.aivi{aivi}
 
 Nullary constructors (like `None`, `True`, `False`) are values.
 
@@ -57,21 +57,21 @@ Records are:
 * structural
 * open by default
 
-<<< ../snippets/from_md/02_syntax/03_types/block_06.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/open_records_row_polymorphism_01.aivi{aivi}
 
 To create a record value, use a record literal:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_07.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/open_records_row_polymorphism_02.aivi{aivi}
 
 Record literals can spread existing records:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_08.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/open_records_row_polymorphism_03.aivi{aivi}
 
 Spreads merge fields left-to-right; later entries override earlier ones.
 
 Functions specify **minimum required fields**, not exact shapes.
 
-<<< ../snippets/from_md/02_syntax/03_types/block_09.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/open_records_row_polymorphism_04.aivi{aivi}
 
 ## 3.4 Record Row Transforms
 
@@ -80,7 +80,7 @@ that transform record rows. These are type-level only and elaborate to plain rec
 
 Field lists are written as tuples of field labels, and rename maps use record-like syntax:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_10.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/record_row_transforms_01.aivi{aivi}
 
 Semantics:
 
@@ -98,37 +98,37 @@ Errors:
 
 Type-level piping mirrors expression piping and applies the left type as the final argument:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_11.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/record_row_transforms_02.aivi{aivi}
 
 desugars to:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_12.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/record_row_transforms_03.aivi{aivi}
 
 
 ## 3.5 Classes and HKTs
 
-<<< ../snippets/from_md/02_syntax/03_types/block_13.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/classes_and_hkts_01.aivi{aivi}
 
-<<< ../snippets/from_md/02_syntax/03_types/block_14.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/classes_and_hkts_02.aivi{aivi}
 
-<<< ../snippets/from_md/02_syntax/03_types/block_15.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/classes_and_hkts_03.aivi{aivi}
 
-<<< ../snippets/from_md/02_syntax/03_types/block_16.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/classes_and_hkts_04.aivi{aivi}
 
-<<< ../snippets/from_md/02_syntax/03_types/block_17.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/classes_and_hkts_05.aivi{aivi}
 
 ### Type Variable Constraints
 
 Class declarations may attach constraints to the **type variables used in member signatures**
 using `with (...)`:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_21.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/type_variable_constraints_01.aivi{aivi}
 
 `A with B` in type position denotes **record/type composition** (an intersection-like merge). It is primarily used for class inheritance and trait aggregation in v0.1.
 
 Instances:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_18.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/type_variable_constraints_02.aivi{aivi}
 
 Notes:
 
@@ -151,7 +151,7 @@ in-scope instance that authorizes the coercion.
 
 The standard library provides:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_19.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/totext_01.aivi{aivi}
 
 Rule (informal):
 
@@ -160,7 +160,7 @@ Rule (informal):
 
 This supports ergonomic boundary code such as HTTP requests:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_20.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/totext_02.aivi{aivi}
 
 ### Record Instances
 
@@ -177,7 +177,7 @@ at the type level.
 
 ### Declaration
 
-<<< ../snippets/from_md/02_syntax/03_types/block_22.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/declaration.aivi{aivi}
 
 
 - `-> Closed : init {}` is the **initial transition**   it has no source state and
@@ -208,10 +208,10 @@ FieldDecl         := lowerIdent ":" TypeExpr
 
 The LSP formatter aligns `->` arrows and `:` colons for readability:
 
-<<< ../snippets/from_md/02_syntax/03_types/block_23.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/formatter_alignment.aivi{aivi}
 
 
 ### Example: Traffic light
 
-<<< ../snippets/from_md/02_syntax/03_types/block_24.aivi{aivi}
+<<< ../snippets/from_md/syntax/types/example_traffic_light.aivi{aivi}
 

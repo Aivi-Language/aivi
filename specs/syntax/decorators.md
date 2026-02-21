@@ -13,7 +13,7 @@ Decorators are intentionally narrow:
 
 ## 14.1 Syntax
 
-<<< ../snippets/from_md/02_syntax/14_decorators/block_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/decorators/syntax.aivi{aivi}
 
 Decorators appear before the binding they annotate.
 
@@ -58,7 +58,7 @@ Decorators desugar to compile-time metadata:
 
 ### Compile-Time Embedding
 
-<<< ../snippets/from_md/02_syntax/14_decorators/block_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/decorators/compile_time_embedding.aivi{aivi}
 
 ### Debug Tracing
 

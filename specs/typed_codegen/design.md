@@ -95,7 +95,7 @@ The codegen gets a `CgType` for each definition and propagates types through exp
 | Expression | Typed emission (when possible) |
 |------------|-------------------------------|
 | `LitNumber "42"` with CgType::Int | `42_i64` |
-| `LitNumber "3.14"` with CgType::Float | `3.14_f64` |
+| `LitNumber "3.14"` with CgType::Float | `3.f64` |
 | `Binary "+" (Int, Int)` | `a + b` (direct i64 add) |
 | `Lambda { param, body }` with Func(A, B) | `\|param: A\| -> B { body }` |
 | `Record { x: 1, y: 2.0 }` with Record | struct init |

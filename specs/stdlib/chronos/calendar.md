@@ -12,15 +12,15 @@ The `Calendar` domain hides this chaos. Writing `timestamp + 86400` works until 
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/02_calendar/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/calendar/overview.aivi{aivi}
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/02_calendar/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/calendar/features.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/02_calendar/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/calendar/domain_definition.aivi{aivi}
 
 ## Helper Functions
 
@@ -36,4 +36,4 @@ The `Calendar` domain hides this chaos. Writing `timestamp + 86400` works until 
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/02_calendar/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/calendar/usage_examples.aivi{aivi}

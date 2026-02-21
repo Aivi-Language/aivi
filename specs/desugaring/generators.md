@@ -20,19 +20,19 @@ Primitive “constructors” as definable macros:
 
 - Sequencing:
 
-<<< ../snippets/from_md/04_desugaring/06_generators/block_01.aivi{aivi}
+<<< ../snippets/from_md/desugaring/generators/generate_01.aivi{aivi}
 
   desugars to `genAppend ⟦gen s1⟧ ⟦gen s2⟧`.
 
 - Binding:
 
-<<< ../snippets/from_md/04_desugaring/06_generators/block_02.aivi{aivi}
+<<< ../snippets/from_md/desugaring/generators/generate_02.aivi{aivi}
 
   desugars to `genBind ⟦g⟧ (λx. ⟦generate { body }⟧)` where `genBind g f = ΛR. λk. λz. g (λacc a. (f a) k acc) z`.
 
 - Filtering:
 
-<<< ../snippets/from_md/04_desugaring/06_generators/block_03.aivi{aivi}
+<<< ../snippets/from_md/desugaring/generators/generate_03.aivi{aivi}
 
   desugars to `genFilter (λx. ⟦pred⟧[_ := x]) ⟦generate { body }⟧`.
 

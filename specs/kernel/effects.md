@@ -51,4 +51,4 @@ No `do`, no `effect` in kernel.
 bracket : Effect E A → (A → Effect E Unit) → (A → Effect E B) → Effect E B
 ```
 
-`bracket acquire release use`   acquires a resource, runs `use`, and guarantees `release` runs even on failure. This is the kernel primitive behind `resource { ... }` blocks (see [Section 15](../02_syntax/15_resources.md)).
+`bracket acquire release use`   acquires a resource, runs `use`, and guarantees `release` runs even on failure. This is the kernel primitive behind `resource { ... }` blocks (see [Section 15](../syntax/resources.md)).

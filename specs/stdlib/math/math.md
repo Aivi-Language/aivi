@@ -9,19 +9,19 @@ It is intentionally small, predictable, and aligned with common math libraries a
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/01_math/01_math/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/math/overview.aivi{aivi}
 
 ## Constants
 
 `inf` is positive infinity and `negInf` is negative infinity. These are IEEE 754 floating-point values   they apply to `Float` only (`Int` has no infinity concept; use `BigInt` for arbitrary precision).
 
-<<< ../../snippets/from_md/05_stdlib/01_math/01_math/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/math/constants.aivi{aivi}
 
 ## Angles
 
 Angles are represented by a dedicated domain so trigonometric functions are not called with raw `Float` values. Use the domain suffix literals `20deg` and `1.2rad` for concise angle construction, or the constructor functions `degrees` and `radians`.
 
-<<< ../../snippets/from_md/05_stdlib/01_math/01_math/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/math/angles.aivi{aivi}
 
 | Function | Explanation |
 | --- | --- |
@@ -161,4 +161,4 @@ Notes:
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/01_math/01_math/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/math/usage_examples.aivi{aivi}

@@ -6,4 +6,4 @@ node =
     </div>
   </html>
 
-type is `VNode msg`.
+type is`VNode msg` .

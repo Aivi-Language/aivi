@@ -11,7 +11,7 @@ The collections family provides persistent data structures for functional code. 
 
 The facade module `aivi.collections` re-exports all of the above for convenience:
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/collections.aivi{aivi}
 
 
 <!-- /quick-info -->
@@ -19,7 +19,7 @@ The facade module `aivi.collections` re-exports all of the above for convenience
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/overview.aivi{aivi}
 
 ## Literals and Merging
 
@@ -27,7 +27,7 @@ Collections introduce sigil-based literals for concise construction. These are d
 
 ### Map literal
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/map_literal_01.aivi{aivi}
 
 Rules:
 - Entries use `key => value`.
@@ -35,11 +35,11 @@ Rules:
 - `...expr` spreads another map into the literal.
 - When duplicate keys exist, the **last** entry wins (right-biased).
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/map_literal_02.aivi{aivi}
 
 ### Set literal
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/set_literal.aivi{aivi}
 
 Rules:
 - Elements are expressions.
@@ -50,13 +50,13 @@ Rules:
 
 The `++` operator is provided as concatenation for `List`, right-biased merge for `Map`, and union for `Set`.
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_05.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/merge_operator.aivi{aivi}
 
 ## `aivi.list`
 
 While `List` is a built-in type, AIVI provides a standard `List` API for pipeline-friendly functional programming.
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/aivi_list.aivi{aivi}
 
 
 | Function | Explanation |
@@ -89,7 +89,7 @@ While `List` is a built-in type, AIVI provides a standard `List` API for pipelin
 
 ## `aivi.map`
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/aivi_map.aivi{aivi}
 
 
 | Function | Explanation |
@@ -121,7 +121,7 @@ Notes:
 
 ## `aivi.set`
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/aivi_set.aivi{aivi}
 
 
 | Function | Explanation |
@@ -140,7 +140,7 @@ Notes:
 
 ## `aivi.queue`
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_05.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/aivi_queue.aivi{aivi}
 
 
 | Function | Explanation |
@@ -152,7 +152,7 @@ Notes:
 
 ### Deque
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_06.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/deque.aivi{aivi}
 
 
 | Function | Explanation |
@@ -167,7 +167,7 @@ Notes:
 
 ## `aivi.heap`
 
-<<< ../../snippets/from_md/05_stdlib/00_core/28_collections/block_07.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/aivi_heap.aivi{aivi}
 
 
 | Function | Explanation |
