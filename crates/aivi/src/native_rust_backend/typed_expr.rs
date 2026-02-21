@@ -780,7 +780,7 @@ fn emit_typed_block(
 /// Try to infer the CgType of an expression from context.
 ///
 /// This is a lightweight inference — it only works for simple cases (variables, literals, known
-/// globals). For complex expressions, returns `None`.
+/// globals) and a few compound expressions. For truly complex expressions, returns `None`.
 fn infer_expr_type(expr: &RustIrExpr, ctx: &TypedCtx) -> Option<CgType> {
     match expr {
         RustIrExpr::Local { name, .. } => ctx.lookup(name).cloned(),
@@ -795,6 +795,7 @@ fn infer_expr_type(expr: &RustIrExpr, ctx: &TypedCtx) -> Option<CgType> {
         RustIrExpr::LitBool { .. } => Some(CgType::Bool),
         RustIrExpr::LitString { .. } => Some(CgType::Text),
         RustIrExpr::LitDateTime { .. } => Some(CgType::DateTime),
+        RustIrExpr::TextInterpolate { .. } => Some(CgType::Text),
         RustIrExpr::Binary { op, left, .. } => {
             match op.as_str() {
                 "+" | "-" | "*" | "/" | "%" => {
@@ -830,6 +831,119 @@ fn infer_expr_type(expr: &RustIrExpr, ctx: &TypedCtx) -> Option<CgType> {
             } else {
                 None
             }
+        }
+        // Multi-arg call: unwrap chained Func types to find the return type.
+        RustIrExpr::Call { func, args, .. } => {
+            // Constructor calls — look up the constructor in globals to find the ADT type.
+            if let RustIrExpr::ConstructorValue {
+                name: ctor_name, ..
+            } = func.as_ref()
+            {
+                // Search all globals for an ADT whose constructors include this name.
+                for cg in ctx.globals.values() {
+                    if let CgType::Adt {
+                        constructors, ..
+                    } = cg
+                    {
+                        if constructors.iter().any(|(n, _)| n == ctor_name) {
+                            return Some(cg.clone());
+                        }
+                    }
+                    // Also check if the return type of a Func chain is an ADT with this ctor.
+                    let mut cur = cg;
+                    loop {
+                        if let CgType::Func(_, ret) = cur {
+                            cur = ret;
+                        } else {
+                            break;
+                        }
+                    }
+                    if let CgType::Adt {
+                        constructors, ..
+                    } = cur
+                    {
+                        if constructors.iter().any(|(n, _)| n == ctor_name) {
+                            return Some(cur.clone());
+                        }
+                    }
+                }
+                return None;
+            }
+            // Global function calls — unwrap Func chain.
+            let func_ty = infer_expr_type(func, ctx)?;
+            let mut cur = &func_ty;
+            for _ in 0..args.len() {
+                if let CgType::Func(_, r) = cur {
+                    cur = r;
+                } else {
+                    return None;
+                }
+            }
+            Some(cur.clone())
+        }
+        // Zero-arg constructor value — search globals for an ADT containing this constructor.
+        RustIrExpr::ConstructorValue {
+            name: ctor_name, ..
+        } => {
+            for cg in ctx.globals.values() {
+                if let CgType::Adt {
+                    constructors, ..
+                } = cg
+                {
+                    if constructors.iter().any(|(n, _)| n == ctor_name) {
+                        return Some(cg.clone());
+                    }
+                }
+                // Also check through Func return types (constructor functions).
+                let mut cur = cg;
+                loop {
+                    if let CgType::Func(_, ret) = cur {
+                        cur = ret;
+                    } else {
+                        break;
+                    }
+                }
+                if let CgType::Adt {
+                    constructors, ..
+                } = cur
+                {
+                    if constructors.iter().any(|(n, _)| n == ctor_name) {
+                        return Some(cur.clone());
+                    }
+                }
+            }
+            None
+        }
+        // Lambda — infer Func(param_ty, body_ty) when we can infer the body.
+        RustIrExpr::Lambda { body, .. } => {
+            // We can't reliably infer the param type without context, so only
+            // return a result when the lambda's expected type is already known
+            // via ctx (handled by the caller). Skip here.
+            let _ = body;
+            None
+        }
+        // Match — infer from first arm body.
+        RustIrExpr::Match { arms, .. } => {
+            arms.first().and_then(|arm| infer_expr_type(&arm.body, ctx))
+        }
+        // Block — infer from last expression.
+        RustIrExpr::Block { items, .. } => {
+            if let Some(RustIrBlockItem::Expr { expr: last }) = items.last() {
+                infer_expr_type(last, ctx)
+            } else {
+                None
+            }
+        }
+        // List — infer ListOf(elem_ty) from first element.
+        RustIrExpr::List { items, .. } => {
+            if items.is_empty() {
+                return None;
+            }
+            if items.iter().any(|i| i.spread) {
+                return None;
+            }
+            let elem_ty = infer_expr_type(&items[0].expr, ctx)?;
+            Some(CgType::ListOf(Box::new(elem_ty)))
         }
         _ => None,
     }
