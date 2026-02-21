@@ -26,10 +26,17 @@ JsonValue =
 JsonError = { message: Text }
 
 decode : Text -> Result JsonError JsonValue
-decode = raw => json.decode raw
+decode = raw => Err { message: "json.decode: native JSON parsing not yet available" }
 
 jsonToText : JsonValue -> Text
-jsonToText = value => json.jsonToText value
+jsonToText = value => value match
+  | JsonNull       => "null"
+  | JsonBool b     => b match | True => "true" | False => "false"
+  | JsonInt n      => toText n
+  | JsonFloat f    => toText f
+  | JsonString s   => "\"" ++ s ++ "\""
+  | JsonArray _    => "[...]"
+  | JsonObject _   => "{...}"
 
 encodeText : Text -> JsonValue
 encodeText = t => JsonString t

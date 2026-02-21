@@ -44,11 +44,25 @@ pub(super) fn collect_free_locals_in_items(items: &[RustIrBlockItem]) -> Vec<Str
     for item in items {
         match item {
             RustIrBlockItem::Bind { pattern, expr } => {
-                collect_free_locals_in_expr(expr, &mut bound, &mut out);
+                // Pre-add compiler-generated (`__`-prefixed) binders so that
+                // self-referential bindings (e.g. `__loop0` from loop/recurse
+                // desugaring) are not incorrectly reported as free.  This
+                // mirrors the same logic in `lower_block_item`.
                 let mut binders = Vec::new();
                 collect_pattern_vars(pattern, &mut binders);
+                let pre_added: Vec<String> = binders
+                    .iter()
+                    .filter(|n| n.starts_with("__"))
+                    .cloned()
+                    .collect();
+                for name in &pre_added {
+                    bound.push(name.clone());
+                }
+                collect_free_locals_in_expr(expr, &mut bound, &mut out);
                 for binder in binders {
-                    bound.push(binder);
+                    if !pre_added.contains(&binder) {
+                        bound.push(binder);
+                    }
                 }
             }
             RustIrBlockItem::Filter { expr }
