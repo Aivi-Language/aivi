@@ -1,4 +1,5 @@
 // Functor instance definition
+// Note: Functor only transforms the success value, so no constraints (like Semigroup E) are needed.
 instance Functor (Validation E *) = {
   map = f v => match v {
     | Valid a => Valid (f a)
