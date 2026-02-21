@@ -33,6 +33,7 @@ The JSON object in the opening marker provides lookup keys for tooling:
 ```
 
 Notes:
+
 - `kind` is used for display and indexing. Tooling may treat unknown kinds as `"unknown"`.
 - `name` is the identifier as it appears in AIVI code (e.g. `isEmpty`, `<|`, `Option`).
 - `module` is the parent module for non-module items (e.g. `aivi.text`).

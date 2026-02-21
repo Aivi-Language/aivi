@@ -1,6 +1,12 @@
 impl Parser {
     fn parse_type_expr(&mut self) -> Option<TypeExpr> {
         let lhs = self.parse_type_and()?;
+        // Allow `->` on a continuation line so multi-line type signatures work:
+        //   foo : A
+        //     -> B
+        //     -> C
+        let checkpoint = self.pos;
+        self.consume_newlines();
         if self.consume_symbol("->") {
             let result = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
                 span: type_span(&lhs),
@@ -12,6 +18,7 @@ impl Parser {
                 span,
             });
         }
+        self.pos = checkpoint;
         Some(lhs)
     }
 

@@ -4,7 +4,6 @@ This chapter is a **draft concrete grammar** for the surface language described 
 
 This chapter is intentionally pragmatic: it aims to be complete enough to build a real lexer/parser/LSP for the current spec and repo examples, even though many parts of the language are still evolving.
 
-
 ## 0.1 Lexical notes
 
 > These are **normative** for parsing. Typing/elaboration rules live elsewhere.
@@ -67,7 +66,6 @@ FieldSep   := Sep | ","
 ### Ellipsis
 
 - `...` is a single token (ellipsis) used for list rest patterns and spread entries.
-
 
 ## 0.2 Top level
 
@@ -141,7 +139,6 @@ InstanceDef    := "instance" UpperIdent InstanceHead "=" RecordLit Sep
 InstanceHead   := "(" Type ")"
 ```
 
-
 ## 0.3 Expressions
 
 ```ebnf
@@ -202,7 +199,7 @@ Atom           := Literal
                | DoBlock
                | GenerateBlock
                | ResourceBlock
-               
+
 SuffixedParens := "(" Expr ")" Suffix
 Suffix         := lowerIdent | "%"
 
@@ -285,7 +282,6 @@ Literal        := "True"
 - `RawSigilLit` content (`SigilText` / `SigilRegexText`) is lexed as raw text until the matching delimiter; `~map{}` and `~set[]` are parsed as structured literals (`MapLit` / `SetLit`).
 - `RecordSpread` (`...expr`) merges fields left-to-right; later fields override earlier ones.
 
-
 ## 0.4 Patching
 
 ```ebnf
@@ -304,7 +300,6 @@ Select         := "[" ( "*" | Expr ) "]"
 
 - `PathSeg` is intentionally permissive in this draft: patch paths, traversal selectors, and prism-like focuses share syntax.
 - A compiler should reject ill-typed or ill-scoped path forms with a targeted error (e.g. “predicate selector expects a `Bool` predicate”).
-
 
 ## 0.5 Multi-clause unary functions
 
@@ -363,7 +358,6 @@ RecordPat      := "{" { RecordPatField } "}"
 RecordPatField := RecordPatKey [ (":" Pattern) | ("as" Pattern) | ("." "{" { RecordPatField } "}") ] [ FieldSep ]
 RecordPatKey   := lowerIdent { "." lowerIdent }
 ```
-
 
 ## 0.8 Diagnostics (where the compiler should nag)
 
