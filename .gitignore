@@ -9,3 +9,7 @@ build
 target
 aivi-vscode-*
 /*.aivi
+
+# Generated test fixture sources (written at runtime by native-codegen tests)
+crates/aivi/tests/fixtures/native_smoke/src/main.rs
+crates/aivi/tests/fixtures/native_smoke/src/lib.rs
