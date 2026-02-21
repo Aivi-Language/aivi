@@ -65,7 +65,7 @@ fn inject_prelude_imports(modules: &mut [Module]) {
             0,
             UseDecl {
                 module: SpannedName {
-                    name: "aivi.prelude".to_string(),
+                    name: "aivi.prelude".into(),
                     span: span.clone(),
                 },
                 items: Vec::new(),
@@ -201,7 +201,7 @@ fn expand_module_aliases(modules: &mut [Module]) {
                 if let Expr::Ident(name) = *base.clone() {
                     if let Some(module) = aliases.get(name.name.as_str()) {
                         return Expr::Ident(SpannedName {
-                            name: format!("{module}.{}", field.name),
+                            name: format!("{module}.{}", field.name).into(),
                             span: field.span,
                         });
                     }

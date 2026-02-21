@@ -329,7 +329,7 @@ impl Parser {
 
         if self.match_keyword("do") {
             let monad = self.consume_ident().unwrap_or(SpannedName {
-                name: "Effect".to_string(),
+                name: "Effect".into(),
                 span: self.previous_span(),
             });
             return Some(self.parse_block(BlockKind::Do { monad }));
@@ -343,7 +343,7 @@ impl Parser {
                 effect_span.clone(),
             );
             let monad = SpannedName {
-                name: "Effect".to_string(),
+                name: "Effect".into(),
                 span: effect_span,
             };
             return Some(self.parse_block(BlockKind::Do { monad }));

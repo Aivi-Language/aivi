@@ -108,7 +108,17 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
         for name in local_names {
             if let Some(schemes) = env.get_all(&name) {
                 if schemes.len() == 1 {
-                    module_types.insert(name.clone(), checker.type_to_string(&schemes[0].ty));
+                    let rendered = checker
+                        .query_cache
+                        .get_binding_type(&module.name.name, &name)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| checker.type_to_string(&schemes[0].ty));
+                    checker.query_cache.store_binding_type(
+                        module.name.name.clone(),
+                        name.clone(),
+                        rendered.clone(),
+                    );
+                    module_types.insert(name.clone(), rendered);
                     // Monomorphic (no quantified vars) → try to produce a CgType.
                     if schemes[0].vars.is_empty() {
                         module_cg_types.insert(name, checker.type_to_cg_type(&schemes[0].ty, &env));
@@ -116,13 +126,25 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
                         module_cg_types.insert(name, CgType::Dynamic);
                     }
                 } else {
-                    let mut rendered = String::new();
-                    for (idx, scheme) in schemes.iter().enumerate() {
-                        if idx > 0 {
-                            rendered.push_str(" | ");
-                        }
-                        rendered.push_str(&checker.type_to_string(&scheme.ty));
-                    }
+                    let rendered = checker
+                        .query_cache
+                        .get_binding_type(&module.name.name, &name)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| {
+                            let mut rendered = String::new();
+                            for (idx, scheme) in schemes.iter().enumerate() {
+                                if idx > 0 {
+                                    rendered.push_str(" | ");
+                                }
+                                rendered.push_str(&checker.type_to_string(&scheme.ty));
+                            }
+                            rendered
+                        });
+                    checker.query_cache.store_binding_type(
+                        module.name.name.clone(),
+                        name.clone(),
+                        rendered.clone(),
+                    );
                     module_types.insert(name.clone(), rendered);
                     // Multi-clause overloads are always Dynamic for now.
                     module_cg_types.insert(name, CgType::Dynamic);

@@ -99,6 +99,7 @@ dependencies = [
  "num-traits",
  "ordered-float",
  "palette",
+ "parking_lot",
  "regex",
  "rust_decimal",
  "rustfft",

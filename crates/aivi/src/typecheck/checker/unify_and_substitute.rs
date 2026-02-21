@@ -1,4 +1,24 @@
 impl TypeChecker {
+    pub(super) fn push_deferred_constraint(&mut self, found: Type, expected: Type, span: Span) {
+        self.constraints
+            .deferred
+            .push(super::constraints::DeferredConstraint::Equal(
+                found, expected, span,
+            ));
+    }
+
+    pub(super) fn solve_deferred_constraints(&mut self) -> Result<(), TypeError> {
+        let deferred = std::mem::take(&mut self.constraints.deferred);
+        for item in deferred {
+            match item {
+                super::constraints::DeferredConstraint::Equal(found, expected, span) => {
+                    self.unify(found, expected, span)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn unify_with_span(&mut self, found: Type, expected: Type, span: Span) -> Result<(), TypeError> {
         self.unify(found, expected, span)
     }
@@ -118,6 +138,7 @@ impl TypeChecker {
             ) => {
                 let mut all_fields: HashSet<String> = f_fields.keys().cloned().collect();
                 all_fields.extend(e_fields.keys().cloned());
+                let mut absorbed_open_tail = false;
 
                 for field in &all_fields {
                     match (f_fields.get(field), e_fields.get(field)) {
@@ -138,6 +159,8 @@ impl TypeChecker {
                                         open: open_f,
                                     })),
                                 });
+                            } else {
+                                absorbed_open_tail = true;
                             }
                         }
                         (None, Some(_)) => {
@@ -154,10 +177,15 @@ impl TypeChecker {
                                         open: open_f,
                                     })),
                                 });
+                            } else {
+                                absorbed_open_tail = true;
                             }
                         }
                         (None, None) => {}
                     }
+                }
+                if absorbed_open_tail || (open_f && open_e) {
+                    self.note_open_row_var();
                 }
                 Ok(())
             }
@@ -185,6 +213,7 @@ impl TypeChecker {
             if *other == var {
                 return Ok(());
             }
+            self.constraints.vars.union(var, *other);
         }
         if self.occurs(var, &ty) {
             let mut message = "occurs check failed".to_string();

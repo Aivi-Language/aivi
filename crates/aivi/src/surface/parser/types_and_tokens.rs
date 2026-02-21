@@ -201,15 +201,17 @@ impl Parser {
 
     fn parse_dotted_name(&mut self) -> Option<SpannedName> {
         let mut name = self.consume_ident()?;
+        let mut text = name.name.as_str().to_string();
         while self.consume_symbol(".") {
             if let Some(part) = self.consume_ident() {
-                name.name.push('.');
-                name.name.push_str(&part.name);
+                text.push('.');
+                text.push_str(part.name.as_str());
                 name.span = merge_span(name.span.clone(), part.span.clone());
             } else {
                 break;
             }
         }
+        name.name = text.into();
         Some(name)
     }
 
@@ -232,7 +234,7 @@ impl Parser {
             let end = self.expect_symbol(")", "expected ')' after operator name");
             let span = merge_span(op_token.span.clone(), end.unwrap_or(op_token.span.clone()));
             return Some(SpannedName {
-                name: format!("({})", op_token.text),
+                name: format!("({})", op_token.text).into(),
                 span,
             });
         }
@@ -246,7 +248,7 @@ impl Parser {
         }
         self.pos += 1;
         Some(SpannedName {
-            name: token.text.clone(),
+            name: token.text.as_str().into(),
             span: token.span.clone(),
         })
     }
