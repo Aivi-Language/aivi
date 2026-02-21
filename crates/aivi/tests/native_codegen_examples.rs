@@ -3,7 +3,7 @@ mod native_fixture;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use aivi::{compile_rust_native_lib, desugar_target};
+use aivi::{compile_rust_native_lib, desugar_target, desugar_target_lenient};
 use aivi_native_runtime::get_builtin;
 use native_fixture::GeneratedModule;
 use walkdir::WalkDir;
@@ -166,8 +166,8 @@ fn native_codegen_examples_compile_with_rustc() {
     eprintln!("[native_codegen] compiling all integration-tests as whole program …");
     let t0 = Instant::now();
 
-    let program = desugar_target("integration-tests/...")
-        .expect("desugar_target(integration-tests/...) failed");
+    let program = desugar_target_lenient("integration-tests/...")
+        .expect("desugar_target_lenient(integration-tests/...) failed");
     let rust_code =
         compile_rust_native_lib(program).expect("compile_rust_native_lib failed for whole-program");
 

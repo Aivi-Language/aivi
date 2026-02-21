@@ -58,8 +58,7 @@ fuzz_target!(|data: &[u8]| {
     // still parses without errors (formatting must not break valid programs).
     let (_modules, parse_diags) = aivi::parse_modules(Path::new("fuzz.aivi"), &src);
     if !aivi::file_diagnostics_have_errors(&parse_diags) {
-        let (_modules2, parse_diags2) =
-            aivi::parse_modules(Path::new("fuzz.aivi"), &formatted);
+        let (_modules2, parse_diags2) = aivi::parse_modules(Path::new("fuzz.aivi"), &formatted);
         assert!(
             !aivi::file_diagnostics_have_errors(&parse_diags2),
             "Formatting broke a valid program"

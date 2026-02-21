@@ -146,7 +146,7 @@ serveHttp : App model msg -> Request -> Effect HttpError Response
 serveHttp = app req => do Effect {
   viewId <- randomUuid
   url = parseUrlInfo req.path
-  initCtx = { viewId, url, online: True }
+  initCtx = { viewId: viewId, url: url, online: True }
   model = app.init initCtx
   vdom0 = app.view model
   (vdom, _, _) = assignHandlers vdom0 0
@@ -185,7 +185,7 @@ serveWs = app ws => do Effect {
     // Reconnection policy v1: treat every Hello as a new view.
           viewId <- randomUuid
           url = parseUrlInfo hello.url
-          initCtx = { viewId, url, online: hello.online }
+          initCtx = { viewId: viewId, url: url, online: hello.online }
           model = app.init initCtx
           vdom0 = app.view model
           (vdom, handlers, nextHid) = assignHandlers vdom0 0

@@ -203,10 +203,25 @@ pub(super) fn collect_free_locals_in_expr(
             for item in items {
                 match item {
                     RustIrBlockItem::Bind { pattern, expr } => {
-                        collect_free_locals_in_expr(expr, bound, out);
+                        // Pre-add `__`-prefixed binders (e.g. `__loop0`) so
+                        // self-referential bindings inside nested blocks are
+                        // not incorrectly reported as free.
                         let mut binders = Vec::new();
                         collect_pattern_vars(pattern, &mut binders);
-                        bound.extend(binders);
+                        let pre_added: Vec<String> = binders
+                            .iter()
+                            .filter(|n| n.starts_with("__"))
+                            .cloned()
+                            .collect();
+                        for name in &pre_added {
+                            bound.push(name.clone());
+                        }
+                        collect_free_locals_in_expr(expr, bound, out);
+                        for binder in binders {
+                            if !pre_added.contains(&binder) {
+                                bound.push(binder);
+                            }
+                        }
                     }
                     RustIrBlockItem::Filter { expr }
                     | RustIrBlockItem::Yield { expr }

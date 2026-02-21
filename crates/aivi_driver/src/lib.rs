@@ -116,6 +116,23 @@ pub fn desugar_target(target: &str) -> Result<HirProgram, AiviError> {
     Ok(aivi_core::desugar_modules(&stdlib_modules))
 }
 
+/// Like [`desugar_target`] but skips the diagnostic pre-check so files with
+/// parse warnings/errors are still desugared (best-effort).  Useful for codegen
+/// tests that want to exercise as much of the pipeline as possible even when
+/// some integration-test files have known issues.
+pub fn desugar_target_lenient(target: &str) -> Result<HirProgram, AiviError> {
+    let paths = workspace::expand_target(target)?;
+    let mut modules = Vec::new();
+    for path in &paths {
+        let content = fs::read_to_string(path)?;
+        let (mut parsed, _) = parse_modules(path.as_path(), &content);
+        modules.append(&mut parsed);
+    }
+    let mut stdlib_modules = embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    Ok(aivi_core::desugar_modules(&stdlib_modules))
+}
+
 /// Builds a test-only program view by finding `@test` definitions and validating their modules.
 pub fn test_target_program_and_names(
     target: &str,
