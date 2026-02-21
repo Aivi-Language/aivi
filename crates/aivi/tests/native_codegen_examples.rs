@@ -5,6 +5,7 @@ use std::time::{Duration, Instant};
 
 use aivi::{compile_rust_native_lib, desugar_target};
 use aivi_native_runtime::get_builtin;
+use native_fixture::GeneratedModule;
 use walkdir::WalkDir;
 
 const PER_FILE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -158,9 +159,8 @@ fn native_codegen_examples_compile_with_rustc() {
     );
 
     let mut failures = Vec::new();
+    let mut modules = Vec::new();
     let mut compiled = 0usize;
-
-    let mut lib_rs = String::new();
 
     for entry in WalkDir::new(&examples_dir)
         .into_iter()
@@ -182,7 +182,7 @@ fn native_codegen_examples_compile_with_rustc() {
             compile_rust_native_lib(program)
         });
 
-        let rust = match result {
+        let rust_code = match result {
             Ok(Ok(rust)) => rust,
             Ok(Err(err)) => {
                 let msg = format!("{err}");
@@ -199,13 +199,10 @@ fn native_codegen_examples_compile_with_rustc() {
             }
         };
 
-        lib_rs.push_str(&format!("pub mod {mod_name} {{\n"));
-        for line in rust.lines() {
-            lib_rs.push_str("    ");
-            lib_rs.push_str(line);
-            lib_rs.push('\n');
-        }
-        lib_rs.push_str("}\n\n");
+        modules.push(GeneratedModule {
+            mod_name,
+            rust_code,
+        });
 
         compiled += 1;
         eprintln!(
@@ -214,16 +211,10 @@ fn native_codegen_examples_compile_with_rustc() {
         );
     }
 
-    // Use the fixture crate (with cached aivi_native_runtime build) for compilation.
-    let _lock = native_fixture::FIXTURE_LOCK.lock().unwrap();
-    let output = native_fixture::cargo_build_fixture_lib(&lib_rs);
-
-    if !output.status.success() {
-        failures.push(format!(
-            "cargo check failed\nstdout:\n{}\nstderr:\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr),
-        ));
+    // Check all generated Rust modules via a sharded multi-crate workspace.
+    // The workspace and CARGO_TARGET_DIR are stable across runs for incremental builds.
+    if let Err(msg) = native_fixture::cargo_check_sharded(&root, &modules) {
+        failures.push(msg);
     }
 
     if !failures.is_empty() {
