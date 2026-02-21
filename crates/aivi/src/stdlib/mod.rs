@@ -5,6 +5,8 @@ use crate::surface::{parse_modules, Module};
 
 mod bigint;
 mod calendar;
+mod json;
+mod map;
 mod chronos_calendar;
 mod chronos_duration;
 mod chronos_instant;
@@ -269,6 +271,14 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: mutable_map::MODULE_NAME,
         source: mutable_map::SOURCE,
+    },
+    EmbeddedModule {
+        name: json::MODULE_NAME,
+        source: json::SOURCE,
+    },
+    EmbeddedModule {
+        name: map::MODULE_NAME,
+        source: map::SOURCE,
     },
 ];
 

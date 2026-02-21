@@ -1,8 +1,8 @@
-pub const MODULE_NAME: &str = "aivi.net.http_server";
+pub const MODULE_NAME: &str = "aivi.net.httpServer";
 
 pub const SOURCE: &str = r#"
 @no_prelude
-module aivi.net.http_server
+module aivi.net.httpServer
 export Header, Request, Response, ServerConfig
 export HttpError, WsError, WsMessage, ServerReply
 export TextMsg, BinaryMsg, Ping, Pong, Close
