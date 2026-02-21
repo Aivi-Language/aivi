@@ -1093,3 +1093,62 @@ fn regex_compile_and_match() {
         .unwrap_or_else(|_| panic!("test value"));
     assert!(matches!(verdict, Value::Bool(true)));
 }
+
+#[test]
+fn deep_recursion_does_not_overflow() {
+    // A recursive countdown: count = n => n match | 0 => 0 | n => count (n - 1)
+    // With n = 100_000, this would overflow the Rust stack without the trampoline.
+    let mut runtime = runtime_from_source(
+        r#"
+@no_prelude
+module test
+count = n => n match
+  | 0 => 0
+  | n => count (n - 1)
+result = count 100000
+"#,
+    );
+    runtime.fuel = Some(1_000_000);
+    let value = runtime
+        .ctx
+        .globals
+        .get("result")
+        .expect("result defined");
+    let value = runtime.force_value(value).unwrap_or_else(|e| panic!("result evaluates: {}", format_runtime_error(e)));
+    assert!(matches!(value, Value::Int(0)));
+}
+
+#[test]
+fn deep_effect_chain_does_not_overflow() {
+    // Build a chain of effect binds that is deep enough to overflow without trampoline.
+    // Each `pure` is an `Effect` value, so `x <- pure 1` forces and binds.
+    let mut runtime = runtime_from_source_with_stdlib(
+        r#"
+@no_prelude
+module test
+use aivi
+
+// Recursive helper that nests effect binds
+loop = n => do Effect {
+  if n <= 0 then
+    pure 0
+  else
+    loop (n - 1)
+}
+
+main = do Effect {
+  result <- loop 10000
+  assert (result == 0)
+}
+"#,
+    );
+    runtime.fuel = Some(10_000_000);
+    let main = runtime
+        .ctx
+        .globals
+        .get("main")
+        .expect("main defined");
+    let main = runtime.force_value(main).unwrap_or_else(|e| panic!("main resolves: {}", format_runtime_error(e)));
+    let result = runtime.run_effect_value(main);
+    result.unwrap_or_else(|e| panic!("deep effect chain failed: {}", format_runtime_error(e)));
+}
