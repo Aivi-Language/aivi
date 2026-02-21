@@ -1,1 +1,1 @@
-usersWithPosts = <- db.load (userTable |> preload posts on (_.id => = _.authorId))
+usersWithPosts = <- db.load (userTable |> preload posts on (_.id == _.authorId))
