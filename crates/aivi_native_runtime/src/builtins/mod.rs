@@ -10,6 +10,7 @@ mod http_server;
 mod i18n;
 mod instant;
 mod linalg;
+mod list;
 mod log;
 mod math;
 mod mutable_map;

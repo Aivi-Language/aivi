@@ -40,6 +40,7 @@ impl Env {
         self.inner.values.write().insert(name, value);
     }
 
+    #[allow(dead_code)]
     pub(super) fn has_local(&self, name: &str) -> bool {
         self.inner.values.read().contains_key(name)
     }
