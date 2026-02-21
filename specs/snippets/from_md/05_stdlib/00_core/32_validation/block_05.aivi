@@ -1,0 +1,5 @@
+fromResult : Result E A -> Validation (List E) A
+fromResult = r => match r {
+  | Ok a => Valid a
+  | Err e => Invalid [e]
+}

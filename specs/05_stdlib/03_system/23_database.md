@@ -81,7 +81,7 @@ and `withConn` guarantees deterministic release via AIVI resources even on failu
 
 | Function | Explanation |
 | --- | --- |
-| **db.load** table<br><pre><code>`Table A -> Effect DbError (List A)`</code></pre> | Loads all rows from `table`. |
+| **db.load** table<br><pre><code>`Table A -> Effect (SourceError Db) (List A)`</code></pre> | Loads all rows from `table`. Validates fields against type `A`. |
 | **db.applyDelta** table delta<br><pre><code>`Table A -> Delta A -> Effect DbError (Table A)`</code></pre> | Applies an insert, update, or delete delta. Also available as the domain `+` operator. |
 
 ### Delta constructors

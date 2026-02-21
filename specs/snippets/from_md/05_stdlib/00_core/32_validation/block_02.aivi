@@ -1,0 +1,7 @@
+// Functor instance definition
+instance Functor (Validation E *) = {
+  map = f v => match v {
+    | Valid a => Valid (f a)
+    | Invalid e => Invalid e
+  }
+}
