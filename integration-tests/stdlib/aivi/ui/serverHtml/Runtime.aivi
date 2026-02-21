@@ -98,44 +98,44 @@ partitionAttrsGo = attrs hid accAttrs accMap => attrs match
 
 // Assign a stable data-aivi-node attribute based on depth-first index.
 // Also assigns handler ids to event attributes.
-assignHandlers
-: VNode msg
--> HandlerId
--> (VNode msg, Map HandlerId (EventPayload -> Option msg), HandlerId)
-assignHandlers = node startHid =>
-  assignWalk node startHid 0 |> (result => (result.node, result.handlers, result.nextHid))
+  assignHandlers
+  : VNode msg
+  -> HandlerId
+  -> (VNode msg, Map HandlerId (EventPayload -> Option msg), HandlerId)
+  assignHandlers = node startHid =>
+    assignWalk node startHid 0 |> (result => (result.node, result.handlers, result.nextHid))
 
-AssignResult msg = {
-  node: VNode msg
-  handlers: Map HandlerId (EventPayload -> Option msg)
-  nextHid: HandlerId
-  nextIdx: Int
-}
+  AssignResult msg = {
+    node: VNode msg
+    handlers: Map HandlerId (EventPayload -> Option msg)
+    nextHid: HandlerId
+    nextIdx: Int
+  }
 
-assignWalk : VNode msg -> HandlerId -> Int -> AssignResult msg
-assignWalk = node hid idx => node match
-  | TextNode t    => { node: TextNode t, handlers: Map.empty, nextHid: hid, nextIdx: idx }
-  | Keyed k inner => {
-    result = assignWalk inner hid idx
-    { node: Keyed k result.node
-    handlers: result.handlers
-    nextHid: result.nextHid
-    nextIdx: result.nextIdx
-  }
-  }
-  | Element tag attrs children => {
-    nodeId = toText idx
-    (cleanAttrs, attrHandlers, hid2) = partitionAttrs attrs hid
-    nodeAttr = Attr "data-aivi-node" nodeId
-    allAttrs = [nodeAttr, ...cleanAttrs]
-    childResult = assignChildrenWalk children hid2 (idx + 1)[] Map.empty
-    mergedHandlers = mergeMaps attrHandlers childResult.handlers
-    { node: Element tag allAttrs childResult.children
-    handlers: mergedHandlers
-    nextHid: childResult.nextHid
-    nextIdx: childResult.nextIdx
-  }
-  }
+  assignWalk : VNode msg -> HandlerId -> Int -> AssignResult msg
+  assignWalk = node hid idx => node match
+    | TextNode t    => { node: TextNode t, handlers: Map.empty, nextHid: hid, nextIdx: idx }
+    | Keyed k inner => {
+      result = assignWalk inner hid idx
+      { node: Keyed k result.node
+      handlers: result.handlers
+      nextHid: result.nextHid
+      nextIdx: result.nextIdx
+    }
+    }
+    | Element tag attrs children => {
+      nodeId = toText idx
+      (cleanAttrs, attrHandlers, hid2) = partitionAttrs attrs hid
+      nodeAttr = Attr "data-aivi-node" nodeId
+      allAttrs = [nodeAttr, ...cleanAttrs]
+      childResult = assignChildrenWalk children hid2 (idx + 1)[] Map.empty
+      mergedHandlers = mergeMaps attrHandlers childResult.handlers
+      { node: Element tag allAttrs childResult.children
+      handlers: mergedHandlers
+      nextHid: childResult.nextHid
+      nextIdx: childResult.nextIdx
+    }
+    }
 
 AssignChildrenResult msg = {
   children: List (VNode msg)
@@ -160,183 +160,183 @@ assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes match
   }
 
 // Merge two maps (second wins on conflict)
-mergeMaps : Map K V -> Map K V -> Map K V
-mergeMaps = base overlay =>
-  mergeGo (Map.toList overlay) base
+  mergeMaps : Map K V -> Map K V -> Map K V
+  mergeMaps = base overlay =>
+    mergeGo (Map.toList overlay) base
 
-mergeGo = pairs acc => pairs match
-  | []                => acc
-  | [(k, v), ...rest] => mergeGo rest (Map.insert k v acc)
+  mergeGo = pairs acc => pairs match
+    | []                => acc
+    | [(k, v), ...rest] => mergeGo rest (Map.insert k v acc)
 
 // Reverse a list (helper)
-reverseList = xs => reverseListGo xs []
+  reverseList = xs => reverseListGo xs []
 
-reverseListGo = xs acc => xs match
-  | []        => acc
-  | [h, ...t] => reverseListGo t [h, ...acc]
+  reverseListGo = xs acc => xs match
+    | []        => acc
+    | [h, ...t] => reverseListGo t [h, ...acc]
 
 // ---------------------------------------------------------------------------
 // 2f. Update helper
 // ---------------------------------------------------------------------------
 
 // Send a ServerMsg as JSON text over the WebSocket.
-sendServerMsg : WebSocket -> ServerMsg -> Effect WsError Unit
-sendServerMsg = ws msg => wsSend ws (TextMsg (encodeServerMsg msg))
+  sendServerMsg : WebSocket -> ServerMsg -> Effect WsError Unit
+  sendServerMsg = ws msg => wsSend ws (TextMsg (encodeServerMsg msg))
 
 // Process a list of ServerEffects, producing ServerMsgs and updating state.
-processEffects
-: List (ServerEffect msg)
--> WebSocket
--> Effect WsError Unit
-processEffects = effects ws => effects match
-  | []             => pure Unit
-  | [eff, ...rest] => do Effect {
-    _ <- eff match
-      | SubscribeIntersectEff sid options targets =>
-    sendServerMsg ws (SubscribeIntersect { sid, options, targets })
-      | UnsubscribeIntersectEff sid =>
-    sendServerMsg ws (UnsubscribeIntersect { sid })
-      | RequestClipboard rid op =>
-    sendServerMsg ws (EffectReq { rid, op })
-    processEffects rest ws
-  }
+  processEffects
+  : List (ServerEffect msg)
+  -> WebSocket
+  -> Effect WsError Unit
+  processEffects = effects ws => effects match
+    | []             => pure Unit
+    | [eff, ...rest] => do Effect {
+      _ <- eff match
+        | SubscribeIntersectEff sid options targets =>
+      sendServerMsg ws (SubscribeIntersect { sid, options, targets })
+        | UnsubscribeIntersectEff sid =>
+      sendServerMsg ws (UnsubscribeIntersect { sid })
+        | RequestClipboard rid op =>
+      sendServerMsg ws (EffectReq { rid, op })
+      processEffects rest ws
+    }
 
 // The App record type is imported from ServerHtml; to avoid circular deps
 // we parameterise runUpdate over the needed callbacks.
-runUpdate
-: msg
--> ViewState model msg
--> { update: msg -> model -> (model, List (ServerEffect msg))
-  view: model -> VNode msg
-}
--> WebSocket
--> Effect WsError (ViewState model msg)
-runUpdate = msg state app ws => do Effect {
-  (newModel, effects) = app.update msg state.model
-  _ <- processEffects effects ws
-  newVdom0 = app.view newModel
-  (newVdom, newHandlers, nextHid) = assignHandlers newVdom0 state.nextHid
-  ops = diff state.lastVdom newVdom
-  _ <- ops match
-    | [] => pure Unit
-    | _  => sendServerMsg ws (Patch { ops: patchToJson ops })
-  pure {
-    viewId: state.viewId
-    model: newModel
-    lastVdom: newVdom
-    handlerTable: newHandlers
-    nextHid: nextHid
-    nextRid: state.nextRid
-    pendingTable: state.pendingTable
-    intersections: state.intersections
+  runUpdate
+  : msg
+  -> ViewState model msg
+  -> { update: msg -> model -> (model, List (ServerEffect msg))
+    view: model -> VNode msg
   }
-}
+  -> WebSocket
+  -> Effect WsError (ViewState model msg)
+  runUpdate = msg state app ws => do Effect {
+    (newModel, effects) = app.update msg state.model
+    _ <- processEffects effects ws
+    newVdom0 = app.view newModel
+    (newVdom, newHandlers, nextHid) = assignHandlers newVdom0 state.nextHid
+    ops = diff state.lastVdom newVdom
+    _ <- ops match
+      | [] => pure Unit
+      | _  => sendServerMsg ws (Patch { ops: patchToJson ops })
+    pure {
+      viewId: state.viewId
+      model: newModel
+      lastVdom: newVdom
+      handlerTable: newHandlers
+      nextHid: nextHid
+      nextRid: state.nextRid
+      pendingTable: state.pendingTable
+      intersections: state.intersections
+    }
+  }
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 @test "pending table resolve read pending ok"
-pendingTableResolveReadPendingOk = do Effect {
-  handler = result => result match
-    | Ok t  => t
-    | Err _ => "fail"
-  entry = ReadPending handler
-  result = entry match
-    | ReadPending f  => f (Ok "clipboard text")
-    | WritePending _ => "wrong branch"
-  assertEq result "clipboard text"
-}
+  pendingTableResolveReadPendingOk = do Effect {
+    handler = result => result match
+      | Ok t  => t
+      | Err _ => "fail"
+    entry = ReadPending handler
+    result = entry match
+      | ReadPending f  => f (Ok "clipboard text")
+      | WritePending _ => "wrong branch"
+    assertEq result "clipboard text"
+  }
 
 @test "pending table resolve read pending err permission denied"
-pendingTableResolveReadPendingErrPermissionDenied = do Effect {
-  handler = result => result match
-    | Ok _                 => "unexpected ok"
-    | Err PermissionDenied => "denied"
-    | Err _                => "other error"
-  entry = ReadPending handler
-  result = entry match
-    | ReadPending f  => f (Err PermissionDenied)
-    | WritePending _ => "wrong branch"
-  assertEq result "denied"
-}
+  pendingTableResolveReadPendingErrPermissionDenied = do Effect {
+    handler = result => result match
+      | Ok _                 => "unexpected ok"
+      | Err PermissionDenied => "denied"
+      | Err _                => "other error"
+    entry = ReadPending handler
+    result = entry match
+      | ReadPending f  => f (Err PermissionDenied)
+      | WritePending _ => "wrong branch"
+    assertEq result "denied"
+  }
 
 @test "pending table resolve write pending ok"
-pendingTableResolveWritePendingOk = do Effect {
-  handler = result => result match
-    | Ok Unit => "write ok"
-    | Err _   => "write fail"
-  entry = WritePending handler
-  result = entry match
-    | ReadPending _  => "wrong branch"
-    | WritePending f => f (Ok Unit)
-  assertEq result "write ok"
-}
+  pendingTableResolveWritePendingOk = do Effect {
+    handler = result => result match
+      | Ok Unit => "write ok"
+      | Err _   => "write fail"
+    entry = WritePending handler
+    result = entry match
+      | ReadPending _  => "wrong branch"
+      | WritePending f => f (Ok Unit)
+    assertEq result "write ok"
+  }
 
 @test "assign handlers click emits hid attribute"
-assignHandlersClickEmitsHidAttribute = do Effect {
-  clickMsg = 99
-  node = Element "button" [OnClickE (_ => clickMsg)] [TextNode "Click"]
-  (assigned, handlers, _) = assignHandlers node 0
-// The assigned node should contain a data-aivi-hid-click attribute
-  assigned match
-    | Element _ attrs _ => {
-      hasHid = attrs |> any (a => a match
-        | Attr name _ when text.startsWith "data-aivi-hid-click" name => True
-        | _                                                           => False
-      )
-      assert hasHid
-    }
-    | _ => assert False
-}
+  assignHandlersClickEmitsHidAttribute = do Effect {
+    clickMsg = 99
+    node = Element "button" [OnClickE (_ => clickMsg)] [TextNode "Click"]
+    (assigned, handlers, _) = assignHandlers node 0
+  // The assigned node should contain a data-aivi-hid-click attribute
+    assigned match
+      | Element _ attrs _ => {
+        hasHid = attrs |> any (a => a match
+          | Attr name _ when text.startsWith "data-aivi-hid-click" name => True
+          | _                                                           => False
+        )
+        assert hasHid
+      }
+      | _ => assert False
+  }
 
 @test "assign handlers multiple handlers get distinct hids"
-assignHandlersMultipleHandlersGetDistinctHids = do Effect {
-  node = Element "div" [
-    OnClickE (_ => "clicked")
-    OnInputE (p => p.value)
-  ] [TextNode "x"]
-  (_, handlers, nextHid) = assignHandlers node 0
-// Two handlers should have been assigned with distinct hids (0 and 1)
-  assertEq nextHid 2
-  assert (Map.get 0 handlers != None)
-  assert (Map.get 1 handlers != None)
-}
+  assignHandlersMultipleHandlersGetDistinctHids = do Effect {
+    node = Element "div" [
+      OnClickE (_ => "clicked")
+      OnInputE (p => p.value)
+    ] [TextNode "x"]
+    (_, handlers, nextHid) = assignHandlers node 0
+  // Two handlers should have been assigned with distinct hids (0 and 1)
+    assertEq nextHid 2
+    assert (Map.get 0 handlers != None)
+    assert (Map.get 1 handlers != None)
+  }
 
 @test "assign handlers assigns data aivi node"
-assignHandlersAssignsDataAiviNode = do Effect {
-  node = Element "div" [] [
-    Element "span" [] [TextNode "a"]
-    Element "span" [] [TextNode "b"]
-  ]
-  (assigned, _, _) = assignHandlers node 0
-  assigned match
-    | Element _ attrs children => {
-      hasNode = attrs |> any (a => a match
-        | Attr "data-aivi-node" _ => True
-        | _                       => False
-      )
-      assert hasNode
-  // Each child element should also have data-aivi-node
-      children |> each (child => child match
-        | Element _ cAttrs _ => {
-          childHasNode = cAttrs |> any (a => a match
-            | Attr "data-aivi-node" _ => True
-            | _                       => False
-          )
-          assert childHasNode
-        }
-        | _ => pure Unit
-      )
-    }
-  | _ => assert False
-}
+  assignHandlersAssignsDataAiviNode = do Effect {
+    node = Element "div" [] [
+      Element "span" [] [TextNode "a"]
+      Element "span" [] [TextNode "b"]
+    ]
+    (assigned, _, _) = assignHandlers node 0
+    assigned match
+      | Element _ attrs children => {
+        hasNode = attrs |> any (a => a match
+          | Attr "data-aivi-node" _ => True
+          | _                       => False
+        )
+        assert hasNode
+    // Each child element should also have data-aivi-node
+        children |> each (child => child match
+          | Element _ cAttrs _ => {
+            childHasNode = cAttrs |> any (a => a match
+              | Attr "data-aivi-node" _ => True
+              | _                       => False
+            )
+            assert childHasNode
+          }
+          | _ => pure Unit
+        )
+      }
+    | _ => assert False
+  }
 
 @test "diff patch to json produces non empty for changed text"
-diffPatchToJsonProducesNonEmptyForChangedText = do Effect {
-  old = Element "p" [] [TextNode "hello"]
-  neu = Element "p" [] [TextNode "world"]
-  ops = diff old neu
-  json = patchToJson ops
-  assert (text.length json > 2) // not empty "[]"
-}
+  diffPatchToJsonProducesNonEmptyForChangedText = do Effect {
+    old = Element "p" [] [TextNode "hello"]
+    neu = Element "p" [] [TextNode "world"]
+    ops = diff old neu
+    json = patchToJson ops
+    assert (text.length json > 2) // not empty "[]"
+  }
