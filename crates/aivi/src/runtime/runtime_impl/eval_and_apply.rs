@@ -400,29 +400,15 @@ impl Runtime {
         )))
     }
 
+    /// Execute an effect value.
+    ///
+    /// Delegates to the trampoline so that deeply-nested effect chains
+    /// (e.g. recursive `do Effect { ... }`) do not overflow the Rust stack.
     fn run_effect_value(&mut self, value: Value) -> Result<Value, RuntimeError> {
-        self.check_cancelled()?;
-        match value {
-            Value::Effect(effect) => match effect.as_ref() {
-                EffectValue::Block { env, items } => {
-                    self.run_effect_block(env.clone(), items.as_ref())
-                }
-                EffectValue::Thunk { func } => func(self),
-            },
-            // Sources can be executed anywhere an `Effect` is expected; `load` just makes this explicit.
-            Value::Source(source) => match source.effect.as_ref() {
-                EffectValue::Block { env, items } => {
-                    self.run_effect_block(env.clone(), items.as_ref())
-                }
-                EffectValue::Thunk { func } => func(self),
-            },
-            other => Err(RuntimeError::Message(format!(
-                "expected Effect, got {}",
-                format_value(&other)
-            ))),
-        }
+        self.trampoline(Step::RunEffectValue { value })
     }
 
+    #[allow(dead_code)]
     fn run_effect_block(
         &mut self,
         env: Env,
