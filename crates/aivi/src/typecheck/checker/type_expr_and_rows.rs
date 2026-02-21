@@ -8,6 +8,7 @@ impl TypeChecker {
                     Type::Var(*var)
                 } else {
                     let var = self.fresh_var_id();
+                    self.var_names.insert(var, name.name.clone());
                     ctx.type_vars.insert(name.name.clone(), var);
                     Type::Var(var)
                 }
@@ -497,8 +498,9 @@ impl TypeChecker {
     }
 
     pub(super) fn type_to_string(&mut self, ty: &Type) -> String {
-        let mut printer = TypePrinter::new();
-        printer.print(&self.apply(ty.clone()))
+        let ty_applied = self.apply(ty.clone());
+        let mut printer = TypePrinter::new(Some(&self.var_names));
+        printer.print(&ty_applied)
     }
 
     fn get_kind(&mut self, ty: &Type, ctx: &TypeContext) -> Option<Kind> {

@@ -16,6 +16,7 @@ use super::{ClassDeclInfo, InstanceDeclInfo};
 pub(super) struct TypeChecker {
     next_var: u32,
     subst: HashMap<TypeVarId, Type>,
+    pub(super) var_names: HashMap<TypeVarId, String>,
     pub(super) type_constructors: HashMap<String, Kind>,
     aliases: HashMap<String, AliasInfo>,
     pub(super) builtin_types: HashMap<String, Kind>,
@@ -37,6 +38,7 @@ impl TypeChecker {
         let mut checker = Self {
             next_var: 0,
             subst: HashMap::new(),
+            var_names: HashMap::new(),
             type_constructors: HashMap::new(),
             aliases: HashMap::new(),
             builtin_types: HashMap::new(),
@@ -69,6 +71,7 @@ impl TypeChecker {
 
     pub(super) fn reset_module_context(&mut self, _module: &Module) {
         self.subst.clear();
+        self.var_names.clear();
         self.type_constructors = self.builtin_type_constructors();
         self.aliases.clear();
         self.register_builtin_aliases();
