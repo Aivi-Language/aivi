@@ -1,0 +1,1 @@
+fromListBy: (A -> K) -> (A -> Option K) -> List A -> Option (Tree A)

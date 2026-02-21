@@ -1,0 +1,45 @@
+name: Sync Specs TOC
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'specs/nav.mjs'
+      - 'specs/index.md'
+      - 'specs/README.md'
+
+jobs:
+  sync_toc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: specs/package.json
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: specs/pnpm-lock.yaml
+          
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: specs
+        
+      - name: Generate TOC
+        run: pnpm run docs:toc
+        working-directory: specs
+        
+      - name: Commit and Push changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs(specs): auto-sync TOC from nav.mjs"
+          file_pattern: "specs/index.md specs/README.md"

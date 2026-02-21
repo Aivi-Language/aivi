@@ -1,7 +1,0 @@
-PlatformEvent =
-  | PopState   UrlInfo
-  | HashChange { url: UrlInfo, oldURL: Text, newURL: Text, hash: Text }
-  | Visibility { state: Text }
-  | WindowFocus { focused: Bool }
-  | Online      { online: Bool }
-  | Intersection { sid: SubscriptionId, entries: List IntersectionEntry }

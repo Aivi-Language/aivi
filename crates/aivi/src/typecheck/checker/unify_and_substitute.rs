@@ -264,7 +264,11 @@ impl TypeChecker {
     fn instantiate(&mut self, scheme: &Scheme) -> Type {
         let mut mapping = HashMap::new();
         for var in &scheme.vars {
-            mapping.insert(*var, self.fresh_var());
+            let fresh = self.fresh_var_id();
+            if let Some(name) = self.var_names.get(var).cloned() {
+                self.var_names.insert(fresh, name);
+            }
+            mapping.insert(*var, Type::Var(fresh));
         }
         Self::substitute(&scheme.ty, &mapping)
     }

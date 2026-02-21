@@ -1,9 +1,0 @@
-use aivi.matrix
-
-scale2 = ~mat[2.0 0.0
-             0.0 2.0]
-rotate2 = ~mat[0.0 -1.0
-               1.0  0.0]
-
-combined = multiply2 scale2 rotate2
-unit = combined * 0.5

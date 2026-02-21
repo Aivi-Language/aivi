@@ -49,7 +49,7 @@ This copies the built bundle to:
 ## Wire protocol
 
 The client communicates with the server using JSON over WebSocket.
-See the [ServerHtml spec](../specs/05_stdlib/04_ui/06_server_html.md) for the
+See the [ServerHtml spec](../specs/stdlib/ui/06_server_html.md) for the
 full protocol documentation.
 
 ### Client → Server messages (discriminator: `"t"`)

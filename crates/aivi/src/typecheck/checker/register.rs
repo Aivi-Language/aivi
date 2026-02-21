@@ -93,6 +93,7 @@ impl TypeChecker {
         let mut params = Vec::new();
         for param in &alias.params {
             let var = self.fresh_var_id();
+            self.var_names.insert(var, param.name.clone());
             ctx.type_vars.insert(param.name.clone(), var);
             params.push(var);
         }
@@ -183,6 +184,7 @@ impl TypeChecker {
         let mut params = Vec::new();
         for param in &type_decl.params {
             let var = self.fresh_var_id();
+            self.var_names.insert(var, param.name.clone());
             ctx.type_vars.insert(param.name.clone(), var);
             params.push(var);
         }

@@ -1,9 +1,0 @@
-node =
-  ~<html>
-    <div class="card">
-      <h1>Hello</h1>
-      <p>{ TextNode text }</p>
-    </div>
-  </html>
-
-type is `VNode msg`.

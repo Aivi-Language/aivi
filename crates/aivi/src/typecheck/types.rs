@@ -257,15 +257,17 @@ impl TypeContext {
     }
 }
 
-pub(super) struct TypePrinter {
+pub(super) struct TypePrinter<'a> {
     names: HashMap<TypeVarId, String>,
+    original_names: Option<&'a HashMap<TypeVarId, String>>,
     next_id: u8,
 }
 
-impl TypePrinter {
-    pub(super) fn new() -> Self {
+impl<'a> TypePrinter<'a> {
+    pub(super) fn new(original_names: Option<&'a HashMap<TypeVarId, String>>) -> Self {
         Self {
             names: HashMap::new(),
+            original_names,
             next_id: 0,
         }
     }
@@ -322,13 +324,20 @@ impl TypePrinter {
         if let Some(name) = self.names.get(&id) {
             return name.clone();
         }
-        let letter = (b'a' + (self.next_id % 26)) as char;
+        if let Some(orig_names) = self.original_names {
+            if let Some(orig_name) = orig_names.get(&id) {
+                let name = orig_name.clone();
+                self.names.insert(id, name.clone());
+                return name;
+            }
+        }
+        let letter = (b'A' + (self.next_id % 26) as u8) as char;
         let suffix = self.next_id / 26;
         self.next_id += 1;
         let name = if suffix == 0 {
-            format!("'{}", letter)
+            format!("{}", letter)
         } else {
-            format!("'{}{}", letter, suffix)
+            format!("{}{}", letter, suffix)
         };
         self.names.insert(id, name.clone());
         name
