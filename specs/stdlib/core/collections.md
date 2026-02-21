@@ -11,7 +11,7 @@ The collections family provides persistent data structures for functional code. 
 
 The facade module `aivi.collections` re-exports all of the above for convenience:
 
-<<< ../../snippets/from_md/stdlib/core/collections/collections.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/overview.aivi{aivi}
 
 
 <!-- /quick-info -->
@@ -27,7 +27,7 @@ Collections introduce sigil-based literals for concise construction. These are d
 
 ### Map literal
 
-<<< ../../snippets/from_md/stdlib/core/collections/map_literal_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/aivi_list.aivi{aivi}
 
 Rules:
 - Entries use `key => value`.
@@ -35,11 +35,11 @@ Rules:
 - `...expr` spreads another map into the literal.
 - When duplicate keys exist, the **last** entry wins (right-biased).
 
-<<< ../../snippets/from_md/stdlib/core/collections/map_literal_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/aivi_map.aivi{aivi}
 
 ### Set literal
 
-<<< ../../snippets/from_md/stdlib/core/collections/set_literal.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/aivi_set.aivi{aivi}
 
 Rules:
 - Elements are expressions.
@@ -50,7 +50,7 @@ Rules:
 
 The `++` operator is provided as concatenation for `List`, right-biased merge for `Map`, and union for `Set`.
 
-<<< ../../snippets/from_md/stdlib/core/collections/merge_operator.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/collections/aivi_queue.aivi{aivi}
 
 ## `aivi.list`
 

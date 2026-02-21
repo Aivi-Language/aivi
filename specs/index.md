@@ -16,7 +16,7 @@ A high-integrity purely functional language with a Rust-first compilation pipeli
 
 ### Overview
 - [Spec Home](index)
-- [Introduction](01_introduction)
+- [Introduction](introduction)
 - [Missing Features (v0.1)](missing_features_v0.1)
 
 ### Syntax

@@ -14,7 +14,7 @@ The `~<html>...</html>` sigil allows embedding HTML inside Aivi code:syntax and 
 
 Use `{ expr }` inline:
 
-<<< ../../snippets/from_md/stdlib/ui/html/splices_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/html/splices_02.aivi{aivi}
 
 
 If the splice is `Text` (or implements `ToText`), it is coerced by wrapping with `TextNode` (and inserting `toText` when needed).

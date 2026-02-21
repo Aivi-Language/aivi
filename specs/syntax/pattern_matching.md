@@ -2,7 +2,7 @@
 
 ## 8.1 `match` branching
 
-<<< ../snippets/from_md/syntax/pattern_matching/match_branching.aivi{aivi}
+<<< ../snippets/from_md/syntax/pattern_matching/choosing_the_match_subject_scrutinee_01.aivi{aivi}
 
 This is a concise way to do case analysis, similar to `match` in Rust or `case` in Haskell/Elixir.
 
@@ -17,7 +17,7 @@ This is a concise way to do case analysis, similar to `match` in Rust or `case` 
 
 This rule composes with pipelines because `match` comes *after* the full expression:
 
-<<< ../snippets/from_md/syntax/pattern_matching/choosing_the_match_subject_scrutinee_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_01.aivi{aivi}
 
 
 In a multi-clause unary function (Section 8.2), the subject is the function's single implicit argument.
@@ -36,25 +36,25 @@ This is **not** a pipeline (`|>`). A leading `|` introduces an arm of a **unary*
 
 <<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_01.aivi{aivi}
 
-<<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/pattern_matching/matching_and_renaming_instantiation.aivi{aivi}
 
 
 ## 8.3 Record Patterns
 
-<<< ../snippets/from_md/syntax/pattern_matching/record_patterns.aivi{aivi}
+<<< ../snippets/from_md/syntax/pattern_matching/as_whole_value_plus_destructuring_01.aivi{aivi}
 
 
 ## 8.4 Nested Patterns
 
 Record patterns support dotted keys, so nested patterns can often be written without extra braces.
 
-<<< ../snippets/from_md/syntax/pattern_matching/nested_patterns.aivi{aivi}
+<<< ../snippets/from_md/syntax/pattern_matching/as_whole_value_plus_destructuring_02.aivi{aivi}
 
 ### Nested constructor patterns
 
 Constructor patterns may themselves take pattern arguments, so you can nest them:
 
-<<< ../snippets/from_md/syntax/pattern_matching/nested_constructor_patterns.aivi{aivi}
+<<< ../snippets/from_md/syntax/pattern_matching/destructuring_only_no_whole_value_binding.aivi{aivi}
 
 ### Flattened constructor-chain patterns
 

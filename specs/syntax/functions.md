@@ -5,7 +5,7 @@
 * Functions are **curried by default**
 * Application is by whitespace
 
-<<< ../snippets/from_md/syntax/functions/application.aivi{aivi}
+<<< ../snippets/from_md/syntax/functions/choosing_the_pipe_subject_and_argument_position_01.aivi{aivi}
 
 ---
 
@@ -13,11 +13,11 @@
 
 `_` denotes a **single-argument lambda**.
 
-<<< ../snippets/from_md/syntax/functions/lambdas_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/functions/choosing_the_pipe_subject_and_argument_position_02.aivi{aivi}
 
 Multi-argument lambdas must be explicit:
 
-<<< ../snippets/from_md/syntax/functions/lambdas_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/functions/choosing_the_pipe_subject_and_argument_position_03.aivi{aivi}
 
 ---
 
@@ -27,7 +27,7 @@ Multi-argument lambdas must be explicit:
 Pipelines use `|>`.
 <!-- /quick-info -->
 
-<<< ../snippets/from_md/syntax/functions/pipes.aivi{aivi}
+<<< ../snippets/from_md/syntax/functions/choosing_the_pipe_subject_and_argument_position_04.aivi{aivi}
 
 ### Choosing the pipe subject (and argument position)
 
@@ -55,7 +55,7 @@ This makes pipelines read left-to-right for data flow while keeping ordinary app
 
 Pipelines often feed directly into `match` branching:
 
-<<< ../snippets/from_md/syntax/functions/choosing_the_pipe_subject_and_argument_position_05.aivi{aivi}
+<<< ../snippets/from_md/syntax/functions/basic_functions.aivi{aivi}
 
 
 See also: [Pattern Matching](pattern_matching.md) for the `match` operator.
