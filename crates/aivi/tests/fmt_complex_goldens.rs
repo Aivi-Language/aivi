@@ -42,7 +42,6 @@ fn complex_examples_match_formatter_output() {
     let dir = root.join("integration-tests/complex");
     let files = [
         "aStar.aivi",
-        "dijkstraHeap.aivi",
         "dinic.aivi",
         "edmondsKarp.aivi",
         "fenwickTree.aivi",

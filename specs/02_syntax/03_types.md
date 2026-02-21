@@ -23,7 +23,6 @@ Numeric suffixes:
 * `~tz(Europe/Paris)` → `TimeZone`
 * `~zdt(2024-05-21T12:00:00Z[Europe/Paris])` → `ZonedDateTime`
 
-
 ## 3.2 Algebraic Data Types
 
 ### `Bool`
@@ -104,7 +103,6 @@ desugars to:
 
 <<< ../snippets/from_md/02_syntax/03_types/block_12.aivi{aivi}
 
-
 ## 3.5 Classes and HKTs
 
 <<< ../snippets/from_md/02_syntax/03_types/block_13.aivi{aivi}
@@ -179,7 +177,6 @@ at the type level.
 
 <<< ../snippets/from_md/02_syntax/03_types/block_22.aivi{aivi}
 
-
 - `-> Closed : init {}` is the **initial transition**   it has no source state and
   marks `Closed` as the machine's starting state. Every machine must have exactly one
   initial transition.
@@ -210,8 +207,6 @@ The LSP formatter aligns `->` arrows and `:` colons for readability:
 
 <<< ../snippets/from_md/02_syntax/03_types/block_23.aivi{aivi}
 
-
 ### Example: Traffic light
 
 <<< ../snippets/from_md/02_syntax/03_types/block_24.aivi{aivi}
-
