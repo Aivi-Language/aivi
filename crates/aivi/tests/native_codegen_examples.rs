@@ -168,8 +168,8 @@ fn native_codegen_examples_compile_with_rustc() {
 
     let program = desugar_target("integration-tests/...")
         .expect("desugar_target(integration-tests/...) failed");
-    let rust_code = compile_rust_native_lib(program)
-        .expect("compile_rust_native_lib failed for whole-program");
+    let rust_code =
+        compile_rust_native_lib(program).expect("compile_rust_native_lib failed for whole-program");
 
     eprintln!(
         "[native_codegen] whole-program codegen ok ({:?})",
