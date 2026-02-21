@@ -5,7 +5,6 @@
 /// overflowing the OS thread stack.
 
 /// What to evaluate next.
-#[allow(dead_code)]
 enum Step {
     /// Evaluate an expression in the given environment.
     Eval { expr: Arc<HirExpr>, env: Env },
@@ -18,7 +17,6 @@ enum Step {
 }
 
 /// Pending work saved on the explicit stack while a sub-evaluation runs.
-#[allow(dead_code)]
 enum Frame {
     /// Stepping through a plain `do { ... }` block.
     PlainBlockStep {

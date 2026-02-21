@@ -40,44 +40,6 @@ impl Runtime {
         Err(last_error.unwrap_or_else(|| RuntimeError::Message("no matching clause".to_string())))
     }
 
-    fn eval_plain_block(
-        &mut self,
-        items: &[HirBlockItem],
-        env: &Env,
-    ) -> Result<Value, RuntimeError> {
-        let local_env = Env::new(Some(env.clone()));
-        let mut last_value = Value::Unit;
-        for (index, item) in items.iter().enumerate() {
-            let last = index + 1 == items.len();
-            match item {
-                HirBlockItem::Bind { pattern, expr } => {
-                    let value = self.eval_expr(expr, &local_env)?;
-                    let bindings = collect_pattern_bindings(pattern, &value)
-                        .ok_or_else(|| RuntimeError::Message("pattern match failed".to_string()))?;
-                    for (name, value) in bindings {
-                        local_env.set(name, value);
-                    }
-                    if last {
-                        last_value = Value::Unit;
-                    }
-                }
-                HirBlockItem::Expr { expr } => {
-                    last_value = self.eval_expr(expr, &local_env)?;
-                    if !last {
-                        last_value = Value::Unit;
-                    }
-                }
-                HirBlockItem::Filter { .. }
-                | HirBlockItem::Yield { .. }
-                | HirBlockItem::Recurse { .. } => {
-                    return Err(RuntimeError::Message(
-                        "unsupported block item in plain block".to_string(),
-                    ));
-                }
-            }
-        }
-        Ok(last_value)
-    }
 
     /// Evaluate a generic `do M { ... }` block (where M is not Effect).
     ///
@@ -133,53 +95,62 @@ impl Runtime {
         env: &Env,
         out: &mut Vec<Value>,
     ) -> Result<(), RuntimeError> {
-        let local_env = Env::new(Some(env.clone()));
-        for item in items {
-            match item {
-                HirBlockItem::Yield { expr } => {
-                    let value = self.eval_expr(expr, &local_env)?;
-                    out.push(value);
-                }
-                HirBlockItem::Bind { pattern, expr } => {
-                    let source = self.eval_expr(expr, &local_env)?;
-                    // The source should be a generator (a builtin that takes k and z).
-                    // We need to extract its elements. We do this by folding with a
-                    // list-accumulate step function.
-                    let source_items = self.generator_to_list(source)?;
-                    // For each element from the source, bind it to the pattern
-                    // and process the rest of the items in this scope.
-                    let rest =
-                        &items[items.iter().position(|i| std::ptr::eq(i, item)).unwrap() + 1..];
-                    for val in source_items {
-                        let bind_env = Env::new(Some(local_env.clone()));
-                        let bindings =
-                            collect_pattern_bindings(pattern, &val).ok_or_else(|| {
-                                RuntimeError::Message(
-                                    "pattern match failed in generator bind".to_string(),
-                                )
-                            })?;
-                        for (name, bound_val) in bindings {
-                            bind_env.set(name, bound_val);
+        // Explicit work stack: each entry is (start_index, items_vec, env).
+        // This replaces the recursive call in the Bind arm.
+        let items_vec: Vec<HirBlockItem> = items.to_vec();
+        let mut work_stack: Vec<(usize, Vec<HirBlockItem>, Env)> =
+            vec![(0, items_vec, Env::new(Some(env.clone())))];
+
+        while let Some((start, work_items, local_env)) = work_stack.pop() {
+            let mut aborted = false;
+            for idx in start..work_items.len() {
+                let item = &work_items[idx];
+                match item {
+                    HirBlockItem::Yield { expr } => {
+                        let value = self.eval_expr(expr, &local_env)?;
+                        out.push(value);
+                    }
+                    HirBlockItem::Bind { pattern, expr } => {
+                        let source = self.eval_expr(expr, &local_env)?;
+                        let source_items = self.generator_to_list(source)?;
+                        let rest: Vec<HirBlockItem> = work_items[idx + 1..].to_vec();
+                        // Push work for each source element in reverse so the first
+                        // element is processed first (LIFO stack).
+                        for val in source_items.into_iter().rev() {
+                            let bind_env = Env::new(Some(local_env.clone()));
+                            let bindings =
+                                collect_pattern_bindings(pattern, &val).ok_or_else(|| {
+                                    RuntimeError::Message(
+                                        "pattern match failed in generator bind".to_string(),
+                                    )
+                                })?;
+                            for (name, bound_val) in bindings {
+                                bind_env.set(name, bound_val);
+                            }
+                            work_stack.push((0, rest.clone(), bind_env));
                         }
-                        self.materialize_generate(rest, &bind_env, out)?;
+                        aborted = true;
+                        break;
                     }
-                    return Ok(());
-                }
-                HirBlockItem::Filter { expr } => {
-                    let cond = self.eval_expr(expr, &local_env)?;
-                    if !matches!(cond, Value::Bool(true)) {
-                        return Ok(());
+                    HirBlockItem::Filter { expr } => {
+                        let cond = self.eval_expr(expr, &local_env)?;
+                        if !matches!(cond, Value::Bool(true)) {
+                            aborted = true;
+                            break;
+                        }
+                    }
+                    HirBlockItem::Expr { expr } => {
+                        let sub = self.eval_expr(expr, &local_env)?;
+                        let sub_items = self.generator_to_list(sub)?;
+                        out.extend(sub_items);
+                    }
+                    HirBlockItem::Recurse { .. } => {
+                        // Unsupported for now
                     }
                 }
-                HirBlockItem::Expr { expr } => {
-                    // An expression in a generate block acts as a sub-generator to spread
-                    let sub = self.eval_expr(expr, &local_env)?;
-                    let sub_items = self.generator_to_list(sub)?;
-                    out.extend(sub_items);
-                }
-                HirBlockItem::Recurse { .. } => {
-                    // Unsupported for now
-                }
+            }
+            if aborted {
+                continue;
             }
         }
         Ok(())
@@ -224,33 +195,6 @@ impl Runtime {
         }
     }
 
-    fn eval_match(
-        &mut self,
-        value: &Value,
-        arms: &[HirMatchArm],
-        env: &Env,
-    ) -> Result<Value, RuntimeError> {
-        for arm in arms {
-            if let Some(bindings) = collect_pattern_bindings(&arm.pattern, value) {
-                if let Some(guard) = &arm.guard {
-                    let guard_env = Env::new(Some(env.clone()));
-                    for (name, value) in bindings.clone() {
-                        guard_env.set(name, value);
-                    }
-                    let guard_value = self.eval_expr(guard, &guard_env)?;
-                    if !matches!(guard_value, Value::Bool(true)) {
-                        continue;
-                    }
-                }
-                let arm_env = Env::new(Some(env.clone()));
-                for (name, value) in bindings {
-                    arm_env.set(name, value);
-                }
-                return self.eval_expr(&arm.body, &arm_env);
-            }
-        }
-        Err(RuntimeError::Message("non-exhaustive match".to_string()))
-    }
 
     fn eval_list(&mut self, items: &[HirListItem], env: &Env) -> Result<Value, RuntimeError> {
         let mut values = Vec::new();
@@ -406,115 +350,5 @@ impl Runtime {
     /// (e.g. recursive `do Effect { ... }`) do not overflow the Rust stack.
     fn run_effect_value(&mut self, value: Value) -> Result<Value, RuntimeError> {
         self.trampoline(Step::RunEffectValue { value })
-    }
-
-    #[allow(dead_code)]
-    fn run_effect_block(
-        &mut self,
-        env: Env,
-        items: &[HirBlockItem],
-    ) -> Result<Value, RuntimeError> {
-        let local_env = Env::new(Some(env));
-        let mut cleanups: Vec<Value> = Vec::new();
-        let mut result: Result<Value, RuntimeError> = Ok(Value::Unit);
-        let trace_effect = std::env::var("AIVI_TRACE_EFFECT").is_ok_and(|v| v == "1");
-
-        for (index, item) in items.iter().enumerate() {
-            let last = index + 1 == items.len();
-            if trace_effect {
-                eprintln!("[AIVI_TRACE_EFFECT] step {} / {}", index + 1, items.len());
-            }
-            if let Err(err) = self.check_cancelled() {
-                result = Err(err);
-                break;
-            }
-            let step = match item {
-                HirBlockItem::Bind { pattern, expr } => {
-                    let value = self.eval_expr(expr, &local_env)?;
-                    match value {
-                        Value::Resource(resource) => {
-                            let (res_value, cleanup) =
-                                self.acquire_resource(resource, &local_env)?;
-                            let bindings = collect_pattern_bindings(pattern, &res_value)
-                                .ok_or_else(|| {
-                                    RuntimeError::Message(
-                                        "pattern match failed in resource bind".to_string(),
-                                    )
-                                })?;
-                            for (name, value) in bindings {
-                                local_env.set(name, value);
-                            }
-                            cleanups.push(cleanup);
-                            Ok(Value::Unit)
-                        }
-                        Value::Effect(_) | Value::Source(_) => {
-                            let value = self.run_effect_value(value)?;
-                            let bindings =
-                                collect_pattern_bindings(pattern, &value).ok_or_else(|| {
-                                    RuntimeError::Message("pattern match failed".to_string())
-                                })?;
-                            for (name, value) in bindings {
-                                local_env.set(name, value);
-                            }
-                            Ok(Value::Unit)
-                        }
-                        other => {
-                            let bindings =
-                                collect_pattern_bindings(pattern, &other).ok_or_else(|| {
-                                    RuntimeError::Message("pattern match failed".to_string())
-                                })?;
-                            for (name, value) in bindings {
-                                local_env.set(name, value);
-                            }
-                            Ok(Value::Unit)
-                        }
-                    }
-                }
-                HirBlockItem::Expr { expr } => {
-                    let value = self.eval_expr(expr, &local_env)?;
-                    if last {
-                        match value {
-                            Value::Effect(_) => self.run_effect_value(value),
-                            _ => Err(RuntimeError::Message(
-                                "final expression in effect block must be Effect".to_string(),
-                            )),
-                        }
-                    } else {
-                        match value {
-                            Value::Effect(_) => {
-                                let _ = self.run_effect_value(value)?;
-                                Ok(Value::Unit)
-                            }
-                            _ => Err(RuntimeError::Message(
-                                "expression in effect block must be Effect".to_string(),
-                            )),
-                        }
-                    }
-                }
-                HirBlockItem::Filter { .. }
-                | HirBlockItem::Yield { .. }
-                | HirBlockItem::Recurse { .. } => Err(RuntimeError::Message(
-                    "unsupported block item in effect block".to_string(),
-                )),
-            };
-            match step {
-                Ok(value) => {
-                    if last {
-                        result = Ok(value);
-                    }
-                }
-                Err(err) => {
-                    result = Err(err);
-                    break;
-                }
-            }
-        }
-
-        let cleanup_result = self.run_cleanups(cleanups);
-        match (result, cleanup_result) {
-            (Err(err), _) => Err(err),
-            (Ok(_), Err(err)) => Err(err),
-            (Ok(value), Ok(())) => Ok(value),
-        }
     }
 }
