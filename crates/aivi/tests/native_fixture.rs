@@ -114,9 +114,7 @@ pub fn cargo_check_sharded(
 
     // -- workspace Cargo.toml --
     std::fs::create_dir_all(&ws).expect("create ws dir");
-    let members: Vec<String> = (0..shard_count)
-        .map(|i| format!("\"shard_{i}\""))
-        .collect();
+    let members: Vec<String> = (0..shard_count).map(|i| format!("\"shard_{i}\"")).collect();
     let ws_toml = format!(
         "[workspace]\nresolver = \"2\"\nmembers = [{}]\n",
         members.join(", ")
