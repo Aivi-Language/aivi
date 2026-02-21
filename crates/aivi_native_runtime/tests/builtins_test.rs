@@ -1,3 +1,5 @@
+#![allow(clippy::approx_constant)]
+
 use aivi_native_runtime::{Runtime, Value};
 
 /// Helper: look up a builtin by name from the global registry.

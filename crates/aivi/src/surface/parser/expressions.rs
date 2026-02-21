@@ -418,7 +418,7 @@ impl Parser {
         if args.is_empty() {
             return Some(expr);
         }
-        let span = merge_span(expr_span(&expr), expr_span(args.last().unwrap()));
+        let span = merge_span(expr_span(&expr), expr_span(args.last().expect("infallible")));
         expr = Expr::Call {
             func: Box::new(expr),
             args,

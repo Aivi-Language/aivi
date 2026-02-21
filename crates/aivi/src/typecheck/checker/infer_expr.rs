@@ -894,6 +894,7 @@ impl TypeChecker {
 
                         // Use subst_after_operands as base so operand types are already constrained
                         let base_subst = subst_after_operands.clone();
+                        #[allow(clippy::type_complexity)]
                         let mut selected: Option<(
                             String,
                             String,

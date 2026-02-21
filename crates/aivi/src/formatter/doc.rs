@@ -44,7 +44,7 @@ impl Doc {
         if out.is_empty() {
             Doc::Nil
         } else if out.len() == 1 {
-            out.pop().unwrap()
+            out.pop().expect("infallible")
         } else {
             Doc::Concat(out)
         }

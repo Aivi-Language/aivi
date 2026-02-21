@@ -345,14 +345,14 @@ impl Parser {
                     }
                     self.consume_newlines();
                     let rhs = self.parse_type_pipe().unwrap_or(TypeExpr::Unknown {
-                        span: type_span(items.last().unwrap()),
+                        span: type_span(items.last().expect("infallible")),
                     });
                     items.push(rhs);
                 }
                 body_opt = Some(if items.len() == 1 {
                     items.remove(0)
                 } else {
-                    let span = merge_span(type_span(&items[0]), type_span(items.last().unwrap()));
+                    let span = merge_span(type_span(&items[0]), type_span(items.last().expect("infallible")));
                     TypeExpr::And { items, span }
                 });
             }
@@ -397,7 +397,7 @@ impl Parser {
         let mut constraints = Vec::new();
         self.consume_newlines();
         if peek_is_with_constraints(self) {
-            let with_span = self.consume_ident_text("with").unwrap().span;
+            let with_span = self.consume_ident_text("with").expect("infallible").span;
             self.expect_symbol("(", "expected '(' after 'with' in class constraints");
             self.consume_newlines();
             while self.pos < self.tokens.len() && !self.check_symbol(")") {
@@ -605,16 +605,16 @@ impl Parser {
                 continue;
             }
             self.pos = checkpoint;
-            let checkpoint = self.pos;
+            let checkpoint_after = self.pos;
             if self.consume_name().is_some() {
                 if self.check_symbol(":") {
-                    self.pos = checkpoint;
+                    self.pos = checkpoint_after;
                     if let Some(sig) = self.parse_type_sig(decorators) {
                         items.push(DomainItem::TypeSig(sig));
                     }
                     continue;
                 }
-                self.pos = checkpoint;
+                self.pos = checkpoint_after;
             }
             if let Some(def) = self.parse_def(decorators.clone()) {
                 items.push(DomainItem::Def(def));

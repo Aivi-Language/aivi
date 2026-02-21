@@ -841,10 +841,7 @@ fn infer_expr_type(expr: &RustIrExpr, ctx: &TypedCtx) -> Option<CgType> {
             {
                 // Search all globals for an ADT whose constructors include this name.
                 for cg in ctx.globals.values() {
-                    if let CgType::Adt {
-                        constructors, ..
-                    } = cg
-                    {
+                    if let CgType::Adt { constructors, .. } = cg {
                         if constructors.iter().any(|(n, _)| n == ctor_name) {
                             return Some(cg.clone());
                         }
@@ -858,10 +855,7 @@ fn infer_expr_type(expr: &RustIrExpr, ctx: &TypedCtx) -> Option<CgType> {
                             break;
                         }
                     }
-                    if let CgType::Adt {
-                        constructors, ..
-                    } = cur
-                    {
+                    if let CgType::Adt { constructors, .. } = cur {
                         if constructors.iter().any(|(n, _)| n == ctor_name) {
                             return Some(cur.clone());
                         }
@@ -886,10 +880,7 @@ fn infer_expr_type(expr: &RustIrExpr, ctx: &TypedCtx) -> Option<CgType> {
             name: ctor_name, ..
         } => {
             for cg in ctx.globals.values() {
-                if let CgType::Adt {
-                    constructors, ..
-                } = cg
-                {
+                if let CgType::Adt { constructors, .. } = cg {
                     if constructors.iter().any(|(n, _)| n == ctor_name) {
                         return Some(cg.clone());
                     }
@@ -903,10 +894,7 @@ fn infer_expr_type(expr: &RustIrExpr, ctx: &TypedCtx) -> Option<CgType> {
                         break;
                     }
                 }
-                if let CgType::Adt {
-                    constructors, ..
-                } = cur
-                {
+                if let CgType::Adt { constructors, .. } = cur {
                     if constructors.iter().any(|(n, _)| n == ctor_name) {
                         return Some(cur.clone());
                     }
