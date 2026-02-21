@@ -355,7 +355,8 @@ fn lower_expr(
                 let ctor = name.rsplit('.').next().unwrap_or(&name).to_string();
                 RustIrExpr::ConstructorValue { id, name: ctor }
             } else {
-                return Err(AiviError::Codegen(format!("unbound variable {name}")));
+                // Not in locals or this module's defs, but if it passed typechecking, it's likely an imported global.
+                RustIrExpr::Global { id, name }
             }
         }
         KernelExpr::LitNumber { id, text } => RustIrExpr::LitNumber { id, text },
