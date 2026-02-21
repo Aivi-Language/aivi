@@ -1,0 +1,8 @@
+type Status = Active | Inactive
+
+decodeStatus : JsonValue -> Validation (List DecodeError) Status
+decodeStatus = val => match val {
+  | JsonString "active" => Valid Active
+  | JsonString "inactive" => Valid Inactive
+  | _ => Invalid [{ path: [], message: "Expected 'active' or 'inactive'" }]
+}

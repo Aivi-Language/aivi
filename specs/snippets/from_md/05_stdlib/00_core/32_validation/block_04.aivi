@@ -1,0 +1,5 @@
+valid : A -> Validation E A
+valid = a => Valid a
+
+invalid : E -> Validation E A
+invalid = e => Invalid e
