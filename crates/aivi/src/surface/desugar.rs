@@ -35,7 +35,7 @@ fn wrap_in_pure(expr: Expr) -> Expr {
 
     Expr::Call {
         func: Box::new(Expr::Ident(SpannedName {
-            name: "pure".to_string(),
+            name: "pure".into(),
             span: span.clone(),
         })),
         args: vec![expr],

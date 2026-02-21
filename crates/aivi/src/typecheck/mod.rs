@@ -3,6 +3,8 @@ use crate::surface::Module;
 
 mod builtins;
 mod checker;
+mod constraints;
+mod query_engine;
 mod types;
 
 mod check;

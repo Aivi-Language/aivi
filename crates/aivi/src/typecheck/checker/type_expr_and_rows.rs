@@ -33,6 +33,9 @@ impl TypeChecker {
                         merged.entry(name).or_insert(ty);
                     }
                 }
+                if open {
+                    self.note_open_row_var();
+                }
                 Type::Record {
                     fields: merged,
                     open,
@@ -106,6 +109,7 @@ impl TypeChecker {
                     let field_ty = self.type_from_expr(ty, ctx);
                     field_map.insert(name.name.clone(), field_ty);
                 }
+                self.note_open_row_var();
                 Type::Record {
                     fields: field_map,
                     open: true,
@@ -466,7 +470,9 @@ impl TypeChecker {
     pub(super) fn fresh_var_id(&mut self) -> TypeVarId {
         let id = self.next_var;
         self.next_var += 1;
-        TypeVarId(id)
+        let var = TypeVarId(id);
+        self.constraints.vars.ensure(var);
+        var
     }
 
     pub(super) fn error_to_diag(&mut self, module: &Module, err: TypeError) -> FileDiagnostic {

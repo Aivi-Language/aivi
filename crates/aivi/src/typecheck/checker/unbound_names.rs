@@ -192,7 +192,7 @@ fn rewrite_implicit_field_vars(
         },
         Expr::Ident(name) if unbound.contains(&name.name) => {
             let param = SpannedName {
-                name: implicit_param.to_string(),
+                name: implicit_param.into(),
                 span: name.span.clone(),
             };
             let field = SpannedName {
