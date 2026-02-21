@@ -85,55 +85,55 @@ convertAppEffects = effects rid pending => effects match
     }
 
 // Adapter: wraps app.update to produce ServerEffects instead of AppEffects
-makeUpdateAdapter
-: App model msg
--> { update: msg -> model -> (model, List (ServerEffect msg))
-  view: model -> VNode msg
-}
-makeUpdateAdapter = app => {
-  update: msg model => {
-    (newModel, appEffects) = app.update msg model
-    converted = convertAppEffects appEffects 0 Map.empty
-    (newModel, converted.serverEffects)
+  makeUpdateAdapter
+  : App model msg
+  -> { update: msg -> model -> (model, List (ServerEffect msg))
+    view: model -> VNode msg
   }
-  view: app.view
-}
+  makeUpdateAdapter = app => {
+    update: msg model => {
+      (newModel, appEffects) = app.update msg model
+      converted = convertAppEffects appEffects 0 Map.empty
+      (newModel, converted.serverEffects)
+    }
+    view: app.view
+  }
 
 // ---------------------------------------------------------------------------
 // Internal: parse UrlInfo from a URL text
 // ---------------------------------------------------------------------------
 
-parseUrlInfo : Text -> UrlInfo
-parseUrlInfo = urlText => {
-// Minimal parser: extract path, query, hash from URL text.
-// A full URL parser would live in aivi.url; this is a best-effort split.
-  href = urlText
-  pathAndRest = stripSchemeHost urlText
-  (pathAndQuery, hash) = splitOnce "#" pathAndRest
-  (path, query) = splitOnce "?" pathAndQuery
-  { href, path, query: query match | "" => "" | q => "?{ q }", hash: hash match | "" => "" | h => "#{ h }" }
-}
+  parseUrlInfo : Text -> UrlInfo
+  parseUrlInfo = urlText => {
+  // Minimal parser: extract path, query, hash from URL text.
+  // A full URL parser would live in aivi.url; this is a best-effort split.
+    href = urlText
+    pathAndRest = stripSchemeHost urlText
+    (pathAndQuery, hash) = splitOnce "#" pathAndRest
+    (path, query) = splitOnce "?" pathAndQuery
+    { href, path, query: query match | "" => "" | q => "?{ q }", hash: hash match | "" => "" | h => "#{ h }" }
+  }
 
 // Strip scheme + authority from a URL, returning path onward.
-stripSchemeHost : Text -> Text
-stripSchemeHost = url => {
-  afterScheme = text.contains "://" url match
-    | True  => text.splitOnce "://" url |> sndOf |> dropUntilSlash
-    | False => url
-  afterScheme
-}
+  stripSchemeHost : Text -> Text
+  stripSchemeHost = url => {
+    afterScheme = text.contains "://" url match
+      | True  => text.splitOnce "://" url |> sndOf |> dropUntilSlash
+      | False => url
+    afterScheme
+  }
 
-dropUntilSlash : Text -> Text
-dropUntilSlash = t => text.contains "/" t match
-  | True  => "/" ++ (text.splitOnce "/" t |> sndOf)
-  | False => "/"
+  dropUntilSlash : Text -> Text
+  dropUntilSlash = t => text.contains "/" t match
+    | True  => "/" ++ (text.splitOnce "/" t |> sndOf)
+    | False => "/"
 
 // Split a text on the first occurrence of sep. Returns (before, after).
 // If sep is not found, returns (text, "").
-splitOnce : Text -> Text -> (Text, Text)
-splitOnce = sep t => text.contains sep t match
-  | True  => text.splitOnce sep t
-  | False => (t, "")
+  splitOnce : Text -> Text -> (Text, Text)
+  splitOnce = sep t => text.contains sep t match
+    | True  => text.splitOnce sep t
+    | False => (t, "")
 
 sndOf : (A, B) -> B
 sndOf = (_, b) => b
@@ -215,130 +215,118 @@ serveWs = app ws => do Effect {
 // Internal: tail-recursive message loop
 // ---------------------------------------------------------------------------
 
-recvLoop
-: App model msg
--> WebSocket
--> ViewState model msg
--> Effect WsError Unit
-recvLoop = app ws state => do Effect {
-  rawMsg <- wsRecv ws
-  msgText = rawMsg match
-    | TextMsg t => t
-    | _         => ""
-  decoded = decodeClientMsg msgText
-  newState <- decoded match
-    | Err _ => do Effect {
-      _ <- wsSend ws (TextMsg (encodeServerMsg (Error { code: "DECODE", detail: "invalid message" })))
-      pure state
-    }
-    | Ok clientMsg => dispatchMsg app ws state clientMsg
-  recvLoop app ws newState
-}
+  recvLoop
+  : App model msg
+  -> WebSocket
+  -> ViewState model msg
+  -> Effect WsError Unit
+  recvLoop = app ws state => do Effect {
+    rawMsg <- wsRecv ws
+    msgText = rawMsg match
+      | TextMsg t => t
+      | _         => ""
+    decoded = decodeClientMsg msgText
+    newState <- decoded match
+      | Err _ => do Effect {
+        _ <- wsSend ws (TextMsg (encodeServerMsg (Error { code: "DECODE", detail: "invalid message" })))
+        pure state
+      }
+      | Ok clientMsg => dispatchMsg app ws state clientMsg
+    recvLoop app ws newState
+  }
 
-dispatchMsg
-: App model msg
--> WebSocket
--> ViewState model msg
--> ClientMsg
--> Effect WsError (ViewState model msg)
-dispatchMsg = app ws state clientMsg => clientMsg match
-  | Hello _ =>
+  dispatchMsg
+  : App model msg
+  -> WebSocket
+  -> ViewState model msg
+  -> ClientMsg
+  -> Effect WsError (ViewState model msg)
+  dispatchMsg = app ws state clientMsg => clientMsg match
+    | Hello _ =>
 // Already initialized; ignore duplicate hello.
-pure state
+  pure state
 | Event e => {
-  handlerOpt = Map.get e.hid state.handlerTable
-  handlerOpt match
-    | None => do Effect {
-      _ <- wsSend ws (TextMsg (encodeServerMsg
-          (Error { code: "HID", detail: "unknown handler id" })
-      )
-      )
-      pure state
-    }
-    | Some handler => {
-      payloadResult = decodeEventPayload e.kind e.p
-      payloadResult match
-        | Err _ => do Effect {
-          _ <- wsSend ws (TextMsg (encodeServerMsg
-          (Error { code: "PAYLOAD", detail: "invalid event payload" })
-          )
-          )
-          pure state
-        }
-        | Ok payload => {
-          msgOpt = handler payload
-          msgOpt match
-            | None     => pure state
-            | Some msg =>
-          runUpdate msg state (makeUpdateAdapter app) ws
-        }
-    }
+    handlerOpt = Map.get e.hid state.handlerTable
+    handlerOpt match
+      | None => do Effect {
+        _ <- wsSend ws (TextMsg (encodeServerMsg (Error { code: "HID", detail: "unknown handler id" })))
+        pure state
+      }
+      | Some handler => {
+        payloadResult = decodeEventPayload e.kind e.p
+        payloadResult match
+          | Err _ => do Effect {
+            _ <- wsSend ws (TextMsg (encodeServerMsg (Error { code: "PAYLOAD", detail: "invalid event payload" })))
+            pure state
+          }
+          | Ok payload => {
+            msgOpt = handler payload
+            msgOpt match
+              | None     => pure state
+              | Some msg =>
+            runUpdate msg state (makeUpdateAdapter app) ws
+          }
+      }
 }
 | Platform p => {
-  platformResult = decodePlatformEvent p.kind (jsonToText p.p)
-  platformResult match
-    | Err _ => do Effect {
-      _ <- wsSend ws (TextMsg (encodeServerMsg
-          (Error { code: "PLATFORM", detail: "invalid platform event" })
-      )
-      )
-      pure state
-    }
-    | Ok platformEvt => {
-      msgOpt = app.onPlatform platformEvt
-      msgOpt match
-        | None     => pure state
-        | Some msg => runUpdate msg state (makeUpdateAdapter app) ws
-    }
+    platformResult = decodePlatformEvent p.kind (jsonToText p.p)
+    platformResult match
+      | Err _ => do Effect {
+        _ <- wsSend ws (TextMsg (encodeServerMsg (Error { code: "PLATFORM", detail: "invalid platform event" })))
+        pure state
+      }
+      | Ok platformEvt => {
+        msgOpt = app.onPlatform platformEvt
+        msgOpt match
+          | None     => pure state
+          | Some msg => runUpdate msg state (makeUpdateAdapter app) ws
+      }
 }
 | EffectResult er => {
-  pendingOpt = Map.get er.rid state.pendingTable
-  pendingOpt match
-    | None => do Effect {
-      _ <- wsSend ws (TextMsg (encodeServerMsg
-          (Error { code: "RID", detail: "unknown request id" })
-      )
-      )
-      pure state
-    }
-    | Some entry => do Effect {
-      newPending = Map.delete er.rid state.pendingTable
-      stateWithoutPending = state <| { pendingTable: newPending }
-      resolveResult = resolveEffectResult er entry
-      result = resolveResult match
-        | None     => pure stateWithoutPending
-        | Some msg => runUpdate msg stateWithoutPending (makeUpdateAdapter app) ws
-      result
-    }
+    pendingOpt = Map.get er.rid state.pendingTable
+    pendingOpt match
+      | None => do Effect {
+        _ <- wsSend ws (TextMsg (encodeServerMsg (Error { code: "RID", detail: "unknown request id" })))
+        pure state
+      }
+      | Some entry => do Effect {
+        newPending = Map.delete er.rid state.pendingTable
+        stateWithoutPending = state <| { pendingTable: newPending }
+        resolveResult = resolveEffectResult er entry
+        result = resolveResult match
+          | None     => pure stateWithoutPending
+          | Some msg => runUpdate msg stateWithoutPending (makeUpdateAdapter app) ws
+        result
+      }
 }
 
 // Resolve an EffectResult against a PendingEntry, producing an optional msg.
-resolveEffectResult
-: { viewId: ViewId, rid: RequestId, kind: Text, ok: Bool, p: JsonValue }
--> PendingEntry msg
--> Option msg
-resolveEffectResult = er entry => entry match
-  | ReadPending cont => er.ok match
-    | True             => {
-      textResult = decodeField "text" er.p |> bind decodeText
-      textResult match
-        | Ok t  => Some (cont (Ok t))
-        | Err _ => Some (cont (Err (Other "decode error")))
-    }
-    | False             => Some (cont (Err (classifyClipboardError er)))
-    | WritePending cont => er.ok match
-      | True              => Some (cont (Ok Unit))
+  resolveEffectResult
+  : { viewId: ViewId, rid: RequestId, kind: Text, ok: Bool, p: JsonValue }
+  -> PendingEntry msg
+  -> Option msg
+  resolveEffectResult = er entry => entry match
+    | ReadPending cont => er.ok match
+      | True             => {
+        textResult = decodeField "text" er.p |> bind decodeText
+        textResult match
+          | Ok t  => Some (cont (Ok t))
+          | Err _ => Some (cont (Err (Other "decode error")))
+      }
       | False             => Some (cont (Err (classifyClipboardError er)))
+      | WritePending cont => er.ok match
+        | True              => Some (cont (Ok Unit))
+        | False             => Some (cont (Err (classifyClipboardError er)))
 
 // Classify a clipboard error from the error string in the EffectResult.
-classifyClipboardError
-: { viewId: ViewId, rid: RequestId, kind: Text, ok: Bool, p: JsonValue }
--> ClipboardError
-classifyClipboardError = er => {
-  errorField = decodeField "error" er.p |> bind decodeText
-  errorField match
-    | Ok "NotAllowedError" => PermissionDenied
-    | Ok "Unavailable"     => Unavailable
-    | Ok other             => Other other
-    | Err _                => Other "unknown error"
-}
+  classifyClipboardError
+  : { viewId: ViewId, rid: RequestId, kind: Text, ok: Bool, p: JsonValue }
+  -> ClipboardError
+  classifyClipboardError = er => {
+    errorField = decodeField "error" er.p |> bind decodeText
+    errorField match
+      | Ok "NotAllowedError" => PermissionDenied
+      | Ok "Unavailable"     => Unavailable
+      | Ok other             => Other other
+      | Err _                => Other "unknown error"
+  }
