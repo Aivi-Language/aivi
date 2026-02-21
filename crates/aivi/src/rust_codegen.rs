@@ -6,8 +6,6 @@ use crate::AiviError;
 use crate::{emit_native_rust_source, emit_native_rust_source_lib, kernel, rust_ir};
 
 /// Experimental backend: lower to Kernel -> Rust IR and emit standalone Rust.
-///
-/// Limitations are those of `rust_ir` + `rustc_backend` (e.g. `match` not supported yet).
 pub fn compile_rust_native(program: HirProgram) -> Result<String, AiviError> {
     compile_rust_native_inner(program, None, EmitVariant::Bin)
 }

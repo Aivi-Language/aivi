@@ -409,7 +409,6 @@ fn run() -> Result<(), AiviError> {
                     maybe_enable_debug_trace(opts.debug_trace);
                     if opts.target != "rust"
                         && opts.target != "rust-native"
-                        && opts.target != "rustc"
                     {
                         return Err(AiviError::InvalidCommand(format!(
                             "unsupported target {}",
@@ -434,12 +433,6 @@ fn run() -> Result<(), AiviError> {
                             write_rust_project_native(&out_dir, &rust)?;
                         }
                         println!("{}", out_dir.display());
-                    } else {
-                        let out = opts
-                            .output
-                            .unwrap_or_else(|| PathBuf::from("target/aivi-rustc/aivi_out"));
-                        aivi::build_with_rustc(program, &out, &opts.forward)?;
-                        println!("{}", out.display());
                     }
                     Ok(())
                 }
@@ -539,7 +532,7 @@ Fix:\n\
 
 fn print_help() {
     println!(
-        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] [--check-stdlib] <path|dir/...>\n  fmt [--write] <path|dir/...>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  test [--check-stdlib] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--target rust|rust-native|rustc] [--out <dir|path>] [-- <rustc args...>]\n  run <path|dir/...> [--debug-trace] [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
+        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] [--check-stdlib] <path|dir/...>\n  fmt [--write] <path|dir/...>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  test [--check-stdlib] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--target rust|rust-native] [--out <dir|path>]\n  run <path|dir/...> [--debug-trace] [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
     );
 }
 
@@ -665,7 +658,6 @@ struct BuildArgs {
     input: String,
     output: Option<PathBuf>,
     target: String,
-    forward: Vec<String>,
     debug_trace: bool,
 }
 
@@ -677,14 +669,9 @@ fn parse_build_args(
     let mut input = None;
     let mut output = None;
     let mut target = default_target.to_string();
-    let mut forward = Vec::new();
     let mut debug_trace = false;
 
     while let Some(arg) = args.next() {
-        if arg == "--" {
-            forward.extend(args);
-            break;
-        }
         match arg.as_str() {
             "--debug-trace" => {
                 debug_trace = true;
@@ -727,7 +714,6 @@ fn parse_build_args(
         input,
         output,
         target,
-        forward,
         debug_trace,
     }))
 }
