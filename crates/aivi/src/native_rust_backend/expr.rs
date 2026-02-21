@@ -105,14 +105,22 @@ pub(super) fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, Aivi
             let body_code = emit_expr(body, indent + 1)?;
             let ind = "    ".repeat(indent);
             let ind2 = "    ".repeat(indent + 1);
-            let mut capture_lines = String::new();
-            for name in captured {
-                let rust_name = rust_local_name(&name);
-                capture_lines.push_str(&format!("{ind2}let {rust_name} = {rust_name}.clone();\n"));
+            // Clone captured variables OUTSIDE the `move` closure so the
+            // originals remain available in the surrounding scope.
+            let mut pre_clone = String::new();
+            for name in &captured {
+                let rust_name = rust_local_name(name);
+                pre_clone.push_str(&format!("{ind2}let {rust_name} = {rust_name}.clone();\n"));
             }
-            format!(
-                "aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue {{ func: Arc::new(move |{param_name}: Value, rt: &mut Runtime| {{\n{capture_lines}{ind2}{body_code}\n{ind}}}) }})))"
-            )
+            if captured.is_empty() {
+                format!(
+                    "aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue {{ func: Arc::new(move |{param_name}: Value, rt: &mut Runtime| {{\n{ind2}{body_code}\n{ind}}}) }})))"
+                )
+            } else {
+                format!(
+                    "{{\n{pre_clone}{ind2}aivi_ok(Value::Closure(Arc::new(aivi_native_runtime::ClosureValue {{ func: Arc::new(move |{param_name}: Value, rt: &mut Runtime| {{\n{ind2}{body_code}\n{ind}}}) }})))\n{ind}}}"
+                )
+            }
         }
         RustIrExpr::App { func, arg, .. } => {
             let func_code = emit_expr(func, indent)?;

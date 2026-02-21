@@ -71,16 +71,22 @@ pub(super) fn emit_block(
             // Effect blocks manage resource cleanups. We run cleanups even if the body errors,
             // and prefer the original error over cleanup errors.
             let captured = collect_free_locals_in_items(items);
+            // Clone captured variables OUTSIDE the `move` closure so the
+            // originals remain available in the surrounding scope.
+            if !captured.is_empty() {
+                s.push_str("{\n");
+                for name in &captured {
+                    let rust_name = rust_local_name(name);
+                    s.push_str(&ind2);
+                    s.push_str(&format!("let {rust_name} = {rust_name}.clone();\n"));
+                }
+                s.push_str(&ind2);
+            }
             s.push_str("aivi_ok(Value::Effect(Arc::new(EffectValue::Thunk {\n");
             s.push_str(&ind2);
             s.push_str("func: Arc::new(move |rt: &mut Runtime| {\n");
             s.push_str(&ind3);
             s.push_str("let mut __cleanups: Vec<Value> = Vec::new();\n");
-            for name in &captured {
-                let rust_name = rust_local_name(name);
-                s.push_str(&ind3);
-                s.push_str(&format!("let {rust_name} = {rust_name}.clone();\n"));
-            }
             s.push_str(&ind3);
             // Use a plain block (not a nested closure) so we can freely move values
             // in/out of the surrounding `move |rt| { ... }` thunk.
@@ -183,6 +189,11 @@ pub(super) fn emit_block(
             s.push_str("}),\n");
             s.push_str(&ind);
             s.push_str("})))");
+            if !captured.is_empty() {
+                s.push_str("\n");
+                s.push_str(&ind);
+                s.push('}');
+            }
         }
         RustIrBlockKind::Do { ref monad } => {
             // Generic `do M` blocks (M ≠ Effect) are desugared into chain/of
