@@ -11,6 +11,7 @@ export domain Calendar
 export domain Duration
 export domain Color
 export domain Vector
+export panic, not, any, each
 
 use aivi
 use aivi.text
@@ -23,4 +24,24 @@ use aivi.vector
 toText : A -> Text
 toText = value => text.toText value
 
-Patch A = A -> A"#;
+Patch A = A -> A
+
+panic : Text -> A
+panic = msg => fail msg
+
+not : Bool -> Bool
+not = b => b match
+  | True  => False
+  | False => True
+
+any : (A -> Bool) -> List A -> Bool
+any = pred xs => xs match
+  | []         => False
+  | [x, ...rest] => pred x match
+    | True  => True
+    | False => any pred rest
+
+each : (A -> B) -> List A -> List B
+each = f xs => xs match
+  | []            => []
+  | [x, ...rest]  => [f x, ...each f rest]"#;
