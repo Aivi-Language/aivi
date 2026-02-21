@@ -1,0 +1,13 @@
+User = { id: Int, name: Text, age: Int }
+
+// Example JSON parsing
+rawJson = """{ "id": 1, "name": "Alice", "age": "twenty" }"""
+
+// json.parse is type-driven by the assignment
+result : Validation (List DecodeError) User
+result = json.parse rawJson
+
+// result evaluates to:
+// Invalid [
+//   { path: ["age"], message: "Expected Int, got String" }
+// ]

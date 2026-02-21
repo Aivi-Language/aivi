@@ -6,7 +6,7 @@ External data enters AIVI through typed **Sources**. A source represents a persi
 > v0.1 status:
 > - Implemented: `Source K A`, `load`, `file.read`, `http.get`/`post`/`fetch` (and `https.*`), and `env.get` (single-variable reads).
 > - Not yet implemented: structured codecs like `file.json`/`file.csv`, streaming sources, and higher-level decoding helpers like `env.decode`.
-> - `SourceError K` is currently just `Text` (a message) in v0.1.
+> - `SourceError K` is upgraded from `Text` to an ADT supporting `DecodeError` accumulation.
 
 ## 12.1 The Source Type
 
@@ -14,6 +14,15 @@ External data enters AIVI through typed **Sources**. A source represents a persi
 
 - `K`   the **kind** of source (File, Http, Db, etc.)
 - `A`   the **decoded type** of the content
+
+### SourceError
+A `Source K A` yields an `Effect (SourceError K) A`. The error encapsulates transport boundaries vs structural bounds.
+
+```aivi
+SourceError K = 
+  | IOError Text
+  | DecodeError (List aivi.validation.DecodeError)
+```
 
 Sources are effectful. Loading a source performs I/O and returns an `Effect E A` (where `E` captures the possible source errors). All source interactions must occur within a `do Effect { ... }` block.
 
