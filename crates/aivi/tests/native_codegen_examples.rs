@@ -37,26 +37,6 @@ fn is_aivi_source(path: &std::path::Path) -> bool {
     path.extension().is_some_and(|ext| ext == "aivi")
 }
 
-fn sanitize_rust_mod_name(name: &str) -> String {
-    let mut out = String::new();
-    for (i, ch) in name.chars().enumerate() {
-        let ok = ch == '_' || ch.is_ascii_alphanumeric();
-        if ok {
-            if i == 0 && ch.is_ascii_digit() {
-                out.push('_');
-            }
-            out.push(ch);
-        } else {
-            out.push('_');
-        }
-    }
-    if out.is_empty() {
-        "_".to_string()
-    } else {
-        out
-    }
-}
-
 fn extract_builtin_names(rust: &str) -> Vec<String> {
     // The native backend emits builtins as `__builtin("name")`.
     let mut out = Vec::new();
