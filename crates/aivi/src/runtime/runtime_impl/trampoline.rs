@@ -34,6 +34,7 @@ enum Frame {
     },
 
     /// Stepping through a `do Effect { ... }` block.
+    #[allow(dead_code)]
     EffectBlockStep {
         items: Arc<Vec<HirBlockItem>>,
         index: usize,

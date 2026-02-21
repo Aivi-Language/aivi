@@ -542,24 +542,35 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
             return;
         };
 
-        let full_path = base_dir.join(rel);
-        match std::fs::read_to_string(&full_path) {
-            Ok(contents) => {
-                def.expr = Expr::Literal(Literal::String {
-                    text: contents,
-                    span: original_span,
-                });
-            }
-            Err(err) => {
-                emit_diag(
-                    module_path,
-                    out,
-                    "E1515",
-                    format!("`@static` failed to read {}: {}", full_path.display(), err),
-                    original_span,
-                );
-            }
-        }
+        // Try source-relative first, then fall back to CWD-relative (workspace root).
+        let source_relative = base_dir.join(rel);
+        let cwd_relative = std::path::PathBuf::from(rel);
+        let (full_path, contents) = match std::fs::read_to_string(&source_relative) {
+            Ok(c) => (source_relative, c),
+            Err(_) => match std::fs::read_to_string(&cwd_relative) {
+                Ok(c) => (cwd_relative, c),
+                Err(err) => {
+                    emit_diag(
+                        module_path,
+                        out,
+                        "E1515",
+                        format!(
+                            "`@static` failed to read {} (also tried {}): {}",
+                            source_relative.display(),
+                            cwd_relative.display(),
+                            err
+                        ),
+                        original_span,
+                    );
+                    return;
+                }
+            },
+        };
+        let _ = full_path; // used for diagnostics above
+        def.expr = Expr::Literal(Literal::String {
+            text: contents,
+            span: original_span,
+        });
     }
 
     let mut diags = Vec::new();

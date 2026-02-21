@@ -1,17 +1,13 @@
 mod native_fixture;
 
 use std::path::PathBuf;
-use std::process::Command;
 use std::time::{Duration, Instant};
 
 use aivi::{compile_rust_native_lib, desugar_target};
 use aivi_native_runtime::get_builtin;
-use native_fixture::fixture_dir;
-use tempfile::tempdir;
 use walkdir::WalkDir;
 
 const PER_FILE_TIMEOUT: Duration = Duration::from_secs(30);
-const RUSTC_COMPILE_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Run `f` on a background thread, aborting if it exceeds `timeout`.
 fn with_timeout<T: Send + 'static>(
@@ -164,27 +160,6 @@ fn native_codegen_examples_compile_with_rustc() {
     let mut failures = Vec::new();
     let mut compiled = 0usize;
 
-    let dir = tempdir().expect("tempdir");
-    let cargo_toml = format!(
-        "[package]\nname = \"aivi-native-examples\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[workspace]\n\n[dependencies]\naivi_native_runtime = {{ path = {:?} }}\n",
-        root.join("crates/aivi_native_runtime")
-            .display()
-            .to_string()
-    );
-    std::fs::write(dir.path().join("Cargo.toml"), cargo_toml).expect("write Cargo.toml");
-
-    // Copy mold linker config from fixture crate
-    let cargo_config_dir = dir.path().join(".cargo");
-    std::fs::create_dir_all(&cargo_config_dir).expect("create .cargo dir");
-    let fixture_config = fixture_dir().join(".cargo/config.toml");
-    if fixture_config.exists() {
-        std::fs::copy(&fixture_config, cargo_config_dir.join("config.toml"))
-            .expect("copy .cargo/config.toml");
-    }
-
-    let src_dir = dir.path().join("src");
-    std::fs::create_dir_all(&src_dir).expect("create src dir");
-
     let mut lib_rs = String::new();
 
     for entry in WalkDir::new(&examples_dir)
@@ -239,35 +214,13 @@ fn native_codegen_examples_compile_with_rustc() {
         );
     }
 
-    std::fs::write(src_dir.join("lib.rs"), lib_rs).expect("write src/lib.rs");
-
-    let build_dir = dir.path().to_path_buf();
-    let output = with_timeout(RUSTC_COMPILE_TIMEOUT, move || {
-        Command::new("cargo")
-            .arg("build")
-            .arg("--lib")
-            .arg("--quiet")
-            .env("RUSTFLAGS", "-Awarnings")
-            .current_dir(&build_dir)
-            .output()
-            .expect("cargo build")
-    });
-
-    let output = match output {
-        Ok(out) => out,
-        Err(timeout_msg) => {
-            failures.push(format!("cargo build: {timeout_msg}"));
-            // Return early – the tempdir is about to be cleaned up.
-            panic!(
-                "native codegen rustc build timed out after {:?}",
-                RUSTC_COMPILE_TIMEOUT
-            );
-        }
-    };
+    // Use the fixture crate (with cached aivi_native_runtime build) for compilation.
+    let _lock = native_fixture::FIXTURE_LOCK.lock().unwrap();
+    let output = native_fixture::cargo_build_fixture_lib(&lib_rs);
 
     if !output.status.success() {
         failures.push(format!(
-            "cargo build failed\nstdout:\n{}\nstderr:\n{}",
+            "cargo check failed\nstdout:\n{}\nstderr:\n{}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),
         ));
