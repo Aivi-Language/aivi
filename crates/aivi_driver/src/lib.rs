@@ -145,7 +145,9 @@ pub fn test_target_program_and_names(
                 if let Some(dec) = def.decorators.iter().find(|d| d.name.name == "test") {
                     let name = format!("{}.{}", module.name.name, def.name.name);
                     let description = match &dec.arg {
-                        Some(aivi_core::Expr::Literal(aivi_core::Literal::String { text, .. })) => text.clone(),
+                        Some(aivi_core::Expr::Literal(aivi_core::Literal::String {
+                            text, ..
+                        })) => text.clone(),
                         _ => name.clone(),
                     };
                     test_entries.push((name, description));

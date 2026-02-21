@@ -2,13 +2,29 @@ mod native_fixture;
 
 use std::path::PathBuf;
 use std::process::Command;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use aivi::{compile_rust_native_lib, desugar_target};
 use aivi_native_runtime::get_builtin;
 use native_fixture::fixture_dir;
 use tempfile::tempdir;
 use walkdir::WalkDir;
+
+const PER_FILE_TIMEOUT: Duration = Duration::from_secs(30);
+const RUSTC_COMPILE_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Run `f` on a background thread, aborting if it exceeds `timeout`.
+fn with_timeout<T: Send + 'static>(
+    timeout: Duration,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, String> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(f());
+    });
+    rx.recv_timeout(timeout)
+        .map_err(|_| format!("timed out after {timeout:?}"))
+}
 
 fn set_workspace_root() -> PathBuf {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -87,18 +103,25 @@ fn native_codegen_examples_emit_rust_and_check_builtins() {
         eprintln!("[native_codegen] emit {rel_str}");
         let t0 = Instant::now();
 
-        let program = match desugar_target(&rel_str) {
-            Ok(p) => p,
-            Err(err) => {
-                failures.push(format!("{rel_str}: desugar failed: {err}"));
+        let rel_owned = rel_str.to_string();
+        let result = with_timeout(PER_FILE_TIMEOUT, move || {
+            let program = desugar_target(&rel_owned)?;
+            compile_rust_native_lib(program)
+        });
+
+        let rust = match result {
+            Ok(Ok(rust)) => rust,
+            Ok(Err(err)) => {
+                let msg = format!("{err}");
+                if msg.contains("desugar") || msg.contains("Diagnostics") {
+                    failures.push(format!("{rel_str}: desugar failed: {err}"));
+                } else {
+                    failures.push(format!("{rel_str}: native codegen failed: {err}"));
+                }
                 continue;
             }
-        };
-
-        let rust = match compile_rust_native_lib(program) {
-            Ok(rust) => rust,
-            Err(err) => {
-                failures.push(format!("{rel_str}: native codegen failed: {err}"));
+            Err(timeout_msg) => {
+                failures.push(format!("{rel_str}: {timeout_msg}"));
                 continue;
             }
         };
@@ -178,18 +201,25 @@ fn native_codegen_examples_compile_with_rustc() {
         eprintln!("[native_codegen] compile {rel_str}");
         let t0 = Instant::now();
 
-        let program = match desugar_target(&rel_str) {
-            Ok(p) => p,
-            Err(err) => {
-                failures.push(format!("{rel_str}: desugar failed: {err}"));
+        let rel_owned = rel_str.to_string();
+        let result = with_timeout(PER_FILE_TIMEOUT, move || {
+            let program = desugar_target(&rel_owned)?;
+            compile_rust_native_lib(program)
+        });
+
+        let rust = match result {
+            Ok(Ok(rust)) => rust,
+            Ok(Err(err)) => {
+                let msg = format!("{err}");
+                if msg.contains("desugar") || msg.contains("Diagnostics") {
+                    failures.push(format!("{rel_str}: desugar failed: {err}"));
+                } else {
+                    failures.push(format!("{rel_str}: native codegen failed: {err}"));
+                }
                 continue;
             }
-        };
-
-        let rust = match compile_rust_native_lib(program) {
-            Ok(rust) => rust,
-            Err(err) => {
-                failures.push(format!("{rel_str}: native codegen failed: {err}"));
+            Err(timeout_msg) => {
+                failures.push(format!("{rel_str}: {timeout_msg}"));
                 continue;
             }
         };
@@ -211,14 +241,29 @@ fn native_codegen_examples_compile_with_rustc() {
 
     std::fs::write(src_dir.join("lib.rs"), lib_rs).expect("write src/lib.rs");
 
-    let output = Command::new("cargo")
-        .arg("build")
-        .arg("--lib")
-        .arg("--quiet")
-        .env("RUSTFLAGS", "-Awarnings")
-        .current_dir(dir.path())
-        .output()
-        .expect("cargo build");
+    let build_dir = dir.path().to_path_buf();
+    let output = with_timeout(RUSTC_COMPILE_TIMEOUT, move || {
+        Command::new("cargo")
+            .arg("build")
+            .arg("--lib")
+            .arg("--quiet")
+            .env("RUSTFLAGS", "-Awarnings")
+            .current_dir(&build_dir)
+            .output()
+            .expect("cargo build")
+    });
+
+    let output = match output {
+        Ok(out) => out,
+        Err(timeout_msg) => {
+            failures.push(format!("cargo build: {timeout_msg}"));
+            // Return early – the tempdir is about to be cleaned up.
+            panic!(
+                "native codegen rustc build timed out after {:?}",
+                RUSTC_COMPILE_TIMEOUT
+            );
+        }
+    };
 
     if !output.status.success() {
         failures.push(format!(

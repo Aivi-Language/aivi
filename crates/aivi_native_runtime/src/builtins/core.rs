@@ -16,6 +16,7 @@ use super::http_server::build_http_server_record;
 use super::i18n::build_i18n_record;
 use super::instant::build_instant_record;
 use super::linalg::build_linalg_record;
+use super::list::build_list_record;
 use super::log::build_log_record;
 use super::math::build_math_record;
 use super::mutable_map::build_mutable_map_record;
@@ -342,6 +343,7 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
         }
     }
     env.insert("collections".to_string(), collections);
+    env.insert("List".to_string(), build_list_record());
     env.insert("MutableMap".to_string(), build_mutable_map_record());
     env.insert("console".to_string(), build_console_record());
     env.insert("crypto".to_string(), build_crypto_record());
