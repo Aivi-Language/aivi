@@ -212,15 +212,8 @@ impl Backend {
         }
 
         // Find `module` line.
-        while i < lines.len() {
-            let trimmed = lines[i].trim_start();
-            if trimmed.starts_with("module ") {
-                break;
-            }
+        if i >= lines.len() || !lines[i].trim_start().starts_with("module ") {
             // If we didn't find a module line, fall back to start of document.
-            return Position::new(0, 0);
-        }
-        if i >= lines.len() {
             return Position::new(0, 0);
         }
 

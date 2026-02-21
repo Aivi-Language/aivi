@@ -19,14 +19,14 @@ impl Parser {
         let mut items = vec![self.parse_type_pipe()?];
         while self.consume_ident_text("with").is_some() {
             let rhs = self.parse_type_pipe().unwrap_or(TypeExpr::Unknown {
-                span: type_span(items.last().unwrap()),
+                span: type_span(items.last().expect("infallible")),
             });
             items.push(rhs);
         }
         if items.len() == 1 {
             return Some(items.remove(0));
         }
-        let span = merge_span(type_span(&items[0]), type_span(items.last().unwrap()));
+        let span = merge_span(type_span(&items[0]), type_span(items.last().expect("infallible")));
         Some(TypeExpr::And { items, span })
     }
 
@@ -65,7 +65,7 @@ impl Parser {
         if args.is_empty() {
             return Some(base);
         }
-        let span = merge_span(type_span(&base), type_span(args.last().unwrap()));
+        let span = merge_span(type_span(&base), type_span(args.last().expect("infallible")));
         Some(TypeExpr::Apply {
             base: Box::new(base),
             args,
@@ -88,7 +88,7 @@ impl Parser {
             if items.len() == 1 {
                 return Some(items.remove(0));
             }
-            let span = merge_span(type_span(&items[0]), type_span(items.last().unwrap()));
+            let span = merge_span(type_span(&items[0]), type_span(items.last().expect("infallible")));
             return Some(TypeExpr::Tuple { items, span });
         }
         if self.consume_symbol("{") {

@@ -234,6 +234,7 @@ pub fn escape_sigil_string_body(text: &str) -> Cow<'_, str> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

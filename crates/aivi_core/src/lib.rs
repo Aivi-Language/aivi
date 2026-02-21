@@ -1,4 +1,5 @@
 #![deny(clippy::unwrap_used)]
+#![allow(clippy::items_after_test_module)]
 
 // NOTE: This crate is an incremental extraction of the pure compiler logic from `crates/aivi`.
 // For now it reuses the existing module implementation files via `#[path = "..")]` to avoid a

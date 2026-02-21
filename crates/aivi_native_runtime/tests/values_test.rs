@@ -1,3 +1,5 @@
+#![allow(clippy::approx_constant)]
+
 use std::collections::HashMap;
 use std::sync::Arc;
 

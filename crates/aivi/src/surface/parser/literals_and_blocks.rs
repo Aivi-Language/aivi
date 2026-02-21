@@ -135,7 +135,7 @@ impl Parser {
         for r in 0..size {
             for c in 0..size {
                 let field_name = format!("m{}{}", r, c);
-                let value_expr = cells.get(idx).unwrap().clone();
+                let value_expr = cells.get(idx).expect("infallible").clone();
                 fields.push(RecordField {
                     spread: false,
                     path: vec![PathSegment::Field(SpannedName {
@@ -193,7 +193,7 @@ impl Parser {
             if current_segment_span.is_none() {
                 current_segment_span = Some(token.span.clone());
             } else {
-                current_segment_span = Some(merge_span(current_segment_span.unwrap(), token.span.clone()));
+                current_segment_span = Some(merge_span(current_segment_span.expect("infallible"), token.span.clone()));
             }
             current_segment_text.push_str(&token.text);
             self.pos += 1;
@@ -211,14 +211,14 @@ impl Parser {
                     } else if text == ".." {
                         if absolute {
                             // absolute path: drop `..` at root
-                            if acc.last().map_or(true, |e| matches!(e, Expr::Literal(crate::surface::Literal::String { text, .. }) if text == "..")) {
+                            if acc.last().is_none_or(|e| matches!(e, Expr::Literal(crate::surface::Literal::String { text, .. }) if text == "..")) {
                                 // nothing to pop or already `..`; skip for absolute
                             } else {
                                 acc.pop();
                             }
                         } else {
                             // relative path: keep `..` when nothing to pop
-                            if acc.last().map_or(true, |e| matches!(e, Expr::Literal(crate::surface::Literal::String { text, .. }) if text == "..")) {
+                            if acc.last().is_none_or(|e| matches!(e, Expr::Literal(crate::surface::Literal::String { text, .. }) if text == "..")) {
                                 acc.push(seg);
                             } else {
                                 acc.pop();
@@ -255,25 +255,26 @@ impl Parser {
             span: start_span.clone(),
         });
 
-        let mut fields = Vec::new();
-        fields.push(RecordField {
-            spread: false,
-            path: vec![PathSegment::Field(SpannedName {
-                name: "absolute".to_string(),
+        let fields = vec![
+            RecordField {
+                spread: false,
+                path: vec![PathSegment::Field(SpannedName {
+                    name: "absolute".to_string(),
+                    span: span.clone(),
+                })],
+                value: absolute_expr,
                 span: span.clone(),
-            })],
-            value: absolute_expr,
-            span: span.clone(),
-        });
-        fields.push(RecordField {
-            spread: false,
-            path: vec![PathSegment::Field(SpannedName {
-                name: "segments".to_string(),
+            },
+            RecordField {
+                spread: false,
+                path: vec![PathSegment::Field(SpannedName {
+                    name: "segments".to_string(),
+                    span: span.clone(),
+                })],
+                value: list_expr,
                 span: span.clone(),
-            })],
-            value: list_expr,
-            span: span.clone(),
-        });
+            }
+        ];
 
         Some(Expr::Record { fields, span })
     }

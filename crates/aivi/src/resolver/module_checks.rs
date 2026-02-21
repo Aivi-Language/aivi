@@ -390,7 +390,7 @@ fn check_uses(
         if use_decl.wildcard {
             continue;
         }
-        let target = target.unwrap();
+        let target = target.expect("infallible");
         let exports: HashSet<&str> = target
             .exports
             .iter()

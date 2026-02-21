@@ -7,7 +7,6 @@ mod runtime;
 mod rust_codegen;
 mod rust_ir;
 
-
 pub mod cst {
     pub use aivi_core::{CstBundle, CstFile, CstToken};
 }
@@ -133,7 +132,6 @@ pub use rust_codegen::{
 };
 pub use rust_ir::cg_type::CgType;
 pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
-
 
 pub use aivi_driver::{
     desugar_target, desugar_target_typed, desugar_target_with_cg_types, format_target,

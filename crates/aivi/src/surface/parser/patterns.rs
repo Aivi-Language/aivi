@@ -278,14 +278,14 @@ impl Parser {
                 }
             }
 
-            let last = path.last().cloned().unwrap();
+            let last = path.last().cloned().expect("infallible");
             if shorthand_subject {
                 Pattern::SubjectIdent(last)
             } else {
                 Pattern::Ident(last)
             }
         };
-        let span = merge_span(path.first().unwrap().span.clone(), pattern_span(&pattern));
+        let span = merge_span(path.first().expect("infallible").span.clone(), pattern_span(&pattern));
         Some(RecordPatternField {
             path,
             pattern,

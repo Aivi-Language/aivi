@@ -801,7 +801,7 @@
             // Walk backwards through all tokens up to this point to find the
             // opener.  If the opener is on the same source line, keep the line
             // intact (e.g. `{ r: 255, g: 0, b: 0 }` all on one source line).
-            let closer_tok = line_tokens[last_code_idx.unwrap()];
+            let closer_tok = line_tokens[last_code_idx.expect("infallible")];
             let _opener_char = match closer_tok.text.as_str() {
                 "}" => "{",
                 "]" => "[",
@@ -820,7 +820,7 @@
             'outer: for scan_line in (0..=line_index).rev() {
                 let scan_tokens = &tokens_by_line[scan_line];
                 let end = if scan_line == line_index {
-                    last_code_idx.unwrap()
+                    last_code_idx.expect("infallible")
                 } else {
                     scan_tokens.len()
                 };

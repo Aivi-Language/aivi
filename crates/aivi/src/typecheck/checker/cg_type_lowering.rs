@@ -161,6 +161,7 @@ impl TypeChecker {
     }
 
     /// Recursively apply a local substitution map to a type.
+    #[allow(clippy::only_used_in_recursion)]
     fn apply_local_subst(
         &self,
         ty: Type,
