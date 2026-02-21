@@ -322,7 +322,7 @@ decodePlatformEvent = kind rawPJson => {
           )
     | "online" =>
           field "online" decodeBool pJson |> bind (online =>
-            Ok (Online { online })
+            Ok (Online { online: online })
           )
     | "intersection" =>
           field "sid" decodeInt pJson |> bind (sid =>
@@ -428,7 +428,7 @@ decodeClientMsg = raw => decode raw |> bind (json => field "t" decodeText json |
           field "viewId" decodeText json |> bind (viewId =>
             field "url" decodeText json |> bind (url =>
               field "online" decodeBool json |> bind (online =>
-                Ok (Hello { viewId, url, online })
+                Ok (Hello { viewId: viewId, url: url, online: online })
               )
             )
           )

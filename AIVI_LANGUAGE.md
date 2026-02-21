@@ -23,18 +23,18 @@ apply: always
 
 ## 2 Lexical Basics
 
-| Element | Syntax |
-| :--- | :--- |
-| Line comment | `//` to end of line |
-| Block comment | `/* ... */` — may span multiple lines; **does not nest** |
-| Value / function / field names | `lowerCamelCase` (`lowerIdent`) |
-| Type / constructor / module / domain / class names | `UpperCamelCase` (`UpperIdent`) |
-| Text literal | `"hello { name }"` (interpolation with `{ expr }`) |
-| Int, Float | `42`, `3.14` |
-| Char | `'a'` |
-| ISO instant | `2024-05-21T12:00:00Z` |
-| Suffixed number | `10px`, `30s`, `100%` (domain-resolved) |
-| Keywords | `as class do domain effect else export generate given hiding if instance machine match module on or over patch recurse resource then use when with yield loop` |
+| Element                                            | Syntax                                                                                                                                                         |
+|:-------------------------------------------------- |:-------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Line comment                                       | `//` to end of line                                                                                                                                            |
+| Block comment                                      | `/* ... */` — may span multiple lines; **does not nest**                                                                                                       |
+| Value / function / field names                     | `lowerCamelCase` (`lowerIdent`)                                                                                                                                |
+| Type / constructor / module / domain / class names | `UpperCamelCase` (`UpperIdent`)                                                                                                                                |
+| Text literal                                       | `"hello { name }"` (interpolation with `{ expr }`)                                                                                                             |
+| Int, Float                                         | `42`, `3.14`                                                                                                                                                   |
+| Char                                               | `'a'`                                                                                                                                                          |
+| ISO instant                                        | `2024-05-21T12:00:00Z`                                                                                                                                         |
+| Suffixed number                                    | `10px`, `30s`, `100%` (domain-resolved)                                                                                                                        |
+| Keywords                                           | `as class do domain effect else export generate given hiding if instance machine match module on or over patch recurse resource then use when with yield loop` |
 
 `True`, `False`, `None`, `Some`, `Ok`, `Err` are constructors, not keywords.
 
@@ -60,14 +60,14 @@ user as { name } = getUser       // whole-value + destructure
 
 ### Record pattern operators
 
-| Syntax | `field` in scope? | Inner bindings? | Purpose |
-| :--- | :---: | :---: | :--- |
-| `{ field: pat }` | no (renamed) | yes | Match / rename a field |
-| `{ field as { pat } }` | yes | yes | Keep whole field + destructure |
-| `{ field.{ pat } }` | no | yes | Destructure only, discard field |
-| `{ field }` | yes | - | Shorthand, binds field by name |
+| Syntax                 | `field` in scope? | Inner bindings? | Purpose                         |
+|:---------------------- |:-----------------:|:---------------:|:------------------------------- |
+| `{ field: pat }`       | no (renamed)      | yes             | Match / rename a field          |
+| `{ field as { pat } }` | yes               | yes             | Keep whole field + destructure  |
+| `{ field.{ pat } }`    | no                | yes             | Destructure only, discard field |
+| `{ field }`            | yes               | -               | Shorthand, binds field by name  |
 
-Deep path destructuring: `{ data.user.profile as { name } }` reaches nested fields directly.
+Deep path destructuring: `{ data.user.profile.name }` reaches nested fields directly.
 
 ### Shadowing
 
@@ -145,7 +145,7 @@ gcd = (a, b) => (a, b) match
 `.field` (with dot prefix) is shorthand for `x => x.field`:
 
 ```aivi
-users |> map .name
+users |> map .name // or map _.name or map name
 ```
 
 ---
@@ -280,8 +280,7 @@ class Functor (F *) = {
   map : (A -> B) -> F A -> F B
 }
 
-class Apply (F *) =
-Functor (F *) with {
+class Apply (F *) = Functor (F *) with {
   ap : F A -> F (A -> B) -> F B
 }
 
@@ -319,6 +318,7 @@ xs |> takeWhile (_ < 10)
 ```
 
 Inside predicates:
+
 - `_` is the current element.
 - Bare field names resolve to `_.field`.
 - `.field` is an accessor function, not a field value.
@@ -343,17 +343,16 @@ record <| { a.b.c: value }                // dot paths
 record <| { items[*].price: _ * 1.1 }     // traversal (all items)
 record <| { items[price > 80].tag: "hot" } // predicate selector
 record <| { lookup["key"]: newVal }        // map key selector
-record <| { shape.Circle.radius: 5 }       // sum-type focus (prism)
 ```
 
 ### Instructions
 
-| Instruction | Meaning |
-| :--- | :--- |
-| `value` | Replace or insert |
-| `function` | Transform existing value (applied to old value) |
+| Instruction   | Meaning                                         |
+|:------------- |:----------------------------------------------- |
+| `value`       | Replace or insert                               |
+| `function`    | Transform existing value (applied to old value) |
 | `:= function` | Replace with function **as data** (not applied) |
-| `-` | Remove field (shrinks record type) |
+| `-`           | Remove field (shrinks record type)              |
 
 ### Patch-as-value
 
@@ -412,6 +411,7 @@ fibs = generate {
 ```
 
 Summary of statements inside `generate { ... }`:
+
 - `x <- source` - bind from another generator/list
 - `x = expr` - pure local binding
 - `x -> pred` - guard (filter by predicate)
@@ -431,6 +431,7 @@ main = do Effect {
 ```
 
 Statements inside `do Effect { ... }`:
+
 - `x <- eff` - run effect, bind result
 - `x = expr` - pure local binding (`expr` must NOT be `Effect`)
 - `x <- resource` - acquire a `Resource`, released on scope exit
@@ -508,19 +509,19 @@ validateAge = input => do Result {
 
 The same bind (`<-`) and pure-bind (`=`) syntax applies. Statement availability by block kind:
 
-| Statement | `do Effect` | `do M` (generic) | `generate` |
-| :--- | :---: | :---: | :---: |
-| `x <- expr` | ✓ | ✓ | ✓ (from sequence) |
-| `x = expr` | ✓ | ✓ | ✓ |
-| `expr` (sequencing) | ✓ | ✓ | — |
-| `yield expr` | — | — | ✓ |
-| `x -> pred` (guard) | — | — | ✓ |
-| `or` fallback | ✓ | — | — |
-| `when`/`unless cond <- eff` | ✓ | — | — |
-| `given cond or expr` | ✓ | — | — |
-| `on Event => handler` | ✓ | — | — |
-| `loop`/`recurse` | ✓ | — | ✓ |
-| resource `<-` | ✓ | — | — |
+| Statement                   | `do Effect` | `do M` (generic) | `generate`        |
+|:--------------------------- |:-----------:|:----------------:|:-----------------:|
+| `x <- expr`                 | ✓           | ✓                | ✓ (from sequence) |
+| `x = expr`                  | ✓           | ✓                | ✓                 |
+| `expr` (sequencing)         | ✓           | ✓                | —                 |
+| `yield expr`                | —           | —                | ✓                 |
+| `x -> pred` (guard)         | —           | —                | ✓                 |
+| `or` fallback               | ✓           | —                | —                 |
+| `when`/`unless cond <- eff` | ✓           | —                | —                 |
+| `given cond or expr`        | ✓           | —                | —                 |
+| `on Event => handler`       | ✓           | —                | —                 |
+| `loop`/`recurse`            | ✓           | —                | ✓                 |
+| resource `<-`               | ✓           | —                | —                 |
 
 Effect-specific statements (`or`, `when`, `unless`, `given`, `on`, resource `<-`, `loop`/`recurse`) are **only** available in `do Effect` blocks.
 
@@ -548,12 +549,12 @@ machine Door = {
 
 ### Core operations
 
-| Operation | Type | Purpose |
-| :--- | :--- | :--- |
-| `pure` | `A -> Effect E A` | Lift a value |
-| `fail` | `E -> Effect E A` | Abort with error |
-| `bind` | `Effect E A -> (A -> Effect E B) -> Effect E B` | Sequence |
-| `attempt` | `Effect E A -> Effect F (Result E A)` | Catch error as `Result` |
+| Operation | Type                                            | Purpose                 |
+|:--------- |:----------------------------------------------- |:----------------------- |
+| `pure`    | `A -> Effect E A`                               | Lift a value            |
+| `fail`    | `E -> Effect E A`                               | Abort with error        |
+| `bind`    | `Effect E A -> (A -> Effect E B) -> Effect E B` | Sequence                |
+| `attempt` | `Effect E A -> Effect F (Result E A)`           | Catch error as `Result` |
 
 ### Error fallback with `or`
 
@@ -771,14 +772,14 @@ Custom literals with `~tag` and a delimiter:
 
 Compile-time metadata only. No user-defined decorators.
 
-| Decorator | Purpose |
-| :--- | :--- |
-| `@test "desc"` | Mark as test case (mandatory description) |
-| `@static` | Embed at compile time |
-| `@inline` | Always inline |
-| `@deprecated` | Emit warning on use |
-| `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`) |
-| `@no_prelude` | Skip implicit `use aivi.prelude` |
+| Decorator                                      | Purpose                                   |
+|:---------------------------------------------- |:----------------------------------------- |
+| `@test "desc"`                                 | Mark as test case (mandatory description) |
+| `@static`                                      | Embed at compile time                     |
+| `@inline`                                      | Always inline                             |
+| `@deprecated`                                  | Emit warning on use                       |
+| `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`)      |
+| `@no_prelude`                                  | Skip implicit `use aivi.prelude`          |
 
 Unknown decorators are compile errors.
 
@@ -810,12 +811,12 @@ Suffix can also be applied to a parenthesized expression (variable suffix):
 
 Common suffix → domain mapping:
 
-| Suffix | Domain | Type |
-| :--- | :--- | :--- |
-| `10ms`, `1s`, `5min`, `2h` | Duration | `Duration` |
-| `1d`, `2w`, `3mo`, `1y` | Calendar | `CalendarDelta` |
-| `20deg`, `1.2rad` | Angle | `Angle` |
-| `10l`, `5s`, `30h` | Color | `ColorDelta` |
+| Suffix                     | Domain   | Type            |
+|:-------------------------- |:-------- |:--------------- |
+| `10ms`, `1s`, `5min`, `2h` | Duration | `Duration`      |
+| `1d`, `2w`, `3mo`, `1y`    | Calendar | `CalendarDelta` |
+| `20deg`, `1.2rad`          | Angle    | `Angle`         |
+| `10l`, `5s`, `30h`         | Color    | `ColorDelta`    |
 
 **Collision rule**: if two imported domains define the same suffix (e.g. both define `1m`), the compiler does not disambiguate by carrier. Resolve by importing only one conflicting domain per module, using `hiding`, or using explicit constructors instead.
 
@@ -948,44 +949,44 @@ topoSmoke = do Effect {
 
 ## 19 Quick Idiom Reference
 
-| Task | AIVI idiom |
-| :--- | :--- |
-| Transform a list | `xs \|> map f` |
-| Filter a list | `xs \|> filter (age > 18)` |
-| Find first match | `xs \|> find (name == "Alice")` |
-| Handle Option | `opt match \| Some x => x \| None => default` |
-| Handle Result | `res match \| Ok x => x \| Err e => handle e` |
-| Provide default for Option | `opt ?? default` |
-| Run fallback on effect error | `val <- riskyOp or default` (inside `do Effect`) |
-| Catch error as Result | `res <- attempt riskyOp` (inside `do Effect`) |
-| Conditional effect | `when cond <- eff` (inside `do Effect`) |
-| Precondition guard | `given cond or failExpr` (inside `do Effect`) |
-| Update nested record | `state <\| { user.profile.name: "New" }` |
-| Transform nested field | `state <\| { items[*].price: _ * 1.1 }` |
-| Create map | `~map{ "key" => value }` |
-| Create set | `~set[1, 2, 3]` |
-| Build a sequence | `generate { x <- src; x -> pred; yield f x }` |
-| Infinite sequence | `generate { loop s = init => { yield s; recurse (next s) } }` |
-| State machine | `machine Name = { -> Idle : init {}; Idle -> Running : start {}; ... }` |
-| Acquire resource | `handle <- managedFile "data.txt"` (inside `do Effect`) |
-| Write a test | `@test "adds correctly" myTest = do Effect { assertEq (f 1) 2 }` |
+| Task                         | AIVI idiom                                                              |
+|:---------------------------- |:----------------------------------------------------------------------- |
+| Transform a list             | `xs \|> map f`                                                          |
+| Filter a list                | `xs \|> filter (age > 18)`                                              |
+| Find first match             | `xs \|> find (name == "Alice")`                                         |
+| Handle Option                | `opt match \| Some x => x \| None => default`                           |
+| Handle Result                | `res match \| Ok x => x \| Err e => handle e`                           |
+| Provide default for Option   | `opt ?? default`                                                        |
+| Run fallback on effect error | `val <- riskyOp or default` (inside `do Effect`)                        |
+| Catch error as Result        | `res <- attempt riskyOp` (inside `do Effect`)                           |
+| Conditional effect           | `when cond <- eff` (inside `do Effect`)                                 |
+| Precondition guard           | `given cond or failExpr` (inside `do Effect`)                           |
+| Update nested record         | `state <\| { user.profile.name: "New" }`                                |
+| Transform nested field       | `state <\| { items[*].price: _ * 1.1 }`                                 |
+| Create map                   | `~map{ "key" => value }`                                                |
+| Create set                   | `~set[1, 2, 3]`                                                         |
+| Build a sequence             | `generate { x <- src; x -> pred; yield f x }`                           |
+| Infinite sequence            | `generate { loop s = init => { yield s; recurse (next s) } }`           |
+| State machine                | `machine Name = { -> Idle : init {}; Idle -> Running : start {}; ... }` |
+| Acquire resource             | `handle <- managedFile "data.txt"` (inside `do Effect`)                 |
+| Write a test                 | `@test "adds correctly" myTest = do Effect { assertEq (f 1) 2 }`        |
 
 ---
 
 ## 20 Anti-Patterns (Do NOT write these)
 
-| Wrong | Why | Correct |
-| :--- | :--- | :--- |
-| `let x = 1` | No `let` keyword | `x = 1` |
-| `def f(x):` | No `def`, no parens for args | `f = x => ...` |
-| `var x = 1; x = 2` | No mutation | `x = 1; x = x + 1` (shadow) |
-| `null` / `nil` | No nulls | `None` / `Option A` |
-| `throw` / `try/catch` | No exceptions | `fail e` / `attempt` / `or` |
-| `for x in xs { ... }` | No loops | `xs \|> map f` or `generate { x <- xs; yield f x }` |
-| `while cond { ... }` | No loops | Recursion or `loop`/`recurse` in generators |
-| `x.method()` | No methods, no parens | `method x` or `x \|> method` |
-| `case x of ...` | `case` is kernel only | `x match \| pat => expr` |
-| `String` | Type is called `Text` | `Text` |
-| `return x` | No return statement | Expression result is implicit; `pure x` in effects |
-| `{ x = 1 }` in records | `=` is binding, not record field | `{ x: 1 }` |
-| `import X` | No `import` keyword | `use module.path` |
+| Wrong                  | Why                              | Correct                                             |
+|:---------------------- |:-------------------------------- |:--------------------------------------------------- |
+| `let x = 1`            | No `let` keyword                 | `x = 1`                                             |
+| `def f(x):`            | No `def`, no parens for args     | `f = x => ...`                                      |
+| `var x = 1; x = 2`     | No mutation                      | `x = 1; x = x + 1` (shadow)                         |
+| `null` / `nil`         | No nulls                         | `None` / `Option A`                                 |
+| `throw` / `try/catch`  | No exceptions                    | `fail e` / `attempt` / `or`                         |
+| `for x in xs { ... }`  | No loops                         | `xs \|> map f` or `generate { x <- xs; yield f x }` |
+| `while cond { ... }`   | No loops                         | Recursion or `loop`/`recurse` in generators         |
+| `x.method()`           | No methods, no parens            | `method x` or `x \|> method`                        |
+| `case x of ...`        | `case` is kernel only            | `x match \| pat => expr`                            |
+| `String`               | Type is called `Text`            | `Text`                                              |
+| `return x`             | No return statement              | Expression result is implicit; `pure x` in effects  |
+| `{ x = 1 }` in records | `=` is binding, not record field | `{ x: 1 }`                                          |
+| `import X`             | No `import` keyword              | `use module.path`                                   |

@@ -25,7 +25,6 @@ compare_and_diff = do Effect {
 add_sub_roundtrip = do Effect {
   base = 2024-01-01T00:00:00Z
 
-  step : Span
   step = { millis: 1500 }
 
   later = base + step

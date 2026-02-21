@@ -36,7 +36,7 @@ jsonToText = value => value match
   | JsonFloat f    => toText f
   | JsonString s   => "\"" ++ s ++ "\""
   | JsonArray _    => "[...]"
-  | JsonObject _   => "{...}"
+  | JsonObject _   => "\{...\}"
 
 encodeText : Text -> JsonValue
 encodeText = t => JsonString t

@@ -27,4 +27,3 @@ fuzz_target!(|data: &[u8]| {
     let hir = aivi::desugar_modules(&modules);
     let _ = aivi::run_native_with_fuel(hir, 25_000);
 });
-

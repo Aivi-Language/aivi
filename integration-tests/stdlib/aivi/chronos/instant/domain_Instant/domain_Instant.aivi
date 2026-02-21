@@ -10,7 +10,6 @@ use aivi.chronos.instant (domain Instant)
 span_ops = do Effect {
   base = 2024-01-01T00:00:00Z
 
-  span : Span
   span = { millis: 250 }
 
   shifted = base + span

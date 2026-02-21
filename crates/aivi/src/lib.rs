@@ -134,9 +134,9 @@ pub use rust_ir::cg_type::CgType;
 pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
 
 pub use aivi_driver::{
-    desugar_target, desugar_target_typed, desugar_target_with_cg_types, format_target,
-    kernel_target, load_module_diagnostics, load_modules, load_modules_from_paths, parse_file,
-    parse_target, resolve_target, test_target_program_and_names, AiviError,
+    desugar_target, desugar_target_lenient, desugar_target_typed, desugar_target_with_cg_types,
+    format_target, kernel_target, load_module_diagnostics, load_modules, load_modules_from_paths,
+    parse_file, parse_target, resolve_target, test_target_program_and_names, AiviError,
 };
 
 pub fn rust_ir_target(target: &str) -> Result<rust_ir::RustIrProgram, AiviError> {

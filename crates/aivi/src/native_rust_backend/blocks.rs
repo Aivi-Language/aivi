@@ -3,7 +3,7 @@ use crate::AiviError;
 
 use super::expr::emit_expr;
 use super::pattern::emit_pattern_bind_stmts;
-use super::utils::{collect_free_locals_in_items, rust_local_name};
+use super::utils::{collect_free_locals_in_items, collect_pattern_vars, rust_local_name};
 
 pub(super) fn emit_block(
     kind: RustIrBlockKind,
@@ -96,6 +96,26 @@ pub(super) fn emit_block(
                 let last = i + 1 == items.len();
                 match item {
                     RustIrBlockItem::Bind { pattern, expr } => {
+                        // Detect __loop-prefixed binders (from loop/recurse desugaring).
+                        // These are self-referential: the Bind expr (a lambda) captures the
+                        // very variable that the pattern defines.  We pre-declare an
+                        // `Arc<Mutex<Value>>` holder so the lambda can capture a clone of
+                        // the Arc and read the final value at call time.
+                        let mut all_binders = Vec::new();
+                        collect_pattern_vars(pattern, &mut all_binders);
+                        let loop_binders: Vec<String> = all_binders
+                            .iter()
+                            .filter(|n| n.starts_with("__loop"))
+                            .cloned()
+                            .collect();
+                        for binder in &loop_binders {
+                            let holder = format!("{}_holder", rust_local_name(binder));
+                            s.push_str(&"    ".repeat(indent + 4));
+                            s.push_str(&format!(
+                                "let {holder}: Arc<std::sync::Mutex<Value>> = Arc::new(std::sync::Mutex::new(Value::Unit));\n"
+                            ));
+                        }
+
                         let expr_code = emit_expr(expr, indent + 3)?;
                         let b_ident = format!("__b{tmp_id}");
                         let ok_ident = format!("__ok{tmp_id}");
@@ -128,6 +148,15 @@ pub(super) fn emit_block(
                             indent + 3,
                             "pattern match failed",
                         )?);
+                        // After pattern extraction, update __loop holders so
+                        // recursive calls inside the captured lambda see the
+                        // real value.
+                        for binder in &loop_binders {
+                            let rn = rust_local_name(binder);
+                            let holder = format!("{rn}_holder");
+                            s.push_str(&"    ".repeat(indent + 4));
+                            s.push_str(&format!("*{holder}.lock().unwrap() = {rn}.clone();\n"));
+                        }
                         if last {
                             s.push_str(&"    ".repeat(indent + 4));
                             s.push_str("Ok(Value::Unit)\n");

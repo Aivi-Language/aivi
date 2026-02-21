@@ -26,4 +26,3 @@ fuzz_target!(|data: &[u8]| {
     let hir = aivi::desugar_modules(&modules);
     let _kernel = aivi::lower_kernel(hir);
 });
-

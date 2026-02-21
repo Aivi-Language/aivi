@@ -20,10 +20,8 @@ fuzz_target!(|data: &[u8]| {
     let (tokens, _lex_diags) = aivi::lex_cst(&src);
 
     // Phase 2: Parse from tokens — must not panic.
-    let (_modules, _parse_diags) =
-        aivi::parse_modules_from_tokens(Path::new("fuzz.aivi"), &tokens);
+    let (_modules, _parse_diags) = aivi::parse_modules_from_tokens(Path::new("fuzz.aivi"), &tokens);
 
     // Phase 3: Also exercise the combined lex+parse path.
     let (_modules2, _parse_diags2) = aivi::parse_modules(Path::new("fuzz.aivi"), &src);
 });
-
