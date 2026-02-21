@@ -132,7 +132,19 @@ To validate the project end-to-end, run these from the repo root:
 4.  **Build docs site**: `cd specs && pnpm install && pnpm docs:build`
 5.  On test failure run `cargo test -vv -- --nocapture --show-output` to see the output.
 
-## 7. Safety Checklist
+## 7. Stale Build Artefacts
+
+The native-codegen integration test (`native_codegen_examples_compile_with_rustc`) writes generated Rust into a **sharded workspace** at `target/native-check-ws/` with a shared `CARGO_TARGET_DIR` at `target/native-check-target/`. These directories are **stable across runs** for incremental-build speed, but that means old shard contents can linger after structural changes (e.g., changing the number of shards or switching from per-file to whole-program compilation).
+
+**If you see unexpected E0425 or other rustc errors after modifying the test infrastructure**, clean the fixture dirs first:
+
+```sh
+rm -rf target/native-check-ws target/native-check-target
+```
+
+Then re-run the test. The `write_if_changed` helper only rewrites files whose content differs, so stale shard crates from a previous layout are never removed automatically.
+
+## 8. Safety Checklist
 
 Before submitting changes:
 - [ ] Did I check the specs?
