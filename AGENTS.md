@@ -41,14 +41,14 @@ graph TD
 
 ### 2.1 The Golden Rule
 **Never invent syntax or features.**
-Always verify against `specs/` before writing AIVI code or compiler logic. If a feature is missing from specs (e.g., [`specs/02_syntax/`](file:///home/mendrik/desk/mendrik/aivi/specs/02_syntax/)), ask for clarification.
+Always verify against `specs/` before writing AIVI code or compiler logic. If a feature is missing from specs (e.g., [`specs/syntax/`](file:///home/mendrik/desk/mendrik/aivi/specs/syntax/)), ask for clarification.
 
 ### 2.2 Task Execution Protocol
 
 1.  **Analyze**: Read the relevant `specs/` files first.
-    *   *Syntax*: [`specs/02_syntax/`](file:///home/mendrik/desk/mendrik/aivi/specs/02_syntax/)
-    *   *Semantics*: [`specs/03_kernel/`](file:///home/mendrik/desk/mendrik/aivi/specs/03_kernel/) & [`specs/04_desugaring/`](file:///home/mendrik/desk/mendrik/aivi/specs/04_desugaring/)
-    *   *Stdlib*: [`specs/05_stdlib/`](file:///home/mendrik/desk/mendrik/aivi/specs/05_stdlib/)
+    *   *Syntax*: [`specs/syntax/`](file:///home/mendrik/desk/mendrik/aivi/specs/syntax/)
+    *   *Semantics*: [`specs/kernel/`](file:///home/mendrik/desk/mendrik/aivi/specs/kernel/) & [`specs/desugaring/`](file:///home/mendrik/desk/mendrik/aivi/specs/desugaring/)
+    *   *Stdlib*: [`specs/stdlib/`](file:///home/mendrik/desk/mendrik/aivi/specs/stdlib/)
 2.  **Locate**: Identify the corresponding Rust crates in `crates/`.
     *   *Parsing*: `crates/aivi/src/parser` (or similar)
     *   *Typing*: `crates/aivi/src/ty`
@@ -61,7 +61,7 @@ Always verify against `specs/` before writing AIVI code or compiler logic. If a 
 
 ### 2.3 Clean as You Cook
 Maintain hygiene in the codebase and documentation.
-*   **Syntax Correction**: If you see syntax that violates the specs (e.g., `let x =` instead of `x =`, or `def foo()`), fix it immediately to match [`specs/02_syntax`](file:///home/mendrik/desk/mendrik/aivi/specs/02_syntax/).
+*   **Syntax Correction**: If you see syntax that violates the specs (e.g., `let x =` instead of `x =`, or `def foo()`), fix it immediately to match [`specs/02_syntax`](file:///home/mendrik/desk/mendrik/aivi/specs/syntax/).
 *   **Gap Filling**: If you encounter code using features not present in `specs/` or `integration-tests/`, document them or add a test case.
 *   **Refactoring**: Keep files small and readable. Propose splitting large files into logical units with good naming and subfolder structure if needed.
 *   **Pre-existing issues** when you encounter pre-existing problems, fix them up as part of the current task.
@@ -80,11 +80,11 @@ When writing or generating AIVI code (e.g., in `integration-tests/` or tests), a
 *   **No Nulls**: Always use `Option` or `Result`.
 *   **Exhaustive Matching**: Ensure `case` or `?` covers all patterns. Use `_` only when necessary.
 *   **Typed Errors**: Use `Result E A` with specific error types, not generic strings.
-*   **Resources**: Use `resource { ... }` blocks for file/network handles to ensure cleanup (see [specs/02_syntax/15_resources.md](file:///home/mendrik/desk/mendrik/aivi/specs/02_syntax/15_resources.md)).
+*   **Resources**: Use `resource { ... }` blocks for file/network handles to ensure cleanup (see [specs/syntax/resources.md](file:///home/mendrik/desk/mendrik/aivi/specs/syntax/resources.md)).
 
 ### 3.3 Concurrency
 *   **Structured**: Always spawn tasks within a scope (`concurrent.scope`).
-*   **Communication**: Use channels (`Send`/`Recv`) for data exchange, not shared memory (see [specs/06_runtime/01_concurrency.md](file:///home/mendrik/desk/mendrik/aivi/specs/06_runtime/01_concurrency.md)).
+*   **Communication**: Use channels (`Send`/`Recv`) for data exchange, not shared memory (see [specs/runtime/concurrency.md](file:///home/mendrik/desk/mendrik/aivi/specs/runtime/concurrency.md)).
 
 ### 3.4 Decorators
 
@@ -93,7 +93,7 @@ This file applies to all of `specs/`.
 - Decorators are reserved for **compiler/tooling pragmas** only (compile-time metadata).
 - Do **not** add new integration-specific decorators (examples of forbidden patterns: `@sql`, `@schema`, `@table`, `@model`).
 - Prefer **typed values** and **type-driven decoding/validation** at boundaries (e.g. `Source` configuration records, decoders derived from types).
-- Only the decorators enumerated in [`specs/02_syntax/14_decorators.md`](file:///home/mendrik/desk/mendrik/aivi/specs/02_syntax/14_decorators.md) are allowed in v0.1; unknown decorators should be considered a spec violation.
+- Only the decorators enumerated in [`specs/syntax/decorators.md`](file:///home/mendrik/desk/mendrik/aivi/specs/syntax/decorators.md) are allowed in v0.1; unknown decorators should be considered a spec violation.
 
 ## 4. Rust Implementation Guidelines
 
@@ -116,6 +116,7 @@ When working on the compiler (`crates/`):
 ## 5. Documentation Maintenance
 
 *   **Specs**: Update `specs/` *before* or *alongside* code changes.
+*   **Specs TOC**: The Table of Contents is automatically synchronized via a GitHub Action (`sync-specs-toc.yml`). **Always modify `specs/nav.mjs` as the single source of truth.** Do NOT manually edit the TOC in `specs/index.md` or `specs/README.md`.
 *   **Specs**: Update indices and make sure links are working.
 *   **AIVI Code Blocks**: Format all AIVI snippets in docs to match `aivi fmt` output (use `aivi fmt path` or `cargo run -p aivi -- fmt path`). In particular, keep formatter-style alignment for `<-` inside `effect { ... }` blocks and `=>` in pattern matching arms. Prefer fenced code blocks with the `aivi` language tag.
 *   **Quick Info Markers**: For LSP hover/quick-info, wrap existing spec markdown with `<!-- quick-info: {JSON} --> ... <!-- /quick-info -->` (see [specs/doc-markers-spec.md](file:///home/mendrik/desk/mendrik/aivi/specs/doc-markers-spec.md)). Do not duplicate prose just to satisfy tooling.

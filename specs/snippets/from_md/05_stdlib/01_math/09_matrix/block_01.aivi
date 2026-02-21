@@ -1,8 +1,0 @@
-// 2x2 rotation matrix (90 degrees)
-rot90 = ~mat[0.0 -1.0
-             1.0  0.0]
-
-// 3x3 identity
-id3 = ~mat[1.0 0.0 0.0
-           0.0 1.0 0.0
-           0.0 0.0 1.0]

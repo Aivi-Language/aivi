@@ -1,2 +1,0 @@
-node : A -> List (Tree A) -> Tree A
-leaf : A -> Tree A

@@ -1,3 +1,0 @@
-// Module-level documentation comment
-foo = bar // call bar
-  |> baz  /* pipe to baz */

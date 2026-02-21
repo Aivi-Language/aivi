@@ -1,0 +1,4 @@
+assignHandlers
+: VNode msg
+-> HandlerId
+-> (VNode msg, Map HandlerId (EventPayload -> Option msg), HandlerId)

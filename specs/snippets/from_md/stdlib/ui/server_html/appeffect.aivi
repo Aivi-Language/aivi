@@ -1,0 +1,5 @@
+AppEffect model msg =
+  | ReadClipboard (Result ClipboardError Text -> msg)
+  | WriteClipboard Text (Result ClipboardError Unit -> msg)
+  | SubIntersect SubscriptionId IntersectionOptions (List IntersectionTarget)
+  | UnsubIntersect SubscriptionId

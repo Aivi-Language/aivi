@@ -1,0 +1,6 @@
+/*
+  This is a block comment.
+  It can span multiple lines.
+*/
+
+result = /*inline block*/42

@@ -1,3 +1,0 @@
-dfsPreorder  : Tree A -> List A
-dfsPostorder : Tree A -> List A
-bfs          : Tree A -> List A

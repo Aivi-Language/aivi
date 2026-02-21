@@ -1,0 +1,1 @@
+serveHttp: App model msg -> Request -> Effect HttpError Response

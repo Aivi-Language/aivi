@@ -1,0 +1,1 @@
+serveWs: App model msg -> WebSocket -> Effect WsError Unit

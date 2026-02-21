@@ -1,3 +1,0 @@
-{ name: n }           // binds field 'name' to variable 'n'
-{ role: Admin }       // matches field 'role' against constructor 'Admin'
-{ name }              // shorthand for { name: name }

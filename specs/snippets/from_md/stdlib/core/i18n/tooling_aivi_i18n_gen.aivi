@@ -1,0 +1,15 @@
+module MyApp.I18n
+
+use aivi.i18n
+
+KeyId = AppWelcome | AppGoodbye
+
+keyText = kid => kid match
+  | AppWelcome => "app.welcome"
+  | AppGoodbye => "app.goodbye"
+
+bundle : Bundle
+bundle = ... // pre-compiled from catalog
+
+t : KeyId -> {} -> Text
+t = kid args => render (Map.get (keyText kid) bundle.entries ?? ~m"???") args or "???"
