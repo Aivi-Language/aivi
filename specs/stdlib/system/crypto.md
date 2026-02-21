@@ -8,7 +8,7 @@ From generating unguessable **UUIDs** for database keys to hashing passwords wit
 <!-- /quick-info -->
 <div class="import-badge">use aivi.crypto</div>
 
-<<< ../../snippets/from_md/05_stdlib/03_system/22_crypto/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/crypto/crypto_domain.aivi{aivi}
 
 ## Hashing
 

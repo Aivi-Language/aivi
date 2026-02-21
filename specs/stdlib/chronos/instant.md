@@ -14,16 +14,16 @@ It corresponds to a UTC timestamp (Unix epoch). While `DateTime` (in `Calendar`)
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/01_instant/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/instant/overview.aivi{aivi}
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/01_instant/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/instant/features.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/01_instant/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/instant/domain_definition.aivi{aivi}
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/02_chronos/01_instant/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/chronos/instant/usage_examples.aivi{aivi}

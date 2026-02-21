@@ -8,11 +8,11 @@ The `Regex` module handles **Pattern Matching** for text. Whether you're validat
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/00_core/24_regex/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/regex/overview.aivi{aivi}
 
 ## Types
 
-<<< ../../snippets/from_md/05_stdlib/00_core/24_regex/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/regex/types.aivi{aivi}
 
 ## Core API (v0.1)
 

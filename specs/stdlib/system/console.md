@@ -6,7 +6,7 @@ The `Console` domain is your program's voice. It handles basic interactions with
 <!-- /quick-info -->
 <div class="import-badge">use aivi.console</div>
 
-<<< ../../snippets/from_md/05_stdlib/03_system/21_console/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/console/console_domain.aivi{aivi}
 
 ## Functions
 
@@ -24,4 +24,4 @@ The `Console` domain is your program's voice. It handles basic interactions with
 
 ## ANSI Types
 
-<<< ../../snippets/from_md/05_stdlib/03_system/21_console/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/console/ansi_types.aivi{aivi}

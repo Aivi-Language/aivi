@@ -6,11 +6,11 @@ The `HttpServer` domain provides a scalable HTTP/1.1 + HTTP/2 server with option
 <!-- /quick-info -->
 <div class="import-badge">use aivi.net.httpServer</div>
 
-<<< ../../snippets/from_md/05_stdlib/03_network/03_http_server/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/network/http_server/http_server_domain.aivi{aivi}
 
 ## Types
 
-<<< ../../snippets/from_md/05_stdlib/03_network/03_http_server/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/network/http_server/types.aivi{aivi}
 
 ## Functions
 

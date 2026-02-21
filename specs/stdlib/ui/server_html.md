@@ -33,14 +33,14 @@ back. No client-side VDOM is needed   patches target stable `data-aivi-node` ids
 
 ## Quick Start Example
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/quick_start_example.aivi{aivi}
 
 
 ## Public API
 
 ### Types
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/types.aivi{aivi}
 
 
 ### App record
@@ -49,34 +49,34 @@ The `App` record is the user-facing entry point. It defines how to initialise a
 model, update it when messages arrive, render it to a virtual DOM, and optionally
 react to browser platform events.
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/app_record.aivi{aivi}
 
 
 ### AppEffect
 
 Effects that an `update` function can return alongside the new model:
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/appeffect.aivi{aivi}
 
 
 #### Clipboard example
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_05.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/clipboard_example.aivi{aivi}
 
 
 #### IntersectionObserver example
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_06.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/intersectionobserver_example.aivi{aivi}
 
 
 ### ClipboardError
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_07.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/clipboarderror.aivi{aivi}
 
 
 ### serveHttp
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_08.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/servehttp.aivi{aivi}
 
 
 Handles an incoming HTTP request by:
@@ -90,7 +90,7 @@ Handles an incoming HTTP request by:
 
 ### serveWs
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_09.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/servews.aivi{aivi}
 
 
 Handles a WebSocket connection by:
@@ -106,7 +106,7 @@ Handles a WebSocket connection by:
 All DOM events are forwarded with typed payloads. Field names match exactly
 between AIVI types, the wire protocol, and the TypeScript client.
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_10.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/event_payloads.aivi{aivi}
 
 
 Event kind strings on the wire: `"click"`, `"input"`, `"keydown"`, `"keyup"`,
@@ -116,7 +116,7 @@ Event kind strings on the wire: `"click"`, `"input"`, `"keydown"`, `"keyup"`,
 
 Browser-level signals forwarded as typed ADTs:
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_11.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/platform_events.aivi{aivi}
 
 
 Platform kind strings: `"popstate"`, `"hashchange"`, `"visibility"`, `"focus"`,
@@ -124,7 +124,7 @@ Platform kind strings: `"popstate"`, `"hashchange"`, `"visibility"`, `"focus"`,
 
 ### Platform event example
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_12.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/platform_event_example.aivi{aivi}
 
 
 ## DOM Identity
@@ -142,7 +142,7 @@ During rendering, the runtime walks the VDOM and replaces each event-handler
 `Attr` with a `data-aivi-hid-<kind>` attribute, recording a mapping from
 `HandlerId` to the handler function.
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/05_server_html/block_13.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/server_html/handler_assignment.aivi{aivi}
 
 
 ## WebSocket Protocol (JSON)

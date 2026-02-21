@@ -14,7 +14,7 @@ This makes generators easy to map/filter/fold without loops or mutation.
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/00_core/30_generator/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/generator/overview.aivi{aivi}
 
 ## Type
 

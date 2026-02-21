@@ -6,11 +6,11 @@ The `Streams` domain provides stream-oriented utilities for processing inbound a
 <!-- /quick-info -->
 <div class="import-badge">use aivi.net.streams</div>
 
-<<< ../../snippets/from_md/05_stdlib/03_network/05_streams/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/network/streams/streams_domain.aivi{aivi}
 
 ## Types
 
-<<< ../../snippets/from_md/05_stdlib/03_network/05_streams/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/network/streams/types.aivi{aivi}
 
 ## Functions
 

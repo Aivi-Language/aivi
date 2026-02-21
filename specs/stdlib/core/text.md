@@ -9,11 +9,11 @@ sentinel values like `-1`.
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/00_core/02_text/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/text/overview.aivi{aivi}
 
 ## Types
 
-<<< ../../snippets/from_md/05_stdlib/00_core/02_text/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/text/types.aivi{aivi}
 
 ## Core API (v0.1)
 
@@ -123,4 +123,4 @@ Notes:
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/00_core/02_text/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/text/usage_examples.aivi{aivi}

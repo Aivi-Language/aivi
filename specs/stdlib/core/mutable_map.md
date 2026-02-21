@@ -9,7 +9,7 @@ blocks, with `freeze` producing an immutable `Map` snapshot.
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/00_core/31_mutable_map/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/mutable_map/overview.aivi{aivi}
 
 ## Type
 

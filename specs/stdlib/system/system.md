@@ -10,7 +10,7 @@ It allows you to read **Environment Variables** (like secret queries or API keys
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/03_system/25_system/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/system/overview.aivi{aivi}
 
 ## Core API (v0.1)
 
@@ -32,4 +32,4 @@ It allows you to read **Environment Variables** (like secret queries or API keys
 
 ## Type Signatures
 
-<<< ../../snippets/from_md/05_stdlib/03_system/25_system/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/system/type_signatures.aivi{aivi}

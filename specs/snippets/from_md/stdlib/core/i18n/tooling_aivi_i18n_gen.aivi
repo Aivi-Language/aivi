@@ -9,7 +9,7 @@ keyText = kid => kid match
   | AppGoodbye => "app.goodbye"
 
 bundle : Bundle
-bundle = ...  // pre-compiled from catalog
+bundle = ... // pre-compiled from catalog
 
 t : KeyId -> {} -> Text
 t = kid args => render (Map.get (keyText kid) bundle.entries ?? ~m"???") args or "???"

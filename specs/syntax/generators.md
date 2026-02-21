@@ -11,11 +11,11 @@ They:
 
 ## 7.1 Generator type
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/generator_type.aivi{aivi}
 
 ## 7.2 Generator expressions
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/generator_expressions.aivi{aivi}
 
 ### From Python/JavaScript
 Similar to `yield` syntax, but purely functional (no mutable iterator state).
@@ -24,11 +24,11 @@ Similar to `yield` syntax, but purely functional (no mutable iterator state).
 
 AIVI does **not** use Haskell-style list comprehensions like:
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_03.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/from_haskell_scala_no_list_comprehension_syntax_01.aivi{aivi}
 
 Instead, write the equivalent logic with a `generate` block:
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_04.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/from_haskell_scala_no_list_comprehension_syntax_02.aivi{aivi}
 
 
 ## 7.3 Guards and predicates
@@ -43,11 +43,11 @@ In a guard, `pred` is a predicate expression with the implicit `_` bound to `x` 
 
 This means these are equivalent:
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_05.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/guards_and_predicates_01.aivi{aivi}
 
 Note: `.email` is an accessor function (`x => x.email`). It’s useful for `map .email`, but in a predicate position you usually want a value like `email` / `_.email`, not a function.
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_06.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/guards_and_predicates_02.aivi{aivi}
 
 Predicate rules are identical to `filter`.
 
@@ -68,15 +68,15 @@ Generators provide a powerful, declarative way to build complex sequences withou
 
 ### Cartesian Products
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_07.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/cartesian_products.aivi{aivi}
 
 ### Complex Filtering and Transformation
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_08.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/complex_filtering_and_transformation.aivi{aivi}
 
 ### Expressive Infinity
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_09.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/expressive_infinity.aivi{aivi}
 
 ## 7.6 Tail-recursive loops
 
@@ -85,7 +85,7 @@ Inside the loop body, `recurse next` continues with the next iteration with upda
 
 ### Syntax
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_10.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/syntax.aivi{aivi}
 
 
 - **`pattern`** binds the loop state (may be a tuple, record, or simple name).
@@ -97,14 +97,14 @@ Inside the loop body, `recurse next` continues with the next iteration with upda
 
 `loop` is syntactic sugar for a local recursive function. The compiler transforms:
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_11.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/desugaring_01.aivi{aivi}
 
 
 into (approximately):
 
-<<< ../snippets/from_md/02_syntax/07_generators/block_12.aivi{aivi}
+<<< ../snippets/from_md/syntax/generators/desugaring_02.aivi{aivi}
 
 
 ### Use in effect blocks
 
-`loop`/`recurse` is also available in `do Effect { ... }` blocks for stateful iteration (see [Effects § 9.6](09_effects.md#96-tail-recursive-loops)).
+`loop`/`recurse` is also available in `do Effect { ... }` blocks for stateful iteration (see [Effects § 9.6](effects.md#96-tail-recursive-loops)).

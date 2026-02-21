@@ -12,11 +12,11 @@ The `Log` module provides **Structured Logging** for modern observability.
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/03_system/26_log/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/log/overview.aivi{aivi}
 
 ## Types
 
-<<< ../../snippets/from_md/05_stdlib/03_system/26_log/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/log/types.aivi{aivi}
 
 ## Core API (v0.1)
 
@@ -37,4 +37,4 @@ Notes:
 
 ## Type Signatures
 
-<<< ../../snippets/from_md/05_stdlib/03_system/26_log/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/log/type_signatures.aivi{aivi}

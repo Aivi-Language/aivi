@@ -40,7 +40,7 @@ function writeJsonFile(filePath, value) {
 }
 
 function moduleFromMd(mdRel, blockIndex1) {
-  // docs.snippets.02_syntax.09_effects.block_01
+  // docs.snippets.syntax.effects.block_01
   const base = mdRel.replace(/^specs\//, "").replace(/\.md$/i, "");
   const parts = base.split("/").filter(Boolean);
   const safe = parts
@@ -51,7 +51,7 @@ function moduleFromMd(mdRel, blockIndex1) {
 }
 
 function snippetPathFromMd(mdRel, blockIndex1) {
-  // specs/snippets/from_md/02_syntax/09_effects/block_01.aivi
+  // specs/snippets/from_md/syntax/effects/block_01.aivi
   const base = mdRel.replace(/^specs\//, "").replace(/\.md$/i, "");
   const parts = base.split("/").filter(Boolean);
   return path.join(

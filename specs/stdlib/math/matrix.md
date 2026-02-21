@@ -12,20 +12,20 @@ Manually calculating the new position of a 3D point after it's been rotated, mov
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/01_math/09_matrix/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/matrix/overview.aivi{aivi}
 
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/01_math/09_matrix/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/matrix/features.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/01_math/09_matrix/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/matrix/domain_definition.aivi{aivi}
 
 ## `×` Operator Overloads
 
-The `Matrix` domain provides two overloads of `×` per carrier, selected by the RHS type (see [Domains: Within-Domain Operator Overloads](../../02_syntax/06_domains.md#within-domain-operator-overloads-rhs-typed)):
+The `Matrix` domain provides two overloads of `×` per carrier, selected by the RHS type (see [Domains: Within-Domain Operator Overloads](../../syntax/domains.md#within-domain-operator-overloads-rhs-typed)):
 
 | Expression | Resolved as | Returns |
 | --- | --- | --- |
@@ -58,11 +58,11 @@ Requires `use aivi.matrix (domain Matrix)` (or `use aivi.matrix`) and `use aivi.
 
 For concise matrix literals, use the `~mat` structured sigil:
 
-<<< ../../snippets/from_md/05_stdlib/01_math/09_matrix/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/matrix/sigil_constructors.aivi{aivi}
 
 
 Rows are separated by newlines; columns by spaces (any whitespace). The formatter aligns columns for readability. The sigil infers `Mat2`, `Mat3`, or `Mat4` from the row/column count.
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/01_math/09_matrix/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/matrix/usage_examples.aivi{aivi}

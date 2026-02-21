@@ -10,11 +10,11 @@ Screens think in Red, Green, and Blue, but people think in **Hue**, **Saturation
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/color/overview.aivi{aivi}
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/color/features.aivi{aivi}
 
 For direct channel edits, prefer record patching instead of deltas (e.g., `color <| { r: 30 }`). Deltas are primarily intended for perceptual adjustments like hue, saturation, and lightness.
 
@@ -24,11 +24,11 @@ For direct channel edits, prefer record patching instead of deltas (e.g., `color
 | --- | --- | --- |
 | `rgb r g b` | `Int -> Int -> Int -> Rgb` | `{ r: r, g: g, b: b }` |
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_05.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/color/short_constructor.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/color/domain_definition.aivi{aivi}
 
 ## Helper Functions
 
@@ -43,4 +43,4 @@ For direct channel edits, prefer record patching instead of deltas (e.g., `color
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/04_color/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/color/usage_examples.aivi{aivi}

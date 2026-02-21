@@ -26,16 +26,16 @@ You can use either the facade module or the specific domain module depending on 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.number</div>
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/choosing_between_decimal_and_rational.aivi{aivi}
 
 
 ## BigInt
 
 `BigInt` is an **opaque native type** for arbitrary-precision integers.
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/bigint_01.aivi{aivi}
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/bigint_02.aivi{aivi}
 
 Helpers:
 
@@ -46,15 +46,15 @@ Helpers:
 
 Example:
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/bigint_03.aivi{aivi}
 
 ## Decimal
 
 `Decimal` is an **opaque native type** for fixed-point arithmetic (base-10), suitable for financial calculations where `Float` precision errors are unacceptable.
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_05.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/decimal_01.aivi{aivi}
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_06.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/decimal_02.aivi{aivi}
 
 Helpers:
 
@@ -66,15 +66,15 @@ Helpers:
 
 Example:
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_07.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/decimal_03.aivi{aivi}
 
 ## Rational
 
 `Rational` is an **opaque native type** for exact fractions (`num/den`).
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_08.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/rational_01.aivi{aivi}
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_09.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/rational_02.aivi{aivi}
 
 Helpers:
 
@@ -86,29 +86,29 @@ Helpers:
 
 Example:
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_10.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/rational_03.aivi{aivi}
 
 ## Complex
 
 `Complex` represents values of the form `a + bi`. It is typically a struct of two floats, but domain operations are backed by optimized native implementations.
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_11.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/complex_01.aivi{aivi}
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_12.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/complex_02.aivi{aivi}
 
 Example:
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_13.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/complex_03.aivi{aivi}
 
 ## Quaternion
 
 The `Quaternion` domain provides tools for handling **3D rotations** without gimbal lock.
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_14.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/quaternion_01.aivi{aivi}
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_15.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/quaternion_02.aivi{aivi}
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_16.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/quaternion_03.aivi{aivi}
 
 | Function | Explanation |
 | --- | --- |
@@ -117,4 +117,4 @@ The `Quaternion` domain provides tools for handling **3D rotations** without gim
 | **magnitude** q<br><pre><code>`Quaternion -> Float`</code></pre> | Returns the quaternion length. |
 | **normalize** q<br><pre><code>`Quaternion -> Quaternion`</code></pre> | Returns a unit-length quaternion. |
 
-<<< ../../snippets/from_md/05_stdlib/01_math/10_number/block_17.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/number/quaternion_04.aivi{aivi}

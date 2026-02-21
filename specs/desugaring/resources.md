@@ -1,12 +1,12 @@
 # Resources
 
-`resource { … }` blocks desugar into kernel `bracket` calls (see [Kernel §8.7](../03_kernel/08_effects.md)).
+`resource { … }` blocks desugar into kernel `bracket` calls (see [Kernel §8.7](../kernel/effects.md)).
 
 ## Resource acquisition
 
 A basic resource block:
 
-<<< ../snippets/from_md/04_desugaring/06_generators/block_04.aivi{aivi}
+<<< ../snippets/from_md/desugaring/generators/resource_acquisition.aivi{aivi}
 
 desugars to:
 
@@ -58,4 +58,4 @@ desugars to:
 bracket (⟦acquireHandle⟧) (λh. ⟦releaseHandle h⟧) (λh. pure h)
 ```
 
-See [Syntax §15](../02_syntax/15_resources.md) for the surface syntax and error semantics.
+See [Syntax §15](../syntax/resources.md) for the surface syntax and error semantics.

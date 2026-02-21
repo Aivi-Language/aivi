@@ -6,7 +6,7 @@ The `Https` domain mirrors `Http`, but enforces secure (TLS) connections. It is 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.net.https</div>
 
-<<< ../../snippets/from_md/05_stdlib/03_network/02_https/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/network/https/https_domain.aivi{aivi}
 
 ## Functions
 

@@ -23,7 +23,7 @@ Resources are defined using `resource` blocks. The syntax is analogous to genera
 
 The code after `yield` is guaranteed to run when the resource goes out of scope.
 
-<<< ../snippets/from_md/02_syntax/15_resources/block_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/resources/defining_resources.aivi{aivi}
 
 This declarative approach hides the complexity of error handling and cancellation checks.
 
@@ -38,7 +38,7 @@ This declarative approach hides the complexity of error handling and cancellatio
 
 Inside a `do Effect { ... }` block, you use the `<-` binder to acquire a resource. This scopes the resource handle to the enclosing block.
 
-<<< ../snippets/from_md/02_syntax/15_resources/block_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/resources/using_resources.aivi{aivi}
 
 When the `do Effect { ... }` block exits   whether by normal completion, an error in `E`, or **cancellation**   all acquired resources are released in reverse order.
 
@@ -46,7 +46,7 @@ When the `do Effect { ... }` block exits   whether by normal completion, an erro
 
 You can acquire multiple resources in sequence. They will be released in reverse order of acquisition (LIFO).
 
-<<< ../snippets/from_md/02_syntax/15_resources/block_03.aivi{aivi}
+<<< ../snippets/from_md/syntax/resources/multiple_resources.aivi{aivi}
 
 
 ## 15.4 Error Semantics
@@ -60,7 +60,7 @@ All guarantees hold regardless of whether the failure is a typed error (`E`) or 
 
 ## 15.5 Cancellation
 
-Resources interact with the cancellation system (see [Concurrency](../06_runtime/01_concurrency.md)):
+Resources interact with the cancellation system (see [Concurrency](../runtime/concurrency.md)):
 
 - Cancellation is checked at `<-` bind points. If a task is cancelled before a resource is acquired, acquisition does not run.
 - If cancellation arrives **during use** of an acquired resource, cleanup still runs. The resource block's finalizer is registered at acquisition time and cannot be skipped.

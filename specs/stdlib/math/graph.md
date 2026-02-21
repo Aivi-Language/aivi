@@ -15,16 +15,16 @@ If you need to find the shortest path between two points or see who is friends w
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/01_math/17_graph/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/graph/overview.aivi{aivi}
 
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/01_math/17_graph/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/graph/features.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/01_math/17_graph/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/graph/domain_definition.aivi{aivi}
 
 ## Helper Functions
 
@@ -55,4 +55,4 @@ If you need to find the shortest path between two points or see who is friends w
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/01_math/17_graph/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/graph/usage_examples.aivi{aivi}

@@ -28,7 +28,7 @@ app =
   }
 
 main = do Effect {
-  req <- receiveHttpRequest   // pseudo   depends on httpServer.listen
+  req <- receiveHttpRequest // pseudo   depends on httpServer.listen
   resp <- serveHttp app req
   pure resp
 }

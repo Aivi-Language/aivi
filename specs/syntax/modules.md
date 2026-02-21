@@ -6,7 +6,7 @@ Modules are the primary unit of code organization, encapsulation, and reuse in A
 
 Modules can be written in a **flat** form that keeps file indentation shallow. The module body runs until end-of-file:
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/module_definitions.aivi{aivi}
 
 In v0.1, there is exactly one module per file. The `module` declaration must be the first non-empty item in the file (after any module decorators), and its body extends to EOF.
 
@@ -27,15 +27,15 @@ Use the `use` keyword to bring symbols from another module into the current scop
 
 ### Basic Import
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/basic_import.aivi{aivi}
 
 ### Selective / Selective Hiding
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_03.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/selective_selective_hiding.aivi{aivi}
 
 ### Renaming / Aliasing
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_04.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/renaming_aliasing.aivi{aivi}
 
 Compiler checks:
 
@@ -47,7 +47,7 @@ Compiler checks:
 
 Modules are the primary vehicle for delivering **Domains**. Exporting a domain automatically exports its carrier type, delta types, and operators.
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_05.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/domain_exports.aivi{aivi}
 
 When another module imports the domain (for example: `use geo.vector (domain Vector)`), it gains the ability to use domain-resolved operators like `+` on `Vec2` records.
 
@@ -63,7 +63,7 @@ Use dot notation to define hierarchy: `module my.app.api` lives in a file such a
 ### Module Re-exports
 A module can aggregate other modules, acting as a facade.
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_07.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/module_re_exports.aivi{aivi}
 
 
 ## 10.6 The Prelude
@@ -72,7 +72,7 @@ Every AIVI module implicitly starts with `use aivi.prelude`. This provides acces
 
 To opt-out of this behavior (mandatory for the core stdlib itself):
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_08.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/the_prelude.aivi{aivi}
 
 
 ## 10.7 Circular Dependencies
@@ -84,23 +84,23 @@ Modules allow for building clean, layered architectures where complex internal i
 
 ### Clean App Facade
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_09.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/clean_app_facade.aivi{aivi}
 
 ### Domain Extension Pattern
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_10.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/domain_extension_pattern.aivi{aivi}
 
 ### Context-Specific Environments (Static Injection)
 
 This pattern allows you to **statically swap** entire module implementations for different build contexts (e.g., Test vs. Prod). This is not for runtime configuration (see below), but for compile-time substitution of logic.
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_11.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/context_specific_environments_static_injection_01.aivi{aivi}
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_11_test.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/context_specific_environments_static_injection_02.aivi{aivi}
 
 To use the test environment, your test entry point (`tests/main.aivi`) simply imports the test module instead of the production one:
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_12.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/context_specific_environments_static_injection_03.aivi{aivi}
 
 ## 10.9 Runtime Configuration (Env Vars)
 
@@ -108,6 +108,6 @@ For values that change between deployments (like API URLs or DB passwords) witho
 
 Do not use module swapping for this. Instead, inject the configuration as data.
 
-See [12.4 Environment Sources](12_external_sources.md#124-environment-sources-env) for details.
+See [12.4 Environment Sources](external_sources.md#124-environment-sources-env) for details.
 
-<<< ../snippets/from_md/02_syntax/10_modules/block_13.aivi{aivi}
+<<< ../snippets/from_md/syntax/modules/runtime_configuration_env_vars.aivi{aivi}

@@ -6,11 +6,11 @@ The `Sockets` domain exposes low-level TCP/UDP sockets for custom protocols and 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.net.sockets</div>
 
-<<< ../../snippets/from_md/05_stdlib/03_network/04_sockets/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/network/sockets/sockets_domain.aivi{aivi}
 
 ## Types
 
-<<< ../../snippets/from_md/05_stdlib/03_network/04_sockets/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/network/sockets/types.aivi{aivi}
 
 ## TCP
 

@@ -1,6 +1,6 @@
 App model msg = {
-  init       : InitContext -> model,
-  update     : msg -> model -> (model, List (AppEffect model msg)),
-  view       : model -> VNode msg,
-  onPlatform : PlatformEvent -> Option msg
+  init: InitContext -> model
+  update: msg -> model -> (model, List (AppEffect model msg))
+  view: model -> VNode msg
+  onPlatform: PlatformEvent -> Option msg
 }

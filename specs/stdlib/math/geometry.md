@@ -15,22 +15,22 @@ Almost every visual application needs to know when two things collide. This doma
 
 ## Overview
 
-<<< ../../snippets/from_md/05_stdlib/01_math/15_geometry/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/geometry/overview.aivi{aivi}
 
 
 ## Features
 
-<<< ../../snippets/from_md/05_stdlib/01_math/15_geometry/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/geometry/features.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/01_math/15_geometry/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/geometry/domain_definition.aivi{aivi}
 
 ## Short Constructors
 
 Instead of verbose nested record literals, use convenience constructors:
 
-<<< ../../snippets/from_md/05_stdlib/01_math/15_geometry/block_05.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/geometry/short_constructors.aivi{aivi}
 
 | Constructor | Type | Equivalent |
 | --- | --- | --- |
@@ -52,4 +52,4 @@ Instead of verbose nested record literals, use convenience constructors:
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/01_math/15_geometry/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/math/geometry/usage_examples.aivi{aivi}

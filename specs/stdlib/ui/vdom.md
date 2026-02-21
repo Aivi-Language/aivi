@@ -10,7 +10,7 @@ The `aivi.ui` module defines a **typed Virtual DOM** (`VNode msg`). Programs con
 
 ## Core Types
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/02_vdom/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/vdom/core_types.aivi{aivi}
 
 ### `VNode msg`
 
@@ -35,7 +35,7 @@ Attributes are typed values, not raw strings:
 
 ## Constructing Nodes
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/02_vdom/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/vdom/constructing_nodes.aivi{aivi}
 
 ## Rendering + Diffs
 
@@ -49,7 +49,7 @@ Attributes are typed values, not raw strings:
 
 The `style={ ... }` attribute expects a record, so `<|` patching works naturally:
 
-<<< ../../snippets/from_md/05_stdlib/04_ui/02_vdom/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/ui/vdom/style_records_typed_css_data.aivi{aivi}
 
 
 Style values are not restricted to `Text`. The runtime renderer recognizes common shapes:

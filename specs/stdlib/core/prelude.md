@@ -6,11 +6,11 @@ The **Prelude** is your default toolkit. It acts as the "standard library of the
 
 <div class="import-badge">use aivi.prelude</div>
 
-<<< ../../snippets/from_md/05_stdlib/00_core/01_prelude/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/prelude/standard_library_prelude.aivi{aivi}
 
 ## Opting Out
 
-<<< ../../snippets/from_md/05_stdlib/00_core/01_prelude/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/core/prelude/opting_out.aivi{aivi}
 
 ## Rationale
 

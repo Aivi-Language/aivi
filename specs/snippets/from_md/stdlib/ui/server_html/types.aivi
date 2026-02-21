@@ -1,7 +1,7 @@
-ViewId         = Text        // opaque; one per WebSocket connection
-HandlerId      = Int
+ViewId = Text // opaque; one per WebSocket connection
+HandlerId = Int
 SubscriptionId = Int
-RequestId      = Int
+RequestId = Int
 
 UrlInfo = { href: Text, path: Text, query: Text, hash: Text }
 

@@ -14,7 +14,7 @@ Classes elaborate to records of methods (dictionary passing is compile-time, but
 
 Surface class syntax may declare constraints on member type variables:
 
-<<< ../snippets/from_md/04_desugaring/08_classes/block_01.aivi{aivi}
+<<< ../snippets/from_md/desugaring/classes/type_variable_constraints.aivi{aivi}
 
 
 Informal elaboration: constraints like `(A: Eq)` behave like additional dictionary requirements

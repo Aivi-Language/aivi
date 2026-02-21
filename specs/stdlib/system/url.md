@@ -10,15 +10,15 @@ A URL isn't just text; it's a structured address with protocols, hosts, and quer
 
 ## Module
 
-<<< ../../snippets/from_md/05_stdlib/03_system/25_url/block_01.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/url/module.aivi{aivi}
 
 ## Types
 
-<<< ../../snippets/from_md/05_stdlib/03_system/25_url/block_02.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/url/types.aivi{aivi}
 
 ## Domain Definition
 
-<<< ../../snippets/from_md/05_stdlib/03_system/25_url/block_03.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/url/domain_definition.aivi{aivi}
 
 ## Helper Functions
 
@@ -29,4 +29,4 @@ A URL isn't just text; it's a structured address with protocols, hosts, and quer
 
 ## Usage Examples
 
-<<< ../../snippets/from_md/05_stdlib/03_system/25_url/block_04.aivi{aivi}
+<<< ../../snippets/from_md/stdlib/system/url/usage_examples.aivi{aivi}

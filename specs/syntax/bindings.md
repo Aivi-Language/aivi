@@ -11,14 +11,14 @@ All bindings use `=`
 * instances
 * modules
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_13.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/definitions.aivi{aivi}
 
 
 ## 1.2 Shadowing
 
 Bindings are lexical and may be shadowed.
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_02.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/shadowing.aivi{aivi}
 
 This introduces a new binding; no mutation exists. This is common in functional languages like OCaml and Rust (re-binding) but distinct from mutation.
 
@@ -28,7 +28,7 @@ Within a module body (flat or braced), top-level value bindings are **recursive*
 
 This supports ordinary recursive functions:
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_03.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/recursion_module_level.aivi{aivi}
 
 Local recursion inside `{ ... }` / `do Effect { ... }` blocks is a future surface feature; in v0.1, prefer defining recursive helpers at module scope.
 
@@ -37,13 +37,13 @@ Local recursion inside `{ ... }` / `do Effect { ... }` blocks is a future surfac
 
 Structural patterns may appear in bindings.
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_04.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/pattern_bindings.aivi{aivi}
 
 ### Record destructuring (deconstructing records)
 
 To deconstruct a record, use a record pattern on the left-hand side.
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_01.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/record_destructuring_deconstructing_records.aivi{aivi}
 
 
 You can also destructure nested records using dot-paths (Section 1.5).
@@ -59,7 +59,7 @@ You can also destructure nested records using dot-paths (Section 1.5).
 
 Patterns may bind the **entire value** alongside destructuring.
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_05.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/whole_value_binding_with_as_01.aivi{aivi}
 
 Semantics:
 
@@ -75,24 +75,24 @@ Allowed in:
 
 Example:
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_06.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/whole_value_binding_with_as_02.aivi{aivi}
 
 
 ## 1.5 Usage Examples
 
 ### Config Binding
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_07.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/config_binding.aivi{aivi}
 
 ### Tuple Destructuring
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_08.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/tuple_destructuring.aivi{aivi}
 
 ### Deep path destructuring
 
 Record destructuring supports **dot-paths** to access nested fields directly. This combines path addressing with the `as` whole-value binder.
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_09.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/deep_path_destructuring_01.aivi{aivi}
 
 Semantics:
 * `data.user.profile` is the path to the record being destructured.
@@ -101,7 +101,7 @@ Semantics:
 
 This is exactly equivalent to the nested expansion:
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_10.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/deep_path_destructuring_02.aivi{aivi}
 
 But much more readable for deep hierarchies.
 
@@ -110,8 +110,8 @@ But much more readable for deep hierarchies.
 
 ### List Head/Tail
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_11.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/list_head_tail.aivi{aivi}
 
 ### Function Definitions
 
-<<< ../snippets/from_md/02_syntax/01_bindings/block_12.aivi{aivi}
+<<< ../snippets/from_md/syntax/bindings/function_definitions.aivi{aivi}

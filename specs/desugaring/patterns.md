@@ -4,15 +4,15 @@ Kernel has only `case`, so even total bindings can lower via `case`. (A compiler
 
 In surface syntax, these bindings appear in a `{ ... }` block:
 
-<<< ../snippets/from_md/04_desugaring/04_patterns/block_01.aivi{aivi}
+<<< ../snippets/from_md/desugaring/patterns/pattern_binding_with_total_only_01.aivi{aivi}
 
 desugars to `case ⟦e⟧ of \| { a = x } -> ⟦body⟧`.
 
-<<< ../snippets/from_md/04_desugaring/04_patterns/block_02.aivi{aivi}
+<<< ../snippets/from_md/desugaring/patterns/pattern_binding_with_total_only_02.aivi{aivi}
 
 desugars to `case ⟦e⟧ of \| (h :: t) -> ⟦body⟧`.
 
-<<< ../snippets/from_md/04_desugaring/04_patterns/block_03.aivi{aivi}
+<<< ../snippets/from_md/desugaring/patterns/pattern_binding_with_total_only_03.aivi{aivi}
 
 desugars to `case ⟦e⟧ of \| ⟦p⟧ -> ⟦body⟧`.
 
@@ -33,7 +33,7 @@ Pattern translation `⟦p⟧` uses the kernel pattern forms.
 
 A `{ ... }` binding with `as`:
 
-<<< ../snippets/from_md/04_desugaring/04_patterns/block_04.aivi{aivi}
+<<< ../snippets/from_md/desugaring/patterns/whole_value_binding_as.aivi{aivi}
 
 desugars to `case ⟦e⟧ of \| v @ ⟦p⟧ -> ⟦body⟧`.
 
