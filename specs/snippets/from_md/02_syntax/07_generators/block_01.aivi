@@ -1,1 +1,1 @@
-Generator A = (R -> A -> R) -> R -> R
+Generator A R = (R -> A -> R) -> R -> R
