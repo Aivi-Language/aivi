@@ -116,6 +116,7 @@ When working on the compiler (`crates/`):
 ## 5. Documentation Maintenance
 
 *   **Specs**: Update `specs/` *before* or *alongside* code changes.
+*   **Specs TOC**: The Table of Contents is automatically synchronized via a GitHub Action (`sync-specs-toc.yml`). **Always modify `specs/nav.mjs` as the single source of truth.** Do NOT manually edit the TOC in `specs/index.md` or `specs/README.md`.
 *   **Specs**: Update indices and make sure links are working.
 *   **AIVI Code Blocks**: Format all AIVI snippets in docs to match `aivi fmt` output (use `aivi fmt path` or `cargo run -p aivi -- fmt path`). In particular, keep formatter-style alignment for `<-` inside `effect { ... }` blocks and `=>` in pattern matching arms. Prefer fenced code blocks with the `aivi` language tag.
 *   **Quick Info Markers**: For LSP hover/quick-info, wrap existing spec markdown with `<!-- quick-info: {JSON} --> ... <!-- /quick-info -->` (see [specs/doc-markers-spec.md](file:///home/mendrik/desk/mendrik/aivi/specs/doc-markers-spec.md)). Do not duplicate prose just to satisfy tooling.
