@@ -50,12 +50,12 @@ To create ADT values, apply constructors like ordinary functions:
 
 Nullary constructors (like `None`, `True`, `False`) are values.
 
-## 3.3 Open Records (Row Polymorphism)
+## 3.3 Closed Records
 
 Records are:
 
 * structural
-* open by default
+* closed by default
 
 <<< ../snippets/from_md/syntax/types/open_records_row_polymorphism_01.aivi{aivi}
 
@@ -69,7 +69,7 @@ Record literals can spread existing records:
 
 Spreads merge fields left-to-right; later entries override earlier ones.
 
-Functions specify **minimum required fields**, not exact shapes.
+Functions specify an **exact record shape** in type signatures.
 
 <<< ../snippets/from_md/syntax/types/open_records_row_polymorphism_04.aivi{aivi}
 
@@ -164,9 +164,9 @@ This supports ergonomic boundary code such as HTTP requests:
 
 ### Record Instances
 
-AIVI uses open structural records, so a record type like `{}` denotes "any record".
-Implementations may ship a default instance `ToText {}` to support record-to-text coercions without
-per-record boilerplate.
+With closed structural records, `{}` denotes only the empty record.
+Record-to-text coercions should therefore be provided for concrete record types (or wrappers),
+rather than a single catch-all `{}` instance.
 
 ## 3.7 Machine Types (State Machines)
 
@@ -214,4 +214,3 @@ The LSP formatter aligns `->` arrows and `:` colons for readability:
 ### Example: Traffic light
 
 <<< ../snippets/from_md/syntax/types/example_traffic_light.aivi{aivi}
-

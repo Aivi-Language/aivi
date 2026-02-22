@@ -181,7 +181,7 @@ updated = addWeek { year: 2024, month: 9, day: 1 }"#;
 }
 
 #[test]
-fn typecheck_html_sigil_vdom_and_layout_units() {
+fn typecheck_html_sigil_style_record_is_closed() {
     let source = r#"
 module test.ui
 export node
@@ -195,11 +195,11 @@ node =
       <span>{ TextNode "1" }</span>
     </div>
   </html>"#;
-    check_ok_with_embedded(source, &["aivi", "aivi.ui", "aivi.ui.layout"]);
+    check_err_with_embedded(source, &["aivi", "aivi.ui", "aivi.ui.layout"]);
 }
 
 #[test]
-fn typecheck_html_sigil_splice_text_coerces_to_textnode() {
+fn typecheck_html_sigil_splice_text_still_checks_style_shape() {
     let source = r#"
 module test.ui_splice_text
 export node
@@ -213,7 +213,7 @@ node =
       { "hallo" }
     </div>
   </html>"#;
-    check_ok_with_embedded(source, &["aivi", "aivi.ui", "aivi.ui.layout"]);
+    check_err_with_embedded(source, &["aivi", "aivi.ui", "aivi.ui.layout"]);
 }
 
 #[test]
@@ -517,7 +517,7 @@ value = missing"#;
 }
 
 #[test]
-fn typecheck_open_records_allow_extra_fields() {
+fn typecheck_closed_records_reject_extra_fields() {
     let source = r#"
 module test.open
 export value
@@ -526,7 +526,24 @@ export value
  getName = user => user.name
 
 value = getName { name: "Alice", id: 1 }"#;
-    check_ok(source);
+    let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
+    assert!(
+        !file_diagnostics_have_errors(&diagnostics),
+        "parse errors: {diagnostics:?}"
+    );
+
+    let mut module_diags = check_modules(&modules);
+    module_diags.extend(check_types(&modules));
+    assert!(
+        file_diagnostics_have_errors(&module_diags),
+        "expected errors, got: {module_diags:?}"
+    );
+    assert!(
+        module_diags
+            .iter()
+            .any(|d| d.diagnostic.message.contains("additional field 'id' is not allowed")),
+        "expected additional-field diagnostic, got: {module_diags:?}"
+    );
 }
 
 #[test]

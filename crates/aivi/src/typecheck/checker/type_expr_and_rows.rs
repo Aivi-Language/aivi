@@ -99,8 +99,8 @@ impl TypeChecker {
                 }
                 Type::Record {
                     fields: field_map,
-                    open: true,
-                    row_tail: Some(self.constraints.note_open_row_var()),
+                    open: false,
+                    row_tail: None,
                 }
             }
             TypeExpr::Tuple { items, .. } => {
@@ -487,15 +487,11 @@ impl TypeChecker {
         ty
     }
 
-    fn make_record(&mut self, fields: BTreeMap<String, Type>, open: bool) -> Type {
+    fn make_record(&mut self, fields: BTreeMap<String, Type>, _open: bool) -> Type {
         Type::Record {
             fields,
-            open,
-            row_tail: if open {
-                Some(self.constraints.note_open_row_var())
-            } else {
-                None
-            },
+            open: false,
+            row_tail: None,
         }
     }
 
