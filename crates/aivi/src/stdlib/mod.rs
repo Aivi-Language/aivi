@@ -53,7 +53,6 @@ mod testing;
 mod text;
 mod tree;
 mod ui;
-mod ui_gtk4;
 mod ui_layout;
 mod ui_server_html;
 mod units;
@@ -269,10 +268,6 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: ui::MODULE_NAME,
         source: ui::SOURCE,
-    },
-    EmbeddedModule {
-        name: ui_gtk4::MODULE_NAME,
-        source: ui_gtk4::SOURCE,
     },
     EmbeddedModule {
         name: ui_server_html::MODULE_NAME,

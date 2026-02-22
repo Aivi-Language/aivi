@@ -323,6 +323,11 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     let effect_text_unit = Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]);
     let effect_text_int = Type::con("Effect").app(vec![text_ty.clone(), int_ty.clone()]);
     let effect_text_text = Type::con("Effect").app(vec![text_ty.clone(), text_ty.clone()]);
+    let css_record_ty = Type::Record {
+        fields: vec![].into_iter().collect(),
+        open: true,
+        row_tail: None,
+    };
     let effect_text_list_text = Type::con("Effect").app(vec![
         text_ty.clone(),
         Type::con("List").app(vec![text_ty.clone()]),
@@ -474,6 +479,53 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(int_ty.clone()),
                     Box::new(Type::Func(
                         Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "drawAreaNew".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_int.clone()),
+                    )),
+                ),
+            ),
+            (
+                "drawAreaSetContentSize".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(int_ty.clone()),
+                            Box::new(effect_text_unit.clone()),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "drawAreaQueueDraw".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
+            ),
+            (
+                "widgetSetCss".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(css_record_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "appSetCss".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(css_record_ty),
                         Box::new(effect_text_unit.clone()),
                     )),
                 ),
@@ -758,6 +810,122 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(int_ty.clone()),
                     Box::new(Type::Func(
                         Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "notificationNew".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_int.clone()),
+                    )),
+                ),
+            ),
+            (
+                "notificationSetBody".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "appSendNotification".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(int_ty.clone()),
+                            Box::new(effect_text_unit.clone()),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "appWithdrawNotification".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "layoutManagerNew".to_string(),
+                Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
+            ),
+            (
+                "widgetSetLayoutManager".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "osOpenUri".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "osShowInFileManager".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(effect_text_unit.clone()),
+                ),
+            ),
+            (
+                "osSetBadgeCount".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "osThemePreference".to_string(),
+                Type::Func(Box::new(Type::con("Unit")), Box::new(effect_text_text)),
+            ),
+            (
+                "widgetSetCss".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::Record {
+                            fields: vec![].into_iter().collect(),
+                            open: true,
+                            row_tail: None,
+                        }),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "appSetCss".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::Record {
+                            fields: vec![].into_iter().collect(),
+                            open: true,
+                            row_tail: None,
+                        }),
                         Box::new(effect_text_unit),
                     )),
                 ),

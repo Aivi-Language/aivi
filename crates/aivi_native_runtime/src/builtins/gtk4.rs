@@ -20,6 +20,9 @@ struct Gtk4State {
     labels: HashMap<i64, String>,
     entries: HashMap<i64, String>,
     scroll_areas: HashMap<i64, ScrollAreaState>,
+    draw_areas: HashMap<i64, DrawAreaState>,
+    widget_css: HashMap<i64, Value>,
+    app_css: HashMap<i64, Value>,
     tray_icons: HashMap<i64, TrayIconState>,
     drag_sources: HashMap<i64, DragSourceState>,
     drop_targets: HashMap<i64, DropTargetState>,
@@ -37,6 +40,14 @@ struct Gtk4State {
     actions: HashMap<i64, ActionState>,
     app_actions: HashMap<i64, Vec<i64>>,
     shortcuts: HashMap<i64, ShortcutState>,
+    notifications: HashMap<i64, NotificationState>,
+    app_notifications: HashMap<i64, HashMap<String, i64>>,
+    layout_managers: HashMap<i64, LayoutManagerState>,
+    widget_layout_manager: HashMap<i64, i64>,
+    badge_count: HashMap<i64, i64>,
+    last_opened_uri: Option<String>,
+    last_revealed_path: Option<String>,
+    theme_preference: String,
     widget_controllers: HashMap<i64, Vec<i64>>,
     widget_shortcuts: HashMap<i64, Vec<i64>>,
 }
@@ -61,6 +72,13 @@ struct BoxState {
 #[derive(Clone)]
 struct ScrollAreaState {
     child: Option<i64>,
+}
+
+#[derive(Clone)]
+struct DrawAreaState {
+    width: i64,
+    height: i64,
+    dirty: bool,
 }
 
 #[derive(Clone)]
@@ -117,6 +135,17 @@ struct ActionState {
 struct ShortcutState {
     trigger: String,
     action_name: String,
+}
+
+#[derive(Clone)]
+struct NotificationState {
+    title: String,
+    body: String,
+}
+
+#[derive(Clone)]
+struct LayoutManagerState {
+    kind: String,
 }
 
 impl Gtk4State {
@@ -622,6 +651,142 @@ pub(super) fn build_gtk4_record() -> Value {
                         ))));
                     };
                     scroll.child = Some(child_id);
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "drawAreaNew".to_string(),
+        builtin("gtk4.drawAreaNew", 2, |mut args, _| {
+            let height = match args.remove(1) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.drawAreaNew expects Int height")),
+            };
+            let width = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.drawAreaNew expects Int width")),
+            };
+            Ok(effect(move |_| {
+                let id = GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    let id = state.alloc_widget_id();
+                    state.draw_areas.insert(
+                        id,
+                        DrawAreaState {
+                            width,
+                            height,
+                            dirty: false,
+                        },
+                    );
+                    id
+                });
+                Ok(Value::Int(id))
+            }))
+        }),
+    );
+
+    fields.insert(
+        "drawAreaSetContentSize".to_string(),
+        builtin("gtk4.drawAreaSetContentSize", 3, |mut args, _| {
+            let height = match args.remove(2) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.drawAreaSetContentSize expects Int height")),
+            };
+            let width = match args.remove(1) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.drawAreaSetContentSize expects Int width")),
+            };
+            let draw_area_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => {
+                    return Err(invalid(
+                        "gtk4.drawAreaSetContentSize expects Int draw area id",
+                    ))
+                }
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    let Some(draw_area) = state.draw_areas.get_mut(&draw_area_id) else {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.drawAreaSetContentSize unknown draw area id {draw_area_id}"
+                        ))));
+                    };
+                    draw_area.width = width;
+                    draw_area.height = height;
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "drawAreaQueueDraw".to_string(),
+        builtin("gtk4.drawAreaQueueDraw", 1, |mut args, _| {
+            let draw_area_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.drawAreaQueueDraw expects Int draw area id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    let Some(draw_area) = state.draw_areas.get_mut(&draw_area_id) else {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.drawAreaQueueDraw unknown draw area id {draw_area_id}"
+                        ))));
+                    };
+                    let _ = (draw_area.width, draw_area.height);
+                    draw_area.dirty = true;
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "widgetSetCss".to_string(),
+        builtin("gtk4.widgetSetCss", 2, |mut args, _| {
+            let css = match args.remove(1) {
+                Value::Record(v) => Value::Record(v),
+                _ => return Err(invalid("gtk4.widgetSetCss expects Record css style")),
+            };
+            let widget_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.widgetSetCss expects Int widget id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    state.ensure_widget(widget_id, "widgetSetCss")?;
+                    state.widget_css.insert(widget_id, css.clone());
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "appSetCss".to_string(),
+        builtin("gtk4.appSetCss", 2, |mut args, _| {
+            let css = match args.remove(1) {
+                Value::Record(v) => Value::Record(v),
+                _ => return Err(invalid("gtk4.appSetCss expects Record css style")),
+            };
+            let app_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.appSetCss expects Int app id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    if !state.apps.contains_key(&app_id) {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.appSetCss unknown app id {app_id}"
+                        ))));
+                    }
+                    state.app_css.insert(app_id, css.clone());
                     Ok(Value::Unit)
                 })
             }))
@@ -1611,6 +1776,272 @@ pub(super) fn build_gtk4_record() -> Value {
                         .or_default()
                         .push(shortcut_id);
                     Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "notificationNew".to_string(),
+        builtin("gtk4.notificationNew", 2, |mut args, _| {
+            let body = match args.remove(1) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.notificationNew expects Text body")),
+            };
+            let title = match args.remove(0) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.notificationNew expects Text title")),
+            };
+            Ok(effect(move |_| {
+                let id = GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    let id = state.alloc_id();
+                    state.notifications.insert(
+                        id,
+                        NotificationState {
+                            title: title.clone(),
+                            body: body.clone(),
+                        },
+                    );
+                    id
+                });
+                Ok(Value::Int(id))
+            }))
+        }),
+    );
+
+    fields.insert(
+        "notificationSetBody".to_string(),
+        builtin("gtk4.notificationSetBody", 2, |mut args, _| {
+            let body = match args.remove(1) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.notificationSetBody expects Text body")),
+            };
+            let notification_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => {
+                    return Err(invalid(
+                        "gtk4.notificationSetBody expects Int notification id",
+                    ))
+                }
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    let Some(notification) = state.notifications.get_mut(&notification_id) else {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.notificationSetBody unknown notification id {notification_id}"
+                        ))));
+                    };
+                    let _ = &notification.title;
+                    notification.body = body.clone();
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "appSendNotification".to_string(),
+        builtin("gtk4.appSendNotification", 3, |mut args, _| {
+            let notification_id = match args.remove(2) {
+                Value::Int(v) => v,
+                _ => {
+                    return Err(invalid(
+                        "gtk4.appSendNotification expects Int notification id",
+                    ))
+                }
+            };
+            let notif_key = match args.remove(1) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.appSendNotification expects Text key")),
+            };
+            let app_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.appSendNotification expects Int app id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    if !state.apps.contains_key(&app_id) {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.appSendNotification unknown app id {app_id}"
+                        ))));
+                    }
+                    if !state.notifications.contains_key(&notification_id) {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.appSendNotification unknown notification id {notification_id}"
+                        ))));
+                    }
+                    state
+                        .app_notifications
+                        .entry(app_id)
+                        .or_default()
+                        .insert(notif_key.clone(), notification_id);
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "appWithdrawNotification".to_string(),
+        builtin("gtk4.appWithdrawNotification", 2, |mut args, _| {
+            let notif_key = match args.remove(1) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.appWithdrawNotification expects Text key")),
+            };
+            let app_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.appWithdrawNotification expects Int app id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    let Some(map) = state.app_notifications.get_mut(&app_id) else {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.appWithdrawNotification unknown app id {app_id}"
+                        ))));
+                    };
+                    map.remove(&notif_key);
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "layoutManagerNew".to_string(),
+        builtin("gtk4.layoutManagerNew", 1, |mut args, _| {
+            let kind = match args.remove(0) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.layoutManagerNew expects Text kind")),
+            };
+            Ok(effect(move |_| {
+                let id = GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    let id = state.alloc_id();
+                    state
+                        .layout_managers
+                        .insert(id, LayoutManagerState { kind: kind.clone() });
+                    id
+                });
+                Ok(Value::Int(id))
+            }))
+        }),
+    );
+
+    fields.insert(
+        "widgetSetLayoutManager".to_string(),
+        builtin("gtk4.widgetSetLayoutManager", 2, |mut args, _| {
+            let layout_id = match args.remove(1) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.widgetSetLayoutManager expects Int layout id")),
+            };
+            let widget_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.widgetSetLayoutManager expects Int widget id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    state.ensure_widget(widget_id, "widgetSetLayoutManager")?;
+                    let Some(layout) = state.layout_managers.get(&layout_id) else {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.widgetSetLayoutManager unknown layout manager id {layout_id}"
+                        ))));
+                    };
+                    let _ = &layout.kind;
+                    state.widget_layout_manager.insert(widget_id, layout_id);
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "osOpenUri".to_string(),
+        builtin("gtk4.osOpenUri", 2, |mut args, _| {
+            let uri = match args.remove(1) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.osOpenUri expects Text uri")),
+            };
+            let app_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.osOpenUri expects Int app id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    if !state.apps.contains_key(&app_id) {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.osOpenUri unknown app id {app_id}"
+                        ))));
+                    }
+                    state.last_opened_uri = Some(uri.clone());
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "osShowInFileManager".to_string(),
+        builtin("gtk4.osShowInFileManager", 1, |mut args, _| {
+            let path = match args.remove(0) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.osShowInFileManager expects Text path")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    state.last_revealed_path = Some(path.clone());
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "osSetBadgeCount".to_string(),
+        builtin("gtk4.osSetBadgeCount", 2, |mut args, _| {
+            let count = match args.remove(1) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.osSetBadgeCount expects Int count")),
+            };
+            let app_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.osSetBadgeCount expects Int app id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    if !state.apps.contains_key(&app_id) {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.osSetBadgeCount unknown app id {app_id}"
+                        ))));
+                    }
+                    state.badge_count.insert(app_id, count);
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "osThemePreference".to_string(),
+        builtin("gtk4.osThemePreference", 1, |mut args, _| {
+            match args.remove(0) {
+                Value::Unit => {}
+                _ => return Err(invalid("gtk4.osThemePreference expects Unit")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    if state.theme_preference.is_empty() {
+                        state.theme_preference = "system".to_string();
+                    }
+                    Ok(Value::Text(state.theme_preference.clone()))
                 })
             }))
         }),

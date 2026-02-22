@@ -1,9 +1,9 @@
-pub const MODULE_NAME: &str = "aivi.gtk4";
+pub const MODULE_NAME: &str = "aivi.ui.gtk4";
 
 pub const SOURCE: &str = r#"
 @no_prelude
-module aivi.gtk4
-export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, TrayIconId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, GtkError
+module aivi.ui.gtk4
+export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, TrayIconId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, NotificationId, LayoutManagerId, GtkError
 export init, appNew, appRun
 export windowNew, windowSetTitle, windowSetChild, windowPresent
 export widgetShow, widgetHide
@@ -12,6 +12,8 @@ export buttonNew, buttonSetLabel
 export labelNew, labelSetText
 export entryNew, entrySetText, entryText
 export scrollAreaNew, scrollAreaSetChild
+export drawAreaNew, drawAreaSetContentSize, drawAreaQueueDraw
+export widgetSetCss, appSetCss
 export trayIconNew, trayIconSetTooltip, trayIconSetVisible
 export dragSourceNew, dragSourceSetText
 export dropTargetNew, dropTargetLastText
@@ -26,6 +28,9 @@ export gestureClickNew, gestureClickLastButton, widgetAddController
 export clipboardDefault, clipboardSetText, clipboardText
 export actionNew, actionSetEnabled, appAddAction
 export shortcutNew, widgetAddShortcut
+export notificationNew, notificationSetBody, appSendNotification, appWithdrawNotification
+export layoutManagerNew, widgetSetLayoutManager
+export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
 
 use aivi
 
@@ -37,6 +42,7 @@ ButtonId = Int
 LabelId = Int
 EntryId = Int
 ScrollAreaId = Int
+DrawAreaId = Int
 TrayIconId = Int
 DragSourceId = Int
 DropTargetId = Int
@@ -52,6 +58,8 @@ GestureClickId = Int
 ClipboardId = Int
 ActionId = Int
 ShortcutId = Int
+NotificationId = Int
+LayoutManagerId = Int
 GtkError = Text
 
 init : Unit -> Effect GtkError Unit
@@ -113,6 +121,21 @@ scrollAreaNew = gtk4.scrollAreaNew
 
 scrollAreaSetChild : ScrollAreaId -> WidgetId -> Effect GtkError Unit
 scrollAreaSetChild = gtk4.scrollAreaSetChild
+
+drawAreaNew : Int -> Int -> Effect GtkError DrawAreaId
+drawAreaNew = gtk4.drawAreaNew
+
+drawAreaSetContentSize : DrawAreaId -> Int -> Int -> Effect GtkError Unit
+drawAreaSetContentSize = gtk4.drawAreaSetContentSize
+
+drawAreaQueueDraw : DrawAreaId -> Effect GtkError Unit
+drawAreaQueueDraw = gtk4.drawAreaQueueDraw
+
+widgetSetCss : WidgetId -> { } -> Effect GtkError Unit
+widgetSetCss = gtk4.widgetSetCss
+
+appSetCss : AppId -> { } -> Effect GtkError Unit
+appSetCss = gtk4.appSetCss
 
 trayIconNew : Text -> Text -> Effect GtkError TrayIconId
 trayIconNew = gtk4.trayIconNew
@@ -227,4 +250,34 @@ shortcutNew = gtk4.shortcutNew
 
 widgetAddShortcut : WidgetId -> ShortcutId -> Effect GtkError Unit
 widgetAddShortcut = gtk4.widgetAddShortcut
+
+notificationNew : Text -> Text -> Effect GtkError NotificationId
+notificationNew = gtk4.notificationNew
+
+notificationSetBody : NotificationId -> Text -> Effect GtkError Unit
+notificationSetBody = gtk4.notificationSetBody
+
+appSendNotification : AppId -> Text -> NotificationId -> Effect GtkError Unit
+appSendNotification = gtk4.appSendNotification
+
+appWithdrawNotification : AppId -> Text -> Effect GtkError Unit
+appWithdrawNotification = gtk4.appWithdrawNotification
+
+layoutManagerNew : Text -> Effect GtkError LayoutManagerId
+layoutManagerNew = gtk4.layoutManagerNew
+
+widgetSetLayoutManager : WidgetId -> LayoutManagerId -> Effect GtkError Unit
+widgetSetLayoutManager = gtk4.widgetSetLayoutManager
+
+osOpenUri : AppId -> Text -> Effect GtkError Unit
+osOpenUri = gtk4.osOpenUri
+
+osShowInFileManager : Text -> Effect GtkError Unit
+osShowInFileManager = gtk4.osShowInFileManager
+
+osSetBadgeCount : AppId -> Int -> Effect GtkError Unit
+osSetBadgeCount = gtk4.osSetBadgeCount
+
+osThemePreference : Unit -> Effect GtkError Text
+osThemePreference = gtk4.osThemePreference
 "#;
