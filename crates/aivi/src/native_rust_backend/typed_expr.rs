@@ -90,7 +90,7 @@ impl TypedCtx {
         }
     }
 
-    fn lookup(&self, name: &str) -> Option<&CgType> {
+    pub(super) fn lookup(&self, name: &str) -> Option<&CgType> {
         self.locals.get(name).or_else(|| self.globals.get(name))
     }
 

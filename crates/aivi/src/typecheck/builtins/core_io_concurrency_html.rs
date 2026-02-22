@@ -222,6 +222,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("file".to_string(), Scheme::mono(file_record));
 
@@ -273,6 +274,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("channel".to_string(), Scheme::mono(channel_record));
 
@@ -322,6 +324,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("concurrent".to_string(), Scheme::mono(concurrent_record));
 
@@ -336,6 +339,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("clock".to_string(), Scheme::mono(clock_record));
 
@@ -353,6 +357,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("random".to_string(), Scheme::mono(random_record));
 
@@ -364,6 +369,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: false,
+        row_tail: None,
     };
     let request_ty = Type::Record {
         fields: vec![
@@ -385,6 +391,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: false,
+        row_tail: None,
     };
     let _response_ty = Type::Record {
         fields: vec![
@@ -401,12 +408,14 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: false,
+        row_tail: None,
     };
     let server_config_ty = Type::Record {
         fields: vec![("address".to_string(), Type::con("Text"))]
             .into_iter()
             .collect(),
         open: false,
+        row_tail: None,
     };
     let server_ty = Type::con("Server");
     let ws_ty = Type::con("WebSocket");
@@ -470,6 +479,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("httpServer".to_string(), Scheme::mono(http_server_record));
 
@@ -481,6 +491,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("html".to_string(), Scheme::mono(html_record));
 
@@ -515,6 +526,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert(
         "ui".to_string(),

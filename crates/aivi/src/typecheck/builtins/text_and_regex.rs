@@ -324,6 +324,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("text".to_string(), Scheme::mono(text_record));
 
@@ -437,6 +438,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("regex".to_string(), Scheme::mono(regex_record));
 }

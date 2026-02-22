@@ -25,7 +25,7 @@ use self::builtins::register_builtins;
 use self::environment::{Env, RuntimeContext};
 use self::values::{
     BuiltinImpl, BuiltinValue, ClosureValue, EffectValue, KeyValue, ResourceValue, SourceValue,
-    ThunkValue, Value,
+    ThunkValue, Value, shape_record,
 };
 
 #[derive(Debug)]
@@ -180,6 +180,7 @@ pub fn run_test_suite(
     test_entries: &[(String, String)],
     surface_modules: &[crate::surface::Module],
 ) -> Result<TestReport, AiviError> {
+    const TEST_FUEL_BUDGET: u64 = 500_000;
     let mut runtime = build_runtime_from_program_scoped(program, surface_modules)?;
     let mut report = TestReport {
         passed: 0,
@@ -189,6 +190,8 @@ pub fn run_test_suite(
     };
 
     for (name, description) in test_entries {
+        // Keep a runaway test from exhausting the thread stack; each test gets a fresh budget.
+        runtime.fuel = Some(TEST_FUEL_BUDGET);
         let Some(value) = runtime.ctx.globals.get(name) else {
             report.failed += 1;
             report.failures.push(TestFailure {

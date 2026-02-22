@@ -8,6 +8,12 @@ AIVI uses **Reference Counting (RC)** as its primary memory management strategy.
 *   **No Tracing GC**: There is no "stop-the-world" tracing garbage collector. Memory is reclaimed immediately when the last reference is dropped.
 *   **Determinism**: Resource cleanup (file handles, network sockets) is deterministic and tied to the scope of the value owning the resource (see [Resources](../syntax/resources.md)).
 
+## Runtime Layout Optimizations
+
+*   **Record Shapes (Hidden Classes)**: Record values are indexed through interned field layouts, so repeated field lookups can use stable offsets after one shape resolution instead of repeatedly hashing keys.
+*   **Tagged Scalar Encoding**: Scalar runtime values (bool/int/float) expose a compact tagged representation used by runtime helpers to reduce transient allocation pressure.
+*   **Compatibility**: These optimizations are runtime-internal and preserve language-level record and value semantics.
+
 ## Cycle Handling
 
 While strict immutability prevents cycles in data structures, cycles can still arise in:
