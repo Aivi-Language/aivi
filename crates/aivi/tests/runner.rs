@@ -2,45 +2,12 @@ use std::path::PathBuf;
 
 use aivi::{
     check_modules, desugar_modules, elaborate_expected_coercions, file_diagnostics_have_errors,
-    load_modules_from_paths, run_test_suite, Expr, Literal, Module, ModuleItem,
+    load_modules_from_paths, run_test_suite,
 };
 use walkdir::WalkDir;
 
-fn set_workspace_root() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_root = manifest_dir
-        .parent()
-        .and_then(|path| path.parent())
-        .expect("workspace root");
-    std::env::set_current_dir(workspace_root).expect("set cwd");
-    workspace_root.to_path_buf()
-}
-
-fn collect_test_entries(modules: &[Module]) -> Vec<(String, String)> {
-    let mut entries = Vec::new();
-    for module in modules {
-        // skip embedded stdlib modules
-        if module.name.name.starts_with("aivi.") || module.name.name == "aivi" {
-            continue;
-        }
-        for item in &module.items {
-            let ModuleItem::Def(def) = item else {
-                continue;
-            };
-            if let Some(dec) = def.decorators.iter().find(|d| d.name.name == "test") {
-                let name = format!("{}.{}", module.name.name, def.name.name);
-                let description = match &dec.arg {
-                    Some(Expr::Literal(Literal::String { text, .. })) => text.clone(),
-                    _ => name.clone(),
-                };
-                entries.push((name, description));
-            }
-        }
-    }
-    entries.sort();
-    entries.dedup();
-    entries
-}
+#[path = "test_support.rs"]
+mod test_support;
 
 #[test]
 fn run_aivi_sources() {
@@ -60,7 +27,8 @@ fn run_aivi_sources() {
 }
 
 fn run_aivi_sources_inner() {
-    let root = set_workspace_root();
+    let root = test_support::workspace_root();
+    std::env::set_current_dir(&root).expect("set cwd");
     let tests_dir = root.join("integration-tests");
 
     if !tests_dir.exists() {
@@ -130,7 +98,7 @@ fn run_aivi_sources_inner() {
         }
 
         // Collect qualified test entries (name, description)
-        let test_entries = collect_test_entries(&modules);
+        let test_entries = test_support::collect_test_entries(&modules);
         if test_entries.is_empty() {
             continue;
         }
