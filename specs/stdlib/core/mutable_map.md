@@ -1,9 +1,12 @@
 # Mutable Map Module
 
+> [!WARNING]
+> `aivi.mutableMap` is planned for deprecation in favor of immutable collections plus record/patch-based updates.
+
 <!-- quick-info: {"kind":"module","name":"aivi.mutableMap"} -->
 The `aivi.mutableMap` module exposes the `MutableMap` record for effect-scoped
-mutable maps. It is designed for local, controlled mutation inside `do Effect { ... }`
-blocks, with `freeze` producing an immutable `Map` snapshot.
+mutable maps. Existing code may still use it, but new code should prefer immutable `Map`
+pipelines and record patching patterns.
 <!-- /quick-info -->
 <div class="import-badge">use aivi.mutableMap</div>
 

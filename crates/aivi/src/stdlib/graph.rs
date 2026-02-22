@@ -308,31 +308,30 @@ hasCycle = g => length (topoSort g) != length ((index g).nodes)
 shortestPath : Graph -> NodeId -> NodeId -> List NodeId
 shortestPath = g start goal => graph.shortestPath g start goal
 
-// Relax a single edge: if going through currentDist + edge.weight is shorter
-// than the known distance to edge.to, update the mutable distance map and return True.
-relax : MutableMap NodeId Float -> Float -> Edge -> Effect e Bool
-relax = dists currentDist edge => do Effect {
+// Relax a single edge against immutable distances. Returns updated map + update flag.
+relax : Map NodeId Float -> Float -> Edge -> { dists: Map NodeId Float, updated: Bool }
+relax = dists currentDist edge => {
   newDist = currentDist + edge.weight
-  maybeDist <- MutableMap.get edge.to dists
+  maybeDist = Map.get edge.to dists
   shouldUpdate = maybeDist ? | None => True | Some oldDist => newDist < oldDist
   if shouldUpdate
-    then do Effect {
-      _ <- MutableMap.insert edge.to newDist dists
-      pure True
+    then {
+      dists: Map.insert edge.to newDist dists
+      updated: True
     }
-    else pure False
+    else { dists: dists, updated: False }
 }
 
-// Relax all edges in a list, returning the number of edges that were updated.
-relaxEdges : MutableMap NodeId Float -> Float -> List Edge -> Effect e Int
+// Relax all edges in a list, returning updated distances + number of updates.
+relaxEdges : Map NodeId Float -> Float -> List Edge -> { dists: Map NodeId Float, count: Int }
 relaxEdges = dists currentDist edges => relaxEdgesHelp dists currentDist edges 0
 
-relaxEdgesHelp : MutableMap NodeId Float -> Float -> List Edge -> Int -> Effect e Int
+relaxEdgesHelp : Map NodeId Float -> Float -> List Edge -> Int -> { dists: Map NodeId Float, count: Int }
 relaxEdgesHelp = dists currentDist edges count => edges match
-  | [] => pure count
-  | [e, ...rest] => do Effect {
-    updated <- relax dists currentDist e
-    next = if updated then count + 1 else count
-    relaxEdgesHelp dists currentDist rest next
+  | [] => { dists: dists, count: count }
+  | [e, ...rest] => {
+    step = relax dists currentDist e
+    next = if step.updated then count + 1 else count
+    relaxEdgesHelp step.dists currentDist rest next
   }
 "#;

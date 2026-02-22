@@ -7,10 +7,12 @@ AIVI uses **Reference Counting (RC)** as its primary memory management strategy.
 *   **Immutable Values**: Most values in AIVI (`List`, `Record`, `Text`, `BigInt`) are immutable and shared via reference counting.
 *   **No Tracing GC**: There is no "stop-the-world" tracing garbage collector. Memory is reclaimed immediately when the last reference is dropped.
 *   **Determinism**: Resource cleanup (file handles, network sockets) is deterministic and tied to the scope of the value owning the resource (see [Resources](../syntax/resources.md)).
+*   **No User-Visible Lifetimes**: AIVI does not expose Rust-like lifetime annotations in source code.
 
 ## Runtime Layout Optimizations
 
 *   **Record Shapes (Hidden Classes)**: Record values are indexed through interned field layouts, so repeated field lookups can use stable offsets after one shape resolution instead of repeatedly hashing keys.
+*   **Closed Record Types**: Type-level records are closed by default, enabling backends to lower known record shapes to fixed-layout representations.
 *   **Tagged Scalar Encoding**: Scalar runtime values (bool/int/float) expose a compact tagged representation used by runtime helpers to reduce transient allocation pressure.
 *   **Compatibility**: These optimizations are runtime-internal and preserve language-level record and value semantics.
 
@@ -32,3 +34,4 @@ The choice of strategy is transparent to the programmer   recursive definitions 
 
 *   **Weak References**: Explicit weak references may be introduced for advanced users implementing cyclic data structures.
 *   **Cycle Detection**: A lightweight cycle detector may be added if the above strategies prove insufficient for complex cases.
+*   **Perceus-Style RC Reuse**: Add a static analysis pass that detects uniqueness/drop-to-zero opportunities and performs in-place reuse for records and collections while preserving immutable semantics.

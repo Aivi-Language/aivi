@@ -33,7 +33,6 @@ mod logic;
 mod map;
 mod math;
 mod matrix;
-mod mutable_map;
 mod network_facade;
 mod network_http;
 mod network_http_server;
@@ -272,10 +271,6 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: ui_server_html::MODULE_NAME,
         source: ui_server_html::SOURCE,
-    },
-    EmbeddedModule {
-        name: mutable_map::MODULE_NAME,
-        source: mutable_map::SOURCE,
     },
     EmbeddedModule {
         name: json::MODULE_NAME,

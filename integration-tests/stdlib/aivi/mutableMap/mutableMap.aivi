@@ -3,59 +3,44 @@ module integrationTests.stdlib.aivi.mutableMap.tests
 
 use aivi
 use aivi.testing
-use aivi.mutableMap
 
-@test "mutable map create and freeze"
-mutableMap_createAndFreeze = do Effect {
-  m <- MutableMap.create (Map.insert "a" 1 Map.empty)
-  snapshot <- MutableMap.freeze m
-  assert (Map.get "a" snapshot == Some 1)
+@test "map insert and get"
+map_insertAndGet = do Effect {
+  m = Map.insert "a" 1 Map.empty
+  assert (Map.get "a" m == Some 1)
 }
 
-@test "mutable map insert and get"
-mutableMap_insertAndGet = do Effect {
-  m <- MutableMap.empty Unit
-  _ <- MutableMap.insert "x" 42 m
-  val <- MutableMap.get "x" m
-  assert (val == Some 42)
+@test "map get or else"
+map_getOrElse = do Effect {
+  m = Map.insert "found" 7 Map.empty
+  val = Map.getOrElse "found" 99 m
+  assert (val == 7)
+  missing = Map.getOrElse "missing" 99 m
+  assert (missing == 99)
 }
 
-@test "mutable map get or else"
-mutableMap_getOrElse = do Effect {
-  m <- MutableMap.empty Unit
-  val <- MutableMap.getOrElse "missing" 99 m
-  assert (val == 99)
-  _ <- MutableMap.insert "found" 7 m
-  val2 <- MutableMap.getOrElse "found" 99 m
-  assert (val2 == 7)
-}
-
-@test "mutable map remove"
-mutableMap_remove = do Effect {
-  m <- MutableMap.empty Unit
-  _ <- MutableMap.insert "a" 1 m
-  _ <- MutableMap.remove "a" m
-  val <- MutableMap.get "a" m
+@test "map remove"
+map_remove = do Effect {
+  m = Map.insert "a" 1 Map.empty
+  m2 = Map.remove "a" m
+  val = Map.get "a" m2
   assert (val == None)
 }
 
-@test "mutable map has"
-mutableMap_has = do Effect {
-  m <- MutableMap.empty Unit
-  _ <- MutableMap.insert "key" 10 m
-  exists <- MutableMap.has "key" m
+@test "map has"
+map_has = do Effect {
+  m = Map.insert "key" 10 Map.empty
+  exists = Map.has "key" m
   assert exists
-  missing <- MutableMap.has "nope" m
+  missing = Map.has "nope" m
   assert (missing == False)
 }
 
-@test "mutable map size"
-mutableMap_size = do Effect {
-  m <- MutableMap.empty Unit
-  s0 <- MutableMap.size m
+@test "map size"
+map_size = do Effect {
+  m = Map.insert "a" 1 (Map.insert "b" 2 Map.empty)
+  s0 = Map.size Map.empty
   assert (s0 == 0)
-  _ <- MutableMap.insert "a" 1 m
-  _ <- MutableMap.insert "b" 2 m
-  s2 <- MutableMap.size m
+  s2 = Map.size m
   assert (s2 == 2)
 }
