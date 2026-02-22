@@ -788,6 +788,7 @@ fn map_new_ops() {
             func: Arc::new(|_args, _runtime| Ok(Value::Constructor { name: "None".to_string(), args: Vec::new() })),
         }),
         args: Vec::new(),
+        tagged_args: Some(Vec::new()),
     });
     let alter = expect_ok(runtime.apply(alter, remove_fn), "alter f");
     let map2 = expect_ok(runtime.apply(alter, map), "alter map");
@@ -1134,9 +1135,9 @@ fn shaped_record_lookup_matches_hash_lookup() {
 fn tagged_value_encodes_scalars() {
     let int_tag = TaggedValue::from_value(&Value::Int(42)).expect("int tag");
     let bool_tag = TaggedValue::from_value(&Value::Bool(true)).expect("bool tag");
-    let float_tag = TaggedValue::from_value(&Value::Float(3.5)).expect("float tag");
+    let none_tag = TaggedValue::from_value(&Value::Float(3.5));
     assert_ne!(int_tag, bool_tag);
-    assert_ne!(bool_tag, float_tag);
+    assert!(none_tag.is_none());
 }
 
 #[test]

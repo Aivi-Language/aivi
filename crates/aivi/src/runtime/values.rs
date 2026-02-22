@@ -121,16 +121,20 @@ impl TaggedValue {
         }
     }
 
-    pub(super) fn from_float(value: f64) -> Self {
-        Self(value.to_bits())
-    }
-
     pub(super) fn from_value(value: &Value) -> Option<Self> {
         match value {
             Value::Int(value) => Some(Self::from_int(*value)),
             Value::Bool(value) => Some(Self::from_bool(*value)),
-            Value::Float(value) => Some(Self::from_float(*value)),
             _ => None,
+        }
+    }
+
+    pub(super) fn to_value(self) -> Value {
+        match self.0 {
+            Self::TAG_BOOL_FALSE => Value::Bool(false),
+            Self::TAG_BOOL_TRUE => Value::Bool(true),
+            bits if bits & 0b11 == Self::TAG_INT => Value::Int((bits as i64) >> 2),
+            _ => Value::Unit,
         }
     }
 }
@@ -226,6 +230,7 @@ impl std::fmt::Debug for Value {
 pub(super) struct BuiltinValue {
     pub(super) imp: Arc<BuiltinImpl>,
     pub(super) args: Vec<Value>,
+    pub(super) tagged_args: Option<Vec<TaggedValue>>,
 }
 
 pub(super) struct BuiltinImpl {

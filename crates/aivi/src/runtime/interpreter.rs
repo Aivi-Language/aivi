@@ -25,7 +25,7 @@ use self::builtins::register_builtins;
 use self::environment::{Env, RuntimeContext};
 use self::values::{
     BuiltinImpl, BuiltinValue, ClosureValue, EffectValue, KeyValue, ResourceValue, SourceValue,
-    ThunkValue, Value, shape_record,
+    TaggedValue, ThunkValue, Value, shape_record,
 };
 
 #[derive(Debug)]
@@ -585,13 +585,40 @@ include!("runtime_impl/trampoline.rs");
 impl BuiltinValue {
     fn apply(&self, arg: Value, runtime: &mut Runtime) -> Result<Value, RuntimeError> {
         let mut args = self.args.clone();
-        args.push(arg);
+        let mut tagged_args = self.tagged_args.clone();
+        let mut pending_arg = Some(arg);
+        if let Some(existing) = tagged_args.as_mut() {
+            if let Some(tagged) = TaggedValue::from_value(pending_arg.as_ref().expect("pending arg")) {
+                existing.push(tagged);
+                pending_arg = None;
+            } else {
+                args = existing.iter().copied().map(TaggedValue::to_value).collect();
+                tagged_args = None;
+            }
+        }
+        if let Some(arg) = pending_arg {
+            args.push(arg);
+        }
+        if args.is_empty() {
+            if let Some(existing) = tagged_args.as_ref() {
+                if existing.len() == self.imp.arity {
+                    args = existing.iter().copied().map(TaggedValue::to_value).collect();
+                } else {
+                    return Ok(Value::Builtin(BuiltinValue {
+                        imp: self.imp.clone(),
+                        args,
+                        tagged_args,
+                    }));
+                }
+            }
+        }
         if args.len() == self.imp.arity {
             (self.imp.func)(args, runtime)
         } else {
             Ok(Value::Builtin(BuiltinValue {
                 imp: self.imp.clone(),
                 args,
+                tagged_args,
             }))
         }
     }

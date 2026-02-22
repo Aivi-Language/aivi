@@ -14,7 +14,7 @@ AIVI is a type-safe functional language targeting WebAssembly, featuring **globa
 This repository contains:
 - **Language specification** (normative semantics, type system, desugaring rules)
 - **Rust implementation** (compiler pipeline + runtime)
-- **Rust codegen** (typed Kernel → typed-MIR pre-pass for scalar closed defs → Rust emission)
+- **Rust codegen** (typed Kernel → typed-MIR pre-pass for scalar closed defs → Rust emission, with optional Cranelift-lowering debug scaffold)
 - **VSCode extension** (syntax highlighting, type checking, quick docs etc)
 - **Documentation** (specs, online docs, local build)
 - **CLI** (project scaffolding, building, introspection)

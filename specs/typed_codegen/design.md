@@ -169,9 +169,14 @@ Boxing/unboxing functions for each CgType:
 
 ### Not Yet Implemented
 
-- **ADT typed emission** — ADT constructors in CgType exist but type-to-cg-type lowering returns empty constructor args
 - **Optimization passes over MIR** — CSE/LICM/inlining are not implemented yet
-- **Direct Cranelift/LLVM backend** — codegen still emits Rust source and relies on `rustc`
+- **Direct Cranelift/LLVM backend** — codegen still emits Rust source and relies on `rustc` for executable output
+
+### Backend abstraction scaffold
+
+- A non-invasive Cranelift-lowering scaffold now exists in `crates/aivi/src/native_rust_backend/typed_cranelift.rs`.
+- It lowers supported typed-MIR scalar defs to a CLIF-like textual form for validation and debugging.
+- Enable with `AIVI_TYPED_BACKEND=cranelift` to embed lowering comments in emitted Rust without changing runtime behavior.
 
 ### Recently Implemented
 

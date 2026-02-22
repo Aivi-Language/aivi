@@ -4,6 +4,7 @@ mod blocks;
 mod expr;
 mod pattern;
 mod prelude;
+mod typed_cranelift;
 pub(crate) mod typed_expr;
 mod typed_mir;
 mod utils;
@@ -204,6 +205,10 @@ fn emit_typed_def(
     vis: &str,
 ) -> Result<bool, AiviError> {
     let mut ctx = typed_expr::TypedCtx::new(global_cg_types.clone());
+    let clif_comment = std::env::var("AIVI_TYPED_BACKEND")
+        .ok()
+        .filter(|value| value == "cranelift")
+        .and_then(|_| typed_cranelift::cranelift_lowering_comment(&def.expr, cg_ty, &ctx));
 
     // Try to emit the typed body
     let body_code = if let Some(code) = typed_mir::emit_typed_via_mir(&def.expr, cg_ty, &ctx, 1) {
@@ -221,6 +226,11 @@ fn emit_typed_def(
 
     if def.inline {
         out.push_str("#[inline(always)]\n");
+    }
+    if let Some(comment) = clif_comment {
+        out.push_str("/*\n");
+        out.push_str(&comment);
+        out.push_str("\n*/\n");
     }
     out.push_str("#[allow(dead_code)]\n");
     out.push_str(&format!(
