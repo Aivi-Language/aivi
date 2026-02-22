@@ -1,43 +1,12 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use aivi::{
     check_modules, desugar_modules, elaborate_expected_coercions, file_diagnostics_have_errors,
-    load_modules_from_paths, run_test_suite, Expr, Literal, Module, ModuleItem,
+    load_modules_from_paths, run_test_suite,
 };
 
-fn workspace_root() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest_dir
-        .parent()
-        .and_then(|path| path.parent())
-        .expect("workspace root")
-        .to_path_buf()
-}
-
-fn collect_test_entries(modules: &[Module]) -> Vec<(String, String)> {
-    let mut entries = Vec::new();
-    for module in modules {
-        if module.name.name.starts_with("aivi.") || module.name.name == "aivi" {
-            continue;
-        }
-        for item in &module.items {
-            let ModuleItem::Def(def) = item else {
-                continue;
-            };
-            if let Some(dec) = def.decorators.iter().find(|d| d.name.name == "test") {
-                let name = format!("{}.{}", module.name.name, def.name.name);
-                let description = match &dec.arg {
-                    Some(Expr::Literal(Literal::String { text, .. })) => text.clone(),
-                    _ => name.clone(),
-                };
-                entries.push((name, description));
-            }
-        }
-    }
-    entries.sort();
-    entries.dedup();
-    entries
-}
+#[path = "test_support.rs"]
+mod test_support;
 
 fn run_stdlib_file(path: &Path) -> (usize, usize) {
     let mut modules = load_modules_from_paths(&[path.to_path_buf()])
@@ -54,7 +23,7 @@ fn run_stdlib_file(path: &Path) -> (usize, usize) {
         path.display()
     );
 
-    let tests = collect_test_entries(&modules);
+    let tests = test_support::collect_test_entries(&modules);
     assert!(
         !tests.is_empty(),
         "no @test definitions found in {}",
@@ -69,7 +38,7 @@ fn run_stdlib_file(path: &Path) -> (usize, usize) {
 
 #[test]
 fn stdlib_selected_modules_execute_without_failures() {
-    let root = workspace_root();
+    let root = test_support::workspace_root();
     let files = [
         root.join("integration-tests/stdlib/aivi/collections/collections.aivi"),
         root.join("integration-tests/stdlib/aivi/text/text.aivi"),
