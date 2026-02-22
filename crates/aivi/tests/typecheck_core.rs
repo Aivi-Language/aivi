@@ -539,9 +539,10 @@ value = getName { name: "Alice", id: 1 }"#;
         "expected errors, got: {module_diags:?}"
     );
     assert!(
-        module_diags
-            .iter()
-            .any(|d| d.diagnostic.message.contains("additional field 'id' is not allowed")),
+        module_diags.iter().any(|d| d
+            .diagnostic
+            .message
+            .contains("additional field 'id' is not allowed")),
         "expected additional-field diagnostic, got: {module_diags:?}"
     );
 }

@@ -468,18 +468,29 @@ mod linux {
                 };
                 let draw_area_id = match args.remove(0) {
                     Value::Int(v) => v,
-                    _ => return Err(invalid("gtk4.drawAreaSetContentSize expects Int draw area id")),
+                    _ => {
+                        return Err(invalid(
+                            "gtk4.drawAreaSetContentSize expects Int draw area id",
+                        ))
+                    }
                 };
                 Ok(effect(move |_| {
-                    let width_i32 = as_i32(width, "gtk4.drawAreaSetContentSize width out of range")?;
-                    let height_i32 = as_i32(height, "gtk4.drawAreaSetContentSize height out of range")?;
+                    let width_i32 =
+                        as_i32(width, "gtk4.drawAreaSetContentSize width out of range")?;
+                    let height_i32 =
+                        as_i32(height, "gtk4.drawAreaSetContentSize height out of range")?;
                     GTK_STATE.with(|state| {
                         let state = state.borrow();
-                        let draw = state.draw_areas.get(&draw_area_id).copied().ok_or_else(|| {
-                            RuntimeError::Error(Value::Text(format!(
+                        let draw =
+                            state
+                                .draw_areas
+                                .get(&draw_area_id)
+                                .copied()
+                                .ok_or_else(|| {
+                                    RuntimeError::Error(Value::Text(format!(
                                 "gtk4.drawAreaSetContentSize unknown draw area id {draw_area_id}"
                             )))
-                        })?;
+                                })?;
                         unsafe { gtk_widget_set_size_request(draw, width_i32, height_i32) };
                         Ok(Value::Unit)
                     })
@@ -497,11 +508,16 @@ mod linux {
                 Ok(effect(move |_| {
                     GTK_STATE.with(|state| {
                         let state = state.borrow();
-                        let draw = state.draw_areas.get(&draw_area_id).copied().ok_or_else(|| {
-                            RuntimeError::Error(Value::Text(format!(
+                        let draw =
+                            state
+                                .draw_areas
+                                .get(&draw_area_id)
+                                .copied()
+                                .ok_or_else(|| {
+                                    RuntimeError::Error(Value::Text(format!(
                                 "gtk4.drawAreaQueueDraw unknown draw area id {draw_area_id}"
                             )))
-                        })?;
+                                })?;
                         unsafe { gtk_widget_queue_draw(draw) };
                         Ok(Value::Unit)
                     })
@@ -542,7 +558,11 @@ mod linux {
             builtin("gtk4.gestureClickLastButton", 1, |mut args, _| {
                 let gesture_id = match args.remove(0) {
                     Value::Int(v) => v,
-                    _ => return Err(invalid("gtk4.gestureClickLastButton expects Int gesture id")),
+                    _ => {
+                        return Err(invalid(
+                            "gtk4.gestureClickLastButton expects Int gesture id",
+                        ))
+                    }
                 };
                 Ok(effect(move |_| {
                     GTK_STATE.with(|state| {
@@ -564,7 +584,11 @@ mod linux {
             builtin("gtk4.widgetAddController", 2, |mut args, _| {
                 let controller_id = match args.remove(1) {
                     Value::Int(v) => v,
-                    _ => return Err(invalid("gtk4.widgetAddController expects Int controller id")),
+                    _ => {
+                        return Err(invalid(
+                            "gtk4.widgetAddController expects Int controller id",
+                        ))
+                    }
                 };
                 let widget_id = match args.remove(0) {
                     Value::Int(v) => v,
@@ -574,11 +598,12 @@ mod linux {
                     GTK_STATE.with(|state| {
                         let state = state.borrow();
                         let widget = widget_ptr(&state, widget_id, "widgetAddController")?;
-                        let gesture = state.gesture_clicks.get(&controller_id).ok_or_else(|| {
-                            RuntimeError::Error(Value::Text(format!(
+                        let gesture =
+                            state.gesture_clicks.get(&controller_id).ok_or_else(|| {
+                                RuntimeError::Error(Value::Text(format!(
                                 "gtk4.widgetAddController unknown controller id {controller_id}"
                             )))
-                        })?;
+                            })?;
                         unsafe { gtk_widget_add_controller(widget, gesture.raw) };
                         Ok(Value::Unit)
                     })
