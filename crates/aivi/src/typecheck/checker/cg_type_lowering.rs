@@ -114,13 +114,141 @@ impl TypeChecker {
     /// payload types with variables resolved.
     fn extract_ctor_arg_types(
         &self,
-        _ctor_name: &str,
-        _adt_name: &str,
-        _type_args: &[Type],
-        _env: &crate::typecheck::types::TypeEnv,
-        _depth_left: usize,
+        ctor_name: &str,
+        adt_name: &str,
+        type_args: &[Type],
+        env: &crate::typecheck::types::TypeEnv,
+        depth_left: usize,
     ) -> Vec<CgType> {
-        // Keep constructor payload lowering conservative to avoid recursive ADT blowups.
-        Vec::new()
+        if depth_left == 0 {
+            return Vec::new();
+        }
+
+        let Some(scheme) = env.get(ctor_name) else {
+            return Vec::new();
+        };
+
+        let mut cur = &scheme.ty;
+        let mut arg_types = Vec::new();
+        while let Type::Func(arg, next) = cur {
+            arg_types.push(arg.as_ref().clone());
+            cur = next.as_ref();
+        }
+
+        let subst_map = match cur {
+            Type::Con(name, ctor_vars) if name == adt_name && ctor_vars.len() == type_args.len() => {
+                let mut map = std::collections::HashMap::new();
+                for (ctor_var, actual_arg) in ctor_vars.iter().zip(type_args.iter()) {
+                    if let Type::Var(v) = ctor_var {
+                        map.insert(*v, actual_arg.clone());
+                    }
+                }
+                map
+            }
+            Type::App(base, args) => {
+                let mut base_ptr = base.as_ref();
+                let mut all_args = args.clone();
+                while let Type::App(inner_base, inner_args) = base_ptr {
+                    all_args.splice(0..0, inner_args.iter().cloned());
+                    base_ptr = inner_base.as_ref();
+                }
+                if let Type::Con(name, existing_args) = base_ptr {
+                    let mut combined = existing_args.clone();
+                    combined.extend(all_args);
+                    if name == adt_name && combined.len() == type_args.len() {
+                        let mut map = std::collections::HashMap::new();
+                        for (ctor_var, actual_arg) in combined.iter().zip(type_args.iter()) {
+                            if let Type::Var(v) = ctor_var {
+                                map.insert(*v, actual_arg.clone());
+                            }
+                        }
+                        map
+                    } else {
+                        return Vec::new();
+                    }
+                } else {
+                    return Vec::new();
+                }
+            }
+            _ => {
+                if type_args.is_empty() {
+                    std::collections::HashMap::new()
+                } else {
+                    return Vec::new();
+                }
+            }
+        };
+
+        arg_types
+            .into_iter()
+            .map(|arg| {
+                let subst_t = self.apply_local_subst(arg, &subst_map);
+                if contains_adt_name(&subst_t, adt_name) {
+                    CgType::Dynamic
+                } else {
+                    self.type_to_cg_type_inner_with_depth(&subst_t, env, depth_left - 1)
+                }
+            })
+            .collect()
+    }
+
+    #[allow(clippy::only_used_in_recursion)]
+    fn apply_local_subst(
+        &self,
+        ty: Type,
+        subst: &std::collections::HashMap<crate::typecheck::types::TypeVarId, Type>,
+    ) -> Type {
+        match ty {
+            Type::Var(v) => subst.get(&v).cloned().unwrap_or(Type::Var(v)),
+            Type::Con(name, args) => Type::Con(
+                name,
+                args.into_iter()
+                    .map(|a| self.apply_local_subst(a, subst))
+                    .collect(),
+            ),
+            Type::App(base, args) => Type::App(
+                Box::new(self.apply_local_subst(*base, subst)),
+                args.into_iter()
+                    .map(|a| self.apply_local_subst(a, subst))
+                    .collect(),
+            ),
+            Type::Func(a, b) => Type::Func(
+                Box::new(self.apply_local_subst(*a, subst)),
+                Box::new(self.apply_local_subst(*b, subst)),
+            ),
+            Type::Tuple(items) => Type::Tuple(
+                items
+                    .into_iter()
+                    .map(|i| self.apply_local_subst(i, subst))
+                    .collect(),
+            ),
+            Type::Record {
+                fields,
+                open,
+                row_tail,
+                ..
+            } => Type::Record {
+                fields: fields
+                    .into_iter()
+                    .map(|(k, v)| (k, self.apply_local_subst(v, subst)))
+                    .collect(),
+                open,
+                row_tail,
+            },
+        }
+    }
+}
+
+fn contains_adt_name(ty: &Type, adt_name: &str) -> bool {
+    match ty {
+        Type::Var(_) => false,
+        Type::Con(name, args) => name == adt_name || args.iter().any(|arg| contains_adt_name(arg, adt_name)),
+        Type::App(base, args) => {
+            contains_adt_name(base, adt_name)
+                || args.iter().any(|arg| contains_adt_name(arg, adt_name))
+        }
+        Type::Func(a, b) => contains_adt_name(a, adt_name) || contains_adt_name(b, adt_name),
+        Type::Tuple(items) => items.iter().any(|item| contains_adt_name(item, adt_name)),
+        Type::Record { fields, .. } => fields.values().any(|field| contains_adt_name(field, adt_name)),
     }
 }
