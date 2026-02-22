@@ -22,6 +22,24 @@ processEdges = dists d edges pq => edges match
     processEdges nextState.dists d rest nextState.pq
   }
 
+dijkstraLoop = g state => {
+  dists = state.dists
+  pq = state.pq
+  result = Heap.popMin pq
+  result match
+    | None                     => pure dists
+    | Some ((d, node), restPq) => do Effect {
+      currentDist = Map.getOrElse node 999999.0 dists
+      if d > currentDist
+      then dijkstraLoop g { dists: dists, pq: restPq }
+      else do Effect {
+        edges = edgesFrom g node
+        nextState <- processEdges dists d edges restPq
+        dijkstraLoop g nextState
+      }
+    }
+}
+
 @test "Dijkstra with mutable state"
 dijkstra_shortestPaths = do Effect {
   // Graph: 0->1 (2.0), 0->2 (5.0), 1->2 (1.0), 1->3 (4.0), 2->3 (1.0)
@@ -30,26 +48,8 @@ dijkstra_shortestPaths = do Effect {
   // Distance table: source node 0 starts at 0.0
   dists0 = Map.insert 0 0.0 Map.empty
 
-  // Dijkstra main loop with min-heap priority queue and loop/recurse
-  loop state = { dists: dists0, pq: Heap.push (0.0, 0) Heap.empty } => {
-    dists = state.dists
-    pq = state.pq
-    result = Heap.popMin pq
-    result match
-      | None                     => pure dists
-      | Some ((d, node), restPq) => do Effect {
-        currentDist = Map.getOrElse node 999999.0 dists
-        if d > currentDist
-        then do Effect { recurse { dists: dists, pq: restPq } }
-        else do Effect {
-          edges = edgesFrom g node
-          nextState <- processEdges dists d edges restPq
-          recurse nextState
-        }
-      }
-  }
-
-  dists <- loop
+  // Dijkstra main loop with min-heap priority queue.
+  dists <- dijkstraLoop g { dists: dists0, pq: Heap.push (0.0, 0) Heap.empty }
 
   // Verify shortest distances from node 0
   d0 = Map.getOrElse 0 999999.0 dists
