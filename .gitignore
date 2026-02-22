@@ -6,7 +6,7 @@ specs/.vitepress/cache/
 
 # Legacy pandoc build output
 build
-bin/aivi
+bin/aivi-lsp
 target
 aivi-vscode-*
 /*.aivi
