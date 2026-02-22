@@ -183,6 +183,13 @@ fn invalid(name: &str) -> RuntimeError {
 }
 
 pub(super) fn build_gtk4_record() -> Value {
+    if let Some(real) = super::gtk4_real::build_gtk4_record_real(build_gtk4_record_mock) {
+        return real;
+    }
+    build_gtk4_record_mock()
+}
+
+fn build_gtk4_record_mock() -> Value {
     let mut fields = HashMap::new();
 
     fields.insert(

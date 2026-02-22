@@ -32,6 +32,16 @@ pub struct AiviTomlBuild {
     pub rust_edition: String,
     #[serde(default = "default_cargo_profile")]
     pub cargo_profile: String,
+    #[serde(default)]
+    pub native_ui_target: NativeUiTarget,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+pub enum NativeUiTarget {
+    #[default]
+    Portable,
+    GnomeGtk4Libadwaita,
 }
 
 impl Default for AiviTomlBuild {
@@ -40,6 +50,7 @@ impl Default for AiviTomlBuild {
             gen_dir: default_gen_dir(),
             rust_edition: default_rust_edition(),
             cargo_profile: default_cargo_profile(),
+            native_ui_target: NativeUiTarget::default(),
         }
     }
 }

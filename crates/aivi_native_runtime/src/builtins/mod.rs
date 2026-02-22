@@ -7,6 +7,7 @@ mod crypto;
 mod database;
 mod graph;
 mod gtk4;
+mod gtk4_real;
 mod http_server;
 mod i18n;
 mod instant;

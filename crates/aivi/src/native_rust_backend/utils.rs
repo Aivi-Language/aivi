@@ -291,6 +291,7 @@ fn is_rust_keyword(ident: &str) -> bool {
             | "false"
             | "fn"
             | "for"
+            | "gen"
             | "if"
             | "impl"
             | "in"
@@ -333,6 +334,7 @@ mod tests {
     #[test]
     fn rust_local_name_avoids_keywords_and_empty() {
         assert_eq!(rust_local_name("match"), "v_match");
+        assert_eq!(rust_local_name("gen"), "v_gen");
         assert_eq!(rust_local_name(""), "_");
         assert_eq!(rust_local_name("9lives"), "_9lives");
     }

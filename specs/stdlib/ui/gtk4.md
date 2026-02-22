@@ -222,16 +222,15 @@ use aivi
 use aivi.ui.gtk4
 
 main = do Effect {
-  _ <- init Unit
-  appId <- appNew "com.example.demo"
-  winId <- windowNew appId "AIVI GTK4" 800 600
+  init Unit
+  appId <- appNew "com.example.counter"
+  win <- windowNew appId "Counter" 640 480
   root <- boxNew 1 8
-  button <- buttonNew "Click me"
-  _ <- boxAppend root button
-  _ <- windowSetChild winId root
-  _ <- windowPresent winId
-  _ <- appRun appId
-  pure Unit
+  title <- labelNew "Mailfox"
+  boxAppend root title
+  windowSetChild win root
+  windowPresent win
+  appRun appId
 }
 ```
 

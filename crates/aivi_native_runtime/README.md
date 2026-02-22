@@ -10,3 +10,6 @@ The native backend lowers AIVI programs to standalone Rust that depends on this 
 This crate is not intended to be used directly by end users yet; its API is driven by the generated
 Rust output.
 
+## Feature flags
+
+- `gtk4-libadwaita`: enables the GNOME-targeted UI backend selection path for `aivi.ui.gtk4`.

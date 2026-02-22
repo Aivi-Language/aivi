@@ -16,6 +16,9 @@ fn init_bin_writes_expected_files() {
     );
 
     let cargo = std::fs::read_to_string(dir.join("Cargo.toml")).expect("read Cargo.toml");
+    let aivi_toml = std::fs::read_to_string(dir.join("aivi.toml")).expect("read aivi.toml");
     assert!(cargo.contains("path = \"target/aivi-gen/src/main.rs\""));
     assert!(cargo.contains("aivi_native_runtime = { path ="));
+    assert!(cargo.contains("runtime-gnome = [\"aivi_native_runtime/gtk4-libadwaita\"]"));
+    assert!(aivi_toml.contains("native_ui_target = \"portable\""));
 }

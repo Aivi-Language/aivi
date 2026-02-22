@@ -158,33 +158,10 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 ## Todo
 
 - bug fixes
-
 - ServerHTML fixes
-
-- how would a wizard work in aivi.ui
-
-- stdlib/ definitions — 47 modules with no unit tests; at least smoke-test that type signatures are valid.
-
-- runtime/builtins/ — The interpreter builtins mirror the native runtime ones; both need tests.
-
-- surface/parser/ sub-modules — Parser logic is tested via integration tests, but no targeted unit tests for individual grammar productions.
-
-- typecheck/checker/ — Core type inference/checking logic with no direct unit tests.
-
-- aivi build should build a binary
-
-- The legacy formatter lives in `formatter/format_text_with_options_body.rs` and is included -> can this be removed?
-
-- split hir files into smaller chunks?
-
-- use include_str! instead of push_str
-
-- add docs to crate code
-
-- find and remove legacy code
-
-- better way than eval and apply?
-
+- memory management
+- recursion + trampoline
+- evaluate gc/ref counting -> internalized "ownership/borrowing"
 
 ## License
 
