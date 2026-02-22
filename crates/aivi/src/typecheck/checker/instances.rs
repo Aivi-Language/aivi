@@ -335,8 +335,7 @@ impl TypeChecker {
                         }
                         // Elaborate against the remaining expected return type so the typechecker
                         // can apply expected-type coercions in the body.
-                        let (_elab, _ty) =
-                            self.elab_expr(*body, Some(remaining), &mut local_env)?;
+                        let (_elab, _ty) = self.elab_expr(*body, Some(remaining), &mut local_env)?;
                         return Ok(());
                     }
 

@@ -150,3 +150,22 @@ main = do Effect {
         "unexpected stdout: {stdout}"
     );
 }
+
+#[test]
+fn typed_codegen_uses_mir_for_scalar_defs() {
+    let rust = compile_typed(
+        r#"module app.main
+score : Int
+score = 1 + 2
+
+main : Effect Text Unit
+main = do Effect {
+  print "ok"
+}
+"#,
+    );
+    assert!(
+        rust.contains("/* typed-mir */"),
+        "expected typed MIR marker in generated Rust:\n{rust}"
+    );
+}

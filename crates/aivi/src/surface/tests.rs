@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::surface::{parse_modules, Expr, Literal, ModuleItem};
+use crate::surface::{lower_modules_to_arena, parse_modules, ArenaExpr, Expr, Literal, ModuleItem};
 
 fn diag_codes(diags: &[crate::FileDiagnostic]) -> Vec<String> {
     let mut codes: Vec<String> = diags.iter().map(|d| d.diagnostic.code.clone()).collect();
@@ -43,6 +43,42 @@ x = 1
         ),
         "expected @deprecated string literal argument"
     );
+}
+
+#[test]
+fn lowers_surface_module_to_arena() {
+    let src = r#"
+module Example
+
+id = x => x
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+    let (arena, lowered) = lower_modules_to_arena(&modules);
+    assert_eq!(lowered.len(), 1);
+    assert!(!arena.exprs.is_empty());
+    assert!(!arena.patterns.is_empty());
+    let module = &lowered[0];
+    assert_eq!(module.name.symbol.as_str(), "Example");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            crate::surface::ArenaModuleItem::Def(def) => Some(def),
+            _ => None,
+        })
+        .expect("def");
+    match arena.expr(def.expr) {
+        ArenaExpr::Lambda { body, .. } => match arena.expr(*body) {
+            ArenaExpr::Ident(name) => assert_eq!(name.symbol.as_str(), "x"),
+            other => panic!("expected arena lambda body ident, got {other:?}"),
+        },
+        other => panic!("expected arena lambda body, got {other:?}"),
+    }
 }
 
 #[test]

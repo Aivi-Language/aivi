@@ -3,7 +3,12 @@ fn record_get_path<'a>(record: &'a HashMap<String, Value>, path: &[String]) -> O
     let mut current = record;
     let mut value = None;
     for (index, segment) in path.iter().enumerate() {
-        value = current.get(segment);
+        let shaped = shape_record(current);
+        value = if shaped.has_field(segment) {
+            current.get(segment)
+        } else {
+            None
+        };
         if index + 1 == path.len() {
             return value;
         }

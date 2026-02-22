@@ -11,6 +11,7 @@ use super::types::{
     number_kind, split_suffixed_number, AliasInfo, Kind, NumberKind, Scheme, SchemeOrigin, Type,
     TypeContext, TypeEnv, TypeError, TypePrinter, TypeVarId,
 };
+use super::{constraints::ConstraintState, query_engine::TypeQueryCache};
 use super::{ClassDeclInfo, InstanceDeclInfo};
 
 pub(super) struct TypeChecker {
@@ -31,6 +32,8 @@ pub(super) struct TypeChecker {
     current_module_path: String,
     extra_diagnostics: Vec<FileDiagnostic>,
     adt_constructors: HashMap<String, Vec<String>>,
+    pub(super) constraints: ConstraintState,
+    pub(super) query_cache: TypeQueryCache,
 }
 
 impl TypeChecker {
@@ -53,6 +56,8 @@ impl TypeChecker {
             current_module_path: String::new(),
             extra_diagnostics: Vec::new(),
             adt_constructors: HashMap::new(),
+            constraints: ConstraintState::default(),
+            query_cache: TypeQueryCache::default(),
         };
         checker.register_builtin_types();
         checker.register_builtin_aliases();
@@ -86,6 +91,8 @@ impl TypeChecker {
         self.extra_diagnostics.clear();
         self.adt_constructors.clear();
         self.current_module_path = _module.path.clone();
+        self.constraints = ConstraintState::default();
+        self.query_cache.clear_module(&_module.name.name);
     }
 
     fn emit_extra_diag(
@@ -105,6 +112,10 @@ impl TypeChecker {
                 labels: Vec::new(),
             },
         });
+    }
+
+    pub(super) fn note_open_row_var(&mut self) {
+        let _ = self.constraints.note_open_row_var();
     }
 
     pub(super) fn set_class_env(
@@ -348,6 +359,7 @@ impl TypeChecker {
             .into_iter()
             .collect(),
             open: true,
+        row_tail: None,
         };
         env.insert("file".to_string(), Scheme::mono(file_record));
 
@@ -402,6 +414,7 @@ impl TypeChecker {
             .into_iter()
             .collect(),
             open: true,
+        row_tail: None,
         };
         env.insert("channel".to_string(), Scheme::mono(channel_record));
 
@@ -451,6 +464,7 @@ impl TypeChecker {
             .into_iter()
             .collect(),
             open: true,
+        row_tail: None,
         };
         env.insert("concurrent".to_string(), Scheme::mono(concurrent_record));
 
@@ -467,6 +481,7 @@ impl TypeChecker {
             .into_iter()
             .collect(),
             open: true,
+        row_tail: None,
         };
         env.insert("clock".to_string(), Scheme::mono(clock_record));
 
@@ -486,6 +501,7 @@ impl TypeChecker {
             .into_iter()
             .collect(),
             open: true,
+        row_tail: None,
         };
         env.insert("random".to_string(), Scheme::mono(random_record));
 
@@ -497,6 +513,7 @@ impl TypeChecker {
             .into_iter()
             .collect(),
             open: true,
+        row_tail: None,
         };
         env.insert("html".to_string(), Scheme::mono(html_record));
 

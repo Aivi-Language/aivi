@@ -6,6 +6,13 @@ pub struct SpannedName {
     pub span: Span,
 }
 
+impl SpannedName {
+    #[inline]
+    pub fn symbol(&self) -> crate::intern::Symbol {
+        crate::intern::Symbol::intern(self.name.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScopeItemKind {
     Value,

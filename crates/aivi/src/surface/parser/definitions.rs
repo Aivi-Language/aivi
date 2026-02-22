@@ -9,7 +9,7 @@ impl Parser {
             let token = self.tokens.get(self.pos)?.clone();
             self.pos += 1;
             Some(SpannedName {
-                name: "%".to_string(),
+                name: "%".into(),
                 span: token.span,
             })
         } else {
@@ -26,7 +26,7 @@ impl Parser {
 
         let name_span = merge_span(number.span.clone(), suffix.span.clone());
         let name = SpannedName {
-            name: format!("{}{}", number.text, suffix.name),
+            name: format!("{}{}", number.text, suffix.name).into(),
             span: name_span.clone(),
         };
         let ty = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
@@ -77,7 +77,7 @@ impl Parser {
             let token = self.tokens.get(self.pos)?.clone();
             self.pos += 1;
             Some(SpannedName {
-                name: "%".to_string(),
+                name: "%".into(),
                 span: token.span,
             })
         } else {
@@ -98,7 +98,7 @@ impl Parser {
         if matches!(expr, Expr::Lambda { .. }) {
             let name_span = merge_span(number.span.clone(), suffix.span.clone());
             let name = SpannedName {
-                name: format!("{}{}", number.text, suffix.name),
+                name: format!("{}{}", number.text, suffix.name).into(),
                 span: name_span.clone(),
             };
             let span = merge_span(name_span, expr_span(&expr));
@@ -115,7 +115,7 @@ impl Parser {
             match expr {
                 Expr::Literal(Literal::Number { text, span }) if text == needle => {
                     Expr::Ident(SpannedName {
-                        name: param.to_string(),
+                        name: param.into(),
                         span,
                     })
                 }
@@ -299,7 +299,7 @@ impl Parser {
 
         let name_span = merge_span(number.span.clone(), suffix.span.clone());
         let name = SpannedName {
-            name: format!("{}{}", number.text, suffix.name),
+            name: format!("{}{}", number.text, suffix.name).into(),
             span: name_span.clone(),
         };
         let span = merge_span(name_span, expr_span(&expr));

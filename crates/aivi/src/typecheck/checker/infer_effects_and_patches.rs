@@ -123,17 +123,22 @@ impl TypeChecker {
                         result_ty = self.fresh_var();
                         let expected =
                             Type::con("Effect").app(vec![err_ty.clone(), result_ty.clone()]);
-                        self.unify_with_span(expr_ty, expected, expr_span(expr))?;
+                        self.push_deferred_constraint(expr_ty, expected, expr_span(expr));
                     } else {
                         // Expression statements only auto-run effects when they return `Unit`.
                         // For non-`Unit` results, require an explicit `<-` bind.
                         let value_ty =
                             self.require_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
-                        self.unify_with_span(value_ty, Type::con("Unit"), expr_span(expr))?;
+                        self.push_deferred_constraint(
+                            value_ty,
+                            Type::con("Unit"),
+                            expr_span(expr),
+                        );
                     }
                 }
             }
         }
+        self.solve_deferred_constraints()?;
         Ok(Type::con("Effect").app(vec![err_ty, result_ty]))
     }
 
@@ -193,7 +198,7 @@ impl TypeChecker {
                         } else {
                             Type::con(&monad_con).app(vec![result_ty.clone()])
                         };
-                        self.unify_with_span(expr_ty, expected, expr_span(expr))?;
+                        self.push_deferred_constraint(expr_ty, expected, expr_span(expr));
                     } else {
                         // Non-final expression: must be M Unit
                         let expected = if monad_con == "Result" {
@@ -202,7 +207,7 @@ impl TypeChecker {
                         } else {
                             Type::con(&monad_con).app(vec![Type::con("Unit")])
                         };
-                        self.unify_with_span(expr_ty, expected, expr_span(expr))?;
+                        self.push_deferred_constraint(expr_ty, expected, expr_span(expr));
                     }
                 }
                 // Effect-specific statements are not allowed in generic do blocks
@@ -269,6 +274,7 @@ impl TypeChecker {
                 }
             }
         }
+        self.solve_deferred_constraints()?;
 
         // Build the block's return type: M result_ty
         let block_ty = if monad_con == "Result" {
@@ -459,7 +465,11 @@ impl TypeChecker {
                     fields.insert(name.name.clone(), field_ty.clone());
                     self.unify_with_span(
                         current_ty,
-                        Type::Record { fields, open: true },
+                        Type::Record {
+                            fields,
+                            open: true,
+                            row_tail: None,
+                        },
                         name.span.clone(),
                     )?;
                     current_ty = field_ty;
@@ -571,6 +581,7 @@ impl TypeChecker {
                         let entry_ty = Type::Record {
                             fields: entry_fields,
                             open: true,
+                            row_tail: Some(self.constraints.note_open_row_var()),
                         };
 
                         let param = "__it".to_string();
@@ -596,6 +607,7 @@ impl TypeChecker {
         let mut record_ty = Type::Record {
             fields: BTreeMap::new(),
             open: true,
+            row_tail: Some(self.constraints.note_open_row_var()),
         };
         for field in fields {
             if field.spread {
@@ -698,6 +710,7 @@ impl TypeChecker {
         let mut record_ty = Type::Record {
             fields: BTreeMap::new(),
             open: true,
+            row_tail: Some(self.constraints.note_open_row_var()),
         };
         for field in fields {
             let field_ty = self.infer_pattern(&field.pattern, env)?;
@@ -769,7 +782,12 @@ impl TypeChecker {
                 PathSegment::Field(name) => {
                     let mut fields = BTreeMap::new();
                     fields.insert(name.name.clone(), current);
-                    current = Type::Record { fields, open: true };
+                    self.note_open_row_var();
+                    current = Type::Record {
+                        fields,
+                        open: true,
+                        row_tail: Some(self.constraints.note_open_row_var()),
+                    };
                 }
                 PathSegment::Index(_, _) | PathSegment::All(_) => {
                     current = Type::con("List").app(vec![current]);
@@ -784,7 +802,12 @@ impl TypeChecker {
         for segment in path.iter().rev() {
             let mut fields = BTreeMap::new();
             fields.insert(segment.name.clone(), current);
-            current = Type::Record { fields, open: true };
+            self.note_open_row_var();
+            current = Type::Record {
+                fields,
+                open: true,
+                row_tail: Some(self.constraints.note_open_row_var()),
+            };
         }
         current
     }
@@ -796,10 +819,11 @@ impl TypeChecker {
         let right_clone = right.clone();
         match (left, right) {
             (
-                Type::Record { mut fields, open },
+                Type::Record { mut fields, open, .. },
                 Type::Record {
                     fields: other,
                     open: other_open,
+                    ..
                 },
             ) => {
                 for (name, ty) in other {
@@ -809,9 +833,17 @@ impl TypeChecker {
                         fields.insert(name, ty);
                     }
                 }
+                if open || other_open {
+                    self.note_open_row_var();
+                }
                 Ok(Type::Record {
                     fields,
                     open: open || other_open,
+                    row_tail: if open || other_open {
+                        Some(self.constraints.note_open_row_var())
+                    } else {
+                        None
+                    },
                 })
             }
             (Type::Var(var), other) => {

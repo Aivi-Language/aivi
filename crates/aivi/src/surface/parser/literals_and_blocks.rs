@@ -259,7 +259,7 @@ impl Parser {
             RecordField {
                 spread: false,
                 path: vec![PathSegment::Field(SpannedName {
-                    name: "absolute".to_string(),
+                    name: "absolute".into(),
                     span: span.clone(),
                 })],
                 value: absolute_expr,
@@ -268,7 +268,7 @@ impl Parser {
             RecordField {
                 spread: false,
                 path: vec![PathSegment::Field(SpannedName {
-                    name: "segments".to_string(),
+                    name: "segments".into(),
                     span: span.clone(),
                 })],
                 value: list_expr,
@@ -281,23 +281,23 @@ impl Parser {
 
     fn build_map_literal_expr(&self, entries: Vec<(bool, Expr, Option<Expr>)>, span: Span) -> Expr {
         let map_name = SpannedName {
-            name: "Map".to_string(),
+            name: "Map".into(),
             span: span.clone(),
         };
         let empty = Expr::FieldAccess {
             base: Box::new(Expr::Ident(map_name.clone())),
             field: SpannedName {
-                name: "empty".to_string(),
+                name: "empty".into(),
                 span: span.clone(),
             },
             span: span.clone(),
         };
         let union_field = SpannedName {
-            name: "union".to_string(),
+            name: "union".into(),
             span: span.clone(),
         };
         let from_list_field = SpannedName {
-            name: "fromList".to_string(),
+            name: "fromList".into(),
             span: span.clone(),
         };
         let mut acc = empty;
@@ -347,23 +347,23 @@ impl Parser {
 
     fn build_set_literal_expr(&self, entries: Vec<(bool, Expr)>, span: Span) -> Expr {
         let set_name = SpannedName {
-            name: "Set".to_string(),
+            name: "Set".into(),
             span: span.clone(),
         };
         let empty = Expr::FieldAccess {
             base: Box::new(Expr::Ident(set_name.clone())),
             field: SpannedName {
-                name: "empty".to_string(),
+                name: "empty".into(),
                 span: span.clone(),
             },
             span: span.clone(),
         };
         let union_field = SpannedName {
-            name: "union".to_string(),
+            name: "union".into(),
             span: span.clone(),
         };
         let from_list_field = SpannedName {
-            name: "fromList".to_string(),
+            name: "fromList".into(),
             span: span.clone(),
         };
         let mut acc = empty;
@@ -925,7 +925,7 @@ impl Parser {
 
         let span = merge_span(or_span.clone(), or_span.clone());
         Expr::Block {
-            kind: BlockKind::Do { monad: SpannedName { name: "Effect".to_string(), span: or_span.clone() } },
+            kind: BlockKind::Do { monad: SpannedName { name: "Effect".into(), span: or_span.clone() } },
             items: vec![
                 bind_item,
                 BlockItem::Expr {
