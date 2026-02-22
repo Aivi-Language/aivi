@@ -235,6 +235,69 @@ main = do Effect {
 }
 ```
 
+## UI update pattern (state machine + events + repaint)
+
+You can drive GTK updates from an AIVI model/update loop:
+
+1. represent UI state as a model value,
+2. model valid transitions with `machine`,
+3. convert GTK input into `Msg`,
+4. call `drawAreaQueueDraw` (or widget setters) when state changes.
+
+```aivi
+use aivi
+use aivi.mutableMap
+use aivi.ui.gtk4
+
+Model = { count: Int, needsRepaint: Bool }
+Msg = Inc | Dec
+
+machine CounterFlow = {
+       -> Idle    : init {}
+  Idle -> Running : click {}
+}
+
+update : Msg -> Model -> Model
+update msg model =
+  msg match
+    | Inc => model <| { count: _ + 1, needsRepaint: True }
+    | Dec => model <| { count: _ - 1, needsRepaint: True }
+
+main = do Effect {
+  _ <- init Unit
+  appId <- appNew "com.example.counter"
+  win <- windowNew appId "Counter" 640 480
+  root <- boxNew 1 8
+  draw <- drawAreaNew 640 400
+  click <- gestureClickNew draw
+  _ <- widgetAddController draw click
+  _ <- boxAppend root draw
+  _ <- windowSetChild win root
+  _ <- windowPresent win
+
+  state <- MutableMap.create (Map.insert "model" { count: 0, needsRepaint: True } Map.empty)
+  loop _ = Unit => do Effect {
+    model <- MutableMap.getOrElse "model" { count: 0, needsRepaint: True } state
+    button <- gestureClickLastButton click
+    msg = if button == 3 then Dec else Inc
+    next = update msg model
+    _ <- MutableMap.insert "model" next state
+    if next.needsRepaint
+    then do Effect {
+      _ <- drawAreaQueueDraw draw
+      _ <- MutableMap.insert "model" (next <| { needsRepaint: False }) state
+      recurse Unit
+    }
+    else recurse Unit
+  }
+
+  _ <- appRun appId
+  pure Unit
+}
+```
+
+For non-canvas widgets, do the same model/update step but call setters directly (`labelSetText`, `entrySetText`, `widgetSetCss`, etc.) instead of `drawAreaQueueDraw`.
+
 ## Compatibility
 
 `widgetSetCss` and `appSetCss` accept AIVI style records (`{ }`) so your existing `aivi.ui`/`aivi.ui.layout` CSS-style values can be reused with GTK widgets/app styling.
