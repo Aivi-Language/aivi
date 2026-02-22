@@ -138,60 +138,52 @@ impl TypeChecker {
                     row_tail: row_tail_e,
                 },
             ) => {
-                let mut all_fields: HashSet<String> = f_fields.keys().cloned().collect();
-                all_fields.extend(e_fields.keys().cloned());
-                let mut absorbed_open_tail = false;
-
-                for field in &all_fields {
-                    match (f_fields.get(field), e_fields.get(field)) {
-                        (Some(tf), Some(te)) => {
-                            self.unify(tf.clone(), te.clone(), span.clone())?;
+                for (field, expected_ty) in &e_fields {
+                    match f_fields.get(field) {
+                        Some(found_ty) => {
+                            self.unify(found_ty.clone(), expected_ty.clone(), span.clone())?;
                         }
-                        (Some(_), None) => {
-                            if !open_e {
-                                return Err(TypeError {
-                                    span: span.clone(),
-                                    message: format!("missing field '{}'", field),
-                                    expected: Some(Box::new(Type::Record {
-                                        fields: e_fields.clone(),
-                                        open: open_e,
-                                        row_tail: row_tail_e,
-                                    })),
-                                    found: Some(Box::new(Type::Record {
-                                        fields: f_fields.clone(),
-                                        open: open_f,
-                                        row_tail: row_tail_f,
-                                    })),
-                                });
-                            } else {
-                                absorbed_open_tail = true;
-                            }
+                        None if open_f => {
+                            // Open rows represent lower-bound requirements; missing named fields
+                            // can still be satisfied by the unknown tail.
                         }
-                        (None, Some(_)) => {
-                            if !open_f {
-                                return Err(TypeError {
-                                    span: span.clone(),
-                                    message: format!("missing field '{}'", field),
-                                    expected: Some(Box::new(Type::Record {
-                                        fields: e_fields.clone(),
-                                        open: open_e,
-                                        row_tail: row_tail_e,
-                                    })),
-                                    found: Some(Box::new(Type::Record {
-                                        fields: f_fields.clone(),
-                                        open: open_f,
-                                        row_tail: row_tail_f,
-                                    })),
-                                });
-                            } else {
-                                absorbed_open_tail = true;
-                            }
+                        None => {
+                            return Err(TypeError {
+                                span: span.clone(),
+                                message: format!("missing field '{}'", field),
+                                expected: Some(Box::new(Type::Record {
+                                    fields: e_fields.clone(),
+                                    open: open_e,
+                                    row_tail: row_tail_e,
+                                })),
+                                found: Some(Box::new(Type::Record {
+                                    fields: f_fields.clone(),
+                                    open: open_f,
+                                    row_tail: row_tail_f,
+                                })),
+                            });
                         }
-                        (None, None) => {}
                     }
                 }
-                if absorbed_open_tail || (open_f && open_e) {
-                    self.note_open_row_var();
+
+                if !open_e {
+                    if let Some(extra_field) = f_fields.keys().find(|field| !e_fields.contains_key(*field))
+                    {
+                        return Err(TypeError {
+                            span,
+                            message: format!("additional field '{}' is not allowed", extra_field),
+                            expected: Some(Box::new(Type::Record {
+                                fields: e_fields,
+                                open: open_e,
+                                row_tail: row_tail_e,
+                            })),
+                            found: Some(Box::new(Type::Record {
+                                fields: f_fields,
+                                open: open_f,
+                                row_tail: row_tail_f,
+                            })),
+                        });
+                    }
                 }
                 Ok(())
             }
