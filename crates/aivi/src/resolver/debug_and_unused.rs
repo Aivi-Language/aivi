@@ -491,6 +491,7 @@ fn is_builtin_name(name: &str) -> bool {
             | "concurrent"
             | "httpServer"
             | "ui"
+            | "gtk4"
             | "sockets"
             | "streams"
             | "i18n"
@@ -550,6 +551,30 @@ main = do Effect {
   _ <- userTable + db.ins { id: 1, name: "Alice" }
   db.load userTable
 }
+"#;
+
+        let path = std::path::Path::new("test.aivi");
+        let (mut modules, diags) = crate::surface::parse_modules(path, source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+
+        let errors: Vec<_> = diags
+            .into_iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:#?}");
+    }
+
+    #[test]
+    fn gtk4_native_record_is_resolved_as_builtin() {
+        let source = r#"
+module test.gtk_builtin
+use aivi.ui.gtk4
+
+x = gtk4.appRun
 "#;
 
         let path = std::path::Path::new("test.aivi");
