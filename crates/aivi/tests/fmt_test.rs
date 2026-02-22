@@ -205,6 +205,28 @@ recursionWorks = do Effect {
 }
 
 #[test]
+fn test_fmt_aligns_adjacent_do_binds_and_restarts_after_non_bind_lines() {
+    let input = r#"
+module demo
+
+main = do Effect {
+  short <- a
+  muchLongerName <- bb
+  pure 1
+  x <- c
+  yy <- dd
+}
+
+other = do Maybe {
+  a <- one
+  bbbbb <- two
+}
+"#;
+    let expected = "module demo\n\nmain = do Effect {\n  short          <- a\n  muchLongerName <- bb\n  pure 1\n  x  <- c\n  yy <- dd\n}\n\nother = do Maybe {\n  a     <- one\n  bbbbb <- two\n}\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
 fn test_fmt_allman_brace_style_is_configurable() {
     let input = "f = x => {\n  x\n}\n";
     let formatted = format_text_with_options(

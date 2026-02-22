@@ -90,6 +90,7 @@ A high-integrity purely functional language with a Rust-first compilation pipeli
 - [Sockets](stdlib/network/sockets)
 - [Streams](stdlib/network/streams)
 #### UI
+- [GTK4](stdlib/ui/gtk4)
 - [Layout](stdlib/ui/layout)
 - [VDOM](stdlib/ui/vdom)
 - [HTML Sigil](stdlib/ui/html)
