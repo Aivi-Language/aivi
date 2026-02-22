@@ -53,21 +53,21 @@ matches_all = do Effect {
 }
 
 @test "split"
-split_smoke = do Effect {
+split_functional = do Effect {
   r = compile "[,;]" or (fail "compile failed")
   parts = split r "a,b;c,d"
   assert (List.length parts == 4)
 }
 
 @test "replace"
-replace_smoke = do Effect {
+replace_functional = do Effect {
   r = compile "\\d+" or (fail "compile failed")
   result = replace r "abc123def456" "NUM"
   assert (result == "abcNUMdef456")
 }
 
 @test "replace all"
-replaceAll_smoke = do Effect {
+replaceAll_functional = do Effect {
   r = compile "\\d+" or (fail "compile failed")
   result = replaceAll r "abc123def456" "NUM"
   assert (result == "abcNUMdefNUM")

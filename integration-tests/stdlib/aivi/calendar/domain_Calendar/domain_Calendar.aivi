@@ -7,28 +7,28 @@ use aivi.calendar
 use aivi.calendar (domain Calendar)
 
 @test "literal eom"
-literal_eom_smoke = do Effect {
+literal_eom_functional = do Effect {
   d = { year: 2024, month: 2, day: 1 }
   e <- eom
   assert ((d + e).day == 29)
 }
 
 @test "suffix d"
-suffix_d_smoke = do Effect {
+suffix_d_functional = do Effect {
   d = { year: 2024, month: 2, day: 28 }
   delta <- 1d
   assert ((d + delta).day == 29)
 }
 
 @test "suffix m"
-suffix_m_smoke = do Effect {
+suffix_m_functional = do Effect {
   d = { year: 2024, month: 1, day: 31 }
   delta <- 1m
   assert ((d + delta).month == 2)
 }
 
 @test "suffix y"
-suffix_y_smoke = do Effect {
+suffix_y_functional = do Effect {
   d = { year: 2024, month: 2, day: 29 }
   delta <- 1y
   assert ((d + delta).year == 2025)

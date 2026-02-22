@@ -42,7 +42,7 @@ abs_float = do Effect {
 }
 
 @test "sign"
-sign_smoke = do Effect {
+sign_functional = do Effect {
   assert (sign 5.0 == 1.0)
   assert (sign (-3.0) == -1.0)
   assert (sign 0.0 == 0.0)
@@ -56,20 +56,20 @@ min_max = do Effect {
 }
 
 @test "clamp"
-clamp_smoke = do Effect {
+clamp_functional = do Effect {
   assert (clamp 0.0 10.0 5.0 == 5.0)
   assert (clamp 0.0 10.0 (-1.0) == 0.0)
   assert (clamp 0.0 10.0 15.0 == 10.0)
 }
 
 @test "sum"
-sum_smoke = do Effect {
+sum_functional = do Effect {
   assert (sum [1.0, 2.0, 3.0] == 6.0)
   assert (sum [] == 0.0)
 }
 
 @test "sum int"
-sumInt_smoke = do Effect {
+sumInt_functional = do Effect {
   assertEq (sumInt [1, 2, 3, 4]) 10
   assertEq (sumInt []) 0
 }
@@ -77,26 +77,26 @@ sumInt_smoke = do Effect {
 // -- Rounding --
 
 @test "floor"
-floor_smoke = do Effect {
+floor_functional = do Effect {
   assert (floor 2.7 == 2.0)
   assert (floor (-2.3) == -3.0)
 }
 
 @test "ceil"
-ceil_smoke = do Effect {
+ceil_functional = do Effect {
   assert (ceil 2.3 == 3.0)
   assert (ceil (-2.7) == -2.0)
 }
 
 @test "round"
-round_smoke = do Effect {
+round_functional = do Effect {
   assert (round 2.5 == 2.0) // banker's rounding: ties to even
   assert (round 3.5 == 4.0)
   assert (round 2.3 == 2.0)
 }
 
 @test "trunc"
-trunc_smoke = do Effect {
+trunc_functional = do Effect {
   assert (trunc 2.9 == 2.0)
   assert (trunc (-2.9) == -2.0)
 }
@@ -104,39 +104,39 @@ trunc_smoke = do Effect {
 // -- Powers and Roots --
 
 @test "pow"
-pow_smoke = do Effect {
+pow_functional = do Effect {
   assert (abs (pow 2.0 3.0-8.0) < 0.0001)
   assert (abs (pow 3.0 2.0-9.0) < 0.0001)
 }
 
 @test "sqrt"
-sqrt_smoke = do Effect {
+sqrt_functional = do Effect {
   assert (abs (sqrt 4.0-2.0) < 0.0001)
   assert (abs (sqrt 9.0-3.0) < 0.0001)
 }
 
 @test "cbrt"
-cbrt_smoke = do Effect {
+cbrt_functional = do Effect {
   assert (abs (cbrt 27.0-3.0) < 0.0001)
   assert (abs (cbrt 8.0-2.0) < 0.0001)
 }
 
 @test "hypot"
-hypot_smoke = do Effect {
+hypot_functional = do Effect {
   assert (abs (hypot 3.0 4.0-5.0) < 0.0001)
 }
 
 // -- Logarithms --
 
 @test "log"
-log_smoke = do Effect {
+log_functional = do Effect {
   assert (abs (log (exp 1.0) - 1.0) < 0.0001)
   assert (abs (log2 8.0-3.0) < 0.0001)
   assert (abs (log10 100.0-2.0) < 0.0001)
 }
 
 @test "exp"
-exp_smoke = do Effect {
+exp_functional = do Effect {
   assert (abs (exp 0.0-1.0) < 0.0001)
   assert (abs (exp 1.0- e) < 0.0001)
 }
@@ -144,14 +144,14 @@ exp_smoke = do Effect {
 // -- Trigonometry --
 
 @test "sin cos"
-sin_cos_smoke = do Effect {
+sin_cos_functional = do Effect {
   angle = radians 0.0
   assert (abs (sin angle) < 0.0001)
   assert (abs (cos angle - 1.0) < 0.0001)
 }
 
 @test "tan"
-tan_smoke = do Effect {
+tan_functional = do Effect {
   angle = radians 0.0
   assert (abs (tan angle) < 0.0001)
 }
@@ -159,20 +159,20 @@ tan_smoke = do Effect {
 // -- Integer Math --
 
 @test "gcd"
-gcd_smoke = do Effect {
+gcd_functional = do Effect {
   assertEq (gcd 12 8) 4
   assertEq (gcd 7 5) 1
   assertEq (gcd 0 5) 5
 }
 
 @test "lcm"
-lcm_smoke = do Effect {
+lcm_functional = do Effect {
   assertEq (lcm 4 6) 12
   assertEq (lcm 3 5) 15
 }
 
 @test "divmod"
-divmod_smoke = do Effect {
+divmod_functional = do Effect {
   (q, r) = divmod 7 3
   assertEq q 2
   assertEq r 1
@@ -181,7 +181,7 @@ divmod_smoke = do Effect {
 // -- Floating-point checks --
 
 @test "is na n"
-isNaN_smoke = do Effect {
+isNaN_functional = do Effect {
   assert (isNaN (0.0 / 0.0))
   assert (isFinite 42.0)
   assert (isFinite (-1.0))

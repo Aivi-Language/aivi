@@ -14,18 +14,19 @@ signal_construct = do Effect {
 }
 
 @test "normalize"
-normalize_smoke = do Effect {
+normalize_functional = do Effect {
   s = { samples: [0.0, 2.0, -4.0, 1.0], rate: 44100.0 }
   n = normalize s
-  // After normalization, max abs value should be 1.0
-  assert True
+  assertEq n.rate s.rate
+  assertEq (List.length n.samples) (List.length s.samples)
 }
 
-@test "fft ifft types"
+@test "fft ifft roundtrip shape"
 fft_ifft_types = do Effect {
-  // Verify fft and ifft type signatures are valid
   s = { samples: [1.0, 0.0, 1.0, 0.0], rate: 44100.0 }
   spectrum = fft s
   reconstructed = ifft spectrum
-  assert True
+  assertEq spectrum.rate s.rate
+  assertEq reconstructed.rate s.rate
+  assertEq (List.length reconstructed.samples) (List.length s.samples)
 }

@@ -7,7 +7,7 @@ use aivi.chronos.instant (Timestamp)
 use aivi.chronos.duration (Span)
 use aivi.testing (assert, assertEq)
 
-timezone_smoke = do Effect {
+timezone_functional = do Effect {
   // Test basic timezone creation and offset
   utc = ~tz(UTC)
   paris = ~tz(Europe/Paris)

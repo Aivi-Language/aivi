@@ -25,7 +25,7 @@ path_segments = do Effect {
 }
 
 @test "file name"
-fileName_smoke = do Effect {
+fileName_functional = do Effect {
   p = parse "home/user/file.txt"
   fileName p match
     | Some name => assertEq name "file.txt"
@@ -33,7 +33,7 @@ fileName_smoke = do Effect {
 }
 
 @test "parent"
-parent_smoke = do Effect {
+parent_functional = do Effect {
   p = parse "a/b/c"
   parent p match
     | Some par => do Effect {

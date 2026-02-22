@@ -50,7 +50,7 @@ distance_2d = do Effect {
 }
 
 @test "midpoint"
-midpoint_smoke = do Effect {
+midpoint_functional = do Effect {
   seg = segment2 0.0 0.0 4.0 6.0
   mid = midpoint seg
   assert (abs (mid.x - 2.0) < 0.0001)

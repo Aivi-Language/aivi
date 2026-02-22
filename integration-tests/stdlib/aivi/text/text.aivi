@@ -9,14 +9,14 @@ use aivi.math
 // -- Length and Inspection --
 
 @test "length"
-length_smoke = do Effect {
+length_functional = do Effect {
   assertEq (length "abc") 3
   assertEq (length "") 0
   assertEq (length "hello world") 11
 }
 
 @test "is empty"
-isEmpty_smoke = do Effect {
+isEmpty_functional = do Effect {
   assert (isEmpty "")
   assert (!(isEmpty "a"))
 }
@@ -24,43 +24,43 @@ isEmpty_smoke = do Effect {
 // -- Search and Comparison --
 
 @test "contains"
-contains_smoke = do Effect {
+contains_functional = do Effect {
   assert (contains "ell" "hello")
   assert (!(contains "xyz" "hello"))
 }
 
 @test "starts with"
-startsWith_smoke = do Effect {
+startsWith_functional = do Effect {
   assert (startsWith "hel" "hello")
   assert (!(startsWith "xyz" "hello"))
 }
 
 @test "ends with"
-endsWith_smoke = do Effect {
+endsWith_functional = do Effect {
   assert (endsWith "llo" "hello")
   assert (!(endsWith "xyz" "hello"))
 }
 
 @test "index of"
-indexOf_smoke = do Effect {
+indexOf_functional = do Effect {
   assertEq (indexOf "ll" "hello") (Some 2)
   assertEq (indexOf "xyz" "hello") None
 }
 
 @test "last index of"
-lastIndexOf_smoke = do Effect {
+lastIndexOf_functional = do Effect {
   assertEq (lastIndexOf "l" "hello world") (Some 9)
   assertEq (lastIndexOf "xyz" "hello") None
 }
 
 @test "count"
-count_smoke = do Effect {
+count_functional = do Effect {
   assertEq (count "l" "hello world") 3
   assertEq (count "xyz" "hello") 0
 }
 
 @test "compare"
-compare_smoke = do Effect {
+compare_functional = do Effect {
   assertEq (compare "abc" "abc") 0
   assert (compare "abc" "abd" < 0)
   assert (compare "abd" "abc" > 0)
@@ -69,19 +69,19 @@ compare_smoke = do Effect {
 // -- Slicing and Splitting --
 
 @test "slice"
-slice_smoke = do Effect {
+slice_functional = do Effect {
   assertEq (slice 1 3 "hello") "el"
   assertEq (slice 0 5 "hello") "hello"
 }
 
 @test "split"
-split_smoke = do Effect {
+split_functional = do Effect {
   parts = split "," "a,b,c"
   assertEq parts ["a", "b", "c"]
 }
 
 @test "split lines"
-splitLines_smoke = do Effect {
+splitLines_functional = do Effect {
   lines = splitLines "a\nb\nc"
   assertEq (List.length lines) 3
 }
@@ -89,62 +89,62 @@ splitLines_smoke = do Effect {
 // -- Trimming and Padding --
 
 @test "trim"
-trim_smoke = do Effect {
+trim_functional = do Effect {
   assertEq (trim "  hello  ") "hello"
   assertEq (trim "hello") "hello"
 }
 
 @test "trim start"
-trimStart_smoke = do Effect {
+trimStart_functional = do Effect {
   assertEq (trimStart "  hello") "hello"
 }
 
 @test "trim end"
-trimEnd_smoke = do Effect {
+trimEnd_functional = do Effect {
   assertEq (trimEnd "hello  ") "hello"
 }
 
 @test "pad start"
-padStart_smoke = do Effect {
+padStart_functional = do Effect {
   assertEq (padStart 5 "0" "42") "00042"
 }
 
 @test "pad end"
-padEnd_smoke = do Effect {
+padEnd_functional = do Effect {
   assertEq (padEnd 5 "0" "42") "42000"
 }
 
 // -- Modification --
 
 @test "replace"
-replace_smoke = do Effect {
+replace_functional = do Effect {
   assertEq (replace "world" "AIVI" "hello world") "hello AIVI"
 }
 
 @test "replace all"
-replaceAll_smoke = do Effect {
+replaceAll_functional = do Effect {
   assertEq (replaceAll "o" "0" "foo boo") "f00 b00"
 }
 
 @test "remove"
-remove_smoke = do Effect {
+remove_functional = do Effect {
   assertEq (remove "l" "hello") "heo"
 }
 
 @test "repeat"
-repeat_smoke = do Effect {
+repeat_functional = do Effect {
   assertEq (repeat 3 "ab") "ababab"
   assertEq (repeat 0 "ab") ""
 }
 
 @test "reverse"
-reverse_smoke = do Effect {
+reverse_functional = do Effect {
   assertEq (reverse "abc") "cba"
   assertEq (reverse "") ""
 }
 
 @test "concat"
-concat_smoke = do Effect {
+concat_functional = do Effect {
   assertEq (concat ["a", "b", "c"]) "abc"
   assertEq (concat []) ""
 }
@@ -152,31 +152,31 @@ concat_smoke = do Effect {
 // -- Case --
 
 @test "to lower"
-toLower_smoke = do Effect {
+toLower_functional = do Effect {
   assertEq (toLower "HELLO") "hello"
 }
 
 @test "to upper"
-toUpper_smoke = do Effect {
+toUpper_functional = do Effect {
   assertEq (toUpper "hello") "HELLO"
 }
 
 @test "capitalize"
-capitalize_smoke = do Effect {
+capitalize_functional = do Effect {
   assertEq (capitalize "hello") "Hello"
 }
 
 // -- Formatting --
 
 @test "parse int"
-parseInt_smoke = do Effect {
+parseInt_functional = do Effect {
   assertEq (parseInt "42") (Some 42)
   assertEq (parseInt "-7") (Some (-7))
   assertEq (parseInt "abc") None
 }
 
 @test "parse float"
-parseFloat_smoke = do Effect {
+parseFloat_functional = do Effect {
   pf = parseFloat "3.14"
   pf match
     | Some f => assert (abs (f - 3.14) < 0.001)

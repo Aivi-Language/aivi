@@ -7,7 +7,7 @@ use aivi.ui.layout
 use aivi.ui.layout (domain Layout)
 
 @test "literals"
-literals_smoke = do Effect {
+literals_functional = do Effect {
   _x <- 1px
   _y <- 1em
   _z <- 1rem

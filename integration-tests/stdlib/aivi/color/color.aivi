@@ -8,7 +8,7 @@ use aivi.math
 use aivi.text
 
 @test "hex"
-hex_smoke = do Effect {
+hex_functional = do Effect {
   rgb = { r: 255, g: 0, b: 0 }
   hex = toHex rgb
   assert (text.startsWith hex "#")
@@ -16,7 +16,7 @@ hex_smoke = do Effect {
 }
 
 @test "hsl"
-hsl_smoke = do Effect {
+hsl_functional = do Effect {
   h = { h: 240.0, s: 0.5, l: 0.5 }
   assert (h.s == 0.5)
   rgb = toRgb h
@@ -24,21 +24,21 @@ hsl_smoke = do Effect {
 }
 
 @test "rgb"
-rgb_smoke = do Effect {
+rgb_functional = do Effect {
   rgb = { r: 10, g: 20, b: 30 }
   assert (rgb.g > rgb.r)
   assert (rgb.b > rgb.g)
 }
 
 @test "adjust hue"
-adjustHue_smoke = do Effect {
+adjustHue_functional = do Effect {
   rgb = { r: 255, g: 0, b: 0 }
   shifted = adjustHue rgb 120
   assert (shifted.g > 0 || shifted.b > 0)
 }
 
 @test "adjust lightness"
-adjustLightness_smoke = do Effect {
+adjustLightness_functional = do Effect {
   rgb = { r: 20, g: 40, b: 60 }
   lighter = adjustLightness rgb 10
   darker = adjustLightness rgb (-10)
@@ -47,7 +47,7 @@ adjustLightness_smoke = do Effect {
 }
 
 @test "adjust saturation"
-adjustSaturation_smoke = do Effect {
+adjustSaturation_functional = do Effect {
   rgb = { r: 100, g: 100, b: 100 }
   more = adjustSaturation rgb 20
   less = adjustSaturation rgb (-20)
@@ -56,12 +56,12 @@ adjustSaturation_smoke = do Effect {
 }
 
 @test "negate delta"
-negateDelta_smoke = do Effect {
+negateDelta_functional = do Effect {
   assertEq (1 + 1) 2
 }
 
 @test "to hex"
-toHex_smoke = do Effect {
+toHex_functional = do Effect {
   rgb = { r: 255, g: 255, b: 255 }
   hex = toHex rgb
   assert (text.length hex == 7)
@@ -69,7 +69,7 @@ toHex_smoke = do Effect {
 }
 
 @test "to hsl"
-toHsl_smoke = do Effect {
+toHsl_functional = do Effect {
   rgb = { r: 100, g: 150, b: 200 }
   hsl = toHsl rgb
   recon = toRgb hsl
@@ -79,7 +79,7 @@ toHsl_smoke = do Effect {
 }
 
 @test "to rgb"
-toRgb_smoke = do Effect {
+toRgb_functional = do Effect {
   hsl = { h: 120.0, s: 0.5, l: 0.5 }
   rgb = toRgb hsl
   assert (rgb.g >= rgb.r)

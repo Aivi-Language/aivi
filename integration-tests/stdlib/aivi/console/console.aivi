@@ -6,36 +6,36 @@ use aivi.testing
 use aivi.console
 
 @test "error"
-error_smoke = do Effect {
+error_functional = do Effect {
   _ <- error "err"
   assert True
 }
 
 @test "log"
-log_smoke = do Effect {
+log_functional = do Effect {
   _ <- log "log"
   assert True
 }
 
 @test "print"
-print_smoke = do Effect {
+print_functional = do Effect {
   _ <- print "p"
   assert True
 }
 
 @test "println"
-println_smoke = do Effect {
+println_functional = do Effect {
   _ <- println "pl"
   assert True
 }
 
 @test "read line"
-readLine_smoke = do Effect {
+readLine_functional = do Effect {
   assert True
   assert True
 }
 
 @test "strip"
-strip_smoke = do Effect {
+strip_functional = do Effect {
   assertEq (strip "plain") "plain"
 }

@@ -6,23 +6,23 @@ use aivi.testing
 use aivi.calendar
 
 @test "date"
-date_smoke = do Effect {
+date_functional = do Effect {
   d = { year: 2024, month: 2, day: 29 }
   assert (d.year == 2024)
 }
 
 @test "date time"
-dateTime_smoke = do Effect {
+dateTime_functional = do Effect {
   assertEq (1 + 1) 2
 }
 
 @test "end of month"
-endOfMonth_smoke = do Effect {
+endOfMonth_functional = do Effect {
   assertEq (1 + 1) 2
 }
 
 @test "add days"
-addDays_smoke = do Effect {
+addDays_functional = do Effect {
   d = addDays { year: 2024, month: 2, day: 28 } 1
   assert (d.day == 29)
   assert (d.month == 2)
@@ -33,39 +33,39 @@ addDays_smoke = do Effect {
 }
 
 @test "add months"
-addMonths_smoke = do Effect {
+addMonths_functional = do Effect {
   d = addMonths { year: 2024, month: 1, day: 31 } 1
   assert (d.month == 2)
   assert (d.day == 29) // 2024 is leap year, 29th is max
 }
 
 @test "add years"
-addYears_smoke = do Effect {
+addYears_functional = do Effect {
   d = addYears { year: 2024, month: 2, day: 29 } 1
   assert (d.year == 2025)
   assert (d.day == 28) // 2025 is not leap, clamps to 28
 }
 
 @test "days in month"
-daysInMonth_smoke = do Effect {
+daysInMonth_functional = do Effect {
   assert (daysInMonth { year: 2024, month: 2, day: 1 } == 29)
   assert (daysInMonth { year: 2023, month: 2, day: 1 } == 28)
 }
 
 @test "end of month 2"
-endOfMonth_smoke_2 = do Effect {
+endOfMonth_functional_2 = do Effect {
   d = endOfMonth { year: 2024, month: 2, day: 1 }
   assert (d.day == 29)
 }
 
 @test "is leap year"
-isLeapYear_smoke = do Effect {
+isLeapYear_functional = do Effect {
   assert (isLeapYear { year: 2024, month: 1, day: 1 } == True)
   assert (isLeapYear { year: 2023, month: 1, day: 1 } == False)
 }
 
 @test "negate delta"
-negateDelta_smoke = do Effect {
+negateDelta_functional = do Effect {
   useDate = { year: 2024, month: 2, day: 10 }
   d1 <- 1d
   m1 <- 1m
@@ -79,7 +79,7 @@ negateDelta_smoke = do Effect {
 }
 
 @test "now"
-now_smoke = do Effect {
+now_functional = do Effect {
   _t <- now
   assert True
 }

@@ -5,16 +5,24 @@ use aivi
 use aivi.testing
 
 @test "assert"
-assert_smoke = do Effect {
-  assert True
+assert_functional = do Effect {
+  assert (1 + 1 == 2)
+}
+
+@test "assert false fails"
+assert_false_fails = do Effect {
+  result <- attempt (assert False)
+  result match
+    | Ok _  => assert False
+    | Err _ => assert True
 }
 
 @test "assert eq"
-assertEq_smoke = do Effect {
+assertEq_functional = do Effect {
   assertEq (1 + 1) 2
 }
 
 @test "assert eq"
-assert_eq_smoke = do Effect {
+assert_eq_functional = do Effect {
   assert_eq (1 + 1) 2
 }

@@ -6,64 +6,64 @@ use aivi.testing
 use aivi.matrix
 
 @test "mat2"
-mat2_smoke = do Effect {
+mat2_functional = do Effect {
   m = identity2
   assert (m.m00 == 1.0)
 }
 
 @test "mat3"
-mat3_smoke = do Effect {
+mat3_functional = do Effect {
   m = identity3
   assert (m.m00 == 1.0)
 }
 
 @test "mat4"
-mat4_smoke = do Effect {
+mat4_functional = do Effect {
   m = identity4
   assert (m.m00 == 1.0)
 }
 
 @test "scalar"
-scalar_smoke = do Effect {
+scalar_functional = do Effect {
   s = 1.0
   assert (s == 1.0)
 }
 
 @test "identity2"
-identity2_smoke = do Effect {
+identity2_functional = do Effect {
   assert (identity2.m00 == 1.0)
   assert (identity2.m01 == 0.0)
 }
 
 @test "identity3"
-identity3_smoke = do Effect {
+identity3_functional = do Effect {
   assert (identity3.m00 == 1.0)
   assert (identity3.m22 == 1.0)
 }
 
 @test "identity4"
-identity4_smoke = do Effect {
+identity4_functional = do Effect {
   assert (identity4.m00 == 1.0)
   assert (identity4.m33 == 1.0)
 }
 
 @test "multiply2"
-multiply2_smoke = do Effect {
+multiply2_functional = do Effect {
   assert (multiply2 identity2 identity2 == identity2)
 }
 
 @test "multiply3"
-multiply3_smoke = do Effect {
+multiply3_functional = do Effect {
   assert (multiply3 identity3 identity3 == identity3)
 }
 
 @test "multiply4"
-multiply4_smoke = do Effect {
+multiply4_functional = do Effect {
   assert (multiply4 identity4 identity4 == identity4)
 }
 
 @test "transpose2"
-transpose2_smoke = do Effect {
+transpose2_functional = do Effect {
   m = ~mat[1.0 2.0
     3.0 4.0
   ]
@@ -74,11 +74,11 @@ transpose2_smoke = do Effect {
 }
 
 @test "transpose3"
-transpose3_smoke = do Effect {
+transpose3_functional = do Effect {
   assert (transpose3 identity3 == identity3)
 }
 
 @test "transpose4"
-transpose4_smoke = do Effect {
+transpose4_functional = do Effect {
   assert (transpose4 identity4 == identity4)
 }

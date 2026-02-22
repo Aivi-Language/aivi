@@ -35,7 +35,7 @@ sha256_empty = do Effect {
 // -- HMAC --
 
 @test "hmac sha256"
-hmacSha256_smoke = do Effect {
+hmacSha256_functional = do Effect {
   key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
   ? { Err _ => panic "bad hex" }
   msg = fromHex "4869205468657265"
@@ -45,7 +45,7 @@ hmacSha256_smoke = do Effect {
 }
 
 @test "hmac sha512"
-hmacSha512_smoke = do Effect {
+hmacSha512_functional = do Effect {
   key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
   ? { Err _ => panic "bad hex" }
   msg = fromHex "4869205468657265"

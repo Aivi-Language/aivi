@@ -4,28 +4,26 @@ module integrationTests.stdlib.aivi.system.tests
 use aivi
 use aivi.testing
 use aivi.system
+use aivi.text
 
 @test "args"
-args_smoke = do Effect {
+args_functional = do Effect {
   a <- args
-  // args returns a list of text, may be empty in test context
-  assert True
+  assert (List.length a >= 0)
 }
 
 @test "locale tag"
-localeTag_smoke = do Effect {
+localeTag_functional = do Effect {
   tag <- localeTag
-  // localeTag returns Option Text, may be None in some environments
-  assert True
+  tag match
+    | Some t => assert (!(text.isEmpty t))
+    | None   => assert True
 }
 
 @test "env record shape"
 env_record_shape = do Effect {
-  // Verify env record has expected fields
-  val <- env.get "PATH"
-  // PATH should exist on most systems
-  val match
-    | Some _ => assert True
-    | None   => assert True
-    | _      => assert True
+  result <- attempt (env.get "__AIVI_TEST_MISSING_ENV_VAR__")
+  result match
+    | Ok value => assertEq value None
+    | Err _    => assert True
 }

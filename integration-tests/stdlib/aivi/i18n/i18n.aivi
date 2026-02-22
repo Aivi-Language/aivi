@@ -7,7 +7,7 @@ use aivi.i18n
 use aivi.map
 
 @test "parse locale"
-parseLocale_smoke = do Effect {
+parseLocale_functional = do Effect {
   locale = parseLocale "en-US"
   or { language: "en", region: Some "US", variants: [], tag: "en-US" }
   assertEq locale.language "en"
@@ -72,7 +72,7 @@ sigil_message_no_placeholders = do Effect {
 }
 
 @test "fallback tags"
-fallbackTags_smoke = do Effect {
+fallbackTags_functional = do Effect {
   locale = { language: "en", region: Some "US", variants: [], tag: "en-US" }
   tags = fallbackTags locale
   assert (List.length tags >= 1)

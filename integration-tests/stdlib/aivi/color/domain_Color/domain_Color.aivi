@@ -6,28 +6,28 @@ use aivi.testing
 use aivi.color
 
 @test "suffix h"
-suffix_h_smoke = do Effect {
+suffix_h_functional = do Effect {
   rgb = { r: 20, g: 20, b: 20 }
   _adjusted = adjustHue rgb 1
   assert True
 }
 
 @test "add r"
-add_r_smoke = do Effect {
+add_r_functional = do Effect {
   rgb = { r: 20, g: 20, b: 20 }
   adjusted = rgb + 10r
   assertEq adjusted.r 30
 }
 
 @test "suffix l"
-suffix_l_smoke = do Effect {
+suffix_l_functional = do Effect {
   rgb = { r: 20, g: 20, b: 20 }
   _adjusted = adjustLightness rgb 1
   assert True
 }
 
 @test "suffix s"
-suffix_s_smoke = do Effect {
+suffix_s_functional = do Effect {
   rgb = { r: 0, g: 50, b: 100 }
   _adjusted = adjustSaturation rgb 1
   assert True
