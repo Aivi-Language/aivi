@@ -3,6 +3,7 @@ use std::collections::HashMap;
 mod blocks;
 mod expr;
 mod pattern;
+mod perceus;
 mod prelude;
 mod typed_cranelift;
 pub(crate) mod typed_expr;
@@ -59,6 +60,7 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
     let def_vis = if public_api { "pub " } else { "" };
 
     let mut out = prelude::emit_runtime_prelude();
+    let reuse_plan = perceus::analyze_reuse(&module.defs);
 
     // Collect global CgType map for the typed emitter context.
     let mut global_cg_types: HashMap<String, CgType> = HashMap::new();
@@ -93,6 +95,7 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
 
     // Track whether main has a typed variant for the entry point.
     let mut main_typed_cg: Option<CgType> = None;
+    let _reuse_candidates = reuse_plan.reusable_defs.len();
 
     for name in &order {
         let defs = groups.get(name).expect("def group");

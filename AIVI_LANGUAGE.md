@@ -446,25 +446,25 @@ Statements inside `do Effect { ... }`:
 
 ```aivi
 dijkstra = source graph => do Effect {
-  dists <- MutableMap.create (Map.insert source 0.0 Map.empty)
+  dists0 = Map.insert source 0.0 Map.empty
 
-  loop pq = Heap.push (0.0, source) Heap.empty => {
+  loop state = { dists: dists0, pq: Heap.push (0.0, source) Heap.empty } => {
+    dists = state.dists
+    pq = state.pq
     result = Heap.popMin pq
     result match
-      | None                       => pure Unit
+      | None                       => pure dists
       | Some ((d, node), restPq)   => do Effect {
-          currentDist <- MutableMap.getOrElse node 999999.0 dists
+          currentDist = Map.getOrElse node 999999.0 dists
           if d > currentDist
-          then do Effect { recurse restPq }
+          then do Effect { recurse { dists: dists, pq: restPq } }
           else do Effect {
             edges = edgesFrom graph node
-            newPq <- processEdges dists d edges restPq
-            recurse newPq
+            nextState <- processEdges dists d edges restPq
+            recurse nextState
           }
         }
   }
-
-  MutableMap.freeze dists
 }
 ```
 

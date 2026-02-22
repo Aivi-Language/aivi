@@ -34,12 +34,11 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("    }\n");
     out.push_str("    match &path[0] {\n");
     out.push_str("        PathSeg::Field(name) => match target {\n");
-    out.push_str("            Value::Record(map) => {\n");
-    out.push_str("                let mut map = map.as_ref().clone();\n");
-    out.push_str("                let old = map.remove(name).unwrap_or(Value::Unit);\n");
+    out.push_str("            Value::Record(mut map) => {\n");
+    out.push_str("                let old = Arc::make_mut(&mut map).remove(name).unwrap_or(Value::Unit);\n");
     out.push_str("                let new_val = patch_path(rt, old, &path[1..], updater)?;\n");
-    out.push_str("                map.insert(name.clone(), new_val);\n");
-    out.push_str("                aivi_ok(Value::Record(Arc::new(map)))\n");
+    out.push_str("                Arc::make_mut(&mut map).insert(name.clone(), new_val);\n");
+    out.push_str("                aivi_ok(Value::Record(map))\n");
     out.push_str("            }\n");
     out.push_str(
         "            other => Err(RuntimeError::Message(format!(\"expected Record for field patch, got {}\", aivi_native_runtime::format_value(&other)))),\n",
