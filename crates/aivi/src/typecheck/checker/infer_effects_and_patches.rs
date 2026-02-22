@@ -465,7 +465,11 @@ impl TypeChecker {
                     fields.insert(name.name.clone(), field_ty.clone());
                     self.unify_with_span(
                         current_ty,
-                        Type::Record { fields, open: true },
+                        Type::Record {
+                            fields,
+                            open: true,
+                            row_tail: None,
+                        },
                         name.span.clone(),
                     )?;
                     current_ty = field_ty;
@@ -577,6 +581,7 @@ impl TypeChecker {
                         let entry_ty = Type::Record {
                             fields: entry_fields,
                             open: true,
+                            row_tail: Some(self.constraints.note_open_row_var()),
                         };
 
                         let param = "__it".to_string();
@@ -602,6 +607,7 @@ impl TypeChecker {
         let mut record_ty = Type::Record {
             fields: BTreeMap::new(),
             open: true,
+            row_tail: Some(self.constraints.note_open_row_var()),
         };
         for field in fields {
             if field.spread {
@@ -704,6 +710,7 @@ impl TypeChecker {
         let mut record_ty = Type::Record {
             fields: BTreeMap::new(),
             open: true,
+            row_tail: Some(self.constraints.note_open_row_var()),
         };
         for field in fields {
             let field_ty = self.infer_pattern(&field.pattern, env)?;
@@ -776,7 +783,11 @@ impl TypeChecker {
                     let mut fields = BTreeMap::new();
                     fields.insert(name.name.clone(), current);
                     self.note_open_row_var();
-                    current = Type::Record { fields, open: true };
+                    current = Type::Record {
+                        fields,
+                        open: true,
+                        row_tail: Some(self.constraints.note_open_row_var()),
+                    };
                 }
                 PathSegment::Index(_, _) | PathSegment::All(_) => {
                     current = Type::con("List").app(vec![current]);
@@ -792,7 +803,11 @@ impl TypeChecker {
             let mut fields = BTreeMap::new();
             fields.insert(segment.name.clone(), current);
             self.note_open_row_var();
-            current = Type::Record { fields, open: true };
+            current = Type::Record {
+                fields,
+                open: true,
+                row_tail: Some(self.constraints.note_open_row_var()),
+            };
         }
         current
     }
@@ -804,10 +819,11 @@ impl TypeChecker {
         let right_clone = right.clone();
         match (left, right) {
             (
-                Type::Record { mut fields, open },
+                Type::Record { mut fields, open, .. },
                 Type::Record {
                     fields: other,
                     open: other_open,
+                    ..
                 },
             ) => {
                 for (name, ty) in other {
@@ -823,6 +839,11 @@ impl TypeChecker {
                 Ok(Type::Record {
                     fields,
                     open: open || other_open,
+                    row_tail: if open || other_open {
+                        Some(self.constraints.note_open_row_var())
+                    } else {
+                        None
+                    },
                 })
             }
             (Type::Var(var), other) => {

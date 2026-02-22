@@ -9,12 +9,12 @@
 
 AIVI is a type-safe functional language targeting WebAssembly, featuring **global type inference**, **open structural records** (row polymorphism), **type classes with higher-kinded types (HKTs)**, **typed effects** (`Effect E A`), and **algebraic data types (ADTs)**.
 
-**AIVI v0.1** implements a CST→AST→HIR→Kernel pipeline with native Rust runtime execution.
+**AIVI v0.1** implements a CST→AST→HIR→Kernel pipeline with native Rust runtime execution, including interned record-shape field lookups and scalar tagged-value runtime packing.
 
 This repository contains:
 - **Language specification** (normative semantics, type system, desugaring rules)
 - **Rust implementation** (compiler pipeline + runtime)
-- **Rust codegen** (typed Kernel → Rust AST emission)
+- **Rust codegen** (typed Kernel → typed-MIR pre-pass for scalar closed defs → Rust emission)
 - **VSCode extension** (syntax highlighting, type checking, quick docs etc)
 - **Documentation** (specs, online docs, local build)
 - **CLI** (project scaffolding, building, introspection)

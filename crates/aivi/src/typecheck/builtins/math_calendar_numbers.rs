@@ -390,6 +390,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("math".to_string(), Scheme::mono(math_record));
 
@@ -443,6 +444,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("calendar".to_string(), Scheme::mono(calendar_record));
 
@@ -490,6 +492,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("instant".to_string(), Scheme::mono(instant_record));
 
@@ -544,6 +547,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("color".to_string(), Scheme::mono(color_record));
 
@@ -591,6 +595,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("bigint".to_string(), Scheme::mono(bigint_record));
 
@@ -663,6 +668,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert("rational".to_string(), Scheme::mono(rational_record));
 }

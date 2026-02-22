@@ -109,6 +109,16 @@ When a typed expression needs to cross into `Value` territory (e.g., passed to a
 
 The typed path is **opt-in per definition**. If a definition's type resolves to `CgType::Dynamic`, the existing `emit_expr` path is used unchanged. The two can coexist in the same generated file.
 
+### Phase 5: Typed MIR pre-pass
+
+Before emitting Rust source for closed scalar definitions, the backend now lowers eligible expressions into a compact typed MIR (basic blocks + explicit branch terminators). This creates a stable optimization boundary for future passes (constant folding, CSE, and branch simplification) while preserving the current fallback strategy.
+
+Current MIR coverage is intentionally narrow and safe:
+- Scalars (`Int`, `Float`, `Bool`) and their literals/locals/globals
+- Scalar binary expressions
+- Single-level `if` branching via CFG blocks
+- Automatic fallback to direct typed emission when MIR lowering does not apply
+
 ### Boundary protocol
 
 ```
@@ -151,14 +161,17 @@ Boxing/unboxing functions for each CgType:
    - CLI `compile` and `build` commands use the typed pipeline
 
 7. **Tests** — `crates/aivi/tests/typed_codegen.rs`
-   - CgType collection verification
-   - `_typed` function emission for closed types
-   - No `_typed` for polymorphic definitions
-   - End-to-end compilation and execution
+    - CgType collection verification
+    - `_typed` function emission for closed types
+    - No `_typed` for polymorphic definitions
+    - End-to-end compilation and execution
+    - MIR pre-pass marker coverage for scalar closed definitions
 
 ### Not Yet Implemented
 
 - **ADT typed emission** — ADT constructors in CgType exist but type-to-cg-type lowering returns empty constructor args
+- **Optimization passes over MIR** — CSE/LICM/inlining are not implemented yet
+- **Direct Cranelift/LLVM backend** — codegen still emits Rust source and relies on `rustc`
 
 ### Recently Implemented
 

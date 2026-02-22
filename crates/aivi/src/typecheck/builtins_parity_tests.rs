@@ -27,7 +27,9 @@ fn collect_type_constructors(ty: &Type, out: &mut BTreeSet<String>) {
                 collect_type_constructors(item, out);
             }
         }
-        Type::Record { fields, open: _ } => {
+        Type::Record {
+            fields, open: _, ..
+        } => {
             for field_ty in fields.values() {
                 collect_type_constructors(field_ty, out);
             }
