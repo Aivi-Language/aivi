@@ -70,14 +70,14 @@ hmacVerify_roundtrip = do Effect {
 @test "hash password and verify"
 hashPassword_and_verify = do Effect {
   hashed <- hashPassword "myS3cret!"
-  ok <- verifyPassword "myS3cret!" hashed
+  ok     <- verifyPassword "myS3cret!" hashed
   assert ok
 }
 
 @test "verify password wrong"
 verifyPassword_wrong = do Effect {
   hashed <- hashPassword "correct"
-  ok <- verifyPassword "wrong" hashed
+  ok     <- verifyPassword "wrong" hashed
   assert (not ok)
 }
 
