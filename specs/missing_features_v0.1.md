@@ -21,7 +21,6 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 ### Syntax
 
 - `on` statement in `do Effect { ... }` blocks: listed in the [grammar](syntax/grammar.md) but semantics are not documented in any syntax chapter.
-- Generic `do M { ... }`: parser accepts it, but HIR lowering currently discards the monad name and hardcodes `Effect` (see [do notation § Type Checking](syntax/do_notation.md#type-checking)).
 
 
 ### Standard Library
@@ -51,7 +50,6 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 ### Runtime
 
 - WASM/WASI compilation target: described in the introduction but not yet implemented.
-- Native codegen for generic `do M { ... }` blocks: stubbed.
 
 ### Tooling (LSP / formatter / docs)
 

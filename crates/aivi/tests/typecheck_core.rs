@@ -244,6 +244,29 @@ user1 = { name: \"Alice\", age: \"a\" }\n";
 }
 
 #[test]
+fn typecheck_reports_kind_mismatch_in_type_application() {
+    let source = r#"
+module test.kind
+bad : List List
+bad = []
+"#;
+    let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
+    assert!(
+        !file_diagnostics_have_errors(&diagnostics),
+        "parse errors: {diagnostics:?}"
+    );
+    let mut module_diags = check_modules(&modules);
+    module_diags.extend(check_types(&modules));
+    assert!(
+        module_diags.iter().any(|d| d
+            .diagnostic
+            .message
+            .contains("kind mismatch in type application")),
+        "expected kind mismatch diagnostic, got: {module_diags:?}"
+    );
+}
+
+#[test]
 fn typecheck_domain_operator_overload_without_deltas() {
     let source = r#"
 module test.domain_ops

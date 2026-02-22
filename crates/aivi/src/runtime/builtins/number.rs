@@ -25,10 +25,17 @@ pub(super) fn build_bigint_record() -> Value {
         "toInt".to_string(),
         builtin("bigint.toInt", 1, |mut args, _| {
             let value = expect_bigint(args.pop().unwrap(), "bigint.toInt")?;
-            let out = value
-                .to_i64()
-                .ok_or_else(|| RuntimeError::Message("bigint.toInt overflow".to_string()))?;
-            Ok(Value::Int(out))
+            if let Some(out) = value.to_i64() {
+                Ok(Value::Constructor {
+                    name: "Some".to_string(),
+                    args: vec![Value::Int(out)],
+                })
+            } else {
+                Ok(Value::Constructor {
+                    name: "None".to_string(),
+                    args: Vec::new(),
+                })
+            }
         }),
     );
     fields.insert(

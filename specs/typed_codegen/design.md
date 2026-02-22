@@ -169,20 +169,21 @@ Boxing/unboxing functions for each CgType:
 
 ### Not Yet Implemented
 
-- **Optimization passes over MIR** — CSE/LICM/inlining are not implemented yet
-- **Direct Cranelift/LLVM backend** — codegen still emits Rust source and relies on `rustc` for executable output
+- **Advanced optimization passes over MIR** — LICM/inlining/loop transforms are not implemented yet
+- **Direct Cranelift/LLVM object backend** — codegen still emits Rust source and relies on `rustc` for executable output
 
 ### Backend abstraction scaffold
 
-- A non-invasive Cranelift-lowering scaffold now exists in `crates/aivi/src/native_rust_backend/typed_cranelift.rs`.
-- It lowers supported typed-MIR scalar defs to a CLIF-like textual form for validation and debugging.
-- Enable with `AIVI_TYPED_BACKEND=cranelift` to embed lowering comments in emitted Rust without changing runtime behavior.
+- The Cranelift path in `crates/aivi/src/native_rust_backend/typed_cranelift.rs` now emits executable typed bodies (for supported scalar MIR) instead of comment-only placeholders.
+- `AIVI_TYPED_BACKEND=cranelift` selects this typed path, while preserving MIR/typed-expr fallbacks for unsupported shapes.
+- The emitted Rust still targets `rustc` as the final compiler; this is a staged backend integration point, not full native object emission yet.
 
 ### Recently Implemented
 
 - **Typed call chain emission** — multi-arg calls to known typed globals now chain: `fn_typed(rt)?(arg1)?(arg2)?`
 - **Boxing/unboxing at boundaries** — typed subexpressions that can't be emitted in typed mode fall back to `emit_expr` + `emit_unbox()`, allowing typed code to cross into Value territory
 - **Typed `main` rewrite** — `main` gets a `_typed` variant when its CgType is closed; the entry point calls the typed version and boxes the result
+- **Typed MIR optimization pre-pass** — conservative constant folding + expression-local CSE with fallback-safe semantics
 
 ## Performance Impact
 

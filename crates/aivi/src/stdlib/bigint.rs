@@ -15,7 +15,7 @@ absInt = n => if n < 0 then -n else n
 fromInt : Int -> BigInt
 fromInt = value => bigint.fromInt value
 
-toInt : BigInt -> Int
+toInt : BigInt -> Option Int
 toInt = value => bigint.toInt value
 
 domain BigInt over BigInt = {

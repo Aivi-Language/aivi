@@ -534,6 +534,8 @@ fn emit_binary(op: &str, left_code: String, right_code: String) -> String {
         "+" | "-" | "*" | "/" | "%" => {
             let template = r#"({LEFT}).and_then(|l| ({RIGHT}).and_then(|r| match (l, r) {
         (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Int(a <OP> b)),
+        (Value::BigInt(a), Value::BigInt(b)) => aivi_ok(Value::BigInt(Arc::new(&*a <OP> &*b))),
+        (Value::Decimal(a), Value::Decimal(b)) => aivi_ok(Value::Decimal(a <OP> b)),
         (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Float(a <OP> b)),
         (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Float((a as f64) <OP> b)),
         (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Float(a <OP> (b as f64))),
@@ -548,6 +550,8 @@ fn emit_binary(op: &str, left_code: String, right_code: String) -> String {
         "<" | "<=" | ">" | ">=" => {
             let template = r#"({LEFT}).and_then(|l| ({RIGHT}).and_then(|r| match (l, r) {
         (Value::Int(a), Value::Int(b)) => aivi_ok(Value::Bool(a <OP> b)),
+        (Value::BigInt(a), Value::BigInt(b)) => aivi_ok(Value::Bool(&*a <OP> &*b)),
+        (Value::Decimal(a), Value::Decimal(b)) => aivi_ok(Value::Bool(a <OP> b)),
         (Value::Float(a), Value::Float(b)) => aivi_ok(Value::Bool(a <OP> b)),
         (Value::Int(a), Value::Float(b)) => aivi_ok(Value::Bool((a as f64) <OP> b)),
         (Value::Float(a), Value::Int(b)) => aivi_ok(Value::Bool(a <OP> (b as f64))),

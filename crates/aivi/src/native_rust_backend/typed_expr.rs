@@ -75,6 +75,7 @@ fn emit_typed_or_unbox(
 }
 
 /// Context tracking the types of local variables during typed emission.
+#[derive(Clone)]
 pub(super) struct TypedCtx {
     /// Local variable name → CgType
     locals: HashMap<String, CgType>,
