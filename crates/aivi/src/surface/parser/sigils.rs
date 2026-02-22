@@ -355,7 +355,7 @@ impl Parser {
             // Lower into the public `aivi.ui` helper functions (e.g. `vElement`, `vClass`).
             // Users are expected to `use aivi.ui` (or selectively import these helpers).
             let mk_ui = |name: &str| Expr::Ident(SpannedName {
-                name: name.to_string(),
+                name: name.into(),
                 span: span.clone(),
             });
             let mk_string = |value: &str| {
@@ -408,7 +408,7 @@ impl Parser {
 
         fn lower_node(this: &mut Parser, node: HtmlNode, span: &Span) -> Expr {
             let mk_ui = |name: &str| Expr::Ident(SpannedName {
-                name: name.to_string(),
+                name: name.into(),
                 span: span.clone(),
             });
             let mk_string = |value: &str| {

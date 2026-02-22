@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use uuid::Uuid;
 
-use super::values::KeyValue;
+use super::values::{shape_record, KeyValue, TaggedValue};
 use super::*;
 
 fn expect_ok<T>(result: Result<T, RuntimeError>, msg: &str) -> T {
@@ -1116,6 +1116,27 @@ result = count 100000
         .expect("result defined");
     let value = runtime.force_value(value).unwrap_or_else(|e| panic!("result evaluates: {}", format_runtime_error(e)));
     assert!(matches!(value, Value::Int(0)));
+}
+
+#[test]
+fn shaped_record_lookup_matches_hash_lookup() {
+    let mut fields = HashMap::new();
+    fields.insert("x".to_string(), Value::Int(1));
+    fields.insert("y".to_string(), Value::Int(2));
+    fields.insert("name".to_string(), Value::Text("p".to_string()));
+    let shaped = shape_record(&fields);
+    assert!(matches!(shaped.get("x"), Some(Value::Int(1))));
+    assert!(matches!(shaped.get("y"), Some(Value::Int(2))));
+    assert!(matches!(shaped.get("name"), Some(Value::Text(text)) if text == "p"));
+}
+
+#[test]
+fn tagged_value_encodes_scalars() {
+    let int_tag = TaggedValue::from_value(&Value::Int(42)).expect("int tag");
+    let bool_tag = TaggedValue::from_value(&Value::Bool(true)).expect("bool tag");
+    let float_tag = TaggedValue::from_value(&Value::Float(3.5)).expect("float tag");
+    assert_ne!(int_tag, bool_tag);
+    assert_ne!(bool_tag, float_tag);
 }
 
 #[test]

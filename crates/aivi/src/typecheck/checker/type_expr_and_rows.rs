@@ -24,6 +24,7 @@ impl TypeChecker {
                     let Type::Record {
                         fields: item_fields,
                         open: item_open,
+                        ..
                     } = item_ty
                     else {
                         return self.fresh_var();
@@ -36,6 +37,11 @@ impl TypeChecker {
                 Type::Record {
                     fields: merged,
                     open,
+                    row_tail: if open {
+                        Some(self.constraints.note_open_row_var())
+                    } else {
+                        None
+                    },
                 }
             }
             TypeExpr::Apply { base, args, .. } => {
@@ -109,6 +115,7 @@ impl TypeChecker {
                 Type::Record {
                     fields: field_map,
                     open: true,
+                    row_tail: Some(self.constraints.note_open_row_var()),
                 }
             }
             TypeExpr::Tuple { items, .. } => {
@@ -303,7 +310,7 @@ impl TypeChecker {
                 out.insert(name, ty.clone());
             }
         }
-        Some(Type::Record { fields: out, open })
+        Some(self.make_record(out, open))
     }
 
     fn row_omit(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
@@ -319,7 +326,7 @@ impl TypeChecker {
                 out.insert(name, ty);
             }
         }
-        Some(Type::Record { fields: out, open })
+        Some(self.make_record(out, open))
     }
 
     fn row_optional(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
@@ -333,10 +340,7 @@ impl TypeChecker {
                 *ty = self.wrap_option_type(ty.clone());
             }
         }
-        Some(Type::Record {
-            fields: source_fields,
-            open,
-        })
+        Some(self.make_record(source_fields, open))
     }
 
     fn row_required(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
@@ -350,10 +354,7 @@ impl TypeChecker {
                 *ty = self.unwrap_option_type(ty.clone());
             }
         }
-        Some(Type::Record {
-            fields: source_fields,
-            open,
-        })
+        Some(self.make_record(source_fields, open))
     }
 
     fn row_rename(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
@@ -370,7 +371,7 @@ impl TypeChecker {
             }
             out.insert(new_name, ty);
         }
-        Some(Type::Record { fields: out, open })
+        Some(self.make_record(out, open))
     }
 
     fn row_defaulted(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
@@ -387,10 +388,7 @@ impl TypeChecker {
                 *ty = self.wrap_option_type(ty.clone());
             }
         }
-        Some(Type::Record {
-            fields: source_fields,
-            open,
-        })
+        Some(self.make_record(source_fields, open))
     }
 
     fn record_from_type_expr(
@@ -401,7 +399,7 @@ impl TypeChecker {
         let ty = self.type_from_expr(expr, ctx);
         let ty = self.expand_alias(ty);
         match ty {
-            Type::Record { fields, open } => Some((fields, open)),
+            Type::Record { fields, open, .. } => Some((fields, open)),
             _ => None,
         }
     }
@@ -459,6 +457,18 @@ impl TypeChecker {
         ty
     }
 
+    fn make_record(&mut self, fields: BTreeMap<String, Type>, open: bool) -> Type {
+        Type::Record {
+            fields,
+            open,
+            row_tail: if open {
+                Some(self.constraints.note_open_row_var())
+            } else {
+                None
+            },
+        }
+    }
+
     fn fresh_var(&mut self) -> Type {
         Type::Var(self.fresh_var_id())
     }
@@ -466,7 +476,9 @@ impl TypeChecker {
     pub(super) fn fresh_var_id(&mut self) -> TypeVarId {
         let id = self.next_var;
         self.next_var += 1;
-        TypeVarId(id)
+        let var = TypeVarId(id);
+        self.constraints.vars.ensure(var);
+        var
     }
 
     pub(super) fn error_to_diag(&mut self, module: &Module, err: TypeError) -> FileDiagnostic {

@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::AtomicBool;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex, OnceLock};
 
 use im::{HashMap as ImHashMap, HashSet as ImHashSet, Vector as ImVector};
 use num_bigint::BigInt;
@@ -24,6 +24,115 @@ pub(super) type ThunkFunc = dyn Fn(&mut Runtime) -> Result<Value, RuntimeError> 
 pub(super) struct SourceValue {
     pub(super) kind: String,
     pub(super) effect: Arc<EffectValue>,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct RecordShape {
+    fields: Arc<Vec<String>>,
+    offsets: Arc<HashMap<String, usize>>,
+}
+
+#[derive(Clone)]
+pub(super) struct ShapedRecord {
+    pub(super) shape: Arc<RecordShape>,
+    pub(super) values: Arc<Vec<Value>>,
+}
+
+#[derive(Default)]
+struct RecordShapeRegistry {
+    by_fields: HashMap<Vec<String>, Arc<RecordShape>>,
+}
+
+static RECORD_SHAPES: OnceLock<Mutex<RecordShapeRegistry>> = OnceLock::new();
+
+fn record_shape_registry() -> &'static Mutex<RecordShapeRegistry> {
+    RECORD_SHAPES.get_or_init(|| Mutex::new(RecordShapeRegistry::default()))
+}
+
+fn intern_record_shape(mut fields: Vec<String>) -> Arc<RecordShape> {
+    fields.sort();
+    let mut registry = record_shape_registry()
+        .lock()
+        .expect("record shape registry lock poisoned");
+    if let Some(shape) = registry.by_fields.get(&fields) {
+        return shape.clone();
+    }
+    let offsets: HashMap<String, usize> = fields
+        .iter()
+        .enumerate()
+        .map(|(idx, name)| (name.clone(), idx))
+        .collect();
+    let shape = Arc::new(RecordShape {
+        fields: Arc::new(fields.clone()),
+        offsets: Arc::new(offsets),
+    });
+    registry.by_fields.insert(fields, shape.clone());
+    shape
+}
+
+pub(super) fn shape_record(record: &HashMap<String, Value>) -> ShapedRecord {
+    let mut names: Vec<String> = record.keys().cloned().collect();
+    names.sort();
+    let shape = intern_record_shape(names);
+    let values = shape
+        .fields
+        .iter()
+        .map(|field| record.get(field).cloned().unwrap_or(Value::Unit))
+        .collect();
+    ShapedRecord {
+        shape,
+        values: Arc::new(values),
+    }
+}
+
+impl ShapedRecord {
+    pub(super) fn get(&self, name: &str) -> Option<&Value> {
+        self.shape
+            .offsets
+            .get(name)
+            .and_then(|idx| self.values.get(*idx))
+    }
+
+    pub(super) fn has_field(&self, name: &str) -> bool {
+        self.shape.offsets.contains_key(name)
+    }
+}
+
+/// Transitional compact scalar container for future NaN-tagged values.
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct TaggedValue(u64);
+
+#[allow(dead_code)]
+impl TaggedValue {
+    const TAG_INT: u64 = 0b01;
+    const TAG_BOOL_FALSE: u64 = 0b10;
+    const TAG_BOOL_TRUE: u64 = 0b11;
+
+    pub(super) fn from_int(value: i64) -> Self {
+        Self(((value as u64) << 2) | Self::TAG_INT)
+    }
+
+    pub(super) fn from_bool(value: bool) -> Self {
+        if value {
+            Self(Self::TAG_BOOL_TRUE)
+        } else {
+            Self(Self::TAG_BOOL_FALSE)
+        }
+    }
+
+    pub(super) fn from_float(value: f64) -> Self {
+        Self(value.to_bits())
+    }
+
+    pub(super) fn from_value(value: &Value) -> Option<Self> {
+        match value {
+            Value::Int(value) => Some(Self::from_int(*value)),
+            Value::Bool(value) => Some(Self::from_bool(*value)),
+            Value::Float(value) => Some(Self::from_float(*value)),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -64,6 +173,53 @@ pub(super) enum Value {
     HttpServer(Arc<ServerHandle>),
     WebSocket(Arc<WebSocketHandle>),
     MutableMap(Arc<Mutex<ImHashMap<KeyValue, Value>>>),
+}
+
+impl std::fmt::Debug for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Unit => write!(f, "Unit"),
+            Value::Bool(v) => f.debug_tuple("Bool").field(v).finish(),
+            Value::Int(v) => f.debug_tuple("Int").field(v).finish(),
+            Value::Float(v) => f.debug_tuple("Float").field(v).finish(),
+            Value::Text(v) => f.debug_tuple("Text").field(v).finish(),
+            Value::DateTime(v) => f.debug_tuple("DateTime").field(v).finish(),
+            Value::Bytes(v) => f.debug_tuple("Bytes").field(v).finish(),
+            Value::Regex(v) => f.debug_tuple("Regex").field(&v.as_str()).finish(),
+            Value::BigInt(v) => f.debug_tuple("BigInt").field(v).finish(),
+            Value::Rational(v) => f.debug_tuple("Rational").field(v).finish(),
+            Value::Decimal(v) => f.debug_tuple("Decimal").field(v).finish(),
+            Value::Map(v) => f.debug_tuple("Map").field(v).finish(),
+            Value::Set(v) => f.debug_tuple("Set").field(v).finish(),
+            Value::Queue(v) => f.debug_tuple("Queue").field(v).finish(),
+            Value::Deque(v) => f.debug_tuple("Deque").field(v).finish(),
+            Value::Heap(v) => f.debug_tuple("Heap").field(v).finish(),
+            Value::List(v) => f.debug_tuple("List").field(v).finish(),
+            Value::Tuple(v) => f.debug_tuple("Tuple").field(v).finish(),
+            Value::Record(v) => f.debug_tuple("Record").field(v).finish(),
+            Value::Constructor { name, args } => f
+                .debug_struct("Constructor")
+                .field("name", name)
+                .field("args", args)
+                .finish(),
+            Value::Closure(_) => write!(f, "Closure(<fn>)"),
+            Value::Builtin(_) => write!(f, "Builtin(<fn>)"),
+            Value::Effect(_) => write!(f, "Effect(<thunk>)"),
+            Value::Source(_) => write!(f, "Source(<stream>)"),
+            Value::Resource(_) => write!(f, "Resource(<scope>)"),
+            Value::Thunk(_) => write!(f, "Thunk(<lazy>)"),
+            Value::MultiClause(v) => f.debug_tuple("MultiClause").field(v).finish(),
+            Value::ChannelSend(_) => write!(f, "ChannelSend(<chan>)"),
+            Value::ChannelRecv(_) => write!(f, "ChannelRecv(<chan>)"),
+            Value::FileHandle(_) => write!(f, "FileHandle(<fd>)"),
+            Value::Listener(_) => write!(f, "Listener(<tcp>)"),
+            Value::Connection(_) => write!(f, "Connection(<tcp>)"),
+            Value::Stream(_) => write!(f, "Stream(<stream>)"),
+            Value::HttpServer(_) => write!(f, "HttpServer(<server>)"),
+            Value::WebSocket(_) => write!(f, "WebSocket(<socket>)"),
+            Value::MutableMap(_) => write!(f, "MutableMap(<state>)"),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -135,7 +291,7 @@ pub(super) enum StreamState {
     },
 }
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub(super) enum KeyValue {
     Unit,
     Bool(bool),

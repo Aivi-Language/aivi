@@ -1,4 +1,24 @@
 impl TypeChecker {
+    pub(super) fn push_deferred_constraint(&mut self, found: Type, expected: Type, span: Span) {
+        self.constraints
+            .deferred
+            .push(super::constraints::DeferredConstraint::Equal(
+                found, expected, span,
+            ));
+    }
+
+    pub(super) fn solve_deferred_constraints(&mut self) -> Result<(), TypeError> {
+        let deferred = std::mem::take(&mut self.constraints.deferred);
+        for item in deferred {
+            match item {
+                super::constraints::DeferredConstraint::Equal(found, expected, span) => {
+                    self.unify(found, expected, span)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn unify_with_span(&mut self, found: Type, expected: Type, span: Span) -> Result<(), TypeError> {
         self.unify(found, expected, span)
     }
@@ -110,14 +130,17 @@ impl TypeChecker {
                 Type::Record {
                     fields: f_fields,
                     open: open_f,
+                    row_tail: row_tail_f,
                 },
                 Type::Record {
                     fields: e_fields,
                     open: open_e,
+                    row_tail: row_tail_e,
                 },
             ) => {
                 let mut all_fields: HashSet<String> = f_fields.keys().cloned().collect();
                 all_fields.extend(e_fields.keys().cloned());
+                let mut absorbed_open_tail = false;
 
                 for field in &all_fields {
                     match (f_fields.get(field), e_fields.get(field)) {
@@ -132,12 +155,16 @@ impl TypeChecker {
                                     expected: Some(Box::new(Type::Record {
                                         fields: e_fields.clone(),
                                         open: open_e,
+                                        row_tail: row_tail_e,
                                     })),
                                     found: Some(Box::new(Type::Record {
                                         fields: f_fields.clone(),
                                         open: open_f,
+                                        row_tail: row_tail_f,
                                     })),
                                 });
+                            } else {
+                                absorbed_open_tail = true;
                             }
                         }
                         (None, Some(_)) => {
@@ -148,16 +175,23 @@ impl TypeChecker {
                                     expected: Some(Box::new(Type::Record {
                                         fields: e_fields.clone(),
                                         open: open_e,
+                                        row_tail: row_tail_e,
                                     })),
                                     found: Some(Box::new(Type::Record {
                                         fields: f_fields.clone(),
                                         open: open_f,
+                                        row_tail: row_tail_f,
                                     })),
                                 });
+                            } else {
+                                absorbed_open_tail = true;
                             }
                         }
                         (None, None) => {}
                     }
+                }
+                if absorbed_open_tail || (open_f && open_e) {
+                    self.note_open_row_var();
                 }
                 Ok(())
             }
@@ -185,6 +219,7 @@ impl TypeChecker {
             if *other == var {
                 return Ok(());
             }
+            self.constraints.vars.union(var, *other);
         }
         if self.occurs(var, &ty) {
             let mut message = "occurs check failed".to_string();
@@ -339,12 +374,18 @@ impl TypeChecker {
                     .map(|item| Self::substitute(item, mapping))
                     .collect(),
             ),
-            Type::Record { fields, open } => Type::Record {
+            Type::Record {
+                fields,
+                open,
+                row_tail,
+                ..
+            } => Type::Record {
                 fields: fields
                     .iter()
                     .map(|(k, v)| (k.clone(), Self::substitute(v, mapping)))
                     .collect(),
                 open: *open,
+                row_tail: *row_tail,
             },
         }
     }
@@ -396,12 +437,18 @@ impl TypeChecker {
                     .map(|item| self.apply_with_visiting(item, visiting))
                     .collect(),
             ),
-            Type::Record { fields, open } => Type::Record {
+            Type::Record {
+                fields,
+                open,
+                row_tail,
+                ..
+            } => Type::Record {
                 fields: fields
                     .into_iter()
                     .map(|(k, v)| (k, self.apply_with_visiting(v, visiting)))
                     .collect(),
                 open,
+                row_tail,
             },
         }
     }
@@ -460,12 +507,18 @@ impl TypeChecker {
                     .map(|item| self.expand_alias_with_visiting(item, visiting))
                     .collect(),
             ),
-            Type::Record { fields, open } => Type::Record {
+            Type::Record {
+                fields,
+                open,
+                row_tail,
+                ..
+            } => Type::Record {
                 fields: fields
                     .into_iter()
                     .map(|(k, v)| (k, self.expand_alias_with_visiting(v, visiting)))
                     .collect(),
                 open,
+                row_tail,
             },
         }
     }

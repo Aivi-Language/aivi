@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::diagnostics::Span;
 
+use super::constraints::RowVarId;
 use super::TypeChecker;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -35,6 +36,7 @@ pub(super) enum Type {
     Record {
         fields: BTreeMap<String, Type>,
         open: bool,
+        row_tail: Option<RowVarId>,
     },
 }
 
@@ -307,13 +309,21 @@ impl<'a> TypePrinter<'a> {
                     .collect::<Vec<_>>();
                 format!("({})", items_str.join(", "))
             }
-            Type::Record { fields, open } => {
+            Type::Record {
+                fields,
+                open,
+                row_tail,
+            } => {
                 let mut parts = Vec::new();
                 for (name, ty) in fields {
                     parts.push(format!("{}: {}", name, self.print(ty)));
                 }
                 if *open {
-                    parts.push("..".to_string());
+                    if let Some(row_tail) = row_tail {
+                        parts.push(format!("..ρ{}", row_tail.0));
+                    } else {
+                        parts.push("..".to_string());
+                    }
                 }
                 format!("{{ {} }}", parts.join(", "))
             }

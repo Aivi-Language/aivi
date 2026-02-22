@@ -498,7 +498,7 @@ impl Runtime {
             HirExpr::FieldAccess { base, field, .. } => {
                 let base_value = self.eval_expr(base, env)?;
                 match base_value {
-                    Value::Record(map) => map
+                    Value::Record(map) => shape_record(map.as_ref())
                         .get(field)
                         .cloned()
                         .ok_or_else(|| RuntimeError::Message(format!("missing field {field}"))),

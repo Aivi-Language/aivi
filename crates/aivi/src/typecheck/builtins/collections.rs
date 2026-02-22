@@ -156,6 +156,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     let map_record_value = map_record.clone();
 
@@ -246,6 +247,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     let set_record_value = set_record.clone();
 
@@ -283,6 +285,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     let queue_record_value = queue_record.clone();
 
@@ -344,6 +347,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     let deque_record_value = deque_record.clone();
 
@@ -382,6 +386,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     let heap_record_value = heap_record.clone();
 
@@ -714,6 +719,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     let list_record_value = list_record.clone();
 
@@ -729,6 +735,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert(
         "collections".to_string(),
@@ -922,6 +929,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
         open: true,
+        row_tail: None,
     };
     env.insert(
         "MutableMap".to_string(),

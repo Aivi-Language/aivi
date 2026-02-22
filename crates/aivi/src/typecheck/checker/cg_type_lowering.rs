@@ -3,16 +3,26 @@
 use crate::cg_type::CgType;
 
 impl TypeChecker {
+    const MAX_CG_LOWERING_DEPTH: usize = 64;
+
     /// Convert a type-checker `Type` to a codegen-friendly `CgType`.
     ///
     /// The `Type` should already have substitution applied (`self.apply(ty)`).
     /// Any remaining `Type::Var`, open records, or un-resolved HKTs produce `CgType::Dynamic`.
     pub(super) fn type_to_cg_type(&mut self, ty: &Type, env: &crate::typecheck::types::TypeEnv) -> CgType {
         let resolved = self.apply(ty.clone());
-        self.type_to_cg_type_inner(&resolved, env)
+        self.type_to_cg_type_inner_with_depth(&resolved, env, Self::MAX_CG_LOWERING_DEPTH)
     }
 
-    fn type_to_cg_type_inner(&self, ty: &Type, env: &crate::typecheck::types::TypeEnv) -> CgType {
+    fn type_to_cg_type_inner_with_depth(
+        &self,
+        ty: &Type,
+        env: &crate::typecheck::types::TypeEnv,
+        depth_left: usize,
+    ) -> CgType {
+        if depth_left == 0 {
+            return CgType::Dynamic;
+        }
         match ty {
             Type::Var(_) => CgType::Dynamic,
 
@@ -24,7 +34,9 @@ impl TypeChecker {
                 "Unit" if args.is_empty() => CgType::Unit,
                 "DateTime" if args.is_empty() => CgType::DateTime,
                 "List" if args.len() == 1 => {
-                    CgType::ListOf(Box::new(self.type_to_cg_type_inner(&args[0], env)))
+                    CgType::ListOf(Box::new(
+                        self.type_to_cg_type_inner_with_depth(&args[0], env, depth_left - 1),
+                    ))
                 }
                 _ => {
                     // Check if this is a known ADT
@@ -35,7 +47,13 @@ impl TypeChecker {
                             // environment. Constructors are registered as functions:
                             // `Ctor : Arg1 -> Arg2 -> ... -> ResultType`
                             // We need to collect the argument types.
-                            let ctor_arg_types = self.extract_ctor_arg_types(ctor_name, name, args, env);
+                            let ctor_arg_types = self.extract_ctor_arg_types(
+                                ctor_name,
+                                name,
+                                args,
+                                env,
+                                depth_left - 1,
+                            );
                             constructors.push((ctor_name.clone(), ctor_arg_types));
                         }
                         CgType::Adt {
@@ -52,24 +70,38 @@ impl TypeChecker {
             Type::App(_, _) => CgType::Dynamic,
 
             Type::Func(a, b) => CgType::Func(
-                Box::new(self.type_to_cg_type_inner(a, env)),
-                Box::new(self.type_to_cg_type_inner(b, env)),
+                Box::new(self.type_to_cg_type_inner_with_depth(a, env, depth_left - 1)),
+                Box::new(self.type_to_cg_type_inner_with_depth(b, env, depth_left - 1)),
             ),
 
             Type::Tuple(items) => {
-                CgType::Tuple(items.iter().map(|t| self.type_to_cg_type_inner(t, env)).collect())
+                CgType::Tuple(
+                    items
+                        .iter()
+                        .map(|t| self.type_to_cg_type_inner_with_depth(t, env, depth_left - 1))
+                        .collect(),
+                )
             }
 
-            Type::Record { fields, open } => {
+            Type::Record { fields, open, .. } => {
                 if *open {
                     CgType::Dynamic
                 } else {
                     CgType::Record(
                         fields
-                            .iter()
-                            .map(|(name, ty)| (name.clone(), self.type_to_cg_type_inner(ty, env)))
-                            .collect(),
-                    )
+                                .iter()
+                                .map(|(name, ty)| {
+                                    (
+                                        name.clone(),
+                                        self.type_to_cg_type_inner_with_depth(
+                                            ty,
+                                            env,
+                                            depth_left - 1,
+                                        ),
+                                    )
+                                })
+                                .collect(),
+                        )
                 }
             }
         }
@@ -86,14 +118,16 @@ impl TypeChecker {
         adt_name: &str,
         type_args: &[Type],
         env: &crate::typecheck::types::TypeEnv,
+        depth_left: usize,
     ) -> Vec<CgType> {
-        // 1. Look up the constructor's Scheme from the environment
-        let scheme = match env.get(ctor_name) {
-            Some(s) => s,
-            None => return Vec::new(),
+        if depth_left == 0 {
+            return Vec::new();
+        }
+
+        let Some(scheme) = env.get(ctor_name) else {
+            return Vec::new();
         };
 
-        // Find the Result type of the constructor function to map vars to applied types.
         let mut cur = &scheme.ty;
         let mut arg_types = Vec::new();
         while let Type::Func(arg, next) = cur {
@@ -101,7 +135,6 @@ impl TypeChecker {
             cur = next.as_ref();
         }
 
-        // The result type should be Type::Con(adt_name, ctor_vars)
         let subst_map = match cur {
             Type::Con(name, ctor_vars) if name == adt_name && ctor_vars.len() == type_args.len() => {
                 let mut map = std::collections::HashMap::new();
@@ -137,30 +170,28 @@ impl TypeChecker {
                     return Vec::new();
                 }
             }
-            Type::Var(_vid) if type_args.is_empty() => {
-               // Special case for zero args on adt name itself like in Option None? Actually None is `Option a`, handled above.
-               std::collections::HashMap::new()
-            }
             _ => {
-               if type_args.is_empty() {
-                   std::collections::HashMap::new()
-               } else {
-                   return Vec::new();
-               }
+                if type_args.is_empty() {
+                    std::collections::HashMap::new()
+                } else {
+                    return Vec::new();
+                }
             }
         };
 
-        // Apply substitution and convert to CgType
         arg_types
             .into_iter()
-            .map(|t| {
-                let subst_t = self.apply_local_subst(t, &subst_map);
-                self.type_to_cg_type_inner(&subst_t, env)
+            .map(|arg| {
+                let subst_t = self.apply_local_subst(arg, &subst_map);
+                if contains_adt_name(&subst_t, adt_name) {
+                    CgType::Dynamic
+                } else {
+                    self.type_to_cg_type_inner_with_depth(&subst_t, env, depth_left - 1)
+                }
             })
             .collect()
     }
 
-    /// Recursively apply a local substitution map to a type.
     #[allow(clippy::only_used_in_recursion)]
     fn apply_local_subst(
         &self,
@@ -168,13 +199,7 @@ impl TypeChecker {
         subst: &std::collections::HashMap<crate::typecheck::types::TypeVarId, Type>,
     ) -> Type {
         match ty {
-            Type::Var(v) => {
-                if let Some(t) = subst.get(&v) {
-                    t.clone()
-                } else {
-                    Type::Var(v)
-                }
-            }
+            Type::Var(v) => subst.get(&v).cloned().unwrap_or(Type::Var(v)),
             Type::Con(name, args) => Type::Con(
                 name,
                 args.into_iter()
@@ -197,13 +222,33 @@ impl TypeChecker {
                     .map(|i| self.apply_local_subst(i, subst))
                     .collect(),
             ),
-            Type::Record { fields, open } => Type::Record {
+            Type::Record {
+                fields,
+                open,
+                row_tail,
+                ..
+            } => Type::Record {
                 fields: fields
                     .into_iter()
                     .map(|(k, v)| (k, self.apply_local_subst(v, subst)))
                     .collect(),
                 open,
+                row_tail,
             },
         }
+    }
+}
+
+fn contains_adt_name(ty: &Type, adt_name: &str) -> bool {
+    match ty {
+        Type::Var(_) => false,
+        Type::Con(name, args) => name == adt_name || args.iter().any(|arg| contains_adt_name(arg, adt_name)),
+        Type::App(base, args) => {
+            contains_adt_name(base, adt_name)
+                || args.iter().any(|arg| contains_adt_name(arg, adt_name))
+        }
+        Type::Func(a, b) => contains_adt_name(a, adt_name) || contains_adt_name(b, adt_name),
+        Type::Tuple(items) => items.iter().any(|item| contains_adt_name(item, adt_name)),
+        Type::Record { fields, .. } => fields.values().any(|field| contains_adt_name(field, adt_name)),
     }
 }

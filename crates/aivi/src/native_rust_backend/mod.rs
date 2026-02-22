@@ -5,6 +5,7 @@ mod expr;
 mod pattern;
 mod prelude;
 pub(crate) mod typed_expr;
+mod typed_mir;
 mod utils;
 
 use crate::rust_ir::cg_type::CgType;
@@ -205,10 +206,14 @@ fn emit_typed_def(
     let mut ctx = typed_expr::TypedCtx::new(global_cg_types.clone());
 
     // Try to emit the typed body
-    let body_code = match typed_expr::emit_typed_expr(&def.expr, cg_ty, &mut ctx, 1) {
-        Ok(Some(code)) => code,
-        Ok(None) => return Ok(false), // Can't emit typed — silently skip
-        Err(_) => return Ok(false),   // Error — silently skip
+    let body_code = if let Some(code) = typed_mir::emit_typed_via_mir(&def.expr, cg_ty, &ctx, 1) {
+        code
+    } else {
+        match typed_expr::emit_typed_expr(&def.expr, cg_ty, &mut ctx, 1) {
+            Ok(Some(code)) => code,
+            Ok(None) => return Ok(false), // Can't emit typed — silently skip
+            Err(_) => return Ok(false),   // Error — silently skip
+        }
     };
 
     let rust_ty = cg_ty.rust_type();

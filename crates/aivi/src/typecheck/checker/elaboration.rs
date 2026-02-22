@@ -102,7 +102,7 @@ impl TypeChecker {
             Expr::FieldAccess { base, field, .. } => self.infer_field_access(base, field, env),
             Expr::FieldSection { field, .. } => {
                 let param = SpannedName {
-                    name: "_arg0".to_string(),
+                    name: "_arg0".into(),
                     span: field.span.clone(),
                 };
                 let body = Expr::FieldAccess {
@@ -803,7 +803,7 @@ impl TypeChecker {
         if is_text {
             // Try inserting a `toText` call (resolved via the `ToText` class environment).
             let to_text = Expr::Ident(SpannedName {
-                name: "toText".to_string(),
+                name: "toText".into(),
                 span: expr_span(&expr),
             });
             let call_expr = Expr::Call {
@@ -830,7 +830,7 @@ impl TypeChecker {
             // Coerce into a `VNode` via `TextNode`, either directly from `Text`
             // or via `toText` when available.
             let text_node = Expr::Ident(SpannedName {
-                name: "TextNode".to_string(),
+                name: "TextNode".into(),
                 span: expr_span(&expr),
             });
 
@@ -852,7 +852,7 @@ impl TypeChecker {
 
             // Then try `TextNode (toText <expr>)`.
             let to_text = Expr::Ident(SpannedName {
-                name: "toText".to_string(),
+                name: "toText".into(),
                 span: expr_span(&expr),
             });
             let to_text_call = Expr::Call {

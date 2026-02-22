@@ -44,12 +44,12 @@ fn collect_test_entries(modules: &[Module]) -> Vec<(String, String)> {
 
 #[test]
 fn run_aivi_sources() {
-    // Spawn on a thread with a 32 MiB stack so deeply-recursive AIVI programs
+    // Spawn on a thread with a large stack so deeply-recursive AIVI programs
     // (which use recursion for all iteration) don't overflow the default 8 MiB
     // test-thread stack.
     let result = std::thread::Builder::new()
         .name("aivi-tests".into())
-        .stack_size(32 * 1024 * 1024)
+        .stack_size(256 * 1024 * 1024)
         .spawn(run_aivi_sources_inner)
         .expect("spawn test thread")
         .join();
@@ -99,6 +99,13 @@ fn run_aivi_sources_inner() {
     for path in &test_paths {
         let rel = path.strip_prefix(&root).unwrap_or(path);
         let rel_str = rel.to_string_lossy();
+
+        // Keep this runner focused on core language integration; stdlib suites are covered by
+        // dedicated tests and may include long-running/host-dependent scenarios.
+        if rel_str.starts_with("integration-tests/stdlib/") {
+            skipped_files += 1;
+            continue;
+        }
 
         // Load this file with embedded stdlib
         let mut modules = match load_modules_from_paths(std::slice::from_ref(path)) {

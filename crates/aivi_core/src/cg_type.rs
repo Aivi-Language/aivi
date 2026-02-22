@@ -272,7 +272,7 @@ impl CgType {
                     }
                 }
                 format!(
-                    "match {expr} {{ Value::Constructor {{ name, args }} => match (name.as_str(), args) {{ {}, _ => Err(RuntimeError::Message(format!(\"invalid Constructor payload for {{name}}, got {{:?}}\", args))) }}, other => Err(RuntimeError::Message(format!(\"expected Constructor, got {{}}\", aivi_native_runtime::format_value(&other)))) }}",
+                    "match {expr} {{ Value::Constructor {{ name, args }} => match (name.as_str(), args) {{ {}, _ => Err(RuntimeError::Message(format!(\"invalid Constructor payload for {{name}}\"))) }}, other => Err(RuntimeError::Message(format!(\"expected Constructor, got {{}}\", aivi_native_runtime::format_value(&other)))) }}",
                     ctor_arms.join(", ")
                 )
             }
