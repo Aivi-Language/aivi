@@ -29,12 +29,12 @@ exists_missing = do Effect {
 @test "write text read text roundtrip"
 writeText_readText_roundtrip = do Effect {
   path = "/tmp/aivi_test_roundtrip.txt"
-  _ <- writeText path "hello aivi"
+  _          <- writeText path "hello aivi"
   contentRes <- readText path
   contentRes match
     | Ok content => assertEq content "hello aivi"
     | Err _      => assert False
-    _ <- delete path
+    _           <- delete path
     existsAfter <- exists path
     assertEq existsAfter False
 }

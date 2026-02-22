@@ -90,7 +90,7 @@ buildGraph = fromWeightedEdges [
 
 @test "A* pathfinding on weighted graph"
 astarSmoke = do Effect {
-  graph <- pure buildGraph
+  graph  <- pure buildGraph
   result <- pure (astar graph 0 3 heuristic)
   assert (result == Some [0, 1, 2, 3])
   zeroHeuristic = _ _ => 0.0

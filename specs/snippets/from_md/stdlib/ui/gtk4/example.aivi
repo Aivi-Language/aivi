@@ -1,0 +1,14 @@
+use aivi
+use aivi.ui.gtk4
+
+main = do Effect {
+  init Unit
+  appId <- appNew "com.example.counter"
+  win <- windowNew appId "Counter" 640 480
+  root <- boxNew 1 8
+  title <- labelNew "Mailfox"
+  boxAppend root title
+  windowSetChild win root
+  windowPresent win
+  appRun appId
+}

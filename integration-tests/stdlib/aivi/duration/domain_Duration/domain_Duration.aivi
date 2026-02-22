@@ -9,8 +9,8 @@ use aivi.duration (domain Duration)
 @test "literals"
 literals_functional = do Effect {
   ms <- 1ms
-  s <- 1s
-  m <- 1min
+  s  <- 1s
+  m  <- 1min
   assertEq ms.millis 1
   assertEq s.millis 1000
   assertEq m.millis 60000

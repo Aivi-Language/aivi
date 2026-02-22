@@ -217,22 +217,7 @@ osThemePreference : Unit -> Effect GtkError Text
 
 ## Example
 
-```aivi
-use aivi
-use aivi.ui.gtk4
-
-main = do Effect {
-  init Unit
-  appId <- appNew "com.example.counter"
-  win <- windowNew appId "Counter" 640 480
-  root <- boxNew 1 8
-  title <- labelNew "Mailfox"
-  boxAppend root title
-  windowSetChild win root
-  windowPresent win
-  appRun appId
-}
-```
+<<< ../../snippets/from_md/stdlib/ui/gtk4/example.aivi{aivi}
 
 ## UI update pattern (state machine + events + repaint)
 
@@ -243,27 +228,7 @@ You can drive GTK updates from an AIVI model/update loop:
 3. convert GTK input into `Msg`,
 4. call `drawAreaQueueDraw` (or widget setters) when state changes.
 
-```aivi
-module user.mailfox
-
-use aivi
-use aivi.mutableMap
-use aivi.ui.gtk4
-
-export main
-
-main = do Effect {
-  init Unit
-  appId <- appNew "com.example.counter"
-  win   <- windowNew appId "Example" 800 600
-  root  <- boxNew 1 8
-  title <- labelNew "Example"
-  boxAppend root title
-  windowSetChild win root
-  windowPresent win
-  appRun appId
-}
-```
+<<< ../../snippets/from_md/stdlib/ui/gtk4/ui_update_pattern.aivi{aivi}
 
 For non-canvas widgets, do the same model/update step but call setters directly (`labelSetText`, `entrySetText`, `widgetSetCss`, etc.) instead of `drawAreaQueueDraw`.
 

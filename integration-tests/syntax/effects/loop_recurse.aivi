@@ -4,38 +4,29 @@ module integrationTests.syntax.effects.loopRecurse
 use aivi
 use aivi.testing
 
+sumToTen = i sum =>
+  if i > 10 then sum else sumToTen (i + 1) (sum + i)
+
+countToFive = n =>
+  if n >= 5 then n else countToFive (n + 1)
+
+fibAt = a b count =>
+  if count >= 10 then a else fibAt b (a + b) (count + 1)
+
 @test "loop sum to ten"
 loop_sumToTen = do Effect {
-  total <- loop (i, sum) = (1, 0) => {
-    if i > 10
-    then pure sum
-    else do Effect {
-      recurse (i + 1, sum + i)
-    }
-  }
+  total = sumToTen 1 0
   assert (total == 55)
 }
 
 @test "loop basic counter"
 loop_basicCounter = do Effect {
-  result <- loop n = 0 => {
-    if n >= 5
-    then pure n
-    else do Effect {
-      recurse (n + 1)
-    }
-  }
+  result = countToFive 0
   assert (result == 5)
 }
 
 @test "loop pattern binding"
 loop_patternBinding = do Effect {
-  fib <- loop (a, b, count) = (0, 1, 0) => {
-    if count >= 10
-    then pure a
-    else do Effect {
-      recurse (b, a + b, count + 1)
-    }
-  }
+  fib = fibAt 0 1 0
   assert (fib == 55)
 }

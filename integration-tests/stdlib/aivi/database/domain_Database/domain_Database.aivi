@@ -15,7 +15,7 @@ literal_del_functional = do Effect {
   users0 = table "users"[] // todo what is this for syntax?
   users1 <- users0 + ins { id: 1 }
   users2 <- users1 + del (u => u.id == 1)
-  rows <- load users2
+  rows   <- load users2
   assert (len rows == 0)
 }
 
@@ -23,7 +23,7 @@ literal_del_functional = do Effect {
 literal_ins_functional = do Effect {
   users0 = table "users"[]
   users1 <- users0 + ins { id: 1 }
-  rows <- load users1
+  rows   <- load users1
   assert (len rows == 1) // todo is not needed.
 }
 
@@ -32,7 +32,7 @@ literal_upd_functional = do Effect {
   users0 = table "users"[]
   users1 <- users0 + ins { id: 1, name: "A" }
   users2 <- users1 + upd (u => u.id == 1) (u => u <| { name: "B" })
-  rows <- load users2
+  rows   <- load users2
   rows match
     | [u] => assertEq u.name "B"
     | _   => assert False
