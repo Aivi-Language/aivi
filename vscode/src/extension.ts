@@ -7,6 +7,7 @@ import {
   LanguageClientOptions,
   ServerOptions,
 } from "vscode-languageclient/node";
+import { extractHoverToken, fallbackHoverMarkdownForToken } from "./hoverFallback";
 
 let client: LanguageClient | undefined;
 
@@ -395,6 +396,24 @@ export function activate(context: vscode.ExtensionContext) {
     },
     outputChannel,
     middleware: {
+      provideHover: async (document, position, token, next) => {
+        const hover = await Promise.resolve(next(document, position, token));
+        if (hover || document.languageId !== "aivi") {
+          return hover;
+        }
+        const text = document.getText();
+        const offset = document.offsetAt(position);
+        const hoverToken = extractHoverToken(text, offset);
+        if (!hoverToken) {
+          return hover;
+        }
+        const fallback = fallbackHoverMarkdownForToken(hoverToken);
+        if (!fallback) {
+          return hover;
+        }
+        const markdown = new vscode.MarkdownString(`\`${hoverToken}\`\n\n${fallback}`);
+        return new vscode.Hover(markdown);
+      },
       provideDocumentFormattingEdits: (document, options, token, next) =>
         next(document, options, token),
       provideDocumentRangeFormattingEdits: (document, range, options, token, next) =>

@@ -1,6 +1,9 @@
 @no_prelude
 module integrationTests.syntax.types.machineDeclaration
 
+use aivi
+use aivi.testing
+
 machine Door = {
          -> Closed : init {}
   Closed -> Opened : open {}
@@ -18,7 +21,12 @@ machine TrafficLight = {
 
 machine OrderFlow = {
             -> Pending   : init {}
-  Pending   -> Confirmed : confirm { confirmedAt: Instant }
-  Confirmed -> Shipped   : ship { trackingId: Text }
-  Shipped   -> Delivered : deliver { deliveredAt: Instant }
+  Pending   -> Confirmed : confirm { confirmedAt: Int }
+  Confirmed -> Shipped   : ship { trackingId: Int }
+  Shipped   -> Delivered : deliver { deliveredAt: Int }
+}
+
+@test "machine declarations typecheck and execute"
+machineDeclarationsSmoke = do Effect {
+  assert True
 }

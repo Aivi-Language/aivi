@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('vscode');
 
 import * as vscode from 'vscode';
+import { extractHoverToken, fallbackHoverMarkdownForToken } from '../../hoverFallback';
 // Import the activate function from your extension. 
 // Note: You might need to export `activate` from `src/extension.ts` if not already exported.
 // Assuming `src/extension.ts` is the entry point.
@@ -30,5 +31,23 @@ describe('Extension Test Suite', () => {
 
         vscode.commands.registerCommand(cmdId, callback);
         expect(vscode.commands.registerCommand).toHaveBeenCalledWith(cmdId, callback);
+    });
+
+    it('extracts operator hover tokens', () => {
+        const text = 'x = a |> b';
+        const offset = text.indexOf('|>') + 1;
+        expect(extractHoverToken(text, offset)).toBe('|>');
+    });
+
+    it('extracts decorator hover tokens', () => {
+        const text = '@test "works"\nfoo = 1';
+        const offset = text.indexOf('@test') + 2;
+        expect(extractHoverToken(text, offset)).toBe('@test');
+    });
+
+    it('has fallback docs for core syntax tokens', () => {
+        expect(fallbackHoverMarkdownForToken('module')).toBeTruthy();
+        expect(fallbackHoverMarkdownForToken('=>')).toBeTruthy();
+        expect(fallbackHoverMarkdownForToken('<|')).toBeTruthy();
     });
 });

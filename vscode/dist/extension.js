@@ -4214,14 +4214,14 @@ var require_main2 = __commonJS({
         }
         MarkedString2.is = is;
       })(MarkedString || (exports3.MarkedString = MarkedString = {}));
-      var Hover;
-      (function(Hover2) {
+      var Hover2;
+      (function(Hover3) {
         function is(value) {
           var candidate = value;
           return !!candidate && Is.objectLiteral(candidate) && (MarkupContent.is(candidate.contents) || MarkedString.is(candidate.contents) || Is.typedArray(candidate.contents, MarkedString.is)) && (value.range === void 0 || Range2.is(value.range));
         }
-        Hover2.is = is;
-      })(Hover || (exports3.Hover = Hover = {}));
+        Hover3.is = is;
+      })(Hover2 || (exports3.Hover = Hover2 = {}));
       var ParameterInformation;
       (function(ParameterInformation2) {
         function create(label, documentation) {
@@ -18017,6 +18017,85 @@ var fs = __toESM(require("node:fs"));
 var path = __toESM(require("node:path"));
 var import_node_child_process = require("node:child_process");
 var import_node = __toESM(require_node3());
+
+// src/hoverFallback.ts
+var HOVER_FALLBACK_DOCS = {
+  module: "Defines the current module namespace.",
+  use: "Imports names or modules into scope.",
+  export: "Exports names from the current module.",
+  effect: "Starts an effect block where `<-` binds effectful values.",
+  resource: "Defines a scoped resource block with structured cleanup semantics.",
+  domain: "Declares a domain for operator/literal rewrites.",
+  class: "Declares a type class.",
+  instance: "Declares a type class instance implementation.",
+  "->": "Function arrow type constructor (`A -> B`).",
+  "<-": "Bind operator inside `effect { ... }` blocks.",
+  "=>": "Pattern-match branch arrow.",
+  "|>": "Forward pipe operator.",
+  "<|": "Record patch / reverse pipe operator depending on context.",
+  "?": "Pattern matching operator.",
+  "@test": "Marks a definition as a test case."
+};
+function isIdentChar(ch) {
+  return /[A-Za-z0-9_.]/.test(ch);
+}
+function isSpace(ch) {
+  return ch === " " || ch === "	" || ch === "\n" || ch === "\r";
+}
+function isSymbolChar(ch) {
+  return !isSpace(ch) && !isIdentChar(ch);
+}
+function extractHoverToken(text, offset) {
+  if (text.length === 0) {
+    return void 0;
+  }
+  const at = Math.max(0, Math.min(offset, text.length));
+  const chAt = at < text.length ? text[at] : void 0;
+  const chBefore = at > 0 ? text[at - 1] : void 0;
+  if (chAt === "@" || chBefore === "@") {
+    const atPos = chAt === "@" ? at : at - 1;
+    let end2 = atPos + 1;
+    while (end2 < text.length && /[A-Za-z0-9_]/.test(text[end2])) {
+      end2 += 1;
+    }
+    const token2 = text.slice(atPos, end2).trim();
+    return token2.length > 0 ? token2 : void 0;
+  }
+  const onSymbol = chAt !== void 0 && isSymbolChar(chAt) || chBefore !== void 0 && isSymbolChar(chBefore);
+  if (onSymbol) {
+    let start2 = at;
+    while (start2 > 0 && isSymbolChar(text[start2 - 1])) {
+      start2 -= 1;
+    }
+    let end2 = at;
+    while (end2 < text.length && isSymbolChar(text[end2])) {
+      end2 += 1;
+    }
+    const token2 = text.slice(start2, end2).trim();
+    return token2.length > 0 ? token2 : void 0;
+  }
+  let start = at;
+  while (start > 0 && isIdentChar(text[start - 1])) {
+    start -= 1;
+  }
+  let end = at;
+  while (end < text.length && isIdentChar(text[end])) {
+    end += 1;
+  }
+  const token = text.slice(start, end).trim();
+  if (token.length === 0) {
+    return void 0;
+  }
+  if (start > 0 && text[start - 1] === "@") {
+    return `@${token}`;
+  }
+  return token;
+}
+function fallbackHoverMarkdownForToken(token) {
+  return HOVER_FALLBACK_DOCS[token] ?? HOVER_FALLBACK_DOCS[token.toLowerCase()];
+}
+
+// src/extension.ts
 var client;
 function getCliCommand() {
   const config = vscode.workspace.getConfiguration("aivi");
@@ -18332,6 +18411,26 @@ function activate(context) {
     },
     outputChannel,
     middleware: {
+      provideHover: async (document, position, token, next) => {
+        const hover = await Promise.resolve(next(document, position, token));
+        if (hover || document.languageId !== "aivi") {
+          return hover;
+        }
+        const text = document.getText();
+        const offset = document.offsetAt(position);
+        const hoverToken = extractHoverToken(text, offset);
+        if (!hoverToken) {
+          return hover;
+        }
+        const fallback = fallbackHoverMarkdownForToken(hoverToken);
+        if (!fallback) {
+          return hover;
+        }
+        const markdown = new vscode.MarkdownString(`\`${hoverToken}\`
+
+${fallback}`);
+        return new vscode.Hover(markdown);
+      },
       provideDocumentFormattingEdits: (document, options, token, next) => next(document, options, token),
       provideDocumentRangeFormattingEdits: (document, range, options, token, next) => next(document, range, options, token)
     }
