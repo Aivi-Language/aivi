@@ -10,14 +10,14 @@ len = xs => xs match
   | [_, ...rest] => 1 + len rest
 
 @test "render html"
-renderHtml_smoke = do Effect {
+renderHtml_functional = do Effect {
   node = vElement "p" [vAttr "data-x" "1"] [vText "hi"]
   html = renderHtml node
   assert (text.length html > 0)
 }
 
 @test "diff"
-diff_smoke = do Effect {
+diff_functional = do Effect {
   old = vElement "p" [vAttr "data-x" "1"] [vText "hi"]
   neu = vElement "p" [vAttr "data-x" "2"] [vText "hi"]
   ops = diff old neu

@@ -7,7 +7,7 @@ use aivi.prelude
 use aivi.text
 
 @test "bool"
-bool_smoke = do Effect {
+bool_functional = do Effect {
   assert (True && True)
   assert (True || False)
   assert (False || True)
@@ -18,7 +18,7 @@ bool_smoke = do Effect {
 }
 
 @test "bytes"
-bytes_smoke = do Effect {
+bytes_functional = do Effect {
   b = toBytes Utf8 "abc"
   res = fromBytes Utf8 b
   res match
@@ -27,12 +27,12 @@ bytes_smoke = do Effect {
 }
 
 @test "char"
-char_smoke = do Effect {
+char_functional = do Effect {
   assertEq (1 + 1) 2
 }
 
 @test "float"
-float_smoke = do Effect {
+float_functional = do Effect {
   assert (1.0 + 2.0 == 3.0)
   assert (2.0 * 3.0 == 6.0)
   assert (4.0 / 2.0 == 2.0)
@@ -43,7 +43,7 @@ float_smoke = do Effect {
 }
 
 @test "int"
-int_smoke = do Effect {
+int_functional = do Effect {
   assertEq (1 + 2) 3
   assertEq (2 * 3) 6
   assertEq (4 / 2) 2
@@ -66,14 +66,14 @@ map = f xs => xs match
   | [x, ...rest] => [f x, ...(map f rest)]
 
 @test "list"
-list_smoke = do Effect {
+list_functional = do Effect {
   l = [1, 2, 3]
   assertEq (len l) 3
   assertEq (map (x => x + 1) l)[2, 3, 4]
 }
 
 @test "option"
-option_smoke = do Effect {
+option_functional = do Effect {
   some = Some 1
   some match
     | Some n => assertEq n 1
@@ -86,14 +86,14 @@ option_smoke = do Effect {
 }
 
 @test "patch"
-patch_smoke = do Effect {
+patch_functional = do Effect {
   user = { name: "A", age: 30 }
   older = user <| { age: _ + 1 }
   assertEq older.age 31
 }
 
 @test "result"
-result_smoke = do Effect {
+result_functional = do Effect {
   ok = Ok 1
   ok match
     | Ok n  => assertEq n 1
@@ -106,7 +106,7 @@ result_smoke = do Effect {
 }
 
 @test "attempt"
-attempt_smoke = do Effect {
+attempt_functional = do Effect {
   ok <- attempt (pure 42)
   ok match
     | Ok n  => assertEq n 42
@@ -119,7 +119,7 @@ attempt_smoke = do Effect {
 }
 
 @test "text"
-text_smoke = do Effect {
+text_functional = do Effect {
   t = "Hello"
   assertEq (length t) 5
   assertEq (toUpper t) "HELLO"
@@ -129,13 +129,13 @@ text_smoke = do Effect {
 }
 
 @test "to text"
-toText_smoke = do Effect {
+toText_functional = do Effect {
   assertEq (toText "abc") "abc"
   assertEq (toText 123) "123"
 }
 
 @test "tuple"
-tuple_smoke = do Effect {
+tuple_functional = do Effect {
   t = (1, "two")
   res = t match
     | (a, b) => if a == 1 && b == "two" then True else False
@@ -144,6 +144,6 @@ tuple_smoke = do Effect {
 }
 
 @test "to text 2"
-toText_smoke_2 = do Effect {
+toText_functional_2 = do Effect {
   assertEq (toText 0) "0"
 }

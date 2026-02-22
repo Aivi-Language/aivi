@@ -11,7 +11,7 @@ len = xs => xs match
   | [_, ...rest] => 1 + len rest
 
 @test "literal del"
-literal_del_smoke = do Effect {
+literal_del_functional = do Effect {
   users0 = table "users"[] // todo what is this for syntax?
   users1 <- users0 + ins { id: 1 }
   users2 <- users1 + del (u => u.id == 1)
@@ -20,7 +20,7 @@ literal_del_smoke = do Effect {
 }
 
 @test "literal ins"
-literal_ins_smoke = do Effect {
+literal_ins_functional = do Effect {
   users0 = table "users"[]
   users1 <- users0 + ins { id: 1 }
   rows <- load users1
@@ -28,7 +28,7 @@ literal_ins_smoke = do Effect {
 }
 
 @test "literal upd"
-literal_upd_smoke = do Effect {
+literal_upd_functional = do Effect {
   users0 = table "users"[]
   users1 <- users0 + ins { id: 1, name: "A" }
   users2 <- users1 + upd (u => u.id == 1) (u => u <| { name: "B" })

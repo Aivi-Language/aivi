@@ -113,7 +113,7 @@ vec2_distance = do Effect {
 }
 
 @test "vec4"
-vec4_smoke = do Effect {
+vec4_functional = do Effect {
   v = vec4 1.0 2.0 3.0 4.0
   assertEq v.w 4.0
 }

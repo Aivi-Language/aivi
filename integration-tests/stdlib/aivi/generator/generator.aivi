@@ -10,7 +10,7 @@ len = xs => xs match
   | [_, ...rest] => 1 + len rest
 
 @test "range"
-range_smoke = do Effect {
+range_functional = do Effect {
   xs = toList (range 0 5)
   assertEq (len xs) 5
   assertEq xs [0, 1, 2, 3, 4]
@@ -33,7 +33,7 @@ fromList_toList = do Effect {
 }
 
 @test "map"
-map_smoke = do Effect {
+map_functional = do Effect {
   g = range 1 4
   doubled = map (x => x * 2) g
   xs = toList doubled
@@ -41,7 +41,7 @@ map_smoke = do Effect {
 }
 
 @test "filter"
-filter_smoke = do Effect {
+filter_functional = do Effect {
   g = range 1 6
   evens = filter (x => x % 2 == 0) g
   xs = toList evens
