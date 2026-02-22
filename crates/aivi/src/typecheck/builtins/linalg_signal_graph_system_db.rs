@@ -321,6 +321,12 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     };
     env.insert("system".to_string(), Scheme::mono(system_record));
     let effect_text_unit = Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]);
+    let effect_text_int = Type::con("Effect").app(vec![text_ty.clone(), int_ty.clone()]);
+    let effect_text_text = Type::con("Effect").app(vec![text_ty.clone(), text_ty.clone()]);
+    let effect_text_list_text = Type::con("Effect").app(vec![
+        text_ty.clone(),
+        Type::con("List").app(vec![text_ty.clone()]),
+    ]);
     let gtk4_record = Type::Record {
         fields: vec![
             (
@@ -332,10 +338,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             ),
             (
                 "appNew".to_string(),
-                Type::Func(
-                    Box::new(text_ty.clone()),
-                    Box::new(Type::con("Effect").app(vec![text_ty.clone(), int_ty.clone()])),
-                ),
+                Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
             ),
             (
                 "windowNew".to_string(),
@@ -347,9 +350,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                             Box::new(int_ty.clone()),
                             Box::new(Type::Func(
                                 Box::new(int_ty.clone()),
-                                Box::new(
-                                    Type::con("Effect").app(vec![text_ty.clone(), int_ty.clone()]),
-                                ),
+                                Box::new(effect_text_int.clone()),
                             )),
                         )),
                     )),
@@ -366,12 +367,400 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "windowSetChild".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
                 "windowPresent".to_string(),
                 Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
             ),
             (
                 "appRun".to_string(),
-                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit)),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
+            ),
+            (
+                "widgetShow".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
+            ),
+            (
+                "widgetHide".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
+            ),
+            (
+                "boxNew".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_int.clone()),
+                    )),
+                ),
+            ),
+            (
+                "boxAppend".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "buttonNew".to_string(),
+                Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
+            ),
+            (
+                "buttonSetLabel".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "labelNew".to_string(),
+                Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
+            ),
+            (
+                "labelSetText".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "entryNew".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(effect_text_int.clone()),
+                ),
+            ),
+            (
+                "entrySetText".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "entryText".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_text.clone())),
+            ),
+            (
+                "scrollAreaNew".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(effect_text_int.clone()),
+                ),
+            ),
+            (
+                "scrollAreaSetChild".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "trayIconNew".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_int.clone()),
+                    )),
+                ),
+            ),
+            (
+                "trayIconSetTooltip".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "trayIconSetVisible".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Bool")),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "dragSourceNew".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_int.clone())),
+            ),
+            (
+                "dragSourceSetText".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "dropTargetNew".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_int.clone())),
+            ),
+            (
+                "dropTargetLastText".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_text.clone())),
+            ),
+            (
+                "menuModelNew".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(effect_text_int.clone()),
+                ),
+            ),
+            (
+                "menuModelAppendItem".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(text_ty.clone()),
+                            Box::new(effect_text_unit.clone()),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "menuButtonNew".to_string(),
+                Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
+            ),
+            (
+                "menuButtonSetMenuModel".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "dialogNew".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_int.clone())),
+            ),
+            (
+                "dialogSetTitle".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "dialogSetChild".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "dialogPresent".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
+            ),
+            (
+                "dialogClose".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
+            ),
+            (
+                "fileDialogNew".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(effect_text_int.clone()),
+                ),
+            ),
+            (
+                "fileDialogSelectFile".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_text.clone())),
+            ),
+            (
+                "imageNewFromFile".to_string(),
+                Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
+            ),
+            (
+                "imageSetFile".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "listStoreNew".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(effect_text_int.clone()),
+                ),
+            ),
+            (
+                "listStoreAppendText".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "listStoreItems".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(effect_text_list_text.clone()),
+                ),
+            ),
+            (
+                "listViewNew".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(effect_text_int.clone()),
+                ),
+            ),
+            (
+                "listViewSetModel".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "treeViewNew".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(effect_text_int.clone()),
+                ),
+            ),
+            (
+                "treeViewSetModel".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "gestureClickNew".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_int.clone())),
+            ),
+            (
+                "gestureClickLastButton".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_int.clone())),
+            ),
+            (
+                "widgetAddController".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "clipboardDefault".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(effect_text_int.clone()),
+                ),
+            ),
+            (
+                "clipboardSetText".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "clipboardText".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_text.clone())),
+            ),
+            (
+                "actionNew".to_string(),
+                Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
+            ),
+            (
+                "actionSetEnabled".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::con("Bool")),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "appAddAction".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "shortcutNew".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_int.clone()),
+                    )),
+                ),
+            ),
+            (
+                "widgetAddShortcut".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit),
+                    )),
+                ),
             ),
         ]
         .into_iter()
