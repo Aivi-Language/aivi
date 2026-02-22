@@ -139,6 +139,7 @@ export const sidebar = [
         text: 'UI',
         collapsed: true,
         items: [
+          { text: 'GTK4', link: '/stdlib/ui/gtk4' },
           { text: 'Layout', link: '/stdlib/ui/layout' },
           { text: 'VDOM', link: '/stdlib/ui/vdom' },
           { text: 'HTML Sigil', link: '/stdlib/ui/html' },

@@ -24,6 +24,7 @@ mod file;
 mod generator;
 mod geometry;
 mod graph;
+mod gtk4;
 mod i18n;
 mod json;
 mod linalg_facade;
@@ -160,6 +161,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: graph::MODULE_NAME,
         source: graph::SOURCE,
+    },
+    EmbeddedModule {
+        name: gtk4::MODULE_NAME,
+        source: gtk4::SOURCE,
     },
     EmbeddedModule {
         name: tree::MODULE_NAME,
