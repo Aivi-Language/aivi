@@ -13,14 +13,20 @@ columnType_construct = do Effect {
   ct2 = BoolType
   ct3 = TimestampType
   ct4 = Varchar 255
-  assert True
+  assertEq ct1 IntType
+  assertEq ct2 BoolType
+  assertEq ct3 TimestampType
+  ct4 match
+    | Varchar n => assertEq n 255
+    | _         => assert False
 }
 
 @test "column constraint construct"
 columnConstraint_construct = do Effect {
   c1 = AutoIncrement
   c2 = NotNull
-  assert True
+  assertEq c1 AutoIncrement
+  assertEq c2 NotNull
 }
 
 @test "column default construct"
@@ -29,7 +35,16 @@ columnDefault_construct = do Effect {
   d2 = DefaultInt 0
   d3 = DefaultText "hello"
   d4 = DefaultNow
-  assert True
+  d1 match
+    | DefaultBool value => assertEq value True
+    | _                 => assert False
+    d2 match
+      | DefaultInt value => assertEq value 0
+      | _                => assert False
+    d3 match
+      | DefaultText value => assertEq value "hello"
+      | _                 => assert False
+    assertEq d4 DefaultNow
 }
 
 @test "driver construct"
@@ -37,7 +52,9 @@ driver_construct = do Effect {
   d1 = Sqlite
   d2 = Postgresql
   d3 = Mysql
-  assert True
+  assertEq d1 Sqlite
+  assertEq d2 Postgresql
+  assertEq d3 Mysql
 }
 
 @test "db config construct"
@@ -63,5 +80,10 @@ delta_construct = do Effect {
   user = { id: 1, name: "Alice" }
   ins = Insert user
   del = Delete (u => u.id == 1)
-  assert True
+  ins match
+    | Insert row => assertEq row.name "Alice"
+    | _          => assert False
+    del match
+      | Delete predicate => assert (predicate user)
+      | _                => assert False
 }

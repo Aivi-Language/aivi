@@ -55,5 +55,7 @@ decimal_round = do Effect {
 rational_construct = do Effect {
   n = fromInt 2
   d = fromInt 4
-  assert True
+  r = normalize n d
+  assertEq (toInt (numerator r)) (Some 1)
+  assertEq (toInt (denominator r)) (Some 2)
 }

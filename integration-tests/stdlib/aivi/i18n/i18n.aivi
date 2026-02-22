@@ -36,7 +36,7 @@ key_invalid_empty = do Effect {
   k = key ""
   k match
     | Ok _  => assert False
-    | Err _ => assert True
+    | Err e => assert (!(e == ""))
 }
 
 @test "key invalid double dot"
@@ -44,7 +44,7 @@ key_invalid_double_dot = do Effect {
   k = key "app..welcome"
   k match
     | Ok _  => assert False
-    | Err _ => assert True
+    | Err e => assert (!(e == ""))
 }
 
 @test "sigil key"

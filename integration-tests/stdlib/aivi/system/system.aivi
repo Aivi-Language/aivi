@@ -15,15 +15,16 @@ args_functional = do Effect {
 @test "locale tag"
 localeTag_functional = do Effect {
   tag <- localeTag
-  tag match
-    | Some t => assert (!(text.isEmpty t))
-    | None   => assert True
+  assertEq (tag match
+    | Some t => !(text.isEmpty t)
+    | None   => True
+  ) True
 }
 
 @test "env record shape"
 env_record_shape = do Effect {
   result <- attempt (env.get "__AIVI_TEST_MISSING_ENV_VAR__")
   result match
-    | Ok value => assertEq value None
-    | Err _    => assert True
+    | Ok _    => assert False
+    | Err msg => assert (!(text.isEmpty msg))
 }

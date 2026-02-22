@@ -7,9 +7,11 @@ use aivi.color
 
 @test "suffix h"
 suffix_h_functional = do Effect {
-  rgb = { r: 20, g: 20, b: 20 }
-  _adjusted = adjustHue rgb 1
-  assert True
+  rgb = { r: 20, g: 30, b: 40 }
+  adjusted = adjustHue rgb 10
+  assert (adjusted.r >= 0)
+  assert (adjusted.g >= 0)
+  assert (adjusted.b >= 0)
 }
 
 @test "add r"
@@ -22,15 +24,19 @@ add_r_functional = do Effect {
 @test "suffix l"
 suffix_l_functional = do Effect {
   rgb = { r: 20, g: 20, b: 20 }
-  _adjusted = adjustLightness rgb 1
-  assert True
+  adjusted = adjustLightness rgb 1
+  assert (adjusted.r >= 20)
+  assert (adjusted.g >= 20)
+  assert (adjusted.b >= 20)
 }
 
 @test "suffix s"
 suffix_s_functional = do Effect {
   rgb = { r: 0, g: 50, b: 100 }
-  _adjusted = adjustSaturation rgb 1
-  assert True
+  adjusted = adjustSaturation rgb 1
+  assert (adjusted.r >= 0)
+  assert (adjusted.g >= 0)
+  assert (adjusted.b >= 0)
 }
 
 @test "rgb channel literals"

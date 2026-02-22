@@ -9,7 +9,7 @@ use aivi.regex
 compile_valid = do Effect {
   res = compile "^hello"
   res match
-    | Ok _  => assert True
+    | Ok r  => assert (test r "hello")
     | Err _ => assert False
 }
 
@@ -17,8 +17,8 @@ compile_valid = do Effect {
 compile_invalid = do Effect {
   res = compile "[invalid"
   res match
-    | Ok _  => assert False
-    | Err _ => assert True
+    | Ok _                     => assert False
+    | Err (InvalidPattern msg) => assert (!(msg == ""))
 }
 
 @test "test match"
@@ -41,34 +41,38 @@ match_first = do Effect {
   r = compile "\\d+" or (fail "compile failed")
   m = match r "abc 123 def 456"
   m match
-    | Some _ => assert True
-    | None   => assert False
+    | Some first => do Effect {
+      assertEq first.full "123"
+      assertEq first.start 4
+      assertEq first.end 7
+    }
+    | None => assert False
 }
 
 @test "matches all"
-matches_all = do Effect {
-  r = compile "\\d+" or (fail "compile failed")
-  ms = matches r "a1b2c3"
-  assert (List.length ms == 3)
-}
+  matches_all = do Effect {
+    r = compile "\\d+" or (fail "compile failed")
+    ms = matches r "a1b2c3"
+    assert (List.length ms == 3)
+  }
 
 @test "split"
-split_functional = do Effect {
-  r = compile "[,;]" or (fail "compile failed")
-  parts = split r "a,b;c,d"
-  assert (List.length parts == 4)
-}
+  split_functional = do Effect {
+    r = compile "[,;]" or (fail "compile failed")
+    parts = split r "a,b;c,d"
+    assert (List.length parts == 4)
+  }
 
 @test "replace"
-replace_functional = do Effect {
-  r = compile "\\d+" or (fail "compile failed")
-  result = replace r "abc123def456" "NUM"
-  assert (result == "abcNUMdef456")
-}
+  replace_functional = do Effect {
+    r = compile "\\d+" or (fail "compile failed")
+    result = replace r "abc123def456" "NUM"
+    assert (result == "abcNUMdef456")
+  }
 
 @test "replace all"
-replaceAll_functional = do Effect {
-  r = compile "\\d+" or (fail "compile failed")
-  result = replaceAll r "abc123def456" "NUM"
-  assert (result == "abcNUMdefNUM")
-}
+  replaceAll_functional = do Effect {
+    r = compile "\\d+" or (fail "compile failed")
+    result = replaceAll r "abc123def456" "NUM"
+    assert (result == "abcNUMdefNUM")
+  }

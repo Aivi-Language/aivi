@@ -3,7 +3,7 @@ module integrationTests.stdlib.aivi.chronos.instant.domain_Instant.tests
 
 use aivi
 use aivi.testing
-use aivi.chronos.duration (Span)
+use aivi.chronos.duration
 use aivi.chronos.instant (domain Instant)
 
 @test "span ops"

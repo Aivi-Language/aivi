@@ -11,14 +11,20 @@ poolError_construct = do Effect {
   e2 = Closed
   e3 = HealthFailed
   e4 = InvalidConfig "bad"
-  assert True
+  assertEq e1 Timeout
+  assertEq e2 Closed
+  assertEq e3 HealthFailed
+  e4 match
+    | InvalidConfig msg => assertEq msg "bad"
+    | _                 => assert False
 }
 
 @test "queue policy construct"
 queuePolicy_construct = do Effect {
   q1 = Fifo
   q2 = Lifo
-  assert True
+  assertEq q1 Fifo
+  assertEq q2 Lifo
 }
 
 @test "pool stats type"

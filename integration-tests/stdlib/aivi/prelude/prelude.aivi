@@ -80,9 +80,7 @@ option_functional = do Effect {
     | None   => assert False
 
     none = None
-    none match
-      | Some _ => assert False
-      | None   => assert True
+    assertEq none None
 }
 
 @test "patch"
