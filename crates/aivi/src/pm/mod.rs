@@ -17,6 +17,7 @@ pub use scaffold::write_scaffold;
 pub use sources::collect_aivi_sources;
 
 pub type AiviTomlBuild = aivi_toml::AiviTomlBuild;
+pub type NativeUiTarget = aivi_toml::NativeUiTarget;
 pub type AiviTomlProject = aivi_toml::AiviTomlProject;
 
 pub fn parse_aivi_cargo_metadata(value: &serde_json::Value) -> Option<AiviCargoMetadata> {

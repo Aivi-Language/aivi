@@ -358,6 +358,7 @@ fn cmd_project_build(args: &[String]) -> Result<(), AiviError> {
     if release {
         cmd.arg("--release");
     }
+    append_native_ui_target_flags(&mut cmd, &cfg.build.native_ui_target, &root)?;
     cmd.args(cargo_args);
     let status = cmd.current_dir(&root).status()?;
     if !status.success() {
@@ -377,6 +378,7 @@ fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
     if release {
         cmd.arg("--release");
     }
+    append_native_ui_target_flags(&mut cmd, &cfg.build.native_ui_target, &root)?;
     cmd.args(cargo_args);
     let status = cmd.current_dir(&root).status()?;
     if !status.success() {
@@ -410,6 +412,49 @@ fn parse_project_args(args: &[String]) -> Result<(bool, Vec<String>), AiviError>
     }
 
     Ok((release, after))
+}
+
+fn append_native_ui_target_flags(
+    cmd: &mut Command,
+    target: &aivi::NativeUiTarget,
+    project_root: &Path,
+) -> Result<(), AiviError> {
+    if let Some(feature) = cargo_feature_for_native_ui_target(project_root, target)? {
+        cmd.arg("--features");
+        cmd.arg(feature);
+    }
+    Ok(())
+}
+
+fn cargo_feature_for_native_ui_target(
+    project_root: &Path,
+    target: &aivi::NativeUiTarget,
+) -> Result<Option<&'static str>, AiviError> {
+    match target {
+        aivi::NativeUiTarget::Portable => Ok(None),
+        aivi::NativeUiTarget::GnomeGtk4Libadwaita => {
+            let cargo_toml = project_root.join("Cargo.toml");
+            if cargo_feature_declared(&cargo_toml, "runtime-gnome")? {
+                Ok(Some("runtime-gnome"))
+            } else {
+                Ok(Some("aivi_native_runtime/gtk4-libadwaita"))
+            }
+        }
+    }
+}
+
+fn cargo_feature_declared(cargo_toml_path: &Path, feature: &str) -> Result<bool, AiviError> {
+    let content = std::fs::read_to_string(cargo_toml_path)?;
+    let manifest: toml::Value = toml::from_str(&content).map_err(|err| {
+        AiviError::Config(format!(
+            "failed to parse {}: {err}",
+            cargo_toml_path.display()
+        ))
+    })?;
+    Ok(manifest
+        .get("features")
+        .and_then(toml::Value::as_table)
+        .is_some_and(|features| features.contains_key(feature)))
 }
 
 fn generate_project_rust(project_root: &Path, cfg: &aivi::AiviToml) -> Result<(), AiviError> {
@@ -498,4 +543,41 @@ fn hex_lower(bytes: &[u8]) -> String {
         out.push_str(&format!("{:02x}", b));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gnome_prefers_runtime_alias_when_declared() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[package]\nname = \"x\"\nversion = \"0.1.0\"\n\n[features]\nruntime-gnome = []\n",
+        )
+        .expect("write Cargo.toml");
+        let feature = cargo_feature_for_native_ui_target(
+            tmp.path(),
+            &aivi::NativeUiTarget::GnomeGtk4Libadwaita,
+        )
+        .expect("feature resolution");
+        assert_eq!(feature, Some("runtime-gnome"));
+    }
+
+    #[test]
+    fn gnome_falls_back_to_dependency_feature() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        std::fs::write(
+            tmp.path().join("Cargo.toml"),
+            "[package]\nname = \"x\"\nversion = \"0.1.0\"\n",
+        )
+        .expect("write Cargo.toml");
+        let feature = cargo_feature_for_native_ui_target(
+            tmp.path(),
+            &aivi::NativeUiTarget::GnomeGtk4Libadwaita,
+        )
+        .expect("feature resolution");
+        assert_eq!(feature, Some("aivi_native_runtime/gtk4-libadwaita"));
+    }
 }

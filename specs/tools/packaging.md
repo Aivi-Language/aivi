@@ -31,6 +31,7 @@ language_version = "0.1"  # Targeted AIVI version
 gen_dir = "target/aivi-gen" # Where generated Rust code is placed
 rust_edition = "2024"       # Rust edition for generated code
 cargo_profile = "dev"       # Default cargo profile
+native_ui_target = "portable" # "portable" (default) or "gnome-gtk4-libadwaita"
 ```
 
 ## `Cargo.toml` Integration

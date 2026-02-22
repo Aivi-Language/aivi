@@ -36,10 +36,10 @@ pub fn write_scaffold(
         ProjectKind::Bin => {
             let entry_file = "main.aivi";
             let aivi_toml = format!(
-                "[project]\nkind = \"bin\"\nentry = \"{entry_file}\"\nlanguage_version = \"{language_version}\"\n\n[build]\ngen_dir = \"target/aivi-gen\"\nrust_edition = \"{edition}\"\ncargo_profile = \"dev\"\n"
+                "[project]\nkind = \"bin\"\nentry = \"{entry_file}\"\nlanguage_version = \"{language_version}\"\n\n[build]\ngen_dir = \"target/aivi-gen\"\nrust_edition = \"{edition}\"\ncargo_profile = \"dev\"\nnative_ui_target = \"portable\"\n"
             );
             let cargo_toml = format!(
-                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"{edition}\"\n\n[package.metadata.aivi]\nlanguage_version = \"{language_version}\"\nkind = \"bin\"\nentry = \"src/{entry_file}\"\n\n[[bin]]\nname = \"{name}\"\npath = \"target/aivi-gen/src/main.rs\"\n\n[dependencies]\n{}\n",
+                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"{edition}\"\n\n[package.metadata.aivi]\nlanguage_version = \"{language_version}\"\nkind = \"bin\"\nentry = \"src/{entry_file}\"\n\n[features]\ndefault = []\nruntime-gnome = [\"aivi_native_runtime/gtk4-libadwaita\"]\n\n[[bin]]\nname = \"{name}\"\npath = \"target/aivi-gen/src/main.rs\"\n\n[dependencies]\n{}\n",
                 aivi_deps
             );
             let aivi_source = starter_bin_source();
@@ -48,10 +48,10 @@ pub fn write_scaffold(
         ProjectKind::Lib => {
             let entry_file = "lib.aivi";
             let aivi_toml = format!(
-                "[project]\nkind = \"lib\"\nentry = \"{entry_file}\"\nlanguage_version = \"{language_version}\"\n\n[build]\ngen_dir = \"target/aivi-gen\"\nrust_edition = \"{edition}\"\ncargo_profile = \"dev\"\n"
+                "[project]\nkind = \"lib\"\nentry = \"{entry_file}\"\nlanguage_version = \"{language_version}\"\n\n[build]\ngen_dir = \"target/aivi-gen\"\nrust_edition = \"{edition}\"\ncargo_profile = \"dev\"\nnative_ui_target = \"portable\"\n"
             );
             let cargo_toml = format!(
-                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"{edition}\"\n\n[package.metadata.aivi]\nlanguage_version = \"{language_version}\"\nkind = \"lib\"\nentry = \"src/{entry_file}\"\n\n[lib]\npath = \"target/aivi-gen/src/lib.rs\"\n\n[dependencies]\n{}\n",
+                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"{edition}\"\n\n[package.metadata.aivi]\nlanguage_version = \"{language_version}\"\nkind = \"lib\"\nentry = \"src/{entry_file}\"\n\n[features]\ndefault = []\nruntime-gnome = [\"aivi_native_runtime/gtk4-libadwaita\"]\n\n[lib]\npath = \"target/aivi-gen/src/lib.rs\"\n\n[dependencies]\n{}\n",
                 aivi_deps
             );
             let aivi_source = starter_lib_source();

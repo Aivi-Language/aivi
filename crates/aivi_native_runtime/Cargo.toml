@@ -3,6 +3,10 @@ name = "aivi_native_runtime"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+gtk4-libadwaita = []
+
 [dependencies]
 chrono = "0.4.38"
 getrandom = "0.4.1"

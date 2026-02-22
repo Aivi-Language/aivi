@@ -135,7 +135,7 @@ pub use pm::{
     collect_aivi_sources, edit_cargo_toml_dependencies, ensure_aivi_dependency,
     parse_aivi_cargo_metadata, read_aivi_toml, validate_publish_preflight, write_scaffold,
     AiviCargoMetadata, AiviToml, AiviTomlBuild, AiviTomlProject, CargoDepSpec,
-    CargoDepSpecParseError, CargoManifestEdits, ProjectKind,
+    CargoDepSpecParseError, CargoManifestEdits, NativeUiTarget, ProjectKind,
 };
 pub use runtime::{
     run_native, run_native_with_fuel, run_test_suite, TestFailure, TestReport, TestSuccess,

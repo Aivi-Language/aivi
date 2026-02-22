@@ -1,5 +1,6 @@
 pub(super) fn emit_runtime_prelude() -> String {
     let mut out = String::new();
+    out.push_str("#![allow(warnings)]\n");
     out.push_str("use std::collections::HashMap;\n");
     out.push_str("use std::sync::{Arc, Mutex};\n\n");
     out.push_str(

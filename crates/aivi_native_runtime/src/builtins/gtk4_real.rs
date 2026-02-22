@@ -1,0 +1,782 @@
+use crate::Value;
+
+#[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
+mod linux {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+    use std::ffi::{CStr, CString};
+    use std::os::raw::{c_char, c_int, c_void};
+    use std::ptr::null_mut;
+    use std::sync::Arc;
+
+    use super::super::util::builtin;
+    use crate::{EffectValue, RuntimeError, Value};
+
+    #[link(name = "gtk-4")]
+    unsafe extern "C" {
+        fn gtk_init();
+        fn gtk_application_new(application_id: *const c_char, flags: c_int) -> *mut c_void;
+        fn gtk_application_window_new(application: *mut c_void) -> *mut c_void;
+        fn gtk_window_set_title(window: *mut c_void, title: *const c_char);
+        fn gtk_window_set_default_size(window: *mut c_void, width: c_int, height: c_int);
+        fn gtk_window_set_child(window: *mut c_void, child: *mut c_void);
+        fn gtk_window_present(window: *mut c_void);
+
+        fn gtk_widget_set_visible(widget: *mut c_void, visible: c_int);
+
+        fn gtk_box_new(orientation: c_int, spacing: c_int) -> *mut c_void;
+        fn gtk_box_append(container: *mut c_void, child: *mut c_void);
+        fn gtk_drawing_area_new() -> *mut c_void;
+        fn gtk_widget_set_size_request(widget: *mut c_void, width: c_int, height: c_int);
+        fn gtk_widget_queue_draw(widget: *mut c_void);
+
+        fn gtk_button_new_with_label(label: *const c_char) -> *mut c_void;
+        fn gtk_button_set_label(button: *mut c_void, label: *const c_char);
+
+        fn gtk_label_new(text: *const c_char) -> *mut c_void;
+        fn gtk_label_set_text(label: *mut c_void, text: *const c_char);
+
+        fn gtk_entry_new() -> *mut c_void;
+        fn gtk_editable_set_text(editable: *mut c_void, text: *const c_char);
+        fn gtk_editable_get_text(editable: *mut c_void) -> *const c_char;
+        fn gtk_gesture_click_new() -> *mut c_void;
+        fn gtk_widget_add_controller(widget: *mut c_void, controller: *mut c_void);
+    }
+
+    #[link(name = "gio-2.0")]
+    unsafe extern "C" {
+        fn g_application_register(
+            application: *mut c_void,
+            cancellable: *mut c_void,
+            error: *mut *mut c_void,
+        ) -> c_int;
+        fn g_application_run(
+            application: *mut c_void,
+            argc: c_int,
+            argv: *mut *mut c_char,
+        ) -> c_int;
+    }
+
+    #[link(name = "dl")]
+    unsafe extern "C" {
+        fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+        fn dlclose(handle: *mut c_void) -> c_int;
+    }
+
+    thread_local! {
+        static GTK_STATE: RefCell<RealGtkState> = RefCell::new(RealGtkState::default());
+    }
+
+    #[derive(Default)]
+    struct RealGtkState {
+        next_id: i64,
+        apps: HashMap<i64, *mut c_void>,
+        windows: HashMap<i64, *mut c_void>,
+        widgets: HashMap<i64, *mut c_void>,
+        boxes: HashMap<i64, *mut c_void>,
+        buttons: HashMap<i64, *mut c_void>,
+        labels: HashMap<i64, *mut c_void>,
+        entries: HashMap<i64, *mut c_void>,
+        draw_areas: HashMap<i64, *mut c_void>,
+        gesture_clicks: HashMap<i64, GestureClickState>,
+    }
+
+    struct GestureClickState {
+        widget_id: i64,
+        raw: *mut c_void,
+        last_button: i64,
+    }
+
+    impl RealGtkState {
+        fn alloc_id(&mut self) -> i64 {
+            self.next_id += 1;
+            self.next_id
+        }
+    }
+
+    fn effect<F>(f: F) -> Value
+    where
+        F: Fn(&mut crate::Runtime) -> Result<Value, RuntimeError> + Send + Sync + 'static,
+    {
+        Value::Effect(Arc::new(EffectValue::Thunk { func: Arc::new(f) }))
+    }
+
+    fn invalid(name: &str) -> RuntimeError {
+        RuntimeError::Message(name.to_string())
+    }
+
+    fn as_i32(value: i64, what: &str) -> Result<i32, RuntimeError> {
+        i32::try_from(value).map_err(|_| invalid(what))
+    }
+
+    fn c_text(text: &str, what: &str) -> Result<CString, RuntimeError> {
+        CString::new(text.as_bytes()).map_err(|_| invalid(what))
+    }
+
+    fn widget_ptr(state: &RealGtkState, id: i64, ctx: &str) -> Result<*mut c_void, RuntimeError> {
+        state.widgets.get(&id).copied().ok_or_else(|| {
+            RuntimeError::Error(Value::Text(format!("gtk4.{ctx} unknown widget id {id}")))
+        })
+    }
+
+    fn try_adw_init() {
+        const RTLD_NOW: c_int = 2;
+        let symbol = CString::new("adw_init").expect("adw_init symbol");
+        for lib_name in ["libadwaita-1.so.0", "libadwaita-1.so"] {
+            let Ok(name) = CString::new(lib_name) else {
+                continue;
+            };
+            let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW) };
+            if handle.is_null() {
+                continue;
+            }
+            let init_ptr = unsafe { dlsym(handle, symbol.as_ptr()) };
+            if !init_ptr.is_null() {
+                let init: unsafe extern "C" fn() = unsafe { std::mem::transmute(init_ptr) };
+                unsafe { init() };
+            }
+            let _ = unsafe { dlclose(handle) };
+            break;
+        }
+    }
+
+    pub(super) fn build_from_mock(mut fields: HashMap<String, Value>) -> HashMap<String, Value> {
+        fields.insert(
+            "init".to_string(),
+            builtin("gtk4.init", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("gtk4.init expects Unit")),
+                }
+                Ok(effect(|_| {
+                    unsafe { gtk_init() };
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
+
+        fields.insert(
+            "appNew".to_string(),
+            builtin("gtk4.appNew", 1, |mut args, _| {
+                let app_id = match args.remove(0) {
+                    Value::Text(text) => text,
+                    _ => return Err(invalid("gtk4.appNew expects Text application id")),
+                };
+                Ok(effect(move |_| {
+                    let app_id_c = c_text(&app_id, "gtk4.appNew invalid application id")?;
+                    let raw = unsafe { gtk_application_new(app_id_c.as_ptr(), 0) };
+                    if raw.is_null() {
+                        return Err(RuntimeError::Error(Value::Text(
+                            "gtk4.appNew failed to create GTK application".to_string(),
+                        )));
+                    }
+                    let registered = unsafe { g_application_register(raw, null_mut(), null_mut()) };
+                    if registered == 0 {
+                        return Err(RuntimeError::Error(Value::Text(
+                            "gtk4.appNew failed to register GTK application".to_string(),
+                        )));
+                    }
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let id = state.alloc_id();
+                        state.apps.insert(id, raw);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "windowNew".to_string(),
+            builtin("gtk4.windowNew", 4, |mut args, _| {
+                let height = match args.remove(3) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowNew expects Int height")),
+                };
+                let width = match args.remove(2) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowNew expects Int width")),
+                };
+                let title = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.windowNew expects Text title")),
+                };
+                let app_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowNew expects Int app id")),
+                };
+                Ok(effect(move |_| {
+                    let width_i32 = as_i32(width, "gtk4.windowNew width out of range")?;
+                    let height_i32 = as_i32(height, "gtk4.windowNew height out of range")?;
+                    let title_c = c_text(&title, "gtk4.windowNew invalid title")?;
+                    let id = GTK_STATE.with(|state| -> Result<i64, RuntimeError> {
+                        let mut state = state.borrow_mut();
+                        let _app = state.apps.get(&app_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.windowNew unknown app id {app_id}"
+                            )))
+                        })?;
+                        let window = unsafe { gtk_application_window_new(_app) };
+                        if window.is_null() {
+                            return Err(RuntimeError::Error(Value::Text(
+                                "gtk4.windowNew failed to create window".to_string(),
+                            )));
+                        }
+                        unsafe {
+                            gtk_window_set_title(window, title_c.as_ptr());
+                            gtk_window_set_default_size(window, width_i32, height_i32);
+                        }
+                        let id = state.alloc_id();
+                        state.windows.insert(id, window);
+                        Ok(id)
+                    })?;
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "windowSetTitle".to_string(),
+            builtin("gtk4.windowSetTitle", 2, |mut args, _| {
+                let title = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.windowSetTitle expects Text title")),
+                };
+                let window_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowSetTitle expects Int window id")),
+                };
+                Ok(effect(move |_| {
+                    let title_c = c_text(&title, "gtk4.windowSetTitle invalid title")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let window = state.windows.get(&window_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.windowSetTitle unknown window id {window_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_window_set_title(window, title_c.as_ptr()) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "windowSetChild".to_string(),
+            builtin("gtk4.windowSetChild", 2, |mut args, _| {
+                let child_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowSetChild expects Int child id")),
+                };
+                let window_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowSetChild expects Int window id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let window = state.windows.get(&window_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.windowSetChild unknown window id {window_id}"
+                            )))
+                        })?;
+                        let child = widget_ptr(&state, child_id, "windowSetChild")?;
+                        unsafe { gtk_window_set_child(window, child) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "windowPresent".to_string(),
+            builtin("gtk4.windowPresent", 1, |mut args, _| {
+                let window_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowPresent expects Int window id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let window = state.windows.get(&window_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.windowPresent unknown window id {window_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_window_present(window) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "appRun".to_string(),
+            builtin("gtk4.appRun", 1, |mut args, _| {
+                let app_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.appRun expects Int app id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let app = state.apps.get(&app_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.appRun unknown app id {app_id}"
+                            )))
+                        })?;
+                        unsafe {
+                            let _ = g_application_run(app, 0, null_mut());
+                        }
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetShow".to_string(),
+            builtin("gtk4.widgetShow", 1, |mut args, _| {
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetShow expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetShow")?;
+                        unsafe { gtk_widget_set_visible(widget, 1) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetHide".to_string(),
+            builtin("gtk4.widgetHide", 1, |mut args, _| {
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetHide expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetHide")?;
+                        unsafe { gtk_widget_set_visible(widget, 0) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "boxNew".to_string(),
+            builtin("gtk4.boxNew", 2, |mut args, _| {
+                let spacing = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.boxNew expects Int spacing")),
+                };
+                let orientation = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.boxNew expects Int orientation")),
+                };
+                Ok(effect(move |_| {
+                    let spacing_i32 = as_i32(spacing, "gtk4.boxNew spacing out of range")?;
+                    let orientation_i32: i32 = if orientation == 1 { 1 } else { 0 };
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_box_new(orientation_i32, spacing_i32) };
+                        let id = state.alloc_id();
+                        state.boxes.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "boxAppend".to_string(),
+            builtin("gtk4.boxAppend", 2, |mut args, _| {
+                let child_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.boxAppend expects Int child id")),
+                };
+                let box_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.boxAppend expects Int box id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let container = state.boxes.get(&box_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.boxAppend unknown box id {box_id}"
+                            )))
+                        })?;
+                        let child = widget_ptr(&state, child_id, "boxAppend")?;
+                        unsafe { gtk_box_append(container, child) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "drawAreaNew".to_string(),
+            builtin("gtk4.drawAreaNew", 2, |mut args, _| {
+                let height = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.drawAreaNew expects Int height")),
+                };
+                let width = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.drawAreaNew expects Int width")),
+                };
+                Ok(effect(move |_| {
+                    let width_i32 = as_i32(width, "gtk4.drawAreaNew width out of range")?;
+                    let height_i32 = as_i32(height, "gtk4.drawAreaNew height out of range")?;
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_drawing_area_new() };
+                        unsafe { gtk_widget_set_size_request(raw, width_i32, height_i32) };
+                        let id = state.alloc_id();
+                        state.draw_areas.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "drawAreaSetContentSize".to_string(),
+            builtin("gtk4.drawAreaSetContentSize", 3, |mut args, _| {
+                let height = match args.remove(2) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.drawAreaSetContentSize expects Int height")),
+                };
+                let width = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.drawAreaSetContentSize expects Int width")),
+                };
+                let draw_area_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.drawAreaSetContentSize expects Int draw area id")),
+                };
+                Ok(effect(move |_| {
+                    let width_i32 = as_i32(width, "gtk4.drawAreaSetContentSize width out of range")?;
+                    let height_i32 = as_i32(height, "gtk4.drawAreaSetContentSize height out of range")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let draw = state.draw_areas.get(&draw_area_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.drawAreaSetContentSize unknown draw area id {draw_area_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_widget_set_size_request(draw, width_i32, height_i32) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "drawAreaQueueDraw".to_string(),
+            builtin("gtk4.drawAreaQueueDraw", 1, |mut args, _| {
+                let draw_area_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.drawAreaQueueDraw expects Int draw area id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let draw = state.draw_areas.get(&draw_area_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.drawAreaQueueDraw unknown draw area id {draw_area_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_widget_queue_draw(draw) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "gestureClickNew".to_string(),
+            builtin("gtk4.gestureClickNew", 1, |mut args, _| {
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.gestureClickNew expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let _widget = widget_ptr(&state, widget_id, "gestureClickNew")?;
+                        let raw = unsafe { gtk_gesture_click_new() };
+                        let id = state.alloc_id();
+                        state.gesture_clicks.insert(
+                            id,
+                            GestureClickState {
+                                widget_id,
+                                raw,
+                                last_button: 0,
+                            },
+                        );
+                        Ok::<i64, RuntimeError>(id)
+                    })?;
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "gestureClickLastButton".to_string(),
+            builtin("gtk4.gestureClickLastButton", 1, |mut args, _| {
+                let gesture_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.gestureClickLastButton expects Int gesture id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let gesture = state.gesture_clicks.get(&gesture_id).ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.gestureClickLastButton unknown gesture id {gesture_id}"
+                            )))
+                        })?;
+                        let _ = gesture.widget_id;
+                        Ok(Value::Int(gesture.last_button))
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetAddController".to_string(),
+            builtin("gtk4.widgetAddController", 2, |mut args, _| {
+                let controller_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetAddController expects Int controller id")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetAddController expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetAddController")?;
+                        let gesture = state.gesture_clicks.get(&controller_id).ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.widgetAddController unknown controller id {controller_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_widget_add_controller(widget, gesture.raw) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "buttonNew".to_string(),
+            builtin("gtk4.buttonNew", 1, |mut args, _| {
+                let label = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.buttonNew expects Text label")),
+                };
+                Ok(effect(move |_| {
+                    let label_c = c_text(&label, "gtk4.buttonNew invalid label")?;
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_button_new_with_label(label_c.as_ptr()) };
+                        let id = state.alloc_id();
+                        state.buttons.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "buttonSetLabel".to_string(),
+            builtin("gtk4.buttonSetLabel", 2, |mut args, _| {
+                let label = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.buttonSetLabel expects Text label")),
+                };
+                let button_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.buttonSetLabel expects Int button id")),
+                };
+                Ok(effect(move |_| {
+                    let label_c = c_text(&label, "gtk4.buttonSetLabel invalid label")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let button = state.buttons.get(&button_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.buttonSetLabel unknown button id {button_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_button_set_label(button, label_c.as_ptr()) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "labelNew".to_string(),
+            builtin("gtk4.labelNew", 1, |mut args, _| {
+                let text = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.labelNew expects Text")),
+                };
+                Ok(effect(move |_| {
+                    let text_c = c_text(&text, "gtk4.labelNew invalid text")?;
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_label_new(text_c.as_ptr()) };
+                        let id = state.alloc_id();
+                        state.labels.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "labelSetText".to_string(),
+            builtin("gtk4.labelSetText", 2, |mut args, _| {
+                let text = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.labelSetText expects Text")),
+                };
+                let label_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.labelSetText expects Int label id")),
+                };
+                Ok(effect(move |_| {
+                    let text_c = c_text(&text, "gtk4.labelSetText invalid text")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let label = state.labels.get(&label_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.labelSetText unknown label id {label_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_label_set_text(label, text_c.as_ptr()) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "entryNew".to_string(),
+            builtin("gtk4.entryNew", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("gtk4.entryNew expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_entry_new() };
+                        let id = state.alloc_id();
+                        state.entries.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "entrySetText".to_string(),
+            builtin("gtk4.entrySetText", 2, |mut args, _| {
+                let text = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.entrySetText expects Text")),
+                };
+                let entry_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.entrySetText expects Int entry id")),
+                };
+                Ok(effect(move |_| {
+                    let text_c = c_text(&text, "gtk4.entrySetText invalid text")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let entry = state.entries.get(&entry_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.entrySetText unknown entry id {entry_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_editable_set_text(entry, text_c.as_ptr()) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "entryText".to_string(),
+            builtin("gtk4.entryText", 1, |mut args, _| {
+                let entry_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.entryText expects Int entry id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let entry = state.entries.get(&entry_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.entryText unknown entry id {entry_id}"
+                            )))
+                        })?;
+                        let text_ptr = unsafe { gtk_editable_get_text(entry) };
+                        if text_ptr.is_null() {
+                            return Ok(Value::Text(String::new()));
+                        }
+                        let text = unsafe { CStr::from_ptr(text_ptr) }
+                            .to_string_lossy()
+                            .into_owned();
+                        Ok(Value::Text(text))
+                    })
+                }))
+            }),
+        );
+
+        fields
+    }
+}
+
+pub(super) fn build_gtk4_record_real(build_mock: fn() -> Value) -> Option<Value> {
+    #[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
+    {
+        let Value::Record(existing) = build_mock() else {
+            return None;
+        };
+        let fields = linux::build_from_mock((*existing).clone());
+        return Some(Value::Record(std::sync::Arc::new(fields)));
+    }
+
+    #[allow(unreachable_code)]
+    {
+        let _ = build_mock;
+        None
+    }
+}
