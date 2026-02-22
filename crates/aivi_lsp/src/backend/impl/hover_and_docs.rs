@@ -1,4 +1,138 @@
 impl Backend {
+    fn hover_badge_markdown(kind: &str, body: String) -> String {
+        format!("`{kind}`\n\n{body}")
+    }
+
+    fn is_primitive_ident(ident: &str) -> bool {
+        matches!(
+            ident,
+            "Int"
+                | "Bool"
+                | "Number"
+                | "Float"
+                | "Text"
+                | "Char"
+                | "Bytes"
+                | "Unit"
+                | "Date"
+                | "Time"
+                | "DateTime"
+                | "Duration"
+        )
+    }
+
+    fn is_operator_ident(ident: &str) -> bool {
+        !ident.is_empty() && ident.chars().any(|ch| !ch.is_alphanumeric() && ch != '_' && ch != '.')
+    }
+
+    fn quick_info_badge(kind: &QuickInfoKind) -> &'static str {
+        match kind {
+            QuickInfoKind::Module => "module",
+            QuickInfoKind::Function => "function",
+            QuickInfoKind::Type => "type",
+            QuickInfoKind::Class => "class",
+            QuickInfoKind::Domain => "domain",
+            QuickInfoKind::Operator => "operator",
+            QuickInfoKind::ClassMember => "class-member",
+            QuickInfoKind::Unknown => "value",
+        }
+    }
+
+    fn hover_badge_for_module_ident(
+        module: &Module,
+        ident: &str,
+        inferred: Option<&HashMap<String, String>>,
+    ) -> Option<&'static str> {
+        if module.name.name == ident {
+            return Some("module");
+        }
+        if Self::is_operator_ident(ident) {
+            return Some("operator");
+        }
+        if Self::is_primitive_ident(ident) {
+            return Some("primitive");
+        }
+
+        for item in module.items.iter() {
+            match item {
+                ModuleItem::Def(def) if def.name.name == ident => {
+                    return Some(if def.params.is_empty() {
+                        "value"
+                    } else {
+                        "function"
+                    });
+                }
+                ModuleItem::TypeSig(sig) if sig.name.name == ident => {
+                    return Some("function");
+                }
+                ModuleItem::TypeDecl(decl) if decl.name.name == ident => return Some("type"),
+                ModuleItem::TypeDecl(decl) => {
+                    if decl.constructors.iter().any(|ctor| ctor.name.name == ident) {
+                        return Some("constructor");
+                    }
+                }
+                ModuleItem::TypeAlias(alias) if alias.name.name == ident => return Some("type-alias"),
+                ModuleItem::ClassDecl(class_decl) if class_decl.name.name == ident => {
+                    return Some("class");
+                }
+                ModuleItem::ClassDecl(class_decl)
+                    if class_decl.members.iter().any(|member| member.name.name == ident) =>
+                {
+                    return Some("class-member");
+                }
+                ModuleItem::InstanceDecl(instance_decl) if instance_decl.name.name == ident => {
+                    return Some("instance");
+                }
+                ModuleItem::InstanceDecl(instance_decl)
+                    if instance_decl.defs.iter().any(|def| def.name.name == ident) =>
+                {
+                    return Some("function");
+                }
+                ModuleItem::DomainDecl(domain_decl) if domain_decl.name.name == ident => {
+                    return Some("domain");
+                }
+                ModuleItem::DomainDecl(domain_decl) => {
+                    for domain_item in domain_decl.items.iter() {
+                        match domain_item {
+                            DomainItem::TypeAlias(type_decl) if type_decl.name.name == ident => {
+                                return Some("type");
+                            }
+                            DomainItem::TypeSig(sig) if sig.name.name == ident => {
+                                return Some("function");
+                            }
+                            DomainItem::Def(def) | DomainItem::LiteralDef(def)
+                                if def.name.name == ident =>
+                            {
+                                return Some(if def.params.is_empty() { "value" } else { "function" });
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                ModuleItem::MachineDecl(machine_decl) if machine_decl.name.name == ident => {
+                    return Some("machine");
+                }
+                ModuleItem::MachineDecl(machine_decl)
+                    if machine_decl.states.iter().any(|state| state.name.name == ident) =>
+                {
+                    return Some("machine-state");
+                }
+                ModuleItem::MachineDecl(machine_decl)
+                    if machine_decl.transitions.iter().any(|transition| transition.name.name == ident) =>
+                {
+                    return Some("machine-transition");
+                }
+                _ => {}
+            }
+        }
+        if inferred
+            .is_some_and(|types| types.contains_key(ident) || types.contains_key(&format!("({ident})")))
+        {
+            return Some("value");
+        }
+        None
+    }
+
     fn doc_block_above(text: &str, line: usize) -> Option<String> {
         let lines: Vec<&str> = text.lines().collect();
         let mut index = line.checked_sub(2)?;
@@ -48,6 +182,9 @@ impl Backend {
                 ModuleItem::DomainDecl(domain_decl) if domain_decl.name.name == ident => {
                     return Some(domain_decl.name.span.start.line);
                 }
+                ModuleItem::MachineDecl(machine_decl) if machine_decl.name.name == ident => {
+                    return Some(machine_decl.name.span.start.line);
+                }
                 ModuleItem::DomainDecl(domain_decl) => {
                     for domain_item in domain_decl.items.iter() {
                         match domain_item {
@@ -63,6 +200,24 @@ impl Backend {
                                 return Some(def.name.span.start.line);
                             }
                             _ => {}
+                        }
+                    }
+                }
+                ModuleItem::MachineDecl(machine_decl) => {
+                    for state in machine_decl.states.iter() {
+                        if state.name.name == ident {
+                            return Some(state.name.span.start.line);
+                        }
+                    }
+                    for transition in machine_decl.transitions.iter() {
+                        if transition.name.name == ident {
+                            return Some(transition.name.span.start.line);
+                        }
+                        if transition.source.name == ident {
+                            return Some(transition.source.span.start.line);
+                        }
+                        if transition.target.name == ident {
+                            return Some(transition.target.span.start.line);
                         }
                     }
                 }
@@ -96,7 +251,8 @@ impl Backend {
                 base.push_str(doc);
             }
         }
-        Some(base)
+        let kind = Self::hover_badge_for_module_ident(module, ident, inferred).unwrap_or("value");
+        Some(Self::hover_badge_markdown(kind, base))
     }
 
     fn hover_base_for_module(
@@ -179,7 +335,7 @@ impl Backend {
             out.push_str("\n\n");
             out.push_str(entry.content.trim());
         }
-        out
+        Self::hover_badge_markdown(Self::quick_info_badge(&entry.kind), out)
     }
 
     fn hover_contents_for_item(
@@ -256,7 +412,51 @@ impl Backend {
                     ));
                 }
             }
-            ModuleItem::MachineDecl(_) => {}
+            ModuleItem::MachineDecl(machine_decl) => {
+                if machine_decl.name.name == ident {
+                    return Some(format!("`machine {}`", machine_decl.name.name));
+                }
+                for state in machine_decl.states.iter() {
+                    if state.name.name == ident {
+                        return Some(format!(
+                            "state `{}` in machine `{}`",
+                            state.name.name,
+                            machine_decl.name.name
+                        ));
+                    }
+                }
+                for transition in machine_decl.transitions.iter() {
+                    if transition.name.name == ident {
+                        let payload = if transition.payload.is_empty() {
+                            "{}".to_string()
+                        } else {
+                            let fields = transition
+                                .payload
+                                .iter()
+                                .map(|(name, ty)| {
+                                    format!("{}: {}", name.name, Self::type_expr_to_string(ty))
+                                })
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            format!("{{{fields}}}")
+                        };
+                        return Some(format!(
+                            "`{} -> {} : {} {}`",
+                            transition.source.name,
+                            transition.target.name,
+                            transition.name.name,
+                            payload
+                        ));
+                    }
+                    if transition.source.name == ident || transition.target.name == ident {
+                        return Some(format!(
+                            "state `{}` in machine `{}`",
+                            ident,
+                            machine_decl.name.name
+                        ));
+                    }
+                }
+            }
         }
         None
     }

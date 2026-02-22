@@ -276,7 +276,21 @@ impl Backend {
                         }
                     }
                 }
-                ModuleItem::MachineDecl(_) => {}
+                ModuleItem::MachineDecl(machine_decl) => {
+                    if machine_decl.name.name == ident {
+                        return Some(Self::span_to_range(machine_decl.name.span.clone()));
+                    }
+                    for state in machine_decl.states.iter() {
+                        if state.name.name == ident {
+                            return Some(Self::span_to_range(state.name.span.clone()));
+                        }
+                    }
+                    for transition in machine_decl.transitions.iter() {
+                        if transition.name.name == ident {
+                            return Some(Self::span_to_range(transition.name.span.clone()));
+                        }
+                    }
+                }
                 ModuleItem::DomainDecl(domain_decl) => {
                     if domain_decl.name.name == ident {
                         return Some(Self::span_to_range(domain_decl.name.span.clone()));

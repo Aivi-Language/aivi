@@ -347,6 +347,7 @@ fn build_hover_reports_type_signature() {
     };
     assert!(markup.value.contains("`add`"));
     assert!(markup.value.contains(":"));
+    assert!(markup.value.contains("`function`"));
 }
 
 #[test]
@@ -532,6 +533,35 @@ run = add 1 2"#;
         "Hover took too long: {:?}",
         elapsed
     );
+}
+
+#[test]
+fn build_hover_reports_machine_state_and_transition_badges() {
+    let text = r#"module user.mailfox
+machine CounterFlow = {
+       -> Idle    : init {}
+  Idle -> Running : click {}
+}
+"#;
+    let uri = sample_uri();
+    let doc_index = DocIndex::default();
+
+    let state_pos = position_for(text, "Idle    :");
+    let state_hover = Backend::build_hover(text, &uri, state_pos, &doc_index).expect("state hover");
+    let HoverContents::Markup(state_markup) = state_hover.contents else {
+        panic!("expected state markup hover");
+    };
+    assert!(state_markup.value.contains("`machine-state`"));
+    assert!(state_markup.value.contains("state `Idle`"));
+
+    let transition_pos = position_for(text, "click {}");
+    let transition_hover =
+        Backend::build_hover(text, &uri, transition_pos, &doc_index).expect("transition hover");
+    let HoverContents::Markup(transition_markup) = transition_hover.contents else {
+        panic!("expected transition markup hover");
+    };
+    assert!(transition_markup.value.contains("`machine-transition`"));
+    assert!(transition_markup.value.contains("click"));
 }
 
 #[test]
