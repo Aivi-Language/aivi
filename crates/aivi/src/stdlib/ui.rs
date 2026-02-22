@@ -6,17 +6,17 @@ module aivi.ui
 export VNode, Attr, PatchOp
 export Element, TextNode, Keyed
 export Class, Id, Style, OnClick, OnInput
-export ClickEvent, InputEvent, KeyboardEvent, PointerEvent
+export ClickEvent, InputEvent, KeyboardEvent, PointerEvent, TransitionEvent, AnimationEvent
 export OnClickE, OnInputE, OnKeyDown, OnKeyUp
 export OnPointerDown, OnPointerUp, OnPointerMove
-export OnFocus, OnBlur
+export OnFocus, OnBlur, OnTransitionEnd, OnAnimationEnd
 export Replace, SetText, SetAttr, RemoveAttr
 export Click, Input
 export vElement, vText, vKeyed
 export vClass, vId, vStyle, vAttr, vOnClick, vOnInput
 export vOnClickE, vOnInputE, vOnKeyDown, vOnKeyUp
 export vOnPointerDown, vOnPointerUp, vOnPointerMove
-export vOnFocus, vOnBlur
+export vOnFocus, vOnBlur, vOnTransitionEnd, vOnAnimationEnd
 export renderHtml, diff, patchToJson
 
 use aivi
@@ -39,6 +39,10 @@ KeyboardEvent =
 PointerEvent =
   { pointerId: Int, pointerType: Text, button: Int, buttons: Int, clientX: Float, clientY: Float, alt: Bool, ctrl: Bool, shift: Bool, meta: Bool }
 
+TransitionEvent = { propertyName: Text, elapsedTime: Float, pseudoElement: Text }
+
+AnimationEvent = { animationName: Text, elapsedTime: Float, pseudoElement: Text }
+
 Attr msg =
   Class Text
   | Id Text
@@ -54,6 +58,8 @@ Attr msg =
   | OnPointerMove (PointerEvent -> msg)
   | OnFocus msg
   | OnBlur msg
+  | OnTransitionEnd (TransitionEvent -> msg)
+  | OnAnimationEnd (AnimationEvent -> msg)
   | Attr Text Text
 
 // Helpers for tooling/lowerings. These avoid common names like `id` or `style`,
@@ -111,6 +117,12 @@ vOnFocus = msg => OnFocus msg
 
 vOnBlur : msg -> Attr msg
 vOnBlur = msg => OnBlur msg
+
+vOnTransitionEnd : (TransitionEvent -> msg) -> Attr msg
+vOnTransitionEnd = f => OnTransitionEnd f
+
+vOnAnimationEnd : (AnimationEvent -> msg) -> Attr msg
+vOnAnimationEnd = f => OnAnimationEnd f
 
 // Patch operations for LiveView-like updates.
 PatchOp = Replace Text Text | SetText Text Text | SetAttr Text Text Text | RemoveAttr Text Text

@@ -13,6 +13,8 @@ enum ServerHtmlEventKind {
     PointerMove,
     Focus,
     Blur,
+    TransitionEnd,
+    AnimationEnd,
 }
 
 impl ServerHtmlEventKind {
@@ -27,6 +29,8 @@ impl ServerHtmlEventKind {
             ServerHtmlEventKind::PointerMove => "pointermove",
             ServerHtmlEventKind::Focus => "focus",
             ServerHtmlEventKind::Blur => "blur",
+            ServerHtmlEventKind::TransitionEnd => "transitionend",
+            ServerHtmlEventKind::AnimationEnd => "animationend",
         }
     }
 
@@ -41,6 +45,8 @@ impl ServerHtmlEventKind {
             "pointermove" => ServerHtmlEventKind::PointerMove,
             "focus" => ServerHtmlEventKind::Focus,
             "blur" => ServerHtmlEventKind::Blur,
+            "transitionend" => ServerHtmlEventKind::TransitionEnd,
+            "animationend" => ServerHtmlEventKind::AnimationEnd,
             _ => return None,
         })
     }
@@ -178,7 +184,7 @@ fn server_html_run_ws_session(
                 Ok(h) => break h,
                 Err(e) => {
                     // Ignore non-hello / malformed messages until close.
-                    let _ = server_html_send_error(&socket, "", &e, "bad_hello");
+                    let _ = server_html_send_error(&socket, &e, "PROTO");
                     continue;
                 }
             },
@@ -195,7 +201,7 @@ fn server_html_run_ws_session(
         .expect("server html views lock")
         .contains_key(&view_id)
     {
-        let _ = server_html_send_error(&socket, &view_id, "unknown viewId", "unknown_view");
+        let _ = server_html_send_error(&socket, "unknown viewId", "PROTO");
         let _ = socket.close();
         return Ok(());
     }
@@ -235,11 +241,16 @@ fn server_html_run_ws_session(
                     continue;
                 }
                 if let Err(err) = server_html_handle_event(runtime, &view_id, &socket, ev, &update, &view, on_platform.as_ref()) {
+                    let detail = runtime_error_to_text(err);
+                    let code = if detail.contains("hid") {
+                        "HID"
+                    } else {
+                        "PAYLOAD"
+                    };
                     let _ = server_html_send_error(
                         &socket,
-                        &view_id,
-                        &runtime_error_to_text(err),
-                        "bad_event",
+                        &detail,
+                        code,
                     );
                 }
             }
@@ -248,17 +259,22 @@ fn server_html_run_ws_session(
                     continue;
                 }
                 if let Some(on_platform) = on_platform.clone() {
-                    if let Ok(pe) = server_html_platform_to_value(&pf.kind, &pf.payload) {
-                        let mapped = runtime.apply(on_platform.clone(), pe)?;
-                        if let Some(msg) = server_html_option_to_value(mapped) {
-                            server_html_apply_msg(
-                                runtime,
-                                &view_id,
-                                &socket,
-                                msg,
-                                &update,
-                                &view,
-                            )?;
+                    match server_html_platform_to_value(&pf.kind, &pf.payload) {
+                        Ok(pe) => {
+                            let mapped = runtime.apply(on_platform.clone(), pe)?;
+                            if let Some(msg) = server_html_option_to_value(mapped) {
+                                server_html_apply_msg(
+                                    runtime,
+                                    &view_id,
+                                    &socket,
+                                    msg,
+                                    &update,
+                                    &view,
+                                )?;
+                            }
+                        }
+                        Err(err) => {
+                            let _ = server_html_send_error(&socket, &err, "PLATFORM");
                         }
                     }
                 }
@@ -278,17 +294,16 @@ fn server_html_run_ws_session(
                 ) {
                     let _ = server_html_send_error(
                         &socket,
-                        &view_id,
                         &runtime_error_to_text(err),
-                        "bad_effect_result",
+                        "RID",
                     );
                 }
             }
             Ok(ServerHtmlClientMsg::Hello) => {
                 // Ignore repeated hello.
             }
-            Err(_) => {
-                // Ignore unknown messages.
+            Err(err) => {
+                let _ = server_html_send_error(&socket, &err, "DECODE");
             }
         }
     }
@@ -407,15 +422,13 @@ fn server_html_apply_msg(
     } else {
         Some(serde_json::json!({
             "t": "patch",
-            "viewId": view_id,
             "ops": patch_ops_to_json_value(&Value::List(Arc::new(ops)))?
         }))
     };
 
     let (_html, handlers) = server_html_render_vnode(&new_vdom, "root");
 
-    let (out_msgs, pending) =
-        server_html_prepare_effects(view_id, &effects, &mut next_rid).map_err(|e| e)?;
+    let (out_msgs, pending) = server_html_prepare_effects(&effects, &mut next_rid).map_err(|e| e)?;
 
     {
         let mut guard = server_html_views().lock().expect("server html views lock");
@@ -459,7 +472,6 @@ fn server_html_expect_model_and_effects(value: Value) -> Result<(Value, Arc<Vec<
 }
 
 fn server_html_prepare_effects(
-    view_id: &str,
     effects: &Arc<Vec<Value>>,
     next_rid: &mut i64,
 ) -> Result<(Vec<serde_json::Value>, Vec<(i64, PendingEffect)>), RuntimeError> {
@@ -482,11 +494,9 @@ fn server_html_prepare_effects(
                     },
                 ));
                 out.push(serde_json::json!({
-                    "t": "effect",
-                    "viewId": view_id,
+                    "t": "effectReq",
                     "rid": rid,
-                    "kind": "clipboard.readText",
-                    "p": {}
+                    "op": { "kind": "clipboard.readText" }
                 }));
             }
             ("ClipboardWriteText", [Value::Text(text), callback]) => {
@@ -500,21 +510,17 @@ fn server_html_prepare_effects(
                     },
                 ));
                 out.push(serde_json::json!({
-                    "t": "effect",
-                    "viewId": view_id,
+                    "t": "effectReq",
                     "rid": rid,
-                    "kind": "clipboard.writeText",
-                    "p": { "text": text }
+                    "op": { "kind": "clipboard.writeText", "text": text }
                 }));
             }
             ("SubscribeIntersection", [sub]) => {
-                out.push(server_html_intersection_subscribe_value(view_id, sub)?);
+                out.push(server_html_intersection_subscribe_value(sub)?);
             }
             ("UnsubscribeIntersection", [Value::Int(sid)]) => {
                 out.push(serde_json::json!({
-                    "t": "unsubscribe",
-                    "viewId": view_id,
-                    "kind": "intersection",
+                    "t": "unsubscribeIntersect",
                     "sid": sid
                 }));
             }
@@ -525,10 +531,7 @@ fn server_html_prepare_effects(
     Ok((out, pending))
 }
 
-fn server_html_intersection_subscribe_value(
-    view_id: &str,
-    sub: &Value,
-) -> Result<serde_json::Value, RuntimeError> {
+fn server_html_intersection_subscribe_value(sub: &Value) -> Result<serde_json::Value, RuntimeError> {
     let record = match sub {
         Value::Record(fields) => fields,
         _ => {
@@ -580,11 +583,9 @@ fn server_html_intersection_subscribe_value(
         _ => Vec::new(),
     };
     Ok(serde_json::json!({
-        "t": "subscribe",
-        "viewId": view_id,
-        "kind": "intersection",
+        "t": "subscribeIntersect",
         "sid": sid,
-        "p": { "root": serde_json::Value::Null, "rootMargin": root_margin, "threshold": threshold },
+        "options": { "rootMargin": root_margin, "threshold": threshold },
         "targets": targets
     }))
 }
@@ -599,14 +600,12 @@ fn server_html_send_json(socket: &WebSocketHandle, value: serde_json::Value) -> 
 
 fn server_html_send_error(
     socket: &WebSocketHandle,
-    view_id: &str,
-    message: &str,
+    detail: &str,
     code: &str,
 ) -> Result<(), RuntimeError> {
     let payload = serde_json::json!({
         "t": "error",
-        "viewId": view_id,
-        "message": message,
+        "detail": detail,
         "code": code
     });
     server_html_send_json(socket, payload)
@@ -796,6 +795,12 @@ fn server_html_render_attrs(attrs: &Value, node_id: &str, state: &mut ServerHtml
             }
             Value::Constructor { name, args } if name == "OnBlur" && args.len() == 1 => {
                 server_html_add_handler(&mut out, state, node_id, ServerHtmlEventKind::Blur, ServerHtmlHandler::Msg(args[0].clone()));
+            }
+            Value::Constructor { name, args } if name == "OnTransitionEnd" && args.len() == 1 => {
+                server_html_add_handler(&mut out, state, node_id, ServerHtmlEventKind::TransitionEnd, ServerHtmlHandler::FnRecord(args[0].clone()));
+            }
+            Value::Constructor { name, args } if name == "OnAnimationEnd" && args.len() == 1 => {
+                server_html_add_handler(&mut out, state, node_id, ServerHtmlEventKind::AnimationEnd, ServerHtmlHandler::FnRecord(args[0].clone()));
             }
             _ => {}
         }
@@ -1168,6 +1173,8 @@ fn server_html_payload_to_value(
         ServerHtmlEventKind::PointerDown
         | ServerHtmlEventKind::PointerUp
         | ServerHtmlEventKind::PointerMove => Ok(server_html_pointer_event_value(payload)?),
+        ServerHtmlEventKind::TransitionEnd => Ok(server_html_transition_event_value(payload)?),
+        ServerHtmlEventKind::AnimationEnd => Ok(server_html_animation_event_value(payload)?),
         ServerHtmlEventKind::Focus | ServerHtmlEventKind::Blur => Ok(Value::Record(Arc::new(HashMap::new()))),
     }
 }
@@ -1310,6 +1317,64 @@ fn server_html_pointer_event_value(payload: &serde_json::Value) -> Result<Value,
     Ok(Value::Record(Arc::new(fields)))
 }
 
+fn server_html_transition_event_value(payload: &serde_json::Value) -> Result<Value, String> {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "propertyName".to_string(),
+        Value::Text(
+            payload
+                .get("propertyName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        ),
+    );
+    fields.insert(
+        "elapsedTime".to_string(),
+        Value::Float(payload.get("elapsedTime").and_then(|v| v.as_f64()).unwrap_or(0.0)),
+    );
+    fields.insert(
+        "pseudoElement".to_string(),
+        Value::Text(
+            payload
+                .get("pseudoElement")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        ),
+    );
+    Ok(Value::Record(Arc::new(fields)))
+}
+
+fn server_html_animation_event_value(payload: &serde_json::Value) -> Result<Value, String> {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "animationName".to_string(),
+        Value::Text(
+            payload
+                .get("animationName")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        ),
+    );
+    fields.insert(
+        "elapsedTime".to_string(),
+        Value::Float(payload.get("elapsedTime").and_then(|v| v.as_f64()).unwrap_or(0.0)),
+    );
+    fields.insert(
+        "pseudoElement".to_string(),
+        Value::Text(
+            payload
+                .get("pseudoElement")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        ),
+    );
+    Ok(Value::Record(Arc::new(fields)))
+}
+
 fn server_html_platform_to_value(kind: &str, payload: &serde_json::Value) -> Result<Value, String> {
     match kind {
         "popstate" => Ok(Value::Constructor {
@@ -1336,13 +1401,14 @@ fn server_html_platform_to_value(kind: &str, payload: &serde_json::Value) -> Res
                 args: vec![Value::Record(Arc::new(fields))],
             })
         }
-        "visibilitychange" => {
+        "visibility" | "visibilitychange" => {
             let mut fields = HashMap::new();
             fields.insert(
                 "visibilityState".to_string(),
                 Value::Text(
                     payload
-                        .get("visibilityState")
+                        .get("state")
+                        .or_else(|| payload.get("visibilityState"))
                         .and_then(|v| v.as_str())
                         .unwrap_or("")
                         .to_string(),
@@ -1615,14 +1681,35 @@ mod server_html_tests {
             panic!("expected list");
         };
         let mut next_rid = 10i64;
-        let (out, pending) = match server_html_prepare_effects("v", &items, &mut next_rid) {
+        let (out, pending) = match server_html_prepare_effects(&items, &mut next_rid) {
             Ok(v) => v,
             Err(_) => panic!("effects failed"),
         };
         assert_eq!(next_rid, 12);
         assert_eq!(pending.len(), 2);
         assert_eq!(out.len(), 2);
+        assert_eq!(out[0]["t"], "effectReq");
+        assert_eq!(out[1]["t"], "effectReq");
         assert!(out[0].to_string().contains("clipboard.readText"));
         assert!(out[1].to_string().contains("clipboard.writeText"));
+    }
+
+    #[test]
+    fn server_html_renders_transition_handler() {
+        let vnode = Value::Constructor {
+            name: "Element".to_string(),
+            args: vec![
+                Value::Text("div".to_string()),
+                Value::List(Arc::new(vec![Value::Constructor {
+                    name: "OnTransitionEnd".to_string(),
+                    args: vec![Value::Int(1)],
+                }])),
+                Value::List(Arc::new(vec![])),
+            ],
+        };
+        let (html, handlers) = server_html_render_vnode(&vnode, "root");
+        let hid = event_id("transitionend", "root");
+        assert!(html.contains(&format!("data-aivi-hid-transitionend=\"{hid}\"")));
+        assert!(handlers.contains_key(&hid));
     }
 }

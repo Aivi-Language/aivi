@@ -133,6 +133,18 @@ export interface PointerPayload {
   meta: boolean;
 }
 
+export interface TransitionPayload {
+  propertyName: string;
+  elapsedTime: number;
+  pseudoElement: string;
+}
+
+export interface AnimationPayload {
+  animationName: string;
+  elapsedTime: number;
+  pseudoElement: string;
+}
+
 // -- Boot blob --------------------------------------------------------------
 
 export interface Boot {

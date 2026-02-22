@@ -30,6 +30,7 @@ Attributes are typed values, not raw strings:
   - `OnInputE (Input -> msg)` (input payload record)
   - `OnKeyDown (Keyboard -> msg)`, `OnKeyUp (Keyboard -> msg)`
   - `OnPointerDown (Pointer -> msg)`, `OnPointerUp (Pointer -> msg)`, `OnPointerMove (Pointer -> msg)`
+  - `OnTransitionEnd (TransitionEvent -> msg)`, `OnAnimationEnd (AnimationEvent -> msg)`
   - `OnFocus msg`, `OnBlur msg`
 - `Attr Text Text` for unknown/escape-hatch attributes
 

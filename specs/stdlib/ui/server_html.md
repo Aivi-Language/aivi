@@ -110,7 +110,7 @@ between AIVI types, the wire protocol, and the TypeScript client.
 
 
 Event kind strings on the wire: `"click"`, `"input"`, `"keydown"`, `"keyup"`,
-`"pointerdown"`, `"pointerup"`, `"pointermove"`.
+`"pointerdown"`, `"pointerup"`, `"pointermove"`, `"transitionend"`, `"animationend"`.
 
 ## Platform Events
 

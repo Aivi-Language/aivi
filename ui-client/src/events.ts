@@ -2,7 +2,14 @@
 // events.ts — Delegated DOM listeners + payload extractors
 // ---------------------------------------------------------------------------
 
-import type { ClickPayload, InputPayload, KeyPayload, PointerPayload } from "./types";
+import type {
+  AnimationPayload,
+  ClickPayload,
+  InputPayload,
+  KeyPayload,
+  PointerPayload,
+  TransitionPayload,
+} from "./types";
 
 /** Walk up from target to find nearest element with the given attribute. */
 function closestWithAttr(el: unknown, attr: string): Element | null {
@@ -65,6 +72,22 @@ export function extractPointer(e: PointerEvent): PointerPayload {
   };
 }
 
+export function extractTransition(e: TransitionEvent): TransitionPayload {
+  return {
+    propertyName: String(e.propertyName || ""),
+    elapsedTime: Number(e.elapsedTime || 0),
+    pseudoElement: String(e.pseudoElement || ""),
+  };
+}
+
+export function extractAnimation(e: AnimationEvent): AnimationPayload {
+  return {
+    animationName: String(e.animationName || ""),
+    elapsedTime: Number(e.elapsedTime || 0),
+    pseudoElement: String(e.pseudoElement || ""),
+  };
+}
+
 type ExtractorMap = Record<string, (e: any) => unknown>;
 
 const extractors: ExtractorMap = {
@@ -75,6 +98,8 @@ const extractors: ExtractorMap = {
   pointerdown: extractPointer,
   pointerup: extractPointer,
   pointermove: extractPointer,
+  transitionend: extractTransition,
+  animationend: extractAnimation,
 };
 
 /** Supported event kinds. */
@@ -86,6 +111,8 @@ export const EVENT_KINDS = [
   "pointerdown",
   "pointerup",
   "pointermove",
+  "transitionend",
+  "animationend",
 ] as const;
 
 /**
