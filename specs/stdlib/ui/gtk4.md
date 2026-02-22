@@ -1,12 +1,12 @@
-# `aivi.gtk4`
+# `aivi.ui.gtk4`
 ## Native GTK4 Runtime Bindings
 
-<!-- quick-info: {"kind":"module","name":"aivi.gtk4"} -->
-`aivi.gtk4` is the convenience module for GTK4-oriented native UI effects.
+<!-- quick-info: {"kind":"module","name":"aivi.ui.gtk4"} -->
+`aivi.ui.gtk4` is the convenience module for GTK4-oriented native UI effects.
 It exposes AIVI types/functions mapped directly to runtime native bindings.
 <!-- /quick-info -->
 
-<div class="import-badge">use aivi.gtk4</div>
+<div class="import-badge">use aivi.ui.gtk4</div>
 
 ## Public API
 
@@ -19,6 +19,7 @@ ButtonId = Int
 LabelId = Int
 EntryId = Int
 ScrollAreaId = Int
+DrawAreaId = Int
 TrayIconId = Int
 DragSourceId = Int
 DropTargetId = Int
@@ -34,6 +35,8 @@ GestureClickId = Int
 ClipboardId = Int
 ActionId = Int
 ShortcutId = Int
+NotificationId = Int
+LayoutManagerId = Int
 GtkError = Text
 
 init : Unit -> Effect GtkError Unit
@@ -112,6 +115,26 @@ appAddAction : AppId -> ActionId -> Effect GtkError Unit
 
 shortcutNew : Text -> Text -> Effect GtkError ShortcutId
 widgetAddShortcut : WidgetId -> ShortcutId -> Effect GtkError Unit
+
+drawAreaNew : Int -> Int -> Effect GtkError DrawAreaId
+drawAreaSetContentSize : DrawAreaId -> Int -> Int -> Effect GtkError Unit
+drawAreaQueueDraw : DrawAreaId -> Effect GtkError Unit
+
+widgetSetCss : WidgetId -> { } -> Effect GtkError Unit
+appSetCss : AppId -> { } -> Effect GtkError Unit
+
+notificationNew : Text -> Text -> Effect GtkError NotificationId
+notificationSetBody : NotificationId -> Text -> Effect GtkError Unit
+appSendNotification : AppId -> Text -> NotificationId -> Effect GtkError Unit
+appWithdrawNotification : AppId -> Text -> Effect GtkError Unit
+
+layoutManagerNew : Text -> Effect GtkError LayoutManagerId
+widgetSetLayoutManager : WidgetId -> LayoutManagerId -> Effect GtkError Unit
+
+osOpenUri : AppId -> Text -> Effect GtkError Unit
+osShowInFileManager : Text -> Effect GtkError Unit
+osSetBadgeCount : AppId -> Int -> Effect GtkError Unit
+osThemePreference : Unit -> Effect GtkError Text
 ```
 
 ## Native Mapping Table
@@ -176,12 +199,27 @@ widgetAddShortcut : WidgetId -> ShortcutId -> Effect GtkError Unit
 | `appAddAction` | `gtk4.appAddAction` |
 | `shortcutNew` | `gtk4.shortcutNew` |
 | `widgetAddShortcut` | `gtk4.widgetAddShortcut` |
+| `drawAreaNew` | `gtk4.drawAreaNew` |
+| `drawAreaSetContentSize` | `gtk4.drawAreaSetContentSize` |
+| `drawAreaQueueDraw` | `gtk4.drawAreaQueueDraw` |
+| `widgetSetCss` | `gtk4.widgetSetCss` |
+| `appSetCss` | `gtk4.appSetCss` |
+| `notificationNew` | `gtk4.notificationNew` |
+| `notificationSetBody` | `gtk4.notificationSetBody` |
+| `appSendNotification` | `gtk4.appSendNotification` |
+| `appWithdrawNotification` | `gtk4.appWithdrawNotification` |
+| `layoutManagerNew` | `gtk4.layoutManagerNew` |
+| `widgetSetLayoutManager` | `gtk4.widgetSetLayoutManager` |
+| `osOpenUri` | `gtk4.osOpenUri` |
+| `osShowInFileManager` | `gtk4.osShowInFileManager` |
+| `osSetBadgeCount` | `gtk4.osSetBadgeCount` |
+| `osThemePreference` | `gtk4.osThemePreference` |
 
 ## Example
 
 ```aivi
 use aivi
-use aivi.gtk4
+use aivi.ui.gtk4
 
 main = do Effect {
   _ <- init Unit
@@ -199,4 +237,4 @@ main = do Effect {
 
 ## Compatibility
 
-`aivi.ui.Gtk4` is still available and re-exports `aivi.gtk4` for compatibility.
+`widgetSetCss` and `appSetCss` accept AIVI style records (`{ }`) so your existing `aivi.ui`/`aivi.ui.layout` CSS-style values can be reused with GTK widgets/app styling.
