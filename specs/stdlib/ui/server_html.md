@@ -1,285 +1,252 @@
 # `aivi.ui.ServerHtml`
-## Server-Driven HTML · DOM Patching · Typed Events
+## Server-Driven HTML · Typed Events · Route-Based Serving
 
 <!-- quick-info: {"kind":"module","name":"aivi.ui.ServerHtml"} -->
-`aivi.ui.ServerHtml` is a server-driven UI runtime. The server renders HTML from
-a `VNode msg` tree, the browser forwards delegated DOM and platform events over a
-WebSocket as typed JSON messages, and the server diffs the VDOM to stream patch ops
-back. No client-side VDOM is needed   patches target stable `data-aivi-node` ids.
+`aivi.ui.ServerHtml` provides server-driven UI rendering for AIVI apps. The server
+renders `VNode msg` trees to HTML, the browser forwards delegated events and platform
+signals over WebSocket, and the server sends DOM patch operations back.
 
 <!-- /quick-info -->
 <div class="import-badge">use aivi.ui.ServerHtml</div>
 
+`aivi.ui.ServerHtml` is the recommended v0.1 backend for interactive browser UIs.
 
-`aivi.ui.ServerHtml` is the recommended v0.1 backend bootstrap for server-driven UIs.
+## Architecture
 
-## Architecture Overview
-
+```text
+Browser                                  Server
+┌────────────────────────────┐          ┌────────────────────────────────────┐
+│ HTTP GET /counter          ├─────────>│ serveHttp(route app)               │
+│ (HTML + boot blob + JS)    │<─────────┤ renders initial VDOM               │
+│                            │          │ stores view state by viewId         │
+│ WS connect /counter/ws     ├─────────>│ serveWs(route app)                 │
+│ hello(viewId,url,online)   │          │ validates viewId                   │
+│ event/platform/effectResult├─────────>│ update + diff + effect handling    │
+│ patch/effectReq            │<─────────┤ patch/effectReq/error              │
+└────────────────────────────┘          └────────────────────────────────────┘
 ```
- Browser                        Server
-┌──────────────────┐     ┌───────────────────────┐
-│ Initial HTML GET ├────>│ serveHttp             │
-│                  │<────┤  app.init → VNode     │
-│                  │     │  renderHtml → HTML    │
-│ WebSocket        │     │                       │
-│  hello ──────────┼────>│ serveWs               │
-│  event ──────────┼────>│  decodeEvent → msg    │
-│  platform ───────┼────>│  app.update → model'  │
-│  effectResult ───┼────>│  diff old new → ops   │
-│                  │<────┤  patch (ops) ─────────│
-│                  │<────┤  effectReq ───────────│
-└──────────────────┘     └───────────────────────┘
-```
-
-## Quick Start Example
-
-<<< ../../snippets/from_md/stdlib/ui/server_html/quick_start_example.aivi{aivi}
-
 
 ## Public API
 
-### Types
+```aivi
+ViewId = Text
 
-<<< ../../snippets/from_md/stdlib/ui/server_html/types.aivi{aivi}
+UrlInfo = { url: Text, path: Text, query: Text, hash: Text }
+InitContext = { viewId: ViewId, url: UrlInfo, online: Bool }
 
+PlatformEvent =
+  PopState UrlInfo
+  | HashChange { old: Text, new: Text, hash: Text, url: UrlInfo }
+  | Visibility { visibilityState: Text }
+  | WindowFocus { focused: Bool }
+  | Online { online: Bool }
+  | Intersection { sid: Int, entries: List { tid: Int, isIntersecting: Bool, ratio: Float } }
 
-### App record
+ClipboardError = { name: Text }
 
-The `App` record is the user-facing entry point. It defines how to initialise a
-model, update it when messages arrive, render it to a virtual DOM, and optionally
-react to browser platform events.
+Effect msg =
+  ClipboardReadText (Result ClipboardError Text -> msg)
+  | ClipboardWriteText Text (Result ClipboardError Unit -> msg)
+  | SubscribeIntersection
+      { sid: Int, rootMargin: Text, threshold: List Float, targets: List { tid: Int, nodeId: Text } }
+  | UnsubscribeIntersection Int
 
-<<< ../../snippets/from_md/stdlib/ui/server_html/app_record.aivi{aivi}
+ServerHtmlApp model msg =
+  { init: InitContext -> model
+  , update: msg -> model -> (model, List (Effect msg))
+  , view: model -> VNode msg
+  , onPlatform: PlatformEvent -> Option msg
+  }
 
+Route model msg =
+  { path: Text
+  , app: ServerHtmlApp model msg
+  }
 
-### AppEffect
-
-Effects that an `update` function can return alongside the new model:
-
-<<< ../../snippets/from_md/stdlib/ui/server_html/appeffect.aivi{aivi}
-
-
-#### Clipboard example
-
-<<< ../../snippets/from_md/stdlib/ui/server_html/clipboard_example.aivi{aivi}
-
-
-#### IntersectionObserver example
-
-<<< ../../snippets/from_md/stdlib/ui/server_html/intersectionobserver_example.aivi{aivi}
-
-
-### ClipboardError
-
-<<< ../../snippets/from_md/stdlib/ui/server_html/clipboarderror.aivi{aivi}
-
-
-### serveHttp
-
-<<< ../../snippets/from_md/stdlib/ui/server_html/servehttp.aivi{aivi}
-
-
-Handles an incoming HTTP request by:
-
-1. Generating a fresh `ViewId` (UUID).
-2. Parsing `UrlInfo` from the request path.
-3. Calling `app.init` to create the initial model.
-4. Rendering the model's view to HTML with handler-id attributes.
-5. Embedding the boot blob (`viewId`, `wsUrl`) and the compiled JS client.
-6. Returning a `200 text/html` response.
-
-### serveWs
-
-<<< ../../snippets/from_md/stdlib/ui/server_html/servews.aivi{aivi}
-
-
-Handles a WebSocket connection by:
-
-1. Waiting for a `Hello` message from the client.
-2. Creating a fresh `ViewId` and initialising the model.
-3. Sending an initial `Patch` with the full rendered HTML.
-4. Entering a tail-recursive message loop that decodes incoming messages,
-   dispatches them through `app.update`, diffs the VDOM, and sends patches.
-
-## Event Payloads
-
-All DOM events are forwarded with typed payloads. Field names match exactly
-between AIVI types, the wire protocol, and the TypeScript client.
-
-<<< ../../snippets/from_md/stdlib/ui/server_html/event_payloads.aivi{aivi}
-
-
-Event kind strings on the wire: `"click"`, `"input"`, `"keydown"`, `"keyup"`,
-`"pointerdown"`, `"pointerup"`, `"pointermove"`, `"transitionend"`, `"animationend"`.
-
-## Platform Events
-
-Browser-level signals forwarded as typed ADTs:
-
-<<< ../../snippets/from_md/stdlib/ui/server_html/platform_events.aivi{aivi}
-
-
-Platform kind strings: `"popstate"`, `"hashchange"`, `"visibility"`, `"focus"`,
-`"online"`, `"intersection"`.
-
-### Platform event example
-
-<<< ../../snippets/from_md/stdlib/ui/server_html/platform_event_example.aivi{aivi}
-
-
-## DOM Identity
-
-- Every rendered element receives a `data-aivi-node` attribute with a stable
-  depth-first index. The same tree structure always produces the same ids.
-- Event handlers are embedded as `data-aivi-hid-<kind>="<id>"` attributes
-  (e.g. `data-aivi-hid-click="42"`).
-- The client walks up from `event.target` to find the nearest matching
-  `data-aivi-hid-<kind>` attribute.
-
-## Handler Assignment
-
-During rendering, the runtime walks the VDOM and replaces each event-handler
-`Attr` with a `data-aivi-hid-<kind>` attribute, recording a mapping from
-`HandlerId` to the handler function.
-
-<<< ../../snippets/from_md/stdlib/ui/server_html/handler_assignment.aivi{aivi}
-
-
-## WebSocket Protocol (JSON)
-
-### Client → Server
-
-All client messages use `"t"` as the discriminator field.
-
-#### `hello`
-
-```json
-{ "t": "hello", "viewId": "<uuid>", "url": "https://example.com/app#x", "online": true }
+serveHttp : ServerHtmlApp model msg -> Request -> Response
+serveWs : ServerHtmlApp model msg -> WebSocket -> Effect WsError Unit
+serve : ServerConfig -> List (Route model msg) -> Resource HttpError Server
 ```
 
-Sent once on connection open. `viewId` comes from the boot blob embedded in the
-initial HTML page.
+## Example 1: Counter app with route-based server bootstrap
 
-#### `event`
+```aivi
+use aivi
+use aivi.ui
+use aivi.net.httpServer
+use aivi.ui.ServerHtml
 
-```json
-{ "t": "event", "viewId": "<uuid>", "hid": 42, "kind": "click",
-  "p": { "button": 0, "alt": false, "ctrl": false, "shift": false, "meta": false } }
+Model = { count: Int }
+Msg = Inc | Dec
+
+view = model =>
+  ~<html>
+    <main>
+      <button onClick={ Dec }>-</button>
+      <span>{ model.count }</span>
+      <button onClick={ Inc }>+</button>
+    </main>
+  </html>
+
+update = msg model => msg match
+  | Inc => (model <| { count: _ + 1 }, [])
+  | Dec => (model <| { count: _ - 1 }, [])
+
+counterApp : ServerHtmlApp Model Msg
+counterApp =
+  { init: _ => { count: 0 }
+  , update: update
+  , view: view
+  , onPlatform: _ => None
+  }
+
+routes =
+  [ { path: "/counter", app: counterApp } ]
+
+main = resource {
+  server <- serve { host: "127.0.0.1", port: 8080 } routes
+  pure server
+}
 ```
 
-#### `platform`
+Notes:
+- HTTP path is normalized (`/counter/` works).
+- WebSocket path is derived as `/<route>/ws` (`/counter/ws` here).
+- Unknown paths return `404`.
 
-```json
-{ "t": "platform", "viewId": "<uuid>", "kind": "popstate",
-  "p": { "href": "https://x.com/a", "path": "/a", "query": "", "hash": "" } }
+## Example 2: Platform + clipboard + intersection effects
+
+```aivi
+Model = { status: Text, clipboard: Text, heroVisible: Bool }
+
+Msg =
+  WentOffline
+  | CameOnline
+  | ReadClipboard
+  | ClipboardResult (Result ClipboardError Text)
+  | StartHeroWatch
+  | HeroIntersected { sid: Int, entries: List { tid: Int, isIntersecting: Bool, ratio: Float } }
+
+onPlatform = evt => evt match
+  | Online { online } => if online then Some CameOnline else Some WentOffline
+  | Intersection payload => Some (HeroIntersected payload)
+  | _ => None
+
+update = msg model => msg match
+  | WentOffline => (model <| { status: "offline" }, [])
+  | CameOnline => (model <| { status: "online" }, [])
+  | ReadClipboard => (model, [ClipboardReadText ClipboardResult])
+  | ClipboardResult (Ok text) => (model <| { clipboard: text }, [])
+  | ClipboardResult (Err _) => (model, [])
+  | StartHeroWatch =>
+      (model,
+        [SubscribeIntersection
+          { sid: 1
+          , rootMargin: "0px"
+          , threshold: [0.0, 1.0]
+          , targets: [{ tid: 1, nodeId: "hero" }]
+          }
+        ]
+      )
+  | HeroIntersected { entries } =>
+      entries match
+        | [{ isIntersecting: True, ..._ }, ..._] => (model <| { heroVisible: True }, [])
+        | _ => (model, [])
 ```
 
-#### `effectResult`
+## DOM event handlers and payloads
 
+`aivi.ui.ServerHtml` supports delegated handlers encoded as `data-aivi-hid-*` attributes.
+
+Supported event kinds on the wire:
+- `click`, `input`
+- `keydown`, `keyup`
+- `pointerdown`, `pointerup`, `pointermove`
+- `focus`, `blur`
+- `transitionend`, `animationend`
+
+`aivi.ui` attributes used with ServerHtml:
+- `onClick` / `onClickE`
+- `onInput` / `onInputE`
+- `onKeyDown`, `onKeyUp`
+- `onPointerDown`, `onPointerUp`, `onPointerMove`
+- `onFocus`, `onBlur`
+- `onTransitionEnd`, `onAnimationEnd`
+
+## Runtime behavior details
+
+- Each rendered element gets a stable `data-aivi-node` id.
+- The client applies patch ops (`replace`, `setText`, `setAttr`, `removeAttr`) by node id.
+- `serveHttp` allocates a fresh `viewId` and embeds it in the boot script.
+- `serveWs` expects `hello` first; unknown `viewId` is rejected.
+- `onPlatform` is optional via `Option msg`; return `None` to ignore a platform event.
+
+## Wire protocol (JSON)
+
+### Client → Server (`"t"` discriminator)
+
+`hello`
 ```json
-{ "t": "effectResult", "viewId": "<uuid>", "rid": 9001,
-  "kind": "clipboard.readText", "ok": true, "p": { "text": "pasted content" } }
+{ "t": "hello", "viewId": "<uuid>", "url": "https://example.com/counter", "online": true }
 ```
 
-On failure:
-
+`event`
 ```json
-{ "t": "effectResult", "viewId": "<uuid>", "rid": 9001,
-  "kind": "clipboard.readText", "ok": false, "error": "NotAllowedError" }
+{ "t": "event", "viewId": "<uuid>", "hid": 42, "kind": "click", "p": { "button": 0, "alt": false, "ctrl": false, "shift": false, "meta": false } }
 ```
 
-### Server → Client
+`platform`
+```json
+{ "t": "platform", "viewId": "<uuid>", "kind": "visibility", "p": { "visibilityState": "hidden" } }
+```
 
-#### `patch`
+`effectResult`
+```json
+{ "t": "effectResult", "viewId": "<uuid>", "rid": 9001, "kind": "clipboard.readText", "ok": true, "p": { "text": "hello" } }
+```
 
+### Server → Client (`"t"` discriminator)
+
+`patch`
 ```json
 { "t": "patch", "ops": "[{\"op\":\"setText\",\"id\":\"3\",\"text\":\"42\"}]" }
 ```
 
-The `ops` field is a JSON-encoded string containing an array of patch operations.
-Supported ops: `replace`, `setText`, `setAttr`, `removeAttr`.
-
-#### `subscribeIntersect`
-
+`subscribeIntersect`
 ```json
-{ "t": "subscribeIntersect", "sid": 1,
-  "options": { "rootMargin": "0px", "threshold": [0, 1] },
-  "targets": [{ "tid": 1, "nodeId": "42" }] }
+{ "t": "subscribeIntersect", "sid": 1, "options": { "rootMargin": "0px", "threshold": [0, 1] }, "targets": [{ "tid": 1, "nodeId": "hero" }] }
 ```
 
-#### `unsubscribeIntersect`
-
+`effectReq`
 ```json
-{ "t": "unsubscribeIntersect", "sid": 1 }
+{ "t": "effectReq", "rid": 9001, "op": { "kind": "clipboard.writeText", "text": "copied" } }
 ```
 
-#### `effectReq`
-
-```json
-{ "t": "effectReq", "rid": 9001,
-  "op": { "kind": "clipboard.writeText", "text": "hello" } }
-```
-
-#### `error`
-
+`error`
 ```json
 { "t": "error", "code": "PAYLOAD", "detail": "invalid event payload" }
 ```
 
-Error codes: `"PROTO"`, `"DECODE"`, `"HID"`, `"PAYLOAD"`, `"PLATFORM"`, `"RID"`.
+Error codes: `PROTO`, `DECODE`, `HID`, `PAYLOAD`, `PLATFORM`, `RID`.
 
-## Module Layout
+## Client implementation and embedding
 
-The implementation is split across helper modules:
+The browser client is built from `ui-client/` into one IIFE bundle
+(`ui-client/dist/aivi-server-html-client.js`) and synced into runtime crates.
 
-| Module | Responsibility |
-| :--- | :--- |
-| `aivi.ui.serverHtml.Protocol` | Wire types, JSON encode/decode for all messages |
-| `aivi.ui.serverHtml.Runtime` | ViewState, handler assignment, update loop helpers |
-| `aivi.ui.serverHtml.ClientAsset` | `@static` embed of the compiled browser client JS |
-| `aivi.ui.ServerHtml` | Public API: `App`, `serveHttp`, `serveWs` |
+```bash
+cd ui-client
+pnpm install
+pnpm build
+node ./scripts/sync-to-rust.mjs
+```
 
-## Browser Client
+The sync copies the bundle to:
+- `crates/aivi/src/runtime/builtins/ui/server_html_client.js`
+- `crates/aivi_native_runtime/src/builtins/ui/server_html_client.js`
 
-The browser client lives in `ui-client/` as TypeScript compiled with Vite into
-a single IIFE bundle (`ui-client/dist/aivi-server-html-client.js`). It is
-embedded via `@static` at compile time   no raw JS strings in AIVI source.
+## v0.1 limits
 
-The client:
-
-- Reads the boot blob from `<script id="aivi-server-html-boot">` on page load.
-- Opens a WebSocket and sends `hello`.
-- Applies DOM patches by `data-aivi-node` id (cache + `querySelector` fallback).
-- Delegates ONE listener per event kind to `document` and walks `composedPath()`
-  to find the nearest `data-aivi-hid-<kind>` attribute.
-- Manages `IntersectionObserver` subscriptions with per-sid batching
-  (flushed once per `requestAnimationFrame`).
-- Executes clipboard effects (`navigator.clipboard`) and returns results.
-- Reconnects with exponential backoff (1 s → 30 s, unlimited retries).
-
-### Client source layout (`ui-client/src/`)
-
-| File | Role |
-| :--- | :--- |
-| `types.ts` | TypeScript interfaces mirroring Protocol.aivi wire types |
-| `patch.ts` | DOM patch application with node cache |
-| `events.ts` | Delegated listeners + payload extractors |
-| `intersection.ts` | IntersectionObserver manager |
-| `clipboard.ts` | Clipboard effect executor |
-| `ws.ts` | WebSocket lifecycle + reconnect |
-| `main.ts` | Entry point (IIFE) + platform listeners |
-
-## Security Notes (v0.1)
-
-- Treat all inbound messages as untrusted.
-- `ViewId` must be unguessable (UUID).
-- Production deployments should bind `ViewId` to an additional secret/token
-  (out of scope for v0.1).
-
-## Limitations (v0.1)
-
-- `ViewId` is per-socket only; no cross-connection session persistence.
-- Diffing is conservative: when structure or keyed child segments change,
-  the runtime may emit a subtree `replace`.
-- Keyed reorders are represented as `replace` rather than a dedicated "move" op.
-- Reconnection policy v1: every reconnect `hello` creates a new view (no state resume).
+- View state is socket-scoped; no reconnect state resume.
+- Structural changes may emit subtree `replace` operations.
+- Keyed reorders are represented as `replace` rather than a dedicated move op.
