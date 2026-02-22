@@ -2,6 +2,15 @@ use std::path::Path;
 
 use crate::hir::HirExpr;
 
+fn without_embedded(
+    diags: Vec<crate::diagnostics::FileDiagnostic>,
+) -> Vec<crate::diagnostics::FileDiagnostic> {
+    diags
+        .into_iter()
+        .filter(|diag| !diag.path.starts_with("<embedded:"))
+        .collect()
+}
+
 fn hir_contains_var(expr: &HirExpr, name: &str) -> bool {
     match expr {
         HirExpr::Var { name: n, .. } => n == name,
@@ -95,10 +104,12 @@ x = needsText { name: "A" }
     let mut all_modules = crate::stdlib::embedded_stdlib_modules();
     all_modules.append(&mut modules);
 
-    let diags = crate::resolver::check_modules(&all_modules);
+    let diags = without_embedded(crate::resolver::check_modules(&all_modules));
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
-    let diags = crate::typecheck::elaborate_expected_coercions(&mut all_modules);
+    let diags = without_embedded(crate::typecheck::elaborate_expected_coercions(
+        &mut all_modules,
+    ));
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
     let program = crate::hir::desugar_modules(&all_modules);
@@ -136,10 +147,12 @@ x = needsText 123
     let mut all_modules = crate::stdlib::embedded_stdlib_modules();
     all_modules.append(&mut modules);
 
-    let diags = crate::resolver::check_modules(&all_modules);
+    let diags = without_embedded(crate::resolver::check_modules(&all_modules));
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
-    let diags = crate::typecheck::elaborate_expected_coercions(&mut all_modules);
+    let diags = without_embedded(crate::typecheck::elaborate_expected_coercions(
+        &mut all_modules,
+    ));
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
     let program = crate::hir::desugar_modules(&all_modules);

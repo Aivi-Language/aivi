@@ -86,6 +86,7 @@ impl Runtime {
                 }),
             }),
             args: Vec::new(),
+            tagged_args: Some(Vec::new()),
         }))
     }
 
@@ -183,6 +184,7 @@ impl Runtime {
         let step = Value::Builtin(BuiltinValue {
             imp: GEN_STEP_IMPL.with(|imp| imp.clone()),
             args: Vec::new(),
+            tagged_args: Some(Vec::new()),
         });
         let init = Value::List(Arc::new(Vec::new()));
         let with_step = self.apply(gen, step)?;

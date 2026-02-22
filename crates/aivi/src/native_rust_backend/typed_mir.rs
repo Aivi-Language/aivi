@@ -8,17 +8,17 @@ use super::utils::{rust_global_fn_name, rust_local_name};
 
 #[derive(Clone, Debug)]
 pub(super) struct TypedMirFunction {
-    entry: u32,
-    blocks: BTreeMap<u32, TypedMirBlock>,
+    pub(super) entry: u32,
+    pub(super) blocks: BTreeMap<u32, TypedMirBlock>,
 }
 
 #[derive(Clone, Debug)]
-struct TypedMirBlock {
-    terminator: TypedMirTerminator,
+pub(super) struct TypedMirBlock {
+    pub(super) terminator: TypedMirTerminator,
 }
 
 #[derive(Clone, Debug)]
-enum TypedMirTerminator {
+pub(super) enum TypedMirTerminator {
     Return(TypedMirExpr),
     Branch {
         cond: TypedMirExpr,
@@ -28,7 +28,7 @@ enum TypedMirTerminator {
 }
 
 #[derive(Clone, Debug)]
-enum TypedMirExpr {
+pub(super) enum TypedMirExpr {
     Int(i64),
     Float(f64),
     Bool(bool),
@@ -53,8 +53,22 @@ pub(super) fn emit_typed_via_mir(
     if !within_mir_depth(expr, 0) {
         return None;
     }
-    let mir = lower_typed_expr(expr, ty, ctx)?;
+    let mir = lower_typed_mir(expr, ty, ctx)?;
     emit_mir_function(&mir, ty, ctx, indent)
+}
+
+pub(super) fn lower_typed_mir(
+    expr: &RustIrExpr,
+    ty: &CgType,
+    ctx: &TypedCtx,
+) -> Option<TypedMirFunction> {
+    if !matches!(ty, CgType::Int | CgType::Float | CgType::Bool) {
+        return None;
+    }
+    if !within_mir_depth(expr, 0) {
+        return None;
+    }
+    lower_typed_expr(expr, ty, ctx)
 }
 
 const MAX_MIR_DEPTH: usize = 64;

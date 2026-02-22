@@ -295,6 +295,8 @@ fn emit_generate_block(items: &[RustIrBlockItem], indent: usize) -> Result<Strin
     s.push_str("}),\n");
     s.push_str(&ind3);
     s.push_str("args: Vec::new(),\n");
+    s.push_str(&ind3);
+    s.push_str("tagged_args: Some(Vec::new()),\n");
     s.push_str(&ind2);
     s.push_str("}))\n");
     s.push_str(&ind);

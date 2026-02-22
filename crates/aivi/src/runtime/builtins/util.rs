@@ -60,6 +60,7 @@ pub(crate) fn builtin(
             func: Arc::new(func),
         }),
         args: Vec::new(),
+        tagged_args: Some(Vec::new()),
     })
 }
 
