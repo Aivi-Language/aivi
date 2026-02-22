@@ -13,6 +13,7 @@ export encodeObject, encodeArray
 export decodeField, decodeList
 
 use aivi
+use aivi.text
 
 JsonValue =
   | JsonNull
@@ -32,8 +33,8 @@ jsonToText : JsonValue -> Text
 jsonToText = value => value match
   | JsonNull       => "null"
   | JsonBool b     => b match | True => "true" | False => "false"
-  | JsonInt n      => toText n
-  | JsonFloat f    => toText f
+  | JsonInt n      => text.toText n
+  | JsonFloat f    => text.toText f
   | JsonString s   => "\"" ++ s ++ "\""
   | JsonArray _    => "[...]"
   | JsonObject _   => "\{...\}"
