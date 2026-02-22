@@ -320,6 +320,66 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         row_tail: None,
     };
     env.insert("system".to_string(), Scheme::mono(system_record));
+    let effect_text_unit = Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]);
+    let gtk4_record = Type::Record {
+        fields: vec![
+            (
+                "init".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(effect_text_unit.clone()),
+                ),
+            ),
+            (
+                "appNew".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![text_ty.clone(), int_ty.clone()])),
+                ),
+            ),
+            (
+                "windowNew".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(int_ty.clone()),
+                            Box::new(Type::Func(
+                                Box::new(int_ty.clone()),
+                                Box::new(
+                                    Type::con("Effect").app(vec![text_ty.clone(), int_ty.clone()]),
+                                ),
+                            )),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "windowSetTitle".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "windowPresent".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
+            ),
+            (
+                "appRun".to_string(),
+                Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit)),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+        open: true,
+        row_tail: None,
+    };
+    env.insert("gtk4".to_string(), Scheme::mono(gtk4_record));
 
     let level_ty = Type::con("Level");
     let context_pair_ty = Type::Tuple(vec![text_ty.clone(), text_ty.clone()]);

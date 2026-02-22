@@ -688,6 +688,7 @@ fn resolve_builtin(name: &str) -> Option<BuiltinName> {
             | "concurrent"
             | "httpServer"
             | "ui"
+            | "gtk4"
             | "text"
             | "regex"
             | "math"

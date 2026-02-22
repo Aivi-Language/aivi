@@ -12,6 +12,7 @@ use super::concurrency::{build_channel_record, build_concurrent_record};
 use super::crypto::build_crypto_record;
 use super::database::build_database_record;
 use super::graph::build_graph_record;
+use super::gtk4::build_gtk4_record;
 use super::http_server::build_http_server_record;
 use super::i18n::build_i18n_record;
 use super::instant::build_instant_record;
@@ -301,6 +302,7 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
     env.insert("concurrent".to_string(), build_concurrent_record());
     env.insert("httpServer".to_string(), build_http_server_record());
     env.insert("ui".to_string(), build_ui_record());
+    env.insert("gtk4".to_string(), build_gtk4_record());
     env.insert("text".to_string(), build_text_record());
     env.insert("regex".to_string(), build_regex_record());
     env.insert("math".to_string(), build_math_record());

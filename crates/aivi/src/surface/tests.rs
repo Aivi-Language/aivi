@@ -128,6 +128,71 @@ module Example
 }
 
 #[test]
+fn native_decorator_requires_string_argument() {
+    let src = r#"
+module Example
+
+@native
+x : Int -> Int
+x = n => n
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1511".to_string()));
+}
+
+#[test]
+fn native_decorator_rewrites_to_target_call() {
+    let src = r#"
+module Example
+
+@native "gtk4.windowPresent"
+windowPresent : Int -> Effect Text Unit
+windowPresent = windowId => Unit
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "windowPresent" => Some(def),
+            _ => None,
+        })
+        .expect("windowPresent def");
+    match &def.expr {
+        Expr::Call { func, args, .. } => {
+            assert_eq!(args.len(), 1);
+            assert!(matches!(args.first(), Some(Expr::Ident(name)) if name.name == "windowId"));
+            match func.as_ref() {
+                Expr::FieldAccess { base, field, .. } => {
+                    assert_eq!(field.name, "windowPresent");
+                    assert!(matches!(base.as_ref(), Expr::Ident(root) if root.name == "gtk4"));
+                }
+                other => panic!("expected rewritten native field access, got {other:?}"),
+            }
+        }
+        other => panic!("expected rewritten native call, got {other:?}"),
+    }
+}
+
+#[test]
+fn native_decorator_requires_type_signature() {
+    let src = r#"
+module Example
+
+@native "gtk4.appRun"
+appRun = appId => Unit
+"#;
+    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1526".to_string()));
+}
+
+#[test]
 fn rejects_legacy_braced_module_body_syntax() {
     let src = r#"
 module Example = {
