@@ -452,6 +452,7 @@ impl Parser {
                     | "deprecated"
                     | "test"
                     | "debug"
+                    | "native"
             ) {
                 self.emit_diag(
                     "E1506",
@@ -499,6 +500,27 @@ impl Parser {
                         self.emit_diag(
                             "E1510",
                             "`@test` expects a string literal argument",
+                            span,
+                        );
+                    }
+                }
+                "native" => {
+                    if decorator.arg.is_none() {
+                        self.emit_diag(
+                            "E1511",
+                            "`@native` expects a target string (e.g. `@native \"gtk4.appRun\"`)",
+                            decorator.span.clone(),
+                        );
+                    } else if !matches!(decorator.arg, Some(Expr::Literal(Literal::String { .. })))
+                    {
+                        let span = decorator
+                            .arg
+                            .as_ref()
+                            .map(expr_span)
+                            .unwrap_or_else(|| decorator.span.clone());
+                        self.emit_diag(
+                            "E1510",
+                            "`@native` expects a string literal argument",
                             span,
                         );
                     }

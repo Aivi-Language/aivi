@@ -16,7 +16,8 @@ pub fn parse_modules(path: &Path, content: &str) -> (Vec<Module>, Vec<FileDiagno
     inject_prelude_imports(&mut modules);
     expand_domain_exports(&mut modules);
     expand_module_aliases(&mut modules);
-    let mut decorator_diags = apply_static_decorators(&mut modules);
+    let mut decorator_diags = apply_native_decorators(&mut modules);
+    decorator_diags.append(&mut apply_static_decorators(&mut modules));
     let mut diagnostics: Vec<FileDiagnostic> = lex_diags
         .into_iter()
         .map(|diag| FileDiagnostic {
@@ -612,6 +613,221 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                                     &module_path,
                                     &base_dir,
                                     is_static,
+                                    def,
+                                    &mut diags,
+                                );
+                            }
+                            DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
+                        }
+                    }
+                }
+                ModuleItem::TypeSig(_)
+                | ModuleItem::TypeDecl(_)
+                | ModuleItem::TypeAlias(_)
+                | ModuleItem::ClassDecl(_)
+                | ModuleItem::MachineDecl(_) => {}
+            }
+        }
+    }
+    diags
+}
+
+fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
+    fn native_target(decorators: &[Decorator]) -> Option<String> {
+        decorators.iter().find_map(|decorator| {
+            if decorator.name.name != "native" {
+                return None;
+            }
+            match decorator.arg.as_ref() {
+                Some(Expr::Literal(Literal::String { text, .. })) => Some(text.clone()),
+                _ => None,
+            }
+        })
+    }
+
+    fn emit_diag(
+        module_path: &str,
+        out: &mut Vec<FileDiagnostic>,
+        code: &str,
+        message: String,
+        span: Span,
+    ) {
+        out.push(FileDiagnostic {
+            path: module_path.to_string(),
+            diagnostic: Diagnostic {
+                code: code.to_string(),
+                severity: DiagnosticSeverity::Error,
+                message,
+                span,
+                labels: Vec::new(),
+            },
+        });
+    }
+
+    fn native_target_expr(path: &str, span: &Span) -> Option<Expr> {
+        let mut segments = path.split('.').filter(|seg| !seg.is_empty());
+        let first = segments.next()?;
+        if !is_valid_ident(first) {
+            return None;
+        }
+        let mut expr = Expr::Ident(SpannedName {
+            name: first.to_string(),
+            span: span.clone(),
+        });
+        for seg in segments {
+            if !is_valid_ident(seg) {
+                return None;
+            }
+            expr = Expr::FieldAccess {
+                base: Box::new(expr),
+                field: SpannedName {
+                    name: seg.to_string(),
+                    span: span.clone(),
+                },
+                span: span.clone(),
+            };
+        }
+        Some(expr)
+    }
+
+    fn is_valid_ident(seg: &str) -> bool {
+        let mut chars = seg.chars();
+        let Some(first) = chars.next() else {
+            return false;
+        };
+        (first.is_ascii_alphabetic() || first == '_')
+            && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+    }
+
+    fn apply_native_to_def(
+        module_path: &str,
+        type_sigs: &std::collections::HashSet<String>,
+        target: Option<String>,
+        allow_in_context: bool,
+        def: &mut Def,
+        out: &mut Vec<FileDiagnostic>,
+    ) {
+        let Some(path) = target else {
+            return;
+        };
+        if !allow_in_context {
+            emit_diag(
+                module_path,
+                out,
+                "E1526",
+                "`@native` is only supported on top-level module definitions".to_string(),
+                def.span.clone(),
+            );
+            return;
+        }
+        if !type_sigs.contains(&def.name.name) {
+            emit_diag(
+                module_path,
+                out,
+                "E1526",
+                format!(
+                    "`@native` definition `{}` requires an explicit type signature",
+                    def.name.name
+                ),
+                def.span.clone(),
+            );
+            return;
+        }
+        let Some(target_expr) = native_target_expr(&path, &def.span) else {
+            emit_diag(
+                module_path,
+                out,
+                "E1526",
+                format!(
+                    "`@native` target must be a dotted identifier path, got `{path}`"
+                ),
+                def.span.clone(),
+            );
+            return;
+        };
+        let params: Vec<Pattern> = if !def.params.is_empty() {
+            def.params.clone()
+        } else if let Expr::Lambda { params, .. } = def.expr.clone() {
+            params
+        } else {
+            Vec::new()
+        };
+        let mut args = Vec::with_capacity(params.len());
+        for param in &params {
+            match param {
+                Pattern::Ident(name) | Pattern::SubjectIdent(name) => {
+                    args.push(Expr::Ident(name.clone()));
+                }
+                _ => {
+                    emit_diag(
+                        module_path,
+                        out,
+                        "E1526",
+                        format!(
+                            "`@native` definition `{}` only supports identifier parameters",
+                            def.name.name
+                        ),
+                        def.span.clone(),
+                    );
+                    return;
+                }
+            }
+        }
+        def.expr = if args.is_empty() {
+            target_expr
+        } else {
+            Expr::Call {
+                func: Box::new(target_expr),
+                args,
+                span: def.span.clone(),
+            }
+        };
+    }
+
+    let mut diags = Vec::new();
+    for module in modules {
+        let module_path = module.path.clone();
+        let mut native_sigs = std::collections::HashSet::<String>::new();
+        let mut native_sig_targets = std::collections::HashMap::<String, String>::new();
+        for item in &module.items {
+            let ModuleItem::TypeSig(sig) = item else {
+                continue;
+            };
+            if let Some(path) = native_target(&sig.decorators) {
+                native_sigs.insert(sig.name.name.clone());
+                native_sig_targets.insert(sig.name.name.clone(), path);
+            }
+        }
+        for item in &mut module.items {
+            match item {
+                ModuleItem::Def(def) => {
+                    let target = native_target(&def.decorators)
+                        .or_else(|| native_sig_targets.get(&def.name.name).cloned());
+                    apply_native_to_def(&module_path, &native_sigs, target, true, def, &mut diags)
+                }
+                ModuleItem::InstanceDecl(instance) => {
+                    for def in &mut instance.defs {
+                        let target = native_target(&def.decorators);
+                        apply_native_to_def(
+                            &module_path,
+                            &native_sigs,
+                            target,
+                            false,
+                            def,
+                            &mut diags,
+                        );
+                    }
+                }
+                ModuleItem::DomainDecl(domain) => {
+                    for domain_item in &mut domain.items {
+                        match domain_item {
+                            DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
+                                let target = native_target(&def.decorators);
+                                apply_native_to_def(
+                                    &module_path,
+                                    &native_sigs,
+                                    target,
+                                    false,
                                     def,
                                     &mut diags,
                                 );

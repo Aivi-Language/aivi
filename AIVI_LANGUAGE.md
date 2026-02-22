@@ -776,12 +776,14 @@ Compile-time metadata only. No user-defined decorators.
 |:---------------------------------------------- |:----------------------------------------- |
 | `@test "desc"`                                 | Mark as test case (mandatory description) |
 | `@static`                                      | Embed at compile time                     |
+| `@native "mod.fn"`                             | Bind typed def to runtime/native path     |
 | `@inline`                                      | Always inline                             |
 | `@deprecated`                                  | Emit warning on use                       |
 | `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`)      |
 | `@no_prelude`                                  | Skip implicit `use aivi.prelude`          |
 
 Unknown decorators are compile errors.
+`@native` is only valid on top-level definitions and requires an explicit type signature.
 
 ---
 
