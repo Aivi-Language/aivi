@@ -1071,6 +1071,7 @@
                     prev_non_comment_text.as_deref(),
                     prevprev_non_comment_text.as_deref(),
                 ) {
+                    ('{', Some(monad), Some("do")) if !is_keyword(monad) => ContextKind::Effect,
                     ('{', Some("effect"), _) => ContextKind::Effect,
                     ('{', Some("generate"), _) => ContextKind::Generate,
                     ('{', Some("resource"), _) => ContextKind::Resource,

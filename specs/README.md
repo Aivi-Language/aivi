@@ -85,6 +85,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Sockets](stdlib/network/sockets.md)
 - [Streams](stdlib/network/streams.md)
 #### UI
+- [GTK4](stdlib/ui/gtk4.md)
 - [Layout](stdlib/ui/layout.md)
 - [VDOM](stdlib/ui/vdom.md)
 - [HTML Sigil](stdlib/ui/html.md)
