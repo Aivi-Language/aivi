@@ -61,7 +61,7 @@ fn json_kind(value: &serde_json::Value) -> &'static str {
 }
 
 #[test]
-fn kernel_dump_examples_10_wasm_is_valid_json() {
+fn kernel_dump_ir_dump_minimal_is_valid_json() {
     let Some(exe) = aivi_exe() else {
         eprintln!("skipping: CARGO_BIN_EXE_aivi not set");
         return;
@@ -81,7 +81,7 @@ fn kernel_dump_examples_10_wasm_is_valid_json() {
 }
 
 #[test]
-fn rust_ir_dump_examples_10_wasm_is_valid_json() {
+fn rust_ir_dump_ir_dump_minimal_is_valid_json() {
     let Some(exe) = aivi_exe() else {
         eprintln!("skipping: CARGO_BIN_EXE_aivi not set");
         return;
