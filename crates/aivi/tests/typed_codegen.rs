@@ -155,8 +155,11 @@ main = do Effect {
 fn typed_codegen_uses_mir_for_scalar_defs() {
     let rust = compile_typed(
         r#"module app.main
+base : Int
+base = 1
+
 score : Int
-score = 1 + 2
+score = base + 2
 
 main : Effect Text Unit
 main = do Effect {
@@ -167,5 +170,27 @@ main = do Effect {
     assert!(
         rust.contains("/* typed-mir */"),
         "expected typed MIR marker in generated Rust:\n{rust}"
+    );
+}
+
+#[test]
+fn typed_codegen_uses_mir_for_block_defs() {
+    let rust = compile_typed(
+        r#"module app.main
+score : Int
+score = {
+  x = 1
+  x + x
+}
+
+main : Effect Text Unit
+main = do Effect {
+  print "ok"
+}
+"#,
+    );
+    assert!(
+        rust.contains("/* typed-mir */"),
+        "expected typed MIR marker for block lowering:\n{rust}"
     );
 }

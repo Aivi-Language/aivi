@@ -64,22 +64,7 @@ impl TypeChecker {
                             if let Some(Kind::Arrow(param_kind, res_kind)) = current_kind {
                                 let arg_kind = self.get_kind(arg, ctx);
                                 if let Some(ak) = arg_kind.as_ref() {
-                                    if *param_kind != *ak {
-                                        // TODO: Report error properly. For now we just log or panic in debug?
-                                        // Since we are in type_from_expr which returns Type, we can't easily return error.
-                                        // But wait, typecheck should verify this.
-                                        // Ideally type_from_expr shoud return Result.
-                                        // For this fix, I will allow it but maybe print warning?
-                                        // Or better, since this is "Long Term Fix", I should just verify logic is structurally correct.
-                                        // The user said "Kind checking is implicit/weak".
-                                        // I am making it explicit.
-                                        // If I panic, I break the compiler.
-                                        // Let's assume validation happens later or we ignore mismatch for now?
-                                        // NO, I should try to enforce it.
-                                        // But changing signature of type_from_expr to Result is massive refactor.
-                                        // I will stick to "Best Effort" kind check and maybe return Unknown or Error type if I could?
-                                        // Retaining existing behavior for mismatch (ignore) but having the logic ready.
-                                    }
+                                    let _kind_matches = *param_kind == *ak;
                                 }
                                 current_kind = Some(*res_kind);
                             } else if current_kind.is_some() {
@@ -154,6 +139,7 @@ impl TypeChecker {
                 }
             }
             TypeExpr::Apply { base, args, .. } => {
+                self.validate_apply_kinds(base, args, errors);
                 if let TypeExpr::Name(base_name) = base.as_ref() {
                     if Self::is_row_op_name(&base_name.name) {
                         self.validate_row_op(base_name, args, errors);
@@ -181,6 +167,37 @@ impl TypeChecker {
                 }
             }
             TypeExpr::Name(_) | TypeExpr::Star { .. } | TypeExpr::Unknown { .. } => {}
+        }
+    }
+
+    fn validate_apply_kinds(&mut self, base: &TypeExpr, args: &[TypeExpr], errors: &mut Vec<TypeError>) {
+        let mut ctx = TypeContext::new(&self.type_constructors);
+        let base_ty = self.type_from_expr(base, &mut ctx);
+        let mut current_kind = self.get_kind(&base_ty, &ctx);
+        for arg in args {
+            let Some(kind) = current_kind else {
+                break;
+            };
+            match kind {
+                Kind::Arrow(param_kind, res_kind) => {
+                    let arg_ty = self.type_from_expr(arg, &mut ctx);
+                    if let Some(arg_kind) = self.get_kind(&arg_ty, &ctx) {
+                        if *param_kind != arg_kind {
+                            errors.push(TypeError {
+                                span: self.type_expr_span(arg),
+                                message: format!(
+                                    "kind mismatch in type application: expected {}, found {}",
+                                    param_kind, arg_kind
+                                ),
+                                expected: None,
+                                found: None,
+                            });
+                        }
+                    }
+                    current_kind = Some(*res_kind);
+                }
+                _ => break,
+            }
         }
     }
 
@@ -296,6 +313,19 @@ impl TypeChecker {
             name,
             "Pick" | "Omit" | "Optional" | "Required" | "Rename" | "Defaulted"
         )
+    }
+
+    fn type_expr_span(&self, expr: &TypeExpr) -> Span {
+        match expr {
+            TypeExpr::Name(name) => name.span.clone(),
+            TypeExpr::And { span, .. }
+            | TypeExpr::Apply { span, .. }
+            | TypeExpr::Func { span, .. }
+            | TypeExpr::Record { span, .. }
+            | TypeExpr::Tuple { span, .. }
+            | TypeExpr::Star { span }
+            | TypeExpr::Unknown { span } => span.clone(),
+        }
     }
 
     fn row_pick(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {

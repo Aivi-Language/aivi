@@ -441,8 +441,8 @@ impl Parser {
                 });
                 self.expect_symbol("=>", "expected '=>' in loop binding");
 
-                if matches!(kind, BlockKind::Do { .. }) {
-                    // --- Effect-block loop: desugar at parse time ---
+                if matches!(kind, BlockKind::Do { .. } | BlockKind::Generate) {
+                    // --- Loop: desugar at parse time for Effect + Generate blocks ---
                     // Generate a fresh internal name for the recursive function.
                     let fn_name = self.fresh_internal_name("loop", loop_start.clone());
 
@@ -483,19 +483,13 @@ impl Parser {
                         span: outer_span,
                     });
                 } else {
-                    // Generator loop — keep existing (stub) behaviour.
+                    // Recovery path for unsupported loop contexts.
                     let body = self.parse_expr().unwrap_or(Expr::Raw {
                         text: String::new(),
                         span: loop_start.clone(),
                     });
                     let span = merge_span(loop_start, expr_span(&body));
-                    items.push(BlockItem::Expr {
-                        expr: Expr::Raw {
-                            text: "loop".to_string(),
-                            span: span.clone(),
-                        },
-                        span,
-                    });
+                    items.push(BlockItem::Expr { expr: body, span });
                 }
                 continue;
             }

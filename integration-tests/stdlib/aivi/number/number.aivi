@@ -4,6 +4,7 @@ module integrationTests.stdlib.aivi.number.tests
 use aivi
 use aivi.testing
 use aivi.number
+use aivi.number.decimal as dec
 use aivi.math
 
 // -- BigInt --
@@ -43,7 +44,7 @@ decimal_fromFloat = do Effect {
 @test "decimal round"
 decimal_round = do Effect {
   d = fromFloat 3.14159
-  r = round d 2
+  r = dec.round d 2
   f = toFloat r
   assert (abs (f - 3.14) < 0.01)
 }
