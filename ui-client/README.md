@@ -5,7 +5,7 @@ This folder contains the browser micro-client for `aivi.ui.ServerHtml`.
 ## What it does
 
 - Applies DOM patch ops by `data-aivi-node` attribute (node cache + `querySelector` fallback)
-- Routes delegated DOM events (`click`, `input`, `keydown`, `keyup`, `pointerdown`, `pointerup`, `pointermove`) to the server via WebSocket
+- Routes delegated DOM events (`click`, `input`, `keydown`, `keyup`, `pointerdown`, `pointerup`, `pointermove`, `transitionend`, `animationend`) to the server via WebSocket
 - Forwards browser platform signals (`popstate`, `hashchange`, `visibilitychange`, `focus`/`blur`, `online`/`offline`) to the server
 - Manages `IntersectionObserver` subscriptions with per-sid batched flushing
 - Executes clipboard effects (`navigator.clipboard.readText` / `writeText`) and returns results
@@ -65,4 +65,3 @@ full protocol documentation.
 - `subscribeIntersect` / `unsubscribeIntersect`   IntersectionObserver management
 - `effectReq`   clipboard read/write request
 - `error`   server-side error notification
-
