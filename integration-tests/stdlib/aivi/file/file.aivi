@@ -35,5 +35,6 @@ writeText_readText_roundtrip = do Effect {
     | Ok content => assertEq content "hello aivi"
     | Err _      => assert False
     _ <- delete path
-    assert True
+    existsAfter <- exists path
+    assertEq existsAfter False
 }

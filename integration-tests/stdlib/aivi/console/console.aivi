@@ -7,32 +7,43 @@ use aivi.console
 
 @test "error"
 error_functional = do Effect {
-  _ <- error "err"
-  assert True
+  result <- attempt (error "err")
+  result match
+    | Ok unit => assertEq unit Unit
+    | Err _   => assert False
 }
 
 @test "log"
 log_functional = do Effect {
-  _ <- log "log"
-  assert True
+  result <- attempt (log "log")
+  result match
+    | Ok unit => assertEq unit Unit
+    | Err _   => assert False
 }
 
 @test "print"
 print_functional = do Effect {
-  _ <- print "p"
-  assert True
+  result <- attempt (print "p")
+  result match
+    | Ok unit => assertEq unit Unit
+    | Err _   => assert False
 }
 
 @test "println"
 println_functional = do Effect {
-  _ <- println "pl"
-  assert True
+  result <- attempt (println "pl")
+  result match
+    | Ok unit => assertEq unit Unit
+    | Err _   => assert False
 }
 
 @test "read line"
 readLine_functional = do Effect {
-  assert True
-  assert True
+  line <- readLine
+  assertEq (line match
+    | Ok _  => True
+    | Err _ => False
+  ) True
 }
 
 @test "strip"

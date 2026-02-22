@@ -7,23 +7,33 @@ use aivi.concurrency
 
 @test "channel error"
 channelError_functional = do Effect {
-  assertEq (1 + 1) 2
+  (tx, rx) <- make Unit
+  close tx
+  res <- recv rx
+  res match
+    | Ok _    => assert False
+    | Err err => assertEq err Closed
 }
 
 @test "scope"
 scope_functional = do Effect {
-  assertEq (1 + 1) 2
+  value <- scope (_ => pure 41)
+  assertEq value 41
 }
 
 @test "close"
 close_functional = do Effect {
   (tx, rx) <- make Unit
   send tx Unit
-  res <- recv rx
-  res match
-    | Ok _  => assert True
-    | Err _ => assert False
-    close tx
+  first <- recv rx
+  close tx
+  second <- recv rx
+  first match
+    | Ok payload => assertEq payload Unit
+    | Err _      => assert False
+    second match
+      | Ok _    => assert False
+      | Err err => assertEq err Closed
 }
 
 @test "make"
@@ -32,43 +42,43 @@ make_functional = do Effect {
   send tx Unit
   res <- recv rx
   res match
-    | Ok _  => assert True
-    | Err _ => assert False
+    | Ok payload => assertEq payload Unit
+    | Err _      => assert False
     close tx
 }
 
 @test "par"
 par_functional = do Effect {
-  // Just ensure both branches run without throwing.
-  _ <- par (pure 1) (pure 2)
-  assert True
+  pair <- par (pure 1) (pure 2)
+  pair match
+    | (left, right) => assertEq (left + right) 3
 }
 
 @test "recv"
-recv_functional = do Effect {
-  (tx, rx) <- make Unit
-  send tx Unit
-  res <- recv rx
-  res match
-    | Ok _  => assert True
-    | Err _ => assert False
+  recv_functional = do Effect {
+    (tx, rx) <- make Unit
+    send tx Unit
+    res <- recv rx
+    res match
+      | Ok payload => assertEq payload Unit
+      | Err _      => assert False
     close tx
-}
+  }
 
 @test "scope 2"
-scope_functional_2 = do Effect {
+  scope_functional_2 = do Effect {
   // Scope should run the callback and return its result.
-  x <- scope (_ => pure 123)
-  assert (x == 123)
-}
+    x <- scope (_ => pure 123)
+    assert (x == 123)
+  }
 
 @test "send"
-send_functional = do Effect {
-  (tx, rx) <- make Unit
-  send tx Unit
-  res <- recv rx
-  res match
-    | Ok _  => assert True
-    | Err _ => assert False
+  send_functional = do Effect {
+    (tx, rx) <- make Unit
+    send tx Unit
+    res <- recv rx
+    res match
+      | Ok payload => assertEq payload Unit
+      | Err _      => assert False
     close tx
-}
+  }

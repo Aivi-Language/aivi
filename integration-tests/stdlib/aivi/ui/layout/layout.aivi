@@ -12,13 +12,17 @@ length_types = do Effect {
   rem = Rem 1
   vh = Vh 50
   vw = Vw 100
-  assert True
+  assertEq px (Px 100)
+  assertEq em (Em 2)
+  assertEq rem (Rem 1)
+  assertEq vh (Vh 50)
+  assertEq vw (Vw 100)
 }
 
 @test "percentage type"
 percentage_type = do Effect {
   p = Pct 50
-  assert True
+  assertEq p (Pct 50)
 }
 
 @test "unit val construct"

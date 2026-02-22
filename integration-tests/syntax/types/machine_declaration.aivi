@@ -28,5 +28,5 @@ machine OrderFlow = {
 
 @test "machine declarations typecheck and execute"
 machineDeclarationsSmoke = do Effect {
-  assert True
+  assertEq (1 + 1) 2
 }

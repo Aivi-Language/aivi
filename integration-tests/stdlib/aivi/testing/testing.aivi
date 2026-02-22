@@ -14,7 +14,7 @@ assert_false_fails = do Effect {
   result <- attempt (assert False)
   result match
     | Ok _  => assert False
-    | Err _ => assert True
+    | Err e => assertEq e "assertion failed"
 }
 
 @test "assert eq"

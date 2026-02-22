@@ -8,10 +8,14 @@ use aivi.ui.layout (domain Layout)
 
 @test "literals"
 literals_functional = do Effect {
-  _x <- 1px
-  _y <- 1em
-  _z <- 1rem
-  _a <- 1vh
-  _b <- 1vw
-  assert True
+  x <- 1px
+  y <- 1em
+  z <- 1rem
+  a <- 1vh
+  b <- 1vw
+  assertEq x (Px 1)
+  assertEq y (Em 1)
+  assertEq z (Rem 1)
+  assertEq a (Vh 1)
+  assertEq b (Vw 1)
 }

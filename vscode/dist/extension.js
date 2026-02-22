@@ -18097,10 +18097,23 @@ function fallbackHoverMarkdownForToken(token) {
 
 // src/extension.ts
 var client;
-function getCliCommand() {
+function hasCommand(cmd) {
+  const res = (0, import_node_child_process.spawnSync)(cmd, ["--version"], { stdio: "ignore" });
+  return !res.error;
+}
+function getCliInvocation() {
   const config = vscode.workspace.getConfiguration("aivi");
   const cmd = config.get("cli.command");
-  return cmd && cmd.trim().length > 0 ? cmd : "aivi";
+  if (cmd && cmd.trim().length > 0) {
+    return { command: cmd, baseArgs: [] };
+  }
+  if (hasCommand("aivi")) {
+    return { command: "aivi", baseArgs: [] };
+  }
+  return {
+    command: "cargo",
+    baseArgs: ["run", "-q", "-p", "aivi", "--bin", "aivi", "--"]
+  };
 }
 function docHasTests(doc) {
   return /(^|\n)\s*@test\b/.test(doc.getText());
@@ -18147,22 +18160,24 @@ function inferWorkspaceFolderForTarget(target) {
   return wsFolders[0];
 }
 async function runAiviTest(target, ws) {
-  const cli = getCliCommand();
+  const cli = getCliInvocation();
   const workspaceFolder = ws ?? inferWorkspaceFolderForTarget(target);
   const task = new vscode.Task(
     { type: "aivi", task: "test" },
     workspaceFolder ?? vscode.TaskScope.Workspace,
     "AIVI: test",
     "aivi",
-    new vscode.ShellExecution(cli, ["test", target], { cwd: workspaceFolder?.uri.fsPath })
+    new vscode.ShellExecution(cli.command, [...cli.baseArgs, "test", target], {
+      cwd: workspaceFolder?.uri.fsPath
+    })
   );
   task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, clear: true };
   await vscode.tasks.executeTask(task);
 }
 async function runAiviTestProcess(args, cwd, token, onStdout, onStderr) {
-  const cli = getCliCommand();
+  const cli = getCliInvocation();
   return await new Promise((resolve) => {
-    const child = (0, import_node_child_process.spawn)(cli, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = (0, import_node_child_process.spawn)(cli.command, [...cli.baseArgs, ...args], { cwd, stdio: ["ignore", "pipe", "pipe"] });
     const cancel = token?.onCancellationRequested(() => {
       try {
         child.kill();
@@ -18360,10 +18375,6 @@ function activate(context) {
   const config = vscode.workspace.getConfiguration("aivi");
   const configuredCommand = config.get("server.command");
   const configuredArgs = config.get("server.args") ?? [];
-  const hasCommand = (cmd) => {
-    const res = (0, import_node_child_process.spawnSync)(cmd, ["--version"], { stdio: "ignore" });
-    return !res.error;
-  };
   let serverCommand;
   let serverArgs;
   if (configuredCommand && configuredCommand.trim().length > 0) {

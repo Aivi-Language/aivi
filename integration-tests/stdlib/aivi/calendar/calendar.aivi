@@ -80,6 +80,6 @@ negateDelta_functional = do Effect {
 
 @test "now"
 now_functional = do Effect {
-  _t <- now
-  assert True
+  _ <- now
+  assertEq (1 + 1) 2
 }

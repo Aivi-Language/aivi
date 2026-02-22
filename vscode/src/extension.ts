@@ -11,10 +11,29 @@ import { extractHoverToken, fallbackHoverMarkdownForToken } from "./hoverFallbac
 
 let client: LanguageClient | undefined;
 
-function getCliCommand(): string {
+type CliInvocation = {
+  command: string;
+  baseArgs: string[];
+};
+
+function hasCommand(cmd: string): boolean {
+  const res = spawnSync(cmd, ["--version"], { stdio: "ignore" });
+  return !res.error;
+}
+
+function getCliInvocation(): CliInvocation {
   const config = vscode.workspace.getConfiguration("aivi");
   const cmd = config.get<string>("cli.command");
-  return cmd && cmd.trim().length > 0 ? cmd : "aivi";
+  if (cmd && cmd.trim().length > 0) {
+    return { command: cmd, baseArgs: [] };
+  }
+  if (hasCommand("aivi")) {
+    return { command: "aivi", baseArgs: [] };
+  }
+  return {
+    command: "cargo",
+    baseArgs: ["run", "-q", "-p", "aivi", "--bin", "aivi", "--"],
+  };
 }
 
 function docHasTests(doc: vscode.TextDocument): boolean {
@@ -82,14 +101,16 @@ function inferWorkspaceFolderForTarget(target: string): vscode.WorkspaceFolder |
 }
 
 async function runAiviTest(target: string, ws?: vscode.WorkspaceFolder): Promise<void> {
-  const cli = getCliCommand();
+  const cli = getCliInvocation();
   const workspaceFolder = ws ?? inferWorkspaceFolderForTarget(target);
   const task = new vscode.Task(
     { type: "aivi", task: "test" },
     workspaceFolder ?? vscode.TaskScope.Workspace,
     "AIVI: test",
     "aivi",
-    new vscode.ShellExecution(cli, ["test", target], { cwd: workspaceFolder?.uri.fsPath })
+    new vscode.ShellExecution(cli.command, [...cli.baseArgs, "test", target], {
+      cwd: workspaceFolder?.uri.fsPath,
+    })
   );
   task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, clear: true };
   await vscode.tasks.executeTask(task);
@@ -102,9 +123,9 @@ async function runAiviTestProcess(
   onStdout: (chunk: string) => void,
   onStderr: (chunk: string) => void
 ): Promise<number> {
-  const cli = getCliCommand();
+  const cli = getCliInvocation();
   return await new Promise<number>((resolve) => {
-    const child = spawn(cli, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(cli.command, [...cli.baseArgs, ...args], { cwd, stdio: ["ignore", "pipe", "pipe"] });
 
     const cancel = token?.onCancellationRequested(() => {
       try {
@@ -338,11 +359,6 @@ export function activate(context: vscode.ExtensionContext) {
   const config = vscode.workspace.getConfiguration("aivi");
   const configuredCommand = config.get<string>("server.command");
   const configuredArgs = config.get<string[]>("server.args") ?? [];
-
-  const hasCommand = (cmd: string): boolean => {
-    const res = spawnSync(cmd, ["--version"], { stdio: "ignore" });
-    return !res.error;
-  };
 
   // Preferred order: user config -> bundled `aivi-lsp` -> `aivi-lsp` on PATH -> `aivi lsp`.
   let serverCommand: string;
