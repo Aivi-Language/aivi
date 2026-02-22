@@ -130,12 +130,12 @@ impl TypeChecker {
                 Type::Record {
                     fields: f_fields,
                     open: open_f,
-                row_tail: None,
+                    row_tail: row_tail_f,
                 },
                 Type::Record {
                     fields: e_fields,
                     open: open_e,
-                row_tail: None,
+                    row_tail: row_tail_e,
                 },
             ) => {
                 let mut all_fields: HashSet<String> = f_fields.keys().cloned().collect();
@@ -155,12 +155,12 @@ impl TypeChecker {
                                     expected: Some(Box::new(Type::Record {
                                         fields: e_fields.clone(),
                                         open: open_e,
-                                    row_tail: None,
+                                        row_tail: row_tail_e,
                                     })),
                                     found: Some(Box::new(Type::Record {
                                         fields: f_fields.clone(),
                                         open: open_f,
-                                    row_tail: None,
+                                        row_tail: row_tail_f,
                                     })),
                                 });
                             } else {
@@ -175,12 +175,12 @@ impl TypeChecker {
                                     expected: Some(Box::new(Type::Record {
                                         fields: e_fields.clone(),
                                         open: open_e,
-                                    row_tail: None,
+                                        row_tail: row_tail_e,
                                     })),
                                     found: Some(Box::new(Type::Record {
                                         fields: f_fields.clone(),
                                         open: open_f,
-                                    row_tail: None,
+                                        row_tail: row_tail_f,
                                     })),
                                 });
                             } else {

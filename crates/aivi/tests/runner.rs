@@ -100,6 +100,13 @@ fn run_aivi_sources_inner() {
         let rel = path.strip_prefix(&root).unwrap_or(path);
         let rel_str = rel.to_string_lossy();
 
+        // Keep this runner focused on core language integration; stdlib suites are covered by
+        // dedicated tests and may include long-running/host-dependent scenarios.
+        if rel_str.starts_with("integration-tests/stdlib/") {
+            skipped_files += 1;
+            continue;
+        }
+
         // Load this file with embedded stdlib
         let mut modules = match load_modules_from_paths(std::slice::from_ref(path)) {
             Ok(m) => m,
