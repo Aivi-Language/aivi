@@ -28,20 +28,20 @@ is **unchanged**   the parser already accepts any `UpperIdent` after `do`. The c
 
 ### Statement subset by monad
 
-| Statement | `do Effect` | `do M` (generic) | `generate` |
-| :--- | :---: | :---: | :---: |
-| `x <- expr` | yes | yes | yes (from sequence) |
-| `x = expr` | yes | yes | yes |
-| `expr` (sequencing) | yes | yes | no |
-| `yield expr` | no | no | yes |
-| `x -> pred` (guard) | no | no | yes |
-| `or` fallback | yes | **no** | no |
-| `when cond <- eff` | yes | **no** | no |
-| `unless cond <- eff` | yes | **no** | no |
-| `given cond or expr` | yes | **no** | no |
-| `on Event => handler` | yes | **no** | no |
-| `loop`/`recurse` | yes | **no** (v1) | yes |
-| resource `<-` | yes | **no** | no |
+| Statement             | `do Effect` | `do M` (generic) | `generate`          |
+|:--------------------- |:-----------:|:----------------:|:-------------------:|
+| `x <- expr`           | yes         | yes              | yes (from sequence) |
+| `x = expr`            | yes         | yes              | yes                 |
+| `expr` (sequencing)   | yes         | yes              | no                  |
+| `yield expr`          | no          | no               | yes                 |
+| `x -> pred` (guard)   | no          | no               | yes                 |
+| `or` fallback         | yes         | **no**           | no                  |
+| `when cond <- eff`    | yes         | **no**           | no                  |
+| `unless cond <- eff`  | yes         | **no**           | no                  |
+| `given cond or expr`  | yes         | **no**           | no                  |
+| `on Event => handler` | yes         | **no**           | no                  |
+| `loop`/`recurse`      | yes         | **no** (v1)      | yes                 |
+| resource `<-`         | yes         | **no**           | no                  |
 
 Rationale: `or`, `when`/`unless`/`given`, `on`, and resource acquisition are tightly coupled to the `Effect E A` type (error handling, cancellation, cleanup). Generic monadic blocks use only the universal monadic operations.
 
@@ -55,7 +55,6 @@ A `do M { ... }` block desugars to calls to `chain` and `of` from the `Chain M` 
 
 <<< ../snippets/from_md/syntax/do_notation/bind.aivi{aivi}
 
-
 desugars to:
 
 ```text
@@ -68,7 +67,6 @@ chain (λx. ⟦do M { body }⟧) ⟦expr⟧
 
 <<< ../snippets/from_md/syntax/do_notation/pure_let_binding.aivi{aivi}
 
-
 desugars to:
 
 ```text
@@ -78,7 +76,6 @@ let x = ⟦expr⟧ in ⟦do M { body }⟧
 #### Sequencing (expression statement)
 
 <<< ../snippets/from_md/syntax/do_notation/sequencing_expression_statement.aivi{aivi}
-
 
 desugars to:
 
@@ -90,13 +87,11 @@ chain (λ_. ⟦do M { body }⟧) ⟦expr⟧
 
 <<< ../snippets/from_md/syntax/do_notation/final_expression.aivi{aivi}
 
-
 desugars to `⟦expr⟧`. It must have type `M A`.
 
 #### Empty block
 
 <<< ../snippets/from_md/syntax/do_notation/empty_block.aivi{aivi}
-
 
 desugars to `of Unit` (using `of : A -> M A` from `Applicative M`).
 
@@ -127,11 +122,11 @@ When no suitable instance is found, compilation fails with an instance-resolutio
 
 ## Common v0.1 Uses
 
-| Type | `do` block use case |
-| :--- | :--- |
-| `Option A` | Short-circuit chaining when any step returns `None`. |
-| `Result E A` | Pure error chaining without effects. |
-| `List A` | Non-deterministic computation / cartesian products. |
+| Type         | `do` block use case                                  |
+|:------------ |:---------------------------------------------------- |
+| `Option A`   | Short-circuit chaining when any step returns `None`. |
+| `Result E A` | Pure error chaining without effects.                 |
+| `List A`     | Non-deterministic computation / cartesian products.  |
 
 ## References
 

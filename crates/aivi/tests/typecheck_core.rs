@@ -50,37 +50,6 @@ fn check_ok_with_embedded(source: &str, embedded: &[&str]) {
     );
 }
 
-fn check_err_with_embedded(source: &str, embedded: &[&str]) {
-    let mut modules = Vec::new();
-    for module_name in embedded {
-        let embedded_source =
-            embedded_stdlib_source(module_name).unwrap_or_else(|| panic!("missing {module_name}"));
-        let (mut embedded_modules, embedded_diags) = parse_modules(
-            Path::new(&format!("<embedded:{module_name}>")),
-            embedded_source,
-        );
-        assert!(
-            !file_diagnostics_have_errors(&embedded_diags),
-            "parse errors in embedded {module_name}: {embedded_diags:?}"
-        );
-        modules.append(&mut embedded_modules);
-    }
-
-    let (mut user_modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
-    assert!(
-        !file_diagnostics_have_errors(&diagnostics),
-        "parse errors: {diagnostics:?}"
-    );
-    modules.append(&mut user_modules);
-
-    let mut module_diags = check_modules(&modules);
-    module_diags.extend(check_types(&modules));
-    assert!(
-        file_diagnostics_have_errors(&module_diags),
-        "expected errors, got: {module_diags:?}"
-    );
-}
-
 fn check_err(source: &str) {
     let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
     assert!(

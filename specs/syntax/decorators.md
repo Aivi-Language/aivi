@@ -17,18 +17,17 @@ Decorators are intentionally narrow:
 
 Decorators appear before the binding they annotate.
 
-
 ## 14.2 Standard Decorators
 
 ### Compile-Time
 
-| Decorator | Usage | Meaning |
-| :--- | :--- | :--- |
-| `@static` | `@static x = file.read "..."` | Embed at compile time |
-| `@native` | `@native "gtk4.appRun"` | Bind definition to a runtime/native function path |
-| `@inline` | `@inline f = ...` | Always inline function |
-| `@deprecated` | `@deprecated msg` | Emit warning on use |
-| `@debug` | `@debug()` / `@debug(pipes, args, return, time)` | Emit structured debug trace events when compiled with `--debug-trace` |
+| Decorator     | Usage                                            | Meaning                                                               |
+|:------------- |:------------------------------------------------ |:--------------------------------------------------------------------- |
+| `@static`     | `@static x = file.read "..."`                    | Embed at compile time                                                 |
+| `@native`     | `@native "gtk4.appRun"`                          | Bind definition to a runtime/native function path                     |
+| `@inline`     | `@inline f = ...`                                | Always inline function                                                |
+| `@deprecated` | `@deprecated msg`                                | Emit warning on use                                                   |
+| `@debug`      | `@debug()` / `@debug(pipes, args, return, time)` | Emit structured debug trace events when compiled with `--debug-trace` |
 
 ### Tooling (MCP)
 
@@ -36,25 +35,26 @@ MCP decorators are not supported in v0.1.
 
 ### Testing
 
-| Decorator | Usage | Meaning |
-| :--- | :--- | :--- |
-| `@test` | `@test "adds two numbers" add_is_commutative = ...` | Mark a definition as a test case (description is mandatory) |
+| Decorator | Usage                                               | Meaning                                                     |
+|:--------- |:--------------------------------------------------- |:----------------------------------------------------------- |
+| `@test`   | `@test "adds two numbers" add_is_commutative = ...` | Mark a definition as a test case (description is mandatory) |
 
 ### Pragmas (Module-level)
-| Decorator | Usage | Meaning |
-| :--- | :--- | :--- |
-| `@no_prelude` | `@no_prelude module M` | Skip implicit prelude import |
-| `@test` | `@test module M` | Mark module as test-only (excluded from production builds) |
+
+| Decorator     | Usage                  | Meaning                                                    |
+|:------------- |:---------------------- |:---------------------------------------------------------- |
+| `@no_prelude` | `@no_prelude module M` | Skip implicit prelude import                               |
+| `@test`       | `@test module M`       | Mark module as test-only (excluded from production builds) |
+
 ## 14.3 Decorator Desugaring
 
 Decorators desugar to compile-time metadata:
 
-| Surface | Desugared |
-| :--- | :--- |
-| `@static x = file.read ...` | Compile-time evaluation |
+| Surface                        | Desugared                                                   |
+|:------------------------------ |:----------------------------------------------------------- |
+| `@static x = file.read ...`    | Compile-time evaluation                                     |
 | `@native "mod.fn" f x y = ...` | Rewritten to `f x y = mod.fn x y` (type signature required) |
-| (none) | (none) |
-
+| (none)                         | (none)                                                      |
 
 ## 14.4 Usage Examples
 

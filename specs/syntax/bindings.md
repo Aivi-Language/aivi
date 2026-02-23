@@ -13,7 +13,6 @@ All bindings use `=`
 
 <<< ../snippets/from_md/syntax/bindings/definitions.aivi{aivi}
 
-
 ## 1.2 Shadowing
 
 Bindings are lexical and may be shadowed.
@@ -30,7 +29,6 @@ This supports ordinary recursive functions:
 
 <<< ../snippets/from_md/syntax/bindings/recursion_module_level.aivi{aivi}
 
-
 ## 1.3 Pattern Bindings
 
 Structural patterns may appear in bindings.
@@ -43,7 +41,6 @@ To deconstruct a record, use a record pattern on the left-hand side.
 
 <<< ../snippets/from_md/syntax/bindings/record_destructuring_deconstructing_records.aivi{aivi}
 
-
 You can also destructure nested records using dot-paths (Section 1.5).
 
 * `=` may only be used where the compiler can prove the pattern is **total** (i.e., it covers all possible shapes of the data).
@@ -51,7 +48,6 @@ You can also destructure nested records using dot-paths (Section 1.5).
 
 > [!NOTE]
 > Using `=` with a non-total pattern (like `[h, ...t] = []`) results in a compile-time error. For partial matches, use the `match` keyword which converts a refutable pattern into an `Option` or branch.
-
 
 ## 1.4 Whole-value binding with `as`
 
@@ -75,7 +71,6 @@ Example:
 
 <<< ../snippets/from_md/syntax/bindings/whole_value_binding_with_as_02.aivi{aivi}
 
-
 ## 1.5 Usage Examples
 
 ### Config Binding
@@ -93,6 +88,7 @@ Record destructuring supports **dot-paths** to access nested fields directly. Th
 <<< ../snippets/from_md/syntax/bindings/deep_path_destructuring_01.aivi{aivi}
 
 Semantics:
+
 * `data.user.profile` is the path to the record being destructured.
 * `as { name }` binds the fields of that specific nested record.
 * Intermediate records are **not** bound unless explicitly requested.
