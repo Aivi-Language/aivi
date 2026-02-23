@@ -2,8 +2,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
-use super::util::builtin;
-use crate::runtime::values::{ChannelInner, ChannelRecv, ChannelSend};
+use super::util::{builtin, expect_int};
+use crate::runtime::values::{ChannelInner, ChannelRecv, ChannelSend, ChannelSender};
 use crate::runtime::{CancelToken, EffectValue, Runtime, RuntimeContext, RuntimeError, Value};
 
 pub(super) fn build_channel_record() -> Value {
@@ -15,7 +15,34 @@ pub(super) fn build_channel_record() -> Value {
                 func: Arc::new(move |_| {
                     let (sender, receiver) = mpsc::channel();
                     let inner = Arc::new(ChannelInner {
-                        sender: Mutex::new(Some(sender)),
+                        sender: Mutex::new(Some(ChannelSender::Unbounded(sender))),
+                        receiver: Mutex::new(receiver),
+                        closed: AtomicBool::new(false),
+                    });
+                    let send = Value::ChannelSend(Arc::new(ChannelSend {
+                        inner: inner.clone(),
+                    }));
+                    let recv = Value::ChannelRecv(Arc::new(ChannelRecv { inner }));
+                    Ok(Value::Tuple(vec![send, recv]))
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
+        "makeBounded".to_string(),
+        builtin("channel.makeBounded", 1, |mut args, _| {
+            let capacity = expect_int(args.pop().unwrap(), "channel.makeBounded")?;
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    if capacity <= 0 {
+                        return Err(RuntimeError::Message(
+                            "channel.makeBounded expects capacity > 0".to_string(),
+                        ));
+                    }
+                    let (sender, receiver) = mpsc::sync_channel(capacity as usize);
+                    let inner = Arc::new(ChannelInner {
+                        sender: Mutex::new(Some(ChannelSender::Bounded(sender))),
                         receiver: Mutex::new(receiver),
                         closed: AtomicBool::new(false),
                     });
@@ -52,9 +79,14 @@ pub(super) fn build_channel_record() -> Value {
                         .lock()
                         .map_err(|_| RuntimeError::Message("channel poisoned".to_string()))?;
                     if let Some(sender) = sender_guard.as_ref() {
-                        sender
-                            .send(value.clone())
-                            .map_err(|_| RuntimeError::Message("channel is closed".to_string()))?;
+                        match sender {
+                            ChannelSender::Unbounded(inner) => inner
+                                .send(value.clone())
+                                .map_err(|_| RuntimeError::Message("channel is closed".to_string()))?,
+                            ChannelSender::Bounded(inner) => inner
+                                .send(value.clone())
+                                .map_err(|_| RuntimeError::Message("channel is closed".to_string()))?,
+                        }
                         Ok(Value::Unit)
                     } else {
                         Err(RuntimeError::Message("channel is closed".to_string()))
@@ -128,6 +160,102 @@ pub(super) fn build_channel_record() -> Value {
             };
             Ok(Value::Effect(Arc::new(effect)))
         }),
+    );
+    Value::Record(Arc::new(fields))
+}
+
+fn spawn_effect(
+    id: usize,
+    effect: Value,
+    ctx: Arc<RuntimeContext>,
+    cancel: Arc<CancelToken>,
+    sender: mpsc::Sender<(usize, Result<Value, RuntimeError>)>,
+) {
+    std::thread::spawn(move || {
+        let mut runtime = Runtime::new(ctx, cancel);
+        let result = runtime.run_effect_value(effect);
+        let _ = sender.send((id, result));
+    });
+}
+
+fn spawn_task(effect_value: Value, ctx: Arc<RuntimeContext>, parent: Arc<CancelToken>) -> Value {
+    let cancel = CancelToken::child(parent);
+    let result = Arc::new(Mutex::new(None::<Result<Value, RuntimeError>>));
+
+    {
+        let result = result.clone();
+        let cancel_for_thread = cancel.clone();
+        std::thread::spawn(move || {
+            let mut runtime = Runtime::new(ctx, cancel_for_thread);
+            let output = runtime.run_effect_value(effect_value);
+            if let Ok(mut guard) = result.lock() {
+                *guard = Some(output);
+            }
+        });
+    }
+
+    let mut fields = std::collections::HashMap::new();
+    fields.insert(
+        "join".to_string(),
+        Value::Effect(Arc::new(EffectValue::Thunk {
+            func: Arc::new({
+                let result = result.clone();
+                move |runtime| loop {
+                    runtime.check_cancelled()?;
+                    let mut guard = result
+                        .lock()
+                        .map_err(|_| RuntimeError::Message("task poisoned".to_string()))?;
+                    if let Some(output) = guard.take() {
+                        return output;
+                    }
+                    drop(guard);
+                    std::thread::sleep(Duration::from_millis(25));
+                }
+            }),
+        })),
+    );
+    fields.insert(
+        "cancel".to_string(),
+        Value::Effect(Arc::new(EffectValue::Thunk {
+            func: Arc::new({
+                let cancel = cancel.clone();
+                move |_| {
+                    cancel.cancel();
+                    Ok(Value::Unit)
+                }
+            }),
+        })),
+    );
+    fields.insert(
+        "isCancelled".to_string(),
+        Value::Effect(Arc::new(EffectValue::Thunk {
+            func: Arc::new(move |_| Ok(Value::Bool(cancel.is_cancelled()))),
+        })),
+    );
+
+    Value::Record(Arc::new(fields))
+}
+
+fn make_cancel_token() -> Value {
+    let token = Arc::new(AtomicBool::new(false));
+    let mut fields = std::collections::HashMap::new();
+    fields.insert(
+        "cancel".to_string(),
+        Value::Effect(Arc::new(EffectValue::Thunk {
+            func: Arc::new({
+                let token = token.clone();
+                move |_| {
+                    token.store(true, Ordering::SeqCst);
+                    Ok(Value::Unit)
+                }
+            }),
+        })),
+    );
+    fields.insert(
+        "isCancelled".to_string(),
+        Value::Effect(Arc::new(EffectValue::Thunk {
+            func: Arc::new(move |_| Ok(Value::Bool(token.load(Ordering::SeqCst)))),
+        })),
     );
     Value::Record(Arc::new(fields))
 }
@@ -287,6 +415,96 @@ pub(crate) fn build_concurrent_record() -> Value {
         }),
     );
     fields.insert(
+        "fork".to_string(),
+        builtin("concurrent.fork", 1, |mut args, runtime| {
+            let effect_value = args.pop().unwrap();
+            let parent = runtime.cancel.clone();
+            let task = spawn_task(effect_value, runtime.ctx.clone(), parent);
+            Ok(task)
+        }),
+    );
+    fields.insert(
+        "sleep".to_string(),
+        builtin("concurrent.sleep", 1, |mut args, _| {
+            let millis = expect_int(args.pop().unwrap(), "concurrent.sleep")?;
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |runtime| {
+                    if millis <= 0 {
+                        return Ok(Value::Unit);
+                    }
+                    let deadline = std::time::Instant::now() + Duration::from_millis(millis as u64);
+                    while std::time::Instant::now() < deadline {
+                        runtime.check_cancelled()?;
+                        std::thread::sleep(Duration::from_millis(25));
+                    }
+                    Ok(Value::Unit)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
+        "timeoutWith".to_string(),
+        builtin("concurrent.timeoutWith", 3, |mut args, runtime| {
+            let effect_value = args.pop().unwrap();
+            let timeout_error = args.pop().unwrap();
+            let millis = expect_int(args.pop().unwrap(), "concurrent.timeoutWith")?;
+            let ctx = runtime.ctx.clone();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |runtime| {
+                    let left_cancel = CancelToken::child(runtime.cancel.clone());
+                    let right_cancel = CancelToken::child(runtime.cancel.clone());
+                    let (tx, rx) = mpsc::channel();
+
+                    spawn_effect(
+                        0,
+                        effect_value.clone(),
+                        ctx.clone(),
+                        left_cancel.clone(),
+                        tx.clone(),
+                    );
+
+                    std::thread::spawn({
+                        let tx = tx.clone();
+                        let right_cancel = right_cancel.clone();
+                        move || {
+                            if millis > 0 {
+                                std::thread::sleep(Duration::from_millis(millis as u64));
+                            }
+                            if !right_cancel.is_cancelled() {
+                                let _ = tx.send((1, Ok(Value::Unit)));
+                            }
+                        }
+                    });
+
+                    let (winner, result) = loop {
+                        runtime.check_cancelled()?;
+                        match rx.recv_timeout(Duration::from_millis(25)) {
+                            Ok(value) => break value,
+                            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                                return Err(RuntimeError::Message("worker stopped".to_string()))
+                            }
+                        }
+                    };
+
+                    if winner == 0 {
+                        right_cancel.cancel();
+                        result
+                    } else {
+                        left_cancel.cancel();
+                        Err(RuntimeError::Error(timeout_error.clone()))
+                    }
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
+        "cancelToken".to_string(),
+        builtin("concurrent.cancelToken", 1, |_, _| Ok(make_cancel_token())),
+    );
+    fields.insert(
         "spawnDetached".to_string(),
         builtin("concurrent.spawnDetached", 1, |mut args, runtime| {
             let effect_value = args.pop().unwrap();
@@ -307,18 +525,4 @@ pub(crate) fn build_concurrent_record() -> Value {
         }),
     );
     Value::Record(Arc::new(fields))
-}
-
-fn spawn_effect(
-    id: usize,
-    effect: Value,
-    ctx: Arc<RuntimeContext>,
-    cancel: Arc<CancelToken>,
-    sender: mpsc::Sender<(usize, Result<Value, RuntimeError>)>,
-) {
-    std::thread::spawn(move || {
-        let mut runtime = Runtime::new(ctx, cancel);
-        let result = runtime.run_effect_value(effect);
-        let _ = sender.send((id, result));
-    });
 }

@@ -15,6 +15,7 @@ mod log;
 mod math;
 mod number;
 mod regex;
+mod secrets;
 mod signal;
 mod sockets;
 mod streams;

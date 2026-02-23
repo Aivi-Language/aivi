@@ -340,25 +340,78 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         },
     );
     let imap_a = checker.fresh_var_id();
+    let mime_part_ty = Type::Record {
+        fields: vec![
+            ("contentType".to_string(), text_ty.clone()),
+            ("body".to_string(), text_ty.clone()),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    let smtp_config_ty = Type::Record {
+        fields: vec![
+            ("host".to_string(), text_ty.clone()),
+            ("user".to_string(), text_ty.clone()),
+            ("password".to_string(), text_ty.clone()),
+            ("from".to_string(), text_ty.clone()),
+            ("to".to_string(), text_ty.clone()),
+            ("subject".to_string(), text_ty.clone()),
+            ("body".to_string(), text_ty.clone()),
+        ]
+        .into_iter()
+        .collect(),
+    };
     let email_record = Type::Record {
-        fields: vec![(
-            "imap".to_string(),
-            Type::Func(
-                Box::new(Type::Record {
-                    fields: vec![
-                        ("host".to_string(), text_ty.clone()),
-                        ("user".to_string(), text_ty.clone()),
-                        ("password".to_string(), text_ty.clone()),
-                    ]
-                    .into_iter()
-                    .collect(),
-                }),
-                Box::new(Type::con("Source").app(vec![
-                    Type::con("Imap"),
-                    Type::con("List").app(vec![Type::Var(imap_a)]),
-                ])),
+        fields: vec![
+            (
+                "imap".to_string(),
+                Type::Func(
+                    Box::new(Type::Record {
+                        fields: vec![
+                            ("host".to_string(), text_ty.clone()),
+                            ("user".to_string(), text_ty.clone()),
+                            ("password".to_string(), text_ty.clone()),
+                            (
+                                "mailbox".to_string(),
+                                Type::con("Option").app(vec![text_ty.clone()]),
+                            ),
+                            (
+                                "filter".to_string(),
+                                Type::con("Option").app(vec![text_ty.clone()]),
+                            ),
+                            (
+                                "limit".to_string(),
+                                Type::con("Option").app(vec![int_ty.clone()]),
+                            ),
+                            (
+                                "port".to_string(),
+                                Type::con("Option").app(vec![int_ty.clone()]),
+                            ),
+                        ]
+                        .into_iter()
+                        .collect(),
+                    }),
+                    Box::new(Type::con("Source").app(vec![
+                        Type::con("Imap"),
+                        Type::con("List").app(vec![Type::Var(imap_a)]),
+                    ])),
+                ),
             ),
-        )]
+            (
+                "smtpSend".to_string(),
+                Type::Func(
+                    Box::new(smtp_config_ty),
+                    Box::new(Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")])),
+                ),
+            ),
+            (
+                "mimeParts".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::con("List").app(vec![mime_part_ty])),
+                ),
+            ),
+        ]
         .into_iter()
         .collect(),
     };
@@ -1065,9 +1118,18 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     let list_table_ty = Type::con("List").app(vec![table_ty.clone()]);
     let list_row_ty = Type::con("List").app(vec![Type::Var(db_row)]);
     let list_column_ty = Type::con("List").app(vec![Type::con("Column")]);
+    let list_text_ty = Type::con("List").app(vec![text_ty.clone()]);
     let db_effect_table_ty = Type::con("Effect").app(vec![db_error_ty.clone(), table_ty.clone()]);
     let db_effect_rows_ty = Type::con("Effect").app(vec![db_error_ty.clone(), list_row_ty.clone()]);
     let db_effect_unit_ty = Type::con("Effect").app(vec![db_error_ty.clone(), Type::con("Unit")]);
+    let sqlite_tuning_ty = Type::Record {
+        fields: vec![
+            ("wal".to_string(), Type::con("Bool")),
+            ("busyTimeoutMs".to_string(), Type::con("Int")),
+        ]
+        .into_iter()
+        .collect(),
+    };
     let database_record = Type::Record {
         fields: vec![
             (
@@ -1100,7 +1162,42 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             ),
             (
                 "runMigrations".to_string(),
-                Type::Func(Box::new(list_table_ty), Box::new(db_effect_unit_ty)),
+                Type::Func(Box::new(list_table_ty), Box::new(db_effect_unit_ty.clone())),
+            ),
+            (
+                "configureSqlite".to_string(),
+                Type::Func(
+                    Box::new(sqlite_tuning_ty),
+                    Box::new(db_effect_unit_ty.clone()),
+                ),
+            ),
+            ("beginTx".to_string(), db_effect_unit_ty.clone()),
+            ("commitTx".to_string(), db_effect_unit_ty.clone()),
+            ("rollbackTx".to_string(), db_effect_unit_ty.clone()),
+            (
+                "savepoint".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(db_effect_unit_ty.clone()),
+                ),
+            ),
+            (
+                "releaseSavepoint".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(db_effect_unit_ty.clone()),
+                ),
+            ),
+            (
+                "rollbackToSavepoint".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(db_effect_unit_ty.clone()),
+                ),
+            ),
+            (
+                "runMigrationSql".to_string(),
+                Type::Func(Box::new(list_text_ty), Box::new(db_effect_unit_ty.clone())),
             ),
             (
                 "ins".to_string(),
@@ -1122,4 +1219,67 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .collect(),
     };
     env.insert("database".to_string(), Scheme::mono(database_record));
+
+    let encrypted_blob_ty = Type::Record {
+        fields: vec![
+            ("keyId".to_string(), text_ty.clone()),
+            ("algorithm".to_string(), text_ty.clone()),
+            ("ciphertext".to_string(), Type::con("Bytes")),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    let option_encrypted_blob_ty = Type::con("Option").app(vec![encrypted_blob_ty.clone()]);
+    let secrets_record = Type::Record {
+        fields: vec![
+            (
+                "put".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(encrypted_blob_ty.clone()),
+                        Box::new(
+                            Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")]),
+                        ),
+                    )),
+                ),
+            ),
+            (
+                "get".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(
+                        Type::con("Effect").app(vec![Type::con("Text"), option_encrypted_blob_ty]),
+                    ),
+                ),
+            ),
+            (
+                "delete".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")])),
+                ),
+            ),
+            (
+                "makeBlob".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(Type::con("Bytes")),
+                            Box::new(encrypted_blob_ty.clone()),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "validateBlob".to_string(),
+                Type::Func(Box::new(encrypted_blob_ty), Box::new(Type::con("Bool"))),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    env.insert("secrets".to_string(), Scheme::mono(secrets_record));
 }

@@ -49,6 +49,7 @@ mod quaternion;
 mod rational;
 mod regex;
 mod rest;
+mod secrets;
 mod signal;
 mod system;
 mod testing;
@@ -206,6 +207,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: database::MODULE_NAME,
         source: database::SOURCE,
+    },
+    EmbeddedModule {
+        name: secrets::MODULE_NAME,
+        source: secrets::SOURCE,
     },
     EmbeddedModule {
         name: database_pool::MODULE_NAME,

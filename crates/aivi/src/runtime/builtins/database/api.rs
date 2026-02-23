@@ -47,6 +47,36 @@ enum DbRequest {
         rows_json: String,
         resp: DbResp<i64>,
     },
+    SqliteConfigure {
+        wal: bool,
+        busy_timeout_ms: i64,
+        resp: DbResp<()>,
+    },
+    BeginTransaction {
+        resp: DbResp<()>,
+    },
+    CommitTransaction {
+        resp: DbResp<()>,
+    },
+    RollbackTransaction {
+        resp: DbResp<()>,
+    },
+    Savepoint {
+        name: String,
+        resp: DbResp<()>,
+    },
+    ReleaseSavepoint {
+        name: String,
+        resp: DbResp<()>,
+    },
+    RollbackToSavepoint {
+        name: String,
+        resp: DbResp<()>,
+    },
+    RunMigrationSql {
+        statements: Vec<String>,
+        resp: DbResp<()>,
+    },
 }
 
 #[derive(Clone)]
@@ -318,6 +348,71 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                 }
             }
         }
+
+        fn sqlite_configure(&mut self, wal: bool, busy_timeout_ms: i64) -> Result<(), String> {
+            match self {
+                Backend::Sqlite(conn) => {
+                    let journal_mode = if wal { "WAL" } else { "DELETE" };
+                    conn.pragma_update(None, "journal_mode", journal_mode)
+                        .map_err(|e| backend_err("sqlite.configure.journal_mode", e))?;
+                    conn.busy_timeout(std::time::Duration::from_millis(
+                        busy_timeout_ms.max(0) as u64,
+                    ))
+                    .map_err(|e| backend_err("sqlite.configure.busy_timeout", e))?;
+                    Ok(())
+                }
+                _ => Ok(()),
+            }
+        }
+
+        fn execute_statement(&mut self, statement: &str) -> Result<(), String> {
+            match self {
+                Backend::Sqlite(conn) => conn
+                    .execute_batch(statement)
+                    .map_err(|e| backend_err("sqlite.execute", e)),
+                Backend::Postgresql(client) => client
+                    .batch_execute(statement)
+                    .map_err(|e| backend_err("postgres.execute", e)),
+                Backend::Mysql(conn) => conn
+                    .query_drop(statement)
+                    .map_err(|e| backend_err("mysql.execute", e)),
+            }
+        }
+
+        fn begin_transaction(&mut self) -> Result<(), String> {
+            self.execute_statement("BEGIN TRANSACTION")
+        }
+
+        fn commit_transaction(&mut self) -> Result<(), String> {
+            self.execute_statement("COMMIT")
+        }
+
+        fn rollback_transaction(&mut self) -> Result<(), String> {
+            self.execute_statement("ROLLBACK")
+        }
+
+        fn savepoint(&mut self, name: &str) -> Result<(), String> {
+            self.execute_statement(&format!("SAVEPOINT {name}"))
+        }
+
+        fn release_savepoint(&mut self, name: &str) -> Result<(), String> {
+            self.execute_statement(&format!("RELEASE SAVEPOINT {name}"))
+        }
+
+        fn rollback_to_savepoint(&mut self, name: &str) -> Result<(), String> {
+            self.execute_statement(&format!("ROLLBACK TO SAVEPOINT {name}"))
+        }
+
+        fn run_migration_sql(&mut self, statements: &[String]) -> Result<(), String> {
+            for statement in statements {
+                let trimmed = statement.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                self.execute_statement(trimmed)?;
+            }
+            Ok(())
+        }
     }
 
     let mut backend: Option<Backend> = None;
@@ -391,6 +486,66 @@ fn db_worker(rx: mpsc::Receiver<DbRequest>) {
                         &columns_json,
                         &rows_json,
                     ),
+                    None => Err("database backend is not configured".to_string()),
+                };
+                let _ = resp.send(result);
+            }
+            DbRequest::SqliteConfigure {
+                wal,
+                busy_timeout_ms,
+                resp,
+            } => {
+                let result = match backend.as_mut() {
+                    Some(backend) => backend.sqlite_configure(wal, busy_timeout_ms),
+                    None => Err("database backend is not configured".to_string()),
+                };
+                let _ = resp.send(result);
+            }
+            DbRequest::BeginTransaction { resp } => {
+                let result = match backend.as_mut() {
+                    Some(backend) => backend.begin_transaction(),
+                    None => Err("database backend is not configured".to_string()),
+                };
+                let _ = resp.send(result);
+            }
+            DbRequest::CommitTransaction { resp } => {
+                let result = match backend.as_mut() {
+                    Some(backend) => backend.commit_transaction(),
+                    None => Err("database backend is not configured".to_string()),
+                };
+                let _ = resp.send(result);
+            }
+            DbRequest::RollbackTransaction { resp } => {
+                let result = match backend.as_mut() {
+                    Some(backend) => backend.rollback_transaction(),
+                    None => Err("database backend is not configured".to_string()),
+                };
+                let _ = resp.send(result);
+            }
+            DbRequest::Savepoint { name, resp } => {
+                let result = match backend.as_mut() {
+                    Some(backend) => backend.savepoint(&name),
+                    None => Err("database backend is not configured".to_string()),
+                };
+                let _ = resp.send(result);
+            }
+            DbRequest::ReleaseSavepoint { name, resp } => {
+                let result = match backend.as_mut() {
+                    Some(backend) => backend.release_savepoint(&name),
+                    None => Err("database backend is not configured".to_string()),
+                };
+                let _ = resp.send(result);
+            }
+            DbRequest::RollbackToSavepoint { name, resp } => {
+                let result = match backend.as_mut() {
+                    Some(backend) => backend.rollback_to_savepoint(&name),
+                    None => Err("database backend is not configured".to_string()),
+                };
+                let _ = resp.send(result);
+            }
+            DbRequest::RunMigrationSql { statements, resp } => {
+                let result = match backend.as_mut() {
+                    Some(backend) => backend.run_migration_sql(&statements),
                     None => Err("database backend is not configured".to_string()),
                 };
                 let _ = resp.send(result);
