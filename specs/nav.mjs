@@ -99,7 +99,7 @@ export const sidebar = [
         ]
       },
       {
-        text: 'Time (Chronos)',
+        text: 'Time',
         collapsed: true,
         items: [
           { text: 'Instant', link: '/stdlib/chronos/instant' },

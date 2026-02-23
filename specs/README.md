@@ -62,7 +62,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Graph](stdlib/math/graph.md)
 - [Linear Algebra](stdlib/math/linear_algebra.md)
 - [Tree](stdlib/math/tree.md)
-#### Time (Chronos)
+#### Time
 - [Instant](stdlib/chronos/instant.md)
 - [Calendar](stdlib/chronos/calendar.md)
 - [Duration](stdlib/chronos/duration.md)

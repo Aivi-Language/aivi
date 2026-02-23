@@ -25,7 +25,6 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 
 ### Standard Library
 
-- A calculus module.
 - Structured codecs (`file.json`, `file.csv`) and streaming sources — specified in [External Sources § 12.1](syntax/external_sources.md) but not yet implemented.
 - `env.decode` (structured environment decoding) — specified but not implemented.
 - Several stdlib modules have **stub or incomplete specs** (see below).
