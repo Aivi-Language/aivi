@@ -7,7 +7,7 @@ export Unit, Bool, Int, Float, Text, Char, Bytes, DateTime
 export List, Option, Result, Tuple, Map, Set, Queue, Deque, Heap
 export Source, SourceError
 export None, Some, Ok, Err, True, False
-export pure, fail, attempt, load
+export pure, fail, attempt, load, constructorName, constructorOrdinal
 
 export text, regex, math, calendar, color
 export bigint, rational, decimal

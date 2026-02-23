@@ -17,3 +17,12 @@ The **Prelude** is your default toolkit. It acts as the "standard library of the
 - Common domains (dates, colors, vectors) are used universally
 - Delta literals should "just work" without explicit `use`
 - Explicit opt-out preserves control for advanced use cases
+
+## Constructor introspection
+
+The prelude also exposes two helpers for ADT values:
+
+| Function | Type | Description |
+| --- | --- | --- |
+| `constructorName value` | `A -> Text` | Returns the constructor tag name (for example `Some`, `Err`, `Published`). |
+| `constructorOrdinal value` | `A -> Int` | Returns the zero-based declaration index of the constructor inside its ADT definition. |

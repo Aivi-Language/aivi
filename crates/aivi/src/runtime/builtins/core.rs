@@ -68,6 +68,41 @@ pub(crate) fn register_builtins(env: &Env) {
     );
 
     env.set(
+        "constructorName".to_string(),
+        builtin("constructorName", 1, |mut args, _| {
+            let value = args.pop().unwrap();
+            match value {
+                Value::Constructor { name, .. } => Ok(Value::Text(name)),
+                other => Err(RuntimeError::Message(format!(
+                    "constructorName expects an ADT constructor value, got {}",
+                    format_value(&other)
+                ))),
+            }
+        }),
+    );
+
+    env.set(
+        "constructorOrdinal".to_string(),
+        builtin("constructorOrdinal", 1, |mut args, runtime| {
+            let value = args.pop().unwrap();
+            let Value::Constructor { name, .. } = value else {
+                return Err(RuntimeError::Message(
+                    "constructorOrdinal expects an ADT constructor value".to_string(),
+                ));
+            };
+            match runtime.ctx.constructor_ordinal(&name) {
+                Some(Some(ordinal)) => Ok(Value::Int(ordinal as i64)),
+                Some(None) => Err(RuntimeError::Message(format!(
+                    "constructorOrdinal is ambiguous for constructor {name}"
+                ))),
+                None => Err(RuntimeError::Message(format!(
+                    "constructorOrdinal does not know constructor {name}"
+                ))),
+            }
+        }),
+    );
+
+    env.set(
         "map".to_string(),
         builtin("map", 2, |mut args, runtime| {
             let container = args.pop().unwrap();

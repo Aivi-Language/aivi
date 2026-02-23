@@ -307,7 +307,10 @@ fn build_runtime_from_program(program: HirProgram) -> Result<Runtime, AiviError>
         }
     }
 
-    let ctx = Arc::new(RuntimeContext::new(globals));
+    let ctx = Arc::new(RuntimeContext::new_with_constructor_ordinals(
+        globals,
+        core_constructor_ordinals(),
+    ));
     let cancel = CancelToken::root();
     Ok(Runtime::new(ctx, cancel))
 }
@@ -564,7 +567,19 @@ fn build_runtime_from_program_scoped(
         }
     }
 
-    let ctx = Arc::new(RuntimeContext::new(globals));
+    let mut constructor_ordinals = core_constructor_ordinals();
+    for (name, ordinal) in collect_surface_constructor_ordinals(surface_modules) {
+        match ordinal {
+            Some(idx) => insert_constructor_ordinal(&mut constructor_ordinals, name, idx),
+            None => {
+                constructor_ordinals.insert(name, None);
+            }
+        }
+    }
+    let ctx = Arc::new(RuntimeContext::new_with_constructor_ordinals(
+        globals,
+        constructor_ordinals,
+    ));
     let cancel = CancelToken::root();
     Ok(Runtime::new(ctx, cancel))
 }
@@ -575,6 +590,67 @@ fn format_runtime_error(err: RuntimeError) -> String {
         RuntimeError::Message(message) => message,
         RuntimeError::Error(value) => format!("runtime error: {}", format_value(&value)),
     }
+}
+
+fn insert_constructor_ordinal(
+    ordinals: &mut HashMap<String, Option<usize>>,
+    name: String,
+    ordinal: usize,
+) {
+    match ordinals.get(&name) {
+        None => {
+            ordinals.insert(name, Some(ordinal));
+        }
+        Some(Some(existing)) if *existing == ordinal => {}
+        _ => {
+            ordinals.insert(name, None);
+        }
+    }
+}
+
+fn core_constructor_ordinals() -> HashMap<String, Option<usize>> {
+    let mut ordinals = HashMap::new();
+    insert_constructor_ordinal(&mut ordinals, "True".to_string(), 0);
+    insert_constructor_ordinal(&mut ordinals, "False".to_string(), 1);
+    insert_constructor_ordinal(&mut ordinals, "None".to_string(), 0);
+    insert_constructor_ordinal(&mut ordinals, "Some".to_string(), 1);
+    insert_constructor_ordinal(&mut ordinals, "Err".to_string(), 0);
+    insert_constructor_ordinal(&mut ordinals, "Ok".to_string(), 1);
+    insert_constructor_ordinal(&mut ordinals, "Closed".to_string(), 0);
+    ordinals
+}
+
+fn collect_surface_constructor_ordinals(
+    surface_modules: &[crate::surface::Module],
+) -> HashMap<String, Option<usize>> {
+    let mut ordinals = HashMap::new();
+    for module in surface_modules {
+        for item in &module.items {
+            match item {
+                crate::surface::ModuleItem::TypeDecl(decl) => {
+                    for (ordinal, ctor) in decl.constructors.iter().enumerate() {
+                        insert_constructor_ordinal(&mut ordinals, ctor.name.name.clone(), ordinal);
+                    }
+                }
+                crate::surface::ModuleItem::DomainDecl(domain) => {
+                    for domain_item in &domain.items {
+                        let crate::surface::DomainItem::TypeAlias(decl) = domain_item else {
+                            continue;
+                        };
+                        for (ordinal, ctor) in decl.constructors.iter().enumerate() {
+                            insert_constructor_ordinal(
+                                &mut ordinals,
+                                ctor.name.name.clone(),
+                                ordinal,
+                            );
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    ordinals
 }
 
 include!("runtime_impl/lifecycle_and_cancel.rs");
