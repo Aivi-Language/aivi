@@ -576,6 +576,52 @@ main = do Effect {
 }
 
 #[test]
+fn database_upsert_inserts_then_updates() {
+    let source = r#"
+module test.databaseUpsert
+
+Driver = Sqlite | Postgresql | Mysql
+DbConfig = { driver: Driver, url: Text }
+
+User = { id: Int, name: Text, active: Bool }
+
+userTable = database.table "users" []
+
+main = do Effect {
+  _ <- database.configure { driver: Sqlite, url: ":memory:" }
+  _ <- database.runMigrations [ userTable ]
+  _ <- database.applyDelta userTable (database.upsert (u => u.id == 1) { id: 1, name: "A", active: False } (u => u <| { name: "B" }))
+  table1 <- database.applyDelta userTable (database.upsert (u => u.id == 1) { id: 1, name: "X", active: False } (u => u <| { name: "B", active: True }))
+  database.load table1
+}
+"#;
+
+    let mut runtime = runtime_from_source(source);
+    let main = runtime.ctx.globals.get("main").unwrap();
+    let main = expect_ok(runtime.force_value(main), "evaluate main");
+    let Value::Effect(effect) = main else {
+        panic!("expected main to be an Effect");
+    };
+
+    let result = match runtime.run_effect_value(Value::Effect(effect)) {
+        Ok(value) => value,
+        Err(RuntimeError::Cancelled) => panic!("run main effect: cancelled"),
+        Err(RuntimeError::Message(message)) => panic!("run main effect: {message}"),
+        Err(RuntimeError::Error(value)) => panic!("run main effect: {}", format_value(&value)),
+    };
+    let Value::List(items) = result else {
+        panic!("expected List result");
+    };
+    assert_eq!(items.len(), 1);
+    let Value::Record(fields) = &items[0] else {
+        panic!("expected record row");
+    };
+    assert!(matches!(fields.get("id"), Some(Value::Int(1))));
+    assert!(matches!(fields.get("name"), Some(Value::Text(t)) if t == "B"));
+    assert!(matches!(fields.get("active"), Some(Value::Bool(true))));
+}
+
+#[test]
 fn concurrent_par_observes_parent_cancellation() {
     let globals = Env::new(None);
     register_builtins(&globals);

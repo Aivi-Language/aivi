@@ -44,11 +44,12 @@ Driver =
 // - Postgresql/Mysql: url is a connection string.
 DbConfig = { driver: Driver, url: Text }
 
-// Deltas express insert/update/delete
+// Deltas express insert/update/delete/upsert
 Delta A =
   | Insert A
   | Update (Pred A) (Patch A)
   | Delete (Pred A)
+  | Upsert (Pred A) A (Patch A)
 
 // Patch functions apply record updates
 Patch A = A -> A

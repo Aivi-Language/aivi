@@ -17,7 +17,7 @@ export configureSqlite
 export beginTx, commitTx, rollbackTx, inTransaction
 export savepoint, releaseSavepoint, rollbackToSavepoint
 export chunkDeltas, ftsDoc, ftsMatchAny, ftsMatchAll
-export ins, upd, del
+export ins, upd, del, upsert
 export domain Database
 
 use aivi
@@ -38,7 +38,7 @@ Column = {
 
 Pred A = A -> Bool
 Patch A = A -> A
-Delta A = Insert A | Update (Pred A) (Patch A) | Delete (Pred A)
+Delta A = Insert A | Update (Pred A) (Patch A) | Delete (Pred A) | Upsert (Pred A) A (Patch A)
 
 Driver = Sqlite | Postgresql | Mysql
 DbConfig = { driver: Driver, url: Text }
@@ -181,6 +181,9 @@ upd = pred patchFn => Update pred patchFn
 del : Pred A -> Delta A
 del = pred => Delete pred
 
+upsert : Pred A -> A -> Patch A -> Delta A
+upsert = pred value patchFn => Upsert pred value patchFn
+
 domain Database over Table A = {
   (+) : Table A -> Delta A -> Effect DbError (Table A)
   (+) = table delta => applyDelta table delta
@@ -188,5 +191,6 @@ domain Database over Table A = {
   ins = Insert
   upd = Update
   del = Delete
+  upsert = Upsert
 }
 "#;

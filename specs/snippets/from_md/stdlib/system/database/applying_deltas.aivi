@@ -13,3 +13,8 @@ deleteOldPosts : Instant -> Effect DbError Unit
 deleteOldPosts = cutoff => do Effect {
   _ <- postTable + del (_.createdAt < cutoff)
 }
+
+upsertActiveUser : User -> Effect DbError Unit
+upsertActiveUser = user => do Effect {
+  _ <- userTable + upsert (id == user.id) user (u => u <| { active: True, loginCount: _ + 1 })
+}

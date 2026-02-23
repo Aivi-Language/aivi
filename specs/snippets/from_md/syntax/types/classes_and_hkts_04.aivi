@@ -1,3 +1,3 @@
 class Chain (F *) = Apply {
-  chain: F A -> (A -> F B) -> F B
+  chain: (A -> F B) -> F A -> F B
 }
