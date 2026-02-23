@@ -2616,8 +2616,40 @@
       ]
     },
     {
+      "path": "specs/snippets/from_md/stdlib/ui/gtk4/public_api.aivi",
+      "module": "docs.snippets.stdlib.ui.gtk4.public_api",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
       "path": "specs/snippets/from_md/stdlib/ui/server_html/quick_start_example.aivi",
       "module": "docs.snippets.stdlib.ui.server_html.quick_start_example",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/server_html/public_api.aivi",
+      "module": "docs.snippets.stdlib.ui.server_html.public_api",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/server_html/counter_app_route_bootstrap.aivi",
+      "module": "docs.snippets.stdlib.ui.server_html.counter_app_route_bootstrap",
+      "verify": [
+        "fmt",
+        "parse"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/ui/server_html/platform_clipboard_intersection_effects.aivi",
+      "module": "docs.snippets.stdlib.ui.server_html.platform_clipboard_intersection_effects",
       "verify": [
         "fmt",
         "parse"

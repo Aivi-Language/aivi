@@ -13,6 +13,549 @@ use crate::doc_index::DocIndex;
 use crate::state::IndexedModule;
 
 impl Backend {
+    fn expr_contains_position_for_hover(expr: &aivi::Expr, position: Position) -> bool {
+        let range = Self::span_to_range(Self::expr_span(expr).clone());
+        Self::range_contains_position(&range, position)
+    }
+
+    fn collect_pattern_binders(pattern: &aivi::Pattern, out: &mut Vec<String>) {
+        match pattern {
+            aivi::Pattern::Ident(name) | aivi::Pattern::SubjectIdent(name) => {
+                out.push(name.name.clone())
+            }
+            aivi::Pattern::At { name, pattern, .. } => {
+                out.push(name.name.clone());
+                Self::collect_pattern_binders(pattern, out);
+            }
+            aivi::Pattern::Tuple { items, .. } => {
+                for item in items {
+                    Self::collect_pattern_binders(item, out);
+                }
+            }
+            aivi::Pattern::List { items, rest, .. } => {
+                for item in items {
+                    Self::collect_pattern_binders(item, out);
+                }
+                if let Some(rest) = rest {
+                    Self::collect_pattern_binders(rest, out);
+                }
+            }
+            aivi::Pattern::Record { fields, .. } => {
+                for field in fields {
+                    Self::collect_pattern_binders(&field.pattern, out);
+                }
+            }
+            aivi::Pattern::Constructor { args, .. } => {
+                for arg in args {
+                    Self::collect_pattern_binders(arg, out);
+                }
+            }
+            aivi::Pattern::Wildcard(_) | aivi::Pattern::Literal(_) => {}
+        }
+    }
+
+    fn pattern_has_binding_at_position(
+        pattern: &aivi::Pattern,
+        ident: &str,
+        position: Position,
+    ) -> bool {
+        match pattern {
+            aivi::Pattern::Ident(name) | aivi::Pattern::SubjectIdent(name) => {
+                name.name == ident
+                    && Self::range_contains_position(&Self::span_to_range(name.span.clone()), position)
+            }
+            aivi::Pattern::At { name, pattern, .. } => {
+                (name.name == ident
+                    && Self::range_contains_position(
+                        &Self::span_to_range(name.span.clone()),
+                        position,
+                    ))
+                    || Self::pattern_has_binding_at_position(pattern, ident, position)
+            }
+            aivi::Pattern::Tuple { items, .. } => items
+                .iter()
+                .any(|item| Self::pattern_has_binding_at_position(item, ident, position)),
+            aivi::Pattern::List { items, rest, .. } => {
+                items
+                    .iter()
+                    .any(|item| Self::pattern_has_binding_at_position(item, ident, position))
+                    || rest.as_deref().is_some_and(|rest| {
+                        Self::pattern_has_binding_at_position(rest, ident, position)
+                    })
+            }
+            aivi::Pattern::Record { fields, .. } => fields
+                .iter()
+                .any(|field| Self::pattern_has_binding_at_position(&field.pattern, ident, position)),
+            aivi::Pattern::Constructor { args, .. } => args
+                .iter()
+                .any(|arg| Self::pattern_has_binding_at_position(arg, ident, position)),
+            aivi::Pattern::Wildcard(_) | aivi::Pattern::Literal(_) => false,
+        }
+    }
+
+    fn local_binding_visible_in_expr(
+        expr: &aivi::Expr,
+        ident: &str,
+        position: Position,
+        in_scope: &mut Vec<String>,
+    ) -> bool {
+        if !Self::expr_contains_position_for_hover(expr, position) {
+            return false;
+        }
+        match expr {
+            aivi::Expr::Ident(name) => {
+                name.name == ident
+                    && in_scope.iter().any(|bound| bound == ident)
+                    && Self::range_contains_position(&Self::span_to_range(name.span.clone()), position)
+            }
+            aivi::Expr::Lambda { params, body, .. } => {
+                if params
+                    .iter()
+                    .any(|param| Self::pattern_has_binding_at_position(param, ident, position))
+                {
+                    return true;
+                }
+                let mut scoped = in_scope.clone();
+                for param in params {
+                    Self::collect_pattern_binders(param, &mut scoped);
+                }
+                Self::local_binding_visible_in_expr(body, ident, position, &mut scoped)
+            }
+            aivi::Expr::Match {
+                scrutinee, arms, ..
+            } => {
+                if scrutinee
+                    .as_ref()
+                    .is_some_and(|s| Self::local_binding_visible_in_expr(s, ident, position, in_scope))
+                {
+                    return true;
+                }
+                for arm in arms {
+                    let arm_range = Self::span_to_range(arm.span.clone());
+                    if !Self::range_contains_position(&arm_range, position) {
+                        continue;
+                    }
+                    if Self::pattern_has_binding_at_position(&arm.pattern, ident, position) {
+                        return true;
+                    }
+                    let mut scoped = in_scope.clone();
+                    Self::collect_pattern_binders(&arm.pattern, &mut scoped);
+                    if arm
+                        .guard
+                        .as_ref()
+                        .is_some_and(|g| Self::local_binding_visible_in_expr(g, ident, position, &mut scoped))
+                        || Self::local_binding_visible_in_expr(&arm.body, ident, position, &mut scoped)
+                    {
+                        return true;
+                    }
+                }
+                false
+            }
+            aivi::Expr::Block { items, .. } => {
+                let mut scoped = in_scope.clone();
+                for item in items {
+                    match item {
+                        aivi::BlockItem::Bind { pattern, expr, .. }
+                        | aivi::BlockItem::Let { pattern, expr, .. } => {
+                            if Self::local_binding_visible_in_expr(expr, ident, position, &mut scoped) {
+                                return true;
+                            }
+                            if Self::pattern_has_binding_at_position(pattern, ident, position) {
+                                return true;
+                            }
+                            Self::collect_pattern_binders(pattern, &mut scoped);
+                        }
+                        aivi::BlockItem::Filter { expr, .. }
+                        | aivi::BlockItem::Yield { expr, .. }
+                        | aivi::BlockItem::Recurse { expr, .. }
+                        | aivi::BlockItem::Expr { expr, .. } => {
+                            if Self::local_binding_visible_in_expr(expr, ident, position, &mut scoped) {
+                                return true;
+                            }
+                        }
+                        aivi::BlockItem::When { cond, effect, .. }
+                        | aivi::BlockItem::Unless { cond, effect, .. } => {
+                            if Self::local_binding_visible_in_expr(cond, ident, position, &mut scoped)
+                                || Self::local_binding_visible_in_expr(
+                                    effect,
+                                    ident,
+                                    position,
+                                    &mut scoped,
+                                )
+                            {
+                                return true;
+                            }
+                        }
+                        aivi::BlockItem::Given {
+                            cond, fail_expr, ..
+                        } => {
+                            if Self::local_binding_visible_in_expr(cond, ident, position, &mut scoped)
+                                || Self::local_binding_visible_in_expr(
+                                    fail_expr,
+                                    ident,
+                                    position,
+                                    &mut scoped,
+                                )
+                            {
+                                return true;
+                            }
+                        }
+                        aivi::BlockItem::On {
+                            transition,
+                            handler,
+                            ..
+                        } => {
+                            if Self::local_binding_visible_in_expr(
+                                transition,
+                                ident,
+                                position,
+                                &mut scoped,
+                            ) || Self::local_binding_visible_in_expr(
+                                handler,
+                                ident,
+                                position,
+                                &mut scoped,
+                            ) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+                false
+            }
+            aivi::Expr::Suffixed { base, .. } | aivi::Expr::UnaryNeg { expr: base, .. } => {
+                Self::local_binding_visible_in_expr(base, ident, position, in_scope)
+            }
+            aivi::Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
+                aivi::TextPart::Text { .. } => false,
+                aivi::TextPart::Expr { expr, .. } => {
+                    Self::local_binding_visible_in_expr(expr, ident, position, in_scope)
+                }
+            }),
+            aivi::Expr::List { items, .. } => items
+                .iter()
+                .any(|item| Self::local_binding_visible_in_expr(&item.expr, ident, position, in_scope)),
+            aivi::Expr::Tuple { items, .. } => items
+                .iter()
+                .any(|item| Self::local_binding_visible_in_expr(item, ident, position, in_scope)),
+            aivi::Expr::Index { base, index, .. } => {
+                Self::local_binding_visible_in_expr(base, ident, position, in_scope)
+                    || Self::local_binding_visible_in_expr(index, ident, position, in_scope)
+            }
+            aivi::Expr::Call { func, args, .. } => {
+                Self::local_binding_visible_in_expr(func, ident, position, in_scope)
+                    || args.iter().any(|arg| {
+                        Self::local_binding_visible_in_expr(arg, ident, position, in_scope)
+                    })
+            }
+            aivi::Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => {
+                Self::local_binding_visible_in_expr(cond, ident, position, in_scope)
+                    || Self::local_binding_visible_in_expr(then_branch, ident, position, in_scope)
+                    || Self::local_binding_visible_in_expr(else_branch, ident, position, in_scope)
+            }
+            aivi::Expr::Binary { left, right, .. } => {
+                Self::local_binding_visible_in_expr(left, ident, position, in_scope)
+                    || Self::local_binding_visible_in_expr(right, ident, position, in_scope)
+            }
+            aivi::Expr::Record { fields, .. } | aivi::Expr::PatchLit { fields, .. } => fields
+                .iter()
+                .any(|field| Self::local_binding_visible_in_expr(&field.value, ident, position, in_scope)),
+            aivi::Expr::FieldAccess { base, field, .. } => {
+                (field.name == ident
+                    && in_scope.iter().any(|bound| bound == ident)
+                    && Self::range_contains_position(
+                        &Self::span_to_range(field.span.clone()),
+                        position,
+                    ))
+                    || Self::local_binding_visible_in_expr(base, ident, position, in_scope)
+            }
+            aivi::Expr::FieldSection { field, .. } => {
+                field.name == ident
+                    && in_scope.iter().any(|bound| bound == ident)
+                    && Self::range_contains_position(&Self::span_to_range(field.span.clone()), position)
+            }
+            aivi::Expr::Literal(_) | aivi::Expr::Raw { .. } => false,
+        }
+    }
+
+    fn hover_contents_for_local_binding(
+        module: &Module,
+        ident: &str,
+        position: Position,
+        inferred: Option<&HashMap<String, String>>,
+        workspace_modules: Option<&HashMap<String, IndexedModule>>,
+    ) -> Option<String> {
+        fn pattern_binds_name(pattern: &aivi::Pattern, name: &str) -> bool {
+            match pattern {
+                aivi::Pattern::Ident(n) | aivi::Pattern::SubjectIdent(n) => n.name == name,
+                aivi::Pattern::At {
+                    name: n, pattern, ..
+                } => n.name == name || pattern_binds_name(pattern, name),
+                aivi::Pattern::Tuple { items, .. } => {
+                    items.iter().any(|item| pattern_binds_name(item, name))
+                }
+                aivi::Pattern::List { items, rest, .. } => {
+                    items.iter().any(|item| pattern_binds_name(item, name))
+                        || rest
+                            .as_deref()
+                            .is_some_and(|rest| pattern_binds_name(rest, name))
+                }
+                aivi::Pattern::Record { fields, .. } => fields
+                    .iter()
+                    .any(|field| pattern_binds_name(&field.pattern, name)),
+                aivi::Pattern::Constructor { args, .. } => {
+                    args.iter().any(|arg| pattern_binds_name(arg, name))
+                }
+                aivi::Pattern::Wildcard(_) | aivi::Pattern::Literal(_) => false,
+            }
+        }
+
+        fn position_after(range: &tower_lsp::lsp_types::Range, position: Position) -> bool {
+            position.line > range.end.line
+                || (position.line == range.end.line && position.character >= range.end.character)
+        }
+
+        fn local_binding_expr_for_ident<'a>(
+            expr: &'a aivi::Expr,
+            ident: &str,
+            position: Position,
+        ) -> Option<(&'a aivi::Expr, bool)> {
+            let range = Backend::span_to_range(Backend::expr_span(expr).clone());
+            if !Backend::range_contains_position(&range, position) {
+                return None;
+            }
+
+            let aivi::Expr::Block { items, .. } = expr else {
+                return None;
+            };
+
+            let mut latest: Option<(&aivi::Expr, bool)> = None;
+            for item in items {
+                let item_span = match item {
+                    aivi::BlockItem::Bind { span, .. }
+                    | aivi::BlockItem::Let { span, .. }
+                    | aivi::BlockItem::Filter { span, .. }
+                    | aivi::BlockItem::Yield { span, .. }
+                    | aivi::BlockItem::Recurse { span, .. }
+                    | aivi::BlockItem::Expr { span, .. }
+                    | aivi::BlockItem::When { span, .. }
+                    | aivi::BlockItem::Unless { span, .. }
+                    | aivi::BlockItem::Given { span, .. }
+                    | aivi::BlockItem::On { span, .. } => span,
+                };
+                let item_range = Backend::span_to_range(item_span.clone());
+                if !Backend::range_contains_position(&item_range, position)
+                    && !position_after(&item_range, position)
+                {
+                    continue;
+                }
+                if Backend::range_contains_position(&item_range, position) {
+                    if let aivi::BlockItem::Expr { expr, .. } = item {
+                        if let Some(found) = local_binding_expr_for_ident(expr, ident, position) {
+                            return Some(found);
+                        }
+                    }
+                    if let aivi::BlockItem::Bind { pattern, expr, .. }
+                    | aivi::BlockItem::Let { pattern, expr, .. } = item
+                    {
+                        if pattern_binds_name(pattern, ident) {
+                            return Some((expr, matches!(item, aivi::BlockItem::Bind { .. })));
+                        }
+                        if let Some(found) = local_binding_expr_for_ident(expr, ident, position) {
+                            return Some(found);
+                        }
+                    }
+                } else if let aivi::BlockItem::Bind { pattern, expr, .. }
+                | aivi::BlockItem::Let { pattern, expr, .. } = item
+                {
+                    if pattern_binds_name(pattern, ident) {
+                        latest = Some((expr, matches!(item, aivi::BlockItem::Bind { .. })));
+                    }
+                }
+            }
+
+            latest
+        }
+
+        fn type_sig_expr_in_module(module: &Module, ident: &str) -> Option<aivi::TypeExpr> {
+            module.items.iter().find_map(|item| match item {
+                aivi::ModuleItem::TypeSig(sig) if sig.name.name == ident => Some(sig.ty.clone()),
+                _ => None,
+            })
+        }
+
+        fn resolve_type_sig_expr(
+            current_module: &Module,
+            ident: &str,
+            workspace_modules: &HashMap<String, IndexedModule>,
+        ) -> Option<aivi::TypeExpr> {
+            if let Some(ty) = type_sig_expr_in_module(current_module, ident) {
+                return Some(ty);
+            }
+            for use_decl in current_module.uses.iter() {
+                let imported = use_decl.wildcard
+                    || use_decl.items.is_empty()
+                    || use_decl.items.iter().any(|item| item.name.name == ident);
+                if !imported {
+                    continue;
+                }
+                let Some(indexed) = workspace_modules.get(&use_decl.module.name) else {
+                    continue;
+                };
+                if let Some(ty) = type_sig_expr_in_module(&indexed.module, ident) {
+                    return Some(ty);
+                }
+            }
+            None
+        }
+
+        fn apply_call_args(ty: &aivi::TypeExpr, mut args: usize) -> aivi::TypeExpr {
+            let mut current = ty.clone();
+            while args > 0 {
+                match current {
+                    aivi::TypeExpr::Func { params, result, .. } => {
+                        if params.len() <= args {
+                            args -= params.len();
+                            current = *result;
+                        } else {
+                            return *result;
+                        }
+                    }
+                    _ => return current,
+                }
+            }
+            current
+        }
+
+        fn extract_bind_value_type(ty: &aivi::TypeExpr) -> aivi::TypeExpr {
+            match ty {
+                aivi::TypeExpr::Apply { base, args, .. }
+                    if args.len() == 1
+                        && matches!(
+                            base.as_ref(),
+                            aivi::TypeExpr::Name(name)
+                                if name.name == "Effect" || name.name == "Task" || name.name == "Result"
+                        ) =>
+                {
+                    args[0].clone()
+                }
+                _ => ty.clone(),
+            }
+        }
+
+        fn root_type_name(ty: &aivi::TypeExpr) -> Option<String> {
+            match ty {
+                aivi::TypeExpr::Name(name) => {
+                    Some(name.name.rsplit('.').next().unwrap_or(&name.name).to_string())
+                }
+                aivi::TypeExpr::Apply { base, .. } => root_type_name(base),
+                _ => None,
+            }
+        }
+
+        fn find_alias_definition(module: &Module, alias_name: &str) -> Option<String> {
+            module.items.iter().find_map(|item| match item {
+                aivi::ModuleItem::TypeAlias(alias) if alias.name.name == alias_name => {
+                    Some(format!("type {} = {}", alias.name.name, Backend::type_expr_to_string(&alias.aliased)))
+                }
+                _ => None,
+            })
+        }
+
+        fn alias_definition_for_type(
+            current_module: &Module,
+            ty: &aivi::TypeExpr,
+            workspace_modules: &HashMap<String, IndexedModule>,
+        ) -> Option<String> {
+            let alias_name = root_type_name(ty)?;
+            if let Some(alias) = find_alias_definition(current_module, &alias_name) {
+                return Some(alias);
+            }
+            for use_decl in current_module.uses.iter() {
+                let imported = use_decl.wildcard
+                    || use_decl.items.is_empty()
+                    || use_decl.items.iter().any(|item| item.name.name == alias_name);
+                if !imported {
+                    continue;
+                }
+                let Some(indexed) = workspace_modules.get(&use_decl.module.name) else {
+                    continue;
+                };
+                if let Some(alias) = find_alias_definition(&indexed.module, &alias_name) {
+                    return Some(alias);
+                }
+            }
+            None
+        }
+
+        fn callee_ident_name(expr: &aivi::Expr) -> Option<String> {
+            match expr {
+                aivi::Expr::Ident(name) => Some(name.name.clone()),
+                aivi::Expr::FieldAccess { field, .. } => Some(field.name.clone()),
+                _ => None,
+            }
+        }
+
+        for item in module.items.iter() {
+            let aivi::ModuleItem::Def(def) = item else {
+                continue;
+            };
+            if !Self::expr_contains_position_for_hover(&def.expr, position) {
+                continue;
+            }
+            if def
+                .params
+                .iter()
+                .any(|param| Self::pattern_has_binding_at_position(param, ident, position))
+            {
+                return Some(Self::hover_badge_markdown("value", format!("`{ident}`")));
+            }
+            let mut scope = Vec::new();
+            for param in def.params.iter() {
+                Self::collect_pattern_binders(param, &mut scope);
+            }
+            if Self::local_binding_visible_in_expr(&def.expr, ident, position, &mut scope) {
+                if let Some(workspace_modules) = workspace_modules {
+                    if let Some((bound_expr, is_bind)) =
+                        local_binding_expr_for_ident(&def.expr, ident, position)
+                    {
+                        if let aivi::Expr::Call { func, args, .. } = bound_expr {
+                            if let Some(callee) = callee_ident_name(func) {
+                                if let Some(sig_ty) =
+                                    resolve_type_sig_expr(module, &callee, workspace_modules)
+                                {
+                                    let mut ty = apply_call_args(&sig_ty, args.len());
+                                    if is_bind {
+                                        ty = extract_bind_value_type(&ty);
+                                    }
+                                    let ty_string = Self::type_expr_to_string(&ty);
+                                    let mut base = format!("`{ident}` : `{ty_string}`");
+                                    if let Some(alias_def) =
+                                        alias_definition_for_type(module, &ty, workspace_modules)
+                                    {
+                                        base.push_str(&format!("\n\n`{alias_def}`"));
+                                    }
+                                    return Some(Self::hover_badge_markdown("value", base));
+                                }
+                            }
+                        }
+                    }
+                }
+                let base = inferred
+                    .and_then(|types| types.get(ident))
+                    .map(|ty| format!("`{ident}` : `{ty}`"))
+                    .unwrap_or_else(|| format!("`{ident}`"));
+                return Some(Self::hover_badge_markdown("value", base));
+            }
+        }
+        None
+    }
+
     fn find_record_field_name_at_position(
         expr: &aivi::Expr,
         position: Position,
@@ -322,7 +865,31 @@ impl Backend {
                 });
             }
         }
-        None
+        if let Some(module) = Self::module_at_position(&modules, position) {
+            if let Some(contents) = Self::hover_contents_for_local_binding(
+                module,
+                &ident,
+                position,
+                inferred.get(&module.name.name),
+                None,
+            ) {
+                return Some(Hover {
+                    contents: HoverContents::Markup(MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: contents,
+                    }),
+                    range: None,
+                });
+            }
+        }
+        let contents = Self::hover_contents_for_primitive_value(&ident)?;
+        Some(Hover {
+            contents: HoverContents::Markup(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: contents,
+            }),
+            range: None,
+        })
     }
 
     /// Collect only the modules relevant for type inference: the current file's
@@ -629,7 +1196,31 @@ impl Backend {
             }
         }
 
-        None
+        if let Some(contents) =
+            Self::hover_contents_for_local_binding(
+                current_module,
+                &ident,
+                position,
+                inferred_current,
+                Some(workspace_modules),
+            )
+        {
+            return Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: contents,
+                }),
+                range: None,
+            });
+        }
+        let contents = Self::hover_contents_for_primitive_value(&ident)?;
+        Some(Hover {
+            contents: HoverContents::Markup(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: contents,
+            }),
+            range: None,
+        })
     }
 
     pub(super) fn build_references(

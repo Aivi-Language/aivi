@@ -1,0 +1,36 @@
+use aivi
+use aivi.ui
+use aivi.net.httpServer
+use aivi.ui.ServerHtml
+
+Model = { count: Int }
+Msg = Inc | Dec
+
+view = model =>
+  ~<html>
+    <main>
+      <button onClick={ Dec }>-</button>
+      <span>{ model.count }</span>
+      <button onClick={ Inc }>+</button>
+    </main>
+  </html>
+
+update = msg model => msg match
+  | Inc => (model <| { count: _ + 1 }, [])
+  | Dec => (model <| { count: _ - 1 }, [])
+
+counterApp : ServerHtmlApp Model Msg
+counterApp =
+  { init: _ => { count: 0 }
+  , update: update
+  , view: view
+  , onPlatform: _ => None
+  }
+
+routes =
+  [ { path: "/counter", app: counterApp } ]
+
+main = resource {
+  server <- serve { host: "127.0.0.1", port: 8080 } routes
+  pure server
+}

@@ -413,6 +413,119 @@ run = id 1"#;
 }
 
 #[test]
+fn build_hover_reports_primitive_type_names() {
+    let text = r#"@no_prelude
+module examples.primitive_type
+id : Int -> Int
+id = x => x
+"#;
+    let uri = sample_uri();
+    let position = position_for(text, "Int -> Int");
+    let doc_index = DocIndex::default();
+    let hover = Backend::build_hover(text, &uri, position, &doc_index).expect("hover found");
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(markup.value.contains("`primitive`"));
+    assert!(markup.value.contains("`Int`"));
+}
+
+#[test]
+fn build_hover_reports_primitive_values() {
+    let text = r#"@no_prelude
+module examples.primitive_value
+run = 1 + (if true then 2 else 3)
+"#;
+    let uri = sample_uri();
+    let doc_index = DocIndex::default();
+
+    let int_pos = position_for(text, "1 +");
+    let int_hover = Backend::build_hover(text, &uri, int_pos, &doc_index).expect("int hover");
+    let HoverContents::Markup(int_markup) = int_hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(int_markup.value.contains("`1` : `Int`"));
+
+    let bool_pos = position_for(text, "true then");
+    let bool_hover = Backend::build_hover(text, &uri, bool_pos, &doc_index).expect("bool hover");
+    let HoverContents::Markup(bool_markup) = bool_hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(bool_markup.value.contains("`true` : `Bool`"));
+}
+
+#[test]
+fn build_hover_reports_local_effect_bindings() {
+    let text = r#"@no_prelude
+module examples.local_hover
+use aivi
+
+main = do Effect {
+  init Unit
+  appId <- appNew "com.example.counter"
+  appRun appId
+}
+"#;
+    let uri = sample_uri();
+    let doc_index = DocIndex::default();
+    let position = position_after(text, "appRun ");
+    let hover = Backend::build_hover(text, &uri, position, &doc_index).expect("hover found");
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(markup.value.contains("`value`"));
+    assert!(markup.value.contains("`appId`"));
+}
+
+#[test]
+fn build_hover_local_binding_shows_alias_definition() {
+    let lib_text = r#"@no_prelude
+module examples.gtk
+export AppId, appNew
+
+type AppId = Int
+appNew : Text -> Effect AppId
+appNew = _ => todo "runtime"
+"#;
+    let app_text = r#"@no_prelude
+module examples.app
+use examples.gtk
+
+main = do Effect {
+  appId <- appNew "com.example.counter"
+  appId
+}
+"#;
+    let lib_uri = Url::parse("file:///gtk.aivi").expect("valid uri");
+    let app_uri = Url::parse("file:///app.aivi").expect("valid uri");
+
+    let mut workspace = HashMap::new();
+    let lib_path = PathBuf::from("gtk.aivi");
+    let (lib_modules, _) = parse_modules(&lib_path, lib_text);
+    for module in lib_modules {
+        workspace.insert(
+            module.name.name.clone(),
+            IndexedModule {
+                uri: lib_uri.clone(),
+                module,
+                text: Some(lib_text.to_string()),
+            },
+        );
+    }
+
+    let doc_index = DocIndex::default();
+    let position = position_for(app_text, "appId\n}");
+    let hover =
+        Backend::build_hover_with_workspace(app_text, &app_uri, position, &workspace, &doc_index)
+            .expect("hover found");
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(markup.value.contains("`appId` : `AppId`"));
+    assert!(markup.value.contains("`type AppId = Int`"));
+}
+
+#[test]
 fn build_hover_resolves_dotted_domain_member() {
     // Simulate a module with a domain that defines a `push` method, and
     // another module that references it via `MyHeap.push`.
