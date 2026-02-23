@@ -13,17 +13,17 @@ signals over WebSocket, and the server sends DOM patch operations back.
 
 ## Architecture
 
-```text
-Browser                                  Server
-┌────────────────────────────┐          ┌────────────────────────────────────┐
-│ HTTP GET /counter          ├─────────>│ serveHttp(route app)               │
-│ (HTML + boot blob + JS)    │<─────────┤ renders initial VDOM               │
-│                            │          │ stores view state by viewId        │
-│ WS connect /counter/ws     ├─────────>│ serveWs(route app)                 │
-│ hello(viewId,url,online)   │          │ validates viewId                   │
-│ event/platform/effectResult├─────────>│ update + diff + effect handling    │
-│ patch/effectReq            │<─────────┤ patch/effectReq/error              │
-└────────────────────────────┘          └────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Server
+    Browser->>Server: HTTP GET /counter
+    Note over Browser,Server: HTML + boot blob + JS
+    Server-->>Browser: Initial render payload
+    Browser->>Server: WS connect /counter/ws
+    Browser->>Server: hello(viewId, url, online)
+    Browser->>Server: event/platform/effectResult
+    Server-->>Browser: patch/effectReq/error
 ```
 
 ## Public API
