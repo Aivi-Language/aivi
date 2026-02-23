@@ -15,6 +15,7 @@ mod instant;
 mod linalg;
 mod list;
 mod log;
+mod mailfox_native;
 mod math;
 mod number;
 mod regex;

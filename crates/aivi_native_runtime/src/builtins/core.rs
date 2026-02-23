@@ -20,6 +20,7 @@ use super::instant::build_instant_record;
 use super::linalg::build_linalg_record;
 use super::list::build_list_record;
 use super::log::build_log_record;
+use super::mailfox_native::build_mailfox_native_record;
 use super::math::build_math_record;
 use super::number::{build_bigint_record, build_decimal_record, build_rational_record};
 use super::regex::build_regex_record;
@@ -355,4 +356,5 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
     env.insert("logger".to_string(), build_log_record());
     env.insert("database".to_string(), build_database_record());
     env.insert("i18n".to_string(), build_i18n_record());
+    env.insert("mailfoxNative".to_string(), build_mailfox_native_record());
 }
