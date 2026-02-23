@@ -19,3 +19,15 @@ The `Streams` domain provides stream-oriented utilities for processing inbound a
 | **fromSocket** connection<br><pre><code>`Connection -> Stream (List Int)`</code></pre> | Creates a stream of byte chunks from the connection. |
 | **toSocket** connection stream<br><pre><code>`Connection -> Stream (List Int) -> Effect StreamError Unit`</code></pre> | Writes byte chunks from `stream` to the connection. |
 | **chunks** size stream<br><pre><code>`Int -> Stream (List Int) -> Stream (List Int)`</code></pre> | Rechunks a byte stream into fixed-size blocks of `size`. |
+
+## Stream Combinators
+
+| Function | Explanation |
+| --- | --- |
+| **map** f stream<br><pre><code>`(A -> B) -> Stream A -> Stream B`</code></pre> | Transforms each stream item. |
+| **filter** pred stream<br><pre><code>`(A -> Bool) -> Stream A -> Stream A`</code></pre> | Keeps items matching `pred`. |
+| **take** n stream<br><pre><code>`Int -> Stream A -> Stream A`</code></pre> | Takes first `n` items then closes. |
+| **drop** n stream<br><pre><code>`Int -> Stream A -> Stream A`</code></pre> | Skips first `n` items. |
+| **flatMap** f stream<br><pre><code>`(A -> Stream B) -> Stream A -> Stream B`</code></pre> | Maps and flattens nested streams. |
+| **merge** left right<br><pre><code>`Stream A -> Stream A -> Stream A`</code></pre> | Interleaves events from both streams. |
+| **fold** f seed stream<br><pre><code>`(B -> A -> B) -> B -> Stream A -> Effect StreamError B`</code></pre> | Consumes stream into one value. |
