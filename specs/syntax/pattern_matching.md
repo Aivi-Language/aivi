@@ -34,6 +34,10 @@ Compiler checks:
 
 This is **not** a pipeline (`|>`). A leading `|` introduces an arm of a **unary** function that pattern-matches on its single (implicit) argument.
 
+Multi-clause function definitions require an explicit type signature for the function name.
+With closed records, that signature provides the exact input shape used to type-check each arm.
+If no arm matches at runtime, evaluation fails with a non-exhaustive-match runtime error.
+
 <<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_01.aivi{aivi}
 
 <<< ../snippets/from_md/syntax/pattern_matching/matching_and_renaming_instantiation.aivi{aivi}

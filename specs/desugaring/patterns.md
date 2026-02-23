@@ -53,6 +53,8 @@ Multi-clause functions:
 | :--- | :--- |
 | `f = \| p1 => b1 \| p2 => b2` | `f = λx#1. case x#1 of \| ⟦p1⟧ -> ⟦b1⟧ \| ⟦p2⟧ -> ⟦b2⟧` |
 
+Surface validity rule: this form requires an explicit type signature for `f`. If no clause matches at runtime, evaluation raises a non-exhaustive-match runtime error.
+
 
 # Conditional `if / then / else`
 

@@ -299,80 +299,125 @@ impl TypeChecker {
         sigs: &HashMap<String, Vec<Scheme>>,
         env: &mut TypeEnv,
         module: &Module,
+        def_count: usize,
         diagnostics: &mut Vec<FileDiagnostic>,
     ) {
         let name = def.name.name.clone();
         let expr = crate::surface::desugar_effect_sugars(desugar_holes(def.expr.clone()));
-        if let Some(sig) = sigs.get(&name).and_then(|items| (items.len() == 1).then(|| &items[0]))
-        {
-            let mut local_env = env.clone();
-            let expected = self.instantiate(sig);
-            local_env.insert(name.clone(), Scheme::mono(expected.clone()));
+        if def_count > 1 && !sigs.contains_key(&name) {
+            if !self.checked_defs.contains(&name) {
+                diagnostics.push(self.error_to_diag(
+                    module,
+                    TypeError {
+                        span: def.span.clone(),
+                        message: format!(
+                            "multi-clause function '{}' requires an explicit type signature",
+                            name
+                        ),
+                        expected: None,
+                        found: None,
+                    },
+                ));
+            }
+            self.checked_defs.insert(name);
+            return;
+        }
+        if let Some(candidates) = sigs.get(&name) {
+            let mut matched = false;
+            let mut first_error: Option<TypeError> = None;
+            let base_subst = self.subst.clone();
+            for candidate in candidates {
+                self.subst = base_subst.clone();
+                let mut local_env = env.clone();
+                let expected = self.instantiate(candidate);
+                local_env.insert(name.clone(), Scheme::mono(expected.clone()));
 
-            let result: Result<(), TypeError> = (|| {
-                if def.params.is_empty() {
-                    // If the surface syntax used `name = x y => ...`, the parameters live in a
-                    // top-level lambda expression instead of `def.params`. Peel that lambda so we
-                    // can use the signature to constrain parameter types early. This avoids
-                    // incorrectly selecting domain operators when operands start as unconstrained
-                    // type variables (e.g. `a.x + b.x` inside a domain `(+)=...` implementation).
-                    if let Expr::Lambda { params, body, .. } = expr.clone() {
-                        let mut remaining = expected;
-                        for param in &params {
-                            let remaining_applied = self.apply(remaining);
-                            let remaining_norm = self.expand_alias(remaining_applied);
-                            let Type::Func(expected_param, expected_rest) = remaining_norm else {
-                                return Err(TypeError {
-                                    span: def.span.clone(),
-                                    message: format!("expected function type for '{name}'"),
-                                    expected: None,
-                                    found: None,
-                                });
-                            };
-                            let pat_ty = self.infer_pattern(param, &mut local_env)?;
-                            self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
-                            remaining = *expected_rest;
+                let result: Result<(), TypeError> = (|| {
+                    if def.params.is_empty() {
+                        // If the surface syntax used `name = x y => ...`, the parameters live in a
+                        // top-level lambda expression instead of `def.params`. Peel that lambda so we
+                        // can use the signature to constrain parameter types early. This avoids
+                        // incorrectly selecting domain operators when operands start as unconstrained
+                        // type variables (e.g. `a.x + b.x` inside a domain `(+)=...` implementation).
+                        if let Expr::Lambda { params, body, .. } = expr.clone() {
+                            let mut remaining = expected;
+                            for param in &params {
+                                let remaining_applied = self.apply(remaining);
+                                let remaining_norm = self.expand_alias(remaining_applied);
+                                let Type::Func(expected_param, expected_rest) = remaining_norm
+                                else {
+                                    return Err(TypeError {
+                                        span: def.span.clone(),
+                                        message: format!("expected function type for '{name}'"),
+                                        expected: None,
+                                        found: None,
+                                    });
+                                };
+                                let pat_ty = self.infer_pattern(param, &mut local_env)?;
+                                self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
+                                remaining = *expected_rest;
+                            }
+                            // Elaborate against the remaining expected return type so the typechecker
+                            // can apply expected-type coercions in the body.
+                            let (_elab, _ty) =
+                                self.elab_expr(*body, Some(remaining), &mut local_env)?;
+                            return Ok(());
                         }
-                        // Elaborate against the remaining expected return type so the typechecker
-                        // can apply expected-type coercions in the body.
-                        let (_elab, _ty) = self.elab_expr(*body, Some(remaining), &mut local_env)?;
+
+                        // Use expected-type elaboration so mismatches inside the expression (e.g. a
+                        // record field) get a precise span instead of underlining the entire def.
+                        let (_elab, _ty) =
+                            self.elab_expr(expr.clone(), Some(expected), &mut local_env)?;
                         return Ok(());
                     }
 
-                    // Use expected-type elaboration so mismatches inside the expression (e.g. a
-                    // record field) get a precise span instead of underlining the entire def.
+                    let mut remaining = expected;
+                    for param in &def.params {
+                        let remaining_applied = self.apply(remaining);
+                        let remaining_norm = self.expand_alias(remaining_applied);
+                        let Type::Func(expected_param, expected_rest) = remaining_norm else {
+                            return Err(TypeError {
+                                span: def.span.clone(),
+                                message: format!("expected function type for '{name}'"),
+                                expected: None,
+                                found: None,
+                            });
+                        };
+                        let pat_ty = self.infer_pattern(param, &mut local_env)?;
+                        self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
+                        remaining = *expected_rest;
+                    }
+                    // Elaborate against the remaining expected return type so the typechecker can
+                    // apply expected-type coercions (e.g. `Text` -> `VNode` via `TextNode`).
                     let (_elab, _ty) =
-                        self.elab_expr(expr.clone(), Some(expected), &mut local_env)?;
-                    return Ok(());
-                }
+                        self.elab_expr(expr.clone(), Some(remaining), &mut local_env)?;
+                    Ok(())
+                })();
 
-                let mut remaining = expected;
-                for param in &def.params {
-                    let remaining_applied = self.apply(remaining);
-                    let remaining_norm = self.expand_alias(remaining_applied);
-                    let Type::Func(expected_param, expected_rest) = remaining_norm else {
-                        return Err(TypeError {
-                            span: def.span.clone(),
-                            message: format!("expected function type for '{name}'"),
-                            expected: None,
-                            found: None,
-                        });
-                    };
-                    let pat_ty = self.infer_pattern(param, &mut local_env)?;
-                    self.unify_with_span(pat_ty, *expected_param, pattern_span(param))?;
-                    remaining = *expected_rest;
+                match result {
+                    Ok(()) => {
+                        matched = true;
+                        break;
+                    }
+                    Err(err) => {
+                        if first_error.is_none() {
+                            first_error = Some(err);
+                        }
+                    }
                 }
-                // Elaborate against the remaining expected return type so the typechecker can
-                // apply expected-type coercions (e.g. `Text` -> `VNode` via `TextNode`).
-                let (_elab, _ty) = self.elab_expr(expr.clone(), Some(remaining), &mut local_env)?;
-                Ok(())
-            })();
-
-            if let Err(err) = result {
-                diagnostics.push(self.error_to_diag(module, err));
+            }
+            if !matched {
+                diagnostics.push(
+                    self.error_to_diag(module, first_error.expect("expected candidate type error")),
+                );
                 return;
             }
-            env.insert(name.clone(), sig.clone());
+            self.subst = base_subst;
+            if candidates.len() == 1 {
+                env.insert(name.clone(), candidates[0].clone());
+            } else {
+                env.insert_overloads(name.clone(), candidates.clone());
+            }
         } else {
             let prior_scheme = env.get(&name).cloned();
             let is_repeat = self.checked_defs.contains(&name);

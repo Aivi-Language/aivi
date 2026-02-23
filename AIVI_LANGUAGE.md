@@ -132,6 +132,10 @@ describe =
   | _ => "many"
 ```
 
+Multi-clause definitions require an explicit type signature for that function name.
+With closed records, this keeps each clause checked against the exact input record shape.
+If no clause matches at runtime, evaluation fails with a non-exhaustive-match runtime error.
+
 For multi-argument matching, match on a tuple:
 
 ```aivi
@@ -272,6 +276,8 @@ User |> Pick (id, name) |> Optional (name)
 add : Int -> Int -> Int
 map : (A -> B) -> List A -> List B
 ```
+
+Type signatures are also required for multi-clause function definitions (`f = | ... => ...`).
 
 ### Classes and instances (ad-hoc polymorphism, HKTs)
 

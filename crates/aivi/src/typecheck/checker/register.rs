@@ -245,17 +245,26 @@ impl TypeChecker {
                                     if schemes.len() == 1 {
                                         env.insert(item.name.name.clone(), schemes[0].clone());
                                     } else {
-                                        env.insert_overloads(item.name.name.clone(), schemes.clone());
+                                        env.insert_overloads(
+                                            item.name.name.clone(),
+                                            schemes.clone(),
+                                        );
                                     }
                                     if qualify {
                                         if schemes.len() == 1 {
                                             env.insert(
-                                                format!("{}.{}", use_decl.module.name, item.name.name),
+                                                format!(
+                                                    "{}.{}",
+                                                    use_decl.module.name, item.name.name
+                                                ),
                                                 schemes[0].clone(),
                                             );
                                         } else {
                                             env.insert_overloads(
-                                                format!("{}.{}", use_decl.module.name, item.name.name),
+                                                format!(
+                                                    "{}.{}",
+                                                    use_decl.module.name, item.name.name
+                                                ),
                                                 schemes.clone(),
                                             );
                                         }
@@ -263,7 +272,8 @@ impl TypeChecker {
                                 }
                             }
                             crate::surface::ScopeItemKind::Domain => {
-                                let Some(domains) = module_domain_exports.get(&use_decl.module.name)
+                                let Some(domains) =
+                                    module_domain_exports.get(&use_decl.module.name)
                                 else {
                                     continue;
                                 };
@@ -381,10 +391,30 @@ impl TypeChecker {
         env: &mut TypeEnv,
     ) -> Vec<FileDiagnostic> {
         let mut diagnostics = Vec::new();
+        let mut def_counts: HashMap<String, usize> = HashMap::new();
         for item in &module.items {
             match item {
                 ModuleItem::Def(def) => {
-                    self.check_def(def, sigs, env, module, &mut diagnostics);
+                    *def_counts.entry(def.name.name.clone()).or_insert(0) += 1;
+                }
+                ModuleItem::DomainDecl(domain) => {
+                    for domain_item in &domain.items {
+                        match domain_item {
+                            DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
+                                *def_counts.entry(def.name.name.clone()).or_insert(0) += 1;
+                            }
+                            DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for item in &module.items {
+            match item {
+                ModuleItem::Def(def) => {
+                    let def_count = def_counts.get(&def.name.name).copied().unwrap_or(1);
+                    self.check_def(def, sigs, env, module, def_count, &mut diagnostics);
                 }
                 ModuleItem::InstanceDecl(instance) => {
                     self.check_instance_decl(instance, env, module, &mut diagnostics);
@@ -393,7 +423,9 @@ impl TypeChecker {
                     for domain_item in &domain.items {
                         match domain_item {
                             DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                                self.check_def(def, sigs, env, module, &mut diagnostics);
+                                let def_count =
+                                    def_counts.get(&def.name.name).copied().unwrap_or(1);
+                                self.check_def(def, sigs, env, module, def_count, &mut diagnostics);
                             }
                             DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                         }
