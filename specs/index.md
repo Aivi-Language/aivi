@@ -23,7 +23,6 @@ A high-integrity purely functional language with a Rust-first compilation pipeli
 #### Core Forms
 - [Bindings and Scope](syntax/bindings)
 - [Functions and Pipes](syntax/functions)
-- [The Type System (Overview)](syntax/types)
 - [Primitive Types](syntax/types/primitive_types)
 - [Algebraic Data Types](syntax/types/algebraic_data_types)
 - [Closed Records](syntax/types/closed_records)

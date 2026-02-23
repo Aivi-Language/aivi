@@ -18,7 +18,6 @@ export const sidebar = [
         items: [
           { text: 'Bindings and Scope', link: '/syntax/bindings' },
           { text: 'Functions and Pipes', link: '/syntax/functions' },
-          { text: 'The Type System (Overview)', link: '/syntax/types' },
           { text: 'Primitive Types', link: '/syntax/types/primitive_types' },
           { text: 'Algebraic Data Types', link: '/syntax/types/algebraic_data_types' },
           { text: 'Closed Records', link: '/syntax/types/closed_records' },
