@@ -171,6 +171,24 @@ impl TypeChecker {
                         }
                     }
                 }
+                ModuleItem::MachineDecl(machine_decl) => {
+                    let mut machine_scheme = Scheme::mono(self.fresh_var());
+                    machine_scheme.origin = Some(SchemeOrigin::new(module.name.name.clone(), None));
+                    env.insert(machine_decl.name.name.clone(), machine_scheme);
+
+                    for state in &machine_decl.states {
+                        let mut state_scheme = Scheme::mono(self.fresh_var());
+                        state_scheme.origin = Some(SchemeOrigin::new(module.name.name.clone(), None));
+                        env.insert(state.name.name.clone(), state_scheme);
+                    }
+
+                    for transition in &machine_decl.transitions {
+                        let mut transition_scheme = Scheme::mono(self.fresh_var());
+                        transition_scheme.origin =
+                            Some(SchemeOrigin::new(module.name.name.clone(), None));
+                        env.insert(transition.name.name.clone(), transition_scheme);
+                    }
+                }
                 _ => {}
             }
         }

@@ -114,7 +114,12 @@ impl TypeChecker {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(fail_expr, &mut local_env)?;
                 }
-                BlockItem::On { handler, .. } => {
+                BlockItem::On {
+                    transition,
+                    handler,
+                    ..
+                } => {
+                    let _ = self.infer_expr(transition, &mut local_env)?;
                     let _ = self.infer_expr(handler, &mut local_env)?;
                 }
                 BlockItem::Expr { expr, .. } => {
@@ -342,7 +347,12 @@ impl TypeChecker {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(fail_expr, &mut local_env)?;
                 }
-                BlockItem::On { handler, .. } => {
+                BlockItem::On {
+                    transition,
+                    handler,
+                    ..
+                } => {
+                    let _ = self.infer_expr(transition, &mut local_env)?;
                     let _ = self.infer_expr(handler, &mut local_env)?;
                 }
             }
@@ -395,7 +405,12 @@ impl TypeChecker {
                     self.infer_expr(cond, &mut local_env)?;
                     self.infer_expr(fail_expr, &mut local_env)?;
                 }
-                BlockItem::On { handler, .. } => {
+                BlockItem::On {
+                    transition,
+                    handler,
+                    ..
+                } => {
+                    let _ = self.infer_expr(transition, &mut local_env)?;
                     let _ = self.infer_expr(handler, &mut local_env)?;
                 }
             }

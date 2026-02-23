@@ -551,6 +551,22 @@ machine Door = {
 
 `-> State : init {}` marks the starting state. `Source -> Target : event { payload }` defines transitions with optional typed payloads. States are inferred from the transition graph. The compiler checks completeness and type safety.
 
+Runtime machine values are available by machine name and can be destructured as records:
+
+```aivi
+do Effect {
+  { lease, run, done, currentState, can } = AccountSyncMachine
+  _ <- assertEq (constructorName (currentState Unit)) "Idle"
+  _ <- lease {}
+  _ <- run { batchId: 42 }
+  _ <- done {}
+}
+```
+
+`can.<transition> Unit` reports if the transition is valid from the current state.
+Invalid transition calls fail with `InvalidTransition { machine, from, event, expectedFrom }`.
+`on transition => handler` handlers run after a successful state transition applies.
+
 ---
 
 ## 10 Effects

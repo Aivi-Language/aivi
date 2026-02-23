@@ -214,3 +214,9 @@ The LSP formatter aligns `->` arrows and `:` colons for readability:
 ### Example: Traffic light
 
 <<< ../snippets/from_md/syntax/types/example_traffic_light.aivi{aivi}
+
+### Runtime model
+
+Declaration syntax and type-level constraints are defined in this section.
+Runtime behavior (`currentState`, `can.<transition>`, transition calls, invalid-transition errors,
+and `on` ordering) is defined in [Machine Runtime Semantics](machines_runtime.md).
