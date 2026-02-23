@@ -147,12 +147,18 @@ pub(super) fn build_url_record() -> Value {
 pub(super) enum HttpClientMode {
     Http,
     Https,
+    RestApi,
+}
+
+pub(super) fn build_rest_api_record() -> Value {
+    build_http_client_record(HttpClientMode::RestApi)
 }
 
 pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
     let kind = match mode {
         HttpClientMode::Http => "Http",
         HttpClientMode::Https => "Https",
+        HttpClientMode::RestApi => "RestApi",
     }
     .to_string();
     let mut fields = HashMap::new();
@@ -243,6 +249,15 @@ fn ensure_http_scheme(url: &Url, mode: HttpClientMode, ctx: &str) -> Result<(), 
                 Ok(())
             } else {
                 Err(RuntimeError::Message(format!("{ctx} expects an https URL")))
+            }
+        }
+        HttpClientMode::RestApi => {
+            if url.scheme() == "http" || url.scheme() == "https" {
+                Ok(())
+            } else {
+                Err(RuntimeError::Message(format!(
+                    "{ctx} expects an http or https URL"
+                )))
             }
         }
     }

@@ -157,6 +157,41 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
     };
     env.insert("https".to_string(), Scheme::mono(https_record));
 
+    let rest_a = _checker.fresh_var_id();
+    let rest_source_ty = Type::con("Source").app(vec![Type::con("RestApi"), Type::Var(rest_a)]);
+    let rest_record = Type::Record {
+        fields: vec![
+            (
+                "get".to_string(),
+                Type::Func(Box::new(url_ty.clone()), Box::new(rest_source_ty.clone())),
+            ),
+            (
+                "post".to_string(),
+                Type::Func(
+                    Box::new(url_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(rest_source_ty.clone()),
+                    )),
+                ),
+            ),
+            (
+                "fetch".to_string(),
+                Type::Func(Box::new(request_ty), Box::new(rest_source_ty.clone())),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    env.insert(
+        "rest".to_string(),
+        Scheme {
+            vars: vec![rest_a],
+            ty: rest_record,
+            origin: None,
+        },
+    );
+
     let address_ty = Type::Record {
         fields: vec![
             ("host".to_string(), Type::con("Text")),

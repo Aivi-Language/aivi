@@ -6,6 +6,7 @@ module aivi.file
 export FileStats
 export open, readAll, close
 export readText, writeText, exists, stat, delete
+export readJson, readCsv, imageMeta, image
 
 use aivi
 
@@ -38,4 +39,16 @@ stat = path => attempt (file.stat path)
 
 delete : Text -> Effect Text (Result Text Unit)
 delete = path => attempt (file.delete path)
+
+readJson : Text -> Effect Text A
+readJson = path => load (file.json path)
+
+readCsv : Text -> Effect Text (List A)
+readCsv = path => load (file.csv path)
+
+imageMeta : Text -> Effect Text A
+imageMeta = path => load (file.imageMeta path)
+
+image : Text -> Effect Text A
+image = path => load (file.image path)
 "#;

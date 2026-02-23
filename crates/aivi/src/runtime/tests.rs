@@ -16,7 +16,10 @@ fn expect_ok<T>(result: Result<T, RuntimeError>, msg: &str) -> T {
 
 fn runtime_from_source(source: &str) -> Runtime {
     let (modules, diags) = crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
-    let errors: Vec<_> = diags.iter().filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error).collect();
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error)
+        .collect();
     assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
 
     let program = crate::hir::desugar_modules(&modules);
@@ -61,13 +64,122 @@ fn runtime_from_source(source: &str) -> Runtime {
 fn runtime_from_source_with_stdlib(source: &str) -> Runtime {
     let (mut modules, diags) =
         crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
-    let errors: Vec<_> = diags.iter().filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error).collect();
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error)
+        .collect();
     assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
 
     let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
     stdlib_modules.append(&mut modules);
     let program = crate::hir::desugar_modules(&stdlib_modules);
     build_runtime_from_program(program).expect("runtime")
+}
+
+#[test]
+fn file_json_source_loads_structured_values() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    std::fs::write(
+        temp.path(),
+        r#"{"name":"Aivi","age":3,"enabled":true,"tags":["lang","dx"]}"#,
+    )
+    .expect("write json");
+    let source = format!(
+        r#"
+module test.fileJson
+value = do Effect {{
+  data <- load (file.json "{}")
+  pure data
+}}
+"#,
+        temp.path().display()
+    );
+    let mut runtime = runtime_from_source(&source);
+    let value = runtime.ctx.globals.get("value").expect("value binding");
+    let effect = expect_ok(runtime.force_value(value), "force");
+    let loaded = expect_ok(runtime.run_effect_value(effect), "load json");
+    let Value::Record(fields) = loaded else {
+        panic!("expected record, got {}", format_value(&loaded));
+    };
+    assert!(matches!(fields.get("name"), Some(Value::Text(name)) if name == "Aivi"));
+    assert!(matches!(fields.get("age"), Some(Value::Int(3))));
+}
+
+#[test]
+fn file_csv_source_loads_row_list() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    std::fs::write(temp.path(), "id,name\n1,A\n2,B\n").expect("write csv");
+    let source = format!(
+        r#"
+module test.fileCsv
+rows = do Effect {{
+  data <- load (file.csv "{}")
+  pure data
+}}
+"#,
+        temp.path().display()
+    );
+    let mut runtime = runtime_from_source(&source);
+    let value = runtime.ctx.globals.get("rows").expect("rows binding");
+    let effect = expect_ok(runtime.force_value(value), "force");
+    let loaded = expect_ok(runtime.run_effect_value(effect), "load csv");
+    let Value::List(rows) = loaded else {
+        panic!("expected list, got {}", format_value(&loaded));
+    };
+    assert_eq!(rows.len(), 2);
+}
+
+#[test]
+fn env_decode_source_collects_prefix() {
+    std::env::set_var("AIVI_DECODE_PORT", "8080");
+    std::env::set_var("AIVI_DECODE_DEBUG", "true");
+    let source = r#"
+module test.envDecode
+cfg = do Effect {
+  data <- load (env.decode "AIVI_DECODE")
+  pure data
+}
+"#;
+    let mut runtime = runtime_from_source(source);
+    let value = runtime.ctx.globals.get("cfg").expect("cfg binding");
+    let effect = expect_ok(runtime.force_value(value), "force");
+    let loaded = expect_ok(runtime.run_effect_value(effect), "decode env");
+    let Value::Record(fields) = loaded else {
+        panic!("expected record, got {}", format_value(&loaded));
+    };
+    assert!(fields.contains_key("port"));
+    assert!(fields.contains_key("debug"));
+    std::env::remove_var("AIVI_DECODE_PORT");
+    std::env::remove_var("AIVI_DECODE_DEBUG");
+}
+
+#[test]
+fn static_json_decorator_embeds_value_at_parse_time() {
+    let temp = tempfile::NamedTempFile::new().expect("temp file");
+    std::fs::write(temp.path(), r#"{"embedded":"ok"}"#).expect("write json");
+    let source = format!(
+        r#"
+@no_prelude
+module test.staticJson
+
+use aivi
+
+@static
+payload = file.json "{}"
+"#,
+        temp.path().display()
+    );
+    let (modules, diags) =
+        crate::surface::parse_modules(std::path::Path::new("test_static.aivi"), &source);
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error)
+        .collect();
+    assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
+    let crate::surface::ModuleItem::Def(def) = &modules[0].items[0] else {
+        panic!("expected first item to be a definition");
+    };
+    assert!(matches!(def.expr, crate::surface::Expr::Record { .. }));
 }
 
 #[test]
@@ -171,16 +283,10 @@ zs = [1..3]
         }
         for (idx, item) in items.iter().enumerate() {
             let Value::Int(n) = item else {
-                panic!(
-                    "expected Int at {label}[{idx}], got {}",
-                    format_value(item)
-                );
+                panic!("expected Int at {label}[{idx}], got {}", format_value(item));
             };
             if *n != expected[idx] {
-                panic!(
-                    "expected {label}[{idx}] = {}, got {}",
-                    expected[idx], n
-                );
+                panic!("expected {label}[{idx}] = {}, got {}", expected[idx], n);
             }
         }
     }
@@ -724,21 +830,19 @@ fn list_core_ops() {
 
     let take = fields.get("take").expect("take").clone();
     let take = expect_ok(runtime.apply(take, Value::Int(2)), "List.take arg1");
-    let taken = runtime
-        .apply(
-            take,
-            Value::List(Arc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)])),
-        );
+    let taken = runtime.apply(
+        take,
+        Value::List(Arc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)])),
+    );
     let taken = expect_ok(taken, "List.take arg2");
     assert!(matches!(taken, Value::List(items) if items.len() == 2));
 
     let chunk = fields.get("chunk").expect("chunk").clone();
     let chunk = expect_ok(runtime.apply(chunk, Value::Int(2)), "List.chunk arg1");
-    let chunked = runtime
-        .apply(
-            chunk,
-            Value::List(Arc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)])),
-        );
+    let chunked = runtime.apply(
+        chunk,
+        Value::List(Arc::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)])),
+    );
     let chunked = expect_ok(chunked, "List.chunk arg2");
     let Value::List(chunks) = chunked else {
         panic!("expected List of chunks");
@@ -763,14 +867,15 @@ fn map_new_ops() {
 
     let empty = fields.get("empty").expect("empty").clone();
     let insert = fields.get("insert").expect("insert").clone();
-    let insert = expect_ok(runtime.apply(insert, Value::Text("a".to_string())), "insert k");
+    let insert = expect_ok(
+        runtime.apply(insert, Value::Text("a".to_string())),
+        "insert k",
+    );
     let insert = expect_ok(runtime.apply(insert, Value::Int(1)), "insert v");
     let map = expect_ok(runtime.apply(insert, empty), "insert map");
 
     let get_or_else = fields.get("getOrElse").expect("getOrElse").clone();
-    let applied = runtime
-        .apply(get_or_else, Value::Text("a".to_string()))
-        ;
+    let applied = runtime.apply(get_or_else, Value::Text("a".to_string()));
     let applied = expect_ok(applied, "getOrElse k");
     let applied = expect_ok(runtime.apply(applied, Value::Int(9)), "getOrElse default");
     let got = expect_ok(runtime.apply(applied, map.clone()), "getOrElse map");
@@ -785,7 +890,12 @@ fn map_new_ops() {
         imp: Arc::new(crate::runtime::values::BuiltinImpl {
             name: "<remove>".to_string(),
             arity: 1,
-            func: Arc::new(|_args, _runtime| Ok(Value::Constructor { name: "None".to_string(), args: Vec::new() })),
+            func: Arc::new(|_args, _runtime| {
+                Ok(Value::Constructor {
+                    name: "None".to_string(),
+                    args: Vec::new(),
+                })
+            }),
         }),
         args: Vec::new(),
         tagged_args: Some(Vec::new()),
@@ -840,7 +950,10 @@ main = do Effect {
     let Value::Effect(effect) = main else {
         panic!("expected main to be an Effect");
     };
-    let result = expect_ok(runtime.run_effect_value(Value::Effect(effect)), "run main effect");
+    let result = expect_ok(
+        runtime.run_effect_value(Value::Effect(effect)),
+        "run main effect",
+    );
     let Value::Tuple(items) = result else {
         panic!("expected stats tuple");
     };
@@ -900,7 +1013,10 @@ main = do Effect {
     let Value::Effect(effect) = main else {
         panic!("expected main to be an Effect");
     };
-    let result = expect_ok(runtime.run_effect_value(Value::Effect(effect)), "run main effect");
+    let result = expect_ok(
+        runtime.run_effect_value(Value::Effect(effect)),
+        "run main effect",
+    );
     let Value::Tuple(items) = result else {
         panic!("expected tuple");
     };
@@ -917,7 +1033,9 @@ main = do Effect {
     };
     assert_eq!(name, "Err");
     assert_eq!(args.len(), 1);
-    assert!(matches!(&args[0], Value::Constructor { name, args } if name == "Timeout" && args.is_empty()));
+    assert!(
+        matches!(&args[0], Value::Constructor { name, args } if name == "Timeout" && args.is_empty())
+    );
 }
 
 #[test]
@@ -1110,12 +1228,10 @@ result = count 100000
 "#,
     );
     runtime.fuel = Some(1_000_000);
+    let value = runtime.ctx.globals.get("result").expect("result defined");
     let value = runtime
-        .ctx
-        .globals
-        .get("result")
-        .expect("result defined");
-    let value = runtime.force_value(value).unwrap_or_else(|e| panic!("result evaluates: {}", format_runtime_error(e)));
+        .force_value(value)
+        .unwrap_or_else(|e| panic!("result evaluates: {}", format_runtime_error(e)));
     assert!(matches!(value, Value::Int(0)));
 }
 
@@ -1165,12 +1281,10 @@ main = do Effect {
 "#,
     );
     runtime.fuel = Some(10_000_000);
+    let main = runtime.ctx.globals.get("main").expect("main defined");
     let main = runtime
-        .ctx
-        .globals
-        .get("main")
-        .expect("main defined");
-    let main = runtime.force_value(main).unwrap_or_else(|e| panic!("main resolves: {}", format_runtime_error(e)));
+        .force_value(main)
+        .unwrap_or_else(|e| panic!("main resolves: {}", format_runtime_error(e)));
     let result = runtime.run_effect_value(main);
     result.unwrap_or_else(|e| panic!("deep effect chain failed: {}", format_runtime_error(e)));
 }

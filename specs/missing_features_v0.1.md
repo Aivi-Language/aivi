@@ -25,8 +25,8 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 
 ### Standard Library
 
-- Structured codecs (`file.json`, `file.csv`) and streaming sources — specified in [External Sources § 12.1](syntax/external_sources.md) but not yet implemented.
-- `env.decode` (structured environment decoding) — specified but not implemented.
+- Streaming sources remain out of scope in runtime v0.1 (e.g. continuous `file.watch`/network stream source adapters).
+- Full typed source error ADT plumbing (`SourceError K`) is partially implemented in runtime but not yet fully reflected in typechecker aliases.
 - Several stdlib modules have **stub or incomplete specs** (see below).
 
 #### Stub specs (no API tables / no functions documented)

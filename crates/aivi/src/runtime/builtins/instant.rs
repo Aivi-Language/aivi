@@ -128,9 +128,7 @@ fn parse_epoch_seconds(text: &str) -> Option<i128> {
             nanos = frac_val * scale;
         }
     }
-    let total = seconds
-        .checked_mul(1_000_000_000)?
-        .checked_add(nanos)?;
+    let total = seconds.checked_mul(1_000_000_000)?.checked_add(nanos)?;
     total.checked_mul(sign)
 }
 

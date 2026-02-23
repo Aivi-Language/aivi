@@ -62,7 +62,10 @@ impl Backend {
         match pattern {
             aivi::Pattern::Ident(name) | aivi::Pattern::SubjectIdent(name) => {
                 name.name == ident
-                    && Self::range_contains_position(&Self::span_to_range(name.span.clone()), position)
+                    && Self::range_contains_position(
+                        &Self::span_to_range(name.span.clone()),
+                        position,
+                    )
             }
             aivi::Pattern::At { name, pattern, .. } => {
                 (name.name == ident
@@ -83,9 +86,9 @@ impl Backend {
                         Self::pattern_has_binding_at_position(rest, ident, position)
                     })
             }
-            aivi::Pattern::Record { fields, .. } => fields
-                .iter()
-                .any(|field| Self::pattern_has_binding_at_position(&field.pattern, ident, position)),
+            aivi::Pattern::Record { fields, .. } => fields.iter().any(|field| {
+                Self::pattern_has_binding_at_position(&field.pattern, ident, position)
+            }),
             aivi::Pattern::Constructor { args, .. } => args
                 .iter()
                 .any(|arg| Self::pattern_has_binding_at_position(arg, ident, position)),
@@ -106,7 +109,10 @@ impl Backend {
             aivi::Expr::Ident(name) => {
                 name.name == ident
                     && in_scope.iter().any(|bound| bound == ident)
-                    && Self::range_contains_position(&Self::span_to_range(name.span.clone()), position)
+                    && Self::range_contains_position(
+                        &Self::span_to_range(name.span.clone()),
+                        position,
+                    )
             }
             aivi::Expr::Lambda { params, body, .. } => {
                 if params
@@ -124,10 +130,9 @@ impl Backend {
             aivi::Expr::Match {
                 scrutinee, arms, ..
             } => {
-                if scrutinee
-                    .as_ref()
-                    .is_some_and(|s| Self::local_binding_visible_in_expr(s, ident, position, in_scope))
-                {
+                if scrutinee.as_ref().is_some_and(|s| {
+                    Self::local_binding_visible_in_expr(s, ident, position, in_scope)
+                }) {
                     return true;
                 }
                 for arm in arms {
@@ -140,12 +145,14 @@ impl Backend {
                     }
                     let mut scoped = in_scope.clone();
                     Self::collect_pattern_binders(&arm.pattern, &mut scoped);
-                    if arm
-                        .guard
-                        .as_ref()
-                        .is_some_and(|g| Self::local_binding_visible_in_expr(g, ident, position, &mut scoped))
-                        || Self::local_binding_visible_in_expr(&arm.body, ident, position, &mut scoped)
-                    {
+                    if arm.guard.as_ref().is_some_and(|g| {
+                        Self::local_binding_visible_in_expr(g, ident, position, &mut scoped)
+                    }) || Self::local_binding_visible_in_expr(
+                        &arm.body,
+                        ident,
+                        position,
+                        &mut scoped,
+                    ) {
                         return true;
                     }
                 }
@@ -157,7 +164,12 @@ impl Backend {
                     match item {
                         aivi::BlockItem::Bind { pattern, expr, .. }
                         | aivi::BlockItem::Let { pattern, expr, .. } => {
-                            if Self::local_binding_visible_in_expr(expr, ident, position, &mut scoped) {
+                            if Self::local_binding_visible_in_expr(
+                                expr,
+                                ident,
+                                position,
+                                &mut scoped,
+                            ) {
                                 return true;
                             }
                             if Self::pattern_has_binding_at_position(pattern, ident, position) {
@@ -169,34 +181,45 @@ impl Backend {
                         | aivi::BlockItem::Yield { expr, .. }
                         | aivi::BlockItem::Recurse { expr, .. }
                         | aivi::BlockItem::Expr { expr, .. } => {
-                            if Self::local_binding_visible_in_expr(expr, ident, position, &mut scoped) {
+                            if Self::local_binding_visible_in_expr(
+                                expr,
+                                ident,
+                                position,
+                                &mut scoped,
+                            ) {
                                 return true;
                             }
                         }
                         aivi::BlockItem::When { cond, effect, .. }
                         | aivi::BlockItem::Unless { cond, effect, .. } => {
-                            if Self::local_binding_visible_in_expr(cond, ident, position, &mut scoped)
-                                || Self::local_binding_visible_in_expr(
-                                    effect,
-                                    ident,
-                                    position,
-                                    &mut scoped,
-                                )
-                            {
+                            if Self::local_binding_visible_in_expr(
+                                cond,
+                                ident,
+                                position,
+                                &mut scoped,
+                            ) || Self::local_binding_visible_in_expr(
+                                effect,
+                                ident,
+                                position,
+                                &mut scoped,
+                            ) {
                                 return true;
                             }
                         }
                         aivi::BlockItem::Given {
                             cond, fail_expr, ..
                         } => {
-                            if Self::local_binding_visible_in_expr(cond, ident, position, &mut scoped)
-                                || Self::local_binding_visible_in_expr(
-                                    fail_expr,
-                                    ident,
-                                    position,
-                                    &mut scoped,
-                                )
-                            {
+                            if Self::local_binding_visible_in_expr(
+                                cond,
+                                ident,
+                                position,
+                                &mut scoped,
+                            ) || Self::local_binding_visible_in_expr(
+                                fail_expr,
+                                ident,
+                                position,
+                                &mut scoped,
+                            ) {
                                 return true;
                             }
                         }
@@ -232,9 +255,9 @@ impl Backend {
                     Self::local_binding_visible_in_expr(expr, ident, position, in_scope)
                 }
             }),
-            aivi::Expr::List { items, .. } => items
-                .iter()
-                .any(|item| Self::local_binding_visible_in_expr(&item.expr, ident, position, in_scope)),
+            aivi::Expr::List { items, .. } => items.iter().any(|item| {
+                Self::local_binding_visible_in_expr(&item.expr, ident, position, in_scope)
+            }),
             aivi::Expr::Tuple { items, .. } => items
                 .iter()
                 .any(|item| Self::local_binding_visible_in_expr(item, ident, position, in_scope)),
@@ -262,9 +285,11 @@ impl Backend {
                 Self::local_binding_visible_in_expr(left, ident, position, in_scope)
                     || Self::local_binding_visible_in_expr(right, ident, position, in_scope)
             }
-            aivi::Expr::Record { fields, .. } | aivi::Expr::PatchLit { fields, .. } => fields
-                .iter()
-                .any(|field| Self::local_binding_visible_in_expr(&field.value, ident, position, in_scope)),
+            aivi::Expr::Record { fields, .. } | aivi::Expr::PatchLit { fields, .. } => {
+                fields.iter().any(|field| {
+                    Self::local_binding_visible_in_expr(&field.value, ident, position, in_scope)
+                })
+            }
             aivi::Expr::FieldAccess { base, field, .. } => {
                 (field.name == ident
                     && in_scope.iter().any(|bound| bound == ident)
@@ -277,7 +302,10 @@ impl Backend {
             aivi::Expr::FieldSection { field, .. } => {
                 field.name == ident
                     && in_scope.iter().any(|bound| bound == ident)
-                    && Self::range_contains_position(&Self::span_to_range(field.span.clone()), position)
+                    && Self::range_contains_position(
+                        &Self::span_to_range(field.span.clone()),
+                        position,
+                    )
             }
             aivi::Expr::Literal(_) | aivi::Expr::Raw { .. } => false,
         }
@@ -450,9 +478,13 @@ impl Backend {
 
         fn root_type_name(ty: &aivi::TypeExpr) -> Option<String> {
             match ty {
-                aivi::TypeExpr::Name(name) => {
-                    Some(name.name.rsplit('.').next().unwrap_or(&name.name).to_string())
-                }
+                aivi::TypeExpr::Name(name) => Some(
+                    name.name
+                        .rsplit('.')
+                        .next()
+                        .unwrap_or(&name.name)
+                        .to_string(),
+                ),
                 aivi::TypeExpr::Apply { base, .. } => root_type_name(base),
                 _ => None,
             }
@@ -461,7 +493,11 @@ impl Backend {
         fn find_alias_definition(module: &Module, alias_name: &str) -> Option<String> {
             module.items.iter().find_map(|item| match item {
                 aivi::ModuleItem::TypeAlias(alias) if alias.name.name == alias_name => {
-                    Some(format!("type {} = {}", alias.name.name, Backend::type_expr_to_string(&alias.aliased)))
+                    Some(format!(
+                        "type {} = {}",
+                        alias.name.name,
+                        Backend::type_expr_to_string(&alias.aliased)
+                    ))
                 }
                 _ => None,
             })
@@ -479,7 +515,10 @@ impl Backend {
             for use_decl in current_module.uses.iter() {
                 let imported = use_decl.wildcard
                     || use_decl.items.is_empty()
-                    || use_decl.items.iter().any(|item| item.name.name == alias_name);
+                    || use_decl
+                        .items
+                        .iter()
+                        .any(|item| item.name.name == alias_name);
                 if !imported {
                     continue;
                 }
@@ -1196,15 +1235,13 @@ impl Backend {
             }
         }
 
-        if let Some(contents) =
-            Self::hover_contents_for_local_binding(
-                current_module,
-                &ident,
-                position,
-                inferred_current,
-                Some(workspace_modules),
-            )
-        {
+        if let Some(contents) = Self::hover_contents_for_local_binding(
+            current_module,
+            &ident,
+            position,
+            inferred_current,
+            Some(workspace_modules),
+        ) {
             return Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
                     kind: MarkupKind::Markdown,

@@ -54,6 +54,10 @@ For more control or large files, use the resource-based API.
 | Function | Explanation |
 | --- | --- |
 | **readText** path<br><pre><code>`Text -> Effect FileError Text`</code></pre> | Reads the entire contents of `path` as text. |
+| **readJson** path<br><pre><code>`Text -> Effect FileError A`</code></pre> | Reads and decodes JSON from `path` into the expected type `A`. |
+| **readCsv** path<br><pre><code>`Text -> Effect FileError (List A)`</code></pre> | Reads and decodes CSV rows from `path` into typed row values. |
+| **imageMeta** path<br><pre><code>`Text -> Effect FileError A`</code></pre> | Reads image metadata (e.g. width/height/format) into the expected type. |
+| **image** path<br><pre><code>`Text -> Effect FileError A`</code></pre> | Loads image data (including pixels) into the expected typed shape. |
 
 ### `writeText`
 

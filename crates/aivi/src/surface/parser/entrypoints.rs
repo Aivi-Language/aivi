@@ -374,12 +374,20 @@ fn expand_module_aliases(modules: &mut [Module]) {
                             effect: rewrite_expr(effect, aliases),
                             span,
                         },
-                        BlockItem::Given { cond, fail_expr, span } => BlockItem::Given {
+                        BlockItem::Given {
+                            cond,
+                            fail_expr,
+                            span,
+                        } => BlockItem::Given {
                             cond: rewrite_expr(cond, aliases),
                             fail_expr: rewrite_expr(fail_expr, aliases),
                             span,
                         },
-                        BlockItem::On { transition, handler, span } => BlockItem::On {
+                        BlockItem::On {
+                            transition,
+                            handler,
+                            span,
+                        } => BlockItem::On {
                             transition: rewrite_expr(transition, aliases),
                             handler: rewrite_expr(handler, aliases),
                             span,
@@ -518,8 +526,7 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
             return;
         }
 
-        // v0.1 minimal implementation: `@static x = file.read \"path\"` becomes a string literal
-        // embedded in the surface AST (and thus in all backends).
+        // Compile-time evaluation for deterministic source calls.
         let original_span = expr_span(&def.expr);
         let expr = def.expr.clone();
         let Expr::Call { func, args, .. } = &expr else {
@@ -533,45 +540,99 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
             },
             _ => (None, None),
         };
-        if base_name != Some("file") || field_name != Some("read") {
-            return;
-        }
-        if args.len() != 1 {
-            return;
-        }
-        let Some(Expr::Literal(Literal::String { text: rel, .. })) = args.first() else {
-            return;
-        };
-
-        // Try source-relative first, then fall back to CWD-relative (workspace root).
-        let source_relative = base_dir.join(rel);
-        let cwd_relative = std::path::PathBuf::from(rel);
-        let (full_path, contents) = match std::fs::read_to_string(&source_relative) {
-            Ok(c) => (source_relative, c),
-            Err(_) => match std::fs::read_to_string(&cwd_relative) {
-                Ok(c) => (cwd_relative, c),
-                Err(err) => {
-                    emit_diag(
-                        module_path,
-                        out,
-                        "E1515",
-                        format!(
-                            "`@static` failed to read {} (also tried {}): {}",
-                            source_relative.display(),
-                            cwd_relative.display(),
-                            err
-                        ),
-                        original_span,
-                    );
+        if args.len() == 1 {
+            if base_name == Some("env") && field_name == Some("get") {
+                let Some(Expr::Literal(Literal::String { text: key, .. })) = args.first() else {
                     return;
+                };
+                let value = std::env::var(key).unwrap_or_default();
+                def.expr = Expr::Literal(Literal::String {
+                    text: value,
+                    span: original_span,
+                });
+                return;
+            }
+            if base_name == Some("file") && matches!(field_name, Some("read" | "json" | "csv")) {
+                let Some(Expr::Literal(Literal::String { text: rel, .. })) = args.first() else {
+                    return;
+                };
+                // Try source-relative first, then fall back to CWD-relative (workspace root).
+                let source_relative = base_dir.join(rel);
+                let cwd_relative = std::path::PathBuf::from(rel);
+                let (full_path, contents) = match std::fs::read_to_string(&source_relative) {
+                    Ok(c) => (source_relative, c),
+                    Err(_) => match std::fs::read_to_string(&cwd_relative) {
+                        Ok(c) => (cwd_relative, c),
+                        Err(err) => {
+                            emit_diag(
+                                module_path,
+                                out,
+                                "E1515",
+                                format!(
+                                    "`@static` failed to read {} (also tried {}): {}",
+                                    source_relative.display(),
+                                    cwd_relative.display(),
+                                    err
+                                ),
+                                original_span,
+                            );
+                            return;
+                        }
+                    },
+                };
+                let _digest = {
+                    use sha2::{Digest, Sha256};
+                    let mut hasher = Sha256::new();
+                    hasher.update(contents.as_bytes());
+                    hasher.finalize()
+                };
+                match field_name {
+                    Some("read") => {
+                        def.expr = Expr::Literal(Literal::String {
+                            text: contents,
+                            span: original_span,
+                        });
+                    }
+                    Some("json") => {
+                        let parsed = match serde_json::from_str::<serde_json::Value>(&contents) {
+                            Ok(value) => value,
+                            Err(err) => {
+                                emit_diag(
+                                    module_path,
+                                    out,
+                                    "E1516",
+                                    format!(
+                                        "`@static` failed to parse JSON from {}: {}",
+                                        full_path.display(),
+                                        err
+                                    ),
+                                    original_span,
+                                );
+                                return;
+                            }
+                        };
+                        def.expr = json_to_expr(&parsed, &original_span);
+                    }
+                    Some("csv") => match csv_to_expr(&contents, &original_span) {
+                        Ok(expr) => def.expr = expr,
+                        Err(err) => {
+                            emit_diag(
+                                module_path,
+                                out,
+                                "E1517",
+                                format!(
+                                    "`@static` failed to parse CSV from {}: {}",
+                                    full_path.display(),
+                                    err
+                                ),
+                                original_span,
+                            );
+                        }
+                    },
+                    _ => {}
                 }
-            },
-        };
-        let _ = full_path; // used for diagnostics above
-        def.expr = Expr::Literal(Literal::String {
-            text: contents,
-            span: original_span,
-        });
+            }
+        }
     }
 
     let mut diags = Vec::new();
@@ -738,9 +799,7 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                 module_path,
                 out,
                 "E1526",
-                format!(
-                    "`@native` target must be a dotted identifier path, got `{path}`"
-                ),
+                format!("`@native` target must be a dotted identifier path, got `{path}`"),
                 def.span.clone(),
             );
             return;
@@ -845,4 +904,94 @@ fn apply_native_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
         }
     }
     diags
+}
+fn spanned_name(name: &str, span: &Span) -> SpannedName {
+    SpannedName {
+        name: name.to_string(),
+        span: span.clone(),
+    }
+}
+
+fn json_to_expr(value: &serde_json::Value, span: &Span) -> Expr {
+    match value {
+        serde_json::Value::Null => Expr::Ident(spanned_name("None", span)),
+        serde_json::Value::Bool(value) => Expr::Literal(Literal::Bool {
+            value: *value,
+            span: span.clone(),
+        }),
+        serde_json::Value::Number(number) => Expr::Literal(Literal::Number {
+            text: number.to_string(),
+            span: span.clone(),
+        }),
+        serde_json::Value::String(text) => Expr::Literal(Literal::String {
+            text: text.clone(),
+            span: span.clone(),
+        }),
+        serde_json::Value::Array(items) => Expr::List {
+            items: items
+                .iter()
+                .map(|item| ListItem {
+                    expr: json_to_expr(item, span),
+                    spread: false,
+                    span: span.clone(),
+                })
+                .collect(),
+            span: span.clone(),
+        },
+        serde_json::Value::Object(object) => Expr::Record {
+            fields: object
+                .iter()
+                .map(|(key, value)| RecordField {
+                    spread: false,
+                    path: vec![PathSegment::Field(spanned_name(key, span))],
+                    value: json_to_expr(value, span),
+                    span: span.clone(),
+                })
+                .collect(),
+            span: span.clone(),
+        },
+    }
+}
+
+fn csv_to_expr(raw: &str, span: &Span) -> Result<Expr, csv::Error> {
+    let mut reader = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .from_reader(raw.as_bytes());
+    let headers = reader
+        .headers()?
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    let mut items = Vec::new();
+    for row in reader.records() {
+        let row = row?;
+        let mut fields = Vec::new();
+        for (idx, value) in row.iter().enumerate() {
+            let key = headers
+                .get(idx)
+                .cloned()
+                .unwrap_or_else(|| format!("col{idx}"));
+            fields.push(RecordField {
+                spread: false,
+                path: vec![PathSegment::Field(spanned_name(&key, span))],
+                value: Expr::Literal(Literal::String {
+                    text: value.to_string(),
+                    span: span.clone(),
+                }),
+                span: span.clone(),
+            });
+        }
+        items.push(ListItem {
+            expr: Expr::Record {
+                fields,
+                span: span.clone(),
+            },
+            spread: false,
+            span: span.clone(),
+        });
+    }
+    Ok(Expr::List {
+        items,
+        span: span.clone(),
+    })
 }

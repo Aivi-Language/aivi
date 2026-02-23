@@ -1,4 +1,3 @@
-
 fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, module: &Module) {
     fn expr_span(expr: &Expr) -> crate::diagnostics::Span {
         match expr {
@@ -277,13 +276,37 @@ fn check_expr(
                         check_expr(cond, &mut block_scope, diagnostics, module, allow_unknown);
                         check_expr(effect, &mut block_scope, diagnostics, module, allow_unknown);
                     }
-                    BlockItem::Given { cond, fail_expr, .. } => {
+                    BlockItem::Given {
+                        cond, fail_expr, ..
+                    } => {
                         check_expr(cond, &mut block_scope, diagnostics, module, allow_unknown);
-                        check_expr(fail_expr, &mut block_scope, diagnostics, module, allow_unknown);
+                        check_expr(
+                            fail_expr,
+                            &mut block_scope,
+                            diagnostics,
+                            module,
+                            allow_unknown,
+                        );
                     }
-                    BlockItem::On { transition, handler, .. } => {
-                        check_expr(transition, &mut block_scope, diagnostics, module, allow_unknown);
-                        check_expr(handler, &mut block_scope, diagnostics, module, allow_unknown);
+                    BlockItem::On {
+                        transition,
+                        handler,
+                        ..
+                    } => {
+                        check_expr(
+                            transition,
+                            &mut block_scope,
+                            diagnostics,
+                            module,
+                            allow_unknown,
+                        );
+                        check_expr(
+                            handler,
+                            &mut block_scope,
+                            diagnostics,
+                            module,
+                            allow_unknown,
+                        );
                     }
                 }
             }
@@ -478,6 +501,8 @@ fn is_builtin_name(name: &str) -> bool {
             | "database"
             | "http"
             | "https"
+            | "rest"
+            | "email"
             | "collections"
             | "linalg"
             | "signal"
@@ -532,7 +557,10 @@ z = db.configure
             .into_iter()
             .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
             .collect();
-        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:#?}");
+        assert!(
+            errors.is_empty(),
+            "unexpected unknown-name errors: {errors:#?}"
+        );
     }
 
     #[test]
@@ -564,7 +592,10 @@ main = do Effect {
             .into_iter()
             .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
             .collect();
-        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:#?}");
+        assert!(
+            errors.is_empty(),
+            "unexpected unknown-name errors: {errors:#?}"
+        );
     }
 
     #[test]
@@ -588,7 +619,10 @@ x = gtk4.appRun
             .into_iter()
             .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
             .collect();
-        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:#?}");
+        assert!(
+            errors.is_empty(),
+            "unexpected unknown-name errors: {errors:#?}"
+        );
     }
 
     #[test]

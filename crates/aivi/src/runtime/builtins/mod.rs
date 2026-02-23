@@ -5,6 +5,7 @@ mod concurrency;
 mod core;
 mod crypto;
 mod database;
+mod email;
 mod graph;
 mod i18n;
 mod instant;

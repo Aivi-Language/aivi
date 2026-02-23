@@ -14,10 +14,7 @@ pub(super) fn analyze_reuse(defs: &[RustIrDef]) -> ReusePlan {
     let mut reusable_defs = Vec::new();
     let mut patching_defs = Vec::new();
     for def in defs {
-        let is_closed = def
-            .cg_type
-            .as_ref()
-            .is_some_and(|ty| ty.is_closed());
+        let is_closed = def.cg_type.as_ref().is_some_and(|ty| ty.is_closed());
         if is_closed {
             reusable_defs.push(def.name.clone());
             if contains_patch(&def.expr) {
@@ -47,14 +44,12 @@ fn contains_patch(expr: &RustIrExpr) -> bool {
         RustIrExpr::FieldAccess { base, .. } => contains_patch(base),
         RustIrExpr::Index { base, index, .. } => contains_patch(base) || contains_patch(index),
         RustIrExpr::Match {
-            scrutinee,
-            arms,
-            ..
+            scrutinee, arms, ..
         } => {
             contains_patch(scrutinee)
-                || arms
-                    .iter()
-                    .any(|arm| arm.guard.as_ref().is_some_and(contains_patch) || contains_patch(&arm.body))
+                || arms.iter().any(|arm| {
+                    arm.guard.as_ref().is_some_and(contains_patch) || contains_patch(&arm.body)
+                })
         }
         RustIrExpr::If {
             cond,

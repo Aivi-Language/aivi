@@ -9,6 +9,7 @@ use aivi
 
 env = {
   get: key => load (system.env.get key)
+  decode: prefix => load (system.env.decode prefix)
   set: key value => system.env.set key value
   remove: key => system.env.remove key
 }

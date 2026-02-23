@@ -19,6 +19,7 @@ It allows you to read **Environment Variables** (like secret queries or API keys
 | Function | Explanation |
 | --- | --- |
 | **env.get** name<br><pre><code>`Text -> Effect Text (Option Text)`</code></pre> | Reads the environment variable `name`. Returns `None` when the variable is not set. |
+| **env.decode** prefix<br><pre><code>`Text -> Effect Text A`</code></pre> | Reads all environment keys under `prefix` and decodes them into the expected typed config `A`. |
 | **env.set** name value<br><pre><code>`Text -> Text -> Effect Text Unit`</code></pre> | Sets the environment variable `name` to `value`. |
 | **env.remove** name<br><pre><code>`Text -> Effect Text Unit`</code></pre> | Removes the environment variable `name`. |
 
