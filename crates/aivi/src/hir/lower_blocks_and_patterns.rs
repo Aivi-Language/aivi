@@ -137,9 +137,23 @@ fn lower_block_item_ctx(
                 },
             }
         }
-        // `on transition => handler` — lower as expression statement for now
-        BlockItem::On { handler, .. } => HirBlockItem::Expr {
-            expr: lower_expr_ctx(handler, id_gen, ctx, false),
+        // `on transition => handler` — register transition handlers at runtime.
+        BlockItem::On {
+            transition,
+            handler,
+            ..
+        } => HirBlockItem::Expr {
+            expr: HirExpr::Call {
+                id: id_gen.next(),
+                func: Box::new(HirExpr::Var {
+                    id: id_gen.next(),
+                    name: "__machine_on".to_string(),
+                }),
+                args: vec![
+                    lower_expr_ctx(transition, id_gen, ctx, false),
+                    lower_expr_ctx(handler, id_gen, ctx, false),
+                ],
+            },
         },
     }
 }

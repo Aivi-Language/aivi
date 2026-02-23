@@ -240,8 +240,19 @@ The loop body's `{ ... }` block is promoted to the parent effect-block kind, so 
 on PostfixExpr => Expr
 ```
 
-- **`PostfixExpr`** evaluates to a machine transition (constructor).
+- **`PostfixExpr`** evaluates to a machine transition function value.
 - **`Expr`** is the handler effect to run when the transition fires.
+
+### Ordering
+
+For machine transitions, runtime order is:
+
+1. transition guard check
+2. machine state update
+3. registered `on` handlers for that transition
+
+If a handler fails, the transition remains applied.
+See [Machine Runtime Semantics](machines_runtime.md) for full runtime details.
 
 ### Example (minimal)
 

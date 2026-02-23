@@ -617,7 +617,15 @@ fn collect_value_defs(item: &ModuleItem, scope: &mut HashMap<String, Option<Stri
             }
         }
         ModuleItem::TypeSig(_) => {}
-        ModuleItem::MachineDecl(_) => {}
+        ModuleItem::MachineDecl(machine_decl) => {
+            scope.insert(machine_decl.name.name.clone(), None);
+            for state in &machine_decl.states {
+                scope.insert(state.name.name.clone(), None);
+            }
+            for transition in &machine_decl.transitions {
+                scope.insert(transition.name.name.clone(), None);
+            }
+        }
     }
 }
 
