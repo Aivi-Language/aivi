@@ -145,12 +145,18 @@ pub(super) fn build_url_record() -> Value {
 pub(super) enum HttpClientMode {
     Http,
     Https,
+    RestApi,
+}
+
+pub(super) fn build_rest_api_record() -> Value {
+    build_http_client_record(HttpClientMode::RestApi)
 }
 
 pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
     let kind = match mode {
         HttpClientMode::Http => "Http",
         HttpClientMode::Https => "Https",
+        HttpClientMode::RestApi => "RestApi",
     }
     .to_string();
     let mut fields = HashMap::new();
@@ -163,7 +169,7 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                 func: Arc::new(move |_| {
                     let url = url_from_value(url.clone(), "http.get")?;
                     ensure_http_scheme(&url, mode, "http.get")?;
-                    http_request("GET", &url, Vec::new(), None)
+                    http_request("GET", &url, Vec::new(), None, None, 0, None, false)
                 }),
             };
             Ok(Value::Source(Arc::new(SourceValue {
@@ -183,7 +189,7 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                     let url = url_from_value(url.clone(), "http.post")?;
                     ensure_http_scheme(&url, mode, "http.post")?;
                     let body = expect_text(body.clone(), "http.post")?;
-                    http_request("POST", &url, Vec::new(), Some(body))
+                    http_request("POST", &url, Vec::new(), Some(body), None, 0, None, false)
                 }),
             };
             Ok(Value::Source(Arc::new(SourceValue {
@@ -221,7 +227,21 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                         Some(value) => text_option_from_value(value.clone(), "http.fetch")?,
                         None => None,
                     };
-                    http_request(&method, &url, headers, body)
+                    let timeout_ms = optional_int_field(&record, "timeoutMs")?;
+                    let retry_count = optional_int_field(&record, "retryCount")?.unwrap_or(0);
+                    let bearer_token = optional_text_field(&record, "bearerToken")?;
+                    let strict_status =
+                        optional_bool_field(&record, "strictStatus")?.unwrap_or(false);
+                    http_request(
+                        &method,
+                        &url,
+                        headers,
+                        body,
+                        timeout_ms,
+                        retry_count.max(0) as usize,
+                        bearer_token,
+                        strict_status,
+                    )
                 }),
             };
             Ok(Value::Source(Arc::new(SourceValue {
@@ -243,6 +263,15 @@ fn ensure_http_scheme(url: &Url, mode: HttpClientMode, ctx: &str) -> Result<(), 
                 Err(RuntimeError::Message(format!("{ctx} expects an https URL")))
             }
         }
+        HttpClientMode::RestApi => {
+            if url.scheme() == "http" || url.scheme() == "https" {
+                Ok(())
+            } else {
+                Err(RuntimeError::Message(format!(
+                    "{ctx} expects an http or https URL"
+                )))
+            }
+        }
     }
 }
 
@@ -251,69 +280,111 @@ fn http_request(
     url: &Url,
     headers: Vec<(String, String)>,
     body: Option<String>,
+    timeout_ms: Option<i64>,
+    retry_count: usize,
+    bearer_token: Option<String>,
+    strict_status: bool,
 ) -> Result<Value, RuntimeError> {
     let url_text = url.to_string();
     let method = method.to_ascii_uppercase();
+    let mut headers = headers;
+    if let Some(token) = bearer_token {
+        headers.push(("Authorization".to_string(), format!("Bearer {token}")));
+    }
+    let timeout = timeout_ms
+        .and_then(|ms| u64::try_from(ms).ok())
+        .map(std::time::Duration::from_millis);
 
-    // ureq 3 uses typestates for methods that can/can't have request bodies. Keep it explicit.
-    let mut response = if let Some(body_text) = body {
-        let builder = match method.as_str() {
-            "POST" => ureq::post(&url_text),
-            "PUT" => ureq::put(&url_text),
-            "PATCH" => ureq::patch(&url_text),
-            _ => {
-                return Err(RuntimeError::Message(format!(
-                    "http.fetch does not support body for method {method}"
-                )))
+    let mut response: Option<Result<ureq::http::Response<ureq::Body>, ureq::Error>> = None;
+    for attempt in 0..=retry_count {
+        let next = if let Some(body_text) = body.clone() {
+            let builder = match method.as_str() {
+                "POST" => ureq::post(&url_text),
+                "PUT" => ureq::put(&url_text),
+                "PATCH" => ureq::patch(&url_text),
+                _ => {
+                    return Err(RuntimeError::Message(format!(
+                        "http.fetch does not support body for method {method}"
+                    )))
+                }
+            };
+            let builder = headers
+                .clone()
+                .into_iter()
+                .fold(builder, |builder, (name, value)| {
+                    builder.header(name, value)
+                });
+            let mut cfg = builder.config().http_status_as_error(false);
+            if let Some(timeout) = timeout {
+                cfg = cfg.timeout_global(Some(timeout));
+            }
+            cfg.build().send(body_text)
+        } else {
+            match method.as_str() {
+                "POST" | "PUT" | "PATCH" => {
+                    let builder = match method.as_str() {
+                        "POST" => ureq::post(&url_text),
+                        "PUT" => ureq::put(&url_text),
+                        "PATCH" => ureq::patch(&url_text),
+                        _ => unreachable!("method matched above"),
+                    };
+                    let builder = headers
+                        .clone()
+                        .into_iter()
+                        .fold(builder, |builder, (name, value)| {
+                            builder.header(name, value)
+                        });
+                    let mut cfg = builder.config().http_status_as_error(false);
+                    if let Some(timeout) = timeout {
+                        cfg = cfg.timeout_global(Some(timeout));
+                    }
+                    cfg.build().send_empty()
+                }
+                _ => {
+                    let builder = match method.as_str() {
+                        "GET" => ureq::get(&url_text),
+                        "DELETE" => ureq::delete(&url_text),
+                        "HEAD" => ureq::head(&url_text),
+                        _ => ureq::get(&url_text),
+                    };
+                    let builder = headers
+                        .clone()
+                        .into_iter()
+                        .fold(builder, |builder, (name, value)| {
+                            builder.header(name, value)
+                        });
+                    let mut cfg = builder.config().http_status_as_error(false);
+                    if let Some(timeout) = timeout {
+                        cfg = cfg.timeout_global(Some(timeout));
+                    }
+                    cfg.build().call()
+                }
             }
         };
-        let builder = headers
-            .into_iter()
-            .fold(builder, |builder, (name, value)| builder.header(name, value));
-        builder
-            .config()
-            .http_status_as_error(false)
-            .build()
-            .send(body_text)
-    } else {
-        match method.as_str() {
-            "POST" | "PUT" | "PATCH" => {
-                let builder = match method.as_str() {
-                    "POST" => ureq::post(&url_text),
-                    "PUT" => ureq::put(&url_text),
-                    "PATCH" => ureq::patch(&url_text),
-                    _ => unreachable!("method matched above"),
-                };
-                let builder = headers
-                    .into_iter()
-                    .fold(builder, |builder, (name, value)| builder.header(name, value));
-                builder
-                    .config()
-                    .http_status_as_error(false)
-                    .build()
-                    .send_empty()
-            }
-            _ => {
-                let builder = match method.as_str() {
-                    "GET" => ureq::get(&url_text),
-                    "DELETE" => ureq::delete(&url_text),
-                    "HEAD" => ureq::head(&url_text),
-                    _ => ureq::get(&url_text),
-                };
-                let builder = headers
-                    .into_iter()
-                    .fold(builder, |builder, (name, value)| builder.header(name, value));
-                builder
-                    .config()
-                    .http_status_as_error(false)
-                    .build()
-                    .call()
-            }
+        let stop = next.is_ok() || attempt == retry_count;
+        response = Some(next);
+        if stop {
+            break;
         }
-    };
+    }
+    let mut response = response.expect("http request must produce a response");
 
     match response.as_mut() {
-        Ok(resp) => Ok(make_ok(http_response_to_value(resp)?)),
+        Ok(resp) => {
+            let value = http_response_to_value(resp)?;
+            if strict_status {
+                if let Value::Record(fields) = &value {
+                    if let Some(Value::Int(status)) = fields.get("status") {
+                        if *status < 200 || *status >= 300 {
+                            return Ok(make_err(http_error_record(format!(
+                                "unexpected HTTP status {status}"
+                            ))));
+                        }
+                    }
+                }
+            }
+            Ok(make_ok(value))
+        }
         Err(err) => Ok(make_err(http_error_record(err.to_string()))),
     }
 }
@@ -402,6 +473,72 @@ fn text_option_from_value(value: Value, ctx: &str) -> Result<Option<String>, Run
         }
         Value::Constructor { name, args } if name == "None" && args.is_empty() => Ok(None),
         _ => Err(RuntimeError::Message(format!("{ctx} expects Option Text"))),
+    }
+}
+
+fn optional_int_field(
+    record: &HashMap<String, Value>,
+    field: &str,
+) -> Result<Option<i64>, RuntimeError> {
+    match record.get(field) {
+        None => Ok(None),
+        Some(Value::Int(value)) => Ok(Some(*value)),
+        Some(Value::Constructor { name, args }) if name == "Some" && args.len() == 1 => {
+            match args.first() {
+                Some(Value::Int(value)) => Ok(Some(*value)),
+                _ => Err(RuntimeError::Message(format!(
+                    "http.fetch expects {field} as Int"
+                ))),
+            }
+        }
+        Some(Value::Constructor { name, args }) if name == "None" && args.is_empty() => Ok(None),
+        Some(_) => Err(RuntimeError::Message(format!(
+            "http.fetch expects {field} as Int"
+        ))),
+    }
+}
+
+fn optional_bool_field(
+    record: &HashMap<String, Value>,
+    field: &str,
+) -> Result<Option<bool>, RuntimeError> {
+    match record.get(field) {
+        None => Ok(None),
+        Some(Value::Bool(value)) => Ok(Some(*value)),
+        Some(Value::Constructor { name, args }) if name == "Some" && args.len() == 1 => {
+            match args.first() {
+                Some(Value::Bool(value)) => Ok(Some(*value)),
+                _ => Err(RuntimeError::Message(format!(
+                    "http.fetch expects {field} as Bool"
+                ))),
+            }
+        }
+        Some(Value::Constructor { name, args }) if name == "None" && args.is_empty() => Ok(None),
+        Some(_) => Err(RuntimeError::Message(format!(
+            "http.fetch expects {field} as Bool"
+        ))),
+    }
+}
+
+fn optional_text_field(
+    record: &HashMap<String, Value>,
+    field: &str,
+) -> Result<Option<String>, RuntimeError> {
+    match record.get(field) {
+        None => Ok(None),
+        Some(Value::Text(value)) => Ok(Some(value.clone())),
+        Some(Value::Constructor { name, args }) if name == "Some" && args.len() == 1 => {
+            match args.first() {
+                Some(Value::Text(value)) => Ok(Some(value.clone())),
+                _ => Err(RuntimeError::Message(format!(
+                    "http.fetch expects {field} as Text"
+                ))),
+            }
+        }
+        Some(Value::Constructor { name, args }) if name == "None" && args.is_empty() => Ok(None),
+        Some(_) => Err(RuntimeError::Message(format!(
+            "http.fetch expects {field} as Text"
+        ))),
     }
 }
 

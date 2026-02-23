@@ -233,6 +233,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     env.insert("i18n".to_string(), Scheme::mono(i18n_record));
 
     let option_text_ty = Type::con("Option").app(vec![text_ty.clone()]);
+    let system_env_decode_a = checker.fresh_var_id();
     let env_record = Type::Record {
         fields: vec![
             (
@@ -261,22 +262,51 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")])),
                 ),
             ),
+            (
+                "decode".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(
+                        Type::con("Source")
+                            .app(vec![Type::con("Env"), Type::Var(system_env_decode_a)]),
+                    ),
+                ),
+            ),
         ]
         .into_iter()
         .collect(),
     };
+    let env_decode_a = checker.fresh_var_id();
     let env_source_record = Type::Record {
-        fields: vec![(
-            "get".to_string(),
-            Type::Func(
-                Box::new(text_ty.clone()),
-                Box::new(Type::con("Source").app(vec![Type::con("Env"), text_ty.clone()])),
+        fields: vec![
+            (
+                "get".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::con("Source").app(vec![Type::con("Env"), text_ty.clone()])),
+                ),
             ),
-        )]
+            (
+                "decode".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(
+                        Type::con("Source").app(vec![Type::con("Env"), Type::Var(env_decode_a)]),
+                    ),
+                ),
+            ),
+        ]
         .into_iter()
         .collect(),
     };
-    env.insert("env".to_string(), Scheme::mono(env_source_record));
+    env.insert(
+        "env".to_string(),
+        Scheme {
+            vars: vec![env_decode_a],
+            ty: env_source_record,
+            origin: None,
+        },
+    );
     let system_record = Type::Record {
         fields: vec![
             ("env".to_string(), env_record),
@@ -301,7 +331,45 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         .into_iter()
         .collect(),
     };
-    env.insert("system".to_string(), Scheme::mono(system_record));
+    env.insert(
+        "system".to_string(),
+        Scheme {
+            vars: vec![system_env_decode_a],
+            ty: system_record,
+            origin: None,
+        },
+    );
+    let imap_a = checker.fresh_var_id();
+    let email_record = Type::Record {
+        fields: vec![(
+            "imap".to_string(),
+            Type::Func(
+                Box::new(Type::Record {
+                    fields: vec![
+                        ("host".to_string(), text_ty.clone()),
+                        ("user".to_string(), text_ty.clone()),
+                        ("password".to_string(), text_ty.clone()),
+                    ]
+                    .into_iter()
+                    .collect(),
+                }),
+                Box::new(Type::con("Source").app(vec![
+                    Type::con("Imap"),
+                    Type::con("List").app(vec![Type::Var(imap_a)]),
+                ])),
+            ),
+        )]
+        .into_iter()
+        .collect(),
+    };
+    env.insert(
+        "email".to_string(),
+        Scheme {
+            vars: vec![imap_a],
+            ty: email_record,
+            origin: None,
+        },
+    );
     let effect_text_unit = Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]);
     let effect_text_int = Type::con("Effect").app(vec![text_ty.clone(), int_ty.clone()]);
     let effect_text_text = Type::con("Effect").app(vec![text_ty.clone(), text_ty.clone()]);

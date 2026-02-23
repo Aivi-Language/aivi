@@ -20,6 +20,7 @@ mod database;
 mod database_pool;
 mod decimal;
 mod duration;
+mod email;
 mod file;
 mod generator;
 mod geometry;
@@ -46,6 +47,7 @@ mod probability;
 mod quaternion;
 mod rational;
 mod regex;
+mod rest;
 mod signal;
 mod system;
 mod testing;
@@ -209,6 +211,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
         source: file::SOURCE,
     },
     EmbeddedModule {
+        name: email::MODULE_NAME,
+        source: email::SOURCE,
+    },
+    EmbeddedModule {
         name: i18n::MODULE_NAME,
         source: i18n::SOURCE,
     },
@@ -259,6 +265,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: network_http_server::MODULE_NAME,
         source: network_http_server::SOURCE,
+    },
+    EmbeddedModule {
+        name: rest::MODULE_NAME,
+        source: rest::SOURCE,
     },
     EmbeddedModule {
         name: ui_layout::MODULE_NAME,

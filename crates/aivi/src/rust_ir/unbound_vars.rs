@@ -1,4 +1,3 @@
-
 fn collect_unbound_vars_in_kernel_expr(
     expr: &KernelExpr,
     globals: &[String],
@@ -703,6 +702,8 @@ fn resolve_builtin(name: &str) -> Option<BuiltinName> {
             | "url"
             | "http"
             | "https"
+            | "rest"
+            | "email"
             | "sockets"
             | "streams"
             | "instant"

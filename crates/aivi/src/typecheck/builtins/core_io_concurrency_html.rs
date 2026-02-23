@@ -151,6 +151,10 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         },
     );
 
+    let file_json_a = checker.fresh_var_id();
+    let file_csv_a = checker.fresh_var_id();
+    let file_image_meta_a = checker.fresh_var_id();
+    let file_image_a = checker.fresh_var_id();
     let file_record = Type::Record {
         fields: vec![
             (
@@ -218,11 +222,56 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")])),
                 ),
             ),
+            (
+                "json".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Text")),
+                    Box::new(
+                        Type::con("Source").app(vec![Type::con("File"), Type::Var(file_json_a)]),
+                    ),
+                ),
+            ),
+            (
+                "csv".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Text")),
+                    Box::new(Type::con("Source").app(vec![
+                        Type::con("File"),
+                        Type::con("List").app(vec![Type::Var(file_csv_a)]),
+                    ])),
+                ),
+            ),
+            (
+                "imageMeta".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Text")),
+                    Box::new(
+                        Type::con("Source")
+                            .app(vec![Type::con("Image"), Type::Var(file_image_meta_a)]),
+                    ),
+                ),
+            ),
+            (
+                "image".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Text")),
+                    Box::new(
+                        Type::con("Source").app(vec![Type::con("Image"), Type::Var(file_image_a)]),
+                    ),
+                ),
+            ),
         ]
         .into_iter()
         .collect(),
     };
-    env.insert("file".to_string(), Scheme::mono(file_record));
+    env.insert(
+        "file".to_string(),
+        Scheme {
+            vars: vec![file_json_a, file_csv_a, file_image_meta_a, file_image_a],
+            ty: file_record,
+            origin: None,
+        },
+    );
 
     let a = checker.fresh_var_id();
     let send_ty = Type::con("Send").app(vec![Type::Var(a)]);

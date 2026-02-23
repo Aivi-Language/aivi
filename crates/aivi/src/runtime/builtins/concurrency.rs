@@ -52,9 +52,9 @@ pub(super) fn build_channel_record() -> Value {
                         .lock()
                         .map_err(|_| RuntimeError::Message("channel poisoned".to_string()))?;
                     if let Some(sender) = sender_guard.as_ref() {
-                        sender.send(value.clone()).map_err(|_| {
-                            RuntimeError::Message("channel is closed".to_string())
-                        })?;
+                        sender
+                            .send(value.clone())
+                            .map_err(|_| RuntimeError::Message("channel is closed".to_string()))?;
                         Ok(Value::Unit)
                     } else {
                         Err(RuntimeError::Message("channel is closed".to_string()))

@@ -30,10 +30,10 @@ pub(super) fn build_math_record() -> Value {
             match value {
                 Value::Int(value) => Ok(Value::Int(value.wrapping_abs())),
                 Value::Float(value) => Ok(Value::Float(value.abs())),
-                _ => Err(RuntimeError::Message(
-                    format!("math.abs: expected Int or Float, but received {}",
-                        super::util::value_type_name(&value)),
-                )),
+                _ => Err(RuntimeError::Message(format!(
+                    "math.abs: expected Int or Float, but received {}",
+                    super::util::value_type_name(&value)
+                ))),
             }
         }),
     );

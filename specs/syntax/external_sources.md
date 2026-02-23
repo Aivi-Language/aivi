@@ -4,8 +4,8 @@ External data enters AIVI through typed **Sources**. A source represents a persi
 
 > [!NOTE]
 > v0.1 status:
-> - Implemented: `Source K A`, `load`, `file.read`, `http.get`/`post`/`fetch` (and `https.*`), and `env.get` (single-variable reads).
-> - Out of scope in runtime v0.1: structured codecs like `file.json`/`file.csv`, streaming sources, and higher-level decoding helpers like `env.decode`.
+> - Implemented: `Source K A`, `load`, `file.read`/`json`/`csv`, `file.imageMeta`/`image`, `http.get`/`post`/`fetch` (and `https.*`), `rest.*`, `env.get`, and `env.decode`.
+> - Streaming sources remain out of scope in runtime v0.1.
 > - `SourceError K` is upgraded from `Text` to an ADT supporting `DecodeError` accumulation.
 
 ## 12.1 The Source Type
@@ -45,6 +45,7 @@ Used for local system access. Supports structured (JSON, CSV) and unstructured (
 ## 12.3 HTTP Sources
 
 Typed REST/API integration.
+In v0.1 this is available through `http.*`/`https.*` and the `aivi.rest` facade.
 
 <<< ../snippets/from_md/syntax/external_sources/http_sources.aivi{aivi}
 
@@ -67,6 +68,7 @@ See the [Database Domain](../stdlib/system/database.md) for table operations, de
 ## 12.6 Email Sources
 
 Interacting with mail servers (IMAP/SMTP).
+In v0.1, IMAP reads are available through `email.imap` / `aivi.email`.
 
 <<< ../snippets/from_md/syntax/external_sources/email_sources.aivi{aivi}
 

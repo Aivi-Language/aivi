@@ -161,7 +161,7 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 - ServerHTML fixes
 - memory management
 - recursion + trampoline
-- evaluate gc/ref counting -> internalized "ownership/borrowing"
+- we need setInterval/Timeout/scheduling/backpressure etc in chronos 
 
 ## License
 

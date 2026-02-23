@@ -7,7 +7,9 @@ use crate::runtime::{values_equal, RuntimeError, Value};
 
 fn expect_callable(value: Value, ctx: &str) -> Result<Value, RuntimeError> {
     match value {
-        Value::Builtin(_) | Value::Closure(_) | Value::Thunk(_) | Value::MultiClause(_) => Ok(value),
+        Value::Builtin(_) | Value::Closure(_) | Value::Thunk(_) | Value::MultiClause(_) => {
+            Ok(value)
+        }
         _ => Err(RuntimeError::Message(format!("{ctx} expects a function"))),
     }
 }

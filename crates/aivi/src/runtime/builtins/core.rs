@@ -6,6 +6,7 @@ use super::collections::build_collections_record;
 use super::color::build_color_record;
 use super::concurrency::build_concurrent_record;
 use super::crypto::build_crypto_record;
+use super::email::build_email_record;
 use super::graph::build_graph_record;
 use super::i18n::build_i18n_record;
 use super::instant::build_instant_record;
@@ -16,13 +17,15 @@ use super::number::{build_bigint_record, build_decimal_record, build_rational_re
 use super::regex::build_regex_record;
 use super::signal::build_signal_record;
 use super::system::{
-    build_clock_record, build_console_record, build_file_record, build_random_record,
-    build_env_source_record, build_system_record,
+    build_clock_record, build_console_record, build_env_source_record, build_file_record,
+    build_random_record, build_system_record,
 };
 use super::text::build_text_record;
 use super::timezone::build_timezone_record;
 use super::ui::build_ui_record;
-use super::url_http::{build_http_client_record, build_url_record, HttpClientMode};
+use super::url_http::{
+    build_http_client_record, build_rest_api_record, build_url_record, HttpClientMode,
+};
 use super::util::{builtin, builtin_constructor};
 use super::{database::build_database_record, log::build_log_record};
 use crate::runtime::http::build_http_server_record;
@@ -320,6 +323,8 @@ pub(crate) fn register_builtins(env: &Env) {
         "https".to_string(),
         build_http_client_record(HttpClientMode::Https),
     );
+    env.set("rest".to_string(), build_rest_api_record());
+    env.set("email".to_string(), build_email_record());
     env.set(
         "sockets".to_string(),
         super::sockets::build_sockets_record(),

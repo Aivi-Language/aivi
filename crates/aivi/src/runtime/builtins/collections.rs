@@ -567,7 +567,10 @@ fn key_from_value(value: &Value, ctx: &str) -> Result<KeyValue, RuntimeError> {
 fn expect_map(value: Value, ctx: &str) -> Result<Arc<ImHashMap<KeyValue, Value>>, RuntimeError> {
     match value {
         Value::Map(entries) => Ok(entries),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Map, got {:?}", std::mem::discriminant(&value)))),
+        _ => Err(RuntimeError::Message(format!(
+            "{ctx} expects Map, got {:?}",
+            std::mem::discriminant(&value)
+        ))),
     }
 }
 

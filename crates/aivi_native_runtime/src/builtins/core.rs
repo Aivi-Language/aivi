@@ -11,6 +11,7 @@ use super::color::build_color_record;
 use super::concurrency::{build_channel_record, build_concurrent_record};
 use super::crypto::build_crypto_record;
 use super::database::build_database_record;
+use super::email::build_email_record;
 use super::graph::build_graph_record;
 use super::gtk4::build_gtk4_record;
 use super::http_server::build_http_server_record;
@@ -31,7 +32,9 @@ use super::system::{
 };
 use super::text::build_text_record;
 use super::ui::build_ui_record;
-use super::url_http::{build_http_client_record, build_url_record, HttpClientMode};
+use super::url_http::{
+    build_http_client_record, build_rest_api_record, build_url_record, HttpClientMode,
+};
 use super::util::{builtin, builtin_constructor};
 
 pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
@@ -323,6 +326,8 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
         "https".to_string(),
         build_http_client_record(HttpClientMode::Https),
     );
+    env.insert("rest".to_string(), build_rest_api_record());
+    env.insert("email".to_string(), build_email_record());
     env.insert("sockets".to_string(), build_sockets_record());
     env.insert("streams".to_string(), build_streams_record());
     let collections = build_collections_record();
