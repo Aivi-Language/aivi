@@ -95,9 +95,14 @@ applyDeltas = table deltas => deltas match
 runMigrations : List (Table A) -> Effect DbError Unit
 runMigrations = tables => database.runMigrations tables
 
+collectSql : List MigrationStep -> List Text
+collectSql = steps => steps match
+  | [] => []
+  | [step, ...rest] => [step.sql, ...collectSql rest]
+
 runMigrationSql : List MigrationStep -> Effect DbError Unit
 runMigrationSql = steps =>
-  database.runMigrationSql (map steps (step => step.sql))
+  database.runMigrationSql (collectSql steps)
 
 beginTx : Effect DbError Unit
 beginTx = database.beginTx

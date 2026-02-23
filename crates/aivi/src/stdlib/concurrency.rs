@@ -23,18 +23,13 @@ scope : (Scope -> Effect e a) -> Effect e a
 scope = run => concurrent.scope (run Unit)
 
 sleep : Int -> Effect Text Unit
-sleep = millis => concurrent.sleep millis
+sleep = concurrent.sleep
 
 timeoutWith : Int -> Text -> Effect Text a -> Effect Text a
-timeoutWith = millis timeoutError effect =>
-  concurrent.timeoutWith millis timeoutError effect
+timeoutWith = concurrent.timeoutWith
 
 retry : Int -> Effect e a -> Effect e a
-retry = attempts effect =>
-  if attempts <= 0 then effect else
-    attempt effect match
-      | Ok value => pure value
-      | Err _    => retry (attempts - 1) effect
+retry = concurrent.retry
 
 make : a -> Effect e (Sender a, Receiver a)
 make = _sample => channel.make Unit

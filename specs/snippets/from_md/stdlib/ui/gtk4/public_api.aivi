@@ -79,6 +79,8 @@ fileDialogSelectFile: FileDialogId -> Effect GtkError Text
 
 imageNewFromFile: Text -> Effect GtkError ImageId
 imageSetFile: ImageId -> Text -> Effect GtkError Unit
+imageNewFromResource: Text -> Effect GtkError ImageId
+imageSetResource: ImageId -> Text -> Effect GtkError Unit
 
 listStoreNew: Unit -> Effect GtkError ListStoreId
 listStoreAppendText: ListStoreId -> Text -> Effect GtkError Unit

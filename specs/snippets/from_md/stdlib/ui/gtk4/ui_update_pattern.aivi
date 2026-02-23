@@ -1,4 +1,4 @@
-module user.mailfox
+module user.myapp
 
 use aivi
 use aivi.ui.gtk4

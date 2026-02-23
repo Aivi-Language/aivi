@@ -259,8 +259,9 @@ pub(super) fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, Aivi
         RustIrExpr::FieldAccess { base, field, .. } => {
             let base_code = emit_expr(base, indent)?;
             format!(
-                "({base_code}).and_then(|b| match b {{ Value::Record(map) => map.get({:?}).cloned().ok_or_else(|| RuntimeError::Message(\"missing field\".to_string())), other => Err(RuntimeError::Message(format!(\"expected Record, got {{}}\", aivi_native_runtime::format_value(&other)))), }})",
-                field
+                "({base_code}).and_then(|b| match b {{ Value::Record(map) => map.get({:?}).cloned().ok_or_else(|| RuntimeError::Message({:?}.to_string())), other => Err(RuntimeError::Message(format!(\"expected Record, got {{}}\", aivi_native_runtime::format_value(&other)))), }})",
+                field,
+                format!("missing field {}", field)
             )
         }
         RustIrExpr::Index { base, index, .. } => {

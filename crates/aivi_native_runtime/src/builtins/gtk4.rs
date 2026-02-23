@@ -58,6 +58,7 @@ struct WindowState {
     title: String,
     width: i64,
     height: i64,
+    titlebar: Option<i64>,
     child: Option<i64>,
     visible: bool,
 }
@@ -251,6 +252,7 @@ fn build_gtk4_record_mock() -> Value {
                             title: title.clone(),
                             width,
                             height,
+                            titlebar: None,
                             child: None,
                             visible: false,
                         },
@@ -289,6 +291,33 @@ fn build_gtk4_record_mock() -> Value {
     );
 
     fields.insert(
+        "windowSetTitlebar".to_string(),
+        builtin("gtk4.windowSetTitlebar", 2, |mut args, _| {
+            let titlebar_id = match args.remove(1) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.windowSetTitlebar expects Int titlebar id")),
+            };
+            let window_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.windowSetTitlebar expects Int window id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    state.ensure_widget(titlebar_id, "windowSetTitlebar")?;
+                    let Some(window) = state.windows.get_mut(&window_id) else {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.windowSetTitlebar unknown window id {window_id}"
+                        ))));
+                    };
+                    window.titlebar = Some(titlebar_id);
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
         "windowPresent".to_string(),
         builtin("gtk4.windowPresent", 1, |mut args, _| {
             let window_id = match args.remove(0) {
@@ -307,6 +336,7 @@ fn build_gtk4_record_mock() -> Value {
                         &window.title,
                         window.width,
                         window.height,
+                        window.titlebar,
                         window.app_id,
                         window.visible,
                     );
@@ -1298,6 +1328,29 @@ fn build_gtk4_record_mock() -> Value {
     );
 
     fields.insert(
+        "imageNewFromResource".to_string(),
+        builtin("gtk4.imageNewFromResource", 1, |mut args, _| {
+            let resource_path = match args.remove(0) {
+                Value::Text(v) => v,
+                _ => {
+                    return Err(invalid(
+                        "gtk4.imageNewFromResource expects Text resource path",
+                    ))
+                }
+            };
+            Ok(effect(move |_| {
+                let id = GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    let id = state.alloc_widget_id();
+                    state.images.insert(id, resource_path.clone());
+                    id
+                });
+                Ok(Value::Int(id))
+            }))
+        }),
+    );
+
+    fields.insert(
         "imageSetFile".to_string(),
         builtin("gtk4.imageSetFile", 2, |mut args, _| {
             let path = match args.remove(1) {
@@ -1317,6 +1370,32 @@ fn build_gtk4_record_mock() -> Value {
                         ))));
                     };
                     *image = path.clone();
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "imageSetResource".to_string(),
+        builtin("gtk4.imageSetResource", 2, |mut args, _| {
+            let resource_path = match args.remove(1) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.imageSetResource expects Text resource path")),
+            };
+            let image_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.imageSetResource expects Int image id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    let Some(image) = state.images.get_mut(&image_id) else {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.imageSetResource unknown image id {image_id}"
+                        ))));
+                    };
+                    *image = resource_path.clone();
                     Ok(Value::Unit)
                 })
             }))
@@ -2055,4 +2134,81 @@ fn build_gtk4_record_mock() -> Value {
     );
 
     Value::Record(Arc::new(fields))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_gtk4_record_mock, Gtk4State, GTK4_STATE};
+    use crate::{Runtime, RuntimeError, Value};
+
+    fn gtk4_field(record: &Value, name: &str) -> Value {
+        let Value::Record(fields) = record else {
+            panic!("gtk4 builtin must be a record")
+        };
+        fields
+            .get(name)
+            .unwrap_or_else(|| panic!("missing gtk4 field: {name}"))
+            .clone()
+    }
+
+    #[test]
+    fn image_resource_apis_store_and_update_resource_path() {
+        GTK4_STATE.with(|state| *state.borrow_mut() = Gtk4State::default());
+        let mut runtime = Runtime::default();
+        let gtk4 = build_gtk4_record_mock();
+
+        let new_from_resource = gtk4_field(&gtk4, "imageNewFromResource");
+        let create_effect = runtime
+            .call(
+                new_from_resource,
+                vec![Value::Text(
+                    "/com/example/YourApp/icons/lucide/home.svg".to_string(),
+                )],
+            )
+            .expect("create effect");
+        let image_id = match runtime.run_effect_value(create_effect).expect("run effect") {
+            Value::Int(id) => id,
+            _ => panic!("expected image id"),
+        };
+
+        let set_resource = gtk4_field(&gtk4, "imageSetResource");
+        let set_effect = runtime
+            .call(
+                set_resource,
+                vec![
+                    Value::Int(image_id),
+                    Value::Text("/com/example/YourApp/icons/lucide/search.svg".to_string()),
+                ],
+            )
+            .expect("set effect");
+        runtime
+            .run_effect_value(set_effect)
+            .expect("run set effect");
+
+        GTK4_STATE.with(|state| {
+            let state = state.borrow();
+            assert_eq!(
+                state.images.get(&image_id),
+                Some(&"/com/example/YourApp/icons/lucide/search.svg".to_string())
+            );
+        });
+    }
+
+    #[test]
+    fn image_new_from_resource_requires_text_path() {
+        GTK4_STATE.with(|state| *state.borrow_mut() = Gtk4State::default());
+        let mut runtime = Runtime::default();
+        let gtk4 = build_gtk4_record_mock();
+        let new_from_resource = gtk4_field(&gtk4, "imageNewFromResource");
+
+        let err = match runtime.call(new_from_resource, vec![Value::Int(1)]) {
+            Ok(_) => panic!("should reject non-text path"),
+            Err(err) => err,
+        };
+        assert!(matches!(
+            err,
+            RuntimeError::Message(msg)
+            if msg == "gtk4.imageNewFromResource expects Text resource path"
+        ));
+    }
 }

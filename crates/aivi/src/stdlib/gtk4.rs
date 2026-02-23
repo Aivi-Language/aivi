@@ -5,7 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.ui.gtk4
 export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, TrayIconId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, NotificationId, LayoutManagerId, GtkError
 export init, appNew, appRun
-export windowNew, windowSetTitle, windowSetChild, windowPresent
+export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent
 export widgetShow, widgetHide
 export boxNew, boxAppend
 export buttonNew, buttonSetLabel
@@ -20,7 +20,7 @@ export dropTargetNew, dropTargetLastText
 export menuModelNew, menuModelAppendItem, menuButtonNew, menuButtonSetMenuModel
 export dialogNew, dialogSetTitle, dialogSetChild, dialogPresent, dialogClose
 export fileDialogNew, fileDialogSelectFile
-export imageNewFromFile, imageSetFile
+export imageNewFromFile, imageSetFile, imageNewFromResource, imageSetResource
 export listStoreNew, listStoreAppendText, listStoreItems
 export listViewNew, listViewSetModel
 export treeViewNew, treeViewSetModel
@@ -73,6 +73,9 @@ windowNew = gtk4.windowNew
 
 windowSetTitle : WindowId -> Text -> Effect GtkError Unit
 windowSetTitle = gtk4.windowSetTitle
+
+windowSetTitlebar : WindowId -> WidgetId -> Effect GtkError Unit
+windowSetTitlebar = gtk4.windowSetTitlebar
 
 windowSetChild : WindowId -> WidgetId -> Effect GtkError Unit
 windowSetChild = gtk4.windowSetChild
@@ -196,6 +199,12 @@ imageNewFromFile = gtk4.imageNewFromFile
 
 imageSetFile : ImageId -> Text -> Effect GtkError Unit
 imageSetFile = gtk4.imageSetFile
+
+imageNewFromResource : Text -> Effect GtkError ImageId
+imageNewFromResource = gtk4.imageNewFromResource
+
+imageSetResource : ImageId -> Text -> Effect GtkError Unit
+imageSetResource = gtk4.imageSetResource
 
 listStoreNew : Unit -> Effect GtkError ListStoreId
 listStoreNew = gtk4.listStoreNew

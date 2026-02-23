@@ -19,6 +19,7 @@ mod linux {
         fn gtk_application_window_new(application: *mut c_void) -> *mut c_void;
         fn gtk_window_set_title(window: *mut c_void, title: *const c_char);
         fn gtk_window_set_default_size(window: *mut c_void, width: c_int, height: c_int);
+        fn gtk_window_set_titlebar(window: *mut c_void, titlebar: *mut c_void);
         fn gtk_window_set_child(window: *mut c_void, child: *mut c_void);
         fn gtk_window_present(window: *mut c_void);
 
@@ -39,6 +40,10 @@ mod linux {
         fn gtk_entry_new() -> *mut c_void;
         fn gtk_editable_set_text(editable: *mut c_void, text: *const c_char);
         fn gtk_editable_get_text(editable: *mut c_void) -> *const c_char;
+        fn gtk_image_new_from_file(filename: *const c_char) -> *mut c_void;
+        fn gtk_image_set_from_file(image: *mut c_void, filename: *const c_char);
+        fn gtk_image_new_from_resource(resource_path: *const c_char) -> *mut c_void;
+        fn gtk_image_set_from_resource(image: *mut c_void, resource_path: *const c_char);
         fn gtk_gesture_click_new() -> *mut c_void;
         fn gtk_widget_add_controller(widget: *mut c_void, controller: *mut c_void);
     }
@@ -55,6 +60,8 @@ mod linux {
             argc: c_int,
             argv: *mut *mut c_char,
         ) -> c_int;
+        fn g_resource_load(filename: *const c_char, error: *mut *mut c_void) -> *mut c_void;
+        fn g_resources_register(resource: *mut c_void);
     }
 
     #[link(name = "dl")]
@@ -78,8 +85,10 @@ mod linux {
         buttons: HashMap<i64, *mut c_void>,
         labels: HashMap<i64, *mut c_void>,
         entries: HashMap<i64, *mut c_void>,
+        images: HashMap<i64, *mut c_void>,
         draw_areas: HashMap<i64, *mut c_void>,
         gesture_clicks: HashMap<i64, GestureClickState>,
+        resources_registered: bool,
     }
 
     struct GestureClickState {
@@ -141,6 +150,37 @@ mod linux {
         }
     }
 
+    fn maybe_register_gresource_bundle() -> Result<(), RuntimeError> {
+        const GRESOURCE_ENV: &str = "AIVI_GTK4_GRESOURCE_PATH";
+        let path = match std::env::var(GRESOURCE_ENV) {
+            Ok(path) => path,
+            Err(std::env::VarError::NotPresent) => return Ok(()),
+            Err(std::env::VarError::NotUnicode(_)) => {
+                return Err(RuntimeError::Error(Value::Text(format!(
+                    "{GRESOURCE_ENV} must be valid UTF-8"
+                ))))
+            }
+        };
+        if path.is_empty() {
+            return Err(RuntimeError::Error(Value::Text(format!(
+                "{GRESOURCE_ENV} cannot be empty"
+            ))));
+        }
+        let path_c = c_text(
+            &path,
+            "gtk4.init invalid gresource path from AIVI_GTK4_GRESOURCE_PATH",
+        )?;
+        let mut err = null_mut();
+        let resource = unsafe { g_resource_load(path_c.as_ptr(), &mut err) };
+        if resource.is_null() {
+            return Err(RuntimeError::Error(Value::Text(format!(
+                "gtk4.init failed to load gresource bundle from {path}"
+            ))));
+        }
+        unsafe { g_resources_register(resource) };
+        Ok(())
+    }
+
     pub(super) fn build_from_mock(mut fields: HashMap<String, Value>) -> HashMap<String, Value> {
         fields.insert(
             "init".to_string(),
@@ -151,6 +191,15 @@ mod linux {
                 }
                 Ok(effect(|_| {
                     unsafe { gtk_init() };
+                    try_adw_init();
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        if !state.resources_registered {
+                            maybe_register_gresource_bundle()?;
+                            state.resources_registered = true;
+                        }
+                        Ok::<(), RuntimeError>(())
+                    })?;
                     Ok(Value::Unit)
                 }))
             }),
@@ -258,6 +307,33 @@ mod linux {
                             )))
                         })?;
                         unsafe { gtk_window_set_title(window, title_c.as_ptr()) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "windowSetTitlebar".to_string(),
+            builtin("gtk4.windowSetTitlebar", 2, |mut args, _| {
+                let titlebar_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowSetTitlebar expects Int titlebar id")),
+                };
+                let window_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowSetTitlebar expects Int window id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let window = state.windows.get(&window_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.windowSetTitlebar unknown window id {window_id}"
+                            )))
+                        })?;
+                        let titlebar = widget_ptr(&state, titlebar_id, "windowSetTitlebar")?;
+                        unsafe { gtk_window_set_titlebar(window, titlebar) };
                         Ok(Value::Unit)
                     })
                 }))
@@ -780,6 +856,124 @@ mod linux {
                             .to_string_lossy()
                             .into_owned();
                         Ok(Value::Text(text))
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "imageNewFromFile".to_string(),
+            builtin("gtk4.imageNewFromFile", 1, |mut args, _| {
+                let path = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.imageNewFromFile expects Text path")),
+                };
+                Ok(effect(move |_| {
+                    let path_c = c_text(&path, "gtk4.imageNewFromFile invalid path")?;
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_image_new_from_file(path_c.as_ptr()) };
+                        if raw.is_null() {
+                            return Err(RuntimeError::Error(Value::Text(
+                                "gtk4.imageNewFromFile failed to create image".to_string(),
+                            )));
+                        }
+                        let id = state.alloc_id();
+                        state.images.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        Ok::<i64, RuntimeError>(id)
+                    })?;
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "imageSetFile".to_string(),
+            builtin("gtk4.imageSetFile", 2, |mut args, _| {
+                let path = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.imageSetFile expects Text path")),
+                };
+                let image_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.imageSetFile expects Int image id")),
+                };
+                Ok(effect(move |_| {
+                    let path_c = c_text(&path, "gtk4.imageSetFile invalid path")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let image = state.images.get(&image_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.imageSetFile unknown image id {image_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_image_set_from_file(image, path_c.as_ptr()) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "imageNewFromResource".to_string(),
+            builtin("gtk4.imageNewFromResource", 1, |mut args, _| {
+                let resource_path = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => {
+                        return Err(invalid(
+                            "gtk4.imageNewFromResource expects Text resource path",
+                        ))
+                    }
+                };
+                Ok(effect(move |_| {
+                    let resource_c = c_text(
+                        &resource_path,
+                        "gtk4.imageNewFromResource invalid resource path",
+                    )?;
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_image_new_from_resource(resource_c.as_ptr()) };
+                        if raw.is_null() {
+                            return Err(RuntimeError::Error(Value::Text(
+                                "gtk4.imageNewFromResource failed to create image".to_string(),
+                            )));
+                        }
+                        let id = state.alloc_id();
+                        state.images.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        Ok::<i64, RuntimeError>(id)
+                    })?;
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "imageSetResource".to_string(),
+            builtin("gtk4.imageSetResource", 2, |mut args, _| {
+                let resource_path = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.imageSetResource expects Text resource path")),
+                };
+                let image_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.imageSetResource expects Int image id")),
+                };
+                Ok(effect(move |_| {
+                    let resource_c = c_text(
+                        &resource_path,
+                        "gtk4.imageSetResource invalid resource path",
+                    )?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let image = state.images.get(&image_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.imageSetResource unknown image id {image_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_image_set_from_resource(image, resource_c.as_ptr()) };
+                        Ok(Value::Unit)
                     })
                 }))
             }),

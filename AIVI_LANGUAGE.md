@@ -28,7 +28,8 @@ apply: always
 | Line comment                                       | `//` to end of line                                                                                                                                            |
 | Block comment                                      | `/* ... */` — may span multiple lines; **does not nest**                                                                                                       |
 | Value / function / field names                     | `lowerCamelCase` (`lowerIdent`)                                                                                                                                |
-| Type / constructor / module / domain / class names | `UpperCamelCase` (`UpperIdent`)                                                                                                                                |
+| Type / constructor / domain / class names          | `UpperCamelCase` (`UpperIdent`)                                                                                                                                |
+| Module path segments / `.aivi` file names          | `snake_case` (for example `myapp.daemon.command_queue` -> `myapp/daemon/command_queue.aivi`)                                                             |
 | Text literal                                       | `"hello { name }"` (interpolation with `{ expr }`)                                                                                                             |
 | Int, Float                                         | `42`, `3.14`                                                                                                                                                   |
 | Char                                               | `'a'`                                                                                                                                                          |
@@ -441,6 +442,7 @@ main = do Effect {
 Statements inside `do Effect { ... }`:
 
 - `x <- eff` - run effect, bind result
+- `_ <- eff` - run effect and intentionally discard result (optional; use when value is unused)
 - `x = expr` - pure local binding (`expr` must NOT be `Effect`)
 - `x <- resource` - acquire a `Resource`, released on scope exit
 - `when cond <- eff` - conditional (runs `eff` only when `cond` is true)
@@ -738,6 +740,7 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 - `aivi.heap` - Min/Max heap
 - `vendor.name.*` - third-party libraries
 - `user.app.*` - application code
+- In application code, module path segments and backing file names should be `snake_case`.
 
 ---
 

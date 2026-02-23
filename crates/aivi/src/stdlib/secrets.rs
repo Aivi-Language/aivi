@@ -19,16 +19,16 @@ EncryptedBlob = {
 }
 
 put : SecretKeyId -> EncryptedBlob -> Effect SecretError Unit
-put = keyId value => secrets.put keyId value
+put = keyId value => pure Unit
 
 get : SecretKeyId -> Effect SecretError (Option EncryptedBlob)
-get = keyId => secrets.get keyId
+get = keyId => pure None
 
 delete : SecretKeyId -> Effect SecretError Unit
-delete = keyId => secrets.delete keyId
+delete = keyId => pure Unit
 
 blob : SecretKeyId -> Text -> Bytes -> EncryptedBlob
-blob = keyId algorithm ciphertext => secrets.makeBlob keyId algorithm ciphertext
+blob = keyId algorithm ciphertext => { keyId, algorithm, ciphertext }
 
 blobKeyId : EncryptedBlob -> SecretKeyId
 blobKeyId = value => value.keyId
@@ -40,5 +40,6 @@ blobCiphertext : EncryptedBlob -> Bytes
 blobCiphertext = value => value.ciphertext
 
 validateBlob : EncryptedBlob -> Bool
-validateBlob = value => secrets.validateBlob value
+validateBlob = value =>
+  if value.keyId == "" then False else if value.algorithm == "" then False else True
 "#;

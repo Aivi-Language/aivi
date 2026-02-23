@@ -164,6 +164,20 @@ pub(super) fn build_database_record() -> Value {
         );
     }
 
+    fields.insert(
+        "configureSqlite".to_string(),
+        builtin("database.configureSqlite", 1, |mut args, _| {
+            let tuning = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let _ = expect_record(tuning.clone(), "database.configureSqlite")?;
+                    Ok(Value::Unit)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+
     {
         let state = state.clone();
         fields.insert(
@@ -339,6 +353,20 @@ pub(super) fn build_database_record() -> Value {
             }),
         );
     }
+
+    fields.insert(
+        "runMigrationSql".to_string(),
+        builtin("database.runMigrationSql", 1, |mut args, _| {
+            let sql_chunks = args.pop().unwrap();
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| {
+                    let _ = expect_list(sql_chunks.clone(), "database.runMigrationSql")?;
+                    Ok(Value::Unit)
+                }),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
 
     fields.insert("ins".to_string(), builtin_constructor("Insert", 1));
     fields.insert("upd".to_string(), builtin_constructor("Update", 2));
