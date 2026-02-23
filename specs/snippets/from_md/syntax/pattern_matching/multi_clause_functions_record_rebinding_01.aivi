@@ -1,0 +1,4 @@
+resolveAuthor : { author: { alias: Option Text, legalName: Text } } -> { author: { alias: Option Text, legalName: Text }, label: Text }
+resolveAuthor =
+  | { author as { alias: Some label } } => { author, label }
+  | { author as { legalName: label } }  => { author, label }

@@ -40,6 +40,10 @@ If no arm matches at runtime, evaluation fails with a non-exhaustive-match runti
 
 <<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_01.aivi{aivi}
 
+Here is the same multi-clause shape without a pipeline, using rebinding plus record destructuring inside each arm:
+
+<<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_record_rebinding_01.aivi{aivi}
+
 <<< ../snippets/from_md/syntax/pattern_matching/matching_and_renaming_instantiation.aivi{aivi}
 
 
