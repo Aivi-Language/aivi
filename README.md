@@ -1,47 +1,64 @@
 # AIVI
 
-AIVI is a functional programming language and toolchain for building typed applications with a simpler developer experience than systems-level languages. It is designed to let you model data, business logic, and effects in a high-level language while still compiling and running on a fast Rust-powered foundation.
+AIVI is a functional programming language and toolchain for building strongly typed applications on a Rust-powered foundation.
+It is designed for developers who want high confidence in correctness, explicit effect handling, and fast execution, without writing Rust as their day-to-day language.
 
-## Why AIVI exists
+## What makes AIVI special
 
-AIVI exists to make strong correctness guarantees practical without forcing developers to carry the full cognitive load of Rust syntax, ownership, borrowing, and memory management. The goal is to keep the benefits of modern static typing and performance while offering a language that is focused on expression, composition, and domain modeling.
+AIVI sits in a focused niche: **domain-first functional programming with systems-level runtime credibility**.
 
-In short: use the Rust ecosystem for speed and reliability, but work in a language surface that is optimized for product thinking rather than low-level mechanics.
+- **High-level language, low-level foundation**  
+  Model business logic in a concise, expressive language while relying on a Rust implementation for speed and reliability.
+- **Correctness without ownership overhead**  
+  Keep strong typing and compositional modeling without carrying Rust's full ownership/borrowing mental load in application code.
+- **Explicit effects and errors**  
+  Build effectful programs where side effects and failures stay visible in program design rather than hidden in ad hoc conventions.
+- **Tooling as a first-class feature**  
+  CLI, language server support, and workspace-oriented architecture are part of the core platform, not afterthoughts.
+- **Built to scale from model to runtime**  
+  The language pipeline and runtime path are designed together, so high-level abstractions remain practical in real systems.
 
-## Core use cases
+## Where AIVI fits in the language landscape
 
-AIVI is a good fit when you want:
+AIVI is not trying to replace every language category.
+It is meant for teams that want stronger guarantees than dynamic ecosystems, a more domain-centric developer experience than systems languages, and more runtime pragmatism than purely academic functional stacks.
 
-- **Type-safe application logic** with inference and algebraic data types.
-- **Domain-heavy systems** where correctness and explicit modeling matter.
-- **Effectful programs** that still keep error and side-effect handling explicit.
-- **Toolable workflows** with CLI and editor integration (including LSP).
-- **A Rust-backed runtime path** without writing Rust as the primary language.
+| Language space | Typical strength | Common trade-off | Where AIVI fits |
+| --- | --- | --- | --- |
+| Dynamic scripting (Python/JS) | Fast iteration, huge ecosystems | Weaker static guarantees | Offers stronger type-driven modeling and explicit effects |
+| Systems languages (Rust/C++) | Performance, control, predictability | Higher cognitive load for application logic | Keeps Rust-backed performance with a higher-level language surface |
+| Mainstream typed app languages (TypeScript/Kotlin/Go) | Practical productivity and tooling | Less algebraic/domain-centric modeling in many codebases | Emphasizes functional composition and domain precision |
+| Pure FP ecosystems (Haskell/OCaml/F#) | Powerful type systems and abstractions | Ecosystem/runtime integration varies by context | Brings FP modeling style with a Rust-native implementation path |
 
-## Architecture overview
+## When to choose AIVI
+
+AIVI is a strong fit when you are building:
+
+- Domain-heavy services where correctness matters (finance, compliance, workflow engines, policy systems).
+- Type-safe core business logic that should remain easy to reason about as complexity grows.
+- Effectful applications where you want explicit control over side effects and error propagation.
+- Rust-adjacent platforms where runtime performance and operational reliability are key requirements.
+
+## Architecture at a glance
 
 AIVI is organized as a Rust workspace with language, runtime, and tooling crates:
 
-- `crates/aivi`: main CLI and developer entry point
-- `crates/aivi_core`: core language pipeline and shared compiler logic
-- `crates/aivi_driver`: orchestration layer for compilation tasks
+- `crates/aivi`: CLI and developer entry point
+- `crates/aivi_core`: core language pipeline
+- `crates/aivi_driver`: compilation orchestration
 - `crates/aivi_native_runtime`: native runtime support
 - `crates/aivi_http_server`: HTTP serving integration
-- `crates/aivi_lsp`: language server for editor features
+- `crates/aivi_lsp`: language server support
 - `crates/doc_index_gen`: documentation indexing utilities
 
-At a high level, source code flows through:
+High-level flow:
 
 1. Lexing and parsing
 2. AST/HIR-style lowering and resolution
 3. Desugaring to a compact core representation
 4. Type inference and checking
-5. Runtime execution and/or backend emission paths
+5. Runtime execution and/or backend emission
 
-This separation keeps the language model clean while enabling multiple tooling and runtime surfaces.
+## Project direction
 
-## Using the Rust ecosystem without Rust overhead
-
-AIVI is built in Rust and integrates naturally with Rust-native infrastructure, but AIVI users work mostly at the language level. That means you can benefit from Rust's performance and ecosystem maturity while avoiding day-to-day ownership bookkeeping and memory-management details in application code.
-
-The project direction is to make this bridge explicit: a high-level functional language experience on top of a robust Rust implementation.
+AIVI's direction is clear: **make high-assurance, typed application development feel expressive and practical**, while preserving the reliability and performance profile enabled by a Rust foundation.
