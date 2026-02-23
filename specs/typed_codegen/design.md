@@ -16,7 +16,7 @@ Add a parallel codegen path for **closed types** — types whose runtime represe
 
 ### What is a "closed type"?
 
-A type is **closed** (a.k.a. *monomorphic* / *ground*) when it contains no unresolved type variables, no open record rows, and its runtime layout can be statically determined:
+A type is **closed** (a.k.a. *monomorphic* / *ground*) when it contains no unresolved type variables and its runtime layout can be statically determined:
 
 | Category | Examples | Rust emission |
 |----------|----------|---------------|

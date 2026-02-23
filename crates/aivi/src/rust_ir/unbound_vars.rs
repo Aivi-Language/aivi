@@ -718,7 +718,6 @@ fn resolve_builtin(name: &str) -> Option<BuiltinName> {
             | "Queue"
             | "Deque"
             | "Heap"
-            | "MutableMap"
     );
     if ok {
         Some(name.to_string())

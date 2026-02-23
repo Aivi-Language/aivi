@@ -55,7 +55,6 @@ A high-integrity purely functional language with a Rust-first compilation pipeli
 - [Collections](stdlib/core/collections)
 - [I18n](stdlib/core/i18n)
 - [Generator](stdlib/core/generator)
-- [MutableMap](stdlib/core/mutable_map)
 - [Validation](stdlib/core/validation)
 #### Math & Science
 - [Math](stdlib/math/math)

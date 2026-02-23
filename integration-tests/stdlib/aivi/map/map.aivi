@@ -1,5 +1,5 @@
 @no_prelude
-module integrationTests.stdlib.aivi.mutableMap.tests
+module integrationTests.stdlib.aivi.map.tests
 
 use aivi
 use aivi.testing

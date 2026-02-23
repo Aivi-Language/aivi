@@ -11,9 +11,6 @@ pub(super) enum DeferredConstraint {
     Equal(super::types::Type, super::types::Type, Span),
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub(super) struct RowVarId(pub(super) u32);
-
 #[derive(Default, Clone, Debug)]
 pub(super) struct UnionFindVars {
     parent: HashMap<TypeVarId, TypeVarId>,
@@ -63,15 +60,4 @@ impl UnionFindVars {
 pub(super) struct ConstraintState {
     pub(super) vars: UnionFindVars,
     pub(super) deferred: Vec<DeferredConstraint>,
-    next_row_var: u32,
-    pub(super) open_row_vars: Vec<RowVarId>,
-}
-
-impl ConstraintState {
-    pub(super) fn note_open_row_var(&mut self) -> RowVarId {
-        let id = RowVarId(self.next_row_var);
-        self.next_row_var = self.next_row_var.saturating_add(1);
-        self.open_row_vars.push(id);
-        id
-    }
 }

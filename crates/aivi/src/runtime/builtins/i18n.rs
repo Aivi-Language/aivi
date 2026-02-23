@@ -322,7 +322,6 @@ fn value_type_name(value: &Value) -> &'static str {
         Value::Stream(_) => "Stream",
         Value::HttpServer(_) => "HttpServer",
         Value::WebSocket(_) => "WebSocket",
-        Value::MutableMap(_) => "MutableMap",
     }
 }
 

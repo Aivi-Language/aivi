@@ -70,8 +70,6 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("decimal".to_string(), Scheme::mono(decimal_record));
 
@@ -92,8 +90,6 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("url".to_string(), Scheme::mono(url_record));
 
@@ -128,8 +124,6 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("http".to_string(), Scheme::mono(http_record));
 
@@ -160,8 +154,6 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("https".to_string(), Scheme::mono(https_record));
 
@@ -172,15 +164,11 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     let socket_error_ty = Type::Record {
         fields: vec![("message".to_string(), Type::con("Text"))]
             .into_iter()
             .collect(),
-        open: true,
-        row_tail: None,
     };
     let sockets_record = Type::Record {
         fields: vec![
@@ -258,8 +246,6 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("sockets".to_string(), Scheme::mono(sockets_record));
 
@@ -267,8 +253,6 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
         fields: vec![("message".to_string(), Type::con("Text"))]
             .into_iter()
             .collect(),
-        open: true,
-        row_tail: None,
     };
     let stream_bytes_ty =
         Type::con("Stream").app(vec![Type::con("List").app(vec![Type::con("Int")])]);
@@ -307,8 +291,6 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("streams".to_string(), Scheme::mono(streams_record));
 }

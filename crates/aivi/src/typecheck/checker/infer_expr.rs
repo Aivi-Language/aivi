@@ -88,8 +88,6 @@ impl TypeChecker {
         // record type.
         let mut record_ty = Type::Record {
             fields: BTreeMap::new(),
-            open: false,
-            row_tail: None,
         };
 
         fn closed_record_from_path(path: &[PathSegment], value: Type) -> Type {
@@ -101,8 +99,6 @@ impl TypeChecker {
                         fields.insert(name.name.clone(), current);
                         current = Type::Record {
                             fields,
-                            open: false,
-                            row_tail: None,
                         };
                     }
                     PathSegment::Index(_, _) | PathSegment::All(_) => {

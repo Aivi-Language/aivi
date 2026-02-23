@@ -1,7 +1,7 @@
 use aivi::{
     check_modules, check_types, compile_rust_native_lib_typed, compile_rust_native_typed,
     desugar_target, embedded_stdlib_source, ensure_aivi_dependency, format_target, kernel_target,
-    load_module_diagnostics, load_modules, parse_target, render_diagnostics, run_native,
+    load_module_diagnostics, load_modules, parse_target, render_diagnostics,
     rust_ir_target, serve_mcp_stdio_with_policy, validate_publish_preflight, write_scaffold,
     AiviError, CargoDepSpec, McpPolicy, ProjectKind,
 };
@@ -452,11 +452,19 @@ fn run() -> Result<(), AiviError> {
                             opts.target
                         )));
                     }
-                    // Skip all checking for `run` — checking hangs on the
-                    // embedded stdlib (preexisting bug). The desugar_target
-                    // function parses + desugars without type/module checking.
-                    let program = desugar_target(&opts.input)?;
-                    run_native(program)?;
+                    let (program, cg_types) = aivi::desugar_target_with_cg_types(&opts.input)?;
+                    let rust = compile_rust_native_typed(program, cg_types)?;
+                    let out_dir = opts
+                        .output
+                        .unwrap_or_else(|| PathBuf::from("target/aivi-run"));
+                    write_rust_project_native(&out_dir, &rust)?;
+                    let status = Command::new("cargo")
+                        .arg("run")
+                        .current_dir(&out_dir)
+                        .status()?;
+                    if !status.success() {
+                        return Err(AiviError::Cargo("cargo run failed".to_string()));
+                    }
                     Ok(())
                 }
             }

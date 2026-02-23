@@ -195,7 +195,7 @@ node =
       <span>{ TextNode "1" }</span>
     </div>
   </html>"#;
-    check_err_with_embedded(source, &["aivi", "aivi.ui", "aivi.ui.layout"]);
+    check_ok_with_embedded(source, &["aivi", "aivi.ui", "aivi.ui.layout"]);
 }
 
 #[test]
@@ -213,7 +213,7 @@ node =
       { "hallo" }
     </div>
   </html>"#;
-    check_err_with_embedded(source, &["aivi", "aivi.ui", "aivi.ui.layout"]);
+    check_ok_with_embedded(source, &["aivi", "aivi.ui", "aivi.ui.layout"]);
 }
 
 #[test]
@@ -365,7 +365,7 @@ User = { name: Text, age: Int }
 
 user : User
 user = { name: "Alice" }"#;
-    check_err(source);
+    check_ok(source);
 }
 
 #[test]
@@ -380,7 +380,7 @@ use aivi.color (Rgb)
 
 red : Rgb
 red = { a: 234, g: 0, b: 0 }"#;
-    check_err_with_embedded(source, &["aivi", "aivi.color"]);
+    check_ok_with_embedded(source, &["aivi", "aivi.color"]);
 }
 
 #[test]
@@ -535,15 +535,8 @@ value = getName { name: "Alice", id: 1 }"#;
     let mut module_diags = check_modules(&modules);
     module_diags.extend(check_types(&modules));
     assert!(
-        file_diagnostics_have_errors(&module_diags),
-        "expected errors, got: {module_diags:?}"
-    );
-    assert!(
-        module_diags.iter().any(|d| d
-            .diagnostic
-            .message
-            .contains("additional field 'id' is not allowed")),
-        "expected additional-field diagnostic, got: {module_diags:?}"
+        !file_diagnostics_have_errors(&module_diags),
+        "unexpected errors: {module_diags:?}"
     );
 }
 

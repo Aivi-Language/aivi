@@ -464,7 +464,6 @@ fn is_builtin_name(name: &str) -> bool {
             | "Queue"
             | "Deque"
             | "Heap"
-            | "MutableMap"
             | "text"
             | "regex"
             | "math"

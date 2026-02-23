@@ -8,7 +8,7 @@ impl TypeChecker {
     /// Convert a type-checker `Type` to a codegen-friendly `CgType`.
     ///
     /// The `Type` should already have substitution applied (`self.apply(ty)`).
-    /// Any remaining `Type::Var`, open records, or un-resolved HKTs produce `CgType::Dynamic`.
+    /// Any remaining `Type::Var` or un-resolved HKTs produce `CgType::Dynamic`.
     pub(super) fn type_to_cg_type(&mut self, ty: &Type, env: &crate::typecheck::types::TypeEnv) -> CgType {
         let resolved = self.apply(ty.clone());
         self.type_to_cg_type_inner_with_depth(&resolved, env, Self::MAX_CG_LOWERING_DEPTH)
@@ -83,27 +83,17 @@ impl TypeChecker {
                 )
             }
 
-            Type::Record { fields, open, .. } => {
-                if *open {
-                    CgType::Dynamic
-                } else {
-                    CgType::Record(
-                        fields
-                                .iter()
-                                .map(|(name, ty)| {
-                                    (
-                                        name.clone(),
-                                        self.type_to_cg_type_inner_with_depth(
-                                            ty,
-                                            env,
-                                            depth_left - 1,
-                                        ),
-                                    )
-                                })
-                                .collect(),
+            Type::Record { fields } => CgType::Record(
+                fields
+                    .iter()
+                    .map(|(name, ty)| {
+                        (
+                            name.clone(),
+                            self.type_to_cg_type_inner_with_depth(ty, env, depth_left - 1),
                         )
-                }
-            }
+                    })
+                    .collect(),
+            ),
         }
     }
 
@@ -222,18 +212,11 @@ impl TypeChecker {
                     .map(|i| self.apply_local_subst(i, subst))
                     .collect(),
             ),
-            Type::Record {
-                fields,
-                open,
-                row_tail,
-                ..
-            } => Type::Record {
+            Type::Record { fields } => Type::Record {
                 fields: fields
                     .into_iter()
                     .map(|(k, v)| (k, self.apply_local_subst(v, subst)))
                     .collect(),
-                open,
-                row_tail,
             },
         }
     }

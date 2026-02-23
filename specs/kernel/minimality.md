@@ -7,7 +7,7 @@
 | Recursion | `let rec` |
 | Patterns | case |
 | `@` binding | primitive |
-| Records | row types + update |
+| Records | closed records + update |
 | Patching | update + fold |
 | Predicates | λ + case |
 | Generators | fold |
@@ -25,5 +25,5 @@ Nothing else is required.
 ## The true kernel
 
 > **AIVI’s kernel is simply:**
-> **λ-calculus with algebraic data types, row-typed records with update, universal types, fold, and an opaque effect monad.**
+> **λ-calculus with algebraic data types, closed records with update, universal types, fold, and an opaque effect monad.**
 > **Domains are static rewrite rules; patching, predicates, generators, and effects are all elaborations of these primitives.**

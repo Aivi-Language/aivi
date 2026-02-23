@@ -12,7 +12,6 @@ use super::instant::build_instant_record;
 use super::linalg::build_linalg_record;
 use super::list::build_list_record;
 use super::math::build_math_record;
-use super::mutable_map::build_mutable_map_record;
 use super::number::{build_bigint_record, build_decimal_record, build_rational_record};
 use super::regex::build_regex_record;
 use super::signal::build_signal_record;
@@ -349,7 +348,6 @@ pub(crate) fn register_builtins(env: &Env) {
         }
     }
     env.set("collections".to_string(), collections);
-    env.set("MutableMap".to_string(), build_mutable_map_record());
     env.set("console".to_string(), build_console_record());
     env.set("crypto".to_string(), build_crypto_record());
     env.set("logger".to_string(), build_log_record());
