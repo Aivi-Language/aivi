@@ -104,6 +104,21 @@ fn parse_driver(value: Value) -> Result<Driver, RuntimeError> {
     }
 }
 
+fn require_sql_identifier(value: Value, ctx: &str, field: &str) -> Result<String, RuntimeError> {
+    let name = expect_text(value, ctx)?;
+    if name
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+        && !name.is_empty()
+    {
+        Ok(name)
+    } else {
+        Err(RuntimeError::Message(format!(
+            "{ctx} expects {field} as SQL identifier [A-Za-z0-9_]+"
+        )))
+    }
+}
+
 pub(super) fn build_database_record() -> Value {
     let state = Arc::new(DatabaseState::new());
 
@@ -332,6 +347,205 @@ pub(super) fn build_database_record() -> Value {
                                     })
                                     .map_err(RuntimeError::Message)?;
                             }
+                            Ok(Value::Unit)
+                        }
+                    }),
+                };
+                Ok(Value::Effect(Arc::new(effect)))
+            }),
+        );
+    }
+
+    {
+        let state = state.clone();
+        fields.insert(
+            "configureSqlite".to_string(),
+            builtin("database.configureSqlite", 1, move |mut args, _| {
+                let config = args.pop().unwrap();
+                let effect = EffectValue::Thunk {
+                    func: Arc::new({
+                        let state = state.clone();
+                        move |_| {
+                            let config_fields =
+                                expect_record(config.clone(), "database.configureSqlite")?;
+                            let wal = config_fields
+                                .get("wal")
+                                .cloned()
+                                .unwrap_or(Value::Bool(true));
+                            let busy_timeout = config_fields
+                                .get("busyTimeoutMs")
+                                .cloned()
+                                .unwrap_or(Value::Int(5000));
+                            let wal = match wal {
+                                Value::Bool(v) => v,
+                                other => {
+                                    return Err(RuntimeError::Message(format!(
+                                        "database.configureSqlite expects wal Bool, got {}",
+                                        crate::runtime::format_value(&other)
+                                    )))
+                                }
+                            };
+                            let busy_timeout_ms =
+                                expect_int(busy_timeout, "database.configureSqlite")?;
+                            state
+                                .handle
+                                .request(|resp| DbRequest::SqliteConfigure {
+                                    wal,
+                                    busy_timeout_ms,
+                                    resp,
+                                })
+                                .map_err(RuntimeError::Message)?;
+                            Ok(Value::Unit)
+                        }
+                    }),
+                };
+                Ok(Value::Effect(Arc::new(effect)))
+            }),
+        );
+    }
+
+    for name in ["beginTx", "commitTx", "rollbackTx"] {
+        let state = state.clone();
+        fields.insert(
+            name.to_string(),
+            builtin(&format!("database.{name}"), 0, move |_, _| {
+                let effect = EffectValue::Thunk {
+                    func: Arc::new({
+                        let state = state.clone();
+                        move |_| {
+                            match name {
+                                "beginTx" => state
+                                    .handle
+                                    .request(|resp| DbRequest::BeginTransaction { resp })
+                                    .map_err(RuntimeError::Message)?,
+                                "commitTx" => state
+                                    .handle
+                                    .request(|resp| DbRequest::CommitTransaction { resp })
+                                    .map_err(RuntimeError::Message)?,
+                                _ => state
+                                    .handle
+                                    .request(|resp| DbRequest::RollbackTransaction { resp })
+                                    .map_err(RuntimeError::Message)?,
+                            };
+                            Ok(Value::Unit)
+                        }
+                    }),
+                };
+                Ok(Value::Effect(Arc::new(effect)))
+            }),
+        );
+    }
+
+    {
+        let state = state.clone();
+        fields.insert(
+            "savepoint".to_string(),
+            builtin("database.savepoint", 1, move |mut args, _| {
+                let raw_name = args.pop().unwrap();
+                let effect = EffectValue::Thunk {
+                    func: Arc::new({
+                        let state = state.clone();
+                        move |_| {
+                            let name = require_sql_identifier(
+                                raw_name.clone(),
+                                "database.savepoint",
+                                "name",
+                            )?;
+                            state
+                                .handle
+                                .request(|resp| DbRequest::Savepoint { name, resp })
+                                .map_err(RuntimeError::Message)?;
+                            Ok(Value::Unit)
+                        }
+                    }),
+                };
+                Ok(Value::Effect(Arc::new(effect)))
+            }),
+        );
+    }
+
+    {
+        let state = state.clone();
+        fields.insert(
+            "releaseSavepoint".to_string(),
+            builtin("database.releaseSavepoint", 1, move |mut args, _| {
+                let raw_name = args.pop().unwrap();
+                let effect = EffectValue::Thunk {
+                    func: Arc::new({
+                        let state = state.clone();
+                        move |_| {
+                            let name = require_sql_identifier(
+                                raw_name.clone(),
+                                "database.releaseSavepoint",
+                                "name",
+                            )?;
+                            state
+                                .handle
+                                .request(|resp| DbRequest::ReleaseSavepoint { name, resp })
+                                .map_err(RuntimeError::Message)?;
+                            Ok(Value::Unit)
+                        }
+                    }),
+                };
+                Ok(Value::Effect(Arc::new(effect)))
+            }),
+        );
+    }
+
+    {
+        let state = state.clone();
+        fields.insert(
+            "rollbackToSavepoint".to_string(),
+            builtin("database.rollbackToSavepoint", 1, move |mut args, _| {
+                let raw_name = args.pop().unwrap();
+                let effect = EffectValue::Thunk {
+                    func: Arc::new({
+                        let state = state.clone();
+                        move |_| {
+                            let name = require_sql_identifier(
+                                raw_name.clone(),
+                                "database.rollbackToSavepoint",
+                                "name",
+                            )?;
+                            state
+                                .handle
+                                .request(|resp| DbRequest::RollbackToSavepoint { name, resp })
+                                .map_err(RuntimeError::Message)?;
+                            Ok(Value::Unit)
+                        }
+                    }),
+                };
+                Ok(Value::Effect(Arc::new(effect)))
+            }),
+        );
+    }
+
+    {
+        let state = state.clone();
+        fields.insert(
+            "runMigrationSql".to_string(),
+            builtin("database.runMigrationSql", 1, move |mut args, _| {
+                let statements_value = args.pop().unwrap();
+                let effect = EffectValue::Thunk {
+                    func: Arc::new({
+                        let state = state.clone();
+                        move |_| {
+                            let list = expect_list(
+                                statements_value.clone(),
+                                "database.runMigrationSql",
+                            )?;
+                            let mut statements = Vec::with_capacity(list.len());
+                            for item in list.iter() {
+                                statements
+                                    .push(expect_text(item.clone(), "database.runMigrationSql")?);
+                            }
+                            state
+                                .handle
+                                .request(|resp| DbRequest::RunMigrationSql {
+                                    statements: statements.clone(),
+                                    resp,
+                                })
+                                .map_err(RuntimeError::Message)?;
                             Ok(Value::Unit)
                         }
                     }),

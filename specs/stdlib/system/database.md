@@ -75,6 +75,8 @@ and `withConn` guarantees deterministic release via AIVI resources even on failu
 | **db.table** name columns<br><pre><code>`Text -> List Column -> Table A`</code></pre> | Creates a table definition. The row type `A` is inferred from the binding's type annotation. |
 | **db.configure** config<br><pre><code>`DbConfig -> Effect DbError Unit`</code></pre> | Selects the runtime backend (Sqlite, Postgresql, Mysql). |
 | **db.runMigrations** tables<br><pre><code>`List (Table A) -> Effect DbError Unit`</code></pre> | Creates or updates tables to match their column definitions. |
+| **db.runMigrationSql** steps<br><pre><code>`List MigrationStep -> Effect DbError Unit`</code></pre> | Runs ordered SQL migration steps (id + sql) against the configured backend. |
+| **db.configureSqlite** tuning<br><pre><code>`SqliteTuning -> Effect DbError Unit`</code></pre> | Tunes SQLite `journal_mode` (WAL/DELETE) and busy-timeout for local-first workloads. |
 
 ### Data loading
 
@@ -82,6 +84,18 @@ and `withConn` guarantees deterministic release via AIVI resources even on failu
 | --- | --- |
 | **db.load** table<br><pre><code>`Table A -> Effect (SourceError Db) (List A)`</code></pre> | Loads all rows from `table`. Validates fields against type `A`. |
 | **db.applyDelta** table delta<br><pre><code>`Table A -> Delta A -> Effect DbError (Table A)`</code></pre> | Applies an insert, update, or delete delta. Also available as the domain `+` operator. |
+| **db.applyDeltas** table deltas<br><pre><code>`Table A -> List (Delta A) -> Effect DbError (Table A)`</code></pre> | Applies many deltas in one effect for projection-heavy write workloads. |
+
+### Transactions and savepoints
+
+| Function | Explanation |
+| --- | --- |
+| **db.beginTx**<br><pre><code>`Effect DbError Unit`</code></pre> | Starts a transaction. |
+| **db.commitTx**<br><pre><code>`Effect DbError Unit`</code></pre> | Commits the current transaction. |
+| **db.rollbackTx**<br><pre><code>`Effect DbError Unit`</code></pre> | Rolls back the current transaction. |
+| **db.savepoint** name<br><pre><code>`Text -> Effect DbError Unit`</code></pre> | Creates a savepoint with SQL-safe identifier validation. |
+| **db.releaseSavepoint** name<br><pre><code>`Text -> Effect DbError Unit`</code></pre> | Releases a savepoint. |
+| **db.rollbackToSavepoint** name<br><pre><code>`Text -> Effect DbError Unit`</code></pre> | Rolls back to a savepoint while keeping outer transaction active. |
 
 ### Delta constructors
 
@@ -90,6 +104,14 @@ and `withConn` guarantees deterministic release via AIVI resources even on failu
 | **Insert** row<br><pre><code>`A -> Delta A`</code></pre> | Inserts a new row. |
 | **Update** pred patch<br><pre><code>`Pred A -> Patch A -> Delta A`</code></pre> | Updates rows matching `pred` with `patch`. |
 | **Delete** pred<br><pre><code>`Pred A -> Delta A`</code></pre> | Deletes rows matching `pred`. |
+
+### FTS helpers
+
+`aivi.database` now includes typed helpers for preparing FTS payloads and queries:
+
+- `ftsDoc : Text -> List Text -> FtsDoc`
+- `ftsMatchAny : List Text -> FtsQuery`
+- `ftsMatchAll : List Text -> FtsQuery`
 
 ### Pooling (`aivi.database.pool`)
 

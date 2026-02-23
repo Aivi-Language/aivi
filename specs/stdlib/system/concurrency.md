@@ -19,7 +19,12 @@ It provides **Fibers** (lightweight threads) and **Channels** for safe communica
 | Function | Explanation |
 | --- | --- |
 | **par** left right<br><pre><code>`Effect E A -> Effect E B -> Effect E (A, B)`</code></pre> | Runs both effects concurrently and returns both results; fails if either fails. |
+| **race** left right<br><pre><code>`Effect E A -> Effect E A -> Effect E A`</code></pre> | Runs two effects and resolves with the first completion; cancels the loser. |
 | **scope** run<br><pre><code>`(Scope -> Effect E A) -> Effect E A`</code></pre> | Creates a structured concurrency scope. The `Scope` handle is passed to `run` and can be used to spawn child tasks that are guaranteed to complete (or be cancelled) before `scope` returns. |
+| **spawn** effect<br><pre><code>`Effect Text A -> Effect Text (Task A)`</code></pre> | Starts an effect in the background and returns a `Task` handle with `join`, `cancel`, and `isCancelled`. |
+| **timeoutWith** ms timeoutError effect<br><pre><code>`Int -> E -> Effect E A -> Effect E A`</code></pre> | Races an effect with a timer and fails with `timeoutError` when the timer wins. |
+| **retry** attempts effect<br><pre><code>`Int -> Effect E A -> Effect E A`</code></pre> | Retries a failing effect up to `attempts` times. |
+| **sleep** millis<br><pre><code>`Int -> Effect Text Unit`</code></pre> | Suspends the current effect for `millis` milliseconds. |
 
 Code reference: `crates/aivi/src/stdlib/concurrency.rs` — `aivi.concurrency` exports `par`, `scope`, `make`, `send`, `recv`, `close`
 
@@ -32,6 +37,7 @@ Channels provide a mechanism for synchronization and communication between concu
 | Function | Explanation |
 | --- | --- |
 | **make** sample<br><pre><code>`A -> Effect E (Sender A, Receiver A)`</code></pre> | Creates a new channel and returns `(Sender, Receiver)`. |
+| **makeBounded** capacity<br><pre><code>`Int -> Effect E (Sender A, Receiver A)`</code></pre> | Creates a bounded channel with backpressure when the buffer is full. |
 
 ### `send`
 

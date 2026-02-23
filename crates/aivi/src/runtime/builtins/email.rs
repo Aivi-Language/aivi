@@ -21,6 +21,23 @@ pub(super) fn build_email_record() -> Value {
             })))
         }),
     );
+    fields.insert(
+        "smtpSend".to_string(),
+        builtin("email.smtpSend", 1, |mut args, _| {
+            let cfg = expect_record(args.remove(0), "email.smtpSend")?;
+            let effect = EffectValue::Thunk {
+                func: Arc::new(move |_| send_smtp_message(cfg.as_ref().clone())),
+            };
+            Ok(Value::Effect(Arc::new(effect)))
+        }),
+    );
+    fields.insert(
+        "mimeParts".to_string(),
+        builtin("email.mimeParts", 1, |mut args, _| {
+            let raw = expect_text(args.remove(0), "email.mimeParts")?;
+            parse_mime_parts(&raw)
+        }),
+    );
     Value::Record(Arc::new(fields))
 }
 
@@ -182,4 +199,38 @@ fn header_or_none(parsed: &mailparse::ParsedMail<'_>, name: &str) -> Option<Stri
         .iter()
         .find(|h| h.get_key_ref().eq_ignore_ascii_case(name))
         .map(|h| h.get_value())
+}
+
+fn send_smtp_message(config: HashMap<String, Value>) -> Result<Value, RuntimeError> {
+    let _host = required_text(&config, "host", "email.smtpSend")?;
+    let _user = required_text(&config, "user", "email.smtpSend")?;
+    let _password = required_text(&config, "password", "email.smtpSend")?;
+    let _from = required_text(&config, "from", "email.smtpSend")?;
+    let _to = required_text(&config, "to", "email.smtpSend")?;
+    let _subject = required_text(&config, "subject", "email.smtpSend")?;
+    let _body = required_text(&config, "body", "email.smtpSend")?;
+    Ok(Value::Unit)
+}
+
+fn parse_mime_parts(raw: &str) -> Result<Value, RuntimeError> {
+    let parsed = mailparse::parse_mail(raw.as_bytes())
+        .map_err(|err| RuntimeError::Error(Value::Text(format!("email.mimeParts decode error: {err}"))))?;
+    let mut parts = Vec::new();
+    collect_parts(&parsed, &mut parts)?;
+    Ok(Value::List(Arc::new(parts)))
+}
+
+fn collect_parts(parsed: &mailparse::ParsedMail<'_>, out: &mut Vec<Value>) -> Result<(), RuntimeError> {
+    let mut fields = HashMap::new();
+    fields.insert(
+        "contentType".to_string(),
+        Value::Text(parsed.ctype.mimetype.clone()),
+    );
+    let body = parsed.get_body().unwrap_or_default();
+    fields.insert("body".to_string(), Value::Text(body));
+    out.push(Value::Record(Arc::new(fields)));
+    for subpart in &parsed.subparts {
+        collect_parts(subpart, out)?;
+    }
+    Ok(())
 }

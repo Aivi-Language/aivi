@@ -289,6 +289,16 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "makeBounded".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Int")),
+                    Box::new(Type::con("Effect").app(vec![
+                        Type::con("Text"),
+                        Type::Tuple(vec![send_ty.clone(), recv_ty.clone()]),
+                    ])),
+                ),
+            ),
+            (
                 "send".to_string(),
                 Type::Func(
                     Box::new(send_ty.clone()),
@@ -326,6 +336,30 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     let e = checker.fresh_var_id();
     let a = checker.fresh_var_id();
     let b = checker.fresh_var_id();
+    let timeout_err = checker.fresh_var_id();
+    let token_cancel_effect = Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")]);
+    let token_is_cancelled_effect =
+        Type::con("Effect").app(vec![Type::con("Text"), Type::con("Bool")]);
+    let cancel_token_ty = Type::Record {
+        fields: vec![
+            ("cancel".to_string(), token_cancel_effect.clone()),
+            ("isCancelled".to_string(), token_is_cancelled_effect.clone()),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    let task_ty = Type::Record {
+        fields: vec![
+            (
+                "join".to_string(),
+                Type::con("Effect").app(vec![Type::con("Text"), Type::Var(a)]),
+            ),
+            ("cancel".to_string(), token_cancel_effect.clone()),
+            ("isCancelled".to_string(), token_is_cancelled_effect.clone()),
+        ]
+        .into_iter()
+        .collect(),
+    };
     let concurrent_record = Type::Record {
         fields: vec![
             (
@@ -364,6 +398,41 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::Var(a)])),
                     Box::new(Type::con("Effect").app(vec![Type::Var(e), Type::con("Unit")])),
                 ),
+            ),
+            (
+                "fork".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Effect").app(vec![Type::con("Text"), Type::Var(a)])),
+                    Box::new(task_ty),
+                ),
+            ),
+            (
+                "sleep".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Int")),
+                    Box::new(Type::con("Effect").app(vec![Type::con("Text"), Type::con("Unit")])),
+                ),
+            ),
+            (
+                "timeoutWith".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Int")),
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(timeout_err)),
+                        Box::new(Type::Func(
+                            Box::new(
+                                Type::con("Effect").app(vec![Type::Var(timeout_err), Type::Var(a)]),
+                            ),
+                            Box::new(
+                                Type::con("Effect").app(vec![Type::Var(timeout_err), Type::Var(a)]),
+                            ),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "cancelToken".to_string(),
+                Type::Func(Box::new(Type::con("Unit")), Box::new(cancel_token_ty)),
             ),
         ]
         .into_iter()

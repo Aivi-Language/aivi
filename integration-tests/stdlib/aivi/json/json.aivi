@@ -1,0 +1,36 @@
+@no_prelude
+module integrationTests.stdlib.aivi.json.tests
+
+use aivi
+use aivi.testing
+use aivi.json
+
+@test "strict fields"
+strict_fields = do Effect {
+  payload = encodeObject [
+    ("id", encodeInt 1),
+    ("name", encodeText "a")
+  ]
+  ok = strictFields ["id", "name"] payload
+  ok match
+    | Ok _ => assert True
+    | Err _ => assert False
+}
+
+@test "schema required fields"
+schema_required_fields = do Effect {
+  payload = encodeObject [("id", encodeInt 1)]
+  schema = { required: ["id", "name"], strict: True }
+  issues = validateSchema schema payload
+  assertEq (List.length issues) 1
+}
+
+@test "migrate object"
+migrate_object = do Effect {
+  payload = encodeObject [("name", encodeText "old")]
+  migrated = migrateObject (entries => [("name", encodeText "new"), ...entries]) payload
+  field = decodeField "name" migrated
+  field match
+    | Ok value => assertEq value (encodeText "new")
+    | Err _    => assert False
+}

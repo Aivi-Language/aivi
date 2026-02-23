@@ -23,3 +23,13 @@ It is designed for distributed workers: plan keys are idempotent, leases and hea
 ## Usage Examples
 
 <<< ../../snippets/from_md/stdlib/chronos/scheduler/usage_examples.aivi{aivi}
+
+## Worker/runtime helpers (v0.1)
+
+The scheduler module also exposes execution-planning helpers for durable workers:
+
+- `chooseWorkerAction : PlannedRun -> WorkerState -> Int -> WorkerDecision`
+- `renewLease : Lease -> Timestamp -> Lease`
+- `planRetryRun : PlannedRun -> WorkerState -> Int -> PlannedRun`
+
+These helpers keep lease, retry, and next-action logic deterministic and testable as pure values.

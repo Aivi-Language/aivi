@@ -4,8 +4,9 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.concurrency
 export Scope, ChannelError
-export par, scope
-export make, send, recv, close
+export par, race, scope
+export make, makeBounded, send, recv, close
+export sleep, timeoutWith, retry
 
 use aivi
 
@@ -15,18 +16,38 @@ ChannelError = Closed
 par : Effect e a -> Effect e b -> Effect e (a, b)
 par = left right => concurrent.par left right
 
+race : Effect e a -> Effect e a -> Effect e a
+race = left right => concurrent.race left right
+
 scope : (Scope -> Effect e a) -> Effect e a
 scope = run => concurrent.scope (run Unit)
 
-make : A -> Effect e (Sender A, Receiver A)
-make = sample => channel.make sample
+sleep : Int -> Effect Text Unit
+sleep = millis => concurrent.sleep millis
 
-send : Sender A -> A -> Effect e Unit
+timeoutWith : Int -> Text -> Effect Text a -> Effect Text a
+timeoutWith = millis timeoutError effect =>
+  concurrent.timeoutWith millis timeoutError effect
+
+retry : Int -> Effect e a -> Effect e a
+retry = attempts effect =>
+  if attempts <= 0 then effect else
+    attempt effect match
+      | Ok value => pure value
+      | Err _    => retry (attempts - 1) effect
+
+make : a -> Effect e (Sender a, Receiver a)
+make = _sample => channel.make Unit
+
+makeBounded : Int -> Effect e (Sender a, Receiver a)
+makeBounded = capacity => channel.makeBounded capacity
+
+send : Sender a -> a -> Effect e Unit
 send = sender value => channel.send sender value
 
-recv : Receiver A -> Effect e (Result A ChannelError)
+recv : Receiver a -> Effect e (Result a ChannelError)
 recv = receiver => channel.recv receiver
 
-close : Sender A -> Effect e Unit
+close : Sender a -> Effect e Unit
 close = sender => channel.close sender
 "#;

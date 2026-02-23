@@ -265,9 +265,14 @@ pub(super) struct ThunkValue {
 }
 
 pub(super) struct ChannelInner {
-    pub(super) sender: Mutex<Option<mpsc::Sender<Value>>>,
+    pub(super) sender: Mutex<Option<ChannelSender>>,
     pub(super) receiver: Mutex<mpsc::Receiver<Value>>,
     pub(super) closed: AtomicBool,
+}
+
+pub(super) enum ChannelSender {
+    Unbounded(mpsc::Sender<Value>),
+    Bounded(mpsc::SyncSender<Value>),
 }
 
 pub(super) struct ChannelSend {

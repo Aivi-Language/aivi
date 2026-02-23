@@ -13,6 +13,7 @@ export retryDelay, retryAt
 export countActiveForTenant, canStartForTenant
 export metricScheduled, metricStarted, metricRetried, metricCompleted
 export logScheduled, logLease, logRetry, logCompleted
+export WorkerDecision, WorkerState, chooseWorkerAction, renewLease, planRetryRun
 export domain Scheduler
 
 use aivi
@@ -100,6 +101,15 @@ LogEvent = {
   level: Text
   message: Text
   fields: Map Text Text
+}
+
+WorkerDecision = RunNow | WaitUntil Timestamp | RetryAt Timestamp | SkipRun Text
+
+WorkerState = {
+  now: Timestamp
+  lease: Option Lease
+  retryPolicy: RetryPolicy
+  retryState: RetryState
 }
 
 cron : Text -> TimeZone -> Trigger
@@ -257,6 +267,29 @@ logCompleted = run ok =>
     ("tenantId", run.tenantId),
     ("ok", text.toText ok)
   ])
+
+renewLease : Lease -> Timestamp -> Lease
+renewLease = lease heartbeatAt => heartbeatLease lease heartbeatAt
+
+planRetryRun : PlannedRun -> WorkerState -> Int -> PlannedRun
+planRetryRun = run state jitterSeed => {
+  ...run
+  attempt: run.attempt + 1
+  scheduledAt: retryAt state.now state.retryPolicy (run.attempt + 1) jitterSeed
+  status: Planned
+}
+
+chooseWorkerAction : PlannedRun -> WorkerState -> Int -> WorkerDecision
+chooseWorkerAction = run state jitterSeed =>
+  if not (canAcquireLease state.now state.lease)
+  then WaitUntil (state.lease match
+    | None => run.scheduledAt
+    | Some lease => lease.leaseUntil)
+  else if run.scheduledAt <= state.now
+  then RunNow
+  else if state.retryState.attempts > 0
+  then RetryAt (retryAt state.now state.retryPolicy state.retryState.attempts jitterSeed)
+  else WaitUntil run.scheduledAt
 
 domain Scheduler over JobStatus = {
   isTerminal : JobStatus -> Bool

@@ -15,6 +15,7 @@ use super::list::build_list_record;
 use super::math::build_math_record;
 use super::number::{build_bigint_record, build_decimal_record, build_rational_record};
 use super::regex::build_regex_record;
+use super::secrets::build_secrets_record;
 use super::signal::build_signal_record;
 use super::system::{
     build_clock_record, build_console_record, build_env_source_record, build_file_record,
@@ -357,5 +358,6 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("crypto".to_string(), build_crypto_record());
     env.set("logger".to_string(), build_log_record());
     env.set("database".to_string(), build_database_record());
+    env.set("secrets".to_string(), build_secrets_record());
     env.set("i18n".to_string(), build_i18n_record());
 }

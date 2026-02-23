@@ -87,3 +87,44 @@ delta_construct = do Effect {
       | Delete predicate => assert (predicate user)
       | _                => assert False
 }
+
+@test "sqlite tuning and transaction primitives"
+sqlite_tuning_and_tx = do Effect {
+  configure { driver: Sqlite, url: ":memory:" }
+  configureSqlite { wal: True, busyTimeoutMs: 100 }
+  beginTx
+  savepoint "s1"
+  releaseSavepoint "s1"
+  commitTx
+  assert True
+}
+
+@test "migration sql helper"
+migration_sql_helper = do Effect {
+  configure { driver: Sqlite, url: ":memory:" }
+  runMigrationSql [
+    { id: "001-create", sql: "CREATE TABLE IF NOT EXISTS people (id INTEGER PRIMARY KEY, name TEXT NOT NULL);" }
+  ]
+  assert True
+}
+
+@test "delta chunk helper"
+delta_chunk_helper = do Effect {
+  deltas = [
+    ins { id: 1, name: "A" },
+    ins { id: 2, name: "B" },
+    del (u => u.id == 1)
+  ]
+  chunks = chunkDeltas 2 deltas
+  assertEq (List.length chunks) 2
+}
+
+@test "fts helpers"
+fts_helpers = do Effect {
+  doc = ftsDoc "doc-1" ["hello", "world"]
+  anyQuery = ftsMatchAny ["hello", "world"]
+  allQuery = ftsMatchAll ["hello", "world"]
+  assertEq doc.docId "doc-1"
+  assertEq anyQuery.matchMode "any"
+  assertEq allQuery.matchMode "all"
+}

@@ -79,11 +79,13 @@ A high-integrity purely functional language with a Rust-first compilation pipeli
 - [Calendar](stdlib/chronos/calendar)
 - [Duration](stdlib/chronos/duration)
 - [TimeZone](stdlib/chronos/timezone)
+- [Scheduler](stdlib/chronos/scheduler)
 #### System & IO
 - [File](stdlib/system/file)
 - [Console](stdlib/system/console)
 - [Crypto](stdlib/system/crypto)
 - [Database](stdlib/system/database)
+- [Secrets](stdlib/system/secrets)
 - [Path](stdlib/system/path)
 - [URL](stdlib/system/url)
 - [System](stdlib/system/system)
