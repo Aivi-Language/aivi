@@ -56,6 +56,8 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 | `fileDialogSelectFile` | `gtk4.fileDialogSelectFile` |
 | `imageNewFromFile` | `gtk4.imageNewFromFile` |
 | `imageSetFile` | `gtk4.imageSetFile` |
+| `imageNewFromResource` | `gtk4.imageNewFromResource` |
+| `imageSetResource` | `gtk4.imageSetResource` |
 | `listStoreNew` | `gtk4.listStoreNew` |
 | `listStoreAppendText` | `gtk4.listStoreAppendText` |
 | `listStoreItems` | `gtk4.listStoreItems` |
@@ -110,3 +112,8 @@ For non-canvas widgets, do the same model/update step but call setters directly 
 ## Compatibility
 
 `widgetSetCss` and `appSetCss` accept AIVI style records (`{ }`) so your existing `aivi.ui`/`aivi.ui.layout` CSS-style values can be reused with GTK widgets/app styling.
+
+## Lucide SVG workflow (GNOME GTK4 target)
+
+For production packaging, prefer `imageNewFromResource`/`imageSetResource` with compiled GResources (for example `/com/example/YourApp/icons/lucide/home.svg`), and register your `.gresource` bundle before loading images.
+`imageNewFromFile`/`imageSetFile` remain available for local prototyping from disk paths.

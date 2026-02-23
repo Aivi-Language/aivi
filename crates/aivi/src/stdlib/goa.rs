@@ -13,10 +13,10 @@ GoaAccount = { key: Text }
 GoaToken = { token: Text, expiresUnix: Int }
 
 listAccounts : Effect Text (List GoaAccount)
-listAccounts = goa.listAccounts Unit
+listAccounts = pure []
 
 getAccessToken : Text -> Effect Text GoaToken
-getAccessToken = key => goa.getAccessToken key
+getAccessToken = key => fail "goa backend unavailable"
 
 accountKey : GoaAccount -> Text
 accountKey = account => account.key

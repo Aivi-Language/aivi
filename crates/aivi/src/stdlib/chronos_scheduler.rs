@@ -139,7 +139,7 @@ leaseActive = now lease => now < lease.leaseUntil
 canAcquireLease : Timestamp -> Option Lease -> Bool
 canAcquireLease = now leaseOpt => leaseOpt match
   | None => True
-  | Some lease => not (leaseActive now lease)
+  | Some lease => if leaseActive now lease then False else True
 
 heartbeatLease : Lease -> Timestamp -> Lease
 heartbeatLease = lease heartbeatAt => {
@@ -281,7 +281,7 @@ planRetryRun = run state jitterSeed => {
 
 chooseWorkerAction : PlannedRun -> WorkerState -> Int -> WorkerDecision
 chooseWorkerAction = run state jitterSeed =>
-  if not (canAcquireLease state.now state.lease)
+  if canAcquireLease state.now state.lease == False
   then WaitUntil (state.lease match
     | None => run.scheduledAt
     | Some lease => lease.leaseUntil)

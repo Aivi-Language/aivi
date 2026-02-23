@@ -6,7 +6,7 @@ main = do Effect {
   appId <- appNew "com.example.counter"
   win   <- windowNew appId "Counter" 640 480
   root  <- boxNew 1 8
-  title <- labelNew "Mailfox"
+  title <- labelNew "App"
   boxAppend root title
   windowSetChild win root
   windowPresent win
