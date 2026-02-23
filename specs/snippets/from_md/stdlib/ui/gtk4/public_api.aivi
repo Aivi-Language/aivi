@@ -1,0 +1,124 @@
+AppId = Int
+WindowId = Int
+WidgetId = Int
+BoxId = Int
+ButtonId = Int
+LabelId = Int
+EntryId = Int
+ScrollAreaId = Int
+DrawAreaId = Int
+TrayIconId = Int
+DragSourceId = Int
+DropTargetId = Int
+MenuModelId = Int
+MenuButtonId = Int
+DialogId = Int
+FileDialogId = Int
+ImageId = Int
+ListStoreId = Int
+ListViewId = Int
+TreeViewId = Int
+GestureClickId = Int
+ClipboardId = Int
+ActionId = Int
+ShortcutId = Int
+NotificationId = Int
+LayoutManagerId = Int
+GtkError = Text
+
+init : Unit -> Effect GtkError Unit
+appNew : Text -> Effect GtkError AppId
+appRun : AppId -> Effect GtkError Unit
+
+windowNew : AppId -> Text -> Int -> Int -> Effect GtkError WindowId
+windowSetTitle : WindowId -> Text -> Effect GtkError Unit
+windowSetChild : WindowId -> WidgetId -> Effect GtkError Unit
+windowPresent : WindowId -> Effect GtkError Unit
+
+widgetShow : WidgetId -> Effect GtkError Unit
+widgetHide : WidgetId -> Effect GtkError Unit
+
+boxNew : Int -> Int -> Effect GtkError BoxId
+boxAppend : BoxId -> WidgetId -> Effect GtkError Unit
+
+buttonNew : Text -> Effect GtkError ButtonId
+buttonSetLabel : ButtonId -> Text -> Effect GtkError Unit
+
+labelNew : Text -> Effect GtkError LabelId
+labelSetText : LabelId -> Text -> Effect GtkError Unit
+
+entryNew : Unit -> Effect GtkError EntryId
+entrySetText : EntryId -> Text -> Effect GtkError Unit
+entryText : EntryId -> Effect GtkError Text
+
+scrollAreaNew : Unit -> Effect GtkError ScrollAreaId
+scrollAreaSetChild : ScrollAreaId -> WidgetId -> Effect GtkError Unit
+
+trayIconNew : Text -> Text -> Effect GtkError TrayIconId
+trayIconSetTooltip : TrayIconId -> Text -> Effect GtkError Unit
+trayIconSetVisible : TrayIconId -> Bool -> Effect GtkError Unit
+
+dragSourceNew : WidgetId -> Effect GtkError DragSourceId
+dragSourceSetText : DragSourceId -> Text -> Effect GtkError Unit
+dropTargetNew : WidgetId -> Effect GtkError DropTargetId
+dropTargetLastText : DropTargetId -> Effect GtkError Text
+
+menuModelNew : Unit -> Effect GtkError MenuModelId
+menuModelAppendItem : MenuModelId -> Text -> Text -> Effect GtkError Unit
+menuButtonNew : Text -> Effect GtkError MenuButtonId
+menuButtonSetMenuModel : MenuButtonId -> MenuModelId -> Effect GtkError Unit
+
+dialogNew : AppId -> Effect GtkError DialogId
+dialogSetTitle : DialogId -> Text -> Effect GtkError Unit
+dialogSetChild : DialogId -> WidgetId -> Effect GtkError Unit
+dialogPresent : DialogId -> Effect GtkError Unit
+dialogClose : DialogId -> Effect GtkError Unit
+
+fileDialogNew : Unit -> Effect GtkError FileDialogId
+fileDialogSelectFile : FileDialogId -> Effect GtkError Text
+
+imageNewFromFile : Text -> Effect GtkError ImageId
+imageSetFile : ImageId -> Text -> Effect GtkError Unit
+
+listStoreNew : Unit -> Effect GtkError ListStoreId
+listStoreAppendText : ListStoreId -> Text -> Effect GtkError Unit
+listStoreItems : ListStoreId -> Effect GtkError (List Text)
+listViewNew : Unit -> Effect GtkError ListViewId
+listViewSetModel : ListViewId -> ListStoreId -> Effect GtkError Unit
+treeViewNew : Unit -> Effect GtkError TreeViewId
+treeViewSetModel : TreeViewId -> ListStoreId -> Effect GtkError Unit
+
+gestureClickNew : WidgetId -> Effect GtkError GestureClickId
+gestureClickLastButton : GestureClickId -> Effect GtkError Int
+widgetAddController : WidgetId -> GestureClickId -> Effect GtkError Unit
+
+clipboardDefault : Unit -> Effect GtkError ClipboardId
+clipboardSetText : ClipboardId -> Text -> Effect GtkError Unit
+clipboardText : ClipboardId -> Effect GtkError Text
+
+actionNew : Text -> Effect GtkError ActionId
+actionSetEnabled : ActionId -> Bool -> Effect GtkError Unit
+appAddAction : AppId -> ActionId -> Effect GtkError Unit
+
+shortcutNew : Text -> Text -> Effect GtkError ShortcutId
+widgetAddShortcut : WidgetId -> ShortcutId -> Effect GtkError Unit
+
+drawAreaNew : Int -> Int -> Effect GtkError DrawAreaId
+drawAreaSetContentSize : DrawAreaId -> Int -> Int -> Effect GtkError Unit
+drawAreaQueueDraw : DrawAreaId -> Effect GtkError Unit
+
+widgetSetCss : WidgetId -> { } -> Effect GtkError Unit
+appSetCss : AppId -> { } -> Effect GtkError Unit
+
+notificationNew : Text -> Text -> Effect GtkError NotificationId
+notificationSetBody : NotificationId -> Text -> Effect GtkError Unit
+appSendNotification : AppId -> Text -> NotificationId -> Effect GtkError Unit
+appWithdrawNotification : AppId -> Text -> Effect GtkError Unit
+
+layoutManagerNew : Text -> Effect GtkError LayoutManagerId
+widgetSetLayoutManager : WidgetId -> LayoutManagerId -> Effect GtkError Unit
+
+osOpenUri : AppId -> Text -> Effect GtkError Unit
+osShowInFileManager : Text -> Effect GtkError Unit
+osSetBadgeCount : AppId -> Int -> Effect GtkError Unit
+osThemePreference : Unit -> Effect GtkError Text

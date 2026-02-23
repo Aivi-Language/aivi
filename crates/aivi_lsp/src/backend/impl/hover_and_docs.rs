@@ -1,5 +1,5 @@
 impl Backend {
-    fn hover_badge_markdown(kind: &str, body: String) -> String {
+    pub(super) fn hover_badge_markdown(kind: &str, body: String) -> String {
         format!("`{kind}`\n\n{body}")
     }
 
@@ -261,6 +261,9 @@ impl Backend {
         inferred: Option<&HashMap<String, String>>,
     ) -> Option<String> {
         let mut base = None;
+        if Self::is_primitive_ident(ident) {
+            base = Some(format!("`{ident}`"));
+        }
         if module.name.name == ident {
             base = Some(format!("module `{}`", module.name.name));
         }
@@ -307,6 +310,19 @@ impl Backend {
             }
         }
         base
+    }
+
+    pub(super) fn hover_contents_for_primitive_value(token: &str) -> Option<String> {
+        let ty = match token {
+            "true" | "false" => "Bool",
+            _ if token.parse::<i64>().is_ok() => "Int",
+            _ if token.contains('.') && token.parse::<f64>().is_ok() => "Float",
+            _ => return None,
+        };
+        Some(Self::hover_badge_markdown(
+            "value",
+            format!("`{token}` : `{ty}`"),
+        ))
     }
 
     fn format_quick_info(

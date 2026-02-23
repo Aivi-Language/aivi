@@ -18,7 +18,7 @@ Browser                                  Server
 ┌────────────────────────────┐          ┌────────────────────────────────────┐
 │ HTTP GET /counter          ├─────────>│ serveHttp(route app)               │
 │ (HTML + boot blob + JS)    │<─────────┤ renders initial VDOM               │
-│                            │          │ stores view state by viewId         │
+│                            │          │ stores view state by viewId        │
 │ WS connect /counter/ws     ├─────────>│ serveWs(route app)                 │
 │ hello(viewId,url,online)   │          │ validates viewId                   │
 │ event/platform/effectResult├─────────>│ update + diff + effect handling    │
@@ -28,86 +28,11 @@ Browser                                  Server
 
 ## Public API
 
-```aivi
-ViewId = Text
-
-UrlInfo = { url: Text, path: Text, query: Text, hash: Text }
-InitContext = { viewId: ViewId, url: UrlInfo, online: Bool }
-
-PlatformEvent =
-  PopState UrlInfo
-  | HashChange { old: Text, new: Text, hash: Text, url: UrlInfo }
-  | Visibility { visibilityState: Text }
-  | WindowFocus { focused: Bool }
-  | Online { online: Bool }
-  | Intersection { sid: Int, entries: List { tid: Int, isIntersecting: Bool, ratio: Float } }
-
-ClipboardError = { name: Text }
-
-Effect msg =
-  ClipboardReadText (Result ClipboardError Text -> msg)
-  | ClipboardWriteText Text (Result ClipboardError Unit -> msg)
-  | SubscribeIntersection
-      { sid: Int, rootMargin: Text, threshold: List Float, targets: List { tid: Int, nodeId: Text } }
-  | UnsubscribeIntersection Int
-
-ServerHtmlApp model msg =
-  { init: InitContext -> model
-  , update: msg -> model -> (model, List (Effect msg))
-  , view: model -> VNode msg
-  , onPlatform: PlatformEvent -> Option msg
-  }
-
-Route model msg =
-  { path: Text
-  , app: ServerHtmlApp model msg
-  }
-
-serveHttp : ServerHtmlApp model msg -> Request -> Response
-serveWs : ServerHtmlApp model msg -> WebSocket -> Effect WsError Unit
-serve : ServerConfig -> List (Route model msg) -> Resource HttpError Server
-```
+<<< ../../snippets/from_md/stdlib/ui/server_html/public_api.aivi{aivi}
 
 ## Example 1: Counter app with route-based server bootstrap
 
-```aivi
-use aivi
-use aivi.ui
-use aivi.net.httpServer
-use aivi.ui.ServerHtml
-
-Model = { count: Int }
-Msg = Inc | Dec
-
-view = model =>
-  ~<html>
-    <main>
-      <button onClick={ Dec }>-</button>
-      <span>{ model.count }</span>
-      <button onClick={ Inc }>+</button>
-    </main>
-  </html>
-
-update = msg model => msg match
-  | Inc => (model <| { count: _ + 1 }, [])
-  | Dec => (model <| { count: _ - 1 }, [])
-
-counterApp : ServerHtmlApp Model Msg
-counterApp =
-  { init: _ => { count: 0 }
-  , update: update
-  , view: view
-  , onPlatform: _ => None
-  }
-
-routes =
-  [ { path: "/counter", app: counterApp } ]
-
-main = resource {
-  server <- serve { host: "127.0.0.1", port: 8080 } routes
-  pure server
-}
-```
+<<< ../../snippets/from_md/stdlib/ui/server_html/counter_app_route_bootstrap.aivi{aivi}
 
 Notes:
 - HTTP path is normalized (`/counter/` works).
@@ -116,43 +41,7 @@ Notes:
 
 ## Example 2: Platform + clipboard + intersection effects
 
-```aivi
-Model = { status: Text, clipboard: Text, heroVisible: Bool }
-
-Msg =
-  WentOffline
-  | CameOnline
-  | ReadClipboard
-  | ClipboardResult (Result ClipboardError Text)
-  | StartHeroWatch
-  | HeroIntersected { sid: Int, entries: List { tid: Int, isIntersecting: Bool, ratio: Float } }
-
-onPlatform = evt => evt match
-  | Online { online } => if online then Some CameOnline else Some WentOffline
-  | Intersection payload => Some (HeroIntersected payload)
-  | _ => None
-
-update = msg model => msg match
-  | WentOffline => (model <| { status: "offline" }, [])
-  | CameOnline => (model <| { status: "online" }, [])
-  | ReadClipboard => (model, [ClipboardReadText ClipboardResult])
-  | ClipboardResult (Ok text) => (model <| { clipboard: text }, [])
-  | ClipboardResult (Err _) => (model, [])
-  | StartHeroWatch =>
-      (model,
-        [SubscribeIntersection
-          { sid: 1
-          , rootMargin: "0px"
-          , threshold: [0.0, 1.0]
-          , targets: [{ tid: 1, nodeId: "hero" }]
-          }
-        ]
-      )
-  | HeroIntersected { entries } =>
-      entries match
-        | [{ isIntersecting: True, ..._ }, ..._] => (model <| { heroVisible: True }, [])
-        | _ => (model, [])
-```
+<<< ../../snippets/from_md/stdlib/ui/server_html/platform_clipboard_intersection_effects.aivi{aivi}
 
 ## DOM event handlers and payloads
 
