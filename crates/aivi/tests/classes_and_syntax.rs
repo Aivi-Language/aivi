@@ -13,7 +13,7 @@ class Functor (F *) = {
 }
 
 class Monad (M *) =
-  Functor (M *) with {
+  Functor {
     pure: A -> M A
     flatMap: M A -> (A -> M B) -> M B
   }
@@ -41,7 +41,7 @@ class Super A = {
   foo: A -> A
 }
 
-class Sub A = Super A with {
+class Sub A = Super {
   bar: A -> A
 }
 
@@ -76,7 +76,7 @@ class Super A = {
   foo: A -> A
 }
 
-class Sub A = Super A with {
+class Sub A = Super {
   bar: A -> A
 }
 

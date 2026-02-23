@@ -6,7 +6,7 @@ class Functor (F *) = {
 }
 
 class Apply (F *) =
-  Functor (F *) with {
+  Functor {
     ap: F A -> F (A -> B) -> F B
   }
 

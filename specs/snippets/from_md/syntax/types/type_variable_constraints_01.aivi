@@ -1,12 +1,12 @@
 // Type-variable constraints for class members
 
 // Simple case: constrain member type variables
-class Collection (C *) = with (A: Eq) {
+class Collection (C *) = given (A: Eq) {
   elem: A -> C A -> Bool
   unique: C A -> C A
 }
 
 // Combined: superclass composition + constrained member variables
-class Monad (M *) = Applicative (M *) with (A: Eq, B: Show) {
+class Monad (M *) = Applicative given (A: Eq, B: Show) {
   bind: M A -> (A -> M B) -> M B
 }

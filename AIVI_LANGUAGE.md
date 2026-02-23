@@ -289,7 +289,7 @@ class Functor (F *) = {
   map : (A -> B) -> F A -> F B
 }
 
-class Apply (F *) = Functor (F *) with {
+class Apply (F *) = Functor {
   ap : F A -> F (A -> B) -> F B
 }
 
@@ -303,7 +303,7 @@ instance Monad (Result E *) = { ... }
 ### Type variable constraints
 
 ```aivi
-class Collection (C *) = with (A: Eq) {
+class Collection (C *) = given (A: Eq) {
   elem : A -> C A -> Bool
   unique : C A -> C A
 }

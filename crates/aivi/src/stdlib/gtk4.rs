@@ -12,7 +12,7 @@ export widgetSetHalign, widgetSetValign
 export widgetSetMarginStart, widgetSetMarginEnd, widgetSetMarginTop, widgetSetMarginBottom
 export widgetAddCssClass, widgetRemoveCssClass, widgetSetTooltipText, widgetSetOpacity
 export boxNew, boxAppend, boxSetHomogeneous
-export buttonNew, buttonSetLabel, buttonNewFromIconName
+export buttonNew, buttonSetLabel, buttonNewFromIconName, buttonSetChild
 export labelNew, labelSetText, labelSetWrap, labelSetEllipsize, labelSetXalign, labelSetMaxWidthChars
 export entryNew, entrySetText, entryText
 export scrollAreaNew, scrollAreaSetChild, scrollAreaSetPolicy
@@ -21,6 +21,7 @@ export overlayNew, overlaySetChild, overlayAddOverlay
 export drawAreaNew, drawAreaSetContentSize, drawAreaQueueDraw
 export widgetSetCss, appSetCss
 export imageNewFromFile, imageSetFile, imageNewFromResource, imageSetResource, imageNewFromIconName, imageSetPixelSize
+export iconThemeAddSearchPath
 export trayIconNew, trayIconSetTooltip, trayIconSetVisible
 export dragSourceNew, dragSourceSetText
 export dropTargetNew, dropTargetLastText
@@ -157,6 +158,9 @@ buttonSetLabel = gtk4.buttonSetLabel
 buttonNewFromIconName : Text -> Effect GtkError ButtonId
 buttonNewFromIconName = gtk4.buttonNewFromIconName
 
+buttonSetChild : ButtonId -> WidgetId -> Effect GtkError Unit
+buttonSetChild = gtk4.buttonSetChild
+
 labelNew : Text -> Effect GtkError LabelId
 labelNew = gtk4.labelNew
 
@@ -291,6 +295,9 @@ imageNewFromIconName = gtk4.imageNewFromIconName
 
 imageSetPixelSize : ImageId -> Int -> Effect GtkError Unit
 imageSetPixelSize = gtk4.imageSetPixelSize
+
+iconThemeAddSearchPath : Text -> Effect GtkError Unit
+iconThemeAddSearchPath = gtk4.iconThemeAddSearchPath
 
 listStoreNew : Unit -> Effect GtkError ListStoreId
 listStoreNew = gtk4.listStoreNew

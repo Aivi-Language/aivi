@@ -120,11 +120,11 @@ desugars to:
 ### Type Variable Constraints
 
 Class declarations may attach constraints to the **type variables used in member signatures**
-using `with (...)`:
+using `given (...)`:
 
 <<< ../snippets/from_md/syntax/types/type_variable_constraints_01.aivi{aivi}
 
-`A with B` in type position denotes **record/type composition** (an intersection-like merge). It is primarily used for class inheritance and trait aggregation in v0.1.
+`A with B` in type position denotes **record/type composition** (an intersection-like merge).
 
 Instances:
 

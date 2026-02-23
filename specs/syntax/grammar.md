@@ -130,10 +130,10 @@ ClassParam     := UpperIdent
 (* Classes are records of methods ("dictionaries") with optional superclass composition.
    A class may also declare constraints on the type variables used in its member signatures. *)
 ClassRhs       := [ ClassSupers ] [ ClassConstraints ] ClassMembers
-ClassSupers    := TypeExpr { "with" TypeExpr }
-ClassConstraints := "with" "(" TypeVarConstraint { "," TypeVarConstraint } ")"
+ClassSupers    := UpperIdent { "," UpperIdent }
+ClassConstraints := "given" "(" TypeVarConstraint { "," TypeVarConstraint } ")"
 TypeVarConstraint := UpperIdent ":" UpperIdent
-ClassMembers   := [ "with" ] RecordType
+ClassMembers   := RecordType
 
 InstanceDef    := "instance" UpperIdent InstanceHead "=" RecordLit Sep
 InstanceHead   := "(" Type ")"

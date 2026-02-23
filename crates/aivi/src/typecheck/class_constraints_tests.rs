@@ -35,7 +35,7 @@ instance Eq (Result E X) = {
       | _ => False
 }
 
-class NeedsEq = with (A: Eq) {
+class NeedsEq = given (A: Eq) {
   same: A -> Bool
 }
 

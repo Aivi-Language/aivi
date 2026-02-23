@@ -394,7 +394,7 @@ impl TypeChecker {
         // If instance selection fails due to polymorphism, allow the call when a matching class
         // constraint is in scope for one of the argument type variables.
         //
-        // This supports class members that require constraints like `with (A: Eq)` where method
+        // This supports class members that require constraints like `given (A: Eq)` where method
         // bodies can call `eq` on `A` without committing to a particular instance upfront.
         let arg_tys_applied: Vec<Type> = arg_tys.into_iter().map(|ty| self.apply(ty)).collect();
         let arg_var_ids: HashSet<TypeVarId> = arg_tys_applied

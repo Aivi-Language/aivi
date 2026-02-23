@@ -1,3 +1,3 @@
-class Collection (C *) = with (A: Eq) {
+class Collection (C *) = given (A: Eq) {
   unique: C A -> C A
 }
