@@ -45,6 +45,7 @@ fn stdlib_selected_modules_execute_without_failures() {
         root.join("integration-tests/stdlib/aivi/prelude/prelude.aivi"),
         root.join("integration-tests/stdlib/aivi/probability/probability.aivi"),
         root.join("integration-tests/stdlib/aivi/signal/signal.aivi"),
+        root.join("integration-tests/stdlib/aivi/goa/goa.aivi"),
         root.join("integration-tests/stdlib/aivi/system/system.aivi"),
         root.join("integration-tests/stdlib/aivi/testing/testing.aivi"),
     ];

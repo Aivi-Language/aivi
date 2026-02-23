@@ -129,6 +129,7 @@ export const sidebar = [
           { text: 'Console', link: '/stdlib/system/console' },
           { text: 'Crypto', link: '/stdlib/system/crypto' },
           { text: 'Database', link: '/stdlib/system/database' },
+          { text: 'GOA', link: '/stdlib/system/goa' },
           { text: 'Secrets', link: '/stdlib/system/secrets' },
           { text: 'Path', link: '/stdlib/system/path' },
           { text: 'URL', link: '/stdlib/system/url' },

@@ -7,6 +7,7 @@ mod crypto;
 mod database;
 mod email;
 mod graph;
+mod goa;
 mod i18n;
 mod instant;
 mod linalg;
