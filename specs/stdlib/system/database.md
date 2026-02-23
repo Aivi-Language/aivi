@@ -35,8 +35,7 @@ list of `Column` values; the row type comes from the table binding's type annota
 
 In v0.1, `Table A` is a persistent in-memory structure with explicit observation via `db.load`.
 
-Query planning utilities (`filter`, `find`, `sortBy`, `groupBy`, `join`) are part of the design direction,
-but are not yet guaranteed to be implemented end-to-end in the runtime.
+Query planning utilities (`filter`, `find`, `sortBy`, `groupBy`, `join`) are specified, but runtime coverage is partial in v0.1.
 
 <<< ../../snippets/from_md/stdlib/system/database/querying.aivi{aivi}
 

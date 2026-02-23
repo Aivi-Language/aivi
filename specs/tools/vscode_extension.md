@@ -76,4 +76,4 @@ The extension is currently distributed as a `.vsix` file. You can install it man
 2.  Type "Extensions: Install from VSIX...".
 3.  Select the `aivi-vscode-x.y.z.vsix` file.
 
-(Roadmap: Publish to Visual Studio Marketplace)
+Distribution is currently via `.vsix`; Marketplace publication is out of scope for v0.1.

@@ -1,6 +1,6 @@
 # Log Module
 
-> **Status: Planned** — this module is not yet implemented in the runtime. The spec below is a design document for a future version.
+> **Status: Specified, not implemented in runtime v0.1.**
 
 <!-- quick-info: {"kind":"module","name":"aivi.log"} -->
 The `Log` module provides **Structured Logging** for modern observability.

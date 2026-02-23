@@ -4,7 +4,7 @@ The AIVI Command Line Interface (CLI) is the primary tool for managing AIVI proj
 
 ## Installation
 
-The CLI is distributed as a single binary named `aivi`. It can be installed directly from source or via pre-built binaries (roadmap).
+The CLI is distributed as a single binary named `aivi`. It can be installed directly from source.
 
 ## Commands
 
@@ -234,7 +234,7 @@ aivi mcp serve <path|dir/...> [--allow-effects]
 - `--allow-effects`: Allows the MCP server to execute tools that have side effects.
 
 In v0.1, `aivi mcp serve` exposes the bundled language specifications (`specs/`) as MCP resources.
-The `<path|dir/...>` argument is accepted for future expansion, but is currently ignored.
+The `<path|dir/...>` argument is currently accepted for compatibility and ignored in v0.1.
 
 #### `i18n`
 

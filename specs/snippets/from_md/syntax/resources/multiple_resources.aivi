@@ -1,5 +1,5 @@
 copy = src dest => do Effect {
-  input <- managedFile src
+  input  <- managedFile src
   output <- managedFile dest
 
   file.copyTo input output

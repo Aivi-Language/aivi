@@ -6,8 +6,8 @@ users = file.json "./users.json"
 loadUsers = do Effect {
   // If `./users.json` contains malformed entities, the Effect short-circuits
   // and yields a `SourceError.DecodeError(errs)`!
-  data <- users 
-  
+  data <- users
+
   // Here `data` is guaranteed to be a valid `List User`
   pure data
 }
