@@ -97,7 +97,7 @@ These templates are usually provided by a domain (e.g. `aivi.chronos.duration` d
 
 ## 11.6 Type coercion (expected-type only)
 
-AIVI does not have global implicit casts. The only implicit conversions in v0.1 are **expected-type coercions** that are explicitly authorized by an in-scope instance (see [Types: Expected-Type Coercions](types.md#36-expected-type-coercions-instance-driven)).
+AIVI does not have global implicit casts. The only implicit conversions in v0.1 are **expected-type coercions** that are explicitly authorized by an in-scope instance (see [Types: Expected-Type Coercions](types/expected_type_coercions.md)).
 
 Practical consequences:
 
@@ -119,4 +119,3 @@ Limitations (v0.1):
 
 - Domain names are not values; you cannot write `D.suffix` to qualify suffix templates.
 - If two imported domains export the same literal template name (e.g. both define `1m`), the current compiler does not provide carrier-based disambiguation. Prefer selective imports/hiding or explicit constructors to avoid collisions.
-

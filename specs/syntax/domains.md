@@ -137,4 +137,4 @@ In v0.1, domains do not support defining custom sigils via the `domain` block. S
 
 Domains are not an implicit-cast mechanism. They supply operator semantics and literal templates, but do not introduce global coercions.
 
-The only implicit conversions in v0.1 are expected-type coercions authorized by in-scope instances (see [Types: Expected-Type Coercions](types.md#36-expected-type-coercions-instance-driven)).
+The only implicit conversions in v0.1 are expected-type coercions authorized by in-scope instances (see [Types: Expected-Type Coercions](types/expected_type_coercions.md)).
