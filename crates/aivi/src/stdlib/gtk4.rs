@@ -3,24 +3,30 @@ pub const MODULE_NAME: &str = "aivi.ui.gtk4";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.ui.gtk4
-export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, TrayIconId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, NotificationId, LayoutManagerId, GtkError
+export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, TrayIconId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, NotificationId, LayoutManagerId, OverlayId, SeparatorId, GtkError
 export init, appNew, appRun
 export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent
 export widgetShow, widgetHide
-export boxNew, boxAppend
-export buttonNew, buttonSetLabel
-export labelNew, labelSetText
+export widgetSetSizeRequest, widgetSetHexpand, widgetSetVexpand
+export widgetSetHalign, widgetSetValign
+export widgetSetMarginStart, widgetSetMarginEnd, widgetSetMarginTop, widgetSetMarginBottom
+export widgetAddCssClass, widgetRemoveCssClass, widgetSetTooltipText, widgetSetOpacity
+export boxNew, boxAppend, boxSetHomogeneous
+export buttonNew, buttonSetLabel, buttonNewFromIconName
+export labelNew, labelSetText, labelSetWrap, labelSetEllipsize, labelSetXalign, labelSetMaxWidthChars
 export entryNew, entrySetText, entryText
-export scrollAreaNew, scrollAreaSetChild
+export scrollAreaNew, scrollAreaSetChild, scrollAreaSetPolicy
+export separatorNew
+export overlayNew, overlaySetChild, overlayAddOverlay
 export drawAreaNew, drawAreaSetContentSize, drawAreaQueueDraw
 export widgetSetCss, appSetCss
+export imageNewFromFile, imageSetFile, imageNewFromResource, imageSetResource, imageNewFromIconName, imageSetPixelSize
 export trayIconNew, trayIconSetTooltip, trayIconSetVisible
 export dragSourceNew, dragSourceSetText
 export dropTargetNew, dropTargetLastText
 export menuModelNew, menuModelAppendItem, menuButtonNew, menuButtonSetMenuModel
 export dialogNew, dialogSetTitle, dialogSetChild, dialogPresent, dialogClose
 export fileDialogNew, fileDialogSelectFile
-export imageNewFromFile, imageSetFile, imageNewFromResource, imageSetResource
 export listStoreNew, listStoreAppendText, listStoreItems
 export listViewNew, listViewSetModel
 export treeViewNew, treeViewSetModel
@@ -60,6 +66,8 @@ ActionId = Int
 ShortcutId = Int
 NotificationId = Int
 LayoutManagerId = Int
+OverlayId = Int
+SeparatorId = Int
 GtkError = Text
 
 init : Unit -> Effect GtkError Unit
@@ -92,11 +100,53 @@ widgetShow = gtk4.widgetShow
 widgetHide : WidgetId -> Effect GtkError Unit
 widgetHide = gtk4.widgetHide
 
+widgetSetSizeRequest : WidgetId -> Int -> Int -> Effect GtkError Unit
+widgetSetSizeRequest = gtk4.widgetSetSizeRequest
+
+widgetSetHexpand : WidgetId -> Bool -> Effect GtkError Unit
+widgetSetHexpand = gtk4.widgetSetHexpand
+
+widgetSetVexpand : WidgetId -> Bool -> Effect GtkError Unit
+widgetSetVexpand = gtk4.widgetSetVexpand
+
+widgetSetHalign : WidgetId -> Int -> Effect GtkError Unit
+widgetSetHalign = gtk4.widgetSetHalign
+
+widgetSetValign : WidgetId -> Int -> Effect GtkError Unit
+widgetSetValign = gtk4.widgetSetValign
+
+widgetSetMarginStart : WidgetId -> Int -> Effect GtkError Unit
+widgetSetMarginStart = gtk4.widgetSetMarginStart
+
+widgetSetMarginEnd : WidgetId -> Int -> Effect GtkError Unit
+widgetSetMarginEnd = gtk4.widgetSetMarginEnd
+
+widgetSetMarginTop : WidgetId -> Int -> Effect GtkError Unit
+widgetSetMarginTop = gtk4.widgetSetMarginTop
+
+widgetSetMarginBottom : WidgetId -> Int -> Effect GtkError Unit
+widgetSetMarginBottom = gtk4.widgetSetMarginBottom
+
+widgetAddCssClass : WidgetId -> Text -> Effect GtkError Unit
+widgetAddCssClass = gtk4.widgetAddCssClass
+
+widgetRemoveCssClass : WidgetId -> Text -> Effect GtkError Unit
+widgetRemoveCssClass = gtk4.widgetRemoveCssClass
+
+widgetSetTooltipText : WidgetId -> Text -> Effect GtkError Unit
+widgetSetTooltipText = gtk4.widgetSetTooltipText
+
+widgetSetOpacity : WidgetId -> Int -> Effect GtkError Unit
+widgetSetOpacity = gtk4.widgetSetOpacity
+
 boxNew : Int -> Int -> Effect GtkError BoxId
 boxNew = gtk4.boxNew
 
 boxAppend : BoxId -> WidgetId -> Effect GtkError Unit
 boxAppend = gtk4.boxAppend
+
+boxSetHomogeneous : BoxId -> Bool -> Effect GtkError Unit
+boxSetHomogeneous = gtk4.boxSetHomogeneous
 
 buttonNew : Text -> Effect GtkError ButtonId
 buttonNew = gtk4.buttonNew
@@ -104,11 +154,26 @@ buttonNew = gtk4.buttonNew
 buttonSetLabel : ButtonId -> Text -> Effect GtkError Unit
 buttonSetLabel = gtk4.buttonSetLabel
 
+buttonNewFromIconName : Text -> Effect GtkError ButtonId
+buttonNewFromIconName = gtk4.buttonNewFromIconName
+
 labelNew : Text -> Effect GtkError LabelId
 labelNew = gtk4.labelNew
 
 labelSetText : LabelId -> Text -> Effect GtkError Unit
 labelSetText = gtk4.labelSetText
+
+labelSetWrap : LabelId -> Bool -> Effect GtkError Unit
+labelSetWrap = gtk4.labelSetWrap
+
+labelSetEllipsize : LabelId -> Int -> Effect GtkError Unit
+labelSetEllipsize = gtk4.labelSetEllipsize
+
+labelSetXalign : LabelId -> Int -> Effect GtkError Unit
+labelSetXalign = gtk4.labelSetXalign
+
+labelSetMaxWidthChars : LabelId -> Int -> Effect GtkError Unit
+labelSetMaxWidthChars = gtk4.labelSetMaxWidthChars
 
 entryNew : Unit -> Effect GtkError EntryId
 entryNew = gtk4.entryNew
@@ -125,6 +190,21 @@ scrollAreaNew = gtk4.scrollAreaNew
 scrollAreaSetChild : ScrollAreaId -> WidgetId -> Effect GtkError Unit
 scrollAreaSetChild = gtk4.scrollAreaSetChild
 
+scrollAreaSetPolicy : ScrollAreaId -> Int -> Int -> Effect GtkError Unit
+scrollAreaSetPolicy = gtk4.scrollAreaSetPolicy
+
+separatorNew : Int -> Effect GtkError SeparatorId
+separatorNew = gtk4.separatorNew
+
+overlayNew : Unit -> Effect GtkError OverlayId
+overlayNew = gtk4.overlayNew
+
+overlaySetChild : OverlayId -> WidgetId -> Effect GtkError Unit
+overlaySetChild = gtk4.overlaySetChild
+
+overlayAddOverlay : OverlayId -> WidgetId -> Effect GtkError Unit
+overlayAddOverlay = gtk4.overlayAddOverlay
+
 drawAreaNew : Int -> Int -> Effect GtkError DrawAreaId
 drawAreaNew = gtk4.drawAreaNew
 
@@ -137,7 +217,7 @@ drawAreaQueueDraw = gtk4.drawAreaQueueDraw
 widgetSetCss : WidgetId -> { } -> Effect GtkError Unit
 widgetSetCss = gtk4.widgetSetCss
 
-appSetCss : AppId -> { } -> Effect GtkError Unit
+appSetCss : AppId -> Text -> Effect GtkError Unit
 appSetCss = gtk4.appSetCss
 
 trayIconNew : Text -> Text -> Effect GtkError TrayIconId
@@ -205,6 +285,12 @@ imageNewFromResource = gtk4.imageNewFromResource
 
 imageSetResource : ImageId -> Text -> Effect GtkError Unit
 imageSetResource = gtk4.imageSetResource
+
+imageNewFromIconName : Text -> Effect GtkError ImageId
+imageNewFromIconName = gtk4.imageNewFromIconName
+
+imageSetPixelSize : ImageId -> Int -> Effect GtkError Unit
+imageSetPixelSize = gtk4.imageSetPixelSize
 
 listStoreNew : Unit -> Effect GtkError ListStoreId
 listStoreNew = gtk4.listStoreNew
