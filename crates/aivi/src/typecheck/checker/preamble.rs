@@ -243,6 +243,22 @@ impl TypeChecker {
             },
         );
         env.insert("Closed".to_string(), Scheme::mono(Type::con("Closed")));
+        let a = self.fresh_var_id();
+        env.insert(
+            "constructorName".to_string(),
+            Scheme {
+                vars: vec![a],
+                ty: Type::Func(Box::new(Type::Var(a)), Box::new(Type::con("Text"))),
+            },
+        );
+        let a = self.fresh_var_id();
+        env.insert(
+            "constructorOrdinal".to_string(),
+            Scheme {
+                vars: vec![a],
+                ty: Type::Func(Box::new(Type::Var(a)), Box::new(Type::con("Int"))),
+            },
+        );
 
         let a = self.fresh_var_id();
         let e = self.fresh_var_id();

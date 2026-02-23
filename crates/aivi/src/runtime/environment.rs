@@ -49,17 +49,31 @@ impl Env {
 pub(super) struct RuntimeContext {
     pub(super) globals: Env,
     debug_call_id: AtomicU64,
+    constructor_ordinals: HashMap<String, Option<usize>>,
 }
 
 impl RuntimeContext {
+    #[allow(dead_code)]
     pub(super) fn new(globals: Env) -> Self {
+        Self::new_with_constructor_ordinals(globals, HashMap::new())
+    }
+
+    pub(super) fn new_with_constructor_ordinals(
+        globals: Env,
+        constructor_ordinals: HashMap<String, Option<usize>>,
+    ) -> Self {
         Self {
             globals,
             debug_call_id: AtomicU64::new(1),
+            constructor_ordinals,
         }
     }
 
     pub(super) fn next_debug_call_id(&self) -> u64 {
         self.debug_call_id.fetch_add(1, Ordering::Relaxed)
+    }
+
+    pub(super) fn constructor_ordinal(&self, name: &str) -> Option<Option<usize>> {
+        self.constructor_ordinals.get(name).copied()
     }
 }

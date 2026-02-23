@@ -55,6 +55,24 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         },
     );
     env.insert("Closed".to_string(), Scheme::mono(Type::con("Closed")));
+    let a = checker.fresh_var_id();
+    env.insert(
+        "constructorName".to_string(),
+        Scheme {
+            vars: vec![a],
+            ty: Type::Func(Box::new(Type::Var(a)), Box::new(Type::con("Text"))),
+            origin: None,
+        },
+    );
+    let a = checker.fresh_var_id();
+    env.insert(
+        "constructorOrdinal".to_string(),
+        Scheme {
+            vars: vec![a],
+            ty: Type::Func(Box::new(Type::Var(a)), Box::new(Type::con("Int"))),
+            origin: None,
+        },
+    );
 
     let a = checker.fresh_var_id();
     let b = checker.fresh_var_id();

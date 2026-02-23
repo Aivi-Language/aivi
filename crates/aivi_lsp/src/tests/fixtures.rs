@@ -650,7 +650,7 @@ run = add 1 2"#;
 
 #[test]
 fn build_hover_reports_machine_state_and_transition_badges() {
-    let text = r#"module user.mailfox
+    let text = r#"module user.machineFlow
 machine CounterFlow = {
        -> Idle    : init {}
   Idle -> Running : click {}

@@ -230,6 +230,8 @@ Tree A = Leaf A | Node (Tree A) (Tree A)
 
 Create values by applying constructors: `Some 42`, `Err "nope"`, `Node (Leaf 1) (Leaf 2)`.
 Nullary constructors (`None`, `True`, `Red`) are values directly.
+Use `constructorName value` and `constructorOrdinal value` to inspect an ADT value at runtime.
+`constructorOrdinal` is zero-based by constructor declaration order.
 
 ### Open records (row polymorphism)
 

@@ -56,7 +56,20 @@ fn runtime_from_source(source: &str) -> Runtime {
         }
     }
 
-    let ctx = Arc::new(RuntimeContext::new(globals));
+    let mut constructor_ordinals = core_constructor_ordinals();
+    for (name, ordinal) in collect_surface_constructor_ordinals(&modules) {
+        match ordinal {
+            Some(idx) => insert_constructor_ordinal(&mut constructor_ordinals, name, idx),
+            None => {
+                constructor_ordinals.insert(name, None);
+            }
+        }
+    }
+
+    let ctx = Arc::new(RuntimeContext::new_with_constructor_ordinals(
+        globals,
+        constructor_ordinals,
+    ));
     let cancel = CancelToken::root();
     Runtime::new(ctx, cancel)
 }
@@ -74,6 +87,27 @@ fn runtime_from_source_with_stdlib(source: &str) -> Runtime {
     stdlib_modules.append(&mut modules);
     let program = crate::hir::desugar_modules(&stdlib_modules);
     build_runtime_from_program(program).expect("runtime")
+}
+
+#[test]
+fn constructor_introspection_returns_name_and_ordinal() {
+    let mut runtime = runtime_from_source(
+        r#"
+module test.constructorIntrospection
+Status = Draft | Published | Archived
+
+name = constructorName Published
+ordinal = constructorOrdinal Published
+"#,
+    );
+
+    let name = runtime.ctx.globals.get("name").expect("name binding");
+    let name = expect_ok(runtime.force_value(name), "name evaluates");
+    assert!(matches!(name, Value::Text(text) if text == "Published"));
+
+    let ordinal = runtime.ctx.globals.get("ordinal").expect("ordinal binding");
+    let ordinal = expect_ok(runtime.force_value(ordinal), "ordinal evaluates");
+    assert!(matches!(ordinal, Value::Int(1)));
 }
 
 #[test]
