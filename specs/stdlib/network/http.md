@@ -26,10 +26,8 @@ The `Http` domain connects your program to the world. Whether you're fetching da
 | `url` | `Url` | Target URL. |
 | `headers` | `List Header` | Request headers. |
 | `body` | `Option Text` | Optional request body. |
-| `timeoutMs` | `Option Int` | Global request timeout in milliseconds. |
-| `retryCount` | `Option Int` | Number of retry attempts for transient failures. |
-| `bearerToken` | `Option Text` | Optional Bearer auth token; mapped to `Authorization` header. |
-| `strictStatus` | `Option Bool` | When `True`, non-2xx statuses are treated as request errors. |
+
+Code reference: `crates/aivi/src/stdlib/network_http.rs` — `aivi.net.http::Request`
 
 ## Types
 
@@ -40,11 +38,3 @@ The `Http` domain connects your program to the world. Whether you're fetching da
 ### `Request`
 
 <<< ../../snippets/from_md/stdlib/network/http/request.aivi{aivi}
-
-## Header Utilities
-
-| Function | Explanation |
-| --- | --- |
-| **header** name value<br><pre><code>`Text -> Text -> Header`</code></pre> | Creates one header record. |
-| **setHeader** name value request<br><pre><code>`Text -> Text -> Request -> Request`</code></pre> | Adds or replaces one header on a request. |
-| **contentType** value request<br><pre><code>`Text -> Request -> Request`</code></pre> | Sets the `Content-Type` header. |

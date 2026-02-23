@@ -27,20 +27,21 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 - Streaming sources remain out of scope in runtime v0.1 (e.g. continuous `file.watch`/network stream source adapters).
 - Full typed source error ADT plumbing (`SourceError K`) is partially implemented in runtime but not yet fully reflected in typechecker aliases.
 - Several stdlib modules still have **stub specs** (see below).
+- Add OAuth2 module
+- We need a scheduler module with semi-advanced features:
+  - cron + interval + one-shot triggers
+  - timezone-aware cron
+  - persistent runs + idempotent planning
+  - leases + heartbeats (distributed safe)
+  - retries with exponential backoff + jitter
+  - per-tenant concurrency limit
+  - metrics + structured logs
 
 #### Stub specs (no API tables / no functions documented)
 
 | Module | File                                  | Status                                           |
 |:------ |:------------------------------------- |:------------------------------------------------ |
 | Log    | [system/log.md](stdlib/system/log.md) | Specified-only (not implemented in runtime v0.1) |
-
-#### Resolved documentation gaps
-
-- Added quick-info + API table coverage for [Tree](stdlib/math/tree.md).
-- Added UDP API documentation in [Sockets](stdlib/network/sockets.md).
-- Added stream combinator coverage in [Streams](stdlib/network/streams.md).
-- Added request options/headers coverage in [HTTP](stdlib/network/http.md).
-- Added routing/middleware documentation in [HTTP Server](stdlib/network/http_server.md).
 
 ### Runtime
 
