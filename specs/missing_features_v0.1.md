@@ -26,7 +26,7 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 
 - Streaming sources remain out of scope in runtime v0.1 (e.g. continuous `file.watch`/network stream source adapters).
 - Full typed source error ADT plumbing (`SourceError K`) is partially implemented in runtime but not yet fully reflected in typechecker aliases.
-- Several stdlib modules have **stub or incomplete specs** (see below).
+- Several stdlib modules still have **stub specs** (see below).
 
 #### Stub specs (no API tables / no functions documented)
 
@@ -34,16 +34,13 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 |:------ |:------------------------------------- |:------------------------------------------------ |
 | Log    | [system/log.md](stdlib/system/log.md) | Specified-only (not implemented in runtime v0.1) |
 
-#### Incomplete specs (thin API coverage)
+#### Resolved documentation gaps
 
-| Module      | File                                                    | Gap                                        |
-|:----------- |:------------------------------------------------------- |:------------------------------------------ |
-| Tree        | [math/tree.md](stdlib/math/tree.md)                     | No API table, no quick-info marker         |
-| File        | [system/file.md](stdlib/system/file.md)                 | No directory operations; no usage examples |
-| Sockets     | [network/sockets.md](stdlib/network/sockets.md)         | No UDP functions                           |
-| Streams     | [network/streams.md](stdlib/network/streams.md)         | No stream combinators                      |
-| HTTP        | [network/http.md](stdlib/network/http.md)               | Only 3 functions; no headers/timeouts      |
-| HTTP Server | [network/http_server.md](stdlib/network/http_server.md) | No routing or middleware                   |
+- Added quick-info + API table coverage for [Tree](stdlib/math/tree.md).
+- Added UDP API documentation in [Sockets](stdlib/network/sockets.md).
+- Added stream combinator coverage in [Streams](stdlib/network/streams.md).
+- Added request options/headers coverage in [HTTP](stdlib/network/http.md).
+- Added routing/middleware documentation in [HTTP Server](stdlib/network/http_server.md).
 
 ### Runtime
 

@@ -8,6 +8,15 @@ External data enters AIVI through typed **Sources**. A source represents a persi
 > - Streaming sources remain out of scope in runtime v0.1.
 > - `SourceError K` is upgraded from `Text` to an ADT supporting `DecodeError` accumulation.
 
+## Source Guides
+
+- [File Sources](external_sources/file.md)
+- [REST / HTTP Sources](external_sources/rest_http.md)
+- [Environment Sources](external_sources/environment.md)
+- [IMAP Email Sources](external_sources/imap_email.md)
+- [Image Sources](external_sources/image.md)
+- [Compile-Time Sources](external_sources/compile_time.md)
+
 ## 12.1 The Source Type
 
 <<< ../snippets/from_md/syntax/external_sources/the_source_type.aivi{aivi}

@@ -28,6 +28,7 @@ AIVI is a statically typed, purely functional language designed for **high-integ
 * Fiber-based structured concurrency
 * Explicit effect tracking with `Effect E A`
 * **Declarative Resource Management**
+* **Type-directed external sources** (`Source K A`) with compile-time embedding via `@static`
 
 **Intentional omissions**
 
@@ -67,3 +68,15 @@ In AIVI, the language doesn't try to know everything. Instead, it provides **Dom
 - **Extensibility**: Developers can define their own domains, creating a language that speaks the vocabulary of their specific business area (Finance, IoT, UI) without losing the safety of the AIVI core.
 
 This document defines **AIVI** as a language where **data shape, transformation, and meaning are explicit, uniform, and statically enforced**.
+
+## External Source Experience (v0.1)
+
+AIVI reduces boundary boilerplate by deriving decoders from expected types at source edges.
+
+- File boundaries: `file.read`, `file.json`, `file.csv`, `file.imageMeta`, `file.image`
+- Network boundaries: `http.*`, `https.*`, `rest.*`
+- Environment boundaries: `env.get`, `env.decode`
+- Email boundaries: `email.imap`
+- Compile-time embedding: `@static` over deterministic source reads
+
+See [External Sources](syntax/external_sources.md) and the per-source guides under `syntax/external_sources/`.

@@ -1,5 +1,9 @@
 # Tree
 
+<!-- quick-info: {"kind":"module","name":"aivi.tree"} -->
+The `Tree` module provides immutable rose trees (multi-way trees) and traversal helpers.
+<!-- /quick-info -->
+
 <div class="import-badge">use aivi.tree</div>
 
 General-purpose rose tree (multi-way tree) data structure. Each node holds a value of type `A` and a `List` of child trees.
@@ -16,6 +20,19 @@ General-purpose rose tree (multi-way tree) data structure. Each node holds a val
 
 - `node value children`   creates a tree node with the given value and children.
 - `leaf value`   creates a leaf node (a node with no children).
+
+## Core API
+
+| Function | Explanation |
+| --- | --- |
+| **node** value children<br><pre><code>`A -> List (Tree A) -> Tree A`</code></pre> | Constructs a node with `value` and `children`. |
+| **leaf** value<br><pre><code>`A -> Tree A`</code></pre> | Constructs a node with no children. |
+| **value** tree<br><pre><code>`Tree A -> A`</code></pre> | Returns the current node value. |
+| **children** tree<br><pre><code>`Tree A -> List (Tree A)`</code></pre> | Returns direct children. |
+| **map** f tree<br><pre><code>`(A -> B) -> Tree A -> Tree B`</code></pre> | Transforms every node value. |
+| **fold** f seed tree<br><pre><code>`(B -> A -> B) -> B -> Tree A -> B`</code></pre> | Reduces a tree to one value. |
+| **size** tree<br><pre><code>`Tree A -> Int`</code></pre> | Counts all nodes. |
+| **height** tree<br><pre><code>`Tree A -> Int`</code></pre> | Returns maximum depth. |
 
 ## Traversals
 

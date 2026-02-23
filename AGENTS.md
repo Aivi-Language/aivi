@@ -123,6 +123,22 @@ When working on the compiler (`crates/`):
 *   **Guidelines**: Follow `.junie/guidelines.md`.
 *   **AGENTS.md**: Update this file if workflows or structures change significantly.
 
+### 5.1 External Source Docs Baseline (v0.1)
+When touching source-boundary runtime/compiler behavior, keep these docs aligned:
+
+- `specs/syntax/external_sources.md` (overview + status)
+- `specs/syntax/external_sources/file.md`
+- `specs/syntax/external_sources/rest_http.md`
+- `specs/syntax/external_sources/environment.md`
+- `specs/syntax/external_sources/imap_email.md`
+- `specs/syntax/external_sources/image.md`
+- `specs/syntax/external_sources/compile_time.md`
+
+Source integration docs should always include:
+1. current v0.1 API surface,
+2. one realistic example,
+3. failure/diagnostic behavior notes.
+
 ## 6. Project Validation
 
 To validate the project end-to-end, run these from the repo root:
@@ -156,4 +172,3 @@ Before submitting changes:
 - [ ] Is the code consistent with AIVI style?
 - [ ] Did I avoid hallucinating features? (Always check [`specs/`](file:///home/mendrik/desk/mendrik/aivi/specs/) first)
 - [ ] Did I update AIVI_LANGUAGE.md for LLM use?
-

@@ -46,7 +46,19 @@ export const sidebar = [
         collapsed: true,
         items: [
           { text: 'Modules', link: '/syntax/modules' },
-          { text: 'External Sources', link: '/syntax/external_sources' }
+          { text: 'External Sources', link: '/syntax/external_sources' },
+          {
+            text: 'Source Integrations',
+            collapsed: true,
+            items: [
+              { text: 'File Sources', link: '/syntax/external_sources/file' },
+              { text: 'REST/HTTP Sources', link: '/syntax/external_sources/rest_http' },
+              { text: 'Environment Sources', link: '/syntax/external_sources/environment' },
+              { text: 'IMAP Email Sources', link: '/syntax/external_sources/imap_email' },
+              { text: 'Image Sources', link: '/syntax/external_sources/image' },
+              { text: 'Compile-Time Sources', link: '/syntax/external_sources/compile_time' }
+            ]
+          }
         ]
       },
       {

@@ -16,6 +16,21 @@ The `Http` domain connects your program to the world. Whether you're fetching da
 | **post** url body<br><pre><code>`Url -> Text -> Effect HttpError Response`</code></pre> | Performs a POST request with a text body. |
 | **fetch** request<br><pre><code>`Request -> Effect HttpError Response`</code></pre> | Performs a request with custom method, headers, and body. |
 
+## Request Options
+
+`fetch` supports richer request options through `Request` fields:
+
+| Field | Type | Explanation |
+| --- | --- | --- |
+| `method` | `Text` | HTTP method (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`). |
+| `url` | `Url` | Target URL. |
+| `headers` | `List Header` | Request headers. |
+| `body` | `Option Text` | Optional request body. |
+| `timeoutMs` | `Option Int` | Global request timeout in milliseconds. |
+| `retryCount` | `Option Int` | Number of retry attempts for transient failures. |
+| `bearerToken` | `Option Text` | Optional Bearer auth token; mapped to `Authorization` header. |
+| `strictStatus` | `Option Bool` | When `True`, non-2xx statuses are treated as request errors. |
+
 ## Types
 
 ### `Response`
@@ -25,3 +40,11 @@ The `Http` domain connects your program to the world. Whether you're fetching da
 ### `Request`
 
 <<< ../../snippets/from_md/stdlib/network/http/request.aivi{aivi}
+
+## Header Utilities
+
+| Function | Explanation |
+| --- | --- |
+| **header** name value<br><pre><code>`Text -> Text -> Header`</code></pre> | Creates one header record. |
+| **setHeader** name value request<br><pre><code>`Text -> Text -> Request -> Request`</code></pre> | Adds or replaces one header on a request. |
+| **contentType** value request<br><pre><code>`Text -> Request -> Request`</code></pre> | Sets the `Content-Type` header. |

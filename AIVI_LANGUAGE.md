@@ -726,7 +726,9 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 
 - `aivi.*` - standard library
 - `aivi.chronos.*` - time/date/duration/timezone
-- `aivi.net.*` - networking (http, https, httpServer)
+- `aivi.net.*` - networking (http, https, rest, httpServer)
+- `aivi.rest` - REST-oriented source facade
+- `aivi.email` - IMAP email source facade
 - `aivi.list` - List operations (map, filter, fold, ...)
 - `aivi.map` - Map (ordered key-value)
 - `aivi.set` - Set (ordered unique elements)
@@ -743,13 +745,16 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 
 ```aivi
 cfg <- load (file.read "config.json")
-resp <- load (http.get "https://api.example.com/data")
+cfgTyped <- load (file.json "config.json")
+rows <- load (file.csv "users.csv")
+resp <- load (rest.get ~u(https://api.example.com/data))
 apiKey <- load (env.get "API_KEY")
+appCfg <- load (env.decode "AIVI_APP")
 ```
 
-Available sources: `file`, `http`/`https`, `env`, `db`, `email`, `llm`, `image`, `s3`.
+Available source APIs in v0.1: `file.read/json/csv/imageMeta/image`, `http`/`https`, `rest`, `env.get/decode`, `email.imap`.
 
-`@static` embeds sources at compile time: `@static schema = file.read "schema.json"`.
+`@static` embeds sources at compile time: `@static schema = file.json "schema.json"` or `@static envName = env.get "AIVI_BUILD_ENV"`.
 
 ---
 
