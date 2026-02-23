@@ -272,26 +272,12 @@ impl Backend {
 
     pub(super) async fn workspace_modules_for_diagnostics(
         &self,
-        _uri: &Url,
+        uri: &Url,
     ) -> HashMap<String, IndexedModule> {
-        // Diagnostics should be fast and must not require scanning/parsing the whole workspace.
-        // Use open documents + embedded stdlib only; this keeps imports/prelude/classes resolving
-        // for typical editing flows without risking expensive indexing work on every keystroke.
-        let open_modules = {
-            let state = self.state.lock().await;
-            state.open_module_index.clone()
-        };
-
-        let mut merged = open_modules;
-        for module in embedded_stdlib_modules() {
-            let name = module.name.name.clone();
-            merged.entry(name.clone()).or_insert_with(|| IndexedModule {
-                uri: Self::stdlib_uri(&name),
-                module,
-                text: None,
-            });
-        }
-        merged
+        // Use the same module set as navigation/completions so that diagnostics can resolve
+        // imports from files that aren't currently open.  The disk index is already cached after
+        // the first build, so the only per-call cost is cloning the HashMap.
+        self.workspace_modules_for(uri).await
     }
 
     pub(super) async fn update_document(&self, uri: Url, text: String) {

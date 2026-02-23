@@ -5,7 +5,7 @@ mod linux {
     use std::cell::RefCell;
     use std::collections::HashMap;
     use std::ffi::{CStr, CString};
-    use std::os::raw::{c_char, c_int, c_void};
+    use std::os::raw::{c_char, c_int, c_ulong, c_void};
     use std::ptr::null_mut;
     use std::sync::Arc;
 
@@ -24,28 +24,83 @@ mod linux {
         fn gtk_window_present(window: *mut c_void);
 
         fn gtk_widget_set_visible(widget: *mut c_void, visible: c_int);
+        fn gtk_widget_set_size_request(widget: *mut c_void, width: c_int, height: c_int);
+        fn gtk_widget_set_hexpand(widget: *mut c_void, expand: c_int);
+        fn gtk_widget_set_vexpand(widget: *mut c_void, expand: c_int);
+        fn gtk_widget_set_halign(widget: *mut c_void, align: c_int);
+        fn gtk_widget_set_valign(widget: *mut c_void, align: c_int);
+        fn gtk_widget_set_margin_start(widget: *mut c_void, margin: c_int);
+        fn gtk_widget_set_margin_end(widget: *mut c_void, margin: c_int);
+        fn gtk_widget_set_margin_top(widget: *mut c_void, margin: c_int);
+        fn gtk_widget_set_margin_bottom(widget: *mut c_void, margin: c_int);
+        fn gtk_widget_add_css_class(widget: *mut c_void, css_class: *const c_char);
+        fn gtk_widget_remove_css_class(widget: *mut c_void, css_class: *const c_char);
+        fn gtk_widget_set_tooltip_text(widget: *mut c_void, text: *const c_char);
+        fn gtk_widget_queue_draw(widget: *mut c_void);
+        fn gtk_widget_set_opacity(widget: *mut c_void, opacity: f64);
 
         fn gtk_box_new(orientation: c_int, spacing: c_int) -> *mut c_void;
         fn gtk_box_append(container: *mut c_void, child: *mut c_void);
+        fn gtk_box_set_homogeneous(boxw: *mut c_void, homogeneous: c_int);
+
         fn gtk_drawing_area_new() -> *mut c_void;
-        fn gtk_widget_set_size_request(widget: *mut c_void, width: c_int, height: c_int);
-        fn gtk_widget_queue_draw(widget: *mut c_void);
 
         fn gtk_button_new_with_label(label: *const c_char) -> *mut c_void;
         fn gtk_button_set_label(button: *mut c_void, label: *const c_char);
+        fn gtk_button_new_from_icon_name(icon_name: *const c_char) -> *mut c_void;
 
         fn gtk_label_new(text: *const c_char) -> *mut c_void;
         fn gtk_label_set_text(label: *mut c_void, text: *const c_char);
+        fn gtk_label_set_wrap(label: *mut c_void, wrap: c_int);
+        fn gtk_label_set_ellipsize(label: *mut c_void, mode: c_int);
+        fn gtk_label_set_xalign(label: *mut c_void, xalign: f32);
+        fn gtk_label_set_max_width_chars(label: *mut c_void, n_chars: c_int);
 
         fn gtk_entry_new() -> *mut c_void;
         fn gtk_editable_set_text(editable: *mut c_void, text: *const c_char);
         fn gtk_editable_get_text(editable: *mut c_void) -> *const c_char;
+
         fn gtk_image_new_from_file(filename: *const c_char) -> *mut c_void;
         fn gtk_image_set_from_file(image: *mut c_void, filename: *const c_char);
         fn gtk_image_new_from_resource(resource_path: *const c_char) -> *mut c_void;
         fn gtk_image_set_from_resource(image: *mut c_void, resource_path: *const c_char);
+        fn gtk_image_new_from_icon_name(icon_name: *const c_char) -> *mut c_void;
+        fn gtk_image_set_pixel_size(image: *mut c_void, pixel_size: c_int);
+
+        fn gtk_scrolled_window_new() -> *mut c_void;
+        fn gtk_scrolled_window_set_child(scrolled: *mut c_void, child: *mut c_void);
+        fn gtk_scrolled_window_set_policy(
+            scrolled: *mut c_void,
+            hscrollbar_policy: c_int,
+            vscrollbar_policy: c_int,
+        );
+        fn gtk_scrolled_window_set_propagate_natural_height(
+            scrolled: *mut c_void,
+            propagate: c_int,
+        );
+        fn gtk_scrolled_window_set_propagate_natural_width(
+            scrolled: *mut c_void,
+            propagate: c_int,
+        );
+
+        fn gtk_separator_new(orientation: c_int) -> *mut c_void;
+
+        fn gtk_overlay_new() -> *mut c_void;
+        fn gtk_overlay_set_child(overlay: *mut c_void, child: *mut c_void);
+        fn gtk_overlay_add_overlay(overlay: *mut c_void, widget: *mut c_void);
+
+        fn gtk_css_provider_new() -> *mut c_void;
+        fn gtk_css_provider_load_from_string(provider: *mut c_void, css: *const c_char);
+        fn gtk_style_context_add_provider_for_display(
+            display: *mut c_void,
+            provider: *mut c_void,
+            priority: u32,
+        );
+
         fn gtk_gesture_click_new() -> *mut c_void;
         fn gtk_widget_add_controller(widget: *mut c_void, controller: *mut c_void);
+
+        fn gdk_display_get_default() -> *mut c_void;
     }
 
     #[link(name = "gio-2.0")]
@@ -63,6 +118,20 @@ mod linux {
         fn g_resource_load(filename: *const c_char, error: *mut *mut c_void) -> *mut c_void;
         fn g_resources_register(resource: *mut c_void);
     }
+
+    #[link(name = "gobject-2.0")]
+    unsafe extern "C" {
+        fn g_signal_connect_data(
+            instance: *mut c_void,
+            detailed_signal: *const c_char,
+            c_handler: *const c_void,
+            data: *mut c_void,
+            destroy_data: *mut c_void,
+            connect_flags: c_int,
+        ) -> c_ulong;
+    }
+
+    unsafe extern "C" fn activate_noop(_app: *mut c_void, _data: *mut c_void) {}
 
     #[link(name = "dl")]
     unsafe extern "C" {
@@ -87,6 +156,9 @@ mod linux {
         entries: HashMap<i64, *mut c_void>,
         images: HashMap<i64, *mut c_void>,
         draw_areas: HashMap<i64, *mut c_void>,
+        scrolled_windows: HashMap<i64, *mut c_void>,
+        overlays: HashMap<i64, *mut c_void>,
+        separators: HashMap<i64, *mut c_void>,
         gesture_clicks: HashMap<i64, GestureClickState>,
         resources_registered: bool,
     }
@@ -225,6 +297,18 @@ mod linux {
                         return Err(RuntimeError::Error(Value::Text(
                             "gtk4.appNew failed to register GTK application".to_string(),
                         )));
+                    }
+                    // Connect a no-op activate handler so GTK does not warn
+                    let sig = CString::new("activate").unwrap();
+                    unsafe {
+                        g_signal_connect_data(
+                            raw,
+                            sig.as_ptr(),
+                            activate_noop as *const c_void,
+                            null_mut(),
+                            null_mut(),
+                            0,
+                        );
                     }
                     let id = GTK_STATE.with(|state| {
                         let mut state = state.borrow_mut();
@@ -975,6 +1059,758 @@ mod linux {
                         unsafe { gtk_image_set_from_resource(image, resource_c.as_ptr()) };
                         Ok(Value::Unit)
                     })
+                }))
+            }),
+        );
+
+        // ── widget layout primitives ──────────────────────────────────
+
+        fields.insert(
+            "widgetSetSizeRequest".to_string(),
+            builtin("gtk4.widgetSetSizeRequest", 3, |mut args, _| {
+                let height = match args.remove(2) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetSizeRequest expects Int height")),
+                };
+                let width = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetSizeRequest expects Int width")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetSizeRequest expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    let w = as_i32(width, "gtk4.widgetSetSizeRequest width")?;
+                    let h = as_i32(height, "gtk4.widgetSetSizeRequest height")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetSetSizeRequest")?;
+                        unsafe { gtk_widget_set_size_request(widget, w, h) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetSetHexpand".to_string(),
+            builtin("gtk4.widgetSetHexpand", 2, |mut args, _| {
+                let expand = match args.remove(1) {
+                    Value::Bool(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetHexpand expects Bool")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetHexpand expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetSetHexpand")?;
+                        unsafe { gtk_widget_set_hexpand(widget, if expand { 1 } else { 0 }) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetSetVexpand".to_string(),
+            builtin("gtk4.widgetSetVexpand", 2, |mut args, _| {
+                let expand = match args.remove(1) {
+                    Value::Bool(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetVexpand expects Bool")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetVexpand expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetSetVexpand")?;
+                        unsafe { gtk_widget_set_vexpand(widget, if expand { 1 } else { 0 }) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        // GtkAlign: FILL=0, START=1, END=2, CENTER=3, BASELINE_FILL=4, BASELINE_CENTER=5
+        fields.insert(
+            "widgetSetHalign".to_string(),
+            builtin("gtk4.widgetSetHalign", 2, |mut args, _| {
+                let align = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetHalign expects Int align")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetHalign expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    let a = as_i32(align, "gtk4.widgetSetHalign align")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetSetHalign")?;
+                        unsafe { gtk_widget_set_halign(widget, a) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetSetValign".to_string(),
+            builtin("gtk4.widgetSetValign", 2, |mut args, _| {
+                let align = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetValign expects Int align")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetValign expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    let a = as_i32(align, "gtk4.widgetSetValign align")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetSetValign")?;
+                        unsafe { gtk_widget_set_valign(widget, a) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetSetMarginStart".to_string(),
+            builtin("gtk4.widgetSetMarginStart", 2, |mut args, _| {
+                let margin = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetMarginStart expects Int margin")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetMarginStart expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    let m = as_i32(margin, "gtk4.widgetSetMarginStart margin")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetSetMarginStart")?;
+                        unsafe { gtk_widget_set_margin_start(widget, m) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetSetMarginEnd".to_string(),
+            builtin("gtk4.widgetSetMarginEnd", 2, |mut args, _| {
+                let margin = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetMarginEnd expects Int margin")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetMarginEnd expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    let m = as_i32(margin, "gtk4.widgetSetMarginEnd margin")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetSetMarginEnd")?;
+                        unsafe { gtk_widget_set_margin_end(widget, m) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetSetMarginTop".to_string(),
+            builtin("gtk4.widgetSetMarginTop", 2, |mut args, _| {
+                let margin = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetMarginTop expects Int margin")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetMarginTop expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    let m = as_i32(margin, "gtk4.widgetSetMarginTop margin")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetSetMarginTop")?;
+                        unsafe { gtk_widget_set_margin_top(widget, m) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetSetMarginBottom".to_string(),
+            builtin("gtk4.widgetSetMarginBottom", 2, |mut args, _| {
+                let margin = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetMarginBottom expects Int margin")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetMarginBottom expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    let m = as_i32(margin, "gtk4.widgetSetMarginBottom margin")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetSetMarginBottom")?;
+                        unsafe { gtk_widget_set_margin_bottom(widget, m) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetAddCssClass".to_string(),
+            builtin("gtk4.widgetAddCssClass", 2, |mut args, _| {
+                let class = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.widgetAddCssClass expects Text class")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetAddCssClass expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    let class_c = c_text(&class, "gtk4.widgetAddCssClass invalid class")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetAddCssClass")?;
+                        unsafe { gtk_widget_add_css_class(widget, class_c.as_ptr()) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetRemoveCssClass".to_string(),
+            builtin("gtk4.widgetRemoveCssClass", 2, |mut args, _| {
+                let class = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.widgetRemoveCssClass expects Text class")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetRemoveCssClass expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    let class_c = c_text(&class, "gtk4.widgetRemoveCssClass invalid class")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetRemoveCssClass")?;
+                        unsafe { gtk_widget_remove_css_class(widget, class_c.as_ptr()) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetSetTooltipText".to_string(),
+            builtin("gtk4.widgetSetTooltipText", 2, |mut args, _| {
+                let text = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetTooltipText expects Text")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetTooltipText expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    let text_c = c_text(&text, "gtk4.widgetSetTooltipText invalid text")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetSetTooltipText")?;
+                        unsafe { gtk_widget_set_tooltip_text(widget, text_c.as_ptr()) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetSetOpacity".to_string(),
+            builtin("gtk4.widgetSetOpacity", 2, |mut args, _| {
+                let opacity = match args.remove(1) {
+                    Value::Int(v) => v as f64 / 100.0,
+                    _ => return Err(invalid("gtk4.widgetSetOpacity expects Int (0-100)")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.widgetSetOpacity expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let widget = widget_ptr(&state, widget_id, "widgetSetOpacity")?;
+                        unsafe { gtk_widget_set_opacity(widget, opacity) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        // ── box extras ────────────────────────────────────────────────
+
+        fields.insert(
+            "boxSetHomogeneous".to_string(),
+            builtin("gtk4.boxSetHomogeneous", 2, |mut args, _| {
+                let homogeneous = match args.remove(1) {
+                    Value::Bool(v) => v,
+                    _ => return Err(invalid("gtk4.boxSetHomogeneous expects Bool")),
+                };
+                let box_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.boxSetHomogeneous expects Int box id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let boxw = state.boxes.get(&box_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.boxSetHomogeneous unknown box id {box_id}"
+                            )))
+                        })?;
+                        unsafe {
+                            gtk_box_set_homogeneous(boxw, if homogeneous { 1 } else { 0 })
+                        };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        // ── label extras ──────────────────────────────────────────────
+
+        fields.insert(
+            "labelSetWrap".to_string(),
+            builtin("gtk4.labelSetWrap", 2, |mut args, _| {
+                let wrap = match args.remove(1) {
+                    Value::Bool(v) => v,
+                    _ => return Err(invalid("gtk4.labelSetWrap expects Bool")),
+                };
+                let label_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.labelSetWrap expects Int label id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let label = state.labels.get(&label_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.labelSetWrap unknown label id {label_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_label_set_wrap(label, if wrap { 1 } else { 0 }) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        // PangoEllipsizeMode: NONE=0, START=1, MIDDLE=2, END=3
+        fields.insert(
+            "labelSetEllipsize".to_string(),
+            builtin("gtk4.labelSetEllipsize", 2, |mut args, _| {
+                let mode = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.labelSetEllipsize expects Int mode")),
+                };
+                let label_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.labelSetEllipsize expects Int label id")),
+                };
+                Ok(effect(move |_| {
+                    let m = as_i32(mode, "gtk4.labelSetEllipsize mode")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let label = state.labels.get(&label_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.labelSetEllipsize unknown label id {label_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_label_set_ellipsize(label, m) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "labelSetXalign".to_string(),
+            builtin("gtk4.labelSetXalign", 2, |mut args, _| {
+                let xalign = match args.remove(1) {
+                    Value::Int(v) => v as f32 / 100.0,
+                    _ => return Err(invalid("gtk4.labelSetXalign expects Int (0-100)")),
+                };
+                let label_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.labelSetXalign expects Int label id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let label = state.labels.get(&label_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.labelSetXalign unknown label id {label_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_label_set_xalign(label, xalign) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "labelSetMaxWidthChars".to_string(),
+            builtin("gtk4.labelSetMaxWidthChars", 2, |mut args, _| {
+                let n = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.labelSetMaxWidthChars expects Int n")),
+                };
+                let label_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.labelSetMaxWidthChars expects Int label id")),
+                };
+                Ok(effect(move |_| {
+                    let n_i32 = as_i32(n, "gtk4.labelSetMaxWidthChars n")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let label = state.labels.get(&label_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.labelSetMaxWidthChars unknown label id {label_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_label_set_max_width_chars(label, n_i32) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        // ── button icon ───────────────────────────────────────────────
+
+        fields.insert(
+            "buttonNewFromIconName".to_string(),
+            builtin("gtk4.buttonNewFromIconName", 1, |mut args, _| {
+                let icon_name = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.buttonNewFromIconName expects Text icon name")),
+                };
+                Ok(effect(move |_| {
+                    let icon_c =
+                        c_text(&icon_name, "gtk4.buttonNewFromIconName invalid icon name")?;
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_button_new_from_icon_name(icon_c.as_ptr()) };
+                        let id = state.alloc_id();
+                        state.buttons.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        // ── image from icon name ──────────────────────────────────────
+
+        fields.insert(
+            "imageNewFromIconName".to_string(),
+            builtin("gtk4.imageNewFromIconName", 1, |mut args, _| {
+                let icon_name = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.imageNewFromIconName expects Text icon name")),
+                };
+                Ok(effect(move |_| {
+                    let icon_c =
+                        c_text(&icon_name, "gtk4.imageNewFromIconName invalid icon name")?;
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_image_new_from_icon_name(icon_c.as_ptr()) };
+                        let id = state.alloc_id();
+                        state.images.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "imageSetPixelSize".to_string(),
+            builtin("gtk4.imageSetPixelSize", 2, |mut args, _| {
+                let size = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.imageSetPixelSize expects Int size")),
+                };
+                let image_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.imageSetPixelSize expects Int image id")),
+                };
+                Ok(effect(move |_| {
+                    let s = as_i32(size, "gtk4.imageSetPixelSize size")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let image = state.images.get(&image_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.imageSetPixelSize unknown image id {image_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_image_set_pixel_size(image, s) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        // ── scrolled window (real) ────────────────────────────────────
+
+        fields.insert(
+            "scrollAreaNew".to_string(),
+            builtin("gtk4.scrollAreaNew", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("gtk4.scrollAreaNew expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_scrolled_window_new() };
+                        let id = state.alloc_id();
+                        state.scrolled_windows.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "scrollAreaSetChild".to_string(),
+            builtin("gtk4.scrollAreaSetChild", 2, |mut args, _| {
+                let child_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.scrollAreaSetChild expects Int child id")),
+                };
+                let scroll_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.scrollAreaSetChild expects Int scroll id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let scrolled =
+                            state
+                                .scrolled_windows
+                                .get(&scroll_id)
+                                .copied()
+                                .ok_or_else(|| {
+                                    RuntimeError::Error(Value::Text(format!(
+                                    "gtk4.scrollAreaSetChild unknown scroll id {scroll_id}"
+                                )))
+                                })?;
+                        let child = widget_ptr(&state, child_id, "scrollAreaSetChild")?;
+                        unsafe { gtk_scrolled_window_set_child(scrolled, child) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        // GtkPolicyType: AUTOMATIC=0, ALWAYS=1, NEVER=2, EXTERNAL=3
+        fields.insert(
+            "scrollAreaSetPolicy".to_string(),
+            builtin("gtk4.scrollAreaSetPolicy", 3, |mut args, _| {
+                let vpolicy = match args.remove(2) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.scrollAreaSetPolicy expects Int vpolicy")),
+                };
+                let hpolicy = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.scrollAreaSetPolicy expects Int hpolicy")),
+                };
+                let scroll_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.scrollAreaSetPolicy expects Int scroll id")),
+                };
+                Ok(effect(move |_| {
+                    let hp = as_i32(hpolicy, "gtk4.scrollAreaSetPolicy hpolicy")?;
+                    let vp = as_i32(vpolicy, "gtk4.scrollAreaSetPolicy vpolicy")?;
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let scrolled =
+                            state
+                                .scrolled_windows
+                                .get(&scroll_id)
+                                .copied()
+                                .ok_or_else(|| {
+                                    RuntimeError::Error(Value::Text(format!(
+                                    "gtk4.scrollAreaSetPolicy unknown scroll id {scroll_id}"
+                                )))
+                                })?;
+                        unsafe { gtk_scrolled_window_set_policy(scrolled, hp, vp) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        // ── separator ─────────────────────────────────────────────────
+
+        fields.insert(
+            "separatorNew".to_string(),
+            builtin("gtk4.separatorNew", 1, |mut args, _| {
+                let orientation = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.separatorNew expects Int orientation")),
+                };
+                Ok(effect(move |_| {
+                    let ori = if orientation == 1 { 1 } else { 0 };
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_separator_new(ori) };
+                        let id = state.alloc_id();
+                        state.separators.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        // ── overlay ───────────────────────────────────────────────────
+
+        fields.insert(
+            "overlayNew".to_string(),
+            builtin("gtk4.overlayNew", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("gtk4.overlayNew expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    let id = GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = unsafe { gtk_overlay_new() };
+                        let id = state.alloc_id();
+                        state.overlays.insert(id, raw);
+                        state.widgets.insert(id, raw);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "overlaySetChild".to_string(),
+            builtin("gtk4.overlaySetChild", 2, |mut args, _| {
+                let child_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.overlaySetChild expects Int child id")),
+                };
+                let overlay_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.overlaySetChild expects Int overlay id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let overlay =
+                            state.overlays.get(&overlay_id).copied().ok_or_else(|| {
+                                RuntimeError::Error(Value::Text(format!(
+                                    "gtk4.overlaySetChild unknown overlay id {overlay_id}"
+                                )))
+                            })?;
+                        let child = widget_ptr(&state, child_id, "overlaySetChild")?;
+                        unsafe { gtk_overlay_set_child(overlay, child) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "overlayAddOverlay".to_string(),
+            builtin("gtk4.overlayAddOverlay", 2, |mut args, _| {
+                let child_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.overlayAddOverlay expects Int child id")),
+                };
+                let overlay_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.overlayAddOverlay expects Int overlay id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let overlay =
+                            state.overlays.get(&overlay_id).copied().ok_or_else(|| {
+                                RuntimeError::Error(Value::Text(format!(
+                                    "gtk4.overlayAddOverlay unknown overlay id {overlay_id}"
+                                )))
+                            })?;
+                        let child = widget_ptr(&state, child_id, "overlayAddOverlay")?;
+                        unsafe { gtk_overlay_add_overlay(overlay, child) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        // ── CSS provider (app-level stylesheet) ───────────────────────
+
+        fields.insert(
+            "appSetCss".to_string(),
+            builtin("gtk4.appSetCss", 2, |mut args, _| {
+                let css_text = match args.remove(1) {
+                    Value::Text(v) => v,
+                    Value::Record(_) => {
+                        // Accept record but treat as no-op for now
+                        return Ok(effect(|_| Ok(Value::Unit)));
+                    }
+                    _ => return Err(invalid("gtk4.appSetCss expects Text css or Record")),
+                };
+                let _app_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.appSetCss expects Int app id")),
+                };
+                Ok(effect(move |_| {
+                    let css_c = c_text(&css_text, "gtk4.appSetCss invalid css")?;
+                    let display = unsafe { gdk_display_get_default() };
+                    if display.is_null() {
+                        return Err(RuntimeError::Error(Value::Text(
+                            "gtk4.appSetCss no default display".to_string(),
+                        )));
+                    }
+                    let provider = unsafe { gtk_css_provider_new() };
+                    unsafe { gtk_css_provider_load_from_string(provider, css_c.as_ptr()) };
+                    // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION = 600
+                    unsafe {
+                        gtk_style_context_add_provider_for_display(display, provider, 600)
+                    };
+                    Ok(Value::Unit)
                 }))
             }),
         );
