@@ -25,25 +25,25 @@ e₁ e₂
 Whitespace application is syntax only.
 
 
-## 1.4 Let-binding
+## 1.4 Blocks and binding items
 
 ```text
-let x = e₁ in e₂
+{ p <- e₁; e₂ }
 ```
 
-All top-level and block bindings desugar to `let`.
+The kernel models local binding through `Block` expressions with `Bind`/`Expr` items.
+
+Code reference: `crates/aivi/src/kernel/ir.rs` — `crate::kernel::ir::KernelExpr::Block`, `crate::kernel::ir::KernelBlockItem::{Bind,Expr}`
 
 ## 1.4.1 Recursive let-binding
 
-Recursion is required for practical programs (and is used throughout the spec examples). The kernel therefore includes a recursive binding form:
+Recursion is represented by `Recurse` block items rather than a dedicated `let rec` expression form.
 
 ```text
-let rec f = e₁ in e₂
+{ recurse e }
 ```
 
-Informally: `f` is in scope in both `e₁` and `e₂`.
-
-An implementation may also support mutually-recursive groups as a convenience, but the kernel only needs a single-binder `let rec` as a primitive.
+Code reference: `crates/aivi/src/kernel/ir.rs` — `crate::kernel::ir::KernelBlockItem::Recurse`
 
 
 ## 1.5 Algebraic data constructors
@@ -63,10 +63,12 @@ case e of
   | p₂ → e₂
 ```
 
-This is the **only branching construct**.
+`case` is the primary pattern-elimination construct, and the kernel also includes an explicit `if` form.
 
 * `match`
 * multi-clause functions
 * predicate patterns
 
 all desugar to `case`.
+
+Code reference: `crates/aivi/src/kernel/ir.rs` — `crate::kernel::ir::KernelExpr::{Match,If}`

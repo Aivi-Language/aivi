@@ -9,36 +9,44 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 <!-- toc:start -->
 
 ### Overview
+
 - [Spec Home](index.md)
 - [Introduction](introduction.md)
 - [Missing Features (v0.1)](missing_features_v0.1.md)
 
 ### Syntax
+
 #### Core Forms
+
 - [Bindings and Scope](syntax/bindings.md)
 - [Functions and Pipes](syntax/functions.md)
 - [The Type System](syntax/types.md)
 - [Predicates](syntax/predicates.md)
-#### Data & Flow
+  
+  #### Data & Flow
 - [Patching Records](syntax/patching.md)
 - [Domains, Units, and Deltas](syntax/domains.md)
 - [Generators](syntax/generators.md)
 - [Pattern Matching](syntax/pattern_matching.md)
-#### Effects & Control
+  
+  #### Effects & Control
 - [Effects](syntax/effects.md)
 - [Resources](syntax/resources.md)
 - [Generic `do` Notation](syntax/do_notation.md)
-#### Modules & Interop
+  
+  #### Modules & Interop
 - [Modules](syntax/modules.md)
 - [External Sources](syntax/external_sources.md)
-##### Source Integrations
+  
+  ##### Source Integrations
 - [File Sources](syntax/external_sources/file.md)
 - [REST/HTTP Sources](syntax/external_sources/rest_http.md)
 - [Environment Sources](syntax/external_sources/environment.md)
 - [IMAP Email Sources](syntax/external_sources/imap_email.md)
 - [Image Sources](syntax/external_sources/image.md)
 - [Compile-Time Sources](syntax/external_sources/compile_time.md)
-#### Notation & Grammar
+  
+  #### Notation & Grammar
 - [Operators and Context](syntax/operators.md)
 - [Sigils](syntax/sigils.md)
 - [Decorators](syntax/decorators.md)
@@ -46,7 +54,9 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Concrete Syntax](syntax/grammar.md)
 
 ### Standard Library
+
 #### Core & Utils
+
 - [Prelude](stdlib/core/prelude.md)
 - [Text](stdlib/core/text.md)
 - [Logic](stdlib/core/logic.md)
@@ -57,7 +67,8 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [I18n](stdlib/core/i18n.md)
 - [Generator](stdlib/core/generator.md)
 - [Validation](stdlib/core/validation.md)
-#### Math & Science
+  
+  #### Math & Science
 - [Math](stdlib/math/math.md)
 - [Vector](stdlib/math/vector.md)
 - [Matrix](stdlib/math/matrix.md)
@@ -68,12 +79,14 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Graph](stdlib/math/graph.md)
 - [Linear Algebra](stdlib/math/linear_algebra.md)
 - [Tree](stdlib/math/tree.md)
-#### Time
+  
+  #### Time
 - [Instant](stdlib/chronos/instant.md)
 - [Calendar](stdlib/chronos/calendar.md)
 - [Duration](stdlib/chronos/duration.md)
 - [TimeZone](stdlib/chronos/timezone.md)
-#### System & IO
+  
+  #### System & IO
 - [File](stdlib/system/file.md)
 - [Console](stdlib/system/console.md)
 - [Crypto](stdlib/system/crypto.md)
@@ -83,13 +96,15 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [System](stdlib/system/system.md)
 - [Log](stdlib/system/log.md)
 - [Concurrency](stdlib/system/concurrency.md)
-#### Network
+  
+  #### Network
 - [HTTP](stdlib/network/http.md)
 - [HTTPS](stdlib/network/https.md)
 - [HTTP Server](stdlib/network/http_server.md)
 - [Sockets](stdlib/network/sockets.md)
 - [Streams](stdlib/network/streams.md)
-#### UI
+  
+  #### UI
 - [GTK4](stdlib/ui/gtk4.md)
 - [Layout](stdlib/ui/layout.md)
 - [VDOM](stdlib/ui/vdom.md)
@@ -98,7 +113,9 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [ServerHtml](stdlib/ui/server_html.md)
 
 ### Semantics
+
 #### Kernel (Core Calculus)
+
 - [Core Terms](kernel/core_terms.md)
 - [Types](kernel/types.md)
 - [Records](kernel/records.md)
@@ -111,7 +128,8 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Domains](kernel/domains.md)
 - [Patching](kernel/patching.md)
 - [Minimality Proof](kernel/minimality.md)
-#### Desugaring (Surface -> Kernel)
+  
+  #### Desugaring (Surface -> Kernel)
 - [Bindings](desugaring/bindings.md)
 - [Functions](desugaring/functions.md)
 - [Records](desugaring/records.md)
@@ -125,11 +143,13 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Resources](desugaring/resources.md)
 
 ### Runtime
+
 - [Concurrency](runtime/concurrency.md)
 - [Memory Management](runtime/memory_management.md)
 - [Package Manager (Cargo-backed)](runtime/package_manager.md)
 
 ### Tooling
+
 - [CLI](tools/cli.md)
 - [LSP Server](tools/lsp_server.md)
 - [VSCode Extension](tools/vscode_extension.md)
@@ -137,6 +157,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Spec Doc Markers](doc-markers-spec.md)
 
 ### Compiler & Backend
+
 - [Typed Codegen Design](typed_codegen/design.md)
 
 <!-- toc:end -->
