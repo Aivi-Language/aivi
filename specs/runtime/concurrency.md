@@ -9,7 +9,7 @@ Structural concurrency means: concurrent tasks are children of the scope that sp
 
 ### Primitives
 
-For parser simplicity in v0.1, these are described as **standard library APIs** (taking thunks / effects), even if future surface syntax adds dedicated blocks:
+For parser simplicity in v0.1, these are described as **standard library APIs** (taking thunks / effects):
 
 - `concurrent.scope : (Scope -> Effect E A) -> Effect E A`
 - `concurrent.par   : Effect E A -> Effect E B -> Effect E (A, B)`

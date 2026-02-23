@@ -1,6 +1,6 @@
 # HTML Sigil (`~<html>...</html>`)
 
-> **Status: Planned**   the HTML sigil described below is not yet implemented in the runtime.
+> **Status: Specified, not implemented in runtime v0.1.**
 
 <!-- quick-info: {"kind":"module","name":"aivi.ui"} -->
 The `~<html>...</html>` sigil allows embedding HTML inside Aivi code:syntax and lowers it to `aivi.ui.VNode msg` constructors.

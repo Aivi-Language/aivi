@@ -5,7 +5,7 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 > Scope: AIVI **v0.1**.
 >
 > This document is intentionally lightweight: it is meant to provide a stable link target from the introduction/README and keep the VitePress build green.
-> Please expand sections as features stabilize or as gaps are discovered.
+> Update this page when gaps are discovered or resolved.
 
 ## How to use this page
 
@@ -34,7 +34,7 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 
 | Module | File | Status |
 | :--- | :--- | :--- |
-| Log | [system/log.md](stdlib/system/log.md) | Stub — "Planned" status |
+| Log | [system/log.md](stdlib/system/log.md) | Specified-only (not implemented in runtime v0.1) |
 
 #### Incomplete specs (thin API coverage)
 

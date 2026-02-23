@@ -1,10 +1,10 @@
 // Apply instance definition requires E to be a Semigroup to concat errors
 instance Apply (Validation E *) with (E: Semigroup) = {
   ap = f v => (f, v) match
-    | (Valid f', Valid a)       => Valid (f' a)
-    | (Invalid e1, Invalid e2)  => Invalid (concat e1 e2)
-    | (Invalid e, _)            => Invalid e
-    | (_, Invalid e)            => Invalid e
+    | (Valid f', Valid a)      => Valid (f' a)
+    | (Invalid e1, Invalid e2) => Invalid (concat e1 e2)
+    | (Invalid e, _)           => Invalid e
+    | (_, Invalid e)           => Invalid e
 }
 
 // Applicative instance

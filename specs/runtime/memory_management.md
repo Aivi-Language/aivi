@@ -30,8 +30,8 @@ To handle recursive definitions without leaking memory, the runtime uses one of 
 
 The choice of strategy is transparent to the programmer   recursive definitions simply work without memory leaks.
 
-### Future Work
+### Out of Scope in v0.1
 
-*   **Weak References**: Explicit weak references may be introduced for advanced users implementing cyclic data structures.
-*   **Cycle Detection**: A lightweight cycle detector may be added if the above strategies prove insufficient for complex cases.
-*   **Perceus-Style RC Reuse**: Add a static analysis pass that detects uniqueness/drop-to-zero opportunities and performs in-place reuse for records and collections while preserving immutable semantics.
+*   **Weak References**: Explicit weak references for user-defined cyclic graphs are not part of v0.1.
+*   **Cycle Detection**: A dedicated cycle detector is not part of v0.1.
+*   **Perceus-Style RC Reuse**: Static uniqueness/drop-to-zero reuse analysis is not part of v0.1.

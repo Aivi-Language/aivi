@@ -5,7 +5,7 @@ External data enters AIVI through typed **Sources**. A source represents a persi
 > [!NOTE]
 > v0.1 status:
 > - Implemented: `Source K A`, `load`, `file.read`, `http.get`/`post`/`fetch` (and `https.*`), and `env.get` (single-variable reads).
-> - Not yet implemented: structured codecs like `file.json`/`file.csv`, streaming sources, and higher-level decoding helpers like `env.decode`.
+> - Out of scope in runtime v0.1: structured codecs like `file.json`/`file.csv`, streaming sources, and higher-level decoding helpers like `env.decode`.
 > - `SourceError K` is upgraded from `Text` to an ADT supporting `DecodeError` accumulation.
 
 ## 12.1 The Source Type
@@ -92,7 +92,7 @@ Integration with object storage.
 <<< ../snippets/from_md/syntax/external_sources/s3_cloud_storage_sources.aivi{aivi}
 
 > [!NOTE]
-> Browser sources are part of the AIVI long-term vision for end-to-end automation but are considered **Experimental** and may not be fully available in the initial WASM-targeted phase.
+> Browser sources are **Experimental** and not guaranteed across all v0.1 runtime targets (including WASM).
 
 
 ## 12.10 Compile-Time Sources (@static)

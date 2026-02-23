@@ -24,7 +24,7 @@ Attributes are typed values, not raw strings:
 
 - `Class Text`, `Id Text`
 - `Style { ... }` where the style value is a record (see Layout units and CSS records below)
-- `OnClick msg`, `OnInput (Text -> msg)` for event wiring (legacy)
+- `OnClick msg`, `OnInput (Text -> msg)` for event wiring
 - Additional event handlers used by `aivi.ui.ServerHtml`:
   - `OnClickE (Click -> msg)` (click payload record)
   - `OnInputE (Input -> msg)` (input payload record)

@@ -18,5 +18,5 @@ dijkstra = do Effect {
       }
   }
 
-  loop dists0 (Heap.push (0.0, source) Heap.empty)
+    loop dists0 (Heap.push (0.0, source) Heap.empty)
 }

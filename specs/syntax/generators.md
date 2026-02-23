@@ -52,7 +52,7 @@ Note: `.email` is an accessor function (`x => x.email`). It’s useful for `map 
 Predicate rules are identical to `filter`.
 
 
-## 7.4 Effectful streaming (future direction)
+## 7.4 Effectful streaming (v0.1 scope)
 
 The v0.1 surface syntax does **not** include `generate async`.
 

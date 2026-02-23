@@ -17,8 +17,8 @@ userTable = db.table "users"[
 
 getActiveUsers : Effect DbError (List User)
 getActiveUsers = do Effect {
-  _ <- db.configure dbDefault
-  _ <- db.runMigrations[userTable]
+  _     <- db.configure dbDefault
+  _     <- db.runMigrations[userTable]
   users <- db.load userTable
   pure (users |> filter active |> sortBy.createdAt)
 }

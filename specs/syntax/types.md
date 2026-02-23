@@ -136,7 +136,7 @@ Notes:
 - In `Result E *`, `E` is a type parameter and `*` is the remaining type slot for higher-kinded types. Read it as: “`Result` with the error fixed to `E`, as a 1-parameter type constructor”.
 
 > [!NOTE] Implementation Note: Kinds
-> In the v0.1 compiler, kind annotations like `(F *)` were hints. The type checker now (planned) enforces kinds explicitly.
+> In the v0.1 compiler, kind annotations like `(F *)` are enforced by the type checker.
 
 ## 3.6 Expected-Type Coercions (Instance-Driven)
 
