@@ -12,7 +12,6 @@ mod linalg;
 mod list;
 mod log;
 mod math;
-mod mutable_map;
 mod number;
 mod regex;
 mod signal;

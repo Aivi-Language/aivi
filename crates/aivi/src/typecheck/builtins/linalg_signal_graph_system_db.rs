@@ -43,8 +43,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("linalg".to_string(), Scheme::mono(linalg_record));
 
@@ -71,8 +69,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("signal".to_string(), Scheme::mono(signal_record));
 
@@ -117,8 +113,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("graph".to_string(), Scheme::mono(graph_record));
 
@@ -201,8 +195,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("console".to_string(), Scheme::mono(console_record));
 
@@ -232,15 +224,11 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("crypto".to_string(), Scheme::mono(crypto_record));
 
     let i18n_record = Type::Record {
         fields: vec![].into_iter().collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("i18n".to_string(), Scheme::mono(i18n_record));
 
@@ -276,8 +264,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: false,
-        row_tail: None,
     };
     let env_source_record = Type::Record {
         fields: vec![(
@@ -289,8 +275,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         )]
         .into_iter()
         .collect(),
-        open: false,
-        row_tail: None,
     };
     env.insert("env".to_string(), Scheme::mono(env_source_record));
     let system_record = Type::Record {
@@ -316,8 +300,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("system".to_string(), Scheme::mono(system_record));
     let effect_text_unit = Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]);
@@ -325,8 +307,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     let effect_text_text = Type::con("Effect").app(vec![text_ty.clone(), text_ty.clone()]);
     let css_record_ty = Type::Record {
         fields: vec![].into_iter().collect(),
-        open: true,
-        row_tail: None,
     };
     let effect_text_list_text = Type::con("Effect").app(vec![
         text_ty.clone(),
@@ -909,8 +889,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(Type::Func(
                         Box::new(Type::Record {
                             fields: vec![].into_iter().collect(),
-                            open: true,
-                            row_tail: None,
                         }),
                         Box::new(effect_text_unit.clone()),
                     )),
@@ -923,8 +901,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(Type::Func(
                         Box::new(Type::Record {
                             fields: vec![].into_iter().collect(),
-                            open: true,
-                            row_tail: None,
                         }),
                         Box::new(effect_text_unit),
                     )),
@@ -933,8 +909,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("gtk4".to_string(), Scheme::mono(gtk4_record));
 
@@ -1010,8 +984,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("logger".to_string(), Scheme::mono(logger_record));
 
@@ -1080,8 +1052,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert("database".to_string(), Scheme::mono(database_record));
 }

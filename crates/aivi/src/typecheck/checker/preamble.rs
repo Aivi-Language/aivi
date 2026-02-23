@@ -114,10 +114,6 @@ impl TypeChecker {
         });
     }
 
-    pub(super) fn note_open_row_var(&mut self) {
-        let _ = self.constraints.note_open_row_var();
-    }
-
     pub(super) fn set_class_env(
         &mut self,
         classes: HashMap<String, ClassDeclInfo>,
@@ -358,8 +354,6 @@ impl TypeChecker {
             ]
             .into_iter()
             .collect(),
-            open: true,
-        row_tail: None,
         };
         env.insert("file".to_string(), Scheme::mono(file_record));
 
@@ -413,8 +407,6 @@ impl TypeChecker {
             ]
             .into_iter()
             .collect(),
-            open: true,
-        row_tail: None,
         };
         env.insert("channel".to_string(), Scheme::mono(channel_record));
 
@@ -463,8 +455,6 @@ impl TypeChecker {
             ]
             .into_iter()
             .collect(),
-            open: true,
-        row_tail: None,
         };
         env.insert("concurrent".to_string(), Scheme::mono(concurrent_record));
 
@@ -480,8 +470,6 @@ impl TypeChecker {
             )]
             .into_iter()
             .collect(),
-            open: true,
-        row_tail: None,
         };
         env.insert("clock".to_string(), Scheme::mono(clock_record));
 
@@ -500,8 +488,6 @@ impl TypeChecker {
             )]
             .into_iter()
             .collect(),
-            open: true,
-        row_tail: None,
         };
         env.insert("random".to_string(), Scheme::mono(random_record));
 
@@ -512,8 +498,6 @@ impl TypeChecker {
             )]
             .into_iter()
             .collect(),
-            open: true,
-        row_tail: None,
         };
         env.insert("html".to_string(), Scheme::mono(html_record));
 

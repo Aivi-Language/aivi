@@ -17,32 +17,17 @@ impl TypeChecker {
                 // v0.1: `A with B` is record/type composition. For now we only support composing records;
                 // other compositions fall back to an unconstrained fresh type variable.
                 let mut merged = BTreeMap::new();
-                let mut open = true;
                 for item in items {
                     let item_ty = self.type_from_expr(item, ctx);
                     let item_ty = self.expand_alias(item_ty);
-                    let Type::Record {
-                        fields: item_fields,
-                        open: item_open,
-                        ..
-                    } = item_ty
-                    else {
+                    let Type::Record { fields: item_fields } = item_ty else {
                         return self.fresh_var();
                     };
-                    open &= item_open;
                     for (name, ty) in item_fields {
                         merged.entry(name).or_insert(ty);
                     }
                 }
-                Type::Record {
-                    fields: merged,
-                    open,
-                    row_tail: if open {
-                        Some(self.constraints.note_open_row_var())
-                    } else {
-                        None
-                    },
-                }
+                Type::Record { fields: merged }
             }
             TypeExpr::Apply { base, args, .. } => {
                 if let TypeExpr::Name(base_name) = base.as_ref() {
@@ -97,11 +82,7 @@ impl TypeChecker {
                     let field_ty = self.type_from_expr(ty, ctx);
                     field_map.insert(name.name.clone(), field_ty);
                 }
-                Type::Record {
-                    fields: field_map,
-                    open: false,
-                    row_tail: None,
-                }
+                Type::Record { fields: field_map }
             }
             TypeExpr::Tuple { items, .. } => {
                 let items_ty = items
@@ -218,7 +199,7 @@ impl TypeChecker {
         }
 
         let mut ctx = TypeContext::new(&self.type_constructors);
-        let Some((source_fields, _open)) = self.record_from_type_expr(&args[1], &mut ctx) else {
+        let Some(source_fields) = self.record_from_type_expr(&args[1], &mut ctx) else {
             return;
         };
         let source_names: HashSet<String> = source_fields.keys().cloned().collect();
@@ -333,14 +314,14 @@ impl TypeChecker {
             return None;
         }
         let fields = self.row_fields_from_expr(&args[0]);
-        let (source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        let source_fields = self.record_from_type_expr(&args[1], ctx)?;
         let mut out = BTreeMap::new();
         for name in fields {
             if let Some(ty) = source_fields.get(&name) {
                 out.insert(name, ty.clone());
             }
         }
-        Some(self.make_record(out, open))
+        Some(self.make_record(out))
     }
 
     fn row_omit(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
@@ -349,14 +330,14 @@ impl TypeChecker {
         }
         let fields = self.row_fields_from_expr(&args[0]);
         let omit: HashSet<String> = fields.into_iter().collect();
-        let (source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        let source_fields = self.record_from_type_expr(&args[1], ctx)?;
         let mut out = BTreeMap::new();
         for (name, ty) in source_fields {
             if !omit.contains(&name) {
                 out.insert(name, ty);
             }
         }
-        Some(self.make_record(out, open))
+        Some(self.make_record(out))
     }
 
     fn row_optional(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
@@ -364,13 +345,13 @@ impl TypeChecker {
             return None;
         }
         let fields = self.row_fields_from_expr(&args[0]);
-        let (mut source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        let mut source_fields = self.record_from_type_expr(&args[1], ctx)?;
         for name in fields {
             if let Some(ty) = source_fields.get_mut(&name) {
                 *ty = self.wrap_option_type(ty.clone());
             }
         }
-        Some(self.make_record(source_fields, open))
+        Some(self.make_record(source_fields))
     }
 
     fn row_required(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
@@ -378,13 +359,13 @@ impl TypeChecker {
             return None;
         }
         let fields = self.row_fields_from_expr(&args[0]);
-        let (mut source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        let mut source_fields = self.record_from_type_expr(&args[1], ctx)?;
         for name in fields {
             if let Some(ty) = source_fields.get_mut(&name) {
                 *ty = self.unwrap_option_type(ty.clone());
             }
         }
-        Some(self.make_record(source_fields, open))
+        Some(self.make_record(source_fields))
     }
 
     fn row_rename(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
@@ -392,7 +373,7 @@ impl TypeChecker {
             return None;
         }
         let rename_map = self.row_rename_map_from_expr(&args[0]);
-        let (source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        let source_fields = self.record_from_type_expr(&args[1], ctx)?;
         let mut out = BTreeMap::new();
         for (name, ty) in source_fields {
             let new_name = rename_map.get(&name).cloned().unwrap_or(name);
@@ -401,7 +382,7 @@ impl TypeChecker {
             }
             out.insert(new_name, ty);
         }
-        Some(self.make_record(out, open))
+        Some(self.make_record(out))
     }
 
     fn row_defaulted(&mut self, args: &[TypeExpr], ctx: &mut TypeContext) -> Option<Type> {
@@ -412,24 +393,24 @@ impl TypeChecker {
         if fields.is_empty() {
             fields = self.row_fields_from_record_expr(&args[0]);
         }
-        let (mut source_fields, open) = self.record_from_type_expr(&args[1], ctx)?;
+        let mut source_fields = self.record_from_type_expr(&args[1], ctx)?;
         for name in fields {
             if let Some(ty) = source_fields.get_mut(&name) {
                 *ty = self.wrap_option_type(ty.clone());
             }
         }
-        Some(self.make_record(source_fields, open))
+        Some(self.make_record(source_fields))
     }
 
     fn record_from_type_expr(
         &mut self,
         expr: &TypeExpr,
         ctx: &mut TypeContext,
-    ) -> Option<(BTreeMap<String, Type>, bool)> {
+    ) -> Option<BTreeMap<String, Type>> {
         let ty = self.type_from_expr(expr, ctx);
         let ty = self.expand_alias(ty);
         match ty {
-            Type::Record { fields, open, .. } => Some((fields, open)),
+            Type::Record { fields } => Some(fields),
             _ => None,
         }
     }
@@ -487,12 +468,8 @@ impl TypeChecker {
         ty
     }
 
-    fn make_record(&mut self, fields: BTreeMap<String, Type>, _open: bool) -> Type {
-        Type::Record {
-            fields,
-            open: false,
-            row_tail: None,
-        }
+    fn make_record(&mut self, fields: BTreeMap<String, Type>) -> Type {
+        Type::Record { fields }
     }
 
     fn fresh_var(&mut self) -> Type {

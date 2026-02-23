@@ -430,7 +430,6 @@ fn debug_value_to_json(value: &Value, depth: usize) -> serde_json::Value {
         Value::Stream(_) => debug_summary_json(value),
         Value::HttpServer(_) => debug_summary_json(value),
         Value::WebSocket(_) => debug_summary_json(value),
-        Value::MutableMap(_) => debug_summary_json(value),
     }
 }
 
@@ -482,7 +481,6 @@ fn debug_summary_json(value: &Value) -> serde_json::Value {
         Value::Stream(_) => ("Stream", None),
         Value::HttpServer(_) => ("HttpServer", None),
         Value::WebSocket(_) => ("WebSocket", None),
-        Value::MutableMap(_) => ("MutableMap", None),
     };
 
     let mut out = serde_json::Map::new();
@@ -567,7 +565,6 @@ fn format_value(value: &Value) -> String {
         Value::Stream(_) => "<stream>".to_string(),
         Value::HttpServer(_) => "<http-server>".to_string(),
         Value::WebSocket(_) => "<websocket>".to_string(),
-        Value::MutableMap(_) => "<mutable-map>".to_string(),
     }
 }
 

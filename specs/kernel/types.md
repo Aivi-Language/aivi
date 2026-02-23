@@ -16,15 +16,15 @@
 This corresponds to `*` in surface syntax.
 
 
-## 2.3 Row types (records)
+## 2.3 Record types (closed)
 
 ```text
-{ l₁ : τ₁, … | ρ }
+{ l₁ : τ₁, … }
 ```
 
-* open records
-* structural typing
-* patching relies on this
+* closed records
+* structural typing over declared fields
+* patching relies on closed-shape updates
 
 ## 2.4 Row transforms (derived)
 

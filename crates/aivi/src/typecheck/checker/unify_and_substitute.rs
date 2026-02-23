@@ -129,60 +129,14 @@ impl TypeChecker {
             (
                 Type::Record {
                     fields: f_fields,
-                    open: open_f,
-                    row_tail: row_tail_f,
                 },
                 Type::Record {
                     fields: e_fields,
-                    open: open_e,
-                    row_tail: row_tail_e,
                 },
             ) => {
-                for (field, expected_ty) in &e_fields {
-                    match f_fields.get(field) {
-                        Some(found_ty) => {
-                            self.unify(found_ty.clone(), expected_ty.clone(), span.clone())?;
-                        }
-                        None if open_f => {
-                            // Open rows represent lower-bound requirements; missing named fields
-                            // can still be satisfied by the unknown tail.
-                        }
-                        None => {
-                            return Err(TypeError {
-                                span: span.clone(),
-                                message: format!("missing field '{}'", field),
-                                expected: Some(Box::new(Type::Record {
-                                    fields: e_fields.clone(),
-                                    open: open_e,
-                                    row_tail: row_tail_e,
-                                })),
-                                found: Some(Box::new(Type::Record {
-                                    fields: f_fields.clone(),
-                                    open: open_f,
-                                    row_tail: row_tail_f,
-                                })),
-                            });
-                        }
-                    }
-                }
-
-                if !open_e {
-                    if let Some(extra_field) = f_fields.keys().find(|field| !e_fields.contains_key(*field))
-                    {
-                        return Err(TypeError {
-                            span,
-                            message: format!("additional field '{}' is not allowed", extra_field),
-                            expected: Some(Box::new(Type::Record {
-                                fields: e_fields,
-                                open: open_e,
-                                row_tail: row_tail_e,
-                            })),
-                            found: Some(Box::new(Type::Record {
-                                fields: f_fields,
-                                open: open_f,
-                                row_tail: row_tail_f,
-                            })),
-                        });
+                for (field, found_ty) in &f_fields {
+                    if let Some(expected_ty) = e_fields.get(field) {
+                        self.unify(found_ty.clone(), expected_ty.clone(), span.clone())?;
                     }
                 }
                 Ok(())
@@ -366,18 +320,11 @@ impl TypeChecker {
                     .map(|item| Self::substitute(item, mapping))
                     .collect(),
             ),
-            Type::Record {
-                fields,
-                open,
-                row_tail,
-                ..
-            } => Type::Record {
+            Type::Record { fields } => Type::Record {
                 fields: fields
                     .iter()
                     .map(|(k, v)| (k.clone(), Self::substitute(v, mapping)))
                     .collect(),
-                open: *open,
-                row_tail: *row_tail,
             },
         }
     }
@@ -429,18 +376,11 @@ impl TypeChecker {
                     .map(|item| self.apply_with_visiting(item, visiting))
                     .collect(),
             ),
-            Type::Record {
-                fields,
-                open,
-                row_tail,
-                ..
-            } => Type::Record {
+            Type::Record { fields } => Type::Record {
                 fields: fields
                     .into_iter()
                     .map(|(k, v)| (k, self.apply_with_visiting(v, visiting)))
                     .collect(),
-                open,
-                row_tail,
             },
         }
     }
@@ -499,18 +439,11 @@ impl TypeChecker {
                     .map(|item| self.expand_alias_with_visiting(item, visiting))
                     .collect(),
             ),
-            Type::Record {
-                fields,
-                open,
-                row_tail,
-                ..
-            } => Type::Record {
+            Type::Record { fields } => Type::Record {
                 fields: fields
                     .into_iter()
                     .map(|(k, v)| (k, self.expand_alias_with_visiting(v, visiting)))
                     .collect(),
-                open,
-                row_tail,
             },
         }
     }

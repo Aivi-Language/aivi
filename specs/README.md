@@ -50,7 +50,6 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Collections](stdlib/core/collections.md)
 - [I18n](stdlib/core/i18n.md)
 - [Generator](stdlib/core/generator.md)
-- [MutableMap](stdlib/core/mutable_map.md)
 - [Validation](stdlib/core/validation.md)
 #### Math & Science
 - [Math](stdlib/math/math.md)

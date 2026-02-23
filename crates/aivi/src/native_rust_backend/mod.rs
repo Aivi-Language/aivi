@@ -61,6 +61,11 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
 
     let mut out = prelude::emit_runtime_prelude();
     let reuse_plan = perceus::analyze_reuse(&module.defs);
+    out.push_str(&format!(
+        "/* perceus.reuse.closed_defs={} perceus.reuse.patching_defs={} */\n",
+        reuse_plan.reusable_defs.len(),
+        reuse_plan.patching_defs.len()
+    ));
 
     // Collect global CgType map for the typed emitter context.
     let mut global_cg_types: HashMap<String, CgType> = HashMap::new();
@@ -95,7 +100,6 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
 
     // Track whether main has a typed variant for the entry point.
     let mut main_typed_cg: Option<CgType> = None;
-    let _reuse_candidates = reuse_plan.reusable_defs.len();
 
     for name in &order {
         let defs = groups.get(name).expect("def group");
@@ -197,7 +201,7 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
 /// `Value` enum, yielding significantly better performance for closed types.
 ///
 /// If typed emission fails for any reason (unsupported expression, type mismatch), the function
-/// is silently skipped — the Value-returning version is always available as fallback.
+/// is skipped and the Value-returning version remains available.
 /// Returns `true` if a `_typed` variant was actually emitted.
 fn emit_typed_def(
     out: &mut String,

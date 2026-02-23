@@ -36,6 +36,8 @@ rusqlite = { version = "0.38.0", features = ["bundled"] }
 postgres = "0.19.9"
 mysql = "27.0.0"
 parking_lot = "0.12"
+cranelift-codegen = "0.126.0"
+cranelift-frontend = "0.126.0"
 
 [features]
 proptest = []

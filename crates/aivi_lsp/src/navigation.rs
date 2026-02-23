@@ -357,7 +357,7 @@ impl Backend {
     }
 
     /// Resolve hover for dotted member access like `Heap.push`, `Map.empty`,
-    /// `MutableMap.create` — looks up the prefix as a type/domain name in imported
+    /// Qualified value access — looks up the prefix as a type/domain name in imported
     /// modules and then finds the member in that module.
     fn hover_for_dotted_member(
         ident: &str,

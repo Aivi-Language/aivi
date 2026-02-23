@@ -59,7 +59,6 @@ impl TypeChecker {
             "Queue",
             "Deque",
             "Heap",
-            "MutableMap",
             "Vec",
             "Mat",
             "Signal",

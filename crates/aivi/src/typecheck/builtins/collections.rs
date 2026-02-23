@@ -155,8 +155,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     let map_record_value = map_record.clone();
 
@@ -246,8 +244,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     let set_record_value = set_record.clone();
 
@@ -284,8 +280,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     let queue_record_value = queue_record.clone();
 
@@ -346,8 +340,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     let deque_record_value = deque_record.clone();
 
@@ -382,11 +374,20 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                     Box::new(Type::con("Option").app(vec![Type::Var(heap_a)])),
                 ),
             ),
+            (
+                "size".to_string(),
+                Type::Func(Box::new(heap_ty.clone()), Box::new(int_ty.clone())),
+            ),
+            (
+                "fromList".to_string(),
+                Type::Func(
+                    Box::new(Type::con("List").app(vec![Type::Var(heap_a)])),
+                    Box::new(heap_ty.clone()),
+                ),
+            ),
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     let heap_record_value = heap_record.clone();
 
@@ -718,8 +719,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     let list_record_value = list_record.clone();
 
@@ -734,8 +733,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         ]
         .into_iter()
         .collect(),
-        open: true,
-        row_tail: None,
     };
     env.insert(
         "collections".to_string(),
@@ -790,152 +787,6 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         Scheme {
             vars: vec![list_a, list_b, list_c],
             ty: list_record_value,
-            origin: None,
-        },
-    );
-
-    // MutableMap builtins
-    let mm_k = checker.fresh_var_id();
-    let mm_v = checker.fresh_var_id();
-    let mm_e = checker.fresh_var_id();
-    let mm_ty = Type::con("MutableMap").app(vec![Type::Var(mm_k), Type::Var(mm_v)]);
-    let effect = |e, a| Type::con("Effect").app(vec![e, a]);
-    let mm_record = Type::Record {
-        fields: vec![
-            (
-                "create".to_string(),
-                Type::Func(
-                    Box::new(Type::con("Map").app(vec![Type::Var(mm_k), Type::Var(mm_v)])),
-                    Box::new(effect(Type::Var(mm_e), mm_ty.clone())),
-                ),
-            ),
-            (
-                "empty".to_string(),
-                Type::Func(
-                    Box::new(Type::con("Unit")),
-                    Box::new(effect(Type::Var(mm_e), mm_ty.clone())),
-                ),
-            ),
-            (
-                "get".to_string(),
-                Type::Func(
-                    Box::new(Type::Var(mm_k)),
-                    Box::new(Type::Func(
-                        Box::new(mm_ty.clone()),
-                        Box::new(effect(
-                            Type::Var(mm_e),
-                            Type::con("Option").app(vec![Type::Var(mm_v)]),
-                        )),
-                    )),
-                ),
-            ),
-            (
-                "getOrElse".to_string(),
-                Type::Func(
-                    Box::new(Type::Var(mm_k)),
-                    Box::new(Type::Func(
-                        Box::new(Type::Var(mm_v)),
-                        Box::new(Type::Func(
-                            Box::new(mm_ty.clone()),
-                            Box::new(effect(Type::Var(mm_e), Type::Var(mm_v))),
-                        )),
-                    )),
-                ),
-            ),
-            (
-                "insert".to_string(),
-                Type::Func(
-                    Box::new(Type::Var(mm_k)),
-                    Box::new(Type::Func(
-                        Box::new(Type::Var(mm_v)),
-                        Box::new(Type::Func(
-                            Box::new(mm_ty.clone()),
-                            Box::new(effect(Type::Var(mm_e), Type::con("Unit"))),
-                        )),
-                    )),
-                ),
-            ),
-            (
-                "remove".to_string(),
-                Type::Func(
-                    Box::new(Type::Var(mm_k)),
-                    Box::new(Type::Func(
-                        Box::new(mm_ty.clone()),
-                        Box::new(effect(Type::Var(mm_e), Type::con("Unit"))),
-                    )),
-                ),
-            ),
-            (
-                "has".to_string(),
-                Type::Func(
-                    Box::new(Type::Var(mm_k)),
-                    Box::new(Type::Func(
-                        Box::new(mm_ty.clone()),
-                        Box::new(effect(Type::Var(mm_e), bool_ty.clone())),
-                    )),
-                ),
-            ),
-            (
-                "size".to_string(),
-                Type::Func(
-                    Box::new(mm_ty.clone()),
-                    Box::new(effect(Type::Var(mm_e), int_ty.clone())),
-                ),
-            ),
-            (
-                "freeze".to_string(),
-                Type::Func(
-                    Box::new(mm_ty.clone()),
-                    Box::new(effect(
-                        Type::Var(mm_e),
-                        Type::con("Map").app(vec![Type::Var(mm_k), Type::Var(mm_v)]),
-                    )),
-                ),
-            ),
-            (
-                "keys".to_string(),
-                Type::Func(
-                    Box::new(mm_ty.clone()),
-                    Box::new(effect(
-                        Type::Var(mm_e),
-                        Type::con("List").app(vec![Type::Var(mm_k)]),
-                    )),
-                ),
-            ),
-            (
-                "values".to_string(),
-                Type::Func(
-                    Box::new(mm_ty.clone()),
-                    Box::new(effect(
-                        Type::Var(mm_e),
-                        Type::con("List").app(vec![Type::Var(mm_v)]),
-                    )),
-                ),
-            ),
-            (
-                "modify".to_string(),
-                Type::Func(
-                    Box::new(Type::Func(
-                        Box::new(Type::con("Map").app(vec![Type::Var(mm_k), Type::Var(mm_v)])),
-                        Box::new(Type::con("Map").app(vec![Type::Var(mm_k), Type::Var(mm_v)])),
-                    )),
-                    Box::new(Type::Func(
-                        Box::new(mm_ty.clone()),
-                        Box::new(effect(Type::Var(mm_e), Type::con("Unit"))),
-                    )),
-                ),
-            ),
-        ]
-        .into_iter()
-        .collect(),
-        open: true,
-        row_tail: None,
-    };
-    env.insert(
-        "MutableMap".to_string(),
-        Scheme {
-            vars: vec![mm_k, mm_v, mm_e],
-            ty: mm_record,
             origin: None,
         },
     );

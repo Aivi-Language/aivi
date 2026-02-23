@@ -48,21 +48,23 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("        },\n");
     out.push_str("        PathSeg::IndexAll => match target {\n");
     out.push_str("            Value::List(items) => {\n");
-    out.push_str("                let mut out_items = Vec::with_capacity(items.len());\n");
-    out.push_str("                for item in items.iter().cloned() {\n");
+    out.push_str("                let mut items = items;\n");
+    out.push_str("                let out_items = Arc::make_mut(&mut items);\n");
+    out.push_str("                for item in out_items.iter_mut() {\n");
     out.push_str(
-        "                    out_items.push(patch_path(rt, item, &path[1..], updater.clone())?);\n",
+        "                    *item = patch_path(rt, item.clone(), &path[1..], updater.clone())?;\n",
     );
     out.push_str("                }\n");
-    out.push_str("                aivi_ok(Value::List(Arc::new(out_items)))\n");
+    out.push_str("                aivi_ok(Value::List(items))\n");
     out.push_str("            }\n");
     out.push_str("            Value::Map(entries) => {\n");
-    out.push_str("                let mut out_entries = entries.as_ref().clone();\n");
-    out.push_str("                for (k, v) in entries.iter() {\n");
+    out.push_str("                let mut entries = entries;\n");
+    out.push_str("                let snapshot = entries.as_ref().clone();\n");
+    out.push_str("                for (k, v) in snapshot.iter() {\n");
     out.push_str("                    let new_val = patch_path(rt, v.clone(), &path[1..], updater.clone())?;\n");
-    out.push_str("                    out_entries.insert(k.clone(), new_val);\n");
+    out.push_str("                    Arc::make_mut(&mut entries).insert(k.clone(), new_val);\n");
     out.push_str("                }\n");
-    out.push_str("                aivi_ok(Value::Map(Arc::new(out_entries)))\n");
+    out.push_str("                aivi_ok(Value::Map(entries))\n");
     out.push_str("            }\n");
     out.push_str("            other => Err(RuntimeError::Message(format!(\"expected List/Map for traversal patch, got {}\", aivi_native_runtime::format_value(&other)))),\n");
     out.push_str("        },\n");
@@ -70,10 +72,11 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("            (Value::List(items), Value::Int(i)) => {\n");
     out.push_str("                let i = i as usize;\n");
     out.push_str("                if i >= items.len() { return Err(RuntimeError::Message(\"index out of bounds\".to_string())); }\n");
-    out.push_str("                let mut out = items.as_ref().clone();\n");
+    out.push_str("                let mut items = items;\n");
+    out.push_str("                let out = Arc::make_mut(&mut items);\n");
     out.push_str("                let old = out[i].clone();\n");
     out.push_str("                out[i] = patch_path(rt, old, &path[1..], updater)?;\n");
-    out.push_str("                aivi_ok(Value::List(Arc::new(out)))\n");
+    out.push_str("                aivi_ok(Value::List(items))\n");
     out.push_str("            }\n");
     out.push_str("            (Value::Tuple(mut items), Value::Int(i)) => {\n");
     out.push_str("                let i = i as usize;\n");
@@ -86,13 +89,11 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("                let Some(key) = KeyValue::try_from_value(&idx) else {\n");
     out.push_str("                    return Err(RuntimeError::Message(format!(\"map key is not a valid key type: {}\", aivi_native_runtime::format_value(&idx))));\n");
     out.push_str("                };\n");
-    out.push_str("                let mut out_entries = entries.as_ref().clone();\n");
-    out.push_str(
-        "                let old = out_entries.get(&key).cloned().unwrap_or(Value::Unit);\n",
-    );
+    out.push_str("                let mut entries = entries;\n");
+    out.push_str("                let old = entries.get(&key).cloned().unwrap_or(Value::Unit);\n");
     out.push_str("                let new_val = patch_path(rt, old, &path[1..], updater)?;\n");
-    out.push_str("                out_entries.insert(key, new_val);\n");
-    out.push_str("                aivi_ok(Value::Map(Arc::new(out_entries)))\n");
+    out.push_str("                Arc::make_mut(&mut entries).insert(key, new_val);\n");
+    out.push_str("                aivi_ok(Value::Map(entries))\n");
     out.push_str("            }\n");
     out.push_str(
         "            (other, _) => Err(RuntimeError::Message(format!(\"expected List/Tuple + Int for index patch, got {}\", aivi_native_runtime::format_value(&other)))),\n",
@@ -100,19 +101,18 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("        },\n");
     out.push_str("        PathSeg::IndexFieldBool(field) => match target {\n");
     out.push_str("            Value::List(items) => {\n");
-    out.push_str("                let mut out_items = Vec::with_capacity(items.len());\n");
-    out.push_str("                for item in items.iter().cloned() {\n");
-    out.push_str("                    let should_patch = match &item {\n");
+    out.push_str("                let mut items = items;\n");
+    out.push_str("                let out_items = Arc::make_mut(&mut items);\n");
+    out.push_str("                for item in out_items.iter_mut() {\n");
+    out.push_str("                    let should_patch = match item {\n");
     out.push_str("                        Value::Record(map) => matches!(map.get(field), Some(Value::Bool(true))),\n");
     out.push_str("                        _ => false,\n");
     out.push_str("                    };\n");
     out.push_str("                    if should_patch {\n");
-    out.push_str("                        out_items.push(patch_path(rt, item, &path[1..], updater.clone())?);\n");
-    out.push_str("                    } else {\n");
-    out.push_str("                        out_items.push(item);\n");
+    out.push_str("                        *item = patch_path(rt, item.clone(), &path[1..], updater.clone())?;\n");
     out.push_str("                    }\n");
     out.push_str("                }\n");
-    out.push_str("                aivi_ok(Value::List(Arc::new(out_items)))\n");
+    out.push_str("                aivi_ok(Value::List(items))\n");
     out.push_str("            }\n");
     out.push_str(
         "            other => Err(RuntimeError::Message(format!(\"expected List for traversal patch, got {}\", aivi_native_runtime::format_value(&other)))),\n",
@@ -120,8 +120,9 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("        },\n");
     out.push_str("        PathSeg::IndexPredicate(pred) => match target {\n");
     out.push_str("            Value::List(items) => {\n");
-    out.push_str("                let mut out_items = Vec::with_capacity(items.len());\n");
-    out.push_str("                for item in items.iter().cloned() {\n");
+    out.push_str("                let mut items = items;\n");
+    out.push_str("                let out_items = Arc::make_mut(&mut items);\n");
+    out.push_str("                for item in out_items.iter_mut() {\n");
     out.push_str("                    let keep = match rt.apply(pred.clone(), item.clone())? {\n");
     out.push_str("                        Value::Bool(true) => true,\n");
     out.push_str("                        Value::Bool(false) => false,\n");
@@ -130,16 +131,15 @@ pub(super) fn emit_runtime_prelude() -> String {
     );
     out.push_str("                    };\n");
     out.push_str("                    if keep {\n");
-    out.push_str("                        out_items.push(patch_path(rt, item, &path[1..], updater.clone())?);\n");
-    out.push_str("                    } else {\n");
-    out.push_str("                        out_items.push(item);\n");
+    out.push_str("                        *item = patch_path(rt, item.clone(), &path[1..], updater.clone())?;\n");
     out.push_str("                    }\n");
     out.push_str("                }\n");
-    out.push_str("                aivi_ok(Value::List(Arc::new(out_items)))\n");
+    out.push_str("                aivi_ok(Value::List(items))\n");
     out.push_str("            }\n");
     out.push_str("            Value::Map(entries) => {\n");
-    out.push_str("                let mut out_entries = entries.as_ref().clone();\n");
-    out.push_str("                for (k, v) in entries.iter() {\n");
+    out.push_str("                let mut entries = entries;\n");
+    out.push_str("                let snapshot = entries.as_ref().clone();\n");
+    out.push_str("                for (k, v) in snapshot.iter() {\n");
     out.push_str("                    let mut rec = HashMap::new();\n");
     out.push_str("                    rec.insert(\"key\".to_string(), k.to_value());\n");
     out.push_str("                    rec.insert(\"value\".to_string(), v.clone());\n");
@@ -153,10 +153,12 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("                    };\n");
     out.push_str("                    if keep {\n");
     out.push_str("                        let new_val = patch_path(rt, v.clone(), &path[1..], updater.clone())?;\n");
-    out.push_str("                        out_entries.insert(k.clone(), new_val);\n");
+    out.push_str(
+        "                        Arc::make_mut(&mut entries).insert(k.clone(), new_val);\n",
+    );
     out.push_str("                    }\n");
     out.push_str("                }\n");
-    out.push_str("                aivi_ok(Value::Map(Arc::new(out_entries)))\n");
+    out.push_str("                aivi_ok(Value::Map(entries))\n");
     out.push_str("            }\n");
     out.push_str(
         "            other => Err(RuntimeError::Message(format!(\"expected List/Map for predicate traversal patch, got {}\", aivi_native_runtime::format_value(&other)))),\n",

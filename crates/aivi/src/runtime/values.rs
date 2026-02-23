@@ -176,7 +176,6 @@ pub(super) enum Value {
     Stream(Arc<StreamHandle>),
     HttpServer(Arc<ServerHandle>),
     WebSocket(Arc<WebSocketHandle>),
-    MutableMap(Arc<Mutex<ImHashMap<KeyValue, Value>>>),
 }
 
 impl std::fmt::Debug for Value {
@@ -221,7 +220,6 @@ impl std::fmt::Debug for Value {
             Value::Stream(_) => write!(f, "Stream(<stream>)"),
             Value::HttpServer(_) => write!(f, "HttpServer(<server>)"),
             Value::WebSocket(_) => write!(f, "WebSocket(<socket>)"),
-            Value::MutableMap(_) => write!(f, "MutableMap(<state>)"),
         }
     }
 }
