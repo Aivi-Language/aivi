@@ -240,8 +240,13 @@ Drawer chat rendering:
 
 - Daemon emits new-mail notifications with account-aware context.
 - Notification click opens target email drawer in UI.
-- Quick actions: Reply / Archive / Mark done.
-- Tray/status integration should gracefully degrade on GNOME Wayland constraints; notifications are primary channel.
+- Quick actions: Reply / Archive / Mark done. Open a small window next to tray icon.
+- Tray/status integration:
+  Ship the extension bundled with your Rust app.
+  On first run:
+    Extract it into ~/.local/share/gnome-shell/extensions/<uuid>/
+    Run gnome-extensions enable <uuid>
+    Inform the user that a session restart may be required.
 
 ---
 
