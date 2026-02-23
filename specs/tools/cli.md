@@ -8,6 +8,20 @@ The CLI is distributed as a single binary named `aivi`. It can be installed dire
 
 ## Commands
 
+### Version
+
+#### `version`
+
+Prints CLI and language version information.
+
+```bash
+aivi version
+aivi --version
+aivi -V
+```
+
+Running plain `aivi` also shows this version header before the command help.
+
 ### Project Management
 
 #### `init` / `new`
