@@ -311,6 +311,7 @@ FunArms        := "|" Arm { Sep "|" Arm }
 ```
 
 This form desugars to a single-argument function that performs pattern matching (`match`) on its input (see [Desugaring: Patterns](../desugaring/patterns.md)).
+In v0.1, multi-clause function definitions require an explicit type signature for the function name.
 
 If you want multi-argument matching, match on a tuple:
 
@@ -362,5 +363,6 @@ RecordPatKey   := lowerIdent { "." lowerIdent }
 ## 0.8 Diagnostics (where the compiler should nag)
 
 - **Arms without a `match`**: `| p => e` is only valid after `match` *or* directly after `=` in the multi-clause unary function form.
+- **Multi-clause signature requirement**: when a function name has multiple `=` definitions (multi-clause form), emit an error unless an explicit type signature for that name is present.
 - **`_` placeholder**: `_ + 1` is only legal where a unary function is expected; otherwise error and suggest `x => x + 1`.
 - **Deep keys in record literals**: `a.b: 1` should be rejected in record literals (suggest patching with `<|` if the intent was a path).

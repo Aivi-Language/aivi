@@ -56,3 +56,54 @@ instance NeedsEq = {
         "unexpected type errors: {type_diags:?}"
     );
 }
+
+#[test]
+fn repeated_function_defs_require_explicit_signature() {
+    let src = r#"
+module Example
+
+getNickName = ({ name: "Andreas" }) => "Andy"
+getNickName = (_) => "Friend"
+"#;
+
+    let (modules, parse_diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        !has_errors(&parse_diags),
+        "unexpected parse errors: {parse_diags:?}"
+    );
+
+    let type_diags = check_types(&modules);
+    assert!(
+        type_diags.iter().any(|diag| {
+            diag.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error
+                && diag
+                    .diagnostic
+                    .message
+                    .contains("requires an explicit type signature")
+        }),
+        "expected missing signature error for repeated defs, got: {type_diags:?}"
+    );
+}
+
+#[test]
+fn repeated_function_defs_with_signature_typecheck() {
+    let src = r#"
+module Example
+
+getNickName : { name: Text } -> Text
+getNickName = ({ name: "Andreas" }) => "Andy"
+getNickName = (_) => "Friend"
+"#;
+
+    let (modules, parse_diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        !has_errors(&parse_diags),
+        "unexpected parse errors: {parse_diags:?}"
+    );
+
+    let type_diags = check_types(&modules);
+    assert!(
+        !has_errors(&type_diags),
+        "unexpected type errors: {type_diags:?}"
+    );
+}

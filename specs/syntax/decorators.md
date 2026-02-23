@@ -8,8 +8,7 @@ Decorators are intentionally narrow:
 
 - Decorators MUST NOT be used to model domain semantics (e.g. database schemas/ORM, SQL, HTTP, validation rules).
 - Integration behavior belongs in **typed values** (e.g. `Source` configurations) and **types** (decoders), not hidden in decorators.
-- Only the standard decorators listed here are allowed in v0.1. Unknown decorators are a compile error.
-- User-defined decorators are not supported in v0.1.
+- Unknown decorators are a compile error.
 - `@native` is restricted to top-level definitions and requires an explicit type signature for type-safe bindings.
 
 ## 14.1 Syntax
