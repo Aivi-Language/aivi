@@ -28,16 +28,8 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 - Full typed source error ADT plumbing (`SourceError K`) is partially implemented in runtime but not yet fully reflected in typechecker aliases.
 - Several stdlib modules still have **stub specs** (see below).
 - Add OAuth2 module
-- We need a scheduler module with semi-advanced features:
-  - cron + interval + one-shot triggers
-  - timezone-aware cron
-  - persistent runs + idempotent planning
-  - leases + heartbeats (distributed safe)
-  - retries with exponential backoff + jitter
-  - per-tenant concurrency limit
-  - metrics + structured logs
-
-#### Stub specs (no API tables / no functions documented)
+  
+  #### Stub specs (no API tables / no functions documented)
 
 | Module | File                                  | Status                                           |
 |:------ |:------------------------------------- |:------------------------------------------------ |

@@ -1,0 +1,10 @@
+use aivi.chronos.scheduler
+
+invoiceSchedule = {
+  jobId: "invoice-rollup"
+  tenantId: "tenant-apac"
+  trigger: cron "0 0 * * *" ~tz(Asia/Singapore)
+  maxAttempts: 8
+  leaseTtl: { millis: 120000 }
+  heartbeatEvery: { millis: 10000 }
+}

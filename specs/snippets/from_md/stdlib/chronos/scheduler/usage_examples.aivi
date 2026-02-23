@@ -1,0 +1,21 @@
+use aivi.chronos.scheduler
+
+key = planKey "email-drip" 2026-02-01T12:00:00Z
+
+run = {
+  key
+  tenantId: "tenant-eu"
+  trigger: interval { millis: 900000 }
+  scheduledAt: 2026-02-01T12:00:00Z
+  attempt: 1
+  status: Running
+}
+
+idx0 = Map.empty
+idx1 = upsertPlan run idx0
+
+limit = { tenantId: "tenant-eu", maxConcurrent: 4 }
+allowed = canStartForTenant limit [run]
+
+metric = metricRetried "tenant-eu" "email-drip" run.scheduledAt 2
+log = logRetry run 2 { millis: 2000 }

@@ -1,0 +1,109 @@
+@no_prelude
+module integrationTests.stdlib.aivi.chronos.scheduler.tests
+
+use aivi
+use aivi.testing
+use aivi.chronos.duration (Span)
+use aivi.chronos.scheduler
+use aivi.chronos.scheduler (domain Scheduler)
+
+@test "trigger constructors"
+trigger_constructors = do Effect {
+  tz = ~tz(UTC)
+
+  c = cron "0 */5 * * *" tz
+  i = interval { millis: 30000 }
+  o = once 2026-01-01T00:00:00Z
+
+  c match
+    | Cron spec => assertEq spec.timezone.id "UTC"
+    | _         => assert False
+
+    i match
+      | Interval span => assertEq span.millis 30000
+      | _             => assert False
+
+    o match
+      | Once at => assertEq at.year 2026
+      | _       => assert False
+}
+
+@test "idempotent planning index"
+idempotent_planning_index = do Effect {
+  k = planKey "nightly-report" 2026-01-01T00:00:00Z
+
+  run = {
+    key: k
+    tenantId: "tenant-1"
+    trigger: once 2026-01-01T00:00:00Z
+    scheduledAt: 2026-01-01T00:00:00Z
+    attempt: 0
+    status: Planned
+  }
+
+  index0 = Map.empty
+  index1 = upsertPlan run index0
+  index2 = upsertPlan run index1
+
+  assertEq (Map.size index1) 1
+  assertEq (Map.size index2) 1
+  assert (hasPlan k index2)
+}
+
+@test "retry delay with exponential backoff"
+retry_delay_with_exponential_backoff = do Effect {
+  policy = Exponential {
+    base: { millis: 1000 }
+    cap: { millis: 10000 }
+    jitter: PlusMinusPermille 100
+  }
+
+  d1 = retryDelay policy 1 500
+  d2 = retryDelay policy 2 500
+  d4 = retryDelay policy 4 1000
+
+  assertEq d1.millis 1000
+  assertEq d2.millis 2000
+  assertEq d4.millis 8800
+}
+
+@test "tenant concurrency limit"
+tenant_concurrency_limit = do Effect {
+  limit = { tenantId: "tenant-1", maxConcurrent: 2 }
+
+  k1 = planKey "job-a" 2026-01-01T00:00:00Z
+  k2 = planKey "job-b" 2026-01-01T00:01:00Z
+  k3 = planKey "job-c" 2026-01-01T00:02:00Z
+
+  leased = {
+    key: k1
+    tenantId: "tenant-1"
+    trigger: once 2026-01-01T00:00:00Z
+    scheduledAt: 2026-01-01T00:00:00Z
+    attempt: 0
+    status: Leased
+  }
+
+  running = {
+    key: k2
+    tenantId: "tenant-1"
+    trigger: once 2026-01-01T00:01:00Z
+    scheduledAt: 2026-01-01T00:01:00Z
+    attempt: 0
+    status: Running
+  }
+
+  queued = {
+    key: k3
+    tenantId: "tenant-1"
+    trigger: once 2026-01-01T00:02:00Z
+    scheduledAt: 2026-01-01T00:02:00Z
+    attempt: 0
+    status: Planned
+  }
+
+  assertEq (countActiveForTenant "tenant-1" [leased, running, queued]) 2
+  assertEq (canStartForTenant limit [leased, running, queued]) False
+
+  assertEq (isTerminal Succeeded) True
+}

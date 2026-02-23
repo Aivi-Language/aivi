@@ -8,6 +8,7 @@ mod calendar;
 mod chronos_calendar;
 mod chronos_duration;
 mod chronos_instant;
+mod chronos_scheduler;
 mod chronos_timezone;
 mod collections;
 mod color;
@@ -117,6 +118,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: chronos_instant::MODULE_NAME,
         source: chronos_instant::SOURCE,
+    },
+    EmbeddedModule {
+        name: chronos_scheduler::MODULE_NAME,
+        source: chronos_scheduler::SOURCE,
     },
     EmbeddedModule {
         name: chronos_timezone::MODULE_NAME,
