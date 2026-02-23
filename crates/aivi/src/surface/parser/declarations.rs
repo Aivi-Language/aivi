@@ -305,23 +305,16 @@ impl Parser {
         self.expect_symbol("=", "expected '=' in class declaration");
         self.consume_newlines();
 
-        // Spec form:
-        //   class Monad (M *) =
-        //     Functor (M *) with { pure: A -> M A }
+        // Syntax:
+        //   class Name (Var *) = [Super1, Super2, ...] [given (A: Eq, ...)] { ... }
         //
-        // Extended:
-        //   class Collection (C *) = with (A: Eq) { unique: C A -> C A }
-        //   class Monad (M *) = Applicative (M *) with (A: Eq, B: Show) { bind: ... }
-        //
-        // We parse:
-        // - an optional superclass/type-composition chain (`... with ...`)
-        // - an optional constraint clause (`with (A: Eq, ...)`)
-        // - an optional record type for members (`{ ... }` or `with { ... }`)
-        //
-        // For backward compatibility, record-type operands that appear as part of the superclass
-        // chain (e.g. `Super with { ... }`) still contribute members.
-        fn peek_is_with_constraints(parser: &Parser) -> bool {
-            if !parser.peek_keyword("with") {
+        // Examples:
+        //   class Functor (F *) = { map: (A -> B) -> F A -> F B }
+        //   class Monad (M *) = Applicative, Chain { bind: M A -> (A -> M B) -> M B }
+        //   class Collection (C *) = given (A: Eq) { elem: A -> C A -> Bool }
+
+        fn peek_is_given_constraints(parser: &Parser) -> bool {
+            if !parser.peek_keyword("given") {
                 return false;
             }
             parser
@@ -330,75 +323,26 @@ impl Parser {
                 .is_some_and(|tok| tok.kind == TokenKind::Symbol && tok.text == "(")
         }
 
-        let mut body_opt: Option<TypeExpr> = None;
-        if !self.check_symbol("{") && !peek_is_with_constraints(self) {
-            // Parse a `with`-separated chain, but stop before `with (...)` constraints.
-            if let Some(first) = self.parse_type_pipe() {
-                let mut items = vec![first];
-                loop {
-                    self.consume_newlines();
-                    if peek_is_with_constraints(self) {
-                        break;
-                    }
-                    if self.consume_ident_text("with").is_none() {
-                        break;
-                    }
-                    self.consume_newlines();
-                    let rhs = self.parse_type_pipe().unwrap_or(TypeExpr::Unknown {
-                        span: type_span(items.last().expect("infallible")),
-                    });
-                    items.push(rhs);
-                }
-                body_opt = Some(if items.len() == 1 {
-                    items.remove(0)
-                } else {
-                    let span = merge_span(type_span(&items[0]), type_span(items.last().expect("infallible")));
-                    TypeExpr::And { items, span }
-                });
+        // Parse optional comma-separated superclass list.
+        // Superclasses are type names/applications; we must not consume `{` (the member body).
+        let mut raw_supers = Vec::new();
+        while !self.check_symbol("{") && !peek_is_given_constraints(self) && self.pos < self.tokens.len() {
+            // Parse a single superclass: a name optionally followed by parenthesized args.
+            let Some(name) = self.consume_ident() else { break };
+            raw_supers.push(TypeExpr::Name(name));
+            self.consume_newlines();
+            if !self.consume_symbol(",") {
+                break;
             }
+            self.consume_newlines();
         }
 
-        fn flatten_and(ty: TypeExpr, out: &mut Vec<TypeExpr>) {
-            match ty {
-                TypeExpr::And { items, .. } => {
-                    for item in items {
-                        flatten_and(item, out);
-                    }
-                }
-                other => out.push(other),
-            }
-        }
-
-        let mut parts = Vec::new();
-        if let Some(body) = body_opt.clone() {
-            flatten_and(body, &mut parts);
-        }
-
-        let mut supers = Vec::new();
-        let mut members = Vec::new();
-        for part in parts {
-            match part {
-                TypeExpr::Record { fields, .. } => {
-                    for (field_name, field_ty) in fields {
-                        let span = merge_span(field_name.span.clone(), type_span(&field_ty));
-                        members.push(ClassMember {
-                            name: field_name,
-                            ty: field_ty,
-                            span,
-                        });
-                    }
-                }
-                TypeExpr::Unknown { .. } => {}
-                other => supers.push(other),
-            }
-        }
-
-        // Parse optional `with (...)` constraint clause.
+        // Parse optional `given (...)` constraint clause.
         let mut constraints = Vec::new();
         self.consume_newlines();
-        if peek_is_with_constraints(self) {
-            let with_span = self.consume_ident_text("with").expect("infallible").span;
-            self.expect_symbol("(", "expected '(' after 'with' in class constraints");
+        if peek_is_given_constraints(self) {
+            let given_span = self.consume_ident_text("given").expect("infallible").span;
+            self.expect_symbol("(", "expected '(' after 'given' in class constraints");
             self.consume_newlines();
             while self.pos < self.tokens.len() && !self.check_symbol(")") {
                 self.consume_newlines();
@@ -423,21 +367,13 @@ impl Parser {
             }
             let end = self.expect_symbol(")", "expected ')' to close class constraints");
             if let Some(end) = end {
-                let _ = merge_span(with_span, end);
+                let _ = merge_span(given_span, end);
             }
         }
 
-        // Parse optional trailing member record (`{ ... }` or `with { ... }`).
+        // Parse optional member record (`{ ... }`).
+        let mut members = Vec::new();
         self.consume_newlines();
-        if self.peek_keyword("with")
-            && self
-                .tokens
-                .get(self.pos + 1)
-                .is_some_and(|tok| tok.kind == TokenKind::Symbol && tok.text == "{")
-        {
-            let _ = self.consume_ident_text("with");
-            self.consume_newlines();
-        }
         if self.check_symbol("{") {
             if let Some(TypeExpr::Record { fields, .. }) = self.parse_type_atom() {
                 for (field_name, field_ty) in fields {
@@ -452,6 +388,27 @@ impl Parser {
                 self.expect_symbol("{", "expected '{' to start class member set");
             }
         }
+
+        let supers = if params.is_empty() {
+            raw_supers
+        } else {
+            raw_supers
+                .into_iter()
+                .map(|super_ty| match super_ty {
+                    TypeExpr::Name(name) => {
+                        let base = TypeExpr::Name(name.clone());
+                        let args = params.clone();
+                        let span = merge_span(name.span, type_span(args.last().expect("non-empty")));
+                        TypeExpr::Apply {
+                            base: Box::new(base),
+                            args,
+                            span,
+                        }
+                    }
+                    other => other,
+                })
+                .collect()
+        };
 
         let span = merge_span(start, self.previous_span());
         Some(ClassDecl {

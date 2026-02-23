@@ -18,7 +18,7 @@ class Setoid A = {
   equals: A -> A -> Bool
 }
 
-class Ord A = Setoid A with {
+class Ord A = Setoid {
   lte: A -> A -> Bool
 }
 
@@ -28,11 +28,11 @@ class Semigroup A = {
   concat: A -> A -> A
 }
 
-class Monoid A = Semigroup A with {
+class Monoid A = Semigroup {
   empty: A
 }
 
-class Group A = Monoid A with {
+class Group A = Monoid {
   invert: A -> A
 }
 
@@ -42,7 +42,7 @@ class Semigroupoid (F * *) = {
   compose: F B C -> F A B -> F A C
 }
 
-class Category (F * *) = Semigroupoid (F * *) with {
+class Category (F * *) = Semigroupoid {
   id: F A A
 }
 
@@ -52,19 +52,19 @@ class Functor (F *) = {
   map: (A -> B) -> F A -> F B
 }
 
-class Apply (F *) = Functor (F *) with {
+class Apply (F *) = Functor {
   ap: F (A -> B) -> F A -> F B
 }
 
-class Applicative (F *) = Apply (F *) with {
+class Applicative (F *) = Apply {
   of: A -> F A
 }
 
-class Chain (F *) = Apply (F *) with {
+class Chain (F *) = Apply {
   chain: (A -> F B) -> F A -> F B
 }
 
-class Monad (M *) = Applicative (M *) with Chain (M *) with {}
+class Monad (M *) = Applicative, Chain {}
 
 // 5. Folds and Traversals
 
@@ -72,7 +72,7 @@ class Foldable (F *) = {
   reduce: (B -> A -> B) -> B -> F A -> B
 }
 
-class Traversable (T *) = Functor (T *) with Foldable (T *) with {
+class Traversable (T *) = Functor, Foldable {
   traverse: (A -> F B) -> T A -> F (T B)
 }
 

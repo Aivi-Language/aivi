@@ -1,7 +1,7 @@
 {
   "files": [
     {
-      "byte_count": 335,
+      "byte_count": 324,
       "diagnostics": [],
       "line_count": 23,
       "lines": [
@@ -13,7 +13,7 @@
         "}",
         "",
         "class Apply (F *) =",
-        "Functor (F *) with {",
+        "Functor {",
         "  ap: F A -> F (A -> B) -> F B",
         "}",
         "",
@@ -852,118 +852,6 @@
             },
             "start": {
               "column": 9,
-              "line": 9
-            }
-          },
-          "text": "("
-        },
-        {
-          "kind": "ident",
-          "span": {
-            "end": {
-              "column": 10,
-              "line": 9
-            },
-            "start": {
-              "column": 10,
-              "line": 9
-            }
-          },
-          "text": "F"
-        },
-        {
-          "kind": "whitespace",
-          "span": {
-            "end": {
-              "column": 11,
-              "line": 9
-            },
-            "start": {
-              "column": 11,
-              "line": 9
-            }
-          },
-          "text": " "
-        },
-        {
-          "kind": "symbol",
-          "span": {
-            "end": {
-              "column": 12,
-              "line": 9
-            },
-            "start": {
-              "column": 12,
-              "line": 9
-            }
-          },
-          "text": "*"
-        },
-        {
-          "kind": "symbol",
-          "span": {
-            "end": {
-              "column": 13,
-              "line": 9
-            },
-            "start": {
-              "column": 13,
-              "line": 9
-            }
-          },
-          "text": ")"
-        },
-        {
-          "kind": "whitespace",
-          "span": {
-            "end": {
-              "column": 14,
-              "line": 9
-            },
-            "start": {
-              "column": 14,
-              "line": 9
-            }
-          },
-          "text": " "
-        },
-        {
-          "kind": "ident",
-          "span": {
-            "end": {
-              "column": 18,
-              "line": 9
-            },
-            "start": {
-              "column": 15,
-              "line": 9
-            }
-          },
-          "text": "with"
-        },
-        {
-          "kind": "whitespace",
-          "span": {
-            "end": {
-              "column": 19,
-              "line": 9
-            },
-            "start": {
-              "column": 19,
-              "line": 9
-            }
-          },
-          "text": " "
-        },
-        {
-          "kind": "symbol",
-          "span": {
-            "end": {
-              "column": 20,
-              "line": 9
-            },
-            "start": {
-              "column": 20,
               "line": 9
             }
           },

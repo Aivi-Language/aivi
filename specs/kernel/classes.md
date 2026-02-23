@@ -17,5 +17,5 @@ Resolution is **compile-time**, not runtime.
 ## 9.3 Type-variable constraints (surface)
 
 Surface `class` declarations may attach constraints to type variables used in method signatures
-via `with (...)`. The kernel represents these as additional evidence requirements for the
+via `given (...)`. The kernel represents these as additional evidence requirements for the
 corresponding methods.

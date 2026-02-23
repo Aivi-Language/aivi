@@ -100,6 +100,13 @@ mod linux {
         fn gtk_gesture_click_new() -> *mut c_void;
         fn gtk_widget_add_controller(widget: *mut c_void, controller: *mut c_void);
 
+        fn gtk_icon_theme_get_for_display(display: *mut c_void) -> *mut c_void;
+        fn gtk_icon_theme_add_search_path(
+            icon_theme: *mut c_void,
+            path: *const c_char,
+        );
+        fn gtk_button_set_child(button: *mut c_void, child: *mut c_void);
+
         fn gdk_display_get_default() -> *mut c_void;
     }
 
@@ -203,12 +210,13 @@ mod linux {
 
     fn try_adw_init() {
         const RTLD_NOW: c_int = 2;
+        const RTLD_NODELETE: c_int = 0x1000;
         let symbol = CString::new("adw_init").expect("adw_init symbol");
         for lib_name in ["libadwaita-1.so.0", "libadwaita-1.so"] {
             let Ok(name) = CString::new(lib_name) else {
                 continue;
             };
-            let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW) };
+            let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW | RTLD_NODELETE) };
             if handle.is_null() {
                 continue;
             }
@@ -286,6 +294,9 @@ mod linux {
                 };
                 Ok(effect(move |_| {
                     let app_id_c = c_text(&app_id, "gtk4.appNew invalid application id")?;
+                    // Ensure GTK + libadwaita are initialized before creating the app
+                    unsafe { gtk_init() };
+                    try_adw_init();
                     let raw = unsafe { gtk_application_new(app_id_c.as_ptr(), 0) };
                     if raw.is_null() {
                         return Err(RuntimeError::Error(Value::Text(
@@ -1577,6 +1588,75 @@ mod linux {
                             )))
                         })?;
                         unsafe { gtk_image_set_pixel_size(image, s) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        // ── icon theme search path (real) ─────────────────────────────
+
+        fields.insert(
+            "iconThemeAddSearchPath".to_string(),
+            builtin("gtk4.iconThemeAddSearchPath", 1, |mut args, _| {
+                let path = match args.remove(0) {
+                    Value::Text(text) => text,
+                    _ => {
+                        return Err(invalid(
+                            "gtk4.iconThemeAddSearchPath expects Text path",
+                        ))
+                    }
+                };
+                Ok(effect(move |_| {
+                    let path_c =
+                        c_text(&path, "gtk4.iconThemeAddSearchPath invalid path")?;
+                    unsafe {
+                        let display = gdk_display_get_default();
+                        if display.is_null() {
+                            return Err(RuntimeError::Error(Value::Text(
+                                "gtk4.iconThemeAddSearchPath no default display"
+                                    .to_string(),
+                            )));
+                        }
+                        let theme = gtk_icon_theme_get_for_display(display);
+                        gtk_icon_theme_add_search_path(theme, path_c.as_ptr());
+                    }
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
+
+        // ── button set child (real) ───────────────────────────────────
+
+        fields.insert(
+            "buttonSetChild".to_string(),
+            builtin("gtk4.buttonSetChild", 2, |mut args, _| {
+                let child_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.buttonSetChild expects Int child id")),
+                };
+                let button_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => {
+                        return Err(invalid("gtk4.buttonSetChild expects Int button id"))
+                    }
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let button =
+                            state.buttons.get(&button_id).copied().ok_or_else(|| {
+                                RuntimeError::Error(Value::Text(format!(
+                                    "gtk4.buttonSetChild unknown button id {button_id}"
+                                )))
+                            })?;
+                        let child =
+                            state.widgets.get(&child_id).copied().ok_or_else(|| {
+                                RuntimeError::Error(Value::Text(format!(
+                                    "gtk4.buttonSetChild unknown child id {child_id}"
+                                )))
+                            })?;
+                        unsafe { gtk_button_set_child(button, child) };
                         Ok(Value::Unit)
                     })
                 }))

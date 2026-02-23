@@ -940,7 +940,7 @@ fn parses_class_type_variable_constraints() {
     let src = r#"
 module Example
 
-class Collection (C *) = with (A: Eq, B: Show) {
+class Collection (C *) = given (A: Eq, B: Show) {
   elem: A -> C A -> Bool
   render: B -> Text
 }

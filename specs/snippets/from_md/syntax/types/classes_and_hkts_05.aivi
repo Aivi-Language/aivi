@@ -1,1 +1,1 @@
-class Monad (M *) = Applicative (M *) with Chain (M *)
+class Monad (M *) = Applicative, Chain {}
