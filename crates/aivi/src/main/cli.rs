@@ -18,6 +18,8 @@ use std::sync::{
 };
 use std::time::Duration;
 
+const AIVI_LANGUAGE_VERSION: &str = "0.1";
+
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
@@ -40,6 +42,10 @@ fn run() -> Result<(), AiviError> {
     match command.as_str() {
         "-h" | "--help" => {
             print_help();
+            Ok(())
+        }
+        "-V" | "--version" | "version" => {
+            print_version();
             Ok(())
         }
         "init" | "new" => cmd_init(&rest),
@@ -540,8 +546,22 @@ Fix:\n\
 
 fn print_help() {
     println!(
-        "aivi\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] [--check-stdlib] <path|dir/...>\n  fmt [--write] <path|dir/...>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  test [--check-stdlib] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--target rust|rust-native] [--out <dir|path>]\n  run <path|dir/...> [--debug-trace] [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help"
+        "aivi {} (language {})\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  version\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] [--check-stdlib] <path|dir/...>\n  fmt [--write] <path|dir/...>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  test [--check-stdlib] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--target rust|rust-native] [--out <dir|path>]\n  run <path|dir/...> [--debug-trace] [--target native]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help\n  -V, --version",
+        env!("CARGO_PKG_VERSION"),
+        AIVI_LANGUAGE_VERSION
     );
+}
+
+fn print_version() {
+    println!("{}", version_text());
+}
+
+fn version_text() -> String {
+    format!(
+        "aivi {} (language {})",
+        env!("CARGO_PKG_VERSION"),
+        AIVI_LANGUAGE_VERSION
+    )
 }
 
 fn cmd_mcp(args: &[String]) -> Result<(), AiviError> {
@@ -936,4 +956,16 @@ fn load_checked_modules(target: &str) -> Result<Vec<aivi::Module>, AiviError> {
         }
     }
     Err(AiviError::Diagnostics)
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn version_text_contains_cli_and_language_versions() {
+        let text = version_text();
+        assert!(text.contains(env!("CARGO_PKG_VERSION")));
+        assert!(text.contains(AIVI_LANGUAGE_VERSION));
+    }
 }

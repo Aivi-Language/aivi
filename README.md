@@ -136,6 +136,7 @@ The `aivi` CLI supports project scaffolding, building, and introspection:
 ### Project management
 ```sh
 cargo install aivi
+aivi version
 aivi init my-app --bin          # or --lib
 cd my-app && aivi build
 cd my-app && aivi run
@@ -154,6 +155,12 @@ aivi build integration-tests/syntax/ir_dump_minimal.aivi --target rustc \
 ```
 
 **Implementation Note**: Generated Rust code is emitted to `target/aivi-gen/` (managed builds) or `target/aivi-rustc/` (direct `rustc` target).
+
+## Versioning & Releases
+
+- CLI version comes from crate version (`crates/aivi/Cargo.toml`).
+- Language compatibility is currently tracked as `0.1` (`language_version` in `aivi.toml` and CLI version output).
+- For a release: bump crate version, update any language-version docs if needed, run `cargo test --workspace`, then publish and tag (`vX.Y.Z`).
 
 ## Todo
 
