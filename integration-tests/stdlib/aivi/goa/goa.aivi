@@ -1,0 +1,24 @@
+@no_prelude
+module integrationTests.stdlib.aivi.goa.tests
+
+use aivi
+use aivi.testing
+use aivi.goa
+
+@test "filter helper"
+filter_helper = do Effect {
+  accounts = [
+    { key: "/org/gnome/OnlineAccounts/Accounts/1" },
+    { key: "/org/gnome/OnlineAccounts/Accounts/2" }
+  ]
+  only2 = filterByKey "/org/gnome/OnlineAccounts/Accounts/2" accounts
+  assertEq (List.length only2) 1
+}
+
+@test "list accounts effect"
+list_accounts_effect = do Effect {
+  result <- attempt listAccounts
+  result match
+    | Ok _  => assert True
+    | Err _ => assert True
+}

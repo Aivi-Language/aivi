@@ -423,6 +423,43 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             origin: None,
         },
     );
+    let goa_account_ty = Type::Record {
+        fields: vec![("key".to_string(), text_ty.clone())]
+            .into_iter()
+            .collect(),
+    };
+    let goa_token_ty = Type::Record {
+        fields: vec![
+            ("token".to_string(), text_ty.clone()),
+            ("expiresUnix".to_string(), int_ty.clone()),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    let goa_record = Type::Record {
+        fields: vec![
+            (
+                "listAccounts".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(Type::con("Effect").app(vec![
+                        text_ty.clone(),
+                        Type::con("List").app(vec![goa_account_ty]),
+                    ])),
+                ),
+            ),
+            (
+                "getAccessToken".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::con("Effect").app(vec![text_ty.clone(), goa_token_ty])),
+                ),
+            ),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    env.insert("goa".to_string(), Scheme::mono(goa_record));
     let effect_text_unit = Type::con("Effect").app(vec![text_ty.clone(), Type::con("Unit")]);
     let effect_text_int = Type::con("Effect").app(vec![text_ty.clone(), int_ty.clone()]);
     let effect_text_text = Type::con("Effect").app(vec![text_ty.clone(), text_ty.clone()]);

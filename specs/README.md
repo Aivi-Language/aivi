@@ -79,6 +79,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Console](stdlib/system/console.md)
 - [Crypto](stdlib/system/crypto.md)
 - [Database](stdlib/system/database.md)
+- [GOA](stdlib/system/goa.md)
 - [Secrets](stdlib/system/secrets.md)
 - [Path](stdlib/system/path.md)
 - [URL](stdlib/system/url.md)
