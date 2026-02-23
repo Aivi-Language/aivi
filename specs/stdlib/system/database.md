@@ -83,7 +83,7 @@ and `withConn` guarantees deterministic release via AIVI resources even on failu
 | Function | Explanation |
 | --- | --- |
 | **db.load** table<br><pre><code>`Table A -> Effect (SourceError Db) (List A)`</code></pre> | Loads all rows from `table`. Validates fields against type `A`. |
-| **db.applyDelta** table delta<br><pre><code>`Table A -> Delta A -> Effect DbError (Table A)`</code></pre> | Applies an insert, update, or delete delta. Also available as the domain `+` operator. |
+| **db.applyDelta** table delta<br><pre><code>`Table A -> Delta A -> Effect DbError (Table A)`</code></pre> | Applies an insert, update, delete, or upsert delta. Also available as the domain `+` operator. |
 | **db.applyDeltas** table deltas<br><pre><code>`Table A -> List (Delta A) -> Effect DbError (Table A)`</code></pre> | Applies many deltas in one effect for projection-heavy write workloads. |
 
 ### Transactions and savepoints
@@ -104,6 +104,7 @@ and `withConn` guarantees deterministic release via AIVI resources even on failu
 | **Insert** row<br><pre><code>`A -> Delta A`</code></pre> | Inserts a new row. |
 | **Update** pred patch<br><pre><code>`Pred A -> Patch A -> Delta A`</code></pre> | Updates rows matching `pred` with `patch`. |
 | **Delete** pred<br><pre><code>`Pred A -> Delta A`</code></pre> | Deletes rows matching `pred`. |
+| **Upsert** pred value patch<br><pre><code>`Pred A -> A -> Patch A -> Delta A`</code></pre> | Patches matching rows; inserts `value` when no row matches `pred`. |
 
 ### FTS helpers
 

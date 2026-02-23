@@ -7,4 +7,5 @@ domain Database over Table A = {
   ins = Insert
   upd = Update
   del = Delete
+  upsert = Upsert
 }

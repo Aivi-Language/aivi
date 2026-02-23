@@ -1,4 +1,3 @@
-
 fn apply_delta_rows(
     rows: &[Value],
     delta: Value,
@@ -64,6 +63,40 @@ fn apply_delta_rows(
                     if !matches {
                         out.push(row.clone());
                     }
+                }
+            }
+            "Upsert" => {
+                if args.len() != 3 {
+                    return Err(RuntimeError::Message(
+                        "database.applyDelta expects Upsert predicate, value, and patch"
+                            .to_string(),
+                    ));
+                }
+                let pred = args[0].clone();
+                let value = args[1].clone();
+                let patch = args[2].clone();
+                let mut matched = false;
+                for row in rows.iter() {
+                    let keep = runtime.apply(pred.clone(), row.clone())?;
+                    let keep = match keep {
+                        Value::Bool(value) => value,
+                        other => {
+                            return Err(RuntimeError::Message(format!(
+                                "database.applyDelta Upsert predicate expects Bool, got {}",
+                                crate::runtime::format_value(&other)
+                            )))
+                        }
+                    };
+                    if keep {
+                        matched = true;
+                        let updated = runtime.apply(patch.clone(), row.clone())?;
+                        out.push(updated);
+                    } else {
+                        out.push(row.clone());
+                    }
+                }
+                if !matched {
+                    out.push(value);
                 }
             }
             _ => {
@@ -530,10 +563,8 @@ pub(super) fn build_database_record() -> Value {
                     func: Arc::new({
                         let state = state.clone();
                         move |_| {
-                            let list = expect_list(
-                                statements_value.clone(),
-                                "database.runMigrationSql",
-                            )?;
+                            let list =
+                                expect_list(statements_value.clone(), "database.runMigrationSql")?;
                             let mut statements = Vec::with_capacity(list.len());
                             for item in list.iter() {
                                 statements
@@ -558,6 +589,7 @@ pub(super) fn build_database_record() -> Value {
     fields.insert("ins".to_string(), builtin_constructor("Insert", 1));
     fields.insert("upd".to_string(), builtin_constructor("Update", 2));
     fields.insert("del".to_string(), builtin_constructor("Delete", 1));
+    fields.insert("upsert".to_string(), builtin_constructor("Upsert", 3));
     fields.insert("pool".to_string(), build_database_pool_record());
     Value::Record(Arc::new(fields))
 }

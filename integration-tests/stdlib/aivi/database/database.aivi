@@ -80,12 +80,20 @@ delta_construct = do Effect {
   user = { id: 1, name: "Alice" }
   ins = Insert user
   del = Delete (u => u.id == 1)
+  ups = Upsert (u => u.id == 1) user (u => u <| { name: "Bob" })
   ins match
     | Insert row => assertEq row.name "Alice"
     | _          => assert False
     del match
       | Delete predicate => assert (predicate user)
       | _                => assert False
+    ups match
+      | Upsert predicate row patch => do Effect {
+          assert (predicate user)
+          assertEq row.id 1
+          assertEq (patch user).name "Bob"
+        }
+      | _ => assert False
 }
 
 @test "sqlite tuning and transaction primitives"

@@ -1263,7 +1263,23 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             ),
             (
                 "del".to_string(),
-                Type::Func(Box::new(pred_ty), Box::new(delta_ty.clone())),
+                Type::Func(Box::new(pred_ty.clone()), Box::new(delta_ty.clone())),
+            ),
+            (
+                "upsert".to_string(),
+                Type::Func(
+                    Box::new(pred_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(db_row)),
+                        Box::new(Type::Func(
+                            Box::new(Type::Func(
+                                Box::new(Type::Var(db_row)),
+                                Box::new(Type::Var(db_row)),
+                            )),
+                            Box::new(delta_ty.clone()),
+                        )),
+                    )),
+                ),
             ),
         ]
         .into_iter()
