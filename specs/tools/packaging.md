@@ -63,8 +63,8 @@ my-aivi-lib = { path = "../my-aivi-lib" } # Another AIVI package
 
 When you run `aivi build`:
 
-1.  **Aivi Compilation**: The `aivi` compiler reads `src/*.aivi` files, type-checks them, and compiles them into Rust code.
-2.  **Code Generation**: The generated Rust code is written to `target/aivi-gen/src`.
-3.  **Rust Compilation**: `cargo build` is invoked in the project root, compiling the generated sources referenced by your `Cargo.toml`.
+1. **Aivi Compilation**: The `aivi` compiler reads `src/*.aivi` files, type-checks them, and compiles them into Rust code.
+2. **Code Generation**: The generated Rust code is written to `target/aivi-gen/src`.
+3. **Rust Compilation**: `cargo build` is invoked in the project root, compiling the generated sources referenced by your `Cargo.toml`.
 
 This architecture allows Aivi to leverage the full power of the Rust ecosystem, including optimized compilation, linking, and native interoperability.

@@ -131,7 +131,7 @@ aivi run [--release] [-- <cargo args...>]
 
 - `--release`: Run in release mode.
 - `<cargo args...>`: Additional arguments passed to `cargo run`.
-Project mode also forwards the `runtime-gnome` Cargo feature when `[build].native_ui_target` is set to `gnome-gtk4-libadwaita`.
+  Project mode also forwards the `runtime-gnome` Cargo feature when `[build].native_ui_target` is set to `gnome-gtk4-libadwaita`.
 
 **Direct mode** (a path/glob is given as the first argument):
 
