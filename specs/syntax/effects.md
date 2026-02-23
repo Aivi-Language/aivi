@@ -232,7 +232,7 @@ The loop body's `{ ... }` block is promoted to the parent effect-block kind, so 
 
 ## 9.8 Transition event wiring (`on`)
 
-`on Transition => handler` registers a handler for a machine state transition event inside a `do Effect { ... }` block. This is the mechanism for wiring [Machine Types (§ 3.7)](types.md#37-machine-types-state-machines) to effectful handlers.
+`on Transition => handler` registers a handler for a machine state transition event inside a `do Effect { ... }` block. This is the mechanism for wiring [Machine Runtime Semantics](machines_runtime.md) to effectful handlers.
 
 ### Syntax
 

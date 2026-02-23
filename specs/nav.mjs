@@ -18,7 +18,13 @@ export const sidebar = [
         items: [
           { text: 'Bindings and Scope', link: '/syntax/bindings' },
           { text: 'Functions and Pipes', link: '/syntax/functions' },
-          { text: 'The Type System', link: '/syntax/types' },
+          { text: 'The Type System (Overview)', link: '/syntax/types' },
+          { text: 'Primitive Types', link: '/syntax/types/primitive_types' },
+          { text: 'Algebraic Data Types', link: '/syntax/types/algebraic_data_types' },
+          { text: 'Closed Records', link: '/syntax/types/closed_records' },
+          { text: 'Record Row Transforms', link: '/syntax/types/record_row_transforms' },
+          { text: 'Classes and HKTs', link: '/syntax/types/classes_and_hkts' },
+          { text: 'Expected-Type Coercions', link: '/syntax/types/expected_type_coercions' },
           { text: 'Predicates', link: '/syntax/predicates' }
         ]
       },
@@ -37,6 +43,7 @@ export const sidebar = [
         collapsed: true,
         items: [
           { text: 'Effects', link: '/syntax/effects' },
+          { text: 'Machines', link: '/syntax/machines_runtime' },
           { text: 'Resources', link: '/syntax/resources' },
           { text: 'Generic `do` Notation', link: '/syntax/do_notation' }
         ]

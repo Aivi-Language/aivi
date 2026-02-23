@@ -17,7 +17,13 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 #### Core Forms
 - [Bindings and Scope](syntax/bindings.md)
 - [Functions and Pipes](syntax/functions.md)
-- [The Type System](syntax/types.md)
+- [The Type System (Overview)](syntax/types.md)
+- [Primitive Types](syntax/types/primitive_types.md)
+- [Algebraic Data Types](syntax/types/algebraic_data_types.md)
+- [Closed Records](syntax/types/closed_records.md)
+- [Record Row Transforms](syntax/types/record_row_transforms.md)
+- [Classes and HKTs](syntax/types/classes_and_hkts.md)
+- [Expected-Type Coercions](syntax/types/expected_type_coercions.md)
 - [Predicates](syntax/predicates.md)
 #### Data & Flow
 - [Patching Records](syntax/patching.md)

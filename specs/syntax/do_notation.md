@@ -1,7 +1,7 @@
 # Generic Monadic `do` Blocks
 
 > **Status**: Implemented (v0.1)   `do M { ... }` works for any type constructor with a `Chain` instance (including `Option`, `Result`, and `List`). Blocks are desugared to nested `chain`/lambda calls during HIR lowering. Native codegen is stubbed.  
-> **Depends on**: Type classes ([§ 3.5](types.md#35-classes-and-hkts)), `Monad` hierarchy ([aivi.logic](../stdlib/core/logic.md)), effects ([§ 9](effects.md)), instance resolution (compiler).
+> **Depends on**: Type classes ([§ 3.5](types/classes_and_hkts.md)), `Monad` hierarchy ([aivi.logic](../stdlib/core/logic.md)), effects ([§ 9](effects.md)), instance resolution (compiler).
 
 ## Overview
 
@@ -132,7 +132,7 @@ When no suitable instance is found, compilation fails with an instance-resolutio
 
 - Effects: [§ 9](effects.md)
 - Generators: [§ 7](generators.md)
-- Type classes: [§ 3.5](types.md#35-classes-and-hkts)
+- Type classes: [§ 3.5](types/classes_and_hkts.md)
 - Monad hierarchy: [aivi.logic](../stdlib/core/logic.md)
 - Desugaring   effects: [§ 7](../desugaring/effects.md)
 - Desugaring   classes: [§ 8](../desugaring/classes.md)
