@@ -2134,6 +2134,34 @@
       ]
     },
     {
+      "path": "specs/snippets/from_md/stdlib/chronos/scheduler/overview.aivi",
+      "module": "docs.snippets.stdlib.chronos.scheduler.overview",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/scheduler/features.aivi",
+      "module": "docs.snippets.stdlib.chronos.scheduler.features",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/scheduler/domain_definition.aivi",
+      "module": "docs.snippets.stdlib.chronos.scheduler.domain_definition",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
+      "path": "specs/snippets/from_md/stdlib/chronos/scheduler/usage_examples.aivi",
+      "module": "docs.snippets.stdlib.chronos.scheduler.usage_examples",
+      "verify": [
+        "fmt"
+      ]
+    },
+    {
       "path": "specs/snippets/from_md/stdlib/network/http/http_domain.aivi",
       "module": "docs.snippets.stdlib.network.http.http_domain",
       "verify": [

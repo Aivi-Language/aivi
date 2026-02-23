@@ -117,7 +117,8 @@ export const sidebar = [
           { text: 'Instant', link: '/stdlib/chronos/instant' },
           { text: 'Calendar', link: '/stdlib/chronos/calendar' },
           { text: 'Duration', link: '/stdlib/chronos/duration' },
-          { text: 'TimeZone', link: '/stdlib/chronos/timezone' }
+          { text: 'TimeZone', link: '/stdlib/chronos/timezone' },
+          { text: 'Scheduler', link: '/stdlib/chronos/scheduler' }
         ]
       },
       {

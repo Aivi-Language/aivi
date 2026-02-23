@@ -1,0 +1,14 @@
+use aivi.chronos.scheduler
+use aivi.chronos.scheduler (domain Scheduler)
+
+planned = {
+  key: planKey "invoice-rollup" 2026-01-01T00:00:00Z
+  tenantId: "tenant-apac"
+  trigger: once 2026-01-01T00:00:00Z
+  scheduledAt: 2026-01-01T00:00:00Z
+  attempt: 0
+  status: Planned
+}
+
+plannedKey = keyText planned
+terminal = isTerminal Succeeded
