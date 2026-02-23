@@ -32,6 +32,7 @@ A high-integrity purely functional language with a Rust-first compilation pipeli
 - [Pattern Matching](syntax/pattern_matching)
 #### Effects & Control
 - [Effects](syntax/effects)
+- [Machines](syntax/machines_runtime)
 - [Resources](syntax/resources)
 - [Generic `do` Notation](syntax/do_notation)
 #### Modules & Interop
