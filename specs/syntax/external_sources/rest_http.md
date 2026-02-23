@@ -1,7 +1,9 @@
 # REST / HTTP Sources
 
 <!-- quick-info: {"kind":"topic","name":"rest http sources"} -->
+
 AIVI supports both low-level HTTP (`http`/`https`) and a REST-oriented facade (`rest`) as typed `Source` boundaries.
+
 <!-- /quick-info -->
 
 ## APIs (v0.1)
@@ -26,8 +28,13 @@ Request = {
   strictStatus: Option Bool
 }
 
+User = { name: Text, age: Int, gender: Text }
+
+usersSource : Source RestApi (List User)
+usersSource = rest.get ~u(https://api.example.com/users)
+
 do Effect {
-  users <- load (rest.get ~u(https://api.example.com/users))
+  users <- load usersSource
   pure users
 }
 ```
