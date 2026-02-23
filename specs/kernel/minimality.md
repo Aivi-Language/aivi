@@ -6,7 +6,6 @@
 | Multi-arg functions | currying |
 | Recursion | `let rec` |
 | Patterns | case |
-| `@` binding | primitive |
 | Records | closed records + update |
 | Patching | update + fold |
 | Predicates | λ + case |

@@ -30,8 +30,6 @@ This supports ordinary recursive functions:
 
 <<< ../snippets/from_md/syntax/bindings/recursion_module_level.aivi{aivi}
 
-Local recursion inside `{ ... }` / `do Effect { ... }` blocks is a future surface feature; in v0.1, prefer defining recursive helpers at module scope.
-
 
 ## 1.3 Pattern Bindings
 
