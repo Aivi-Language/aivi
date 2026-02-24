@@ -36,6 +36,10 @@ impl Backend {
                 continue;
             }
 
+            if Self::emit_gtk_sigil_tokens(token, &mut data, &mut last_line, &mut last_start) {
+                continue;
+            }
+
             if Self::emit_i18n_sigil_tokens(token, &mut data, &mut last_line, &mut last_start) {
                 continue;
             }

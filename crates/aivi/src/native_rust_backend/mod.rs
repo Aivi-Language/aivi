@@ -5,7 +5,7 @@ mod expr;
 mod pattern;
 mod perceus;
 mod prelude;
-mod typed_cranelift;
+pub(crate) mod typed_cranelift;
 pub(crate) mod typed_expr;
 mod typed_mir;
 mod utils;
@@ -212,17 +212,10 @@ fn emit_typed_def(
     vis: &str,
 ) -> Result<bool, AiviError> {
     let mut ctx = typed_expr::TypedCtx::new(global_cg_types.clone());
-    let use_cranelift = std::env::var("AIVI_TYPED_BACKEND")
-        .ok()
-        .is_some_and(|value| value == "cranelift");
-    let clif_comment = if use_cranelift {
-        typed_cranelift::cranelift_lowering_comment(&def.expr, cg_ty, &ctx)
-    } else {
-        None
-    };
+    let clif_comment = typed_cranelift::cranelift_lowering_comment(&def.expr, cg_ty, &ctx);
 
     // Try to emit the typed body
-    let body_code = if use_cranelift {
+    let body_code =
         if let Some(code) = typed_cranelift::emit_typed_via_cranelift(&def.expr, cg_ty, &ctx, 1) {
             code
         } else if let Some(code) = typed_mir::emit_typed_via_mir(&def.expr, cg_ty, &ctx, 1) {
@@ -233,16 +226,7 @@ fn emit_typed_def(
                 Ok(None) => return Ok(false), // Can't emit typed — silently skip
                 Err(_) => return Ok(false),   // Error — silently skip
             }
-        }
-    } else if let Some(code) = typed_mir::emit_typed_via_mir(&def.expr, cg_ty, &ctx, 1) {
-        code
-    } else {
-        match typed_expr::emit_typed_expr(&def.expr, cg_ty, &mut ctx, 1) {
-            Ok(Some(code)) => code,
-            Ok(None) => return Ok(false), // Can't emit typed — silently skip
-            Err(_) => return Ok(false),   // Error — silently skip
-        }
-    };
+        };
 
     let rust_ty = cg_ty.rust_type();
     let fn_name = format!("{}_typed", utils::rust_global_fn_name(name));

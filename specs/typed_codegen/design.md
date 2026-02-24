@@ -187,7 +187,7 @@ Boxing/unboxing functions for each CgType:
 ### Backend abstraction scaffold
 
 - The Cranelift path in `crates/aivi/src/native_rust_backend/typed_cranelift.rs` now emits executable typed bodies (for supported scalar MIR) instead of comment-only placeholders.
-- `AIVI_TYPED_BACKEND=cranelift` selects this typed path, while preserving MIR/typed-expr fallbacks for unsupported shapes.
+- The typed backend now tries Cranelift first by default, while preserving MIR/typed-expr fallbacks for unsupported shapes.
 - The emitted Rust still targets `rustc` as the final compiler; this is a staged backend integration point, not full native object emission yet.
 
 ### Recently Implemented

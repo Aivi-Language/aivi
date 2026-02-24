@@ -459,19 +459,7 @@ fn run() -> Result<(), AiviError> {
                         )));
                     }
                     let (program, cg_types) = aivi::desugar_target_with_cg_types(&opts.input)?;
-                    let rust = compile_rust_native_typed(program, cg_types)?;
-                    let out_dir = opts
-                        .output
-                        .unwrap_or_else(|| PathBuf::from("target/aivi-run"));
-                    write_rust_project_native(&out_dir, &rust)?;
-                    let status = Command::new("cargo")
-                        .arg("run")
-                        .current_dir(&out_dir)
-                        .status()?;
-                    if !status.success() {
-                        return Err(AiviError::Cargo("cargo run failed".to_string()));
-                    }
-                    Ok(())
+                    aivi::run_native_jit(program, cg_types)
                 }
             }
             _ => Ok(()),

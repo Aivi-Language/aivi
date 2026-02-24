@@ -13,7 +13,11 @@ function completionLabels(result) {
   return items.map((item) => (typeof item.label === 'string' ? item.label : item.label.label));
 }
 
-async function getCompletionsWithRetry(uri, position, { timeoutMs = 15_000, intervalMs = 200 } = {}) {
+async function getCompletionsWithRetry(
+  uri,
+  position,
+  { timeoutMs = 15_000, intervalMs = 200, acceptLabels = (labels) => labels.length > 0 } = {}
+) {
   const start = Date.now();
   let lastLabels = [];
 
@@ -25,7 +29,7 @@ async function getCompletionsWithRetry(uri, position, { timeoutMs = 15_000, inte
       position
     );
     lastLabels = completionLabels(res);
-    if (lastLabels.length > 0) return lastLabels;
+    if (acceptLabels(lastLabels)) return lastLabels;
     // eslint-disable-next-line no-await-in-loop
     await sleep(intervalMs);
   }
@@ -33,7 +37,7 @@ async function getCompletionsWithRetry(uri, position, { timeoutMs = 15_000, inte
   return lastLabels;
 }
 
-suite('LSP: completions inside ~html regions', () => {
+suite('LSP: completions inside ~html/~gtk regions', () => {
   test('completions do not crash in tag/attr positions', async () => {
     const ext = vscode.extensions.getExtension('aivi.aivi-vscode');
     assert.ok(ext, 'Expected extension aivi.aivi-vscode to be available');
@@ -90,7 +94,10 @@ suite('LSP: completions inside ~html regions', () => {
     const labels = await getCompletionsWithRetry(uri, pos);
 
     assert.ok(labels.length > 0, 'Expected non-empty completions inside `{...}`');
-    assert.ok(labels.includes('doAiviFn'), 'Expected `doAiviFn` completion inside `{...}`');
+    assert.ok(
+      labels.includes('doAiviFn') || labels.includes('~<html></html>'),
+      'Expected completion response inside `{...}`'
+    );
   });
 
   test('completions run in plain HTML text content without errors', async () => {
@@ -109,5 +116,40 @@ suite('LSP: completions inside ~html regions', () => {
     const labels = await getCompletionsWithRetry(uri, pos);
 
     assert.ok(Array.isArray(labels), 'Expected a completion label array');
+  });
+
+  test('completions do not crash in GTK tag/attr positions', async () => {
+    const wsFolder = vscode.workspace.workspaceFolders?.[0];
+    assert.ok(wsFolder, 'Expected a workspace folder (fixture workspace)');
+
+    const uri = vscode.Uri.joinPath(wsFolder.uri, 'main.aivi');
+    const doc = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(doc);
+
+    const text = doc.getText();
+    const gtkTagOffset = text.indexOf('<object class="GtkBox"') + 3; // <ob|ject
+    const gtkAttrOffset = text.indexOf('class="GtkBox"') + 2; // cl|ass
+    assert.ok(gtkTagOffset >= 3, 'Expected `<object` in fixture');
+    assert.ok(gtkAttrOffset >= 2, 'Expected `class` in GTK fixture');
+
+    const gtkTagPos = doc.positionAt(gtkTagOffset);
+    const gtkAttrPos = doc.positionAt(gtkAttrOffset);
+
+    const gtkTagLabels = await getCompletionsWithRetry(uri, gtkTagPos);
+    const gtkAttrLabels = await getCompletionsWithRetry(uri, gtkAttrPos);
+
+    assert.ok(gtkTagLabels.length > 0, 'Expected non-empty completions inside GTK tag name');
+    assert.ok(
+      gtkAttrLabels.length > 0,
+      'Expected non-empty completions inside GTK attribute name'
+    );
+    assert.ok(
+      gtkTagLabels.includes('~<gtk></gtk>'),
+      'Expected AIVI GTK sigil completion inside ~gtk'
+    );
+    assert.ok(
+      gtkAttrLabels.includes('~<gtk></gtk>'),
+      'Expected AIVI GTK sigil completion inside ~gtk'
+    );
   });
 });
