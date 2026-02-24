@@ -66,6 +66,12 @@ pub fn run_cranelift_jit(
         }
     }
 
+    // 3b. Monomorphize: create specialized copies of polymorphic defs
+    //     based on the call-site type recordings from Phase 6.
+    //     Single-instantiation defs get their cg_type set directly.
+    //     Multi-instantiation defs get cloned with specialized names.
+    let spec_map = monomorphize_program(&mut rust_program.modules, &_monomorph_plan);
+
     // 4. Create JIT module with runtime helpers registered
     let mut module = create_jit_module()
         .map_err(|e| AiviError::Runtime(format!("cranelift jit init: {e}")))?;
@@ -178,6 +184,7 @@ pub fn run_cranelift_jit(
             &compiled_decls,
             &mut lambda_counter,
             &mut runtime,
+            &spec_map,
         ) {
             Ok(()) => {
                 pending.push(PendingDef {
@@ -246,6 +253,7 @@ fn compile_definition_body(
     compiled_decls: &HashMap<String, JitFuncDecl>,
     lambda_counter: &mut usize,
     runtime: &mut Runtime,
+    spec_map: &HashMap<String, Vec<String>>,
 ) -> Result<(), String> {
     let (params, body) = peel_params(&def.expr);
 
@@ -320,7 +328,8 @@ fn compile_definition_body(
             let ctx_param = block_params[0];
 
             let empty_jit_funcs: HashMap<String, JitFuncInfo> = HashMap::new();
-            let mut lower_ctx = LowerCtx::new(ctx_param, &helper_refs, &compiled_lambdas, &empty_jit_funcs);
+            let empty_spec_map: HashMap<String, Vec<String>> = HashMap::new();
+            let mut lower_ctx = LowerCtx::new(ctx_param, &helper_refs, &compiled_lambdas, &empty_jit_funcs, &empty_spec_map);
 
             // Bind captured vars as leading params (boxed — received as *mut Value)
             for (i, var_name) in captured_vars.iter().enumerate() {
@@ -373,10 +382,12 @@ fn compile_definition_body(
 
     // Import only JIT functions that the body actually references AND that have
     // been successfully compiled. Resolve short names via the current module.
+    // Also import specializations (from spec_map) when the original is referenced.
     let mut called_globals = HashSet::new();
     collect_called_globals(body, &mut called_globals);
 
     let mut local_jit_funcs: HashMap<String, JitFuncInfo> = HashMap::new();
+    let mut local_spec_map: HashMap<String, Vec<String>> = HashMap::new();
     for name in &called_globals {
         // Try qualified name first, then resolve short name via current module
         let decl = compiled_decls.get(name).or_else(|| {
@@ -392,6 +403,31 @@ fn compile_definition_body(
                 return_type: decl.return_type.clone(),
             });
         }
+
+        // Also import any specializations of this function
+        if let Some(spec_names) = spec_map.get(name.as_str()) {
+            let mut imported_specs = Vec::new();
+            for spec_short in spec_names {
+                // Resolve the specialization's qualified name
+                let spec_qualified = format!("{}.{}", module_name, spec_short);
+                let spec_decl = compiled_decls
+                    .get(spec_short)
+                    .or_else(|| compiled_decls.get(&spec_qualified));
+                if let Some(sd) = spec_decl {
+                    let func_ref = module.declare_func_in_func(sd.func_id, &mut function);
+                    local_jit_funcs.insert(spec_short.clone(), JitFuncInfo {
+                        func_ref,
+                        arity: sd.arity,
+                        param_types: sd.param_types.clone(),
+                        return_type: sd.return_type.clone(),
+                    });
+                    imported_specs.push(spec_short.clone());
+                }
+            }
+            if !imported_specs.is_empty() {
+                local_spec_map.insert(name.clone(), imported_specs);
+            }
+        }
     }
 
     let mut fb_ctx = FunctionBuilderContext::new();
@@ -405,7 +441,7 @@ fn compile_definition_body(
         let block_params = builder.block_params(entry).to_vec();
         let ctx_param = block_params[0];
 
-        let mut lower_ctx = LowerCtx::new(ctx_param, &helper_refs, &compiled_lambdas, &local_jit_funcs);
+        let mut lower_ctx = LowerCtx::new(ctx_param, &helper_refs, &compiled_lambdas, &local_jit_funcs, &local_spec_map);
 
         // Bind params with typed unboxing when types are known
         let param_names: Vec<String> = params.iter().map(|s| s.to_string()).collect();
@@ -621,6 +657,92 @@ fn collect_called_globals(expr: &RustIrExpr, out: &mut HashSet<String>) {
         RustIrExpr::DebugFn { body, .. } => collect_called_globals(body, out),
         _ => {}
     }
+}
+
+/// Build a human-readable suffix for a CgType, used for specialization naming.
+fn cg_type_suffix(ty: &CgType) -> String {
+    match ty {
+        CgType::Int => "Int".into(),
+        CgType::Float => "Float".into(),
+        CgType::Bool => "Bool".into(),
+        CgType::Text => "Text".into(),
+        CgType::Unit => "Unit".into(),
+        CgType::DateTime => "DateTime".into(),
+        CgType::Func(a, b) => format!("{}_to_{}", cg_type_suffix(a), cg_type_suffix(b)),
+        CgType::ListOf(elem) => format!("List_{}", cg_type_suffix(elem)),
+        CgType::Tuple(items) => {
+            let parts: Vec<_> = items.iter().map(|t| cg_type_suffix(t)).collect();
+            format!("Tup_{}", parts.join("_"))
+        }
+        _ => {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            format!("{:?}", ty).hash(&mut hasher);
+            format!("h{:x}", hasher.finish())
+        }
+    }
+}
+
+/// Monomorphize polymorphic definitions based on the monomorph plan.
+///
+/// Returns a `spec_map` mapping original short names to their specialization
+/// short names (for call-site routing in the lowering phase).
+fn monomorphize_program(
+    modules: &mut [rust_ir::RustIrModule],
+    monomorph_plan: &HashMap<String, Vec<CgType>>,
+) -> HashMap<String, Vec<String>> {
+    let mut spec_map: HashMap<String, Vec<String>> = HashMap::new();
+
+    for module in modules.iter_mut() {
+        let mut new_defs = Vec::new();
+        let mut single_type_updates: Vec<(String, CgType)> = Vec::new();
+
+        for def in module.defs.iter() {
+            // Skip defs that already have a concrete type
+            if def.cg_type.as_ref().is_some_and(|t| t.is_closed()) {
+                continue;
+            }
+            let qualified = format!("{}.{}", module.name, def.name);
+            let Some(instantiations) = monomorph_plan.get(&qualified) else {
+                continue;
+            };
+            if instantiations.is_empty() {
+                continue;
+            }
+
+            if instantiations.len() == 1 {
+                // Single instantiation: set cg_type on the original def directly.
+                single_type_updates.push((def.name.clone(), instantiations[0].clone()));
+            }
+
+            // Create specialized clones for each concrete type.
+            for concrete_type in instantiations {
+                let suffix = cg_type_suffix(concrete_type);
+                let spec_name = format!("{}$mono_{}", def.name, suffix);
+                new_defs.push(RustIrDef {
+                    name: spec_name.clone(),
+                    inline: def.inline,
+                    expr: def.expr.clone(),
+                    cg_type: Some(concrete_type.clone()),
+                });
+                spec_map
+                    .entry(def.name.clone())
+                    .or_default()
+                    .push(spec_name);
+            }
+        }
+
+        // Apply single-instantiation type updates
+        for (name, cg_type) in single_type_updates {
+            if let Some(def) = module.defs.iter_mut().find(|d| d.name == name) {
+                def.cg_type = Some(cg_type);
+            }
+        }
+
+        module.defs.extend(new_defs);
+    }
+
+    spec_map
 }
 
 fn sanitize_name(name: &str) -> String {
