@@ -187,7 +187,7 @@ impl TypeChecker {
     ) -> Result<Type, TypeError> {
         if let Expr::Ident(name) = func {
             if env.get(&name.name).is_none() && self.method_to_classes.contains_key(&name.name) {
-                return self.infer_method_call(name, args, env);
+                return self.infer_method_call(name, args, None, env);
             }
 
             if env
@@ -308,6 +308,7 @@ impl TypeChecker {
         &mut self,
         method: &SpannedName,
         args: &[Expr],
+        expected_result: Option<Type>,
         env: &mut TypeEnv,
     ) -> Result<Type, TypeError> {
         let mut arg_tys = Vec::new();
@@ -379,7 +380,21 @@ impl TypeChecker {
                     .unify_with_span(member_ty, expected, method.span.clone())
                     .is_ok()
                 {
-                    candidates.push((self.subst.clone(), self.apply(result_ty)));
+                    let mut resolved_result = self.apply(result_ty);
+                    if let Some(expected_ty) = expected_result.clone() {
+                        if self
+                            .unify_with_span(
+                                resolved_result.clone(),
+                                expected_ty.clone(),
+                                method.span.clone(),
+                            )
+                            .is_err()
+                        {
+                            continue;
+                        }
+                        resolved_result = self.apply(expected_ty);
+                    }
+                    candidates.push((self.subst.clone(), resolved_result));
                 }
             }
         }
@@ -437,7 +452,22 @@ impl TypeChecker {
                 .unify_with_span(member_ty, expected, method.span.clone())
                 .is_ok()
             {
-                constrained_candidates.push((self.subst.clone(), self.apply(result_ty)));
+                let mut resolved_result = self.apply(result_ty);
+                if let Some(expected_ty) = expected_result.clone() {
+                    if self
+                        .unify_with_span(
+                            resolved_result.clone(),
+                            expected_ty.clone(),
+                            method.span.clone(),
+                        )
+                        .is_err()
+                    {
+                        self.subst = base_subst;
+                        continue;
+                    }
+                    resolved_result = self.apply(expected_ty);
+                }
+                constrained_candidates.push((self.subst.clone(), resolved_result));
             }
             self.subst = base_subst;
         }

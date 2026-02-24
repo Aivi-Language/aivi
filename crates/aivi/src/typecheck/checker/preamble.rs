@@ -32,6 +32,7 @@ pub(super) struct TypeChecker {
     current_module_path: String,
     extra_diagnostics: Vec<FileDiagnostic>,
     adt_constructors: HashMap<String, Vec<String>>,
+    enabled_record_default_types: HashSet<String>,
     pub(super) constraints: ConstraintState,
     pub(super) query_cache: TypeQueryCache,
 }
@@ -56,6 +57,7 @@ impl TypeChecker {
             current_module_path: String::new(),
             extra_diagnostics: Vec::new(),
             adt_constructors: HashMap::new(),
+            enabled_record_default_types: HashSet::new(),
             constraints: ConstraintState::default(),
             query_cache: TypeQueryCache::default(),
         };
@@ -90,9 +92,45 @@ impl TypeChecker {
         self.assumed_class_constraints.clear();
         self.extra_diagnostics.clear();
         self.adt_constructors.clear();
+        self.enabled_record_default_types = Self::collect_enabled_record_default_types(_module);
         self.current_module_path = _module.path.clone();
         self.constraints = ConstraintState::default();
         self.query_cache.clear_module(&_module.name.name);
+    }
+
+    fn collect_enabled_record_default_types(module: &Module) -> HashSet<String> {
+        let mut enabled = HashSet::new();
+        for use_decl in &module.uses {
+            if use_decl.module.name != "aivi.defaults" {
+                continue;
+            }
+            if use_decl.wildcard {
+                enabled.extend(
+                    [
+                        "Bool",
+                        "Int",
+                        "Float",
+                        "Text",
+                        "List",
+                        "Option",
+                        "ToDefault",
+                    ]
+                    .into_iter()
+                    .map(|name| name.to_string()),
+                );
+                continue;
+            }
+            for item in &use_decl.items {
+                if item.kind == crate::surface::ScopeItemKind::Value {
+                    enabled.insert(item.name.name.clone());
+                }
+            }
+        }
+        enabled
+    }
+
+    fn record_default_enabled(&self, marker: &str) -> bool {
+        self.enabled_record_default_types.contains(marker)
     }
 
     fn emit_extra_diag(

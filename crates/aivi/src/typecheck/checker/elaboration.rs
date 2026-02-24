@@ -153,7 +153,9 @@ impl TypeChecker {
 
             let mut local_env = env.clone();
             // Ensure self-recursion sees the expected scheme when available.
-            if let Some(sig) = sigs.get(&name).and_then(|items| (items.len() == 1).then(|| &items[0]))
+            if let Some(sig) = sigs
+                .get(&name)
+                .and_then(|items| (items.len() == 1).then(|| &items[0]))
             {
                 let expected = self.instantiate(sig);
                 local_env.insert(name.clone(), Scheme::mono(expected));
@@ -245,7 +247,10 @@ impl TypeChecker {
                 for part in parts {
                     match part {
                         TextPart::Text { .. } => new_parts.push(part),
-                        TextPart::Expr { expr, span: part_span } => {
+                        TextPart::Expr {
+                            expr,
+                            span: part_span,
+                        } => {
                             let (expr, _ty) =
                                 self.elab_expr(*expr, Some(Type::con("Text")), env)?;
                             new_parts.push(TextPart::Expr {
@@ -418,11 +423,7 @@ impl TypeChecker {
                             // Always unify Let pattern with expression type so that
                             // later items have accurate constraints during elaboration.
                             // (Let bindings are pure in all block kinds.)
-                            self.unify_with_span(
-                                pat_ty,
-                                expr_ty,
-                                pattern_span(&pattern),
-                            )?;
+                            self.unify_with_span(pat_ty, expr_ty, pattern_span(&pattern))?;
                             new_items.push(BlockItem::Let {
                                 pattern,
                                 expr,
@@ -437,11 +438,7 @@ impl TypeChecker {
                             let (expr, expr_ty) = self.elab_expr(expr, None, &mut local_env)?;
                             let pat_ty = self.infer_pattern(&pattern, &mut local_env)?;
                             if matches!(kind, BlockKind::Plain) {
-                                self.unify_with_span(
-                                    pat_ty,
-                                    expr_ty,
-                                    pattern_span(&pattern),
-                                )?;
+                                self.unify_with_span(pat_ty, expr_ty, pattern_span(&pattern))?;
                             } else {
                                 // For effect/resource/generate blocks, extract the
                                 // value type from the Effect wrapper and unify with
@@ -451,14 +448,10 @@ impl TypeChecker {
                                 let backup = self.subst.clone();
                                 let value_ty = self.fresh_var();
                                 let eff_err_ty = self.fresh_var();
-                                let effect_ty = Type::con("Effect")
-                                    .app(vec![eff_err_ty, value_ty.clone()]);
+                                let effect_ty =
+                                    Type::con("Effect").app(vec![eff_err_ty, value_ty.clone()]);
                                 if self
-                                    .unify_with_span(
-                                        expr_ty.clone(),
-                                        effect_ty,
-                                        span.clone(),
-                                    )
+                                    .unify_with_span(expr_ty.clone(), effect_ty, span.clone())
                                     .is_ok()
                                 {
                                     let _ = self.unify_with_span(
@@ -498,15 +491,32 @@ impl TypeChecker {
                             let (effect, _) = self.elab_expr(effect, None, &mut local_env)?;
                             new_items.push(BlockItem::Unless { cond, effect, span });
                         }
-                        BlockItem::Given { cond, fail_expr, span } => {
+                        BlockItem::Given {
+                            cond,
+                            fail_expr,
+                            span,
+                        } => {
                             let (cond, _) = self.elab_expr(cond, None, &mut local_env)?;
                             let (fail_expr, _) = self.elab_expr(fail_expr, None, &mut local_env)?;
-                            new_items.push(BlockItem::Given { cond, fail_expr, span });
+                            new_items.push(BlockItem::Given {
+                                cond,
+                                fail_expr,
+                                span,
+                            });
                         }
-                        BlockItem::On { transition, handler, span } => {
-                            let (transition, _) = self.elab_expr(transition, None, &mut local_env)?;
+                        BlockItem::On {
+                            transition,
+                            handler,
+                            span,
+                        } => {
+                            let (transition, _) =
+                                self.elab_expr(transition, None, &mut local_env)?;
                             let (handler, _) = self.elab_expr(handler, None, &mut local_env)?;
-                            new_items.push(BlockItem::On { transition, handler, span });
+                            new_items.push(BlockItem::On {
+                                transition,
+                                handler,
+                                span,
+                            });
                         }
                     }
                 }
@@ -537,22 +547,20 @@ impl TypeChecker {
                     let (arg, _ty) = self.elab_expr(arg, None, env)?;
                     new_args.push(arg);
                 }
+                let result_ty = self.infer_method_call(name, &new_args, expected.clone(), env)?;
                 let out = Expr::Call {
                     func: Box::new(func),
                     args: new_args,
                     span: span.clone(),
                 };
-                return self.check_or_coerce(out, expected, env);
+                return Ok((out, result_ty));
             }
         }
 
         // Overloaded (non-method) identifiers: resolve by inferring argument types
         // and selecting the unique matching overload, mirroring infer_call logic.
         if let Expr::Ident(name) = &func {
-            if env
-                .get_all(&name.name)
-                .is_some_and(|items| items.len() > 1)
-            {
+            if env.get_all(&name.name).is_some_and(|items| items.len() > 1) {
                 // Infer argument types first (on the original exprs) to select the
                 // right overload, then elaborate arguments with the resolved param types.
                 let arg_tys: Vec<Type> = args
@@ -572,8 +580,11 @@ impl TypeChecker {
                 // Save substitution state AFTER arg inference so operand type
                 // constraints (e.g. Vec2 from domain `-`) are preserved.
                 let base_subst = self.subst.clone();
-                let mut selected: Option<(Type, Vec<Type>, std::collections::HashMap<TypeVarId, Type>)> =
-                    None;
+                let mut selected: Option<(
+                    Type,
+                    Vec<Type>,
+                    std::collections::HashMap<TypeVarId, Type>,
+                )> = None;
 
                 for scheme in candidates {
                     self.subst = base_subst.clone();
@@ -591,11 +602,17 @@ impl TypeChecker {
                             let arg_applied = self.apply(arg_ty.clone());
                             let arg_expanded = self.expand_alias(arg_applied);
                             if let (
-                                Type::Record { fields: param_fields, .. },
-                                Type::Record { fields: arg_fields, .. },
+                                Type::Record {
+                                    fields: param_fields,
+                                    ..
+                                },
+                                Type::Record {
+                                    fields: arg_fields, ..
+                                },
                             ) = (&param_expanded, &arg_expanded)
                             {
-                                let param_has_extra = param_fields.keys().any(|k| !arg_fields.contains_key(k));
+                                let param_has_extra =
+                                    param_fields.keys().any(|k| !arg_fields.contains_key(k));
                                 if param_has_extra {
                                     ok = false;
                                     break;
@@ -607,10 +624,7 @@ impl TypeChecker {
                         if self
                             .unify_with_span(
                                 func_ty.clone(),
-                                Type::Func(
-                                    Box::new(arg_ty.clone()),
-                                    Box::new(result_ty.clone()),
-                                ),
+                                Type::Func(Box::new(arg_ty.clone()), Box::new(result_ty.clone())),
                                 expr_span(arg_expr),
                             )
                             .is_err()
@@ -709,6 +723,7 @@ impl TypeChecker {
             None
         };
 
+        let fields = self.prepend_missing_record_defaults(fields, expected_ty.as_ref(), &span);
         let mut new_fields = Vec::new();
         for field in fields {
             let value_expected = if field.spread {
@@ -732,6 +747,129 @@ impl TypeChecker {
             span,
         };
         self.check_or_coerce(out, expected, env)
+    }
+
+    fn prepend_missing_record_defaults(
+        &mut self,
+        fields: Vec<RecordField>,
+        expected_ty: Option<&Type>,
+        record_span: &Span,
+    ) -> Vec<RecordField> {
+        let Some(Type::Record {
+            fields: expected_fields,
+        }) = expected_ty
+        else {
+            return fields;
+        };
+        if self.enabled_record_default_types.is_empty() {
+            return fields;
+        }
+
+        let mut present_top_level = HashSet::new();
+        for field in &fields {
+            if field.spread {
+                continue;
+            }
+            if let Some(PathSegment::Field(name)) = field.path.first() {
+                present_top_level.insert(name.name.clone());
+            }
+        }
+
+        let mut generated = Vec::new();
+        for (field_name, field_ty) in expected_fields.clone() {
+            if present_top_level.contains(&field_name) {
+                continue;
+            }
+            let Some(default_value) =
+                self.default_expr_for_missing_record_field(&field_ty, record_span)
+            else {
+                continue;
+            };
+            generated.push(RecordField {
+                spread: false,
+                path: vec![PathSegment::Field(SpannedName {
+                    name: field_name,
+                    span: record_span.clone(),
+                })],
+                value: default_value,
+                span: record_span.clone(),
+            });
+        }
+
+        if generated.is_empty() {
+            fields
+        } else {
+            let mut merged = generated;
+            merged.extend(fields);
+            merged
+        }
+    }
+
+    fn default_expr_for_missing_record_field(&mut self, ty: &Type, span: &Span) -> Option<Expr> {
+        let applied = self.apply(ty.clone());
+        let expected = self.expand_alias(applied);
+        let Type::Con(name, args) = expected else {
+            return None;
+        };
+
+        match (name.as_str(), args.len()) {
+            ("Option", 1) if self.record_default_enabled("Option") => {
+                return Some(Expr::Ident(SpannedName {
+                    name: "None".into(),
+                    span: span.clone(),
+                }));
+            }
+            ("List", 1) if self.record_default_enabled("List") => {
+                return Some(Expr::List {
+                    items: Vec::new(),
+                    span: span.clone(),
+                });
+            }
+            ("Bool", 0) if self.record_default_enabled("Bool") => {
+                return Some(Expr::Literal(Literal::Bool {
+                    value: false,
+                    span: span.clone(),
+                }));
+            }
+            ("Int", 0) if self.record_default_enabled("Int") => {
+                return Some(Expr::Literal(Literal::Number {
+                    text: "0".into(),
+                    span: span.clone(),
+                }));
+            }
+            ("Float", 0) if self.record_default_enabled("Float") => {
+                return Some(Expr::Literal(Literal::Number {
+                    text: "0.0".into(),
+                    span: span.clone(),
+                }));
+            }
+            ("Text", 0) if self.record_default_enabled("Text") => {
+                return Some(Expr::Literal(Literal::String {
+                    text: String::new(),
+                    span: span.clone(),
+                }));
+            }
+            _ => {}
+        }
+
+        if (self.record_default_enabled(name.as_str()) || self.record_default_enabled("ToDefault"))
+            && self.method_to_classes.contains_key("toDefault")
+        {
+            return Some(self.to_default_call_expr(span.clone()));
+        }
+        None
+    }
+
+    fn to_default_call_expr(&self, span: Span) -> Expr {
+        let func = Expr::Ident(SpannedName {
+            name: "toDefault".into(),
+            span: span.clone(),
+        });
+        Expr::Call {
+            func: Box::new(func),
+            args: Vec::new(),
+            span,
+        }
     }
 
     fn check_or_coerce(
@@ -773,6 +911,55 @@ impl TypeChecker {
                     }
                     self.subst = base_subst;
                 }
+            }
+        }
+
+        if let (Some(expected_ty), Expr::Call { func, args, .. }) = (expected.clone(), &expr) {
+            if let Expr::Ident(name) = func.as_ref() {
+                if env.get(&name.name).is_none() && self.method_to_classes.contains_key(&name.name)
+                {
+                    let inferred =
+                        self.infer_method_call(name, args, Some(expected_ty.clone()), env)?;
+                    return Ok((expr, inferred));
+                }
+            }
+        }
+
+        if let (Some(expected_ty), Expr::Record { fields, .. }) = (expected.clone(), &expr) {
+            let expected_applied = {
+                let applied = self.apply(expected_ty.clone());
+                self.expand_alias(applied)
+            };
+            if matches!(expected_applied, Type::Record { .. }) {
+                let mut record_ty = Type::Record {
+                    fields: BTreeMap::new(),
+                };
+                for field in fields {
+                    if field.spread {
+                        let spread_ty = self.infer_expr(&field.value, env)?;
+                        record_ty = self.merge_records(record_ty, spread_ty, field.span.clone())?;
+                        continue;
+                    }
+
+                    let value_expected = self
+                        .record_field_type(
+                            expected_applied.clone(),
+                            &field.path,
+                            field.span.clone(),
+                        )
+                        .ok();
+                    let value_ty = if let Some(value_expected) = value_expected {
+                        let (_elab_value, value_ty) =
+                            self.check_or_coerce(field.value.clone(), Some(value_expected), env)?;
+                        value_ty
+                    } else {
+                        self.infer_expr(&field.value, env)?
+                    };
+                    let nested = self.record_from_path(&field.path, value_ty);
+                    record_ty = self.merge_records(record_ty, nested, field.span.clone())?;
+                }
+                self.unify_with_span(record_ty, expected_ty.clone(), expr_span(&expr))?;
+                return Ok((expr, self.apply(expected_ty)));
             }
         }
 

@@ -27,3 +27,19 @@ This supports ergonomic boundary code such as HTTP requests:
 With closed structural records, `{}` denotes only the empty record.
 Record-to-text coercions should therefore be provided for concrete record types (or wrappers),
 rather than a single catch-all `{}` instance.
+
+## Opt-in Record Defaults (`ToDefault`)
+
+When a module imports markers from `aivi.defaults`, record literals in expected-type positions may
+be completed with missing fields:
+
+- `use aivi.defaults (Option)` enables `Option _ -> None`
+- `use aivi.defaults (List)` enables `List _ -> []`
+- `use aivi.defaults (Bool)` enables `Bool -> False`
+- `use aivi.defaults (Int, Float, Text)` enables `0`, `0.0`, and `""` respectively
+
+For other types, importing `ToDefault` enables instance-driven filling through `toDefault()` when
+`ToDefault` instances are in scope.
+
+Defaults are prepended before user-written fields, so explicit fields and later spreads still
+override synthesized defaults.
