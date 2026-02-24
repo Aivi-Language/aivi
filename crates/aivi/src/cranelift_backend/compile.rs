@@ -26,7 +26,7 @@ use crate::AiviError;
 
 use super::abi::JitRuntimeCtx;
 use super::jit_module::create_jit_module;
-use super::lower::{CompiledLambda, DeclaredHelpers, LowerCtx, declare_helpers};
+use super::lower::{CompiledLambda, DeclaredHelpers, JitFuncDecl, JitFuncInfo, LowerCtx, declare_helpers, decompose_func_type};
 
 /// Pointer type used throughout.
 const PTR: cranelift_codegen::ir::Type = types::I64;
@@ -38,6 +38,7 @@ const PTR: cranelift_codegen::ir::Type = types::I64;
 pub fn run_cranelift_jit(
     program: HirProgram,
     cg_types: HashMap<String, HashMap<String, CgType>>,
+    _monomorph_plan: HashMap<String, Vec<CgType>>,
 ) -> Result<(), AiviError> {
     // 1. Build the interpreter runtime (for builtins, thunks, globals).
     //    During the migration this is still needed because lambdas/closures
@@ -73,8 +74,86 @@ pub fn run_cranelift_jit(
     let helpers = declare_helpers(&mut module)
         .map_err(|e| AiviError::Runtime(format!("cranelift declare helpers: {e}")))?;
 
-    // 6. Compile each definition to a Cranelift function.
-    //    Skip arity-0 do-block definitions — the interpreter handles those lazily.
+    // 6. Two-pass compilation for direct calls between JIT functions.
+    //    Pass 1: Declare all function signatures and build a registry.
+    //    Pass 2: Compile function bodies with the registry for direct calls.
+
+    #[allow(dead_code)]
+    struct DeclaredDef<'a> {
+        def: &'a RustIrDef,
+        module_name: String,
+        qualified: String,
+        func_name: String,
+        func_id: cranelift_module::FuncId,
+        arity: usize,
+        param_types: Vec<Option<CgType>>,
+        return_type: Option<CgType>,
+    }
+    let mut declared_defs: Vec<DeclaredDef> = Vec::new();
+    let mut declared_names: HashSet<String> = HashSet::new();
+    let mut jit_func_ids: HashMap<String, JitFuncDecl> = HashMap::new();
+
+    // Pass 1: Declare all eligible functions
+    for ir_module in &rust_program.modules {
+        for def in &ir_module.defs {
+            let (params, body) = peel_params(&def.expr);
+            if params.is_empty() {
+                if matches!(body, RustIrExpr::Block { block_kind: RustIrBlockKind::Do { .. }, .. }) {
+                    continue;
+                }
+            }
+            if params.len() > 7 || !expr_supported(body) {
+                continue;
+            }
+            let qualified = format!("{}.{}", ir_module.name, def.name);
+            let func_name = format!("__aivi_jit_{}", sanitize_name(&qualified));
+            if declared_names.contains(&func_name) {
+                continue;
+            }
+            declared_names.insert(func_name.clone());
+
+            let arity = params.len();
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR)); // ctx
+            for _ in 0..arity {
+                sig.params.push(AbiParam::new(PTR));
+            }
+            sig.returns.push(AbiParam::new(PTR));
+
+            let func_id = module
+                .declare_function(&func_name, Linkage::Local, &sig)
+                .map_err(|e| AiviError::Runtime(format!("declare {}: {e}", func_name)))?;
+
+            // Extract typed param/return info from CgType
+            let (param_types, return_type) = if let Some(cg_ty) = &def.cg_type {
+                decompose_func_type(cg_ty, arity)
+            } else {
+                (vec![None; arity], None)
+            };
+
+            declared_defs.push(DeclaredDef {
+                def,
+                module_name: ir_module.name.clone(),
+                qualified: qualified.clone(),
+                func_name,
+                func_id,
+                arity,
+                param_types: param_types.clone(),
+                return_type: return_type.clone(),
+            });
+
+            // Register only under the qualified name — short names collide across modules
+            jit_func_ids.insert(qualified, JitFuncDecl {
+                func_id,
+                arity,
+                param_types,
+                return_type,
+            });
+        }
+    }
+
+    // Pass 2: Compile function bodies.
+    // Track successfully-compiled functions so later functions can direct-call them.
     struct PendingDef {
         name: String,
         qualified: String,
@@ -82,41 +161,41 @@ pub fn run_cranelift_jit(
         arity: usize,
     }
     let mut pending: Vec<PendingDef> = Vec::new();
-    let mut declared_names: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut lambda_counter: usize = 0;
+    let mut compiled_decls: HashMap<String, JitFuncDecl> = HashMap::new();
 
-    for ir_module in &rust_program.modules {
-        for def in &ir_module.defs {
-            let (params, body) = peel_params(&def.expr);
-            // Skip arity-0 effect/block defs — these produce lazy Effect values
-            // that the interpreter handles correctly.
-            if params.is_empty() {
-                if matches!(body, RustIrExpr::Block { block_kind: RustIrBlockKind::Do { .. }, .. }) {
-                    continue;
-                }
+    for dd in &declared_defs {
+        match compile_definition_body(
+            &mut module,
+            &helpers,
+            dd.def,
+            &dd.module_name,
+            &dd.qualified,
+            dd.func_id,
+            dd.arity,
+            &dd.param_types,
+            &dd.return_type,
+            &compiled_decls,
+            &mut lambda_counter,
+            &mut runtime,
+        ) {
+            Ok(()) => {
+                pending.push(PendingDef {
+                    name: dd.def.name.clone(),
+                    qualified: dd.qualified.clone(),
+                    func_id: dd.func_id,
+                    arity: dd.arity,
+                });
+                // Register under qualified name only
+                compiled_decls.insert(dd.qualified.clone(), JitFuncDecl {
+                    func_id: dd.func_id,
+                    arity: dd.arity,
+                    param_types: dd.param_types.clone(),
+                    return_type: dd.return_type.clone(),
+                });
             }
-
-            let qualified = format!("{}.{}", ir_module.name, def.name);
-            let func_name = format!("__aivi_jit_{}", sanitize_name(&qualified));
-            // Skip duplicates (e.g., re-exported defs across modules)
-            if declared_names.contains(&func_name) {
-                continue;
-            }
-            declared_names.insert(func_name);
-
-            match compile_definition(&mut module, &helpers, def, &qualified, &mut lambda_counter, &mut runtime) {
-                Ok(Some((func_id, _func_name, arity))) => {
-                    pending.push(PendingDef {
-                        name: def.name.clone(),
-                        qualified: qualified.clone(),
-                        func_id,
-                        arity,
-                    });
-                }
-                Ok(None) => {}
-                Err(e) => {
-                    eprintln!("warning: cranelift compile {}: {e}", qualified);
-                }
+            Err(e) => {
+                eprintln!("warning: cranelift compile {}: {e}", dd.qualified);
             }
         }
     }
@@ -150,29 +229,25 @@ pub fn run_cranelift_jit(
     run_main_effect(&mut runtime)
 }
 
-/// Compile a single `RustIrDef` to native code via Cranelift.
+/// Compile the body of a pre-declared JIT function.
 ///
-/// Returns `Ok(Some((func_id, func_name, arity)))` if compilation succeeded,
-/// `Ok(None)` if the definition can't be compiled yet,
-/// or `Err(msg)` on failure.
-fn compile_definition(
+/// The function has already been declared via `module.declare_function`; this
+/// fills in the body IR. Returns `Ok(())` on success or `Err(msg)` on failure.
+fn compile_definition_body(
     module: &mut JITModule,
     helpers: &DeclaredHelpers,
     def: &RustIrDef,
+    module_name: &str,
     qualified_name: &str,
+    func_id: cranelift_module::FuncId,
+    _arity: usize,
+    param_types: &[Option<CgType>],
+    _return_type: &Option<CgType>,
+    compiled_decls: &HashMap<String, JitFuncDecl>,
     lambda_counter: &mut usize,
     runtime: &mut Runtime,
-) -> Result<Option<(cranelift_module::FuncId, String, usize)>, String> {
+) -> Result<(), String> {
     let (params, body) = peel_params(&def.expr);
-    let arity = params.len();
-
-    if arity > 7 {
-        return Ok(None);
-    }
-
-    if !expr_supported(body) {
-        return Ok(None);
-    }
 
     // --- Pre-compile inner lambdas ---
     let mut lambdas: Vec<(&RustIrExpr, Vec<String>)> = Vec::new();
@@ -244,17 +319,19 @@ fn compile_definition(
             let block_params = builder.block_params(entry).to_vec();
             let ctx_param = block_params[0];
 
-            let mut lower_ctx = LowerCtx::new(ctx_param, &helper_refs, &compiled_lambdas);
+            let empty_jit_funcs: HashMap<String, JitFuncInfo> = HashMap::new();
+            let mut lower_ctx = LowerCtx::new(ctx_param, &helper_refs, &compiled_lambdas, &empty_jit_funcs);
 
-            // Bind captured vars as leading params
+            // Bind captured vars as leading params (boxed — received as *mut Value)
             for (i, var_name) in captured_vars.iter().enumerate() {
-                lower_ctx.locals.insert(var_name.clone(), block_params[i + 1]);
+                lower_ctx.locals.insert(var_name.clone(), super::lower::TypedValue::boxed(block_params[i + 1]));
             }
-            // Bind the actual lambda parameter
-            lower_ctx.locals.insert(param.clone(), block_params[captured_vars.len() + 1]);
+            // Bind the actual lambda parameter (boxed)
+            lower_ctx.locals.insert(param.clone(), super::lower::TypedValue::boxed(block_params[captured_vars.len() + 1]));
 
             let result = lower_ctx.lower_expr(&mut builder, body);
-            builder.ins().return_(&[result]);
+            let result_boxed = lower_ctx.ensure_boxed(&mut builder, result);
+            builder.ins().return_(&[result_boxed]);
             builder.finalize();
         }
 
@@ -285,25 +362,37 @@ fn compile_definition(
         }
     }
 
-    // --- Compile the main body ---
-    let mut sig = module.make_signature();
-    sig.params.push(AbiParam::new(PTR)); // ctx
-    for _ in 0..arity {
-        sig.params.push(AbiParam::new(PTR));
-    }
-    sig.returns.push(AbiParam::new(PTR));
-
-    let func_name = format!("__aivi_jit_{}", sanitize_name(qualified_name));
-    let func_id = module
-        .declare_function(&func_name, Linkage::Local, &sig)
-        .map_err(|e| format!("declare {}: {e}", func_name))?;
-
+    // --- Compile the main body (function was pre-declared in Pass 1) ---
+    let sig = module.declarations().get_function_decl(func_id).signature.clone();
     let mut function = Function::with_name_signature(
         cranelift_codegen::ir::UserFuncName::user(0, func_id.as_u32()),
         sig,
     );
 
     let helper_refs = helpers.import_into(module, &mut function);
+
+    // Import only JIT functions that the body actually references AND that have
+    // been successfully compiled. Resolve short names via the current module.
+    let mut called_globals = HashSet::new();
+    collect_called_globals(body, &mut called_globals);
+
+    let mut local_jit_funcs: HashMap<String, JitFuncInfo> = HashMap::new();
+    for name in &called_globals {
+        // Try qualified name first, then resolve short name via current module
+        let decl = compiled_decls.get(name).or_else(|| {
+            let qualified = format!("{}.{}", module_name, name);
+            compiled_decls.get(&qualified)
+        });
+        if let Some(decl) = decl {
+            let func_ref = module.declare_func_in_func(decl.func_id, &mut function);
+            local_jit_funcs.insert(name.clone(), JitFuncInfo {
+                func_ref,
+                arity: decl.arity,
+                param_types: decl.param_types.clone(),
+                return_type: decl.return_type.clone(),
+            });
+        }
+    }
 
     let mut fb_ctx = FunctionBuilderContext::new();
     {
@@ -316,14 +405,15 @@ fn compile_definition(
         let block_params = builder.block_params(entry).to_vec();
         let ctx_param = block_params[0];
 
-        let mut lower_ctx = LowerCtx::new(ctx_param, &helper_refs, &compiled_lambdas);
+        let mut lower_ctx = LowerCtx::new(ctx_param, &helper_refs, &compiled_lambdas, &local_jit_funcs);
 
-        for (i, param_name) in params.iter().enumerate() {
-            lower_ctx.locals.insert(param_name.clone(), block_params[i + 1]);
-        }
+        // Bind params with typed unboxing when types are known
+        let param_names: Vec<String> = params.iter().map(|s| s.to_string()).collect();
+        lower_ctx.bind_typed_params(&mut builder, &param_names, &block_params, param_types);
 
         let result = lower_ctx.lower_expr(&mut builder, body);
-        builder.ins().return_(&[result]);
+        let result_boxed = lower_ctx.ensure_boxed(&mut builder, result);
+        builder.ins().return_(&[result_boxed]);
         builder.finalize();
     }
 
@@ -331,10 +421,10 @@ fn compile_definition(
     ctx.func = function;
     module
         .define_function(func_id, &mut ctx)
-        .map_err(|e| format!("define {}: {e}", func_name))?;
+        .map_err(|e| format!("define {}: {e}", qualified_name))?;
     module.clear_context(&mut ctx);
 
-    Ok(Some((func_id, func_name, arity)))
+    Ok(())
 }
 
 fn record_field_supported(field: &RustIrRecordField) -> bool {
@@ -461,6 +551,75 @@ fn peel_params(expr: &RustIrExpr) -> (Vec<String>, &RustIrExpr) {
             }
             _ => return (params, cursor),
         }
+    }
+}
+
+/// Collect all global names referenced in an expression (shallow, no dedup).
+fn collect_called_globals(expr: &RustIrExpr, out: &mut HashSet<String>) {
+    match expr {
+        RustIrExpr::Global { name, .. } => { out.insert(name.clone()); }
+        RustIrExpr::App { func, arg, .. } => {
+            collect_called_globals(func, out);
+            collect_called_globals(arg, out);
+        }
+        RustIrExpr::Call { func, args, .. } => {
+            collect_called_globals(func, out);
+            for a in args { collect_called_globals(a, out); }
+        }
+        RustIrExpr::If { cond, then_branch, else_branch, .. } => {
+            collect_called_globals(cond, out);
+            collect_called_globals(then_branch, out);
+            collect_called_globals(else_branch, out);
+        }
+        RustIrExpr::Binary { left, right, .. } => {
+            collect_called_globals(left, out);
+            collect_called_globals(right, out);
+        }
+        RustIrExpr::Match { scrutinee, arms, .. } => {
+            collect_called_globals(scrutinee, out);
+            for arm in arms {
+                collect_called_globals(&arm.body, out);
+                if let Some(g) = &arm.guard { collect_called_globals(g, out); }
+            }
+        }
+        RustIrExpr::Lambda { body, .. } => collect_called_globals(body, out),
+        RustIrExpr::Block { items, .. } => {
+            for item in items {
+                match item {
+                    RustIrBlockItem::Bind { expr, .. } | RustIrBlockItem::Expr { expr } => {
+                        collect_called_globals(expr, out);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        RustIrExpr::List { items, .. } => {
+            for item in items { collect_called_globals(&item.expr, out); }
+        }
+        RustIrExpr::Record { fields, .. } => {
+            for f in fields { collect_called_globals(&f.value, out); }
+        }
+        RustIrExpr::Tuple { items, .. } => {
+            for item in items { collect_called_globals(item, out); }
+        }
+        RustIrExpr::Patch { target, fields, .. } => {
+            collect_called_globals(target, out);
+            for f in fields { collect_called_globals(&f.value, out); }
+        }
+        RustIrExpr::FieldAccess { base, .. } => collect_called_globals(base, out),
+        RustIrExpr::Pipe { func, arg, .. } => {
+            collect_called_globals(func, out);
+            collect_called_globals(arg, out);
+        }
+        RustIrExpr::TextInterpolate { parts, .. } => {
+            for part in parts {
+                if let RustIrTextPart::Expr { expr } = part {
+                    collect_called_globals(expr, out);
+                }
+            }
+        }
+        RustIrExpr::DebugFn { body, .. } => collect_called_globals(body, out),
+        _ => {}
     }
 }
 

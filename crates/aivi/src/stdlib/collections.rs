@@ -4,8 +4,8 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.collections
 export Map, Set, Queue, Deque, Heap
-export domain Collections
-export domain MinHeap
+export Collections
+export MinHeap
 
 use aivi
 

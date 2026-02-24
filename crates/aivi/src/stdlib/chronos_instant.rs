@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.chronos.instant
 export Timestamp
-export domain Instant
+export Instant
 
 use aivi
 use aivi.chronos.duration (Span)

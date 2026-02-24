@@ -18,7 +18,7 @@ export beginTx, commitTx, rollbackTx, inTransaction
 export savepoint, releaseSavepoint, rollbackToSavepoint
 export chunkDeltas, ftsDoc, ftsMatchAny, ftsMatchAll
 export ins, upd, del, ups
-export domain Database
+export Database
 
 use aivi
 

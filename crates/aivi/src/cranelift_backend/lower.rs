@@ -1,10 +1,15 @@
 //! Lower `RustIrExpr` to Cranelift IR.
 //!
 //! This is the main expression-lowering engine for the full Cranelift backend.
-//! All values are represented as opaque `i64` pointers to heap-boxed `Value`s,
-//! except for known-scalar paths where unboxed representations are used.
+//! Values are represented in one of two ways:
 //!
-//! Every emitted function has the signature:
+//! - **Boxed** (`*mut Value`): heap-allocated tagged union, used for compound
+//!   types, unknown types, and at runtime-helper call boundaries.
+//! - **Unboxed** (native scalar): `i64` for Int, `f64` for Float, `i8` for Bool.
+//!   Kept in CPU registers — no heap allocation or tag dispatch.
+//!
+//! The `TypedValue` wrapper tracks which representation each SSA value uses.
+//! Every emitted function currently has the signature:
 //!     `(ctx: i64, ...args: i64) -> i64`
 //! where `ctx` is a `*mut JitRuntimeCtx` and each arg/return is a `*mut Value`.
 
@@ -15,13 +20,46 @@ use cranelift_codegen::ir::FuncRef;
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{Linkage, Module};
 
+use crate::cg_type::CgType;
 use crate::rust_ir::{
     RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrLiteral, RustIrListItem, RustIrMatchArm,
     RustIrPattern, RustIrRecordField, RustIrTextPart,
 };
 
-/// Pointer-sized integer type (all values are passed as i64 pointers).
+/// Pointer-sized integer type used for boxed `*mut Value` pointers.
 const PTR: cranelift_codegen::ir::Type = types::I64;
+/// Native float type for unboxed `Float` values.
+const F64: cranelift_codegen::ir::Type = types::F64;
+
+/// A Cranelift SSA value paired with its known `CgType`.
+///
+/// This allows the lowering engine to keep scalars in registers (unboxed)
+/// and only box them when crossing a boundary that expects `*mut Value`.
+#[derive(Clone)]
+pub(crate) struct TypedValue {
+    /// The Cranelift SSA value.  For `CgType::Int` this is an `i64`,
+    /// for `CgType::Float` an `f64`, for `CgType::Bool` an `i64` (0/1).
+    /// For everything else it is a `*mut Value` pointer.
+    pub(crate) val: Value,
+    /// The compile-time type. `None` means "boxed / unknown".
+    pub(crate) ty: Option<CgType>,
+}
+
+impl TypedValue {
+    /// Create a typed value with a known scalar type.
+    pub(crate) fn typed(val: Value, ty: CgType) -> Self {
+        Self { val, ty: Some(ty) }
+    }
+    /// Create a boxed value (`*mut Value` pointer, type unknown or compound).
+    pub(crate) fn boxed(val: Value) -> Self {
+        Self { val, ty: None }
+    }
+    /// Return `true` when the value is an unboxed scalar in a register.
+    #[allow(dead_code)]
+    fn is_unboxed_scalar(&self) -> bool {
+        matches!(self.ty, Some(CgType::Int | CgType::Float | CgType::Bool))
+    }
+}
 
 /// Information about a pre-compiled inner lambda function.
 pub(crate) struct CompiledLambda {
@@ -37,8 +75,8 @@ pub(crate) struct CompiledLambda {
 
 /// Context for lowering a single function body.
 pub(crate) struct LowerCtx<'a> {
-    /// Maps local variable names to Cranelift SSA values (pointer to `Value`).
-    pub(crate) locals: HashMap<String, Value>,
+    /// Maps local variable names to typed Cranelift SSA values.
+    pub(crate) locals: HashMap<String, TypedValue>,
     /// The `ctx` (JitRuntimeCtx) parameter — first arg of every function.
     ctx_param: Value,
     /// Declared runtime helper function references in this module.
@@ -46,6 +84,58 @@ pub(crate) struct LowerCtx<'a> {
     /// Pre-compiled inner lambda functions, keyed by `*const RustIrExpr`
     /// pointer identity.
     pub(crate) compiled_lambdas: &'a HashMap<usize, CompiledLambda>,
+    /// Registry of JIT-compiled functions available for direct calls.
+    /// Maps qualified name → (FuncRef, param count, param types, return type).
+    jit_funcs: &'a HashMap<String, JitFuncInfo>,
+}
+
+/// Metadata about a JIT-compiled function, used for direct calls.
+#[allow(dead_code)]
+pub(crate) struct JitFuncInfo {
+    pub(crate) func_ref: FuncRef,
+    pub(crate) arity: usize,
+    pub(crate) param_types: Vec<Option<CgType>>,
+    pub(crate) return_type: Option<CgType>,
+}
+
+/// Module-level metadata for a JIT function (stores FuncId, not FuncRef).
+#[allow(dead_code)]
+pub(crate) struct JitFuncDecl {
+    pub(crate) func_id: cranelift_module::FuncId,
+    pub(crate) arity: usize,
+    pub(crate) param_types: Vec<Option<CgType>>,
+    pub(crate) return_type: Option<CgType>,
+}
+
+/// Decompose a function CgType into parameter types and return type.
+/// `Func(A, Func(B, C))` with arity 2 → `([Some(A), Some(B)], Some(C))`
+pub(crate) fn decompose_func_type(ty: &CgType, arity: usize) -> (Vec<Option<CgType>>, Option<CgType>) {
+    let mut params = Vec::new();
+    let mut current = ty;
+    for _ in 0..arity {
+        match current {
+            CgType::Func(param, ret) => {
+                params.push(scalar_type(param));
+                current = ret;
+            }
+            _ => {
+                // Ran out of Func nesting before arity — fill remaining as None
+                while params.len() < arity {
+                    params.push(None);
+                }
+                return (params, None);
+            }
+        }
+    }
+    (params, scalar_type(current))
+}
+
+/// Return `Some(ty)` for types we can represent unboxed, `None` otherwise.
+fn scalar_type(ty: &CgType) -> Option<CgType> {
+    match ty {
+        CgType::Int | CgType::Float | CgType::Bool => Some(ty.clone()),
+        _ => None,
+    }
 }
 
 /// Pre-declared `FuncRef`s for all runtime helpers in a JIT module.
@@ -277,21 +367,93 @@ impl<'a> LowerCtx<'a> {
         ctx_param: Value,
         helpers: &'a HelperRefs,
         compiled_lambdas: &'a HashMap<usize, CompiledLambda>,
+        jit_funcs: &'a HashMap<String, JitFuncInfo>,
     ) -> Self {
         Self {
             locals: HashMap::new(),
             ctx_param,
             helpers,
             compiled_lambdas,
+            jit_funcs,
         }
     }
 
-    /// Lower a `RustIrExpr` to a Cranelift `Value` (a `*mut runtime::Value`).
+    /// Insert function params into `locals`, eagerly unboxing scalars when
+    /// their types are known from the `CgType` annotation.
+    pub(crate) fn bind_typed_params(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        param_names: &[String],
+        block_params: &[Value],        // block_params[0] = ctx, [1..] = args
+        param_types: &[Option<CgType>],
+    ) {
+        for (i, name) in param_names.iter().enumerate() {
+            let raw = block_params[i + 1]; // +1 to skip ctx
+            let tv = if let Some(Some(ty)) = param_types.get(i) {
+                self.try_unbox(builder, raw, ty)
+                    .unwrap_or_else(|| TypedValue::boxed(raw))
+            } else {
+                TypedValue::boxed(raw)
+            };
+            self.locals.insert(name.clone(), tv);
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // Boxing / unboxing helpers
+    // -------------------------------------------------------------------
+
+    /// Ensure a `TypedValue` is in boxed (`*mut Value`) representation.
+    /// If it is already boxed, return the pointer directly.
+    /// If it is an unboxed scalar, emit a boxing call.
+    pub(crate) fn ensure_boxed(&self, builder: &mut FunctionBuilder<'_>, tv: TypedValue) -> Value {
+        match tv.ty {
+            Some(CgType::Int) => {
+                let call = builder.ins().call(self.helpers.rt_box_int, &[self.ctx_param, tv.val]);
+                builder.inst_results(call)[0]
+            }
+            Some(CgType::Float) => {
+                // Bitcast f64 → i64 for the C ABI call
+                let bits = builder.ins().bitcast(PTR, cranelift_codegen::ir::MemFlags::new(), tv.val);
+                let call = builder.ins().call(self.helpers.rt_box_float, &[self.ctx_param, bits]);
+                builder.inst_results(call)[0]
+            }
+            Some(CgType::Bool) => {
+                let call = builder.ins().call(self.helpers.rt_box_bool, &[self.ctx_param, tv.val]);
+                builder.inst_results(call)[0]
+            }
+            _ => tv.val, // already boxed
+        }
+    }
+
+    /// Try to unbox a boxed `*mut Value` to an unboxed scalar if the target
+    /// type is a known scalar.  Returns `None` if the target isn't a scalar.
+    fn try_unbox(&self, builder: &mut FunctionBuilder<'_>, ptr: Value, target: &CgType) -> Option<TypedValue> {
+        match target {
+            CgType::Int => {
+                let call = builder.ins().call(self.helpers.rt_unbox_int, &[self.ctx_param, ptr]);
+                Some(TypedValue::typed(builder.inst_results(call)[0], CgType::Int))
+            }
+            CgType::Float => {
+                let call = builder.ins().call(self.helpers.rt_unbox_float, &[self.ctx_param, ptr]);
+                let bits = builder.inst_results(call)[0];
+                let fval = builder.ins().bitcast(F64, cranelift_codegen::ir::MemFlags::new(), bits);
+                Some(TypedValue::typed(fval, CgType::Float))
+            }
+            CgType::Bool => {
+                let call = builder.ins().call(self.helpers.rt_unbox_bool, &[self.ctx_param, ptr]);
+                Some(TypedValue::typed(builder.inst_results(call)[0], CgType::Bool))
+            }
+            _ => None,
+        }
+    }
+
+    /// Lower a `RustIrExpr` to a typed Cranelift value.
     pub(crate) fn lower_expr(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         expr: &RustIrExpr,
-    ) -> Value {
+    ) -> TypedValue {
         match expr {
             // ----- Literals -----
             RustIrExpr::LitNumber { text, .. } => self.lower_lit_number(builder, text),
@@ -347,23 +509,21 @@ impl<'a> LowerCtx<'a> {
     // Literal lowering
     // -----------------------------------------------------------------------
 
-    fn lower_lit_number(&mut self, builder: &mut FunctionBuilder<'_>, text: &str) -> Value {
+    fn lower_lit_number(&mut self, builder: &mut FunctionBuilder<'_>, text: &str) -> TypedValue {
         if let Ok(int_val) = text.parse::<i64>() {
+            // Unboxed: keep the i64 in a register
             let v = builder.ins().iconst(PTR, int_val);
-            let call = builder.ins().call(self.helpers.rt_box_int, &[self.ctx_param, v]);
-            builder.inst_results(call)[0]
+            TypedValue::typed(v, CgType::Int)
         } else if let Ok(float_val) = text.parse::<f64>() {
-            let bits = float_val.to_bits() as i64;
-            let v = builder.ins().iconst(PTR, bits);
-            let call = builder.ins().call(self.helpers.rt_box_float, &[self.ctx_param, v]);
-            builder.inst_results(call)[0]
+            let v = builder.ins().f64const(float_val);
+            TypedValue::typed(v, CgType::Float)
         } else {
             // Fallback: treat as string (for BigInt, Rational, Decimal, etc.)
             self.lower_lit_string(builder, text)
         }
     }
 
-    fn lower_lit_string(&mut self, builder: &mut FunctionBuilder<'_>, text: &str) -> Value {
+    fn lower_lit_string(&mut self, builder: &mut FunctionBuilder<'_>, text: &str) -> TypedValue {
         let ptr = text.as_ptr() as i64;
         let len = text.len() as i64;
         let ptr_val = builder.ins().iconst(PTR, ptr);
@@ -372,23 +532,21 @@ impl<'a> LowerCtx<'a> {
             self.helpers.rt_alloc_string,
             &[self.ctx_param, ptr_val, len_val],
         );
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 
-    fn lower_lit_bool(&mut self, builder: &mut FunctionBuilder<'_>, value: bool) -> Value {
+    fn lower_lit_bool(&mut self, builder: &mut FunctionBuilder<'_>, value: bool) -> TypedValue {
+        // Unboxed: keep the bool as i64 0/1 in a register
         let v = builder.ins().iconst(PTR, i64::from(value));
-        let call = builder.ins().call(self.helpers.rt_box_bool, &[self.ctx_param, v]);
-        builder.inst_results(call)[0]
+        TypedValue::typed(v, CgType::Bool)
     }
 
     fn lower_text_interpolate(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         parts: &[RustIrTextPart],
-    ) -> Value {
-        // Build interpolated string by concatenating parts via rt_apply on
-        // the text.append builtin. For now, simplify: emit each part as a
-        // value and use rt_binary_op with "++" (string concat).
+    ) -> TypedValue {
+        // Build interpolated string by concatenating parts via rt_binary_op "++".
         if parts.is_empty() {
             return self.lower_lit_string(builder, "");
         }
@@ -400,15 +558,17 @@ impl<'a> LowerCtx<'a> {
         let op_ptr = builder.ins().iconst(PTR, op.as_ptr() as i64);
         let op_len = builder.ins().iconst(PTR, op.len() as i64);
         for part in &parts[1..] {
-            let part_val = match part {
+            let part_tv = match part {
                 RustIrTextPart::Text { text } => self.lower_lit_string(builder, text),
                 RustIrTextPart::Expr { expr } => self.lower_expr(builder, expr),
             };
+            let lhs = self.ensure_boxed(builder, result);
+            let rhs = self.ensure_boxed(builder, part_tv);
             let call = builder.ins().call(
                 self.helpers.rt_binary_op,
-                &[self.ctx_param, op_ptr, op_len, result, part_val],
+                &[self.ctx_param, op_ptr, op_len, lhs, rhs],
             );
-            result = builder.inst_results(call)[0];
+            result = TypedValue::boxed(builder.inst_results(call)[0]);
         }
         result
     }
@@ -417,23 +577,23 @@ impl<'a> LowerCtx<'a> {
     // Variable lowering
     // -----------------------------------------------------------------------
 
-    fn lower_local(&self, builder: &mut FunctionBuilder<'_>, name: &str) -> Value {
-        if let Some(&val) = self.locals.get(name) {
-            val
+    fn lower_local(&self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
+        if let Some(tv) = self.locals.get(name) {
+            tv.clone()
         } else {
             // Fallback: treat as global lookup
             self.lower_global(builder, name)
         }
     }
 
-    fn lower_global(&self, builder: &mut FunctionBuilder<'_>, name: &str) -> Value {
+    fn lower_global(&self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
         let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
         let name_len = builder.ins().iconst(PTR, name.len() as i64);
         let call = builder.ins().call(
             self.helpers.rt_get_global,
             &[self.ctx_param, name_ptr, name_len],
         );
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 
     // -----------------------------------------------------------------------
@@ -446,30 +606,32 @@ impl<'a> LowerCtx<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         expr: &RustIrExpr,
-    ) -> Value {
+    ) -> TypedValue {
         let key = expr as *const RustIrExpr as usize;
         if let Some(cl) = self.compiled_lambdas.get(&key) {
             // Look up the pre-compiled function from globals
             let mut result = self.lower_global(builder, &cl.global_name);
             // Partially apply captured values one by one via rt_apply
             for var_name in &cl.captured_vars {
-                let val = if let Some(&v) = self.locals.get(var_name) {
-                    v
+                let tv = if let Some(v) = self.locals.get(var_name) {
+                    v.clone()
                 } else {
                     self.lower_global(builder, var_name)
                 };
+                let func_ptr = self.ensure_boxed(builder, result);
+                let arg_ptr = self.ensure_boxed(builder, tv);
                 let call = builder.ins().call(
                     self.helpers.rt_apply,
-                    &[self.ctx_param, result, val],
+                    &[self.ctx_param, func_ptr, arg_ptr],
                 );
-                result = builder.inst_results(call)[0];
+                result = TypedValue::boxed(builder.inst_results(call)[0]);
             }
             return result;
         }
 
         // Fallback: look up from globals or return unit
         let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 
     fn lower_app(
@@ -477,14 +639,26 @@ impl<'a> LowerCtx<'a> {
         builder: &mut FunctionBuilder<'_>,
         func: &RustIrExpr,
         arg: &RustIrExpr,
-    ) -> Value {
-        let func_val = self.lower_expr(builder, func);
-        let arg_val = self.lower_expr(builder, arg);
+    ) -> TypedValue {
+        // Check for direct call: App(Global(name), arg) where name is a JIT function with arity 1
+        if let RustIrExpr::Global { name, .. } = func {
+            if let Some(info) = self.jit_funcs.get(name.as_str()) {
+                if info.arity == 1 {
+                    let args_vec = vec![arg.clone()];
+                    return self.emit_direct_call(builder, info, &args_vec);
+                }
+            }
+        }
+
+        let func_tv = self.lower_expr(builder, func);
+        let arg_tv = self.lower_expr(builder, arg);
+        let func_val = self.ensure_boxed(builder, func_tv);
+        let arg_val = self.ensure_boxed(builder, arg_tv);
         let call = builder.ins().call(
             self.helpers.rt_apply,
             &[self.ctx_param, func_val, arg_val],
         );
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 
     fn lower_call(
@@ -492,18 +666,57 @@ impl<'a> LowerCtx<'a> {
         builder: &mut FunctionBuilder<'_>,
         func: &RustIrExpr,
         args: &[RustIrExpr],
-    ) -> Value {
-        // Multi-arg call desugars to chained application
+    ) -> TypedValue {
+        // Check for direct call: Call(Global(name), args) where name is a
+        // JIT function with matching arity.
+        if let RustIrExpr::Global { name, .. } = func {
+            if let Some(info) = self.jit_funcs.get(name.as_str()) {
+                if info.arity == args.len() {
+                    return self.emit_direct_call(builder, info, args);
+                }
+            }
+        }
+
+        // Fallback: chained rt_apply
         let mut result = self.lower_expr(builder, func);
         for arg in args {
-            let arg_val = self.lower_expr(builder, arg);
+            let arg_tv = self.lower_expr(builder, arg);
+            let func_val = self.ensure_boxed(builder, result);
+            let arg_val = self.ensure_boxed(builder, arg_tv);
             let call = builder.ins().call(
                 self.helpers.rt_apply,
-                &[self.ctx_param, result, arg_val],
+                &[self.ctx_param, func_val, arg_val],
             );
-            result = builder.inst_results(call)[0];
+            result = TypedValue::boxed(builder.inst_results(call)[0]);
         }
         result
+    }
+
+    /// Emit a direct Cranelift `call` to a JIT-compiled function, bypassing
+    /// `rt_get_global` + `rt_apply`. Arguments are boxed at the call site
+    /// since the callee's ABI is still all-`PTR`.
+    fn emit_direct_call(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        info: &JitFuncInfo,
+        args: &[RustIrExpr],
+    ) -> TypedValue {
+        let mut call_args = vec![self.ctx_param];
+        for (_i, arg_expr) in args.iter().enumerate() {
+            let arg_tv = self.lower_expr(builder, arg_expr);
+            // Always box for the all-PTR ABI
+            call_args.push(self.ensure_boxed(builder, arg_tv));
+        }
+        let call = builder.ins().call(info.func_ref, &call_args);
+        let raw = builder.inst_results(call)[0];
+        match &info.return_type {
+            Some(ret_ty) => {
+                // Callee returned a boxed value; we know the type so unbox it
+                self.try_unbox(builder, raw, ret_ty)
+                    .unwrap_or_else(|| TypedValue::boxed(raw))
+            }
+            None => TypedValue::boxed(raw),
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -514,7 +727,7 @@ impl<'a> LowerCtx<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         items: &[RustIrListItem],
-    ) -> Value {
+    ) -> TypedValue {
         // Allocate a stack slot for the item pointers array
         let count = items.len();
         if count == 0 {
@@ -524,7 +737,7 @@ impl<'a> LowerCtx<'a> {
                 self.helpers.rt_alloc_list,
                 &[self.ctx_param, null, zero],
             );
-            return builder.inst_results(call)[0];
+            return TypedValue::boxed(builder.inst_results(call)[0]);
         }
 
         // Emit each item and store pointers in a stack slot
@@ -534,8 +747,9 @@ impl<'a> LowerCtx<'a> {
             0,
         ));
         for (i, item) in items.iter().enumerate() {
-            let val = self.lower_expr(builder, &item.expr);
-            builder.ins().stack_store(val, slot, (i * 8) as i32);
+            let tv = self.lower_expr(builder, &item.expr);
+            let boxed = self.ensure_boxed(builder, tv);
+            builder.ins().stack_store(boxed, slot, (i * 8) as i32);
         }
         let arr_ptr = builder.ins().stack_addr(PTR, slot, 0);
         let len = builder.ins().iconst(PTR, count as i64);
@@ -543,18 +757,18 @@ impl<'a> LowerCtx<'a> {
             self.helpers.rt_alloc_list,
             &[self.ctx_param, arr_ptr, len],
         );
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 
     fn lower_tuple(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         items: &[RustIrExpr],
-    ) -> Value {
+    ) -> TypedValue {
         let count = items.len();
         if count == 0 {
             let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
-            return builder.inst_results(call)[0];
+            return TypedValue::boxed(builder.inst_results(call)[0]);
         }
         let slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
@@ -562,8 +776,9 @@ impl<'a> LowerCtx<'a> {
             0,
         ));
         for (i, item) in items.iter().enumerate() {
-            let val = self.lower_expr(builder, item);
-            builder.ins().stack_store(val, slot, (i * 8) as i32);
+            let tv = self.lower_expr(builder, item);
+            let boxed = self.ensure_boxed(builder, tv);
+            builder.ins().stack_store(boxed, slot, (i * 8) as i32);
         }
         let arr_ptr = builder.ins().stack_addr(PTR, slot, 0);
         let len = builder.ins().iconst(PTR, count as i64);
@@ -571,14 +786,14 @@ impl<'a> LowerCtx<'a> {
             self.helpers.rt_alloc_tuple,
             &[self.ctx_param, arr_ptr, len],
         );
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 
     fn lower_record(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         fields: &[RustIrRecordField],
-    ) -> Value {
+    ) -> TypedValue {
         let count = fields.len();
         if count == 0 {
             let null = builder.ins().iconst(PTR, 0);
@@ -587,7 +802,7 @@ impl<'a> LowerCtx<'a> {
                 self.helpers.rt_alloc_record,
                 &[self.ctx_param, null, null, null, zero],
             );
-            return builder.inst_results(call)[0];
+            return TypedValue::boxed(builder.inst_results(call)[0]);
         }
 
         // Stack slots for name pointers, name lengths, and value pointers
@@ -616,8 +831,9 @@ impl<'a> LowerCtx<'a> {
             let name_len = builder.ins().iconst(PTR, field_name.len() as i64);
             builder.ins().stack_store(name_ptr, names_slot, (i * 8) as i32);
             builder.ins().stack_store(name_len, lens_slot, (i * 8) as i32);
-            let val = self.lower_expr(builder, &field.value);
-            builder.ins().stack_store(val, vals_slot, (i * 8) as i32);
+            let tv = self.lower_expr(builder, &field.value);
+            let boxed = self.ensure_boxed(builder, tv);
+            builder.ins().stack_store(boxed, vals_slot, (i * 8) as i32);
         }
 
         let names_ptr = builder.ins().stack_addr(PTR, names_slot, 0);
@@ -628,7 +844,7 @@ impl<'a> LowerCtx<'a> {
             self.helpers.rt_alloc_record,
             &[self.ctx_param, names_ptr, lens_ptr, vals_ptr, len],
         );
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 
     fn lower_patch(
@@ -636,11 +852,12 @@ impl<'a> LowerCtx<'a> {
         builder: &mut FunctionBuilder<'_>,
         target: &RustIrExpr,
         fields: &[RustIrRecordField],
-    ) -> Value {
-        let base = self.lower_expr(builder, target);
+    ) -> TypedValue {
+        let base_tv = self.lower_expr(builder, target);
+        let base = self.ensure_boxed(builder, base_tv);
         let count = fields.len();
         if count == 0 {
-            return base;
+            return TypedValue::boxed(base);
         }
 
         // Build overlay: same layout as lower_record but call rt_patch_record
@@ -669,8 +886,9 @@ impl<'a> LowerCtx<'a> {
             let name_len = builder.ins().iconst(PTR, field_name.len() as i64);
             builder.ins().stack_store(name_ptr, names_slot, (i * 8) as i32);
             builder.ins().stack_store(name_len, lens_slot, (i * 8) as i32);
-            let val = self.lower_expr(builder, &field.value);
-            builder.ins().stack_store(val, vals_slot, (i * 8) as i32);
+            let tv = self.lower_expr(builder, &field.value);
+            let boxed = self.ensure_boxed(builder, tv);
+            builder.ins().stack_store(boxed, vals_slot, (i * 8) as i32);
         }
 
         let names_ptr = builder.ins().stack_addr(PTR, names_slot, 0);
@@ -681,7 +899,7 @@ impl<'a> LowerCtx<'a> {
             self.helpers.rt_patch_record,
             &[self.ctx_param, base, names_ptr, lens_ptr, vals_ptr, len],
         );
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 
     // -----------------------------------------------------------------------
@@ -693,15 +911,16 @@ impl<'a> LowerCtx<'a> {
         builder: &mut FunctionBuilder<'_>,
         base: &RustIrExpr,
         field: &str,
-    ) -> Value {
-        let base_val = self.lower_expr(builder, base);
+    ) -> TypedValue {
+        let base_tv = self.lower_expr(builder, base);
+        let base_val = self.ensure_boxed(builder, base_tv);
         let name_ptr = builder.ins().iconst(PTR, field.as_ptr() as i64);
         let name_len = builder.ins().iconst(PTR, field.len() as i64);
         let call = builder.ins().call(
             self.helpers.rt_record_field,
             &[self.ctx_param, base_val, name_ptr, name_len],
         );
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 
     fn lower_index(
@@ -709,14 +928,18 @@ impl<'a> LowerCtx<'a> {
         builder: &mut FunctionBuilder<'_>,
         base: &RustIrExpr,
         index: &RustIrExpr,
-    ) -> Value {
-        let base_val = self.lower_expr(builder, base);
-        let idx_val = self.lower_expr(builder, index);
-        // Unbox the index to get an i64
-        let idx_int = {
+    ) -> TypedValue {
+        let base_tv = self.lower_expr(builder, base);
+        let base_val = self.ensure_boxed(builder, base_tv);
+        let idx_tv = self.lower_expr(builder, index);
+        // Unbox the index to get an i64 — if already unboxed Int, use directly
+        let idx_int = if matches!(idx_tv.ty, Some(CgType::Int)) {
+            idx_tv.val
+        } else {
+            let idx_boxed = self.ensure_boxed(builder, idx_tv);
             let call = builder.ins().call(
                 self.helpers.rt_unbox_int,
-                &[self.ctx_param, idx_val],
+                &[self.ctx_param, idx_boxed],
             );
             builder.inst_results(call)[0]
         };
@@ -724,7 +947,7 @@ impl<'a> LowerCtx<'a> {
             self.helpers.rt_list_index,
             &[self.ctx_param, base_val, idx_int],
         );
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 
     // -----------------------------------------------------------------------
@@ -737,13 +960,16 @@ impl<'a> LowerCtx<'a> {
         cond: &RustIrExpr,
         then_branch: &RustIrExpr,
         else_branch: &RustIrExpr,
-    ) -> Value {
-        let cond_val = self.lower_expr(builder, cond);
-        // Unbox bool
-        let cond_int = {
+    ) -> TypedValue {
+        let cond_tv = self.lower_expr(builder, cond);
+        // Get a bool condition — if already unboxed Bool, use directly
+        let cond_int = if matches!(cond_tv.ty, Some(CgType::Bool)) {
+            cond_tv.val
+        } else {
+            let cond_boxed = self.ensure_boxed(builder, cond_tv);
             let call = builder.ins().call(
                 self.helpers.rt_unbox_bool,
-                &[self.ctx_param, cond_val],
+                &[self.ctx_param, cond_boxed],
             );
             builder.inst_results(call)[0]
         };
@@ -757,26 +983,29 @@ impl<'a> LowerCtx<'a> {
         let else_block = builder.create_block();
         let merge_block = builder.create_block();
 
-        // Use a Cranelift variable to communicate the result across blocks
+        // Use a Cranelift variable to communicate the result across blocks.
+        // Both branches return boxed values to ensure uniform type in the merge.
         let result_var = builder.declare_var(PTR);
 
         builder.ins().brif(cond_bool, then_block, &[], else_block, &[]);
 
         builder.switch_to_block(then_block);
         builder.seal_block(then_block);
-        let then_val = self.lower_expr(builder, then_branch);
-        builder.def_var(result_var, then_val);
+        let then_tv = self.lower_expr(builder, then_branch);
+        let then_boxed = self.ensure_boxed(builder, then_tv);
+        builder.def_var(result_var, then_boxed);
         builder.ins().jump(merge_block, &[]);
 
         builder.switch_to_block(else_block);
         builder.seal_block(else_block);
-        let else_val = self.lower_expr(builder, else_branch);
-        builder.def_var(result_var, else_val);
+        let else_tv = self.lower_expr(builder, else_branch);
+        let else_boxed = self.ensure_boxed(builder, else_tv);
+        builder.def_var(result_var, else_boxed);
         builder.ins().jump(merge_block, &[]);
 
         builder.switch_to_block(merge_block);
         builder.seal_block(merge_block);
-        builder.use_var(result_var)
+        TypedValue::boxed(builder.use_var(result_var))
     }
 
     fn lower_match(
@@ -784,12 +1013,13 @@ impl<'a> LowerCtx<'a> {
         builder: &mut FunctionBuilder<'_>,
         scrutinee: &RustIrExpr,
         arms: &[RustIrMatchArm],
-    ) -> Value {
-        let scrut_val = self.lower_expr(builder, scrutinee);
+    ) -> TypedValue {
+        let scrut_tv = self.lower_expr(builder, scrutinee);
+        let scrut_val = self.ensure_boxed(builder, scrut_tv);
 
         if arms.is_empty() {
             let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
-            return builder.inst_results(call)[0];
+            return TypedValue::boxed(builder.inst_results(call)[0]);
         }
 
         // Chained if-else: for each arm, test pattern → body, else → next arm
@@ -824,11 +1054,14 @@ impl<'a> LowerCtx<'a> {
 
             // Guard check (if present)
             if let Some(guard) = &arm.guard {
-                let guard_val = self.lower_expr(builder, guard);
-                let guard_int = {
+                let guard_tv = self.lower_expr(builder, guard);
+                let guard_int = if matches!(guard_tv.ty, Some(CgType::Bool)) {
+                    guard_tv.val
+                } else {
+                    let guard_boxed = self.ensure_boxed(builder, guard_tv);
                     let call = builder.ins().call(
                         self.helpers.rt_unbox_bool,
-                        &[self.ctx_param, guard_val],
+                        &[self.ctx_param, guard_boxed],
                     );
                     builder.inst_results(call)[0]
                 };
@@ -843,8 +1076,9 @@ impl<'a> LowerCtx<'a> {
                 builder.seal_block(guard_pass_block);
             }
 
-            let body_val = self.lower_expr(builder, &arm.body);
-            builder.def_var(result_var, body_val);
+            let body_tv = self.lower_expr(builder, &arm.body);
+            let body_boxed = self.ensure_boxed(builder, body_tv);
+            builder.def_var(result_var, body_boxed);
             builder.ins().jump(merge_block, &[]);
 
             // Next arm block
@@ -857,7 +1091,7 @@ impl<'a> LowerCtx<'a> {
 
         builder.switch_to_block(merge_block);
         builder.seal_block(merge_block);
-        builder.use_var(result_var)
+        TypedValue::boxed(builder.use_var(result_var))
     }
 
     /// Emit a pattern test that returns i64: 1 if matched, 0 if not.
@@ -1047,7 +1281,8 @@ impl<'a> LowerCtx<'a> {
     ) -> Value {
         match lit {
             RustIrLiteral::Bool(b) => {
-                let expected = self.lower_lit_bool(builder, *b);
+                let expected_tv = self.lower_lit_bool(builder, *b);
+                let expected = self.ensure_boxed(builder, expected_tv);
                 let call = builder.ins().call(
                     self.helpers.rt_value_equals,
                     &[self.ctx_param, value, expected],
@@ -1055,7 +1290,8 @@ impl<'a> LowerCtx<'a> {
                 builder.inst_results(call)[0]
             }
             RustIrLiteral::String(s) => {
-                let expected = self.lower_lit_string(builder, s);
+                let expected_tv = self.lower_lit_string(builder, s);
+                let expected = self.ensure_boxed(builder, expected_tv);
                 let call = builder.ins().call(
                     self.helpers.rt_value_equals,
                     &[self.ctx_param, value, expected],
@@ -1063,7 +1299,8 @@ impl<'a> LowerCtx<'a> {
                 builder.inst_results(call)[0]
             }
             RustIrLiteral::DateTime(s) => {
-                let expected = self.lower_lit_string(builder, s);
+                let expected_tv = self.lower_lit_string(builder, s);
+                let expected = self.ensure_boxed(builder, expected_tv);
                 let call = builder.ins().call(
                     self.helpers.rt_value_equals,
                     &[self.ctx_param, value, expected],
@@ -1071,7 +1308,8 @@ impl<'a> LowerCtx<'a> {
                 builder.inst_results(call)[0]
             }
             RustIrLiteral::Number(text) => {
-                let expected = self.lower_lit_number(builder, text);
+                let expected_tv = self.lower_lit_number(builder, text);
+                let expected = self.ensure_boxed(builder, expected_tv);
                 let call = builder.ins().call(
                     self.helpers.rt_value_equals,
                     &[self.ctx_param, value, expected],
@@ -1085,7 +1323,8 @@ impl<'a> LowerCtx<'a> {
                     body,
                     if flags.is_empty() { String::new() } else { format!("/{}", flags) }
                 );
-                let expected = self.lower_lit_string(builder, &repr);
+                let expected_tv = self.lower_lit_string(builder, &repr);
+                let expected = self.ensure_boxed(builder, expected_tv);
                 let call = builder.ins().call(
                     self.helpers.rt_value_equals,
                     &[self.ctx_param, value, expected],
@@ -1103,11 +1342,11 @@ impl<'a> LowerCtx<'a> {
     ) {
         match pattern {
             RustIrPattern::Var { name, .. } => {
-                self.locals.insert(name.clone(), value);
+                self.locals.insert(name.clone(), TypedValue::boxed(value));
             }
             RustIrPattern::Wildcard { .. } => {}
             RustIrPattern::At { name, pattern, .. } => {
-                self.locals.insert(name.clone(), value);
+                self.locals.insert(name.clone(), TypedValue::boxed(value));
                 self.bind_pattern(builder, pattern, value);
             }
             RustIrPattern::Literal { .. } => {}
@@ -1185,16 +1424,143 @@ impl<'a> LowerCtx<'a> {
         op: &str,
         left: &RustIrExpr,
         right: &RustIrExpr,
-    ) -> Value {
+    ) -> TypedValue {
         let lhs = self.lower_expr(builder, left);
         let rhs = self.lower_expr(builder, right);
+
+        // Native integer arithmetic when both sides are known Int
+        if matches!(lhs.ty, Some(CgType::Int)) && matches!(rhs.ty, Some(CgType::Int)) {
+            if let Some(tv) = self.try_native_int_op(builder, op, lhs.val, rhs.val) {
+                return tv;
+            }
+        }
+
+        // Native float arithmetic when both sides are known Float
+        if matches!(lhs.ty, Some(CgType::Float)) && matches!(rhs.ty, Some(CgType::Float)) {
+            if let Some(tv) = self.try_native_float_op(builder, op, lhs.val, rhs.val) {
+                return tv;
+            }
+        }
+
+        // Mixed Int/Float: promote Int to Float and do float op
+        if matches!(lhs.ty, Some(CgType::Int)) && matches!(rhs.ty, Some(CgType::Float)) {
+            let lf = builder.ins().fcvt_from_sint(F64, lhs.val);
+            if let Some(tv) = self.try_native_float_op(builder, op, lf, rhs.val) {
+                return tv;
+            }
+        }
+        if matches!(lhs.ty, Some(CgType::Float)) && matches!(rhs.ty, Some(CgType::Int)) {
+            let rf = builder.ins().fcvt_from_sint(F64, rhs.val);
+            if let Some(tv) = self.try_native_float_op(builder, op, lhs.val, rf) {
+                return tv;
+            }
+        }
+
+        // Fallback: box both and call rt_binary_op
+        let lhs_boxed = self.ensure_boxed(builder, lhs);
+        let rhs_boxed = self.ensure_boxed(builder, rhs);
         let op_ptr = builder.ins().iconst(PTR, op.as_ptr() as i64);
         let op_len = builder.ins().iconst(PTR, op.len() as i64);
         let call = builder.ins().call(
             self.helpers.rt_binary_op,
-            &[self.ctx_param, op_ptr, op_len, lhs, rhs],
+            &[self.ctx_param, op_ptr, op_len, lhs_boxed, rhs_boxed],
         );
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
+    }
+
+    /// Try to emit a native i64 integer operation. Returns None if op is unknown.
+    fn try_native_int_op(
+        &self,
+        builder: &mut FunctionBuilder<'_>,
+        op: &str,
+        l: Value,
+        r: Value,
+    ) -> Option<TypedValue> {
+        match op {
+            "+" => Some(TypedValue::typed(builder.ins().iadd(l, r), CgType::Int)),
+            "-" => Some(TypedValue::typed(builder.ins().isub(l, r), CgType::Int)),
+            "*" => Some(TypedValue::typed(builder.ins().imul(l, r), CgType::Int)),
+            "/" => Some(TypedValue::typed(builder.ins().sdiv(l, r), CgType::Int)),
+            "%" => Some(TypedValue::typed(builder.ins().srem(l, r), CgType::Int)),
+            "==" => {
+                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            "!=" => {
+                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::NotEqual, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            "<" => {
+                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::SignedLessThan, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            "<=" => {
+                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            ">" => {
+                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThan, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            ">=" => {
+                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            _ => None,
+        }
+    }
+
+    /// Try to emit a native f64 float operation. Returns None if op is unknown.
+    fn try_native_float_op(
+        &self,
+        builder: &mut FunctionBuilder<'_>,
+        op: &str,
+        l: Value,
+        r: Value,
+    ) -> Option<TypedValue> {
+        match op {
+            "+" => Some(TypedValue::typed(builder.ins().fadd(l, r), CgType::Float)),
+            "-" => Some(TypedValue::typed(builder.ins().fsub(l, r), CgType::Float)),
+            "*" => Some(TypedValue::typed(builder.ins().fmul(l, r), CgType::Float)),
+            "/" => Some(TypedValue::typed(builder.ins().fdiv(l, r), CgType::Float)),
+            "==" => {
+                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::Equal, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            "!=" => {
+                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::NotEqual, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            "<" => {
+                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::LessThan, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            "<=" => {
+                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::LessThanOrEqual, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            ">" => {
+                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::GreaterThan, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            ">=" => {
+                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::GreaterThanOrEqual, l, r);
+                let v = builder.ins().uextend(PTR, c);
+                Some(TypedValue::typed(v, CgType::Bool))
+            }
+            _ => None,
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -1206,7 +1572,7 @@ impl<'a> LowerCtx<'a> {
         builder: &mut FunctionBuilder<'_>,
         block_kind: &RustIrBlockKind,
         items: &[RustIrBlockItem],
-    ) -> Value {
+    ) -> TypedValue {
         match block_kind {
             RustIrBlockKind::Plain => self.lower_plain_block(builder, items),
             RustIrBlockKind::Do { .. } => self.lower_do_block(builder, items),
@@ -1219,17 +1585,18 @@ impl<'a> LowerCtx<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         items: &[RustIrBlockItem],
-    ) -> Value {
+    ) -> TypedValue {
         let mut last = {
             let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
-            builder.inst_results(call)[0]
+            TypedValue::boxed(builder.inst_results(call)[0])
         };
         for item in items {
             last = match item {
                 RustIrBlockItem::Bind { pattern, expr } => {
-                    let val = self.lower_expr(builder, expr);
-                    self.bind_pattern(builder, pattern, val);
-                    val
+                    let tv = self.lower_expr(builder, expr);
+                    let boxed = self.ensure_boxed(builder, tv.clone());
+                    self.bind_pattern(builder, pattern, boxed);
+                    tv
                 }
                 RustIrBlockItem::Expr { expr } => self.lower_expr(builder, expr),
                 RustIrBlockItem::Yield { expr } => self.lower_expr(builder, expr),
@@ -1244,37 +1611,38 @@ impl<'a> LowerCtx<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         items: &[RustIrBlockItem],
-    ) -> Value {
+    ) -> TypedValue {
         // Effect block: each `<- expr` binds the result of running the effect,
         // each bare `expr` is a sequenced effect.
-        // Lowered as chained rt_bind_effect calls.
         let mut current_effect = {
             let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
-            builder.inst_results(call)[0]
+            TypedValue::boxed(builder.inst_results(call)[0])
         };
 
         for item in items {
             match item {
                 RustIrBlockItem::Bind { pattern, expr } => {
-                    let effect = self.lower_expr(builder, expr);
+                    let effect_tv = self.lower_expr(builder, expr);
+                    let effect_boxed = self.ensure_boxed(builder, effect_tv);
                     // Run the effect and bind the result
                     let result = {
                         let call = builder.ins().call(
                             self.helpers.rt_run_effect,
-                            &[self.ctx_param, effect],
+                            &[self.ctx_param, effect_boxed],
                         );
                         builder.inst_results(call)[0]
                     };
                     self.bind_pattern(builder, pattern, result);
-                    current_effect = result;
+                    current_effect = TypedValue::boxed(result);
                 }
                 RustIrBlockItem::Expr { expr } => {
-                    let effect = self.lower_expr(builder, expr);
+                    let effect_tv = self.lower_expr(builder, expr);
+                    let effect_boxed = self.ensure_boxed(builder, effect_tv);
                     let call = builder.ins().call(
                         self.helpers.rt_run_effect,
-                        &[self.ctx_param, effect],
+                        &[self.ctx_param, effect_boxed],
                     );
-                    current_effect = builder.inst_results(call)[0];
+                    current_effect = TypedValue::boxed(builder.inst_results(call)[0]);
                 }
                 _ => {
                     current_effect = self.lower_expr(builder, match item {
@@ -1290,18 +1658,12 @@ impl<'a> LowerCtx<'a> {
     }
 
     /// Delegate a generate or resource block to the interpreter via runtime helpers.
-    ///
-    /// 1. Create an `Env` with `rt_env_new`
-    /// 2. Populate it with every in-scope local via `rt_env_set`
-    /// 3. Pass a pointer to the `RustIrBlockItem` slice (valid because the
-    ///    `rust_program` is alive during JIT execution) plus the env to
-    ///    `rt_eval_generate` (generate) or `rt_make_resource` (resource).
     fn lower_delegated_block(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         items: &[RustIrBlockItem],
         is_generate: bool,
-    ) -> Value {
+    ) -> TypedValue {
         // 1. Create env
         let env = {
             let call = builder.ins().call(self.helpers.rt_env_new, &[self.ctx_param]);
@@ -1311,20 +1673,22 @@ impl<'a> LowerCtx<'a> {
         // 2. Populate env with all in-scope locals.
         //    Leak name strings so the raw pointers embedded in JIT code remain
         //    valid after this function returns (same pattern as lambda globals).
-        let locals_snapshot: Vec<(&'static str, Value)> = self
+        //    All locals must be boxed before storing in the interpreter Env.
+        let locals_snapshot: Vec<(&'static str, TypedValue)> = self
             .locals
             .iter()
             .map(|(k, v)| {
                 let leaked: &'static str = Box::leak(k.clone().into_boxed_str());
-                (leaked, *v)
+                (leaked, v.clone())
             })
             .collect();
-        for (name, val) in &locals_snapshot {
+        for (name, tv) in &locals_snapshot {
+            let boxed = self.ensure_boxed(builder, tv.clone());
             let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
             let name_len = builder.ins().iconst(PTR, name.len() as i64);
             builder.ins().call(
                 self.helpers.rt_env_set,
-                &[self.ctx_param, env, name_ptr, name_len, *val],
+                &[self.ctx_param, env, name_ptr, name_len, boxed],
             );
         }
 
@@ -1339,6 +1703,6 @@ impl<'a> LowerCtx<'a> {
         };
 
         let call = builder.ins().call(helper, &[self.ctx_param, items_ptr, items_count, env]);
-        builder.inst_results(call)[0]
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 }

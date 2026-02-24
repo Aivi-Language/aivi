@@ -4,8 +4,6 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.chronos.timezone
 export TimeZone, ZonedDateTime
-export domain TimeZone
-export domain ZonedDateTime
 
 use aivi
 use aivi.chronos.calendar (DateTime)

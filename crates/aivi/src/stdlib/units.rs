@@ -5,7 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.units
 export Unit, Quantity
 export defineUnit, convert, sameUnit
-export domain Units
+export Units
 
 use aivi
 

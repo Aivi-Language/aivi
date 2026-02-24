@@ -3,7 +3,6 @@ pub const MODULE_NAME: &str = "aivi.path";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.path
-export domain Path
 export Path
 export parse, toString, isAbsolute, parent, fileName, normalize
 

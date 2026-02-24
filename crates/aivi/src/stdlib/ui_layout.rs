@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.ui.layout
 export UnitVal, Length, Percentage
-export domain Layout
+export Layout
 
 use aivi
 

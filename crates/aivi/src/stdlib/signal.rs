@@ -5,7 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.signal
 export Spectrum
 export fft, ifft, windowHann, normalize
-export domain Signal
+export Signal
 
 use aivi
 use aivi.number.complex (Complex)

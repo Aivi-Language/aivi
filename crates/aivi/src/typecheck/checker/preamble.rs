@@ -30,11 +30,15 @@ pub(super) struct TypeChecker {
     method_to_classes: HashMap<String, Vec<String>>,
     assumed_class_constraints: Vec<(String, TypeVarId)>,
     current_module_path: String,
+    current_module_name: String,
     extra_diagnostics: Vec<FileDiagnostic>,
     adt_constructors: HashMap<String, Vec<String>>,
     enabled_record_default_types: HashSet<String>,
     pub(super) constraints: ConstraintState,
     pub(super) query_cache: TypeQueryCache,
+    /// Records `(qualified_callee_name, resolved_type)` for polymorphic call sites.
+    /// Used to build the monomorphization plan.
+    poly_instantiations: Vec<(String, Type)>,
 }
 
 impl TypeChecker {
@@ -55,11 +59,13 @@ impl TypeChecker {
             method_to_classes: HashMap::new(),
             assumed_class_constraints: Vec::new(),
             current_module_path: String::new(),
+            current_module_name: String::new(),
             extra_diagnostics: Vec::new(),
             adt_constructors: HashMap::new(),
             enabled_record_default_types: HashSet::new(),
             constraints: ConstraintState::default(),
             query_cache: TypeQueryCache::default(),
+            poly_instantiations: Vec::new(),
         };
         checker.register_builtin_types();
         checker.register_builtin_aliases();
@@ -94,8 +100,10 @@ impl TypeChecker {
         self.adt_constructors.clear();
         self.enabled_record_default_types = Self::collect_enabled_record_default_types(_module);
         self.current_module_path = _module.path.clone();
+        self.current_module_name = _module.name.name.clone();
         self.constraints = ConstraintState::default();
         self.query_cache.clear_module(&_module.name.name);
+        self.poly_instantiations.clear();
     }
 
     fn collect_enabled_record_default_types(module: &Module) -> HashSet<String> {
@@ -131,6 +139,11 @@ impl TypeChecker {
 
     fn record_default_enabled(&self, marker: &str) -> bool {
         self.enabled_record_default_types.contains(marker)
+    }
+
+    /// Drain the recorded polymorphic call-site instantiations for the current module.
+    pub(super) fn take_poly_instantiations(&mut self) -> Vec<(String, Type)> {
+        std::mem::take(&mut self.poly_instantiations)
     }
 
     fn emit_extra_diag(

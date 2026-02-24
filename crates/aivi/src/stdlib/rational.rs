@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.number.rational
 export normalize, numerator, denominator
-export domain Rational
+export Rational
 
 use aivi
 use aivi.number.bigint (BigInt)
