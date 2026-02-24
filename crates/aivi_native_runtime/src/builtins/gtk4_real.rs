@@ -3,7 +3,7 @@ use crate::Value;
 #[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
 mod linux {
     use std::cell::RefCell;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, VecDeque};
     use std::ffi::{CStr, CString};
     use std::os::raw::{c_char, c_int, c_ulong, c_void};
     use std::ptr::null_mut;
@@ -163,6 +163,7 @@ mod linux {
         overlays: HashMap<i64, *mut c_void>,
         separators: HashMap<i64, *mut c_void>,
         gesture_clicks: HashMap<i64, GestureClickState>,
+        signal_events: VecDeque<SignalEventState>,
         resources_registered: bool,
     }
 
@@ -170,6 +171,33 @@ mod linux {
         widget_id: i64,
         raw: *mut c_void,
         last_button: i64,
+    }
+
+    #[derive(Clone)]
+    struct SignalBindingState {
+        signal: String,
+        handler: String,
+    }
+
+    #[derive(Clone)]
+    struct SignalEventState {
+        widget_id: i64,
+        signal: String,
+        handler: String,
+        payload: String,
+    }
+
+    #[derive(Clone, Copy)]
+    enum SignalPayloadKind {
+        None,
+        EditableText,
+    }
+
+    struct SignalCallbackData {
+        widget_id: i64,
+        signal_name: String,
+        handler: String,
+        payload_kind: SignalPayloadKind,
     }
 
     impl RealGtkState {
@@ -410,6 +438,62 @@ mod linux {
             }
         }
         out
+    }
+
+    fn collect_object_signals(
+        attrs: &[(String, String)],
+        children: &[GtkBuilderNode],
+    ) -> Vec<SignalBindingState> {
+        let mut out = Vec::new();
+        for (name, value) in attrs {
+            if let Some(signal) = name.strip_prefix("signal:") {
+                out.push(SignalBindingState {
+                    signal: signal.to_string(),
+                    handler: value.clone(),
+                });
+            }
+        }
+        for child in children {
+            let GtkBuilderNode::Element {
+                tag,
+                attrs,
+                children: _,
+            } = child
+            else {
+                continue;
+            };
+            if tag != "signal" {
+                continue;
+            }
+            let Some(signal) = node_attr(attrs, "name") else {
+                continue;
+            };
+            let Some(handler) = node_attr(attrs, "handler").or_else(|| node_attr(attrs, "on"))
+            else {
+                continue;
+            };
+            out.push(SignalBindingState {
+                signal: signal.to_string(),
+                handler: handler.to_string(),
+            });
+        }
+        out
+    }
+
+    fn make_signal_event_value(event: SignalEventState) -> Value {
+        let payload = Value::Constructor {
+            name: "GtkSignalEvent".to_string(),
+            args: vec![
+                Value::Int(event.widget_id),
+                Value::Text(event.signal),
+                Value::Text(event.handler),
+                Value::Text(event.payload),
+            ],
+        };
+        Value::Constructor {
+            name: "Some".to_string(),
+            args: vec![payload],
+        }
     }
 
     struct ChildSpec<'a> {
@@ -708,6 +792,7 @@ mod linux {
         let class_name = node_attr(attrs, "class")
             .ok_or_else(|| invalid("gtk4.buildFromNode object requires class attribute"))?;
         let props = collect_object_properties(attrs, children);
+        let signal_bindings = collect_object_signals(attrs, children);
 
         let (raw, kind) = match class_name {
             "GtkBox" | "AdwClamp" => {
@@ -852,6 +937,9 @@ mod linux {
         }
 
         apply_widget_properties(raw, class_name, &props)?;
+        for binding in signal_bindings {
+            connect_widget_signal(raw, id, class_name, &binding)?;
+        }
 
         let mut child_objects = collect_child_objects(children);
         child_objects.sort_by_key(|child| child.position.unwrap_or(usize::MAX));
@@ -941,6 +1029,78 @@ mod linux {
             ))));
         }
         unsafe { g_resources_register(resource) };
+        Ok(())
+    }
+
+    unsafe extern "C" fn gtk_signal_callback(instance: *mut c_void, data: *mut c_void) {
+        if data.is_null() {
+            return;
+        }
+        let binding = unsafe { &*(data as *const SignalCallbackData) };
+        let payload = match binding.payload_kind {
+            SignalPayloadKind::None => String::new(),
+            SignalPayloadKind::EditableText => {
+                let text_ptr = unsafe { gtk_editable_get_text(instance) };
+                if text_ptr.is_null() {
+                    String::new()
+                } else {
+                    unsafe { CStr::from_ptr(text_ptr) }
+                        .to_string_lossy()
+                        .into_owned()
+                }
+            }
+        };
+        GTK_STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            state.signal_events.push_back(SignalEventState {
+                widget_id: binding.widget_id,
+                signal: binding.signal_name.clone(),
+                handler: binding.handler.clone(),
+                payload,
+            });
+        });
+    }
+
+    fn signal_payload_kind_for(class_name: &str, signal_name: &str) -> Option<SignalPayloadKind> {
+        match (class_name, signal_name) {
+            ("GtkButton", "clicked") => Some(SignalPayloadKind::None),
+            ("GtkEntry", "changed") | ("GtkEntry", "activate") => {
+                Some(SignalPayloadKind::EditableText)
+            }
+            _ => None,
+        }
+    }
+
+    fn connect_widget_signal(
+        widget: *mut c_void,
+        widget_id: i64,
+        class_name: &str,
+        binding: &SignalBindingState,
+    ) -> Result<(), RuntimeError> {
+        let Some(payload_kind) = signal_payload_kind_for(class_name, &binding.signal) else {
+            return Err(RuntimeError::Error(Value::Text(format!(
+                "gtk4.buildFromNode unsupported signal `{}` on class `{class_name}`",
+                binding.signal
+            ))));
+        };
+        let signal_c = c_text(&binding.signal, "gtk4.buildFromNode invalid signal name")?;
+        let callback_data = Box::new(SignalCallbackData {
+            widget_id,
+            signal_name: binding.signal.clone(),
+            handler: binding.handler.clone(),
+            payload_kind,
+        });
+        let callback_ptr = Box::into_raw(callback_data) as *mut c_void;
+        unsafe {
+            g_signal_connect_data(
+                widget,
+                signal_c.as_ptr(),
+                gtk_signal_callback as *const c_void,
+                callback_ptr,
+                null_mut(),
+                0,
+            );
+        }
         Ok(())
     }
 
@@ -2576,6 +2736,64 @@ mod linux {
                         build_widget_from_node_real(&mut state, root, &mut id_map)
                     })?;
                     Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "signalPoll".to_string(),
+            builtin("gtk4.signalPoll", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("gtk4.signalPoll expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        if let Some(event) = state.signal_events.pop_front() {
+                            Ok(make_signal_event_value(event))
+                        } else {
+                            Ok(Value::Constructor {
+                                name: "None".to_string(),
+                                args: Vec::new(),
+                            })
+                        }
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "signalEmit".to_string(),
+            builtin("gtk4.signalEmit", 4, |mut args, _| {
+                let payload = match args.remove(3) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalEmit expects Text payload")),
+                };
+                let handler = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalEmit expects Text handler")),
+                };
+                let signal = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalEmit expects Text signal")),
+                };
+                let widget_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.signalEmit expects Int widget id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let _ = widget_ptr(&state, widget_id, "signalEmit")?;
+                        state.signal_events.push_back(SignalEventState {
+                            widget_id,
+                            signal: signal.clone(),
+                            handler: handler.clone(),
+                            payload: payload.clone(),
+                        });
+                        Ok(Value::Unit)
+                    })
                 }))
             }),
         );

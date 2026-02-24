@@ -5,6 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.ui.gtk4
 export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, TrayIconId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, NotificationId, LayoutManagerId, OverlayId, SeparatorId, GtkError
 export GtkNode, GtkAttr, GtkElement, GtkTextNode, GtkAttribute
+export GtkSignalEvent
 export init, appNew, appRun
 export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent
 export widgetShow, widgetHide
@@ -41,6 +42,7 @@ export layoutManagerNew, widgetSetLayoutManager
 export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
 export gtkElement, gtkTextNode, gtkAttr
 export buildFromNode
+export signalPoll, signalEmit
 
 use aivi
 
@@ -78,6 +80,8 @@ GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text
 
 GtkAttr = GtkAttribute Text Text
 
+GtkSignalEvent = GtkSignalEvent WidgetId Text Text Text
+
 gtkElement : Text -> List GtkAttr -> List GtkNode -> GtkNode
 gtkElement = tag attrs children => GtkElement tag attrs children
 
@@ -89,6 +93,12 @@ gtkAttr = name value => GtkAttribute name value
 
 buildFromNode : GtkNode -> Effect GtkError WidgetId
 buildFromNode = gtk4.buildFromNode
+
+signalPoll : Unit -> Effect GtkError (Option GtkSignalEvent)
+signalPoll = gtk4.signalPoll
+
+signalEmit : WidgetId -> Text -> Text -> Text -> Effect GtkError Unit
+signalEmit = gtk4.signalEmit
 
 init : Unit -> Effect GtkError Unit
 init = gtk4.init
