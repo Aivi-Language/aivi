@@ -234,6 +234,19 @@ Nullary constructors (`None`, `True`, `Red`) are values directly.
 Use `constructorName value` and `constructorOrdinal value` to inspect an ADT value at runtime.
 `constructorOrdinal` is zero-based by constructor declaration order.
 
+### Branded nominal types
+
+```aivi
+Email = Text!
+
+mkEmail : Text -> Email
+mkEmail = text => Email text
+```
+
+`T = U!` creates a nominal type `T` (distinct from `U`) using a single constructor named `T`.
+Instances for the base type are auto-forwarded to the branded type when available; explicit
+instances for the branded type take precedence.
+
 ### Open records (row polymorphism)
 
 ```aivi

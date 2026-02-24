@@ -1,3 +1,5 @@
+const AUTO_FORWARD_DECORATOR: &str = "__auto_forward";
+
 impl Parser {
     fn parse_type_or_def(&mut self, decorators: Vec<Decorator>) -> Option<ModuleItem> {
         let checkpoint = self.pos;
@@ -14,8 +16,7 @@ impl Parser {
             // Opaque type declarations can be written as a standalone `UpperIdent` on its own
             // line. Treat those as type declarations, not expression statements.
             let terminator = self.tokens.get(self.pos).map_or(true, |tok| {
-                tok.kind == TokenKind::Newline
-                    || (tok.kind == TokenKind::Symbol && tok.text == "}")
+                tok.kind == TokenKind::Newline || (tok.kind == TokenKind::Symbol && tok.text == "}")
             });
             if terminator {
                 self.pos = checkpoint;
@@ -112,6 +113,25 @@ impl Parser {
                 self.pos = checkpoint;
                 self.diagnostics.truncate(diag_checkpoint);
                 return self.parse_def(Vec::new()).map(ModuleItem::Def);
+            }
+            if alias
+                .decorators
+                .iter()
+                .any(|decorator| decorator.name.name == AUTO_FORWARD_DECORATOR)
+            {
+                let ctor_span = merge_span(alias.name.span.clone(), type_span(&alias.aliased));
+                let constructor = TypeCtor {
+                    name: alias.name.clone(),
+                    args: vec![alias.aliased.clone()],
+                    span: ctor_span,
+                };
+                return Some(ModuleItem::TypeDecl(TypeDecl {
+                    decorators: alias.decorators,
+                    name: alias.name,
+                    params: alias.params,
+                    constructors: vec![constructor],
+                    span: alias.span,
+                }));
             }
             return Some(ModuleItem::TypeAlias(alias));
         }
@@ -265,7 +285,7 @@ impl Parser {
         })
     }
 
-    fn parse_type_alias(&mut self, decorators: Vec<Decorator>) -> Option<TypeAlias> {
+    fn parse_type_alias(&mut self, mut decorators: Vec<Decorator>) -> Option<TypeAlias> {
         self.reject_debug_decorators(&decorators, "type aliases");
         let name = self.consume_ident()?;
         let mut params = Vec::new();
@@ -279,7 +299,20 @@ impl Parser {
         let aliased = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
             span: name.span.clone(),
         });
-        let span = merge_span(name.span.clone(), type_span(&aliased));
+        let mut end_span = type_span(&aliased);
+        if self.consume_symbol("!") {
+            let bang_span = self.previous_span();
+            decorators.push(Decorator {
+                name: SpannedName {
+                    name: AUTO_FORWARD_DECORATOR.to_string(),
+                    span: bang_span.clone(),
+                },
+                arg: None,
+                span: bang_span.clone(),
+            });
+            end_span = bang_span;
+        }
+        let span = merge_span(name.span.clone(), end_span);
         Some(TypeAlias {
             decorators,
             name,
@@ -326,9 +359,14 @@ impl Parser {
         // Parse optional comma-separated superclass list.
         // Superclasses are type names/applications; we must not consume `{` (the member body).
         let mut raw_supers = Vec::new();
-        while !self.check_symbol("{") && !peek_is_given_constraints(self) && self.pos < self.tokens.len() {
+        while !self.check_symbol("{")
+            && !peek_is_given_constraints(self)
+            && self.pos < self.tokens.len()
+        {
             // Parse a single superclass: a name optionally followed by parenthesized args.
-            let Some(name) = self.consume_ident() else { break };
+            let Some(name) = self.consume_ident() else {
+                break;
+            };
             raw_supers.push(TypeExpr::Name(name));
             self.consume_newlines();
             if !self.consume_symbol(",") {
@@ -398,7 +436,8 @@ impl Parser {
                     TypeExpr::Name(name) => {
                         let base = TypeExpr::Name(name.clone());
                         let args = params.clone();
-                        let span = merge_span(name.span, type_span(args.last().expect("non-empty")));
+                        let span =
+                            merge_span(name.span, type_span(args.last().expect("non-empty")));
                         TypeExpr::Apply {
                             base: Box::new(base),
                             args,
@@ -525,11 +564,14 @@ impl Parser {
                     items.push(DomainItem::TypeAlias(type_decl));
                     continue;
                 }
-            } else if self
-                .tokens
-                .get(self.pos)
-                .is_some_and(|tok| tok.kind == TokenKind::Ident && tok.text.chars().next().is_some_and(|c| c.is_ascii_uppercase()))
-            {
+            } else if self.tokens.get(self.pos).is_some_and(|tok| {
+                tok.kind == TokenKind::Ident
+                    && tok
+                        .text
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_uppercase())
+            }) {
                 // Domain-local type declarations (e.g. `Delta = ...`) start with `UpperIdent`.
                 // Only treat it as a type declaration when an `=` appears on the same line.
                 let mut scan = self.pos;
@@ -599,10 +641,7 @@ impl Parser {
     /// Grammar:
     ///   MachineDecl       := "machine" UpperIdent "=" "{" { MachineTransition } "}"
     ///   MachineTransition := [ UpperIdent ] "->" UpperIdent ":" lowerIdent "{" { FieldDecl } "}"
-    pub(crate) fn parse_machine_decl(
-        &mut self,
-        decorators: Vec<Decorator>,
-    ) -> Option<MachineDecl> {
+    pub(crate) fn parse_machine_decl(&mut self, decorators: Vec<Decorator>) -> Option<MachineDecl> {
         self.reject_debug_decorators(&decorators, "machine declarations");
         let start = self.previous_span();
         let name = self.consume_ident()?;
@@ -632,11 +671,7 @@ impl Parser {
                 Some(src)
             } else {
                 let span = self.peek_span().unwrap_or_else(|| self.previous_span());
-                self.emit_diag(
-                    "E1550",
-                    "expected state name or '->' in machine body",
-                    span,
-                );
+                self.emit_diag("E1550", "expected state name or '->' in machine body", span);
                 self.pos += 1;
                 continue;
             };
@@ -644,11 +679,7 @@ impl Parser {
             self.consume_newlines();
             if !self.consume_symbol("->") {
                 let span = self.peek_span().unwrap_or_else(|| self.previous_span());
-                self.emit_diag(
-                    "E1551",
-                    "expected '->' in machine transition",
-                    span,
-                );
+                self.emit_diag("E1551", "expected '->' in machine transition", span);
                 self.recover_to_item();
                 continue;
             }

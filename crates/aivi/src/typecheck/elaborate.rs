@@ -8,7 +8,7 @@ use super::types::Scheme;
 
 use super::class_env::{
     collect_exported_class_env, collect_imported_class_env, collect_local_class_env,
-    expand_classes, InstanceDeclInfo,
+    expand_classes, synthesize_auto_forward_instances, InstanceDeclInfo,
 };
 use super::global::collect_global_type_info;
 use super::ordering::ordered_module_indices;
@@ -51,6 +51,7 @@ pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnosti
             .filter(|instance| !local_class_names.contains(&instance.class_name))
             .collect();
         instances.extend(local_instances);
+        instances.extend(synthesize_auto_forward_instances(module, &instances));
         checker.set_class_env(classes, instances);
 
         checker.register_module_defs(module, &sigs, &mut env);
