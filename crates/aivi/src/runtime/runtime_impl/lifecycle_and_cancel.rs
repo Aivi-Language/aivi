@@ -18,11 +18,13 @@ impl Runtime {
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     fn reset_eval_expr_call_count(&mut self) {
         self.eval_expr_call_count = 0;
     }
 
     #[cfg(test)]
+    #[allow(dead_code)]
     fn eval_expr_call_count(&self) -> usize {
         self.eval_expr_call_count
     }
