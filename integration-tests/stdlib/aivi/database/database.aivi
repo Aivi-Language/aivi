@@ -88,10 +88,10 @@ delta_construct = do Effect {
       | Delete predicate => assert (predicate user)
       | _                => assert False
     ups match
-      | Upsert predicate row patch => do Effect {
+      | Upsert predicate row updateFn => do Effect {
           assert (predicate user)
           assertEq row.id 1
-          assertEq (patch user).name "Bob"
+          assertEq (updateFn user).name "Bob"
         }
       | _ => assert False
 }

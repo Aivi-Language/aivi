@@ -40,6 +40,7 @@ export notificationNew, notificationSetBody, appSendNotification, appWithdrawNot
 export layoutManagerNew, widgetSetLayoutManager
 export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
 export gtkElement, gtkTextNode, gtkAttr
+export buildFromNode
 
 use aivi
 
@@ -85,6 +86,9 @@ gtkTextNode = t => GtkTextNode t
 
 gtkAttr : Text -> Text -> GtkAttr
 gtkAttr = name value => GtkAttribute name value
+
+buildFromNode : GtkNode -> Effect GtkError WidgetId
+buildFromNode = gtk4.buildFromNode
 
 init : Unit -> Effect GtkError Unit
 init = gtk4.init
