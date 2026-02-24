@@ -254,7 +254,11 @@ impl Parser {
                     }
                     // Emit diagnostic for unexpected token inside record literal.
                     let skip_span = self.peek_span().unwrap_or_else(|| self.previous_span());
-                    let skip_text = self.tokens.get(self.pos).map(|t| t.text.as_str()).unwrap_or("?");
+                    let skip_text = self
+                        .tokens
+                        .get(self.pos)
+                        .map(|t| t.text.as_str())
+                        .unwrap_or("?");
                     // Check if this is `name = value` (common mistake: should be `name: value`).
                     if self.pos + 1 < self.tokens.len()
                         && self.tokens[self.pos].kind == TokenKind::Ident
@@ -302,21 +306,30 @@ impl Parser {
             let if_span = self.previous_span();
             let cond = self.parse_expr().unwrap_or_else(|| {
                 self.emit_diag("E1504", "expected condition after 'if'", if_span.clone());
-                Expr::Raw { text: String::new(), span: if_span.clone() }
+                Expr::Raw {
+                    text: String::new(),
+                    span: if_span.clone(),
+                }
             });
             self.consume_newlines();
             self.expect_keyword("then", "expected 'then' in if expression");
             let then_branch = self.parse_expr().unwrap_or_else(|| {
                 let sp = self.previous_span();
                 self.emit_diag("E1504", "expected expression after 'then'", sp.clone());
-                Expr::Raw { text: String::new(), span: sp }
+                Expr::Raw {
+                    text: String::new(),
+                    span: sp,
+                }
             });
             self.consume_newlines();
             self.expect_keyword("else", "expected 'else' in if expression");
             let else_branch = self.parse_expr().unwrap_or_else(|| {
                 let sp = self.previous_span();
                 self.emit_diag("E1504", "expected expression after 'else'", sp.clone());
-                Expr::Raw { text: String::new(), span: sp }
+                Expr::Raw {
+                    text: String::new(),
+                    span: sp,
+                }
             });
             let span = merge_span(expr_span(&cond), expr_span(&else_branch));
             return Some(Expr::If {
@@ -373,8 +386,13 @@ impl Parser {
 
         if let Some(sigil) = self.consume_sigil() {
             let span = sigil.span.clone();
-            if let Some(body) = parse_html_angle_sigil_text(&sigil.text) {
-                return Some(self.parse_html_sigil(&sigil, &body));
+            if let Some((tag, body)) = parse_angle_sigil_text(&sigil.text) {
+                if tag == "html" {
+                    return Some(self.parse_html_sigil(&sigil, &body));
+                }
+                if tag == "gtk" {
+                    return Some(self.parse_gtk_sigil(&sigil, &body));
+                }
             }
             if let Some((tag, body, flags)) = parse_sigil_text(&sigil.text) {
                 if tag == "html" && flags.is_empty() {

@@ -807,9 +807,11 @@ Custom literals with `~tag` and a delimiter:
 ~d(2024-05-21)                 // Date
 ~t(12:00:00)                   // Time
 ~tz(Europe/Paris)              // TimeZone
+~<html><div>{ "x" }</div></html> // Typed VDOM node
+~<gtk><object class="GtkBox" /></gtk> // Typed GTK builder node
 ```
 
-`~map{...}`, `~set[...]`, and `~mat[...]` are **structured** (parsed as AIVI expressions). Other sigils are raw text until the closing delimiter.
+`~map{...}`, `~set[...]`, `~mat[...]`, `~<html>...</html>`, and `~<gtk>...</gtk>` are **structured** (parsed as AIVI expressions). Other sigils are raw text until the closing delimiter.
 
 ---
 

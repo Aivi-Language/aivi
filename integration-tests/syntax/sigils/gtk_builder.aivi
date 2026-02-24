@@ -1,0 +1,16 @@
+@no_prelude
+module integrationTests.syntax.sigils.gtkBuilder
+
+use aivi.ui.gtk4
+
+node : GtkNode
+node =
+  ~<gtk>
+    <object class="GtkBox" props={ { spacing: 24, marginTop: 12 } }>
+      <child>
+        <object class="GtkLabel">
+          <property name="label">Hello</property>
+        </object>
+      </child>
+    </object>
+  </gtk>

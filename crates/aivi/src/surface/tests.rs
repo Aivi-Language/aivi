@@ -782,6 +782,77 @@ x =
 }
 
 #[test]
+fn parses_structured_sigil_gtk_literal() {
+    let src = r#"
+module Example
+
+x =
+  ~<gtk>
+    <object class="GtkBox" props={ { marginTop: 24, spacing: 24 } }>
+      <child>
+        <object class="GtkLabel">
+          <property name="label">Hello</property>
+        </object>
+      </child>
+    </object>
+  </gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    assert!(
+        expr_contains_ident(&def.expr, "gtkElement") && expr_contains_ident(&def.expr, "gtkAttr"),
+        "expected ~<gtk> to lower into GTK helper constructors"
+    );
+}
+
+#[test]
+fn gtk_sigil_props_requires_record_literal() {
+    let src = r#"
+module Example
+
+dynamicProps = "nope"
+x = ~<gtk><object class="GtkBox" props={ dynamicProps } /></gtk>
+"#;
+    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    let codes = diag_codes(&diags);
+    assert!(
+        codes.iter().any(|code| code == "E1612"),
+        "expected E1612 for non-record props splice, got: {codes:?}"
+    );
+}
+
+#[test]
+fn gtk_sigil_props_values_must_be_compile_time_literals() {
+    let src = r#"
+module Example
+
+someValue = 24
+x = ~<gtk><object class="GtkBox" props={ { spacing: someValue } } /></gtk>
+"#;
+    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    let codes = diag_codes(&diags);
+    assert!(
+        codes.iter().any(|code| code == "E1613"),
+        "expected E1613 for non-literal props field value, got: {codes:?}"
+    );
+}
+
+#[test]
 fn parses_domain_literal_def_in_embedded_ui_layout() {
     let src = crate::stdlib::embedded_stdlib_source("aivi.ui.layout")
         .expect("embedded stdlib source for aivi.ui.layout");

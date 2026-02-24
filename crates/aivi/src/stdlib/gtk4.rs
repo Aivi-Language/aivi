@@ -4,6 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.ui.gtk4
 export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, TrayIconId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, NotificationId, LayoutManagerId, OverlayId, SeparatorId, GtkError
+export GtkNode, GtkAttr, GtkElement, GtkTextNode, GtkAttribute
 export init, appNew, appRun
 export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent
 export widgetShow, widgetHide
@@ -38,6 +39,7 @@ export shortcutNew, widgetAddShortcut
 export notificationNew, notificationSetBody, appSendNotification, appWithdrawNotification
 export layoutManagerNew, widgetSetLayoutManager
 export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
+export gtkElement, gtkTextNode, gtkAttr
 
 use aivi
 
@@ -70,6 +72,19 @@ LayoutManagerId = Int
 OverlayId = Int
 SeparatorId = Int
 GtkError = Text
+
+GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text
+
+GtkAttr = GtkAttribute Text Text
+
+gtkElement : Text -> List GtkAttr -> List GtkNode -> GtkNode
+gtkElement = tag attrs children => GtkElement tag attrs children
+
+gtkTextNode : Text -> GtkNode
+gtkTextNode = t => GtkTextNode t
+
+gtkAttr : Text -> Text -> GtkAttr
+gtkAttr = name value => GtkAttribute name value
 
 init : Unit -> Effect GtkError Unit
 init = gtk4.init

@@ -14,6 +14,7 @@ impl Backend {
         "~set[]",
         "~mat[]",
         "~<html></html>",
+        "~<gtk></gtk>",
     ];
 
     pub(super) const SEM_TOKEN_KEYWORD: u32 = 0;
@@ -278,7 +279,12 @@ impl Backend {
             "sigil" => Some(Self::SEM_TOKEN_SIGIL),
             "number" => Some(Self::SEM_TOKEN_NUMBER),
             "symbol" => {
-                if token.text == "~" && next.is_some_and(|n| n.kind == "ident" && matches!(n.text.as_str(), "map" | "set" | "mat" | "path")) {
+                if token.text == "~"
+                    && next.is_some_and(|n| {
+                        n.kind == "ident"
+                            && matches!(n.text.as_str(), "map" | "set" | "mat" | "path")
+                    })
+                {
                     Some(Self::SEM_TOKEN_SIGIL)
                 } else if token.text == "@" {
                     Some(Self::SEM_TOKEN_DECORATOR)
@@ -297,7 +303,9 @@ impl Backend {
                 }
             }
             "ident" => {
-                if prev.is_some_and(|p| p.kind == "symbol" && p.text == "~") && matches!(token.text.as_str(), "map" | "set" | "mat" | "path") {
+                if prev.is_some_and(|p| p.kind == "symbol" && p.text == "~")
+                    && matches!(token.text.as_str(), "map" | "set" | "mat" | "path")
+                {
                     return Some(Self::SEM_TOKEN_SIGIL);
                 }
                 if prev.is_some_and(|prev| Self::is_unit_suffix(prev, token)) {

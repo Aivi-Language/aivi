@@ -229,6 +229,17 @@ fn aivi_tmlanguage() -> serde_json::Value {
               }
             },
             {
+              "name": "string.quoted.other.sigil.gtk.aivi",
+              "begin": "(~<gtk>)",
+              "beginCaptures": {
+                "1": { "name": "storage.type.sigil.aivi" }
+              },
+              "end": "(</gtk>)",
+              "endCaptures": {
+                "1": { "name": "storage.type.sigil.aivi" }
+              }
+            },
+            {
               "name": "string.quoted.other.sigil.aivi",
               "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(/)",
               "beginCaptures": {

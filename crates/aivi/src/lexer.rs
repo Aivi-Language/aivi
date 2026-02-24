@@ -169,7 +169,7 @@ pub fn lex(content: &str) -> (Vec<CstToken>, Vec<Diagnostic>) {
 
         if ch == '~' {
             if let Some((text, end_line, end_col, closed)) =
-                lex_html_angle_sigil(&chars, index, line, col)
+                lex_angle_sigil(&chars, index, line, col)
                     .or_else(|| lex_sigil_multiline(&chars, index, line, col))
             {
                 let len_chars = text.chars().count();
@@ -305,30 +305,38 @@ fn is_ident_continue(ch: char) -> bool {
     is_ident_start(ch) || ch.is_ascii_digit()
 }
 
-fn lex_html_angle_sigil(
+fn lex_angle_sigil(
     chars: &[char],
     start: usize,
     start_line: usize,
     start_col: usize,
 ) -> Option<(String, usize, usize, bool)> {
-    // New HTML sigil syntax: `~<html> ... </html>`
+    // Angle sigil syntax: `~<tag> ... </tag>`.
     // This is multiline and can contain `{ ... }` splices.
     if chars.get(start) != Some(&'~') || chars.get(start + 1) != Some(&'<') {
         return None;
     }
     let mut index = start + 2;
-    if index + 4 >= chars.len() {
+    if index >= chars.len() || !chars[index].is_ascii_alphabetic() {
         return None;
     }
-    if chars.get(index) != Some(&'h')
-        || chars.get(index + 1) != Some(&'t')
-        || chars.get(index + 2) != Some(&'m')
-        || chars.get(index + 3) != Some(&'l')
-        || chars.get(index + 4) != Some(&'>')
+    let tag_start = index;
+    index += 1;
+    while index < chars.len()
+        && (chars[index].is_ascii_alphanumeric() || matches!(chars[index], '_' | '-'))
     {
+        index += 1;
+    }
+    if chars.get(index) != Some(&'>') {
         return None;
     }
-    index += 5; // consume `html>`
+    let tag: String = chars[tag_start..index].iter().collect();
+    // Keep angle sigils explicit for now.
+    if tag != "html" && tag != "gtk" {
+        return None;
+    }
+    index += 1; // consume `>`
+    let close_marker: Vec<char> = format!("</{tag}>").chars().collect();
 
     let mut line = start_line;
     let mut col = start_col + (index - start);
@@ -371,19 +379,14 @@ fn lex_html_angle_sigil(
             continue;
         }
 
-        // Scan for closing delimiter `</html>`.
+        // Scan for closing delimiter `</{tag}>`.
         if ch == '<'
-            && index + 6 < chars.len()
-            && chars[index + 1] == '/'
-            && chars[index + 2] == 'h'
-            && chars[index + 3] == 't'
-            && chars[index + 4] == 'm'
-            && chars[index + 5] == 'l'
-            && chars[index + 6] == '>'
+            && index + close_marker.len() <= chars.len()
+            && chars[index..index + close_marker.len()] == close_marker[..]
         {
             closed = true;
-            index += 7; // consume `</html>`
-            col += 6; // advance to the last char of the delimiter
+            index += close_marker.len(); // consume `</{tag}>`
+            col += close_marker.len().saturating_sub(1); // advance to the last char of delimiter
             break;
         }
 

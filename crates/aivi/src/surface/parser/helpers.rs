@@ -272,7 +272,7 @@ fn parse_sigil_text(text: &str) -> Option<(String, String, String)> {
         break;
     }
     let open = open?;
-    
+
     // Special handling for ~html~> ... <~html delimiter
     if open == '~' {
         // Expect '>' after '~'
@@ -292,7 +292,7 @@ fn parse_sigil_text(text: &str) -> Option<(String, String, String)> {
             return Some((tag, remainder, String::new()));
         }
     }
-    
+
     let close = match open {
         '/' => '/',
         '"' => '"',
@@ -369,15 +369,28 @@ fn parse_sigil_text(text: &str) -> Option<(String, String, String)> {
     Some((tag, body, flags))
 }
 
-fn parse_html_angle_sigil_text(text: &str) -> Option<String> {
-    // HTML sigil syntax: `~<html> ... </html>`
-    let open = "~<html>";
-    let close = "</html>";
-    if !text.starts_with(open) || !text.ends_with(close) {
+fn parse_angle_sigil_text(text: &str) -> Option<(String, String)> {
+    // Angle sigil syntax: `~<tag> ... </tag>`
+    if !text.starts_with("~<") {
         return None;
     }
-    let body = &text[open.len()..text.len().saturating_sub(close.len())];
-    Some(body.to_string())
+    let after_open = &text[2..];
+    let close_tag_start = after_open.find('>')?;
+    let tag = &after_open[..close_tag_start];
+    if tag.is_empty()
+        || !tag
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-'))
+    {
+        return None;
+    }
+    let open_len = 2 + close_tag_start + 1;
+    let close = format!("</{tag}>");
+    if !text.ends_with(&close) || text.len() < open_len + close.len() {
+        return None;
+    }
+    let body = &text[open_len..text.len().saturating_sub(close.len())];
+    Some((tag.to_string(), body.to_string()))
 }
 
 fn is_probably_url(text: &str) -> bool {
