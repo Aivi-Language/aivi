@@ -85,6 +85,7 @@ Definition     := ValueSig
                | DomainDef
                | ClassDef
                | InstanceDef
+               | MachineDef
 
 ValueSig       := lowerIdent ":" Type Sep
 ValueBinding   := Pattern "=" Expr Sep
@@ -102,9 +103,20 @@ ConDef         := UpperIdent { TypeAtom }
 ModuleDef      := "module" ModulePath Sep ModuleBodyImplicit
 ModulePath     := ModuleSeg { "." ModuleSeg }
 ModuleSeg      := lowerIdent | UpperIdent
-ModuleItem     := ExportStmt | UseStmt | Definition
+ModuleItem     := ExportStmt | ExportedDefinition | UseStmt | Definition
 ModuleBodyImplicit := { ModuleItem } EOF
 (* `module` must be the first non-empty item in the file (after any module decorators). *)
+ExportedDefinition := "export" ExportableDefinition
+ExportableDefinition := ValueSig
+                   | ValueBinding
+                   | BrandedType
+                   | OpaqueType
+                   | TypeAlias
+                   | TypeDef
+                   | DomainDef
+                   | ClassDef
+                   | InstanceDef
+                   | MachineDef
 ExportStmt     := "export" ( "*" | ExportList ) Sep
 ExportList     := ExportItem { "," ExportItem }
 ExportItem     := lowerIdent | UpperIdent | ("domain" UpperIdent)
@@ -139,6 +151,10 @@ ClassMembers   := RecordType
 
 InstanceDef    := "instance" UpperIdent InstanceHead "=" RecordLit Sep
 InstanceHead   := "(" Type ")"
+
+MachineDef     := "machine" UpperIdent "=" "{" { MachineTransition } "}" Sep
+MachineTransition := [ UpperIdent ] "->" UpperIdent ":" lowerIdent "{" { FieldDecl } "}"
+FieldDecl      := lowerIdent ":" Type
 ```
 
 ## 0.3 Expressions

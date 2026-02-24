@@ -53,6 +53,27 @@ When another module imports the domain (for example: `use geo.vector (domain Vec
 
 In v0.1, importing a module does not automatically activate its domains; domains must be imported explicitly via `use ... (domain Name)` (or by importing specific operator/template bindings as values).
 
+## 10.4.1 Inline export declarations
+
+`export` can also prefix declarations directly to reduce noise:
+
+```aivi
+module app.flow
+
+export run = input => input
+
+export domain Status over Int = {
+  next : Int -> Int
+  next = x => x + 1
+}
+
+export machine Workflow = {
+  -> Idle : boot {}
+}
+```
+
+The original export-list form remains valid (`export run, Workflow`, `export domain Status`) and is still useful for re-export modules.
+
 
 ## 10.5 File-Scoped Modules (No Nesting)
 

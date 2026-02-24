@@ -225,6 +225,13 @@ impl Parser {
             let decorators = self.consume_decorators();
             self.validate_item_decorators(&decorators);
             if self.match_keyword("export") {
+                if let Some((item, export_item)) =
+                    self.parse_export_prefixed_item(decorators.clone())
+                {
+                    items.push(item);
+                    exports.push(export_item);
+                    continue;
+                }
                 for decorator in decorators {
                     self.emit_diag(
                         "E1507",
@@ -328,6 +335,127 @@ impl Parser {
             span,
             path: self.path.clone(),
         })
+    }
+
+    fn parse_export_prefixed_item(
+        &mut self,
+        decorators: Vec<Decorator>,
+    ) -> Option<(ModuleItem, crate::surface::ExportItem)> {
+        let checkpoint = self.pos;
+        let diag_checkpoint = self.diagnostics.len();
+
+        let parsed_item = if self.match_keyword("class") {
+            self.parse_class_decl(decorators.clone())
+                .map(ModuleItem::ClassDecl)
+        } else if self.match_keyword("instance") {
+            self.parse_instance_decl(decorators.clone())
+                .map(ModuleItem::InstanceDecl)
+        } else if self.match_keyword("domain") {
+            self.parse_domain_decl(decorators.clone())
+                .map(ModuleItem::DomainDecl)
+        } else if self.match_keyword("machine") {
+            self.parse_machine_decl(decorators.clone())
+                .map(ModuleItem::MachineDecl)
+        } else if self.peek_keyword("type")
+            && self.tokens.get(self.pos + 1).is_some_and(|tok| {
+                tok.kind == TokenKind::Ident
+                    && tok
+                        .text
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_uppercase())
+            })
+        {
+            // Legacy syntax: `export type T = ...`.
+            let _ = self.match_keyword("type");
+            let span = self.previous_span();
+            self.emit_diag(
+                "E1542",
+                "`type` keyword is not part of AIVI syntax; write `export Name = ...`",
+                span,
+            );
+            self.parse_type_decl_or_alias(decorators)
+        } else if self.looks_like_export_prefixed_type_or_def() {
+            self.parse_type_or_def(decorators)
+        } else {
+            None
+        };
+
+        let Some(item) = parsed_item else {
+            self.pos = checkpoint;
+            self.diagnostics.truncate(diag_checkpoint);
+            return None;
+        };
+
+        let export_item = match &item {
+            ModuleItem::Def(def) => crate::surface::ExportItem {
+                kind: crate::surface::ScopeItemKind::Value,
+                name: def.name.clone(),
+            },
+            ModuleItem::TypeSig(sig) => crate::surface::ExportItem {
+                kind: crate::surface::ScopeItemKind::Value,
+                name: sig.name.clone(),
+            },
+            ModuleItem::TypeDecl(ty) => crate::surface::ExportItem {
+                kind: crate::surface::ScopeItemKind::Value,
+                name: ty.name.clone(),
+            },
+            ModuleItem::TypeAlias(alias) => crate::surface::ExportItem {
+                kind: crate::surface::ScopeItemKind::Value,
+                name: alias.name.clone(),
+            },
+            ModuleItem::ClassDecl(class_decl) => crate::surface::ExportItem {
+                kind: crate::surface::ScopeItemKind::Value,
+                name: class_decl.name.clone(),
+            },
+            ModuleItem::InstanceDecl(instance_decl) => crate::surface::ExportItem {
+                kind: crate::surface::ScopeItemKind::Value,
+                name: instance_decl.name.clone(),
+            },
+            ModuleItem::DomainDecl(domain_decl) => crate::surface::ExportItem {
+                kind: crate::surface::ScopeItemKind::Domain,
+                name: domain_decl.name.clone(),
+            },
+            ModuleItem::MachineDecl(machine_decl) => crate::surface::ExportItem {
+                kind: crate::surface::ScopeItemKind::Value,
+                name: machine_decl.name.clone(),
+            },
+        };
+        Some((item, export_item))
+    }
+
+    fn looks_like_export_prefixed_type_or_def(&self) -> bool {
+        let Some(first) = self.tokens.get(self.pos) else {
+            return false;
+        };
+        match first.kind {
+            TokenKind::Ident => {
+                if matches!(
+                    first.text.as_str(),
+                    "module" | "export" | "use" | "class" | "instance" | "domain" | "machine"
+                ) {
+                    return false;
+                }
+            }
+            TokenKind::Symbol => {
+                if first.text != "(" {
+                    return false;
+                }
+            }
+            _ => return false,
+        }
+        let mut scan = self.pos;
+        while let Some(tok) = self.tokens.get(scan) {
+            if tok.kind == TokenKind::Newline || (tok.kind == TokenKind::Symbol && tok.text == "}")
+            {
+                break;
+            }
+            if tok.kind == TokenKind::Symbol && (tok.text == ":" || tok.text == "=") {
+                return true;
+            }
+            scan += 1;
+        }
+        false
     }
 
     fn parse_export_list(&mut self) -> Vec<crate::surface::ExportItem> {
@@ -447,12 +575,7 @@ impl Parser {
             let name = decorator.name.name.as_str();
             if !matches!(
                 name,
-                "static"
-                    | "inline"
-                    | "deprecated"
-                    | "test"
-                    | "debug"
-                    | "native"
+                "static" | "inline" | "deprecated" | "test" | "debug" | "native"
             ) {
                 self.emit_diag(
                     "E1506",
@@ -497,11 +620,7 @@ impl Parser {
                             .as_ref()
                             .map(expr_span)
                             .unwrap_or_else(|| decorator.span.clone());
-                        self.emit_diag(
-                            "E1510",
-                            "`@test` expects a string literal argument",
-                            span,
-                        );
+                        self.emit_diag("E1510", "`@test` expects a string literal argument", span);
                     }
                 }
                 "native" => {
