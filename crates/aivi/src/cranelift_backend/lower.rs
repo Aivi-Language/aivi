@@ -32,11 +32,10 @@ pub(crate) struct LowerCtx<'a> {
     ctx_param: Value,
     /// Declared runtime helper function references in this module.
     helpers: &'a HelperRefs,
-    /// Cranelift variable counter.
-    next_var: u32,
 }
 
 /// Pre-declared `FuncRef`s for all runtime helpers in a JIT module.
+#[allow(dead_code)]
 pub(crate) struct HelperRefs {
     pub(crate) rt_box_int: FuncRef,
     pub(crate) rt_box_float: FuncRef,
@@ -190,7 +189,6 @@ impl<'a> LowerCtx<'a> {
             locals: HashMap::new(),
             ctx_param,
             helpers,
-            next_var: 0,
         }
     }
 

@@ -4,46 +4,30 @@ version = "0.0.0"
 publish = false
 edition = "2021"
 
-[package.metadata]
-cargo-fuzz = true
-
 [dependencies]
-libfuzzer-sys = "0.4"
+bolero = "0.13"
 
 # Fuzz the public toolchain surface area.
 aivi = { path = "../crates/aivi" }
 
-[profile.release]
-debug = 1
-
 # ── Fuzz targets ──────────────────────────────────────────────
 
-[[bin]]
+[[test]]
 name = "parser"
 path = "fuzz_targets/parser.rs"
-doc = false
-test = false
 
-[[bin]]
+[[test]]
 name = "frontend"
 path = "fuzz_targets/frontend.rs"
-doc = false
-test = false
 
-[[bin]]
+[[test]]
 name = "runtime"
 path = "fuzz_targets/runtime.rs"
-doc = false
-test = false
 
-[[bin]]
+[[test]]
 name = "formatter"
 path = "fuzz_targets/formatter.rs"
-doc = false
-test = false
 
-[[bin]]
+[[test]]
 name = "lsp_pipeline"
 path = "fuzz_targets/lsp_pipeline.rs"
-doc = false
-test = false

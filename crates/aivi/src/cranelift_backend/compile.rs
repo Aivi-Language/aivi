@@ -73,7 +73,6 @@ pub fn run_cranelift_jit(
     //    Skip arity-0 do-block definitions — the interpreter handles those lazily.
     struct PendingDef {
         name: String,
-        func_name: String,
         func_id: cranelift_module::FuncId,
         arity: usize,
     }
@@ -100,8 +99,8 @@ pub fn run_cranelift_jit(
             declared_names.insert(func_name);
 
             match compile_definition(&mut module, &helpers, def, &qualified) {
-                Ok(Some((func_id, func_name, arity))) => {
-                    pending.push(PendingDef { name: def.name.clone(), func_name, func_id, arity });
+                Ok(Some((func_id, _func_name, arity))) => {
+                    pending.push(PendingDef { name: def.name.clone(), func_id, arity });
                 }
                 Ok(None) => {}
                 Err(e) => {

@@ -17,18 +17,18 @@ jobs:
           components: llvm-tools-preview
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
-      - name: Install cargo-fuzz
-        run: cargo install cargo-fuzz --locked
+      - name: Install cargo-bolero
+        run: cargo install cargo-bolero --locked
       - name: Fuzz parser (long)
-        run: cargo +nightly fuzz run parser -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
+        run: cargo bolero test -p aivi-fuzz parser::parser --engine libfuzzer -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
       - name: Fuzz frontend (long)
-        run: cargo +nightly fuzz run frontend -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
+        run: cargo bolero test -p aivi-fuzz frontend::frontend --engine libfuzzer -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
       - name: Fuzz runtime (long)
-        run: cargo +nightly fuzz run runtime -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
+        run: cargo bolero test -p aivi-fuzz runtime::runtime --engine libfuzzer -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
       - name: Fuzz formatter (long)
-        run: cargo +nightly fuzz run formatter -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
+        run: cargo bolero test -p aivi-fuzz formatter::formatter --engine libfuzzer -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
       - name: Fuzz LSP pipeline (long)
-        run: cargo +nightly fuzz run lsp_pipeline -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
+        run: cargo bolero test -p aivi-fuzz lsp_pipeline::lsp_pipeline --engine libfuzzer -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
       - name: Perf check (tighter)
         run: cargo run -p aivi --bin perf -- check --baseline crates/aivi/perf/baseline.json --max-multiplier 1.25
       - name: Upload perf report
