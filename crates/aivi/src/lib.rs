@@ -124,6 +124,7 @@ pub use aivi_core::{
 };
 pub use aivi_core::{CstBundle, CstFile, CstToken};
 pub use aivi_core::{HirModule, HirProgram};
+pub use cranelift_backend::{compile_to_object, run_cranelift_jit};
 pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
 };
@@ -138,11 +139,7 @@ pub use pm::{
     AiviCargoMetadata, AiviToml, AiviTomlBuild, AiviTomlProject, CargoDepSpec,
     CargoDepSpecParseError, CargoManifestEdits, NativeUiTarget, ProjectKind,
 };
-pub use runtime::{
-    run_test_suite, TestFailure, TestReport,
-    TestSuccess,
-};
-pub use cranelift_backend::run_cranelift_jit;
+pub use runtime::{run_test_suite, TestFailure, TestReport, TestSuccess};
 pub use rust_codegen::{
     compile_rust_native, compile_rust_native_lib, compile_rust_native_lib_typed,
     compile_rust_native_typed,

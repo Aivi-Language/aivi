@@ -46,6 +46,7 @@ cranelift-frontend = "0.126.0"
 cranelift-jit = "0.126.0"
 cranelift-module = "0.126.0"
 cranelift-object = "0.126.0"
+target-lexicon = "0.13.5"
 zbus = "4.4.0"
 
 [features]

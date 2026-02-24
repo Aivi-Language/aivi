@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::runtime::values::Value;
 use crate::runtime::environment::Env;
+use crate::runtime::values::Value;
 
 use super::abi::{self, JitRuntimeCtx};
 
@@ -16,24 +16,28 @@ use super::abi::{self, JitRuntimeCtx};
 // ---------------------------------------------------------------------------
 
 /// Box an i64 integer into a heap-allocated `Value::Int`.
-pub(crate) extern "C" fn rt_box_int(_ctx: *mut JitRuntimeCtx, value: i64) -> *mut Value {
+#[no_mangle]
+pub extern "C" fn rt_box_int(_ctx: *mut JitRuntimeCtx, value: i64) -> *mut Value {
     abi::box_value(Value::Int(value))
 }
 
 /// Box an f64 float into a heap-allocated `Value::Float`.
 /// The f64 is passed as raw i64 bits.
-pub(crate) extern "C" fn rt_box_float(_ctx: *mut JitRuntimeCtx, bits: i64) -> *mut Value {
+#[no_mangle]
+pub extern "C" fn rt_box_float(_ctx: *mut JitRuntimeCtx, bits: i64) -> *mut Value {
     let f = f64::from_bits(bits as u64);
     abi::box_value(Value::Float(f))
 }
 
 /// Box a bool into a heap-allocated `Value::Bool`.
-pub(crate) extern "C" fn rt_box_bool(_ctx: *mut JitRuntimeCtx, value: i64) -> *mut Value {
+#[no_mangle]
+pub extern "C" fn rt_box_bool(_ctx: *mut JitRuntimeCtx, value: i64) -> *mut Value {
     abi::box_value(Value::Bool(value != 0))
 }
 
 /// Unbox `Value::Int` → i64.  Panics on type mismatch.
-pub(crate) extern "C" fn rt_unbox_int(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
+#[no_mangle]
+pub extern "C" fn rt_unbox_int(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };
     match value {
         Value::Int(v) => *v,
@@ -42,7 +46,8 @@ pub(crate) extern "C" fn rt_unbox_int(_ctx: *mut JitRuntimeCtx, ptr: *const Valu
 }
 
 /// Unbox `Value::Float` → i64 (f64 bit pattern).  Panics on type mismatch.
-pub(crate) extern "C" fn rt_unbox_float(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
+#[no_mangle]
+pub extern "C" fn rt_unbox_float(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };
     match value {
         Value::Float(v) => v.to_bits() as i64,
@@ -51,7 +56,8 @@ pub(crate) extern "C" fn rt_unbox_float(_ctx: *mut JitRuntimeCtx, ptr: *const Va
 }
 
 /// Unbox `Value::Bool` → i64 (0 or 1).  Panics on type mismatch.
-pub(crate) extern "C" fn rt_unbox_bool(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
+#[no_mangle]
+pub extern "C" fn rt_unbox_bool(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };
     match value {
         Value::Bool(v) => i64::from(*v),
@@ -64,7 +70,8 @@ pub(crate) extern "C" fn rt_unbox_bool(_ctx: *mut JitRuntimeCtx, ptr: *const Val
 // ---------------------------------------------------------------------------
 
 /// Allocate a `Value::Unit`.
-pub(crate) extern "C" fn rt_alloc_unit(_ctx: *mut JitRuntimeCtx) -> *mut Value {
+#[no_mangle]
+pub extern "C" fn rt_alloc_unit(_ctx: *mut JitRuntimeCtx) -> *mut Value {
     abi::box_value(Value::Unit)
 }
 
@@ -72,7 +79,8 @@ pub(crate) extern "C" fn rt_alloc_unit(_ctx: *mut JitRuntimeCtx) -> *mut Value {
 ///
 /// # Safety
 /// `ptr` must point to valid UTF-8 of `len` bytes.
-pub(crate) extern "C" fn rt_alloc_string(
+#[no_mangle]
+pub extern "C" fn rt_alloc_string(
     _ctx: *mut JitRuntimeCtx,
     ptr: *const u8,
     len: usize,
@@ -85,7 +93,8 @@ pub(crate) extern "C" fn rt_alloc_string(
 ///
 /// # Safety
 /// `items` must point to `len` valid `*const Value` pointers.
-pub(crate) extern "C" fn rt_alloc_list(
+#[no_mangle]
+pub extern "C" fn rt_alloc_list(
     _ctx: *mut JitRuntimeCtx,
     items: *const *const Value,
     len: usize,
@@ -100,7 +109,8 @@ pub(crate) extern "C" fn rt_alloc_list(
 ///
 /// # Safety
 /// `items` must point to `len` valid `*const Value` pointers.
-pub(crate) extern "C" fn rt_alloc_tuple(
+#[no_mangle]
+pub extern "C" fn rt_alloc_tuple(
     _ctx: *mut JitRuntimeCtx,
     items: *const *const Value,
     len: usize,
@@ -116,7 +126,8 @@ pub(crate) extern "C" fn rt_alloc_tuple(
 /// # Safety
 /// `names` and `values` must each point to `len` valid entries.
 /// Each name entry is a `(*const u8, usize)` pair packed as two consecutive pointer-sized values.
-pub(crate) extern "C" fn rt_alloc_record(
+#[no_mangle]
+pub extern "C" fn rt_alloc_record(
     _ctx: *mut JitRuntimeCtx,
     names: *const *const u8,
     name_lens: *const usize,
@@ -141,7 +152,8 @@ pub(crate) extern "C" fn rt_alloc_record(
 /// # Safety
 /// `name_ptr`/`name_len` must describe valid UTF-8.
 /// `args` must point to `args_len` valid `*const Value` pointers.
-pub(crate) extern "C" fn rt_alloc_constructor(
+#[no_mangle]
+pub extern "C" fn rt_alloc_constructor(
     _ctx: *mut JitRuntimeCtx,
     name_ptr: *const u8,
     name_len: usize,
@@ -168,16 +180,16 @@ pub(crate) extern "C" fn rt_alloc_constructor(
 ///
 /// # Safety
 /// `value_ptr` must be a valid `Value::Record`.
-pub(crate) extern "C" fn rt_record_field(
+#[no_mangle]
+pub extern "C" fn rt_record_field(
     _ctx: *mut JitRuntimeCtx,
     value_ptr: *const Value,
     name_ptr: *const u8,
     name_len: usize,
 ) -> *mut Value {
     let value = unsafe { &*value_ptr };
-    let name = unsafe {
-        std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len))
-    };
+    let name =
+        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
     match value {
         Value::Record(rec) => {
             let v = rec.get(name).cloned().unwrap_or(Value::Unit);
@@ -191,7 +203,8 @@ pub(crate) extern "C" fn rt_record_field(
 ///
 /// # Safety
 /// `value_ptr` must be a valid `Value::List`.
-pub(crate) extern "C" fn rt_list_index(
+#[no_mangle]
+pub extern "C" fn rt_list_index(
     _ctx: *mut JitRuntimeCtx,
     value_ptr: *const Value,
     index: i64,
@@ -219,10 +232,8 @@ pub(crate) extern "C" fn rt_list_index(
 ///
 /// # Safety
 /// `ptr` must point to a valid `Value`.
-pub(crate) extern "C" fn rt_clone_value(
-    _ctx: *mut JitRuntimeCtx,
-    ptr: *const Value,
-) -> *mut Value {
+#[no_mangle]
+pub extern "C" fn rt_clone_value(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> *mut Value {
     unsafe { abi::clone_boxed_value(ptr) }
 }
 
@@ -231,8 +242,11 @@ pub(crate) extern "C" fn rt_clone_value(
 /// # Safety
 /// `ptr` must have been created by one of the `rt_alloc_*` / `rt_box_*` helpers
 /// and must not be used afterwards.
-pub(crate) extern "C" fn rt_drop_value(_ctx: *mut JitRuntimeCtx, ptr: *mut Value) {
-    unsafe { abi::unbox_value(ptr); }
+#[no_mangle]
+pub extern "C" fn rt_drop_value(_ctx: *mut JitRuntimeCtx, ptr: *mut Value) {
+    unsafe {
+        abi::unbox_value(ptr);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -243,20 +257,16 @@ pub(crate) extern "C" fn rt_drop_value(_ctx: *mut JitRuntimeCtx, ptr: *mut Value
 ///
 /// # Safety
 /// `ctx` must be a valid `JitRuntimeCtx` pointer.
-pub(crate) extern "C" fn rt_get_global(
+#[no_mangle]
+pub extern "C" fn rt_get_global(
     ctx: *mut JitRuntimeCtx,
     name_ptr: *const u8,
     name_len: usize,
 ) -> *mut Value {
-    let name = unsafe {
-        std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len))
-    };
+    let name =
+        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
     let runtime = unsafe { (*ctx).runtime_mut() };
-    let val = runtime
-        .ctx
-        .globals
-        .get(name)
-        .unwrap_or(Value::Unit);
+    let val = runtime.ctx.globals.get(name).unwrap_or(Value::Unit);
     let forced = runtime.force_value(val).unwrap_or(Value::Unit);
     abi::box_value(forced)
 }
@@ -266,13 +276,55 @@ pub(crate) extern "C" fn rt_get_global(
 /// # Safety
 /// `ctx` must be a valid `JitRuntimeCtx` pointer.
 /// `func_ptr` and `arg_ptr` must be valid `Value` pointers.
-pub(crate) extern "C" fn rt_apply(
+#[no_mangle]
+pub extern "C" fn rt_apply(
     ctx: *mut JitRuntimeCtx,
     func_ptr: *const Value,
     arg_ptr: *const Value,
 ) -> *mut Value {
     let func = unsafe { &*func_ptr };
     let arg = unsafe { &*arg_ptr };
+
+    // Fast path: fully-saturated builtin (arity reached with this arg)
+    if let Value::Builtin(ref b) = func {
+        if b.args.len() + 1 == b.imp.arity {
+            let mut all_args = b.args.clone();
+            all_args.push(arg.clone());
+            let runtime = unsafe { (*ctx).runtime_mut() };
+            match (b.imp.func)(all_args, runtime) {
+                Ok(val) => return abi::box_value(val),
+                Err(_) => return abi::box_value(Value::Unit),
+            }
+        }
+        // Partial application: accumulate arg without going through trampoline
+        if b.args.len() + 1 < b.imp.arity {
+            let mut new_args = b.args.clone();
+            new_args.push(arg.clone());
+            let new_tagged = b.tagged_args.as_ref().map(|t| {
+                let mut new_t = t.clone();
+                if let Some(tv) = crate::runtime::values::TaggedValue::from_value(arg) {
+                    new_t.push(tv);
+                }
+                new_t
+            });
+            return abi::box_value(Value::Builtin(crate::runtime::values::BuiltinValue {
+                imp: b.imp.clone(),
+                args: new_args,
+                tagged_args: new_tagged,
+            }));
+        }
+    }
+
+    // Fast path: constructor application (just accumulate the arg)
+    if let Value::Constructor { ref name, ref args } = func {
+        let mut new_args = args.clone();
+        new_args.push(arg.clone());
+        return abi::box_value(Value::Constructor {
+            name: name.clone(),
+            args: new_args,
+        });
+    }
+
     let runtime = unsafe { (*ctx).runtime_mut() };
     match runtime.apply(func.clone(), arg.clone()) {
         Ok(val) => abi::box_value(val),
@@ -284,10 +336,8 @@ pub(crate) extern "C" fn rt_apply(
 ///
 /// # Safety
 /// `ctx` must be valid.  `ptr` must be a valid `Value` pointer.
-pub(crate) extern "C" fn rt_force_thunk(
-    ctx: *mut JitRuntimeCtx,
-    ptr: *const Value,
-) -> *mut Value {
+#[no_mangle]
+pub extern "C" fn rt_force_thunk(ctx: *mut JitRuntimeCtx, ptr: *const Value) -> *mut Value {
     let value = unsafe { (*ptr).clone() };
     let runtime = unsafe { (*ctx).runtime_mut() };
     let forced = runtime.force_value(value).unwrap_or(Value::Unit);
@@ -298,10 +348,8 @@ pub(crate) extern "C" fn rt_force_thunk(
 ///
 /// # Safety
 /// `ctx` must be valid.  `ptr` must be a valid `Value::Effect`.
-pub(crate) extern "C" fn rt_run_effect(
-    ctx: *mut JitRuntimeCtx,
-    ptr: *const Value,
-) -> *mut Value {
+#[no_mangle]
+pub extern "C" fn rt_run_effect(ctx: *mut JitRuntimeCtx, ptr: *const Value) -> *mut Value {
     let value = unsafe { (*ptr).clone() };
     let runtime = unsafe { (*ctx).runtime_mut() };
     match runtime.run_effect_value(value) {
@@ -315,7 +363,8 @@ pub(crate) extern "C" fn rt_run_effect(
 ///
 /// # Safety
 /// `ctx` must be valid.
-pub(crate) extern "C" fn rt_bind_effect(
+#[no_mangle]
+pub extern "C" fn rt_bind_effect(
     ctx: *mut JitRuntimeCtx,
     effect_ptr: *const Value,
     cont_ptr: *const Value,
@@ -339,16 +388,16 @@ pub(crate) extern "C" fn rt_bind_effect(
 
 /// Check if a value is a Constructor with the given name.
 /// Returns 1 if match, 0 otherwise.
-pub(crate) extern "C" fn rt_constructor_name_eq(
+#[no_mangle]
+pub extern "C" fn rt_constructor_name_eq(
     _ctx: *mut JitRuntimeCtx,
     ptr: *const Value,
     name_ptr: *const u8,
     name_len: usize,
 ) -> i64 {
     let value = unsafe { &*ptr };
-    let name = unsafe {
-        std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len))
-    };
+    let name =
+        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
     match value {
         Value::Constructor { name: n, .. } => i64::from(n == name),
         _ => 0,
@@ -356,10 +405,8 @@ pub(crate) extern "C" fn rt_constructor_name_eq(
 }
 
 /// Get the number of arguments of a Constructor value.
-pub(crate) extern "C" fn rt_constructor_arity(
-    _ctx: *mut JitRuntimeCtx,
-    ptr: *const Value,
-) -> i64 {
+#[no_mangle]
+pub extern "C" fn rt_constructor_arity(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };
     match value {
         Value::Constructor { args, .. } => args.len() as i64,
@@ -368,7 +415,8 @@ pub(crate) extern "C" fn rt_constructor_arity(
 }
 
 /// Get a Constructor argument by index.
-pub(crate) extern "C" fn rt_constructor_arg(
+#[no_mangle]
+pub extern "C" fn rt_constructor_arg(
     _ctx: *mut JitRuntimeCtx,
     ptr: *const Value,
     index: i64,
@@ -385,10 +433,8 @@ pub(crate) extern "C" fn rt_constructor_arg(
 }
 
 /// Get the length of a Tuple value.
-pub(crate) extern "C" fn rt_tuple_len(
-    _ctx: *mut JitRuntimeCtx,
-    ptr: *const Value,
-) -> i64 {
+#[no_mangle]
+pub extern "C" fn rt_tuple_len(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };
     match value {
         Value::Tuple(items) => items.len() as i64,
@@ -397,7 +443,8 @@ pub(crate) extern "C" fn rt_tuple_len(
 }
 
 /// Get a Tuple element by index.
-pub(crate) extern "C" fn rt_tuple_item(
+#[no_mangle]
+pub extern "C" fn rt_tuple_item(
     _ctx: *mut JitRuntimeCtx,
     ptr: *const Value,
     index: i64,
@@ -414,10 +461,8 @@ pub(crate) extern "C" fn rt_tuple_item(
 }
 
 /// Get the length of a List value.
-pub(crate) extern "C" fn rt_list_len(
-    _ctx: *mut JitRuntimeCtx,
-    ptr: *const Value,
-) -> i64 {
+#[no_mangle]
+pub extern "C" fn rt_list_len(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };
     match value {
         Value::List(items) => items.len() as i64,
@@ -426,7 +471,8 @@ pub(crate) extern "C" fn rt_list_len(
 }
 
 /// Get a sub-list (tail) starting from `start` index.
-pub(crate) extern "C" fn rt_list_tail(
+#[no_mangle]
+pub extern "C" fn rt_list_tail(
     _ctx: *mut JitRuntimeCtx,
     ptr: *const Value,
     start: i64,
@@ -448,7 +494,8 @@ pub(crate) extern "C" fn rt_list_tail(
 
 /// Check structural equality of two values.
 /// Returns 1 if equal, 0 otherwise.
-pub(crate) extern "C" fn rt_value_equals(
+#[no_mangle]
+pub extern "C" fn rt_value_equals(
     _ctx: *mut JitRuntimeCtx,
     a: *const Value,
     b: *const Value,
@@ -468,7 +515,8 @@ pub(crate) extern "C" fn rt_value_equals(
 /// `base_ptr` must be a valid `Value::Record` (or any Value — non-records
 /// produce a fresh record).  `names`, `name_lens`, `values` arrays must
 /// each have `len` entries.
-pub(crate) extern "C" fn rt_patch_record(
+#[no_mangle]
+pub extern "C" fn rt_patch_record(
     _ctx: *mut JitRuntimeCtx,
     base_ptr: *const Value,
     names: *const *const u8,
@@ -505,15 +553,16 @@ pub(crate) extern "C" fn rt_patch_record(
 /// # Safety
 /// `func_ptr` must point to valid JIT code with the signature above.
 /// `captured` must point to `captured_count` valid `*const Value` pointers.
-pub(crate) extern "C" fn rt_make_closure(
+#[no_mangle]
+pub extern "C" fn rt_make_closure(
     _ctx: *mut JitRuntimeCtx,
     func_ptr: i64,
     captured: *const *const Value,
     captured_count: i64,
 ) -> *mut Value {
-    use std::sync::Arc;
     use crate::runtime::values::{BuiltinImpl, BuiltinValue};
     use crate::runtime::Runtime;
+    use std::sync::Arc;
 
     let count = captured_count as usize;
     let captured_values: Vec<Value> = (0..count)
@@ -559,16 +608,22 @@ pub(crate) extern "C" fn rt_make_closure(
                 // Drop boxed captures
                 for cap_ptr in boxed_caps {
                     if cap_ptr as i64 != result_ptr {
-                        unsafe { drop(Box::from_raw(cap_ptr)); }
+                        unsafe {
+                            drop(Box::from_raw(cap_ptr));
+                        }
                     }
                 }
                 // Drop arg
                 if arg_ptr as i64 != result_ptr {
-                    unsafe { drop(Box::from_raw(arg_ptr)); }
+                    unsafe {
+                        drop(Box::from_raw(arg_ptr));
+                    }
                 }
                 // Drop result
                 if result_ptr != 0 {
-                    unsafe { drop(Box::from_raw(result_ptr as *mut Value)); }
+                    unsafe {
+                        drop(Box::from_raw(result_ptr as *mut Value));
+                    }
                 }
 
                 Ok(result)
@@ -592,16 +647,15 @@ pub(crate) extern "C" fn rt_make_closure(
 /// # Safety
 /// `ctx` must be valid.  `op_ptr`/`op_len` must describe a valid UTF-8 operator
 /// string (e.g. "+", "-", "==").  `lhs_ptr` and `rhs_ptr` must be valid.
-pub(crate) extern "C" fn rt_binary_op(
+#[no_mangle]
+pub extern "C" fn rt_binary_op(
     ctx: *mut JitRuntimeCtx,
     op_ptr: *const u8,
     op_len: usize,
     lhs_ptr: *const Value,
     rhs_ptr: *const Value,
 ) -> *mut Value {
-    let op = unsafe {
-        std::str::from_utf8_unchecked(std::slice::from_raw_parts(op_ptr, op_len))
-    };
+    let op = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(op_ptr, op_len)) };
     let lhs = unsafe { (*lhs_ptr).clone() };
     let rhs = unsafe { (*rhs_ptr).clone() };
 
@@ -629,14 +683,16 @@ pub(crate) extern "C" fn rt_binary_op(
 
 /// Create a new empty `Env` for passing local scope to interpreter-delegated blocks.
 /// The env's parent is the runtime's global scope so global lookups work.
-pub(crate) extern "C" fn rt_env_new(ctx: *mut JitRuntimeCtx) -> *mut Env {
+#[no_mangle]
+pub extern "C" fn rt_env_new(ctx: *mut JitRuntimeCtx) -> *mut Env {
     let runtime = unsafe { &*(*ctx).runtime };
     let globals = runtime.ctx.globals.clone();
     Box::into_raw(Box::new(Env::new(Some(globals))))
 }
 
 /// Set a variable in an environment created by `rt_env_new`.
-pub(crate) extern "C" fn rt_env_set(
+#[no_mangle]
+pub extern "C" fn rt_env_set(
     _ctx: *mut JitRuntimeCtx,
     env_ptr: *mut Env,
     name_ptr: *const u8,
@@ -651,12 +707,75 @@ pub(crate) extern "C" fn rt_env_set(
     env.set(name, value);
 }
 
+// ---------------------------------------------------------------------------
+// Native generate block helpers
+// ---------------------------------------------------------------------------
+
+/// Allocate a new empty `Vec<Value>` on the heap. Returns a raw pointer.
+#[no_mangle]
+pub extern "C" fn rt_gen_vec_new(_ctx: *mut JitRuntimeCtx) -> *mut Vec<Value> {
+    Box::into_raw(Box::new(Vec::new()))
+}
+
+/// Push a boxed `Value` into the generator accumulator vector.
+///
+/// # Safety
+/// `vec_ptr` must point to a live `Vec<Value>` (from `rt_gen_vec_new`).
+/// `value_ptr` must point to a live `Value`.
+#[no_mangle]
+pub extern "C" fn rt_gen_vec_push(
+    _ctx: *mut JitRuntimeCtx,
+    vec_ptr: *mut Vec<Value>,
+    value_ptr: *mut Value,
+) {
+    let vec = unsafe { &mut *vec_ptr };
+    let value = unsafe { (*value_ptr).clone() };
+    vec.push(value);
+}
+
+/// Convert a `Vec<Value>` accumulator into a generator fold function.
+///
+/// Returns `\k -> \z -> foldl k z values` as a `Value::Builtin`.
+///
+/// # Safety
+/// `vec_ptr` must point to a live `Vec<Value>` (from `rt_gen_vec_new`).
+/// Ownership of the Vec is taken.
+#[no_mangle]
+pub extern "C" fn rt_gen_vec_into_generator(
+    _ctx: *mut JitRuntimeCtx,
+    vec_ptr: *mut Vec<Value>,
+) -> *mut Value {
+    use crate::runtime::values::{BuiltinImpl, BuiltinValue};
+
+    let values = Arc::new(*unsafe { Box::from_raw(vec_ptr) });
+    let builtin = Value::Builtin(BuiltinValue {
+        imp: Arc::new(BuiltinImpl {
+            name: "<native_generator>".to_string(),
+            arity: 2,
+            func: Arc::new(move |mut args, runtime| {
+                let z = args.pop().unwrap();
+                let k = args.pop().unwrap();
+                let mut acc = z;
+                for val in values.iter() {
+                    let partial = runtime.apply(k.clone(), acc)?;
+                    acc = runtime.apply(partial, val.clone())?;
+                }
+                Ok(acc)
+            }),
+        }),
+        args: Vec::new(),
+        tagged_args: Some(Vec::new()),
+    });
+    abi::box_value(builtin)
+}
+
 /// Evaluate a `generate { ... }` block by delegating to the interpreter.
 ///
 /// `items_ptr` / `items_count` point to the `&[RustIrBlockItem]` slice from the
 /// live `RustIrDef` (valid for the duration of JIT execution).
 /// `env_ptr` is an `Env` populated with all in-scope locals.
-pub(crate) extern "C" fn rt_eval_generate(
+#[no_mangle]
+pub extern "C" fn rt_eval_generate(
     ctx: *mut JitRuntimeCtx,
     items_ptr: *const crate::rust_ir::RustIrBlockItem,
     items_count: usize,
@@ -675,7 +794,10 @@ pub(crate) extern "C" fn rt_eval_generate(
     };
 
     let mut values = Vec::new();
-    if runtime.materialize_generate(&lowered, &env, &mut values).is_err() {
+    if runtime
+        .materialize_generate(&lowered, &env, &mut values)
+        .is_err()
+    {
         return abi::box_value(Value::List(Arc::new(Vec::new())));
     }
 
@@ -706,7 +828,8 @@ pub(crate) extern "C" fn rt_eval_generate(
 }
 
 /// Create a `Value::Resource` wrapping the given block items and env.
-pub(crate) extern "C" fn rt_make_resource(
+#[no_mangle]
+pub extern "C" fn rt_make_resource(
     _ctx: *mut JitRuntimeCtx,
     items_ptr: *const crate::rust_ir::RustIrBlockItem,
     items_count: usize,
@@ -725,6 +848,42 @@ pub(crate) extern "C" fn rt_make_resource(
     abi::box_value(Value::Resource(Arc::new(ResourceValue {
         items: Arc::new(lowered),
     })))
+}
+
+// ---------------------------------------------------------------------------
+// AOT runtime lifecycle
+// ---------------------------------------------------------------------------
+
+use crate::hir::HirProgram;
+use crate::runtime::build_runtime_from_program;
+
+/// Initialize an AIVI runtime context from a pre-built HirProgram.
+///
+/// Returns a heap-allocated `JitRuntimeCtx` pointer that must be passed to
+/// all `rt_*` functions. Call `aivi_rt_destroy` when done.
+///
+/// # Safety
+/// The caller must ensure `program_ptr` points to a valid `HirProgram`.
+#[no_mangle]
+pub extern "C" fn aivi_rt_init(program_ptr: *mut HirProgram) -> *mut JitRuntimeCtx {
+    let program = unsafe { Box::from_raw(program_ptr) };
+    let runtime =
+        build_runtime_from_program(*program).expect("aivi_rt_init: failed to build runtime");
+    let ctx = unsafe { JitRuntimeCtx::from_runtime_owned(runtime) };
+    Box::into_raw(Box::new(ctx))
+}
+
+/// Destroy a runtime context previously created by `aivi_rt_init`.
+///
+/// # Safety
+/// `ctx` must be a pointer returned by `aivi_rt_init`.
+#[no_mangle]
+pub extern "C" fn aivi_rt_destroy(ctx: *mut JitRuntimeCtx) {
+    if !ctx.is_null() {
+        unsafe {
+            drop(Box::from_raw(ctx));
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -760,7 +919,10 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_bind_effect", rt_bind_effect as *const u8),
         ("rt_binary_op", rt_binary_op as *const u8),
         // Pattern matching helpers
-        ("rt_constructor_name_eq", rt_constructor_name_eq as *const u8),
+        (
+            "rt_constructor_name_eq",
+            rt_constructor_name_eq as *const u8,
+        ),
         ("rt_constructor_arity", rt_constructor_arity as *const u8),
         ("rt_constructor_arg", rt_constructor_arg as *const u8),
         ("rt_tuple_len", rt_tuple_len as *const u8),
@@ -777,5 +939,12 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_env_set", rt_env_set as *const u8),
         ("rt_eval_generate", rt_eval_generate as *const u8),
         ("rt_make_resource", rt_make_resource as *const u8),
+        // Native generate helpers
+        ("rt_gen_vec_new", rt_gen_vec_new as *const u8),
+        ("rt_gen_vec_push", rt_gen_vec_push as *const u8),
+        (
+            "rt_gen_vec_into_generator",
+            rt_gen_vec_into_generator as *const u8,
+        ),
     ]
 }
