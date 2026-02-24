@@ -12,6 +12,7 @@ use crate::rust_ir::RustIrExpr;
 use super::typed_expr::TypedCtx;
 use super::typed_mir::{lower_typed_mir, TypedMirExpr, TypedMirFunction, TypedMirTerminator};
 
+#[allow(dead_code)]
 pub(crate) struct RuntimeLowering {
     pub(crate) function: Function,
     pub(crate) param_names: Vec<String>,

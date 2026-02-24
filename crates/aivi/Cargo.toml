@@ -45,6 +45,7 @@ cranelift-codegen = "0.126.0"
 cranelift-frontend = "0.126.0"
 cranelift-jit = "0.126.0"
 cranelift-module = "0.126.0"
+cranelift-object = "0.126.0"
 zbus = "4.4.0"
 
 [features]

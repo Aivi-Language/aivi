@@ -14,7 +14,6 @@ use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder, Value};
 use cranelift_codegen::ir::FuncRef;
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{Linkage, Module};
-use cranelift_jit::JITModule;
 
 use crate::rust_ir::{
     RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrPattern,
@@ -63,7 +62,7 @@ pub(crate) struct HelperRefs {
 
 /// Declare all runtime helper signatures in the module and return FuncRefs
 /// that can be imported into individual functions via `module.declare_func_in_func`.
-pub(crate) fn declare_helpers(module: &mut JITModule) -> Result<DeclaredHelpers, String> {
+pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelpers, String> {
     // Helper macro: declare an imported function with the given signature
     macro_rules! decl {
         ($name:expr, [$($param:expr),*], [$($ret:expr),*]) => {{
@@ -148,7 +147,7 @@ impl DeclaredHelpers {
     /// Import all helper FuncIds into a specific function, producing `FuncRef`s.
     pub(crate) fn import_into(
         &self,
-        module: &mut JITModule,
+        module: &mut impl Module,
         func: &mut Function,
     ) -> HelperRefs {
         macro_rules! imp {

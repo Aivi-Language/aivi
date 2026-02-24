@@ -137,7 +137,7 @@ pub fn run_cranelift_jit(
 /// `Ok(None)` if the definition can't be compiled yet,
 /// or `Err(msg)` on failure.
 fn compile_definition(
-    module: &mut cranelift_jit::JITModule,
+    module: &mut impl Module,
     helpers: &DeclaredHelpers,
     def: &RustIrDef,
     qualified_name: &str,
