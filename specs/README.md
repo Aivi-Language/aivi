@@ -80,9 +80,7 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Duration](stdlib/chronos/duration.md)
 - [TimeZone](stdlib/chronos/timezone.md)
 - [Scheduler](stdlib/chronos/scheduler.md)
-#### System & IO
-- [File](stdlib/system/file.md)
-- [Console](stdlib/system/console.md)
+#### System
 - [Crypto](stdlib/system/crypto.md)
 - [Database](stdlib/system/database.md)
 - [GOA](stdlib/system/goa.md)
@@ -92,6 +90,9 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [System](stdlib/system/system.md)
 - [Log](stdlib/system/log.md)
 - [Concurrency](stdlib/system/concurrency.md)
+#### IO
+- [File](stdlib/system/file.md)
+- [Console](stdlib/system/console.md)
 #### Network
 - [HTTP](stdlib/network/http.md)
 - [HTTPS](stdlib/network/https.md)

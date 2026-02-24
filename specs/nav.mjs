@@ -128,11 +128,9 @@ export const sidebar = [
         ]
       },
       {
-        text: 'System & IO',
+        text: 'System',
         collapsed: true,
         items: [
-          { text: 'File', link: '/stdlib/system/file' },
-          { text: 'Console', link: '/stdlib/system/console' },
           { text: 'Crypto', link: '/stdlib/system/crypto' },
           { text: 'Database', link: '/stdlib/system/database' },
           { text: 'GOA', link: '/stdlib/system/goa' },
@@ -142,6 +140,14 @@ export const sidebar = [
           { text: 'System', link: '/stdlib/system/system' },
           { text: 'Log', link: '/stdlib/system/log' },
           { text: 'Concurrency', link: '/stdlib/system/concurrency' }
+        ]
+      },
+      {
+        text: 'IO',
+        collapsed: true,
+        items: [
+          { text: 'File', link: '/stdlib/system/file' },
+          { text: 'Console', link: '/stdlib/system/console' }
         ]
       },
       {
