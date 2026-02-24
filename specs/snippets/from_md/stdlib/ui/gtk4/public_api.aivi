@@ -25,6 +25,9 @@ ShortcutId = Int
 NotificationId = Int
 LayoutManagerId = Int
 GtkError = Text
+GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text
+GtkAttr = GtkAttribute Text Text
+GtkSignalEvent = GtkSignalEvent WidgetId Text Text Text
 
 init: Unit -> Effect GtkError Unit
 appNew: Text -> Effect GtkError AppId
@@ -119,6 +122,10 @@ appWithdrawNotification: AppId -> Text -> Effect GtkError Unit
 
 layoutManagerNew: Text -> Effect GtkError LayoutManagerId
 widgetSetLayoutManager: WidgetId -> LayoutManagerId -> Effect GtkError Unit
+
+buildFromNode: GtkNode -> Effect GtkError WidgetId
+signalPoll: Unit -> Effect GtkError (Option GtkSignalEvent)
+signalEmit: WidgetId -> Text -> Text -> Text -> Effect GtkError Unit
 
 osOpenUri: AppId -> Text -> Effect GtkError Unit
 osShowInFileManager: Text -> Effect GtkError Unit

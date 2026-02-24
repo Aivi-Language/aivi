@@ -78,22 +78,20 @@ column_construct = do Effect {
 @test "delta construct"
 delta_construct = do Effect {
   user = { id: 1, name: "Alice" }
-  ins = Insert user
-  del = Delete (u => u.id == 1)
-  ups = Upsert (u => u.id == 1) user (u => u <| { name: "Bob" })
-  ins match
-    | Insert row => assertEq row.name "Alice"
-    | _          => assert False
-    del match
-      | Delete predicate => assert (predicate user)
-      | _                => assert False
-    ups match
-      | Upsert predicate row updateFn => do Effect {
-          assert (predicate user)
-          assertEq row.id 1
-          assertEq (updateFn user).name "Bob"
-        }
-      | _ => assert False
+  insertDelta = ins user
+  deleteDelta = del (u => u.id == 1)
+  upsertDelta = ups (u => u.id == 1) user (u => u <| { name: "Bob" })
+  users0 = table "users"[]
+  users1 <- applyDelta users0 insertDelta
+  users2 <- applyDelta users1 deleteDelta
+  users3 <- applyDelta users2 upsertDelta
+  rows   <- load users3
+  rows match
+    | [row] => do Effect {
+      assertEq row.id 1
+      assertEq row.name "Alice"
+    }
+    | _ => assert False
 }
 
 @test "sqlite tuning and transaction primitives"

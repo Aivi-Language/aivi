@@ -32,4 +32,22 @@ In addition, the UI layer defines a structured HTML sigil:
     - `<signal name="clicked" on={ Msg.Save } />` lowers to the same typed binding path.
   - Signal handlers must be compile-time expressions in v0.1.
 
+GTK signal sugar quick reference:
+
+```aivi
+~<gtk>
+  <object class="GtkButton" onClick={ Msg.Save } />
+  <object class="GtkEntry" onInput={ Msg.NameChanged } />
+  <object class="GtkButton">
+    <signal name="clicked" on={ Msg.Save } />
+  </object>
+</gtk>
+```
+
+Diagnostics for GTK sigils:
+
+- `E1612`: invalid `props` shape (`props` must be compile-time record literal).
+- `E1613`: non-literal `props` value.
+- `E1614`: non-compile-time signal handler binding.
+
 The exact meaning of a sigil is domain-defined (or compiler-provided for some stdlib features); see [Collections](../stdlib/core/collections.md) for `~map` and `~set`, and [UI](../stdlib/ui/html.md) for `~html`.

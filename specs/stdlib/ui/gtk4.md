@@ -106,6 +106,7 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 - `GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text`
 - `GtkAttr = GtkAttribute Text Text`
 - helpers: `gtkElement`, `gtkTextNode`, `gtkAttr`
+- `GtkSignalEvent = GtkSignalEvent WidgetId Text Text Text`
 
 The parser lowers `~<gtk>...</gtk>` into those constructors.
 Instantiate the resulting node tree with `buildFromNode`.
@@ -113,13 +114,13 @@ Instantiate the resulting node tree with `buildFromNode`.
 For `<interface>`/`<template>`, the first nested `<object>` becomes the instantiated root.
 Object references via `ref`/`idref` are resolved against `id` attributes.
 `<child type="overlay">` and `<child type="controller">` are supported for overlay/controller wiring.
-Signal sugar is supported:
+Signal sugar is supported and lowered to typed signal attrs:
 
-- `<object ... onClick={ Msg.Save } />` lowers to a `clicked` signal binding
-- `<object ... onInput={ Msg.Changed } />` lowers to a `changed` signal binding
-- `<signal name="clicked" on={ Msg.Save } />` lowers to the same binding form
+- `<object ... onClick={ Msg.Save } />` -> `signal:clicked`
+- `<object ... onInput={ Msg.Changed } />` -> `signal:changed`
+- `<signal name="clicked" on={ Msg.Save } />` -> same binding path
 
-Signal handler values must be compile-time expressions (for example constructor-like tags such as `Msg.Save`).
+Signal handler values must be compile-time expressions (for example constructor-like tags such as `Msg.Save`), not runtime lambdas.
 
 Current runtime coverage includes common classes such as `GtkBox`, `AdwClamp`, `GtkLabel`, `GtkButton`, `GtkEntry`, `GtkImage`, `GtkDrawingArea`, `GtkScrolledWindow`, `GtkOverlay`, `GtkSeparator`, `GtkListBox`, and `GtkGestureClick`.
 Supported builder properties include layout/widget basics (`margin-*`, `hexpand`, `vexpand`, `halign`, `valign`, `width-request`, `height-request`, `visible`, `tooltip-text`, `opacity`, style classes), plus class-specific fields like `homogeneous`, `wrap`, `ellipsize`, `xalign`, `max-width-chars`, scrollbar policies, and natural-propagation flags.
@@ -133,6 +134,77 @@ In v0.1, `props` must be a compile-time record literal; dynamic `props={expr}` i
 
 `signalPoll : Unit -> Effect GtkError (Option GtkSignalEvent)` reads queued runtime signal events.
 `signalEmit` is available for synthetic/manual event injection (useful in tests and mock-driven flows).
+
+### Example: builder + property sugar
+
+```aivi
+uiNode : GtkNode
+uiNode =
+  ~<gtk>
+    <object class="GtkBox" props={ { orientation: "vertical", spacing: 12, marginTop: 16 } }>
+      <child>
+        <object class="GtkLabel">
+          <property name="label">Settings</property>
+        </object>
+      </child>
+    </object>
+  </gtk>
+```
+
+### Example: signal sugar (recommended style)
+
+```aivi
+Msg = Save | NameChanged
+
+formNode : GtkNode
+formNode =
+  ~<gtk>
+    <object class="GtkBox" props={ { orientation: "vertical", spacing: 8 } }>
+      <child>
+        <object class="GtkEntry" onInput={ Msg.NameChanged } />
+      </child>
+      <child>
+        <object class="GtkButton" onClick={ Msg.Save }>
+          <property name="label">Save</property>
+        </object>
+      </child>
+    </object>
+  </gtk>
+```
+
+### Example: explicit `<signal>` tags
+
+```aivi
+Msg = Save
+
+buttonNode : GtkNode
+buttonNode =
+  ~<gtk>
+    <object class="GtkButton">
+      <property name="label">Save</property>
+      <signal name="clicked" on={ Msg.Save } />
+    </object>
+  </gtk>
+```
+
+### Example: consuming queued signal events
+
+```aivi
+nextMsg : Effect GtkError (Option Text)
+nextMsg = effect {
+  eventOpt <- signalPoll {}
+  eventOpt match
+    | None => yield None
+    | Some (GtkSignalEvent _ signal handler payload) =>
+        yield Some "{ signal }|{ handler }|{ payload }"
+}
+```
+
+### Diagnostics
+
+- `E1612`: invalid `props` shape (must be compile-time record literal).
+- `E1613`: non-literal `props` field value.
+- `E1614`: invalid signal binding (`onClick`/`onInput`/`<signal ... on={...}>` requires compile-time values).
 
 ## UI update pattern (state machine + events + repaint)
 
