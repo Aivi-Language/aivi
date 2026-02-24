@@ -768,7 +768,7 @@ fn eval_runtime_rust_ir_plain_block(
     Ok(result)
 }
 
-fn lower_runtime_rust_ir_block_items(
+pub(crate) fn lower_runtime_rust_ir_block_items(
     items: &[rust_ir::RustIrBlockItem],
 ) -> Result<Vec<HirBlockItem>, RuntimeError> {
     items

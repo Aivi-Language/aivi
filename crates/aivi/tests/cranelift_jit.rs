@@ -79,3 +79,149 @@ main = do Effect {
 "#,
     );
 }
+
+#[test]
+fn cranelift_jit_match_expression_falls_back_to_interpreter() {
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+
+Option A = None | Some A
+
+safeHead = xs => xs match
+  | []       => None
+  | [x, ...] => Some x
+
+@test "match works"
+main : Effect Text Unit
+main = do Effect {
+  assertEq (safeHead [1, 2, 3]) (Some 1)
+  assertEq (safeHead []) None
+}
+"#,
+    );
+}
+
+#[test]
+fn cranelift_jit_lambda_closure() {
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+
+makeAdder = n => x => n + x
+
+@test "closure captures work"
+main : Effect Text Unit
+main = do Effect {
+  addFive <- pure (makeAdder 5)
+  assertEq (addFive 3) 8
+  assertEq (addFive 10) 15
+}
+"#,
+    );
+}
+
+#[test]
+fn cranelift_jit_pattern_matching_constructor() {
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+
+Option A = None | Some A
+
+unwrapOr = default => opt => opt match
+  | Some x => x
+  | None   => default
+
+@test "constructor pattern matching"
+main : Effect Text Unit
+main = do Effect {
+  assertEq (unwrapOr 0 (Some 42)) 42
+  assertEq (unwrapOr 0 None) 0
+}
+"#,
+    );
+}
+
+#[test]
+fn cranelift_jit_record_patching() {
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+
+updateAge = person => person <| { age: 99 }
+
+@test "record patching"
+main : Effect Text Unit
+main = do Effect {
+  result <- pure (updateAge { name: "Bob", age: 30 })
+  assertEq result { name: "Bob", age: 99 }
+}
+"#,
+    );
+}
+
+#[test]
+fn cranelift_jit_generate_block() {
+    // Generate blocks are desugared by the kernel into Church-encoded folds.
+    // Three yields: `yield 10; yield 20; yield 30` becomes nested gen_append
+    // combinators. The generator is called directly as a fold function.
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi.testing
+
+gen = generate {
+  yield 10
+  yield 20
+  yield 30
+}
+
+@test "generate block"
+main : Effect Text Unit
+main = do Effect {
+  result <- pure (gen (a => b => a + b) 0)
+  assertEq result 60
+}
+"#,
+    );
+}
+
+#[test]
+fn cranelift_jit_resource_block() {
+    // Resource blocks are preserved in the RustIR (not kernel-desugared).
+    // The JIT delegates to the interpreter via rt_make_resource.
+    // Here we verify that a module with a resource block compiles
+    // and runs without crashing (matching integration test coverage).
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+
+managedResource = name => resource {
+  yield name
+}
+
+@test "resource block"
+main : Effect Text Unit
+main = do Effect {
+  assertEq (1 + 1) 2
+}
+"#,
+    );
+}

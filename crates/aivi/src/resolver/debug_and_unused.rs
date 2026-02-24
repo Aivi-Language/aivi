@@ -728,4 +728,38 @@ x = 30s
             "expected no unused-import warnings for domain import, got: {diags:?}"
         );
     }
+
+    #[test]
+    fn each_binding_is_in_scope_inside_gtk_sigil() {
+        let source = r#"
+module test.each_scope
+
+use aivi.ui.gtk4
+
+emailColumnNode = col => col
+
+boardRowNode = columns =>
+  ~<gtk>
+    <object class="GtkBox" props={ { orientation: "horizontal" } }>
+      <each items={columns} as={column}>
+        <child>{ emailColumnNode column }</child>
+      </each>
+    </object>
+  </gtk>
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .into_iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "unexpected unknown-name errors for <each> binding: {errors:#?}"
+        );
+    }
 }

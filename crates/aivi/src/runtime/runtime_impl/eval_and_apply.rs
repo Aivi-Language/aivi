@@ -90,7 +90,7 @@ impl Runtime {
         }))
     }
 
-    fn materialize_generate(
+    pub(crate) fn materialize_generate(
         &mut self,
         items: &[HirBlockItem],
         env: &Env,

@@ -4,10 +4,11 @@
 //! It compiles ALL definitions to Cranelift IR, builds a JIT module, then
 //! executes `main`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
+use cranelift_jit::JITModule;
 use cranelift_module::{Linkage, Module};
 
 use crate::cg_type::CgType;
@@ -17,12 +18,15 @@ use crate::runtime::{
 };
 use crate::runtime::values::Value;
 use crate::{kernel, rust_ir};
-use crate::rust_ir::{RustIrDef, RustIrExpr, RustIrBlockKind};
+use crate::rust_ir::{
+    RustIrBlockItem, RustIrBlockKind, RustIrDef, RustIrExpr, RustIrListItem, RustIrPattern,
+    RustIrPathSegment, RustIrRecordField, RustIrTextPart,
+};
 use crate::AiviError;
 
 use super::abi::JitRuntimeCtx;
 use super::jit_module::create_jit_module;
-use super::lower::{DeclaredHelpers, LowerCtx, declare_helpers};
+use super::lower::{CompiledLambda, DeclaredHelpers, LowerCtx, declare_helpers};
 
 /// Pointer type used throughout.
 const PTR: cranelift_codegen::ir::Type = types::I64;
@@ -73,11 +77,13 @@ pub fn run_cranelift_jit(
     //    Skip arity-0 do-block definitions — the interpreter handles those lazily.
     struct PendingDef {
         name: String,
+        qualified: String,
         func_id: cranelift_module::FuncId,
         arity: usize,
     }
     let mut pending: Vec<PendingDef> = Vec::new();
     let mut declared_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut lambda_counter: usize = 0;
 
     for ir_module in &rust_program.modules {
         for def in &ir_module.defs {
@@ -98,9 +104,14 @@ pub fn run_cranelift_jit(
             }
             declared_names.insert(func_name);
 
-            match compile_definition(&mut module, &helpers, def, &qualified) {
+            match compile_definition(&mut module, &helpers, def, &qualified, &mut lambda_counter, &mut runtime) {
                 Ok(Some((func_id, _func_name, arity))) => {
-                    pending.push(PendingDef { name: def.name.clone(), func_id, arity });
+                    pending.push(PendingDef {
+                        name: def.name.clone(),
+                        qualified: qualified.clone(),
+                        func_id,
+                        arity,
+                    });
                 }
                 Ok(None) => {}
                 Err(e) => {
@@ -118,12 +129,20 @@ pub fn run_cranelift_jit(
     let mut compiled_globals: HashMap<String, Value> = HashMap::new();
     for pd in &pending {
         let ptr = module.get_finalized_function(pd.func_id);
-        let jit_value = make_jit_builtin(&pd.name, pd.arity, ptr as usize);
-        compiled_globals.insert(pd.name.clone(), jit_value);
+        let jit_value = make_jit_builtin(&pd.qualified, pd.arity, ptr as usize);
+        compiled_globals.insert(pd.name.clone(), jit_value.clone());
+        compiled_globals.insert(pd.qualified.clone(), jit_value);
     }
 
-    // 8. Install compiled globals into the runtime (overriding interpreter thunks)
+    // 8. Install compiled globals into the runtime (overriding interpreter thunks).
+    //    For unqualified (short) names, only set if not yet present — this mirrors
+    //    `build_runtime_from_program` which keeps the first definition and lets
+    //    module order determine priority.
     for (name, value) in compiled_globals {
+        // Source defs cannot shadow builtins.
+        if let Some(Value::Builtin(_)) = runtime.ctx.globals.get(&name) {
+            continue;
+        }
         runtime.ctx.globals.set(name, value);
     }
 
@@ -137,28 +156,148 @@ pub fn run_cranelift_jit(
 /// `Ok(None)` if the definition can't be compiled yet,
 /// or `Err(msg)` on failure.
 fn compile_definition(
-    module: &mut impl Module,
+    module: &mut JITModule,
     helpers: &DeclaredHelpers,
     def: &RustIrDef,
     qualified_name: &str,
+    lambda_counter: &mut usize,
+    runtime: &mut Runtime,
 ) -> Result<Option<(cranelift_module::FuncId, String, usize)>, String> {
     let (params, body) = peel_params(&def.expr);
     let arity = params.len();
 
-    // Build function signature: (ctx, ...args) -> result
+    if arity > 7 {
+        return Ok(None);
+    }
+
+    if !expr_supported(body) {
+        return Ok(None);
+    }
+
+    // --- Pre-compile inner lambdas ---
+    let mut lambdas: Vec<(&RustIrExpr, Vec<String>)> = Vec::new();
+    collect_inner_lambdas(body, &mut Vec::new(), &mut lambdas);
+
+    let mut compiled_lambdas: HashMap<usize, CompiledLambda> = HashMap::new();
+
+    // Compile each lambda as a function: (ctx, cap0, cap1, ..., param) -> result
+    // Lambdas are collected bottom-up (innermost first), so nested lambdas
+    // appear before their parents.  Global lookups at runtime resolve
+    // forward references.
+    struct PendingLambda {
+        func_id: cranelift_module::FuncId,
+        global_name: String,
+        total_arity: usize,
+    }
+    let mut pending_lambdas: Vec<PendingLambda> = Vec::new();
+
+    for (lambda_expr, captured_vars) in &lambdas {
+        let RustIrExpr::Lambda { param, body, .. } = lambda_expr else { continue };
+
+        let total_arity = captured_vars.len() + 1; // captures + the actual param
+        if total_arity > 7 {
+            // Too many captures + param for call_jit_function
+            continue;
+        }
+
+        let global_name = format!("__jit_lambda_{}", *lambda_counter);
+        *lambda_counter += 1;
+
+        // Leak the name so the raw pointer embedded in JIT code remains valid.
+        let global_name_static: &'static str = Box::leak(global_name.clone().into_boxed_str());
+
+        // Store in compiled_lambdas so nested lambdas can reference it
+        let key = *lambda_expr as *const RustIrExpr as usize;
+        compiled_lambdas.insert(key, CompiledLambda {
+            global_name: global_name_static,
+            captured_vars: captured_vars.clone(),
+        });
+
+        // Build function signature: (ctx, cap0, cap1, ..., param) -> result
+        let mut sig = module.make_signature();
+        sig.params.push(AbiParam::new(PTR)); // ctx
+        for _ in 0..total_arity {
+            sig.params.push(AbiParam::new(PTR)); // each cap + param
+        }
+        sig.returns.push(AbiParam::new(PTR));
+
+        let func_name = format!("__aivi_lambda_{}", sanitize_name(&global_name));
+        let func_id = module
+            .declare_function(&func_name, Linkage::Local, &sig)
+            .map_err(|e| format!("declare lambda {}: {e}", func_name))?;
+
+        let mut function = Function::with_name_signature(
+            cranelift_codegen::ir::UserFuncName::user(0, func_id.as_u32()),
+            sig,
+        );
+
+        let helper_refs = helpers.import_into(module, &mut function);
+
+        let mut fb_ctx = FunctionBuilderContext::new();
+        {
+            let mut builder = FunctionBuilder::new(&mut function, &mut fb_ctx);
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            let block_params = builder.block_params(entry).to_vec();
+            let ctx_param = block_params[0];
+
+            let mut lower_ctx = LowerCtx::new(ctx_param, &helper_refs, &compiled_lambdas);
+
+            // Bind captured vars as leading params
+            for (i, var_name) in captured_vars.iter().enumerate() {
+                lower_ctx.locals.insert(var_name.clone(), block_params[i + 1]);
+            }
+            // Bind the actual lambda parameter
+            lower_ctx.locals.insert(param.clone(), block_params[captured_vars.len() + 1]);
+
+            let result = lower_ctx.lower_expr(&mut builder, body);
+            builder.ins().return_(&[result]);
+            builder.finalize();
+        }
+
+        let mut ctx = module.make_context();
+        ctx.func = function;
+        module
+            .define_function(func_id, &mut ctx)
+            .map_err(|e| format!("define lambda {}: {e}", func_name))?;
+        module.clear_context(&mut ctx);
+
+        pending_lambdas.push(PendingLambda {
+            func_id,
+            global_name: global_name.clone(),
+            total_arity,
+        });
+    }
+
+    // Finalize lambda functions and install them as globals
+    if !pending_lambdas.is_empty() {
+        module
+            .finalize_definitions()
+            .map_err(|e| format!("finalize lambdas: {e}"))?;
+
+        for pl in &pending_lambdas {
+            let ptr = module.get_finalized_function(pl.func_id);
+            let jit_value = make_jit_builtin(&pl.global_name, pl.total_arity, ptr as usize);
+            runtime.ctx.globals.set(pl.global_name.clone(), jit_value);
+        }
+    }
+
+    // --- Compile the main body ---
     let mut sig = module.make_signature();
     sig.params.push(AbiParam::new(PTR)); // ctx
     for _ in 0..arity {
-        sig.params.push(AbiParam::new(PTR)); // each arg
+        sig.params.push(AbiParam::new(PTR));
     }
-    sig.returns.push(AbiParam::new(PTR)); // return value
+    sig.returns.push(AbiParam::new(PTR));
 
     let func_name = format!("__aivi_jit_{}", sanitize_name(qualified_name));
     let func_id = module
         .declare_function(&func_name, Linkage::Local, &sig)
         .map_err(|e| format!("declare {}: {e}", func_name))?;
 
-    // Build the function body
     let mut function = Function::with_name_signature(
         cranelift_codegen::ir::UserFuncName::user(0, func_id.as_u32()),
         sig,
@@ -177,21 +316,17 @@ fn compile_definition(
         let block_params = builder.block_params(entry).to_vec();
         let ctx_param = block_params[0];
 
-        let mut lower_ctx = LowerCtx::new(ctx_param, &helper_refs);
+        let mut lower_ctx = LowerCtx::new(ctx_param, &helper_refs, &compiled_lambdas);
 
-        // Bind parameters
         for (i, param_name) in params.iter().enumerate() {
             lower_ctx.locals.insert(param_name.clone(), block_params[i + 1]);
         }
 
-        // Lower the body expression
         let result = lower_ctx.lower_expr(&mut builder, body);
         builder.ins().return_(&[result]);
-
         builder.finalize();
     }
 
-    // Define (but don't finalize yet — caller finalizes all at once)
     let mut ctx = module.make_context();
     ctx.func = function;
     module
@@ -200,6 +335,118 @@ fn compile_definition(
     module.clear_context(&mut ctx);
 
     Ok(Some((func_id, func_name, arity)))
+}
+
+fn record_field_supported(field: &RustIrRecordField) -> bool {
+    if field.spread {
+        return false;
+    }
+    if field.path.len() != 1 {
+        return false;
+    }
+    matches!(field.path[0], RustIrPathSegment::Field(_)) && expr_supported(&field.value)
+}
+
+fn list_item_supported(item: &RustIrListItem) -> bool {
+    !item.spread && expr_supported(&item.expr)
+}
+
+fn pattern_supported(pattern: &RustIrPattern) -> bool {
+    match pattern {
+        RustIrPattern::Wildcard { .. } | RustIrPattern::Var { .. } | RustIrPattern::Literal { .. } => true,
+        RustIrPattern::At { pattern, .. } => pattern_supported(pattern),
+        RustIrPattern::Constructor { args, .. } => args.iter().all(pattern_supported),
+        RustIrPattern::Tuple { items, .. } => items.iter().all(pattern_supported),
+        RustIrPattern::List { items, rest, .. } => {
+            items.iter().all(pattern_supported)
+                && rest.as_deref().map_or(true, pattern_supported)
+        }
+        RustIrPattern::Record { fields, .. } => {
+            fields.iter().all(|f| pattern_supported(&f.pattern))
+        }
+    }
+}
+
+fn block_item_supported(item: &RustIrBlockItem) -> bool {
+    match item {
+        RustIrBlockItem::Bind { pattern, expr } => pattern_supported(pattern) && expr_supported(expr),
+        RustIrBlockItem::Expr { expr } => expr_supported(expr),
+        RustIrBlockItem::Filter { .. }
+        | RustIrBlockItem::Yield { .. }
+        | RustIrBlockItem::Recurse { .. } => false,
+    }
+}
+
+fn expr_supported(expr: &RustIrExpr) -> bool {
+    match expr {
+        RustIrExpr::Local { .. }
+        | RustIrExpr::Global { .. }
+        | RustIrExpr::Builtin { .. }
+        | RustIrExpr::ConstructorValue { .. }
+        | RustIrExpr::LitString { .. }
+        | RustIrExpr::LitBool { .. }
+        | RustIrExpr::Raw { .. } => true,
+
+        RustIrExpr::LitNumber { text, .. } => text.parse::<i64>().is_ok() || text.parse::<f64>().is_ok(),
+
+        // These have non-trivial runtime semantics we haven't matched yet.
+        RustIrExpr::LitSigil { .. }
+        | RustIrExpr::LitDateTime { .. }
+        | RustIrExpr::TextInterpolate { .. }
+        | RustIrExpr::DebugFn { .. }
+        | RustIrExpr::Pipe { .. } => true,
+
+        RustIrExpr::Match { scrutinee, arms, .. } => {
+            expr_supported(scrutinee)
+                && arms.iter().all(|arm| {
+                    pattern_supported(&arm.pattern)
+                        && arm.guard.as_ref().map_or(true, expr_supported)
+                        && expr_supported(&arm.body)
+                })
+        }
+
+        RustIrExpr::Patch { target, fields, .. } => {
+            expr_supported(target) && fields.iter().all(record_field_supported)
+        }
+
+        RustIrExpr::Lambda { body, .. } => expr_supported(body),
+
+        RustIrExpr::App { func, arg, .. } => expr_supported(func) && expr_supported(arg),
+        RustIrExpr::Call { func, args, .. } => {
+            expr_supported(func) && args.iter().all(expr_supported)
+        }
+
+        RustIrExpr::List { items, .. } => items.iter().all(list_item_supported),
+        RustIrExpr::Tuple { items, .. } => items.iter().all(expr_supported),
+        RustIrExpr::Record { fields, .. } => fields.iter().all(record_field_supported),
+
+        RustIrExpr::FieldAccess { base, .. } => expr_supported(base),
+        RustIrExpr::Index { base, index, .. } => expr_supported(base) && expr_supported(index),
+
+        RustIrExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => expr_supported(cond) && expr_supported(then_branch) && expr_supported(else_branch),
+
+        RustIrExpr::Binary { left, right, .. } => expr_supported(left) && expr_supported(right),
+
+        RustIrExpr::Block {
+            block_kind,
+            items,
+            ..
+        } => match block_kind {
+            // Plain blocks: all items must be individually supported
+            RustIrBlockKind::Plain => items.iter().all(block_item_supported),
+            // Generate and Resource blocks are delegated to the interpreter;
+            // the items don't need to be individually supported since they'll
+            // be evaluated by the interpreter at runtime.
+            RustIrBlockKind::Generate | RustIrBlockKind::Resource => true,
+            // Do blocks: items must be individually supported
+            RustIrBlockKind::Do { .. } => items.iter().all(block_item_supported),
+        },
+    }
 }
 
 /// Peel Lambda wrappers to extract parameter names and the innermost body.
@@ -377,5 +624,289 @@ unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
             )
         }
         n => panic!("call_jit_function: unsupported arity {n} (max 7 params + ctx)"),
+    }
+}
+
+/// Collect all inner Lambda nodes in post-order (innermost first).
+/// `bound` tracks variables that are in scope (parameters, let-bindings).
+/// Each lambda is returned with its list of captured (free) variables.
+fn collect_inner_lambdas<'a>(
+    expr: &'a RustIrExpr,
+    bound: &mut Vec<String>,
+    out: &mut Vec<(&'a RustIrExpr, Vec<String>)>,
+) {
+    match expr {
+        RustIrExpr::Lambda { param, body, .. } => {
+            bound.push(param.clone());
+            collect_inner_lambdas(body, bound, out);
+            bound.pop();
+
+            let mut free = HashSet::new();
+            let mut inner_bound = vec![param.clone()];
+            collect_free_locals(body, &mut inner_bound, &mut free);
+            let mut captured: Vec<String> = free.into_iter().collect();
+            captured.sort();
+
+            out.push((expr, captured));
+        }
+        RustIrExpr::App { func, arg, .. } => {
+            collect_inner_lambdas(func, bound, out);
+            collect_inner_lambdas(arg, bound, out);
+        }
+        RustIrExpr::Call { func, args, .. } => {
+            collect_inner_lambdas(func, bound, out);
+            for a in args {
+                collect_inner_lambdas(a, bound, out);
+            }
+        }
+        RustIrExpr::If { cond, then_branch, else_branch, .. } => {
+            collect_inner_lambdas(cond, bound, out);
+            collect_inner_lambdas(then_branch, bound, out);
+            collect_inner_lambdas(else_branch, bound, out);
+        }
+        RustIrExpr::Binary { left, right, .. } => {
+            collect_inner_lambdas(left, bound, out);
+            collect_inner_lambdas(right, bound, out);
+        }
+        RustIrExpr::Block { items, .. } => {
+            let mark = bound.len();
+            for item in items {
+                match item {
+                    RustIrBlockItem::Bind { pattern, expr } => {
+                        collect_inner_lambdas(expr, bound, out);
+                        collect_pattern_vars(pattern, bound);
+                    }
+                    RustIrBlockItem::Expr { expr }
+                    | RustIrBlockItem::Yield { expr }
+                    | RustIrBlockItem::Recurse { expr }
+                    | RustIrBlockItem::Filter { expr } => {
+                        collect_inner_lambdas(expr, bound, out);
+                    }
+                }
+            }
+            bound.truncate(mark);
+        }
+        RustIrExpr::FieldAccess { base, .. } => {
+            collect_inner_lambdas(base, bound, out);
+        }
+        RustIrExpr::Index { base, index, .. } => {
+            collect_inner_lambdas(base, bound, out);
+            collect_inner_lambdas(index, bound, out);
+        }
+        RustIrExpr::List { items, .. } => {
+            for item in items {
+                collect_inner_lambdas(&item.expr, bound, out);
+            }
+        }
+        RustIrExpr::Tuple { items, .. } => {
+            for item in items {
+                collect_inner_lambdas(item, bound, out);
+            }
+        }
+        RustIrExpr::Record { fields, .. } => {
+            for f in fields {
+                collect_inner_lambdas(&f.value, bound, out);
+            }
+        }
+        RustIrExpr::Match { scrutinee, arms, .. } => {
+            collect_inner_lambdas(scrutinee, bound, out);
+            for arm in arms {
+                let mark = bound.len();
+                collect_pattern_vars(&arm.pattern, bound);
+                if let Some(g) = &arm.guard {
+                    collect_inner_lambdas(g, bound, out);
+                }
+                collect_inner_lambdas(&arm.body, bound, out);
+                bound.truncate(mark);
+            }
+        }
+        RustIrExpr::Patch { target, fields, .. } => {
+            collect_inner_lambdas(target, bound, out);
+            for f in fields {
+                collect_inner_lambdas(&f.value, bound, out);
+            }
+        }
+        RustIrExpr::TextInterpolate { parts, .. } => {
+            for p in parts {
+                if let RustIrTextPart::Expr { expr } = p {
+                    collect_inner_lambdas(expr, bound, out);
+                }
+            }
+        }
+        RustIrExpr::Pipe { func, arg, .. } => {
+            collect_inner_lambdas(func, bound, out);
+            collect_inner_lambdas(arg, bound, out);
+        }
+        RustIrExpr::DebugFn { body, .. } => {
+            collect_inner_lambdas(body, bound, out);
+        }
+        // Leaf expressions don't contain lambdas
+        RustIrExpr::Local { .. }
+        | RustIrExpr::Global { .. }
+        | RustIrExpr::Builtin { .. }
+        | RustIrExpr::ConstructorValue { .. }
+        | RustIrExpr::LitBool { .. }
+        | RustIrExpr::LitNumber { .. }
+        | RustIrExpr::LitString { .. }
+        | RustIrExpr::LitSigil { .. }
+        | RustIrExpr::LitDateTime { .. }
+        | RustIrExpr::Raw { .. } => {}
+    }
+}
+
+/// Collect variable names bound by a pattern.
+fn collect_pattern_vars(pat: &RustIrPattern, bound: &mut Vec<String>) {
+    match pat {
+        RustIrPattern::Var { name, .. } => bound.push(name.clone()),
+        RustIrPattern::At { name, pattern, .. } => {
+            bound.push(name.clone());
+            collect_pattern_vars(pattern, bound);
+        }
+        RustIrPattern::Constructor { args, .. } => {
+            for a in args {
+                collect_pattern_vars(a, bound);
+            }
+        }
+        RustIrPattern::Tuple { items, .. } => {
+            for i in items {
+                collect_pattern_vars(i, bound);
+            }
+        }
+        RustIrPattern::List { items, rest, .. } => {
+            for i in items {
+                collect_pattern_vars(i, bound);
+            }
+            if let Some(r) = rest {
+                collect_pattern_vars(r, bound);
+            }
+        }
+        RustIrPattern::Record { fields, .. } => {
+            for f in fields {
+                collect_pattern_vars(&f.pattern, bound);
+            }
+        }
+        RustIrPattern::Literal { .. } | RustIrPattern::Wildcard { .. } => {}
+    }
+}
+
+/// Collect free local variable references in an expression.
+/// `bound` tracks variables currently in scope; `free` accumulates unbound locals.
+fn collect_free_locals(
+    expr: &RustIrExpr,
+    bound: &mut Vec<String>,
+    free: &mut HashSet<String>,
+) {
+    match expr {
+        RustIrExpr::Local { name, .. } => {
+            if !bound.contains(name) {
+                free.insert(name.clone());
+            }
+        }
+        RustIrExpr::Lambda { param, body, .. } => {
+            bound.push(param.clone());
+            collect_free_locals(body, bound, free);
+            bound.pop();
+        }
+        RustIrExpr::App { func, arg, .. } => {
+            collect_free_locals(func, bound, free);
+            collect_free_locals(arg, bound, free);
+        }
+        RustIrExpr::Call { func, args, .. } => {
+            collect_free_locals(func, bound, free);
+            for a in args {
+                collect_free_locals(a, bound, free);
+            }
+        }
+        RustIrExpr::If { cond, then_branch, else_branch, .. } => {
+            collect_free_locals(cond, bound, free);
+            collect_free_locals(then_branch, bound, free);
+            collect_free_locals(else_branch, bound, free);
+        }
+        RustIrExpr::Binary { left, right, .. } => {
+            collect_free_locals(left, bound, free);
+            collect_free_locals(right, bound, free);
+        }
+        RustIrExpr::Block { items, .. } => {
+            let mark = bound.len();
+            for item in items {
+                match item {
+                    RustIrBlockItem::Bind { pattern, expr } => {
+                        collect_free_locals(expr, bound, free);
+                        collect_pattern_vars(pattern, bound);
+                    }
+                    RustIrBlockItem::Expr { expr }
+                    | RustIrBlockItem::Yield { expr }
+                    | RustIrBlockItem::Recurse { expr }
+                    | RustIrBlockItem::Filter { expr } => {
+                        collect_free_locals(expr, bound, free);
+                    }
+                }
+            }
+            bound.truncate(mark);
+        }
+        RustIrExpr::FieldAccess { base, .. } => {
+            collect_free_locals(base, bound, free);
+        }
+        RustIrExpr::Index { base, index, .. } => {
+            collect_free_locals(base, bound, free);
+            collect_free_locals(index, bound, free);
+        }
+        RustIrExpr::List { items, .. } => {
+            for item in items {
+                collect_free_locals(&item.expr, bound, free);
+            }
+        }
+        RustIrExpr::Tuple { items, .. } => {
+            for item in items {
+                collect_free_locals(item, bound, free);
+            }
+        }
+        RustIrExpr::Record { fields, .. } => {
+            for f in fields {
+                collect_free_locals(&f.value, bound, free);
+            }
+        }
+        RustIrExpr::Match { scrutinee, arms, .. } => {
+            collect_free_locals(scrutinee, bound, free);
+            for arm in arms {
+                let mark = bound.len();
+                collect_pattern_vars(&arm.pattern, bound);
+                if let Some(g) = &arm.guard {
+                    collect_free_locals(g, bound, free);
+                }
+                collect_free_locals(&arm.body, bound, free);
+                bound.truncate(mark);
+            }
+        }
+        RustIrExpr::Patch { target, fields, .. } => {
+            collect_free_locals(target, bound, free);
+            for f in fields {
+                collect_free_locals(&f.value, bound, free);
+            }
+        }
+        RustIrExpr::TextInterpolate { parts, .. } => {
+            for p in parts {
+                if let RustIrTextPart::Expr { expr } = p {
+                    collect_free_locals(expr, bound, free);
+                }
+            }
+        }
+        RustIrExpr::Pipe { func, arg, .. } => {
+            collect_free_locals(func, bound, free);
+            collect_free_locals(arg, bound, free);
+        }
+        RustIrExpr::DebugFn { body, .. } => {
+            collect_free_locals(body, bound, free);
+        }
+        // Leaves with no free locals
+        RustIrExpr::Global { .. }
+        | RustIrExpr::Builtin { .. }
+        | RustIrExpr::ConstructorValue { .. }
+        | RustIrExpr::LitBool { .. }
+        | RustIrExpr::LitNumber { .. }
+        | RustIrExpr::LitString { .. }
+        | RustIrExpr::LitSigil { .. }
+        | RustIrExpr::LitDateTime { .. }
+        | RustIrExpr::Raw { .. } => {}
     }
 }
