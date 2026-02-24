@@ -404,6 +404,6 @@ pub(super) fn build_database_record() -> Value {
     fields.insert("ins".to_string(), builtin_constructor("Insert", 1));
     fields.insert("upd".to_string(), builtin_constructor("Update", 2));
     fields.insert("del".to_string(), builtin_constructor("Delete", 1));
-    fields.insert("upsert".to_string(), builtin_constructor("Upsert", 3));
+    fields.insert("ups".to_string(), builtin_constructor("Upsert", 3));
     Value::Record(Arc::new(fields))
 }

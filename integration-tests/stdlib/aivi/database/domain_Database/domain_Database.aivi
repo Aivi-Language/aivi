@@ -41,8 +41,8 @@ literal_upd_functional = do Effect {
 @test "literal upsert"
 literal_upsert_functional = do Effect {
   users0 = table "users"[]
-  users1 <- users0 + upsert (id == 1) { id: 1, name: "A", active: False } (u => u <| { name: "B", active: True })
-  users2 <- users1 + upsert (id == 1) { id: 1, name: "X", active: False } (u => u <| { name: "C" })
+  users1 <- users0 + ups (id == 1) { id: 1, name: "A", active: False } (u => u <| { name: "B", active: True })
+  users2 <- users1 + ups (id == 1) { id: 1, name: "X", active: False } (u => u <| { name: "C" })
   rows <- load users2
   rows match
     | [u] => do Effect {

@@ -106,6 +106,17 @@ and `withConn` guarantees deterministic release via AIVI resources even on failu
 | **Delete** pred<br><pre><code>`Pred A -> Delta A`</code></pre> | Deletes rows matching `pred`. |
 | **Upsert** pred value patch<br><pre><code>`Pred A -> A -> Patch A -> Delta A`</code></pre> | Patches matching rows; inserts `value` when no row matches `pred`. |
 
+### Convenience aliases
+
+`aivi.database` also exports constructor aliases and domain sugar:
+
+- `ins = Insert`
+- `upd = Update`
+- `del = Delete`
+- `ups = Upsert`
+
+When `use aivi.database (domain Database)` is in scope, these are available in delta expressions such as `table + upd (...) (...)` and `table + ups (...) value (...)`.
+
 ### FTS helpers
 
 `aivi.database` now includes typed helpers for preparing FTS payloads and queries:

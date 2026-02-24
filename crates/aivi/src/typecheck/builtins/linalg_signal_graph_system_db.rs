@@ -1266,7 +1266,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Type::Func(Box::new(pred_ty.clone()), Box::new(delta_ty.clone())),
             ),
             (
-                "upsert".to_string(),
+                "ups".to_string(),
                 Type::Func(
                     Box::new(pred_ty.clone()),
                     Box::new(Type::Func(
