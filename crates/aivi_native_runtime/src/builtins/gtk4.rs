@@ -16,6 +16,8 @@ struct Gtk4State {
     windows: HashMap<i64, WindowState>,
     widgets: HashSet<i64>,
     boxes: HashMap<i64, BoxState>,
+    overlays: HashMap<i64, OverlayState>,
+    list_boxes: HashMap<i64, Vec<i64>>,
     buttons: HashMap<i64, String>,
     labels: HashMap<i64, String>,
     entries: HashMap<i64, String>,
@@ -73,6 +75,12 @@ struct BoxState {
 #[derive(Clone)]
 struct ScrollAreaState {
     child: Option<i64>,
+}
+
+#[derive(Clone)]
+struct OverlayState {
+    child: Option<i64>,
+    overlays: Vec<i64>,
 }
 
 #[derive(Clone)]
@@ -181,6 +189,501 @@ where
 
 fn invalid(name: &str) -> RuntimeError {
     RuntimeError::Message(name.to_string())
+}
+
+#[derive(Debug, Clone)]
+enum GtkBuilderNode {
+    Element {
+        tag: String,
+        attrs: Vec<(String, String)>,
+        children: Vec<GtkBuilderNode>,
+    },
+    Text(String),
+}
+
+fn decode_text(value: &Value) -> Option<String> {
+    match value {
+        Value::Text(text) => Some(text.clone()),
+        Value::Int(value) => Some(value.to_string()),
+        Value::Float(value) => Some(value.to_string()),
+        Value::Bool(value) => Some(value.to_string()),
+        Value::DateTime(value) => Some(value.clone()),
+        _ => None,
+    }
+}
+
+fn decode_gtk_attr(value: &Value) -> Result<(String, String), RuntimeError> {
+    let Value::Constructor { name, args } = value else {
+        return Err(invalid("gtk4.buildFromNode expects GtkAttribute values"));
+    };
+    if name != "GtkAttribute" || args.len() != 2 {
+        return Err(invalid("gtk4.buildFromNode expects GtkAttribute values"));
+    }
+    let key =
+        decode_text(&args[0]).ok_or_else(|| invalid("gtk4.buildFromNode invalid attr name"))?;
+    let val =
+        decode_text(&args[1]).ok_or_else(|| invalid("gtk4.buildFromNode invalid attr value"))?;
+    Ok((key, val))
+}
+
+fn decode_gtk_node(value: &Value) -> Result<GtkBuilderNode, RuntimeError> {
+    let Value::Constructor { name, args } = value else {
+        return Err(invalid("gtk4.buildFromNode expects GtkNode"));
+    };
+    match (name.as_str(), args.len()) {
+        ("GtkTextNode", 1) => {
+            let text = decode_text(&args[0])
+                .ok_or_else(|| invalid("gtk4.buildFromNode invalid GtkTextNode text"))?;
+            Ok(GtkBuilderNode::Text(text))
+        }
+        ("GtkElement", 3) => {
+            let tag = decode_text(&args[0])
+                .ok_or_else(|| invalid("gtk4.buildFromNode invalid GtkElement tag"))?;
+            let Value::List(attrs) = &args[1] else {
+                return Err(invalid("gtk4.buildFromNode GtkElement attrs must be List"));
+            };
+            let Value::List(children) = &args[2] else {
+                return Err(invalid(
+                    "gtk4.buildFromNode GtkElement children must be List",
+                ));
+            };
+            let attrs = attrs
+                .iter()
+                .map(decode_gtk_attr)
+                .collect::<Result<Vec<_>, _>>()?;
+            let children = children
+                .iter()
+                .map(decode_gtk_node)
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(GtkBuilderNode::Element {
+                tag,
+                attrs,
+                children,
+            })
+        }
+        _ => Err(invalid("gtk4.buildFromNode expects GtkNode")),
+    }
+}
+
+fn parse_i64_text(text: &str) -> Option<i64> {
+    text.trim().parse::<i64>().ok()
+}
+
+fn parse_usize_text(text: &str) -> Option<usize> {
+    text.trim().parse::<usize>().ok()
+}
+
+fn parse_bool_text(text: &str) -> Option<bool> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => Some(true),
+        "false" | "0" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+fn parse_policy_text(text: &str) -> Option<i64> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "always" => Some(0),
+        "automatic" => Some(1),
+        "never" => Some(2),
+        "external" => Some(3),
+        other => other.parse::<i64>().ok(),
+    }
+}
+
+fn parse_orientation_text(text: &str) -> i64 {
+    let normalized = text.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "vertical" | "1" => 1,
+        _ => 0,
+    }
+}
+
+fn node_attr<'a>(attrs: &'a [(String, String)], name: &str) -> Option<&'a str> {
+    attrs
+        .iter()
+        .find_map(|(key, value)| (key == name).then_some(value.as_str()))
+}
+
+fn collect_text(children: &[GtkBuilderNode]) -> String {
+    let mut out = String::new();
+    for child in children {
+        if let GtkBuilderNode::Text(text) = child {
+            out.push_str(text);
+        }
+    }
+    out.trim().to_string()
+}
+
+fn collect_object_properties(
+    attrs: &[(String, String)],
+    children: &[GtkBuilderNode],
+) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for (name, value) in attrs {
+        if let Some(prop) = name.strip_prefix("prop:") {
+            out.insert(prop.to_string(), value.clone());
+        }
+    }
+    for child in children {
+        let GtkBuilderNode::Element {
+            tag,
+            attrs,
+            children,
+        } = child
+        else {
+            continue;
+        };
+        if tag == "property" {
+            if let Some(name) = node_attr(attrs, "name") {
+                out.insert(name.to_string(), collect_text(children));
+            }
+            continue;
+        }
+        if tag == "style" {
+            for style_child in children {
+                let GtkBuilderNode::Element {
+                    tag,
+                    attrs,
+                    children: _,
+                } = style_child
+                else {
+                    continue;
+                };
+                if tag == "class" {
+                    if let Some(class_name) = node_attr(attrs, "name") {
+                        let current = out.remove("css-class").unwrap_or_default();
+                        let joined = if current.is_empty() {
+                            class_name.to_string()
+                        } else {
+                            format!("{current} {class_name}")
+                        };
+                        out.insert("css-class".to_string(), joined);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+struct ChildSpec<'a> {
+    node: &'a GtkBuilderNode,
+    child_type: Option<String>,
+    position: Option<usize>,
+}
+
+fn child_packing_position(children: &[GtkBuilderNode]) -> Option<usize> {
+    for child in children {
+        let GtkBuilderNode::Element {
+            tag,
+            attrs: _,
+            children,
+        } = child
+        else {
+            continue;
+        };
+        if tag != "packing" {
+            continue;
+        }
+        for packing_child in children {
+            let GtkBuilderNode::Element {
+                tag,
+                attrs,
+                children,
+            } = packing_child
+            else {
+                continue;
+            };
+            if tag == "property" && node_attr(attrs, "name") == Some("position") {
+                return parse_usize_text(&collect_text(children));
+            }
+        }
+    }
+    None
+}
+
+fn collect_child_objects(children: &[GtkBuilderNode]) -> Vec<ChildSpec<'_>> {
+    let mut out = Vec::new();
+    for child in children {
+        let GtkBuilderNode::Element {
+            tag,
+            attrs,
+            children,
+        } = child
+        else {
+            continue;
+        };
+        if tag == "child" {
+            let child_type = node_attr(attrs, "type").map(str::to_string);
+            let position = node_attr(attrs, "position")
+                .and_then(parse_usize_text)
+                .or_else(|| child_packing_position(children));
+            for nested in children {
+                if matches!(
+                    nested,
+                    GtkBuilderNode::Element {
+                        tag,
+                        attrs: _,
+                        children: _
+                    } if tag == "object"
+                ) {
+                    out.push(ChildSpec {
+                        node: nested,
+                        child_type: child_type.clone(),
+                        position,
+                    });
+                }
+            }
+        } else if tag == "property" && node_attr(attrs, "name") == Some("child") {
+            for nested in children {
+                if matches!(
+                    nested,
+                    GtkBuilderNode::Element {
+                        tag,
+                        attrs: _,
+                        children: _
+                    } if tag == "object"
+                ) {
+                    out.push(ChildSpec {
+                        node: nested,
+                        child_type: None,
+                        position: None,
+                    });
+                }
+            }
+        } else if tag == "object" {
+            out.push(ChildSpec {
+                node: child,
+                child_type: None,
+                position: None,
+            });
+        }
+    }
+    out
+}
+
+fn first_object_in_interface(node: &GtkBuilderNode) -> Result<&GtkBuilderNode, RuntimeError> {
+    let GtkBuilderNode::Element { tag, children, .. } = node else {
+        return Err(invalid("gtk4.buildFromNode expects GtkNode root element"));
+    };
+    if tag == "object" {
+        return Ok(node);
+    }
+    if tag != "interface" && tag != "template" {
+        return Err(invalid(
+            "gtk4.buildFromNode root must be <object>, <interface>, or <template>",
+        ));
+    }
+    fn find_first_object(node: &GtkBuilderNode) -> Option<&GtkBuilderNode> {
+        let GtkBuilderNode::Element { tag, children, .. } = node else {
+            return None;
+        };
+        if tag == "object" {
+            return Some(node);
+        }
+        for child in children {
+            if let Some(found) = find_first_object(child) {
+                return Some(found);
+            }
+        }
+        None
+    }
+    children
+        .iter()
+        .find_map(find_first_object)
+        .ok_or_else(|| invalid("gtk4.buildFromNode root must contain at least one <object>"))
+}
+
+fn build_widget_from_node_mock(
+    state: &mut Gtk4State,
+    node: &GtkBuilderNode,
+    id_map: &mut HashMap<String, i64>,
+) -> Result<i64, RuntimeError> {
+    let GtkBuilderNode::Element {
+        tag,
+        attrs,
+        children,
+    } = node
+    else {
+        return Err(invalid("gtk4.buildFromNode root must be GtkElement"));
+    };
+    if tag != "object" {
+        return Err(invalid("gtk4.buildFromNode root tag must be <object>"));
+    }
+    if let Some(ref_id) = node_attr(attrs, "idref").or_else(|| node_attr(attrs, "ref")) {
+        return id_map.get(ref_id).copied().ok_or_else(|| {
+            RuntimeError::Error(Value::Text(format!(
+                "gtk4.buildFromNode unresolved object reference id '{ref_id}'"
+            )))
+        });
+    }
+    let class = node_attr(attrs, "class")
+        .ok_or_else(|| invalid("gtk4.buildFromNode object requires class attribute"))?;
+    let props = collect_object_properties(attrs, children);
+
+    let id = state.alloc_widget_id();
+    if let Some(object_id) = node_attr(attrs, "id") {
+        id_map.insert(object_id.to_string(), id);
+    }
+    match class {
+        "GtkBox" | "AdwClamp" => {
+            let spacing = props
+                .get("spacing")
+                .and_then(|v| parse_i64_text(v))
+                .unwrap_or(0);
+            let orientation = props
+                .get("orientation")
+                .map(|v| parse_orientation_text(v))
+                .unwrap_or(0);
+            state.boxes.insert(
+                id,
+                BoxState {
+                    orientation,
+                    spacing,
+                    children: Vec::new(),
+                },
+            );
+        }
+        "GtkOverlay" => {
+            state.overlays.insert(
+                id,
+                OverlayState {
+                    child: None,
+                    overlays: Vec::new(),
+                },
+            );
+        }
+        "GtkLabel" => {
+            let label = props
+                .get("label")
+                .or_else(|| props.get("text"))
+                .cloned()
+                .unwrap_or_default();
+            state.labels.insert(id, label);
+        }
+        "GtkButton" => {
+            let label = props.get("label").cloned().unwrap_or_default();
+            state.buttons.insert(id, label);
+        }
+        "GtkEntry" => {
+            let text = props.get("text").cloned().unwrap_or_default();
+            state.entries.insert(id, text);
+        }
+        "GtkScrolledWindow" => {
+            let _h_policy = props
+                .get("hscrollbar-policy")
+                .and_then(|v| parse_policy_text(v))
+                .unwrap_or(1);
+            let _v_policy = props
+                .get("vscrollbar-policy")
+                .and_then(|v| parse_policy_text(v))
+                .unwrap_or(1);
+            let _propagate_natural_height = props
+                .get("propagate-natural-height")
+                .and_then(|v| parse_bool_text(v))
+                .unwrap_or(false);
+            let _propagate_natural_width = props
+                .get("propagate-natural-width")
+                .and_then(|v| parse_bool_text(v))
+                .unwrap_or(false);
+            state
+                .scroll_areas
+                .insert(id, ScrollAreaState { child: None });
+        }
+        "GtkDrawingArea" => {
+            state.draw_areas.insert(
+                id,
+                DrawAreaState {
+                    width: props
+                        .get("width-request")
+                        .and_then(|v| parse_i64_text(v))
+                        .unwrap_or(0),
+                    height: props
+                        .get("height-request")
+                        .and_then(|v| parse_i64_text(v))
+                        .unwrap_or(0),
+                    dirty: false,
+                },
+            );
+        }
+        "GtkListBox" => {
+            state.list_boxes.insert(id, Vec::new());
+        }
+        "GtkMenuButton" => {
+            state.menu_buttons.insert(
+                id,
+                MenuButtonState {
+                    label: props.get("label").cloned().unwrap_or_default(),
+                    menu_model: None,
+                },
+            );
+        }
+        "GtkGestureClick" => {
+            state.gesture_clicks.insert(
+                id,
+                GestureClickState {
+                    widget_id: 0,
+                    last_button: props
+                        .get("button")
+                        .and_then(|v| parse_i64_text(v))
+                        .unwrap_or(0),
+                },
+            );
+        }
+        "GtkImage" => {
+            let src = props
+                .get("resource")
+                .or_else(|| props.get("file"))
+                .or_else(|| props.get("icon-name"))
+                .cloned()
+                .unwrap_or_default();
+            state.images.insert(id, src);
+        }
+        _ => {}
+    }
+
+    let child_objects = collect_child_objects(children);
+    let mut ordered_children = child_objects;
+    ordered_children.sort_by_key(|child| child.position.unwrap_or(usize::MAX));
+    for child in ordered_children {
+        let child_id = build_widget_from_node_mock(state, child.node, id_map)?;
+        if child.child_type.as_deref() == Some("controller") {
+            state
+                .widget_controllers
+                .entry(id)
+                .or_default()
+                .push(child_id);
+            if let Some(gesture) = state.gesture_clicks.get_mut(&child_id) {
+                gesture.widget_id = id;
+            }
+            continue;
+        }
+        if let Some(container) = state.boxes.get_mut(&id) {
+            if let Some(position) = child.position {
+                let position = position.min(container.children.len());
+                container.children.insert(position, child_id);
+            } else {
+                container.children.push(child_id);
+            }
+        } else if let Some(list_box) = state.list_boxes.get_mut(&id) {
+            list_box.push(child_id);
+        } else if let Some(overlay) = state.overlays.get_mut(&id) {
+            if child.child_type.as_deref() == Some("overlay") {
+                overlay.overlays.push(child_id);
+            } else if overlay.child.is_none() {
+                overlay.child = Some(child_id);
+            } else {
+                overlay.overlays.push(child_id);
+            }
+        } else if let Some(scrolled) = state.scroll_areas.get_mut(&id) {
+            if scrolled.child.is_none() {
+                scrolled.child = Some(child_id);
+            }
+        }
+    }
+
+    Ok(id)
 }
 
 pub(super) fn build_gtk4_record() -> Value {
@@ -2046,6 +2549,23 @@ fn build_gtk4_record_mock() -> Value {
     );
 
     fields.insert(
+        "buildFromNode".to_string(),
+        builtin("gtk4.buildFromNode", 1, |mut args, _| {
+            let node = args.remove(0);
+            Ok(effect(move |_| {
+                let decoded = decode_gtk_node(&node)?;
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    let mut id_map = HashMap::new();
+                    let root = first_object_in_interface(&decoded)?;
+                    let id = build_widget_from_node_mock(&mut state, root, &mut id_map)?;
+                    Ok(Value::Int(id))
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
         "osOpenUri".to_string(),
         builtin("gtk4.osOpenUri", 2, |mut args, _| {
             let uri = match args.remove(1) {
@@ -2138,6 +2658,8 @@ fn build_gtk4_record_mock() -> Value {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::{build_gtk4_record_mock, Gtk4State, GTK4_STATE};
     use crate::{Runtime, RuntimeError, Value};
 
@@ -2149,6 +2671,34 @@ mod tests {
             .get(name)
             .unwrap_or_else(|| panic!("missing gtk4 field: {name}"))
             .clone()
+    }
+
+    fn attr(name: &str, value: &str) -> Value {
+        Value::Constructor {
+            name: "GtkAttribute".to_string(),
+            args: vec![
+                Value::Text(name.to_string()),
+                Value::Text(value.to_string()),
+            ],
+        }
+    }
+
+    fn text_node(text: &str) -> Value {
+        Value::Constructor {
+            name: "GtkTextNode".to_string(),
+            args: vec![Value::Text(text.to_string())],
+        }
+    }
+
+    fn element(tag: &str, attrs: Vec<Value>, children: Vec<Value>) -> Value {
+        Value::Constructor {
+            name: "GtkElement".to_string(),
+            args: vec![
+                Value::Text(tag.to_string()),
+                Value::List(Arc::new(attrs)),
+                Value::List(Arc::new(children)),
+            ],
+        }
     }
 
     #[test]
@@ -2210,5 +2760,499 @@ mod tests {
             RuntimeError::Message(msg)
             if msg == "gtk4.imageNewFromResource expects Text resource path"
         ));
+    }
+
+    #[test]
+    fn build_from_node_creates_box_and_child_label() {
+        GTK4_STATE.with(|state| *state.borrow_mut() = Gtk4State::default());
+        let mut runtime = Runtime::default();
+        let gtk4 = build_gtk4_record_mock();
+        let build_from_node = gtk4_field(&gtk4, "buildFromNode");
+
+        let node = Value::Constructor {
+            name: "GtkElement".to_string(),
+            args: vec![
+                Value::Text("object".to_string()),
+                Value::List(Arc::new(vec![
+                    Value::Constructor {
+                        name: "GtkAttribute".to_string(),
+                        args: vec![
+                            Value::Text("class".to_string()),
+                            Value::Text("GtkBox".to_string()),
+                        ],
+                    },
+                    Value::Constructor {
+                        name: "GtkAttribute".to_string(),
+                        args: vec![
+                            Value::Text("prop:spacing".to_string()),
+                            Value::Text("24".to_string()),
+                        ],
+                    },
+                ])),
+                Value::List(Arc::new(vec![Value::Constructor {
+                    name: "GtkElement".to_string(),
+                    args: vec![
+                        Value::Text("child".to_string()),
+                        Value::List(Arc::new(vec![])),
+                        Value::List(Arc::new(vec![Value::Constructor {
+                            name: "GtkElement".to_string(),
+                            args: vec![
+                                Value::Text("object".to_string()),
+                                Value::List(Arc::new(vec![Value::Constructor {
+                                    name: "GtkAttribute".to_string(),
+                                    args: vec![
+                                        Value::Text("class".to_string()),
+                                        Value::Text("GtkLabel".to_string()),
+                                    ],
+                                }])),
+                                Value::List(Arc::new(vec![Value::Constructor {
+                                    name: "GtkElement".to_string(),
+                                    args: vec![
+                                        Value::Text("property".to_string()),
+                                        Value::List(Arc::new(vec![Value::Constructor {
+                                            name: "GtkAttribute".to_string(),
+                                            args: vec![
+                                                Value::Text("name".to_string()),
+                                                Value::Text("label".to_string()),
+                                            ],
+                                        }])),
+                                        Value::List(Arc::new(vec![Value::Constructor {
+                                            name: "GtkTextNode".to_string(),
+                                            args: vec![Value::Text("Hello".to_string())],
+                                        }])),
+                                    ],
+                                }])),
+                            ],
+                        }])),
+                    ],
+                }])),
+            ],
+        };
+
+        let effect = runtime
+            .call(build_from_node, vec![node])
+            .expect("buildFromNode should return effect");
+        let root_id = match runtime
+            .run_effect_value(effect)
+            .expect("buildFromNode effect should succeed")
+        {
+            Value::Int(id) => id,
+            _ => panic!("expected Int root id"),
+        };
+
+        GTK4_STATE.with(|state| {
+            let state = state.borrow();
+            let root_box = state.boxes.get(&root_id).expect("root should be a GtkBox");
+            assert_eq!(root_box.spacing, 24);
+            assert_eq!(root_box.children.len(), 1);
+            let child_id = root_box.children[0];
+            assert_eq!(state.labels.get(&child_id), Some(&"Hello".to_string()));
+        });
+    }
+
+    #[test]
+    fn build_from_node_accepts_interface_root() {
+        GTK4_STATE.with(|state| *state.borrow_mut() = Gtk4State::default());
+        let mut runtime = Runtime::default();
+        let gtk4 = build_gtk4_record_mock();
+        let build_from_node = gtk4_field(&gtk4, "buildFromNode");
+
+        let node = Value::Constructor {
+            name: "GtkElement".to_string(),
+            args: vec![
+                Value::Text("interface".to_string()),
+                Value::List(Arc::new(vec![])),
+                Value::List(Arc::new(vec![
+                    Value::Constructor {
+                        name: "GtkElement".to_string(),
+                        args: vec![
+                            Value::Text("requires".to_string()),
+                            Value::List(Arc::new(vec![
+                                Value::Constructor {
+                                    name: "GtkAttribute".to_string(),
+                                    args: vec![
+                                        Value::Text("lib".to_string()),
+                                        Value::Text("gtk".to_string()),
+                                    ],
+                                },
+                                Value::Constructor {
+                                    name: "GtkAttribute".to_string(),
+                                    args: vec![
+                                        Value::Text("version".to_string()),
+                                        Value::Text("4.0".to_string()),
+                                    ],
+                                },
+                            ])),
+                            Value::List(Arc::new(vec![])),
+                        ],
+                    },
+                    Value::Constructor {
+                        name: "GtkElement".to_string(),
+                        args: vec![
+                            Value::Text("object".to_string()),
+                            Value::List(Arc::new(vec![Value::Constructor {
+                                name: "GtkAttribute".to_string(),
+                                args: vec![
+                                    Value::Text("class".to_string()),
+                                    Value::Text("GtkLabel".to_string()),
+                                ],
+                            }])),
+                            Value::List(Arc::new(vec![Value::Constructor {
+                                name: "GtkElement".to_string(),
+                                args: vec![
+                                    Value::Text("property".to_string()),
+                                    Value::List(Arc::new(vec![Value::Constructor {
+                                        name: "GtkAttribute".to_string(),
+                                        args: vec![
+                                            Value::Text("name".to_string()),
+                                            Value::Text("label".to_string()),
+                                        ],
+                                    }])),
+                                    Value::List(Arc::new(vec![Value::Constructor {
+                                        name: "GtkTextNode".to_string(),
+                                        args: vec![Value::Text("FromInterface".to_string())],
+                                    }])),
+                                ],
+                            }])),
+                        ],
+                    },
+                ])),
+            ],
+        };
+
+        let effect = runtime
+            .call(build_from_node, vec![node])
+            .expect("buildFromNode should return effect");
+        let root_id = match runtime
+            .run_effect_value(effect)
+            .expect("buildFromNode effect should succeed")
+        {
+            Value::Int(id) => id,
+            _ => panic!("expected Int root id"),
+        };
+
+        GTK4_STATE.with(|state| {
+            let state = state.borrow();
+            assert_eq!(
+                state.labels.get(&root_id),
+                Some(&"FromInterface".to_string())
+            );
+        });
+    }
+
+    #[test]
+    fn build_from_node_resolves_ref_children() {
+        GTK4_STATE.with(|state| *state.borrow_mut() = Gtk4State::default());
+        let mut runtime = Runtime::default();
+        let gtk4 = build_gtk4_record_mock();
+        let build_from_node = gtk4_field(&gtk4, "buildFromNode");
+
+        let label_object = Value::Constructor {
+            name: "GtkElement".to_string(),
+            args: vec![
+                Value::Text("object".to_string()),
+                Value::List(Arc::new(vec![
+                    Value::Constructor {
+                        name: "GtkAttribute".to_string(),
+                        args: vec![
+                            Value::Text("class".to_string()),
+                            Value::Text("GtkLabel".to_string()),
+                        ],
+                    },
+                    Value::Constructor {
+                        name: "GtkAttribute".to_string(),
+                        args: vec![
+                            Value::Text("id".to_string()),
+                            Value::Text("sharedLabel".to_string()),
+                        ],
+                    },
+                ])),
+                Value::List(Arc::new(vec![Value::Constructor {
+                    name: "GtkElement".to_string(),
+                    args: vec![
+                        Value::Text("property".to_string()),
+                        Value::List(Arc::new(vec![Value::Constructor {
+                            name: "GtkAttribute".to_string(),
+                            args: vec![
+                                Value::Text("name".to_string()),
+                                Value::Text("label".to_string()),
+                            ],
+                        }])),
+                        Value::List(Arc::new(vec![Value::Constructor {
+                            name: "GtkTextNode".to_string(),
+                            args: vec![Value::Text("Shared".to_string())],
+                        }])),
+                    ],
+                }])),
+            ],
+        };
+
+        let ref_object = Value::Constructor {
+            name: "GtkElement".to_string(),
+            args: vec![
+                Value::Text("object".to_string()),
+                Value::List(Arc::new(vec![Value::Constructor {
+                    name: "GtkAttribute".to_string(),
+                    args: vec![
+                        Value::Text("ref".to_string()),
+                        Value::Text("sharedLabel".to_string()),
+                    ],
+                }])),
+                Value::List(Arc::new(vec![])),
+            ],
+        };
+
+        let node = Value::Constructor {
+            name: "GtkElement".to_string(),
+            args: vec![
+                Value::Text("object".to_string()),
+                Value::List(Arc::new(vec![Value::Constructor {
+                    name: "GtkAttribute".to_string(),
+                    args: vec![
+                        Value::Text("class".to_string()),
+                        Value::Text("GtkBox".to_string()),
+                    ],
+                }])),
+                Value::List(Arc::new(vec![
+                    Value::Constructor {
+                        name: "GtkElement".to_string(),
+                        args: vec![
+                            Value::Text("child".to_string()),
+                            Value::List(Arc::new(vec![])),
+                            Value::List(Arc::new(vec![label_object])),
+                        ],
+                    },
+                    Value::Constructor {
+                        name: "GtkElement".to_string(),
+                        args: vec![
+                            Value::Text("child".to_string()),
+                            Value::List(Arc::new(vec![])),
+                            Value::List(Arc::new(vec![ref_object])),
+                        ],
+                    },
+                ])),
+            ],
+        };
+
+        let effect = runtime
+            .call(build_from_node, vec![node])
+            .expect("buildFromNode should return effect");
+        let root_id = match runtime
+            .run_effect_value(effect)
+            .expect("buildFromNode effect should succeed")
+        {
+            Value::Int(id) => id,
+            _ => panic!("expected Int root id"),
+        };
+
+        GTK4_STATE.with(|state| {
+            let state = state.borrow();
+            let root_box = state.boxes.get(&root_id).expect("root should be GtkBox");
+            assert_eq!(root_box.children.len(), 2);
+            assert_eq!(root_box.children[0], root_box.children[1]);
+            assert_eq!(
+                state.labels.get(&root_box.children[0]),
+                Some(&"Shared".to_string())
+            );
+        });
+    }
+
+    #[test]
+    fn build_from_node_accepts_template_root() {
+        GTK4_STATE.with(|state| *state.borrow_mut() = Gtk4State::default());
+        let mut runtime = Runtime::default();
+        let gtk4 = build_gtk4_record_mock();
+        let build_from_node = gtk4_field(&gtk4, "buildFromNode");
+
+        let node = element(
+            "template",
+            vec![attr("class", "Card"), attr("parent", "GtkBox")],
+            vec![element(
+                "child",
+                vec![],
+                vec![element(
+                    "object",
+                    vec![attr("class", "GtkLabel")],
+                    vec![element(
+                        "property",
+                        vec![attr("name", "label")],
+                        vec![text_node("FromTemplate")],
+                    )],
+                )],
+            )],
+        );
+
+        let effect = runtime
+            .call(build_from_node, vec![node])
+            .expect("buildFromNode should return effect");
+        let root_id = match runtime
+            .run_effect_value(effect)
+            .expect("buildFromNode effect should succeed")
+        {
+            Value::Int(id) => id,
+            _ => panic!("expected Int root id"),
+        };
+
+        GTK4_STATE.with(|state| {
+            let state = state.borrow();
+            assert_eq!(
+                state.labels.get(&root_id),
+                Some(&"FromTemplate".to_string())
+            );
+        });
+    }
+
+    #[test]
+    fn build_from_node_applies_child_type_and_position() {
+        GTK4_STATE.with(|state| *state.borrow_mut() = Gtk4State::default());
+        let mut runtime = Runtime::default();
+        let gtk4 = build_gtk4_record_mock();
+        let build_from_node = gtk4_field(&gtk4, "buildFromNode");
+
+        let node = element(
+            "object",
+            vec![attr("class", "GtkBox")],
+            vec![
+                element(
+                    "child",
+                    vec![attr("position", "1")],
+                    vec![element(
+                        "object",
+                        vec![attr("class", "GtkLabel"), attr("id", "later")],
+                        vec![element(
+                            "property",
+                            vec![attr("name", "label")],
+                            vec![text_node("Later")],
+                        )],
+                    )],
+                ),
+                element(
+                    "child",
+                    vec![attr("position", "0")],
+                    vec![element(
+                        "object",
+                        vec![attr("class", "GtkLabel"), attr("id", "first")],
+                        vec![element(
+                            "property",
+                            vec![attr("name", "label")],
+                            vec![text_node("First")],
+                        )],
+                    )],
+                ),
+                element(
+                    "child",
+                    vec![attr("type", "controller")],
+                    vec![element(
+                        "object",
+                        vec![attr("class", "GtkGestureClick")],
+                        vec![],
+                    )],
+                ),
+            ],
+        );
+
+        let effect = runtime
+            .call(build_from_node, vec![node])
+            .expect("buildFromNode should return effect");
+        let root_id = match runtime
+            .run_effect_value(effect)
+            .expect("buildFromNode effect should succeed")
+        {
+            Value::Int(id) => id,
+            _ => panic!("expected Int root id"),
+        };
+
+        GTK4_STATE.with(|state| {
+            let state = state.borrow();
+            let root_box = state.boxes.get(&root_id).expect("root should be GtkBox");
+            assert_eq!(root_box.children.len(), 2);
+            assert_eq!(
+                state.labels.get(&root_box.children[0]),
+                Some(&"First".to_string())
+            );
+            assert_eq!(
+                state.labels.get(&root_box.children[1]),
+                Some(&"Later".to_string())
+            );
+            let controllers = state
+                .widget_controllers
+                .get(&root_id)
+                .expect("box should have controller child");
+            assert_eq!(controllers.len(), 1);
+            let gesture = state
+                .gesture_clicks
+                .get(&controllers[0])
+                .expect("controller should be gesture click");
+            assert_eq!(gesture.widget_id, root_id);
+        });
+    }
+
+    #[test]
+    fn build_from_node_supports_drawing_area_and_scrolled_properties() {
+        GTK4_STATE.with(|state| *state.borrow_mut() = Gtk4State::default());
+        let mut runtime = Runtime::default();
+        let gtk4 = build_gtk4_record_mock();
+        let build_from_node = gtk4_field(&gtk4, "buildFromNode");
+
+        let node = element(
+            "object",
+            vec![attr("class", "GtkScrolledWindow")],
+            vec![
+                element(
+                    "property",
+                    vec![attr("name", "hscrollbar-policy")],
+                    vec![text_node("never")],
+                ),
+                element(
+                    "property",
+                    vec![attr("name", "vscrollbar-policy")],
+                    vec![text_node("always")],
+                ),
+                element(
+                    "property",
+                    vec![attr("name", "propagate-natural-height")],
+                    vec![text_node("true")],
+                ),
+                element(
+                    "child",
+                    vec![],
+                    vec![element(
+                        "object",
+                        vec![
+                            attr("class", "GtkDrawingArea"),
+                            attr("prop:width-request", "640"),
+                            attr("prop:height-request", "320"),
+                        ],
+                        vec![],
+                    )],
+                ),
+            ],
+        );
+
+        let effect = runtime
+            .call(build_from_node, vec![node])
+            .expect("buildFromNode should return effect");
+        let root_id = match runtime
+            .run_effect_value(effect)
+            .expect("buildFromNode effect should succeed")
+        {
+            Value::Int(id) => id,
+            _ => panic!("expected Int root id"),
+        };
+
+        GTK4_STATE.with(|state| {
+            let state = state.borrow();
+            let scrolled = state
+                .scroll_areas
+                .get(&root_id)
+                .expect("root should be scrolled window");
+            let child_id = scrolled.child.expect("scrolled window child should exist");
+            let drawing = state
+                .draw_areas
+                .get(&child_id)
+                .expect("child should be drawing area");
+            assert_eq!(drawing.width, 640);
+            assert_eq!(drawing.height, 320);
+        });
     }
 }

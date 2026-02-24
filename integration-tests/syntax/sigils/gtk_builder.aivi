@@ -14,3 +14,49 @@ node =
       </child>
     </object>
   </gtk>
+
+interfaceNode : GtkNode
+interfaceNode =
+  ~<gtk>
+    <interface>
+      <requires lib="gtk" version="4.0"></requires>
+      <object class="GtkBox">
+        <child>
+          <object class="GtkLabel" id="headline">
+            <property name="label">Hi</property>
+          </object>
+        </child>
+        <child>
+          <object ref="headline"></object>
+        </child>
+      </object>
+    </interface>
+  </gtk>
+
+templateNode : GtkNode
+templateNode =
+  ~<gtk>
+    <template class="AppCard" parent="GtkBox">
+      <property name="orientation">vertical</property>
+      <child>
+        <object class="GtkOverlay">
+          <child>
+            <object class="GtkLabel" id="baseLabel">
+              <property name="label">Base</property>
+            </object>
+          </child>
+          <child type="overlay">
+            <object class="GtkLabel">
+              <property name="label">Badge</property>
+            </object>
+          </child>
+        </object>
+      </child>
+      <child>
+        <object class="GtkButton">
+          <property name="label">Open</property>
+          <signal name="clicked" handler="onOpenClicked" swapped="no"></signal>
+        </object>
+      </child>
+    </template>
+  </gtk>

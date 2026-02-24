@@ -87,6 +87,7 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 | `appWithdrawNotification` | `gtk4.appWithdrawNotification` |
 | `layoutManagerNew` | `gtk4.layoutManagerNew` |
 | `widgetSetLayoutManager` | `gtk4.widgetSetLayoutManager` |
+| `buildFromNode` | `gtk4.buildFromNode` |
 | `osOpenUri` | `gtk4.osOpenUri` |
 | `osShowInFileManager` | `gtk4.osShowInFileManager` |
 | `osSetBadgeCount` | `gtk4.osSetBadgeCount` |
@@ -105,6 +106,14 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 - helpers: `gtkElement`, `gtkTextNode`, `gtkAttr`
 
 The parser lowers `~<gtk>...</gtk>` into those constructors.
+Instantiate the resulting node tree with `buildFromNode`.
+`buildFromNode` accepts `<object>`, `<interface>`, or `<template>` roots.
+For `<interface>`/`<template>`, the first nested `<object>` becomes the instantiated root.
+Object references via `ref`/`idref` are resolved against `id` attributes.
+`<child type="overlay">` and `<child type="controller">` are supported for overlay/controller wiring.
+
+Current runtime coverage includes common classes such as `GtkBox`, `AdwClamp`, `GtkLabel`, `GtkButton`, `GtkEntry`, `GtkImage`, `GtkDrawingArea`, `GtkScrolledWindow`, `GtkOverlay`, `GtkSeparator`, `GtkListBox`, and `GtkGestureClick`.
+Supported builder properties include layout/widget basics (`margin-*`, `hexpand`, `vexpand`, `halign`, `valign`, `width-request`, `height-request`, `visible`, `tooltip-text`, `opacity`, style classes), plus class-specific fields like `homogeneous`, `wrap`, `ellipsize`, `xalign`, `max-width-chars`, scrollbar policies, and natural-propagation flags.
 
 `props={ { ... } }` sugar on any tag expands to normalized GTK properties:
 

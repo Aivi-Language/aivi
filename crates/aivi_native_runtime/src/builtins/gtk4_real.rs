@@ -42,6 +42,8 @@ mod linux {
         fn gtk_box_new(orientation: c_int, spacing: c_int) -> *mut c_void;
         fn gtk_box_append(container: *mut c_void, child: *mut c_void);
         fn gtk_box_set_homogeneous(boxw: *mut c_void, homogeneous: c_int);
+        fn gtk_list_box_new() -> *mut c_void;
+        fn gtk_list_box_append(list_box: *mut c_void, child: *mut c_void);
 
         fn gtk_drawing_area_new() -> *mut c_void;
 
@@ -78,10 +80,7 @@ mod linux {
             scrolled: *mut c_void,
             propagate: c_int,
         );
-        fn gtk_scrolled_window_set_propagate_natural_width(
-            scrolled: *mut c_void,
-            propagate: c_int,
-        );
+        fn gtk_scrolled_window_set_propagate_natural_width(scrolled: *mut c_void, propagate: c_int);
 
         fn gtk_separator_new(orientation: c_int) -> *mut c_void;
 
@@ -101,10 +100,7 @@ mod linux {
         fn gtk_widget_add_controller(widget: *mut c_void, controller: *mut c_void);
 
         fn gtk_icon_theme_get_for_display(display: *mut c_void) -> *mut c_void;
-        fn gtk_icon_theme_add_search_path(
-            icon_theme: *mut c_void,
-            path: *const c_char,
-        );
+        fn gtk_icon_theme_add_search_path(icon_theme: *mut c_void, path: *const c_char);
         fn gtk_button_set_child(button: *mut c_void, child: *mut c_void);
 
         fn gdk_display_get_default() -> *mut c_void;
@@ -206,6 +202,693 @@ mod linux {
         state.widgets.get(&id).copied().ok_or_else(|| {
             RuntimeError::Error(Value::Text(format!("gtk4.{ctx} unknown widget id {id}")))
         })
+    }
+
+    #[derive(Debug, Clone)]
+    enum GtkBuilderNode {
+        Element {
+            tag: String,
+            attrs: Vec<(String, String)>,
+            children: Vec<GtkBuilderNode>,
+        },
+        Text(String),
+    }
+
+    #[derive(Debug, Clone, Copy)]
+    enum CreatedWidgetKind {
+        Box,
+        ScrolledWindow,
+        Overlay,
+        ListBox,
+        Other,
+    }
+
+    fn decode_text(value: &Value) -> Option<String> {
+        match value {
+            Value::Text(text) => Some(text.clone()),
+            Value::Int(value) => Some(value.to_string()),
+            Value::Float(value) => Some(value.to_string()),
+            Value::Bool(value) => Some(value.to_string()),
+            Value::DateTime(value) => Some(value.clone()),
+            _ => None,
+        }
+    }
+
+    fn decode_gtk_attr(value: &Value) -> Result<(String, String), RuntimeError> {
+        let Value::Constructor { name, args } = value else {
+            return Err(invalid("gtk4.buildFromNode expects GtkAttribute values"));
+        };
+        if name != "GtkAttribute" || args.len() != 2 {
+            return Err(invalid("gtk4.buildFromNode expects GtkAttribute values"));
+        }
+        let key =
+            decode_text(&args[0]).ok_or_else(|| invalid("gtk4.buildFromNode invalid attr name"))?;
+        let val = decode_text(&args[1])
+            .ok_or_else(|| invalid("gtk4.buildFromNode invalid attr value"))?;
+        Ok((key, val))
+    }
+
+    fn decode_gtk_node(value: &Value) -> Result<GtkBuilderNode, RuntimeError> {
+        let Value::Constructor { name, args } = value else {
+            return Err(invalid("gtk4.buildFromNode expects GtkNode"));
+        };
+        match (name.as_str(), args.len()) {
+            ("GtkTextNode", 1) => {
+                let text = decode_text(&args[0])
+                    .ok_or_else(|| invalid("gtk4.buildFromNode invalid GtkTextNode text"))?;
+                Ok(GtkBuilderNode::Text(text))
+            }
+            ("GtkElement", 3) => {
+                let tag = decode_text(&args[0])
+                    .ok_or_else(|| invalid("gtk4.buildFromNode invalid GtkElement tag"))?;
+                let Value::List(attrs) = &args[1] else {
+                    return Err(invalid("gtk4.buildFromNode GtkElement attrs must be List"));
+                };
+                let Value::List(children) = &args[2] else {
+                    return Err(invalid(
+                        "gtk4.buildFromNode GtkElement children must be List",
+                    ));
+                };
+                let attrs = attrs
+                    .iter()
+                    .map(decode_gtk_attr)
+                    .collect::<Result<Vec<_>, _>>()?;
+                let children = children
+                    .iter()
+                    .map(decode_gtk_node)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(GtkBuilderNode::Element {
+                    tag,
+                    attrs,
+                    children,
+                })
+            }
+            _ => Err(invalid("gtk4.buildFromNode expects GtkNode")),
+        }
+    }
+
+    fn parse_i32_text(text: &str) -> Option<i32> {
+        text.trim().parse::<i32>().ok()
+    }
+
+    fn parse_usize_text(text: &str) -> Option<usize> {
+        text.trim().parse::<usize>().ok()
+    }
+
+    fn parse_f64_text(text: &str) -> Option<f64> {
+        text.trim().parse::<f64>().ok()
+    }
+
+    fn parse_bool_text(text: &str) -> Option<bool> {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" | "on" => Some(true),
+            "false" | "0" | "no" | "off" => Some(false),
+            _ => None,
+        }
+    }
+
+    fn parse_orientation_text(text: &str) -> c_int {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "vertical" | "1" => 1,
+            _ => 0,
+        }
+    }
+
+    fn parse_align_text(text: &str) -> Option<c_int> {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "fill" => Some(0),
+            "start" => Some(1),
+            "end" => Some(2),
+            "center" => Some(3),
+            other => other.parse::<c_int>().ok(),
+        }
+    }
+
+    fn parse_policy_text(text: &str) -> Option<c_int> {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "always" => Some(0),
+            "automatic" => Some(1),
+            "never" => Some(2),
+            "external" => Some(3),
+            other => other.parse::<c_int>().ok(),
+        }
+    }
+
+    fn parse_ellipsize_text(text: &str) -> Option<c_int> {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "none" => Some(0),
+            "start" => Some(1),
+            "middle" => Some(2),
+            "end" => Some(3),
+            other => other.parse::<c_int>().ok(),
+        }
+    }
+
+    fn node_attr<'a>(attrs: &'a [(String, String)], name: &str) -> Option<&'a str> {
+        attrs
+            .iter()
+            .find_map(|(key, value)| (key == name).then_some(value.as_str()))
+    }
+
+    fn collect_text(children: &[GtkBuilderNode]) -> String {
+        let mut out = String::new();
+        for child in children {
+            if let GtkBuilderNode::Text(text) = child {
+                out.push_str(text);
+            }
+        }
+        out.trim().to_string()
+    }
+
+    fn collect_object_properties(
+        attrs: &[(String, String)],
+        children: &[GtkBuilderNode],
+    ) -> HashMap<String, String> {
+        let mut out = HashMap::new();
+        for (name, value) in attrs {
+            if let Some(prop) = name.strip_prefix("prop:") {
+                out.insert(prop.to_string(), value.clone());
+            }
+        }
+        for child in children {
+            let GtkBuilderNode::Element {
+                tag,
+                attrs,
+                children,
+            } = child
+            else {
+                continue;
+            };
+            if tag == "property" {
+                if let Some(name) = node_attr(attrs, "name") {
+                    out.insert(name.to_string(), collect_text(children));
+                }
+                continue;
+            }
+            if tag == "style" {
+                for style_child in children {
+                    let GtkBuilderNode::Element {
+                        tag,
+                        attrs,
+                        children: _,
+                    } = style_child
+                    else {
+                        continue;
+                    };
+                    if tag == "class" {
+                        if let Some(class_name) = node_attr(attrs, "name") {
+                            let current = out.remove("css-class").unwrap_or_default();
+                            let joined = if current.is_empty() {
+                                class_name.to_string()
+                            } else {
+                                format!("{current} {class_name}")
+                            };
+                            out.insert("css-class".to_string(), joined);
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    struct ChildSpec<'a> {
+        node: &'a GtkBuilderNode,
+        child_type: Option<String>,
+        position: Option<usize>,
+    }
+
+    fn child_packing_position(children: &[GtkBuilderNode]) -> Option<usize> {
+        for child in children {
+            let GtkBuilderNode::Element {
+                tag,
+                attrs: _,
+                children,
+            } = child
+            else {
+                continue;
+            };
+            if tag != "packing" {
+                continue;
+            }
+            for packing_child in children {
+                let GtkBuilderNode::Element {
+                    tag,
+                    attrs,
+                    children,
+                } = packing_child
+                else {
+                    continue;
+                };
+                if tag == "property" && node_attr(attrs, "name") == Some("position") {
+                    return parse_usize_text(&collect_text(children));
+                }
+            }
+        }
+        None
+    }
+
+    fn collect_child_objects(children: &[GtkBuilderNode]) -> Vec<ChildSpec<'_>> {
+        let mut out = Vec::new();
+        for child in children {
+            let GtkBuilderNode::Element {
+                tag,
+                attrs,
+                children,
+            } = child
+            else {
+                continue;
+            };
+            if tag == "child" {
+                let child_type = node_attr(attrs, "type").map(str::to_string);
+                let position = node_attr(attrs, "position")
+                    .and_then(parse_usize_text)
+                    .or_else(|| child_packing_position(children));
+                for nested in children {
+                    if matches!(
+                        nested,
+                        GtkBuilderNode::Element {
+                            tag,
+                            attrs: _,
+                            children: _
+                        } if tag == "object"
+                    ) {
+                        out.push(ChildSpec {
+                            node: nested,
+                            child_type: child_type.clone(),
+                            position,
+                        });
+                    }
+                }
+                continue;
+            }
+            if tag == "property" && node_attr(attrs, "name") == Some("child") {
+                for nested in children {
+                    if matches!(
+                        nested,
+                        GtkBuilderNode::Element {
+                            tag,
+                            attrs: _,
+                            children: _
+                        } if tag == "object"
+                    ) {
+                        out.push(ChildSpec {
+                            node: nested,
+                            child_type: None,
+                            position: None,
+                        });
+                    }
+                }
+                continue;
+            }
+            if tag == "object" {
+                out.push(ChildSpec {
+                    node: child,
+                    child_type: None,
+                    position: None,
+                });
+            }
+        }
+        out
+    }
+
+    fn first_object_in_interface(node: &GtkBuilderNode) -> Result<&GtkBuilderNode, RuntimeError> {
+        let GtkBuilderNode::Element { tag, children, .. } = node else {
+            return Err(invalid("gtk4.buildFromNode expects GtkNode root element"));
+        };
+        if tag == "object" {
+            return Ok(node);
+        }
+        if tag != "interface" && tag != "template" {
+            return Err(invalid(
+                "gtk4.buildFromNode root must be <object>, <interface>, or <template>",
+            ));
+        }
+        fn find_first_object(node: &GtkBuilderNode) -> Option<&GtkBuilderNode> {
+            let GtkBuilderNode::Element { tag, children, .. } = node else {
+                return None;
+            };
+            if tag == "object" {
+                return Some(node);
+            }
+            for child in children {
+                if let Some(found) = find_first_object(child) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        children
+            .iter()
+            .find_map(find_first_object)
+            .ok_or_else(|| invalid("gtk4.buildFromNode root must contain at least one <object>"))
+    }
+
+    fn apply_widget_properties(
+        widget: *mut c_void,
+        class_name: &str,
+        props: &HashMap<String, String>,
+    ) -> Result<(), RuntimeError> {
+        if let Some(value) = props.get("margin-start").and_then(|v| parse_i32_text(v)) {
+            unsafe { gtk_widget_set_margin_start(widget, value) };
+        }
+        if let Some(value) = props.get("margin-end").and_then(|v| parse_i32_text(v)) {
+            unsafe { gtk_widget_set_margin_end(widget, value) };
+        }
+        if let Some(value) = props.get("margin-top").and_then(|v| parse_i32_text(v)) {
+            unsafe { gtk_widget_set_margin_top(widget, value) };
+        }
+        if let Some(value) = props.get("margin-bottom").and_then(|v| parse_i32_text(v)) {
+            unsafe { gtk_widget_set_margin_bottom(widget, value) };
+        }
+        if let Some(value) = props.get("hexpand").and_then(|v| parse_bool_text(v)) {
+            unsafe { gtk_widget_set_hexpand(widget, if value { 1 } else { 0 }) };
+        }
+        if let Some(value) = props.get("vexpand").and_then(|v| parse_bool_text(v)) {
+            unsafe { gtk_widget_set_vexpand(widget, if value { 1 } else { 0 }) };
+        }
+        if let Some(value) = props.get("halign").and_then(|v| parse_align_text(v)) {
+            unsafe { gtk_widget_set_halign(widget, value) };
+        }
+        if let Some(value) = props.get("valign").and_then(|v| parse_align_text(v)) {
+            unsafe { gtk_widget_set_valign(widget, value) };
+        }
+        if let Some(value) = props.get("width-request").and_then(|v| parse_i32_text(v)) {
+            unsafe { gtk_widget_set_size_request(widget, value, -1) };
+        }
+        if let Some(value) = props.get("height-request").and_then(|v| parse_i32_text(v)) {
+            unsafe { gtk_widget_set_size_request(widget, -1, value) };
+        }
+        if let Some(value) = props.get("tooltip-text") {
+            let text_c = c_text(value, "gtk4.buildFromNode invalid tooltip-text")?;
+            unsafe { gtk_widget_set_tooltip_text(widget, text_c.as_ptr()) };
+        }
+        if let Some(value) = props.get("opacity").and_then(|v| parse_f64_text(v)) {
+            unsafe { gtk_widget_set_opacity(widget, value) };
+        }
+        if let Some(value) = props.get("visible").and_then(|v| parse_bool_text(v)) {
+            unsafe { gtk_widget_set_visible(widget, if value { 1 } else { 0 }) };
+        }
+        if let Some(value) = props.get("css-class") {
+            for class_name in value.split_whitespace() {
+                let class_c = c_text(class_name, "gtk4.buildFromNode invalid css class")?;
+                unsafe { gtk_widget_add_css_class(widget, class_c.as_ptr()) };
+            }
+        }
+
+        match class_name {
+            "GtkLabel" => {
+                if let Some(value) = props.get("label").or_else(|| props.get("text")) {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid GtkLabel text")?;
+                    unsafe { gtk_label_set_text(widget, text_c.as_ptr()) };
+                }
+                if let Some(value) = props.get("wrap").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_label_set_wrap(widget, if value { 1 } else { 0 }) };
+                }
+                if let Some(value) = props.get("ellipsize").and_then(|v| parse_ellipsize_text(v)) {
+                    unsafe { gtk_label_set_ellipsize(widget, value) };
+                }
+                if let Some(value) = props.get("xalign").and_then(|v| parse_f64_text(v)) {
+                    unsafe { gtk_label_set_xalign(widget, value as f32) };
+                }
+                if let Some(value) = props.get("max-width-chars").and_then(|v| parse_i32_text(v)) {
+                    unsafe { gtk_label_set_max_width_chars(widget, value) };
+                }
+            }
+            "GtkButton" => {
+                if let Some(value) = props.get("label") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid GtkButton label")?;
+                    unsafe { gtk_button_set_label(widget, text_c.as_ptr()) };
+                }
+            }
+            "GtkEntry" => {
+                if let Some(value) = props.get("text") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid GtkEntry text")?;
+                    unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
+                }
+            }
+            "GtkImage" => {
+                if let Some(value) = props.get("resource") {
+                    let resource_c = c_text(value, "gtk4.buildFromNode invalid GtkImage resource")?;
+                    unsafe { gtk_image_set_from_resource(widget, resource_c.as_ptr()) };
+                } else if let Some(value) = props.get("file") {
+                    let file_c = c_text(value, "gtk4.buildFromNode invalid GtkImage file")?;
+                    unsafe { gtk_image_set_from_file(widget, file_c.as_ptr()) };
+                }
+                if let Some(value) = props.get("pixel-size").and_then(|v| parse_i32_text(v)) {
+                    unsafe { gtk_image_set_pixel_size(widget, value) };
+                }
+            }
+            "GtkBox" | "AdwClamp" => {
+                if let Some(value) = props.get("homogeneous").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_box_set_homogeneous(widget, if value { 1 } else { 0 }) };
+                }
+            }
+            "GtkScrolledWindow" => {
+                let h_policy = props
+                    .get("hscrollbar-policy")
+                    .and_then(|v| parse_policy_text(v))
+                    .unwrap_or(1);
+                let v_policy = props
+                    .get("vscrollbar-policy")
+                    .and_then(|v| parse_policy_text(v))
+                    .unwrap_or(1);
+                unsafe { gtk_scrolled_window_set_policy(widget, h_policy, v_policy) };
+                if let Some(value) = props
+                    .get("propagate-natural-height")
+                    .and_then(|v| parse_bool_text(v))
+                {
+                    unsafe {
+                        gtk_scrolled_window_set_propagate_natural_height(
+                            widget,
+                            if value { 1 } else { 0 },
+                        )
+                    };
+                }
+                if let Some(value) = props
+                    .get("propagate-natural-width")
+                    .and_then(|v| parse_bool_text(v))
+                {
+                    unsafe {
+                        gtk_scrolled_window_set_propagate_natural_width(
+                            widget,
+                            if value { 1 } else { 0 },
+                        )
+                    };
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn build_widget_from_node_real(
+        state: &mut RealGtkState,
+        node: &GtkBuilderNode,
+        id_map: &mut HashMap<String, i64>,
+    ) -> Result<i64, RuntimeError> {
+        let GtkBuilderNode::Element {
+            tag,
+            attrs,
+            children,
+        } = node
+        else {
+            return Err(invalid("gtk4.buildFromNode root must be GtkElement"));
+        };
+        if tag != "object" {
+            return Err(invalid("gtk4.buildFromNode root tag must be <object>"));
+        }
+        if let Some(ref_id) = node_attr(attrs, "idref").or_else(|| node_attr(attrs, "ref")) {
+            return id_map.get(ref_id).copied().ok_or_else(|| {
+                RuntimeError::Error(Value::Text(format!(
+                    "gtk4.buildFromNode unresolved object reference id '{ref_id}'"
+                )))
+            });
+        }
+        let class_name = node_attr(attrs, "class")
+            .ok_or_else(|| invalid("gtk4.buildFromNode object requires class attribute"))?;
+        let props = collect_object_properties(attrs, children);
+
+        let (raw, kind) = match class_name {
+            "GtkBox" | "AdwClamp" => {
+                let orientation = props
+                    .get("orientation")
+                    .map(|v| parse_orientation_text(v))
+                    .unwrap_or(0);
+                let spacing = props
+                    .get("spacing")
+                    .and_then(|v| parse_i32_text(v))
+                    .unwrap_or(0);
+                (
+                    unsafe { gtk_box_new(orientation, spacing) },
+                    CreatedWidgetKind::Box,
+                )
+            }
+            "GtkLabel" => {
+                let label = props
+                    .get("label")
+                    .or_else(|| props.get("text"))
+                    .cloned()
+                    .unwrap_or_default();
+                let label_c = c_text(&label, "gtk4.buildFromNode invalid GtkLabel text")?;
+                (
+                    unsafe { gtk_label_new(label_c.as_ptr()) },
+                    CreatedWidgetKind::Other,
+                )
+            }
+            "GtkButton" => {
+                if let Some(icon_name) = props.get("icon-name").cloned() {
+                    let icon_c = c_text(&icon_name, "gtk4.buildFromNode invalid GtkButton icon")?;
+                    (
+                        unsafe { gtk_button_new_from_icon_name(icon_c.as_ptr()) },
+                        CreatedWidgetKind::Other,
+                    )
+                } else {
+                    let label = props.get("label").cloned().unwrap_or_default();
+                    let label_c = c_text(&label, "gtk4.buildFromNode invalid GtkButton label")?;
+                    (
+                        unsafe { gtk_button_new_with_label(label_c.as_ptr()) },
+                        CreatedWidgetKind::Other,
+                    )
+                }
+            }
+            "GtkEntry" => (unsafe { gtk_entry_new() }, CreatedWidgetKind::Other),
+            "GtkDrawingArea" => (unsafe { gtk_drawing_area_new() }, CreatedWidgetKind::Other),
+            "GtkGestureClick" => (unsafe { gtk_gesture_click_new() }, CreatedWidgetKind::Other),
+            "GtkScrolledWindow" => (
+                unsafe { gtk_scrolled_window_new() },
+                CreatedWidgetKind::ScrolledWindow,
+            ),
+            "GtkOverlay" => (unsafe { gtk_overlay_new() }, CreatedWidgetKind::Overlay),
+            "GtkSeparator" => {
+                let orientation = props
+                    .get("orientation")
+                    .map(|v| parse_orientation_text(v))
+                    .unwrap_or(0);
+                (
+                    unsafe { gtk_separator_new(orientation) },
+                    CreatedWidgetKind::Other,
+                )
+            }
+            "GtkImage" => {
+                if let Some(resource) = props.get("resource") {
+                    let resource_c = c_text(resource, "gtk4.buildFromNode invalid resource")?;
+                    (
+                        unsafe { gtk_image_new_from_resource(resource_c.as_ptr()) },
+                        CreatedWidgetKind::Other,
+                    )
+                } else if let Some(file) = props.get("file") {
+                    let file_c = c_text(file, "gtk4.buildFromNode invalid file")?;
+                    (
+                        unsafe { gtk_image_new_from_file(file_c.as_ptr()) },
+                        CreatedWidgetKind::Other,
+                    )
+                } else {
+                    let icon = props.get("icon-name").cloned().unwrap_or_default();
+                    let icon_c = c_text(&icon, "gtk4.buildFromNode invalid icon-name")?;
+                    (
+                        unsafe { gtk_image_new_from_icon_name(icon_c.as_ptr()) },
+                        CreatedWidgetKind::Other,
+                    )
+                }
+            }
+            "GtkListBox" => (unsafe { gtk_list_box_new() }, CreatedWidgetKind::ListBox),
+            _ => {
+                return Err(RuntimeError::Error(Value::Text(format!(
+                    "gtk4.buildFromNode unsupported class {class_name}"
+                ))));
+            }
+        };
+        if raw.is_null() {
+            return Err(RuntimeError::Error(Value::Text(format!(
+                "gtk4.buildFromNode failed to create {class_name}"
+            ))));
+        }
+
+        let id = state.alloc_id();
+        if let Some(object_id) = node_attr(attrs, "id") {
+            id_map.insert(object_id.to_string(), id);
+        }
+        state.widgets.insert(id, raw);
+        match class_name {
+            "GtkBox" | "AdwClamp" => {
+                state.boxes.insert(id, raw);
+            }
+            "GtkButton" => {
+                state.buttons.insert(id, raw);
+            }
+            "GtkLabel" => {
+                state.labels.insert(id, raw);
+            }
+            "GtkEntry" => {
+                state.entries.insert(id, raw);
+            }
+            "GtkImage" => {
+                state.images.insert(id, raw);
+            }
+            "GtkDrawingArea" => {
+                state.draw_areas.insert(id, raw);
+            }
+            "GtkGestureClick" => {
+                state.gesture_clicks.insert(
+                    id,
+                    GestureClickState {
+                        widget_id: 0,
+                        raw,
+                        last_button: 0,
+                    },
+                );
+            }
+            "GtkScrolledWindow" => {
+                state.scrolled_windows.insert(id, raw);
+            }
+            "GtkOverlay" => {
+                state.overlays.insert(id, raw);
+            }
+            "GtkSeparator" => {
+                state.separators.insert(id, raw);
+            }
+            _ => {}
+        }
+
+        apply_widget_properties(raw, class_name, &props)?;
+
+        let mut child_objects = collect_child_objects(children);
+        child_objects.sort_by_key(|child| child.position.unwrap_or(usize::MAX));
+        let mut overlay_root_set = false;
+        for child in child_objects {
+            let child_id = build_widget_from_node_real(state, child.node, id_map)?;
+            let child_raw = widget_ptr(state, child_id, "buildFromNode")?;
+            if child.child_type.as_deref() == Some("controller") {
+                unsafe { gtk_widget_add_controller(raw, child_raw) };
+                if let Some(gesture) = state.gesture_clicks.get_mut(&child_id) {
+                    gesture.widget_id = id;
+                }
+                continue;
+            }
+            match kind {
+                CreatedWidgetKind::Box => unsafe { gtk_box_append(raw, child_raw) },
+                CreatedWidgetKind::ScrolledWindow => {
+                    if child.child_type.as_deref() != Some("overlay") {
+                        unsafe { gtk_scrolled_window_set_child(raw, child_raw) };
+                    }
+                }
+                CreatedWidgetKind::Overlay => {
+                    if child.child_type.as_deref() == Some("overlay") {
+                        unsafe { gtk_overlay_add_overlay(raw, child_raw) };
+                    } else if !overlay_root_set {
+                        unsafe { gtk_overlay_set_child(raw, child_raw) };
+                        overlay_root_set = true;
+                    } else {
+                        unsafe { gtk_overlay_add_overlay(raw, child_raw) };
+                    }
+                }
+                CreatedWidgetKind::ListBox => unsafe { gtk_list_box_append(raw, child_raw) },
+                CreatedWidgetKind::Other => {}
+            }
+        }
+
+        Ok(id)
     }
 
     fn try_adw_init() {
@@ -1399,9 +2082,7 @@ mod linux {
                                 "gtk4.boxSetHomogeneous unknown box id {box_id}"
                             )))
                         })?;
-                        unsafe {
-                            gtk_box_set_homogeneous(boxw, if homogeneous { 1 } else { 0 })
-                        };
+                        unsafe { gtk_box_set_homogeneous(boxw, if homogeneous { 1 } else { 0 }) };
                         Ok(Value::Unit)
                     })
                 }))
@@ -1552,8 +2233,7 @@ mod linux {
                     _ => return Err(invalid("gtk4.imageNewFromIconName expects Text icon name")),
                 };
                 Ok(effect(move |_| {
-                    let icon_c =
-                        c_text(&icon_name, "gtk4.imageNewFromIconName invalid icon name")?;
+                    let icon_c = c_text(&icon_name, "gtk4.imageNewFromIconName invalid icon name")?;
                     let id = GTK_STATE.with(|state| {
                         let mut state = state.borrow_mut();
                         let raw = unsafe { gtk_image_new_from_icon_name(icon_c.as_ptr()) };
@@ -1601,21 +2281,15 @@ mod linux {
             builtin("gtk4.iconThemeAddSearchPath", 1, |mut args, _| {
                 let path = match args.remove(0) {
                     Value::Text(text) => text,
-                    _ => {
-                        return Err(invalid(
-                            "gtk4.iconThemeAddSearchPath expects Text path",
-                        ))
-                    }
+                    _ => return Err(invalid("gtk4.iconThemeAddSearchPath expects Text path")),
                 };
                 Ok(effect(move |_| {
-                    let path_c =
-                        c_text(&path, "gtk4.iconThemeAddSearchPath invalid path")?;
+                    let path_c = c_text(&path, "gtk4.iconThemeAddSearchPath invalid path")?;
                     unsafe {
                         let display = gdk_display_get_default();
                         if display.is_null() {
                             return Err(RuntimeError::Error(Value::Text(
-                                "gtk4.iconThemeAddSearchPath no default display"
-                                    .to_string(),
+                                "gtk4.iconThemeAddSearchPath no default display".to_string(),
                             )));
                         }
                         let theme = gtk_icon_theme_get_for_display(display);
@@ -1637,25 +2311,21 @@ mod linux {
                 };
                 let button_id = match args.remove(0) {
                     Value::Int(v) => v,
-                    _ => {
-                        return Err(invalid("gtk4.buttonSetChild expects Int button id"))
-                    }
+                    _ => return Err(invalid("gtk4.buttonSetChild expects Int button id")),
                 };
                 Ok(effect(move |_| {
                     GTK_STATE.with(|state| {
                         let state = state.borrow();
-                        let button =
-                            state.buttons.get(&button_id).copied().ok_or_else(|| {
-                                RuntimeError::Error(Value::Text(format!(
-                                    "gtk4.buttonSetChild unknown button id {button_id}"
-                                )))
-                            })?;
-                        let child =
-                            state.widgets.get(&child_id).copied().ok_or_else(|| {
-                                RuntimeError::Error(Value::Text(format!(
-                                    "gtk4.buttonSetChild unknown child id {child_id}"
-                                )))
-                            })?;
+                        let button = state.buttons.get(&button_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.buttonSetChild unknown button id {button_id}"
+                            )))
+                        })?;
+                        let child = state.widgets.get(&child_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.buttonSetChild unknown child id {child_id}"
+                            )))
+                        })?;
                         unsafe { gtk_button_set_child(button, child) };
                         Ok(Value::Unit)
                     })
@@ -1707,8 +2377,8 @@ mod linux {
                                 .copied()
                                 .ok_or_else(|| {
                                     RuntimeError::Error(Value::Text(format!(
-                                    "gtk4.scrollAreaSetChild unknown scroll id {scroll_id}"
-                                )))
+                                        "gtk4.scrollAreaSetChild unknown scroll id {scroll_id}"
+                                    )))
                                 })?;
                         let child = widget_ptr(&state, child_id, "scrollAreaSetChild")?;
                         unsafe { gtk_scrolled_window_set_child(scrolled, child) };
@@ -1746,8 +2416,8 @@ mod linux {
                                 .copied()
                                 .ok_or_else(|| {
                                     RuntimeError::Error(Value::Text(format!(
-                                    "gtk4.scrollAreaSetPolicy unknown scroll id {scroll_id}"
-                                )))
+                                        "gtk4.scrollAreaSetPolicy unknown scroll id {scroll_id}"
+                                    )))
                                 })?;
                         unsafe { gtk_scrolled_window_set_policy(scrolled, hp, vp) };
                         Ok(Value::Unit)
@@ -1887,10 +2557,25 @@ mod linux {
                     let provider = unsafe { gtk_css_provider_new() };
                     unsafe { gtk_css_provider_load_from_string(provider, css_c.as_ptr()) };
                     // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION = 600
-                    unsafe {
-                        gtk_style_context_add_provider_for_display(display, provider, 600)
-                    };
+                    unsafe { gtk_style_context_add_provider_for_display(display, provider, 600) };
                     Ok(Value::Unit)
+                }))
+            }),
+        );
+
+        fields.insert(
+            "buildFromNode".to_string(),
+            builtin("gtk4.buildFromNode", 1, |mut args, _| {
+                let node = args.remove(0);
+                Ok(effect(move |_| {
+                    let decoded = decode_gtk_node(&node)?;
+                    let id = GTK_STATE.with(|state| -> Result<i64, RuntimeError> {
+                        let mut state = state.borrow_mut();
+                        let mut id_map = HashMap::new();
+                        let root = first_object_in_interface(&decoded)?;
+                        build_widget_from_node_real(&mut state, root, &mut id_map)
+                    })?;
+                    Ok(Value::Int(id))
                 }))
             }),
         );
