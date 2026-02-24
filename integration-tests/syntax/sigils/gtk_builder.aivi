@@ -60,3 +60,12 @@ templateNode =
       </child>
     </template>
   </gtk>
+
+signalSugarNode : GtkNode
+signalSugarNode =
+  ~<gtk>
+    <object class="GtkButton" onClick={ Msg.Save }>
+      <property name="label">Save</property>
+      <signal name="clicked" on={ Msg.Save }></signal>
+    </object>
+  </gtk>

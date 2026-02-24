@@ -813,6 +813,17 @@ Custom literals with `~tag` and a delimiter:
 
 `~map{...}`, `~set[...]`, `~mat[...]`, `~<html>...</html>`, and `~<gtk>...</gtk>` are **structured** (parsed as AIVI expressions). Other sigils are raw text until the closing delimiter.
 
+GTK sigils also support signal sugar in v0.1:
+
+```aivi
+~<gtk>
+  <object class="GtkButton" onClick={ Msg.Save } />
+  <object class="GtkEntry" onInput={ Msg.Changed } />
+</gtk>
+```
+
+Signal handlers must be compile-time expressions; they lower into typed GTK signal bindings.
+
 ---
 
 ## 15 Decorators (v0.1)

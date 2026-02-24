@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use super::util::builtin;
@@ -52,6 +51,8 @@ struct Gtk4State {
     theme_preference: String,
     widget_controllers: HashMap<i64, Vec<i64>>,
     widget_shortcuts: HashMap<i64, Vec<i64>>,
+    signal_events: VecDeque<SignalEventState>,
+    widget_signal_handlers: HashMap<i64, Vec<SignalBindingState>>,
 }
 
 #[derive(Clone)]
@@ -155,6 +156,20 @@ struct NotificationState {
 #[derive(Clone)]
 struct LayoutManagerState {
     kind: String,
+}
+
+#[derive(Clone)]
+struct SignalBindingState {
+    signal: String,
+    handler: String,
+}
+
+#[derive(Clone)]
+struct SignalEventState {
+    widget_id: i64,
+    signal: String,
+    handler: String,
+    payload: String,
 }
 
 impl Gtk4State {
@@ -367,6 +382,61 @@ fn collect_object_properties(
     out
 }
 
+fn collect_object_signals(
+    attrs: &[(String, String)],
+    children: &[GtkBuilderNode],
+) -> Vec<SignalBindingState> {
+    let mut out = Vec::new();
+    for (name, value) in attrs {
+        if let Some(signal) = name.strip_prefix("signal:") {
+            out.push(SignalBindingState {
+                signal: signal.to_string(),
+                handler: value.clone(),
+            });
+        }
+    }
+    for child in children {
+        let GtkBuilderNode::Element {
+            tag,
+            attrs,
+            children: _,
+        } = child
+        else {
+            continue;
+        };
+        if tag != "signal" {
+            continue;
+        }
+        let Some(signal) = node_attr(attrs, "name") else {
+            continue;
+        };
+        let Some(handler) = node_attr(attrs, "handler").or_else(|| node_attr(attrs, "on")) else {
+            continue;
+        };
+        out.push(SignalBindingState {
+            signal: signal.to_string(),
+            handler: handler.to_string(),
+        });
+    }
+    out
+}
+
+fn make_signal_event_value(event: SignalEventState) -> Value {
+    let payload = Value::Constructor {
+        name: "GtkSignalEvent".to_string(),
+        args: vec![
+            Value::Int(event.widget_id),
+            Value::Text(event.signal),
+            Value::Text(event.handler),
+            Value::Text(event.payload),
+        ],
+    };
+    Value::Constructor {
+        name: "Some".to_string(),
+        args: vec![payload],
+    }
+}
+
 struct ChildSpec<'a> {
     node: &'a GtkBuilderNode,
     child_type: Option<String>,
@@ -521,6 +591,8 @@ fn build_widget_from_node_mock(
     let class = node_attr(attrs, "class")
         .ok_or_else(|| invalid("gtk4.buildFromNode object requires class attribute"))?;
     let props = collect_object_properties(attrs, children);
+    let mut signal_bindings = collect_object_signals(attrs, children);
+    signal_bindings.retain(|binding| !binding.signal.is_empty() && !binding.handler.is_empty());
 
     let id = state.alloc_widget_id();
     if let Some(object_id) = node_attr(attrs, "id") {
@@ -641,6 +713,9 @@ fn build_widget_from_node_mock(
             state.images.insert(id, src);
         }
         _ => {}
+    }
+    if !signal_bindings.is_empty() {
+        state.widget_signal_handlers.insert(id, signal_bindings);
     }
 
     let child_objects = collect_child_objects(children);
@@ -2566,6 +2641,64 @@ fn build_gtk4_record_mock() -> Value {
     );
 
     fields.insert(
+        "signalPoll".to_string(),
+        builtin("gtk4.signalPoll", 1, |mut args, _| {
+            match args.remove(0) {
+                Value::Unit => {}
+                _ => return Err(invalid("gtk4.signalPoll expects Unit")),
+            }
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    if let Some(event) = state.signal_events.pop_front() {
+                        Ok(make_signal_event_value(event))
+                    } else {
+                        Ok(Value::Constructor {
+                            name: "None".to_string(),
+                            args: Vec::new(),
+                        })
+                    }
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
+        "signalEmit".to_string(),
+        builtin("gtk4.signalEmit", 4, |mut args, _| {
+            let payload = match args.remove(3) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.signalEmit expects Text payload")),
+            };
+            let handler = match args.remove(2) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.signalEmit expects Text handler")),
+            };
+            let signal = match args.remove(1) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.signalEmit expects Text signal")),
+            };
+            let widget_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.signalEmit expects Int widget id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let mut state = state.borrow_mut();
+                    state.ensure_widget(widget_id, "signalEmit")?;
+                    state.signal_events.push_back(SignalEventState {
+                        widget_id,
+                        signal: signal.clone(),
+                        handler: handler.clone(),
+                        payload: payload.clone(),
+                    });
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
         "osOpenUri".to_string(),
         builtin("gtk4.osOpenUri", 2, |mut args, _| {
             let uri = match args.remove(1) {
@@ -3254,5 +3387,123 @@ mod tests {
             assert_eq!(drawing.width, 640);
             assert_eq!(drawing.height, 320);
         });
+    }
+
+    #[test]
+    fn build_from_node_collects_signal_bindings() {
+        GTK4_STATE.with(|state| *state.borrow_mut() = Gtk4State::default());
+        let mut runtime = Runtime::default();
+        let gtk4 = build_gtk4_record_mock();
+        let build_from_node = gtk4_field(&gtk4, "buildFromNode");
+
+        let node = element(
+            "object",
+            vec![
+                attr("class", "GtkButton"),
+                attr("signal:clicked", "Msg.Save"),
+            ],
+            vec![],
+        );
+        let effect = runtime
+            .call(build_from_node, vec![node])
+            .expect("buildFromNode should return effect");
+        let root_id = match runtime
+            .run_effect_value(effect)
+            .expect("buildFromNode effect should succeed")
+        {
+            Value::Int(id) => id,
+            _ => panic!("expected Int root id"),
+        };
+
+        GTK4_STATE.with(|state| {
+            let state = state.borrow();
+            let handlers = state
+                .widget_signal_handlers
+                .get(&root_id)
+                .expect("signal bindings should be collected");
+            assert_eq!(handlers.len(), 1);
+            assert_eq!(handlers[0].signal, "clicked");
+            assert_eq!(handlers[0].handler, "Msg.Save");
+        });
+    }
+
+    #[test]
+    fn signal_emit_and_poll_roundtrip() {
+        GTK4_STATE.with(|state| *state.borrow_mut() = Gtk4State::default());
+        let mut runtime = Runtime::default();
+        let gtk4 = build_gtk4_record_mock();
+        let button_new = gtk4_field(&gtk4, "buttonNew");
+        let signal_emit = gtk4_field(&gtk4, "signalEmit");
+        let signal_poll = gtk4_field(&gtk4, "signalPoll");
+
+        let create_effect = runtime
+            .call(button_new, vec![Value::Text("Save".to_string())])
+            .expect("buttonNew should return effect");
+        let widget_id = match runtime
+            .run_effect_value(create_effect)
+            .expect("buttonNew effect should succeed")
+        {
+            Value::Int(id) => id,
+            _ => panic!("expected widget id"),
+        };
+
+        let emit_effect = runtime
+            .call(
+                signal_emit,
+                vec![
+                    Value::Int(widget_id),
+                    Value::Text("clicked".to_string()),
+                    Value::Text("Msg.Save".to_string()),
+                    Value::Text("".to_string()),
+                ],
+            )
+            .expect("signalEmit should return effect");
+        runtime
+            .run_effect_value(emit_effect)
+            .expect("signalEmit effect should succeed");
+
+        let poll_effect = runtime
+            .call(signal_poll.clone(), vec![Value::Unit])
+            .expect("signalPoll should return effect");
+        let first = runtime
+            .run_effect_value(poll_effect)
+            .expect("signalPoll effect should succeed");
+        let Value::Constructor { name, args } = first else {
+            panic!("expected Option constructor");
+        };
+        assert_eq!(name, "Some");
+        let Value::Constructor {
+            name: evt_name,
+            args: evt_args,
+        } = &args[0]
+        else {
+            panic!("expected GtkSignalEvent payload");
+        };
+        assert_eq!(evt_name, "GtkSignalEvent");
+        assert_eq!(evt_args.len(), 4);
+        match &evt_args[0] {
+            Value::Int(id) => assert_eq!(*id, widget_id),
+            _ => panic!("expected widget id in event payload"),
+        }
+        match &evt_args[1] {
+            Value::Text(text) => assert_eq!(text, "clicked"),
+            _ => panic!("expected signal name in event payload"),
+        }
+        match &evt_args[2] {
+            Value::Text(text) => assert_eq!(text, "Msg.Save"),
+            _ => panic!("expected handler token in event payload"),
+        }
+
+        let poll_again_effect = runtime
+            .call(signal_poll, vec![Value::Unit])
+            .expect("signalPoll should return effect");
+        let second = runtime
+            .run_effect_value(poll_again_effect)
+            .expect("signalPoll effect should succeed");
+        let Value::Constructor { name, args } = second else {
+            panic!("expected Option constructor");
+        };
+        assert_eq!(name, "None");
+        assert!(args.is_empty(), "None must not carry payload");
     }
 }

@@ -1031,6 +1031,32 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "signalPoll".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(Type::con("Effect").app(vec![
+                        text_ty.clone(),
+                        Type::con("Option").app(vec![Type::con("GtkSignalEvent")]),
+                    ])),
+                ),
+            ),
+            (
+                "signalEmit".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(text_ty.clone()),
+                            Box::new(Type::Func(
+                                Box::new(text_ty.clone()),
+                                Box::new(effect_text_unit.clone()),
+                            )),
+                        )),
+                    )),
+                ),
+            ),
+            (
                 "osOpenUri".to_string(),
                 Type::Func(
                     Box::new(int_ty.clone()),

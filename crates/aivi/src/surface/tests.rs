@@ -528,6 +528,82 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
     }
 }
 
+fn expr_contains_string(expr: &Expr, target: &str) -> bool {
+    match expr {
+        Expr::Literal(Literal::String { text, .. }) => text == target,
+        Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } => false,
+        Expr::UnaryNeg { expr, .. } => expr_contains_string(expr, target),
+        Expr::Suffixed { base, .. } => expr_contains_string(base, target),
+        Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
+            crate::surface::TextPart::Text { text, .. } => text == target,
+            crate::surface::TextPart::Expr { expr, .. } => expr_contains_string(expr, target),
+        }),
+        Expr::List { items, .. } => items
+            .iter()
+            .any(|item| expr_contains_string(&item.expr, target)),
+        Expr::Tuple { items, .. } => items.iter().any(|item| expr_contains_string(item, target)),
+        Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => fields
+            .iter()
+            .any(|field| expr_contains_string(&field.value, target)),
+        Expr::FieldAccess { base, .. } => expr_contains_string(base, target),
+        Expr::Index { base, index, .. } => {
+            expr_contains_string(base, target) || expr_contains_string(index, target)
+        }
+        Expr::FieldSection { .. } => false,
+        Expr::Call { func, args, .. } => {
+            expr_contains_string(func, target)
+                || args.iter().any(|arg| expr_contains_string(arg, target))
+        }
+        Expr::Lambda { body, .. } => expr_contains_string(body, target),
+        Expr::Match {
+            scrutinee, arms, ..
+        } => {
+            scrutinee
+                .as_ref()
+                .is_some_and(|e| expr_contains_string(e, target))
+                || arms.iter().any(|arm| {
+                    arm.guard
+                        .as_ref()
+                        .is_some_and(|e| expr_contains_string(e, target))
+                        || expr_contains_string(&arm.body, target)
+                })
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            expr_contains_string(cond, target)
+                || expr_contains_string(then_branch, target)
+                || expr_contains_string(else_branch, target)
+        }
+        Expr::Binary { left, right, .. } => {
+            expr_contains_string(left, target) || expr_contains_string(right, target)
+        }
+        Expr::Block { items, .. } => items.iter().any(|item| match item {
+            crate::surface::BlockItem::Bind { expr, .. }
+            | crate::surface::BlockItem::Let { expr, .. }
+            | crate::surface::BlockItem::Filter { expr, .. }
+            | crate::surface::BlockItem::Yield { expr, .. }
+            | crate::surface::BlockItem::Recurse { expr, .. }
+            | crate::surface::BlockItem::Expr { expr, .. } => expr_contains_string(expr, target),
+            crate::surface::BlockItem::When { cond, effect, .. }
+            | crate::surface::BlockItem::Unless { cond, effect, .. } => {
+                expr_contains_string(cond, target) || expr_contains_string(effect, target)
+            }
+            crate::surface::BlockItem::Given {
+                cond, fail_expr, ..
+            } => expr_contains_string(cond, target) || expr_contains_string(fail_expr, target),
+            crate::surface::BlockItem::On {
+                transition,
+                handler,
+                ..
+            } => expr_contains_string(transition, target) || expr_contains_string(handler, target),
+        }),
+    }
+}
+
 #[test]
 fn parses_parenthesized_suffix_application_expression() {
     let src = r#"
@@ -849,6 +925,57 @@ x = ~<gtk><object class="GtkBox" props={ { spacing: someValue } } /></gtk>
     assert!(
         codes.iter().any(|code| code == "E1613"),
         "expected E1613 for non-literal props field value, got: {codes:?}"
+    );
+}
+
+#[test]
+fn gtk_sigil_onclick_lowers_to_signal_attr() {
+    let src = r#"
+module Example
+
+Msg = Save
+x = ~<gtk><object class="GtkButton" onClick={ Msg.Save } /></gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+    assert!(
+        expr_contains_string(&def.expr, "signal:clicked")
+            && expr_contains_string(&def.expr, "Msg.Save"),
+        "expected onClick sugar to lower into signal:clicked attribute"
+    );
+}
+
+#[test]
+fn gtk_sigil_signal_on_requires_compile_time_value() {
+    let src = r#"
+module Example
+
+x =
+  ~<gtk>
+    <object class="GtkButton">
+      <signal name="clicked" on={ x => x } />
+    </object>
+  </gtk>
+"#;
+    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    let codes = diag_codes(&diags);
+    assert!(
+        codes.iter().any(|code| code == "E1614"),
+        "expected E1614 for non-compile-time signal handler, got: {codes:?}"
     );
 }
 

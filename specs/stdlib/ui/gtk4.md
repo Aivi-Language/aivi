@@ -88,6 +88,8 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 | `layoutManagerNew` | `gtk4.layoutManagerNew` |
 | `widgetSetLayoutManager` | `gtk4.widgetSetLayoutManager` |
 | `buildFromNode` | `gtk4.buildFromNode` |
+| `signalPoll` | `gtk4.signalPoll` |
+| `signalEmit` | `gtk4.signalEmit` |
 | `osOpenUri` | `gtk4.osOpenUri` |
 | `osShowInFileManager` | `gtk4.osShowInFileManager` |
 | `osSetBadgeCount` | `gtk4.osSetBadgeCount` |
@@ -111,6 +113,13 @@ Instantiate the resulting node tree with `buildFromNode`.
 For `<interface>`/`<template>`, the first nested `<object>` becomes the instantiated root.
 Object references via `ref`/`idref` are resolved against `id` attributes.
 `<child type="overlay">` and `<child type="controller">` are supported for overlay/controller wiring.
+Signal sugar is supported:
+
+- `<object ... onClick={ Msg.Save } />` lowers to a `clicked` signal binding
+- `<object ... onInput={ Msg.Changed } />` lowers to a `changed` signal binding
+- `<signal name="clicked" on={ Msg.Save } />` lowers to the same binding form
+
+Signal handler values must be compile-time expressions (for example constructor-like tags such as `Msg.Save`).
 
 Current runtime coverage includes common classes such as `GtkBox`, `AdwClamp`, `GtkLabel`, `GtkButton`, `GtkEntry`, `GtkImage`, `GtkDrawingArea`, `GtkScrolledWindow`, `GtkOverlay`, `GtkSeparator`, `GtkListBox`, and `GtkGestureClick`.
 Supported builder properties include layout/widget basics (`margin-*`, `hexpand`, `vexpand`, `halign`, `valign`, `width-request`, `height-request`, `visible`, `tooltip-text`, `opacity`, style classes), plus class-specific fields like `homogeneous`, `wrap`, `ellipsize`, `xalign`, `max-width-chars`, scrollbar policies, and natural-propagation flags.
@@ -121,6 +130,9 @@ Supported builder properties include layout/widget basics (`margin-*`, `hexpand`
 - `spacing` stays `prop:spacing`
 
 In v0.1, `props` must be a compile-time record literal; dynamic `props={expr}` is a diagnostic.
+
+`signalPoll : Unit -> Effect GtkError (Option GtkSignalEvent)` reads queued runtime signal events.
+`signalEmit` is available for synthetic/manual event injection (useful in tests and mock-driven flows).
 
 ## UI update pattern (state machine + events + repaint)
 

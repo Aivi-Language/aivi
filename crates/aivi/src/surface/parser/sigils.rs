@@ -571,6 +571,7 @@ impl Parser {
 
         fn compile_time_expr_text(expr: &Expr) -> Option<String> {
             match expr {
+                Expr::Ident(name) => Some(name.name.clone()),
                 Expr::Literal(Literal::Number { text, .. }) => Some(text.clone()),
                 Expr::Literal(Literal::String { text, .. }) => Some(text.clone()),
                 Expr::Literal(Literal::Bool { value, .. }) => Some(value.to_string()),
@@ -585,6 +586,17 @@ impl Parser {
                 }
                 Expr::Suffixed { base, suffix, .. } => {
                     Some(format!("{}{}", compile_time_expr_text(base)?, suffix.name))
+                }
+                Expr::FieldAccess { base, field, .. } => {
+                    Some(format!("{}.{}", compile_time_expr_text(base)?, field.name))
+                }
+                Expr::Call { func, args, .. } => {
+                    let func_text = compile_time_expr_text(func)?;
+                    let arg_texts = args
+                        .iter()
+                        .map(compile_time_expr_text)
+                        .collect::<Option<Vec<_>>>()?;
+                    Some(format!("{func_text}({})", arg_texts.join(", ")))
                 }
                 _ => None,
             }
@@ -941,6 +953,17 @@ impl Parser {
                     children,
                 } => {
                     let mut lowered_attrs = Vec::new();
+                    let attr_handler_text =
+                        |attr_name: &str, value: GtkAttrValue| -> Option<String> {
+                            match value {
+                                GtkAttrValue::Text(v) => Some(v),
+                                GtkAttrValue::Splice(expr) => compile_time_expr_text(&expr),
+                                GtkAttrValue::Bare => {
+                                    let _ = attr_name;
+                                    None
+                                }
+                            }
+                        };
                     for attr in attrs {
                         if attr.name == "props" {
                             match attr.value {
@@ -1007,10 +1030,78 @@ impl Parser {
                             }
                             continue;
                         }
+                        if attr.name == "onClick" || attr.name == "onInput" {
+                            let signal_name = if attr.name == "onClick" {
+                                "clicked"
+                            } else {
+                                "changed"
+                            };
+                            let Some(handler) = attr_handler_text(&attr.name, attr.value) else {
+                                this.emit_diag(
+                                    "E1614",
+                                    "signal handlers must be compile-time values",
+                                    span.clone(),
+                                );
+                                continue;
+                            };
+                            lowered_attrs.push(call2(
+                                "gtkAttr",
+                                mk_string(&format!("signal:{signal_name}")),
+                                mk_string(&handler),
+                            ));
+                            continue;
+                        }
                         lowered_attrs.push(lower_attr(attr, span));
                     }
 
-                    let lowered_children: Vec<Expr> = children
+                    let mut kept_children = Vec::new();
+                    for child in children {
+                        let GtkNode::Element {
+                            tag: child_tag,
+                            attrs: child_attrs,
+                            children: _,
+                        } = &child
+                        else {
+                            kept_children.push(child);
+                            continue;
+                        };
+                        if child_tag != "signal" {
+                            kept_children.push(child);
+                            continue;
+                        }
+                        let mut signal_name: Option<String> = None;
+                        let mut signal_handler: Option<String> = None;
+                        for attr in child_attrs.iter().cloned() {
+                            if attr.name == "name" {
+                                signal_name = attr_handler_text("name", attr.value);
+                            } else if attr.name == "handler" || attr.name == "on" {
+                                signal_handler = attr_handler_text(&attr.name, attr.value);
+                            }
+                        }
+                        let Some(name) = signal_name else {
+                            this.emit_diag(
+                                "E1614",
+                                "signal tag requires a compile-time `name` attribute",
+                                span.clone(),
+                            );
+                            continue;
+                        };
+                        let Some(handler) = signal_handler else {
+                            this.emit_diag(
+                                "E1614",
+                                "signal tag requires a compile-time `handler` or `on` attribute",
+                                span.clone(),
+                            );
+                            continue;
+                        };
+                        lowered_attrs.push(call2(
+                            "gtkAttr",
+                            mk_string(&format!("signal:{name}")),
+                            mk_string(&handler),
+                        ));
+                    }
+
+                    let lowered_children: Vec<Expr> = kept_children
                         .into_iter()
                         .map(|child| lower_node(this, child, span))
                         .collect();
