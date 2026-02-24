@@ -980,6 +980,72 @@ x =
 }
 
 #[test]
+fn gtk_sigil_each_lowers_to_mapped_children() {
+    let src = r#"
+module Example
+
+items = [1, 2, 3]
+x =
+  ~<gtk>
+    <object class="GtkBox">
+      <each items={items} as={item}>
+        <child>
+          <object class="GtkLabel">
+            <property name="label">{ item }</property>
+          </object>
+        </child>
+      </each>
+    </object>
+  </gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    assert!(
+        expr_contains_ident(&def.expr, "map") && expr_contains_ident(&def.expr, "gtkElement"),
+        "expected <each> to lower to mapped GtkNode children"
+    );
+}
+
+#[test]
+fn gtk_sigil_each_requires_items_and_as_attributes() {
+    let src = r#"
+module Example
+
+x =
+  ~<gtk>
+    <object class="GtkBox">
+      <each>
+        <child>
+          <object class="GtkLabel" />
+        </child>
+      </each>
+    </object>
+  </gtk>
+"#;
+    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    let codes = diag_codes(&diags);
+    assert!(
+        codes.iter().any(|code| code == "E1615"),
+        "expected E1615 for invalid <each> usage, got: {codes:?}"
+    );
+}
+
+#[test]
 fn parses_domain_literal_def_in_embedded_ui_layout() {
     let src = crate::stdlib::embedded_stdlib_source("aivi.ui.layout")
         .expect("embedded stdlib source for aivi.ui.layout");

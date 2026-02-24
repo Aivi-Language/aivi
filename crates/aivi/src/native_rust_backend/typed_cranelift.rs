@@ -12,11 +12,6 @@ use crate::rust_ir::RustIrExpr;
 use super::typed_expr::TypedCtx;
 use super::typed_mir::{lower_typed_mir, TypedMirExpr, TypedMirFunction, TypedMirTerminator};
 
-pub(crate) struct JitLowering {
-    pub(crate) function: Function,
-    pub(crate) param_names: Vec<String>,
-}
-
 pub(super) fn emit_typed_via_cranelift(
     expr: &RustIrExpr,
     ty: &CgType,
@@ -41,24 +36,6 @@ pub(super) fn cranelift_lowering_comment(
     text.push_str(&function.to_string());
     text.push_str("\nclif.lowering.end");
     Some(text)
-}
-
-pub(crate) fn lower_for_jit(
-    expr: &RustIrExpr,
-    ret_ty: &CgType,
-    globals: &HashMap<String, CgType>,
-    locals: &[(String, CgType)],
-) -> Option<JitLowering> {
-    let mut ctx = TypedCtx::new(globals.clone());
-    for (name, ty) in locals {
-        ctx.with_local_for_jit(name, ty.clone());
-    }
-    let mir = lower_typed_mir(expr, ret_ty, &ctx)?;
-    let (function, param_names) = lower_with_cranelift(&mir, ret_ty, &ctx)?;
-    Some(JitLowering {
-        function,
-        param_names,
-    })
 }
 
 fn lower_with_cranelift(

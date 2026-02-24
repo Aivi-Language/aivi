@@ -26,6 +26,7 @@ In addition, the UI layer defines a structured HTML sigil:
 - `~<gtk>...</gtk>` for GtkBuilder-style XML literals to typed `aivi.ui.gtk4.GtkNode` constructors.
   - `props={ { marginTop: 24, spacing: 24 } }` is sugar that lowers to normalized GTK property entries (`margin-top`, `spacing`).
   - `props` only accepts compile-time record literals in v0.1; non-literal values are diagnostics.
+  - Dynamic repeated children can be expressed with `<each items={items} as={item}>...</each>` inside GTK elements.
   - Signal sugar follows the same style as HTML events:
     - `onClick={ Msg.Save }` lowers to a `clicked` signal binding.
     - `onInput={ Msg.Changed }` lowers to a `changed` signal binding.
