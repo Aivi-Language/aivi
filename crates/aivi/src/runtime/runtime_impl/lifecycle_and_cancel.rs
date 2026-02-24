@@ -62,6 +62,13 @@ impl Runtime {
     fn force_value(&mut self, value: Value) -> Result<Value, RuntimeError> {
         match value {
             Value::Thunk(thunk) => self.eval_thunk(thunk),
+            Value::Builtin(builtin)
+                if builtin.imp.arity == 0
+                    && builtin.args.is_empty()
+                    && builtin.imp.name.starts_with("__jit|") =>
+            {
+                (builtin.imp.func)(Vec::new(), self)
+            }
             other => Ok(other),
         }
     }

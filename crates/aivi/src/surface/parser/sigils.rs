@@ -910,6 +910,120 @@ impl Parser {
             call2("gtkAttr", mk_string(&attr.name), value_expr)
         }
 
+        fn lower_children(this: &mut Parser, children: Vec<GtkNode>, span: &Span) -> Expr {
+            let mut lowered_items: Vec<ListItem> = Vec::new();
+            for child in children {
+                let GtkNode::Element {
+                    tag,
+                    attrs,
+                    children: each_children,
+                } = child.clone()
+                else {
+                    lowered_items.push(ListItem {
+                        expr: lower_node(this, child, span),
+                        spread: false,
+                        span: span.clone(),
+                    });
+                    continue;
+                };
+                if tag != "each" {
+                    lowered_items.push(ListItem {
+                        expr: lower_node(
+                            this,
+                            GtkNode::Element {
+                                tag,
+                                attrs,
+                                children: each_children,
+                            },
+                            span,
+                        ),
+                        spread: false,
+                        span: span.clone(),
+                    });
+                    continue;
+                }
+
+                let mut each_items: Option<Expr> = None;
+                let mut each_binder: Option<SpannedName> = None;
+                for attr in attrs {
+                    if attr.name == "items" {
+                        if let GtkAttrValue::Splice(expr) = attr.value {
+                            each_items = Some(expr);
+                        } else {
+                            this.emit_diag(
+                                "E1615",
+                                "<each> `items` must be a splice expression: items={items}",
+                                span.clone(),
+                            );
+                        }
+                    } else if attr.name == "as" {
+                        if let GtkAttrValue::Splice(Expr::Ident(name)) = attr.value {
+                            each_binder = Some(name);
+                        } else {
+                            this.emit_diag(
+                                "E1615",
+                                "<each> `as` must be an identifier splice: as={item}",
+                                span.clone(),
+                            );
+                        }
+                    }
+                }
+
+                let Some(items_expr) = each_items else {
+                    this.emit_diag(
+                        "E1615",
+                        "<each> requires `items={...}`",
+                        span.clone(),
+                    );
+                    continue;
+                };
+                let Some(item_binder) = each_binder else {
+                    this.emit_diag("E1615", "<each> requires `as={...}`", span.clone());
+                    continue;
+                };
+                let mut each_children_iter = each_children.into_iter();
+                let Some(each_template_node) = each_children_iter.next() else {
+                    this.emit_diag(
+                        "E1615",
+                        "<each> requires exactly one child template node",
+                        span.clone(),
+                    );
+                    continue;
+                };
+                if each_children_iter.next().is_some() {
+                    this.emit_diag(
+                        "E1615",
+                        "<each> requires exactly one child template node",
+                        span.clone(),
+                    );
+                    continue;
+                }
+
+                let lambda_expr = Expr::Lambda {
+                    params: vec![Pattern::Ident(item_binder)],
+                    body: Box::new(lower_node(this, each_template_node, span)),
+                    span: span.clone(),
+                };
+                let mapped_expr = Expr::Call {
+                    func: Box::new(Expr::Ident(SpannedName {
+                        name: "map".into(),
+                        span: span.clone(),
+                    })),
+                    args: vec![lambda_expr, items_expr],
+                    span: span.clone(),
+                };
+                lowered_items.push(ListItem {
+                    expr: mapped_expr,
+                    spread: true,
+                    span: span.clone(),
+                });
+            }
+            Expr::List {
+                items: lowered_items,
+                span: span.clone(),
+            }
+        }
+
         fn lower_node(this: &mut Parser, node: GtkNode, span: &Span) -> Expr {
             let mk_ui = |name: &str| {
                 Expr::Ident(SpannedName {
@@ -1101,14 +1215,13 @@ impl Parser {
                         ));
                     }
 
-                    let lowered_children: Vec<Expr> = kept_children
-                        .into_iter()
-                        .map(|child| lower_node(this, child, span))
-                        .collect();
-
                     Expr::Call {
                         func: Box::new(mk_ui("gtkElement")),
-                        args: vec![mk_string(&tag), list(lowered_attrs), list(lowered_children)],
+                        args: vec![
+                            mk_string(&tag),
+                            list(lowered_attrs),
+                            lower_children(this, kept_children, span),
+                        ],
                         span: span.clone(),
                     }
                 }
@@ -1117,7 +1230,17 @@ impl Parser {
 
         let root_span = sigil.span.clone();
         if nodes.len() == 1 {
-            return lower_node(self, nodes.remove(0), &root_span);
+            let root = nodes.remove(0);
+            if let GtkNode::Element { tag, .. } = &root {
+                if tag == "each" {
+                    self.emit_diag(
+                        "E1615",
+                        "<each> is only valid inside a GTK element",
+                        root_span.clone(),
+                    );
+                }
+            }
+            return lower_node(self, root, &root_span);
         }
         self.emit_diag(
             "E1611",

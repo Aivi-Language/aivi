@@ -828,6 +828,18 @@ GTK sigils also support signal sugar in v0.1:
 Signal handlers must be compile-time expressions; they lower into typed GTK signal bindings.
 `onClick` maps to `clicked`, `onInput` maps to `changed`, and invalid dynamic handlers produce `E1614`.
 
+Dynamic child lists are supported with `<each>`:
+
+```aivi
+~<gtk>
+  <object class="GtkBox">
+    <each items={items} as={item}>
+      <child><object class="GtkLabel"><property name="label">{ item }</property></object></child>
+    </each>
+  </object>
+</gtk>
+```
+
 ---
 
 ## 15 Decorators (v0.1)

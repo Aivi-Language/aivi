@@ -1,11 +1,16 @@
 use std::collections::{HashMap, HashSet};
+use std::panic::AssertUnwindSafe;
+use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{Datelike, NaiveDate, Timelike, TimeZone as ChronoTimeZone};
+use cranelift_codegen::ir::{types, AbiParam, InstBuilder, Signature};
+use cranelift_codegen::isa::CallConv;
+use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{default_libcall_names, Linkage, Module};
+use cranelift_module::{default_libcall_names, FuncId, Linkage, Module};
 use regex::RegexBuilder;
 use url::Url;
 
@@ -15,7 +20,6 @@ use crate::hir::{
     HirProgram, HirRecordField, HirTextPart,
 };
 use crate::i18n::{parse_message_template, validate_key_text, MessagePart};
-use crate::native_rust_backend::typed_cranelift;
 use crate::{kernel, rust_ir};
 use crate::AiviError;
 
@@ -118,6 +122,80 @@ pub struct TestReport {
     pub successes: Vec<TestSuccess>,
 }
 
+thread_local! {
+    static JIT_LAST_ERROR: RefCell<Option<String>> = const { RefCell::new(None) };
+}
+
+static JIT_DEF_NAMES: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
+
+fn jit_def_names_store() -> &'static RwLock<Vec<String>> {
+    JIT_DEF_NAMES.get_or_init(|| RwLock::new(Vec::new()))
+}
+
+fn set_jit_last_error(message: String) {
+    JIT_LAST_ERROR.with(|slot| {
+        *slot.borrow_mut() = Some(message);
+    });
+}
+
+fn take_jit_last_error() -> Option<String> {
+    JIT_LAST_ERROR.with(|slot| slot.borrow_mut().take())
+}
+
+fn jit_def_name(def_id: u64) -> Option<String> {
+    let names = jit_def_names_store().read().ok()?;
+    names.get(def_id as usize).cloned()
+}
+
+extern "C" fn aivi_jit_dispatch(runtime_ptr: u64, def_id: u64, args_ptr: u64, args_len: u64) -> u64 {
+    let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<Value, String> {
+        let Some(def_name) = jit_def_name(def_id) else {
+            return Err(format!("unknown jitted definition id {def_id}"));
+        };
+        if runtime_ptr == 0 {
+            return Err("null runtime pointer in jit dispatch".to_string());
+        }
+
+        let runtime = unsafe { &mut *(runtime_ptr as *mut Runtime) };
+        let args_len = usize::try_from(args_len).map_err(|_| "jit args length overflow".to_string())?;
+        let args = if args_len == 0 {
+            &[][..]
+        } else {
+            if args_ptr == 0 {
+                return Err("null args pointer in jit dispatch".to_string());
+            }
+            unsafe { std::slice::from_raw_parts(args_ptr as *const Value, args_len) }
+        };
+
+        let hidden_name = format!("__jit_orig|{def_name}");
+        let Some(source) = runtime
+            .ctx
+            .globals
+            .get(&hidden_name)
+            .or_else(|| runtime.ctx.globals.get(&def_name))
+        else {
+            return Err(format!("missing definition {def_name}"));
+        };
+        let mut value = runtime.force_value(source).map_err(format_runtime_error)?;
+        for arg in args {
+            value = runtime.apply(value, arg.clone()).map_err(format_runtime_error)?;
+        }
+        Ok(value)
+    }));
+
+    match outcome {
+        Ok(Ok(value)) => Box::into_raw(Box::new(value)) as u64,
+        Ok(Err(message)) => {
+            set_jit_last_error(message);
+            0
+        }
+        Err(_) => {
+            set_jit_last_error("panic while executing jitted dispatch callback".to_string());
+            0
+        }
+    }
+}
+
 pub fn run_native(program: HirProgram) -> Result<(), AiviError> {
     let mut runtime = build_runtime_from_program(program)?;
     run_main_effect(&mut runtime)
@@ -125,10 +203,18 @@ pub fn run_native(program: HirProgram) -> Result<(), AiviError> {
 
 pub fn run_native_jit(
     program: HirProgram,
-    cg_types: HashMap<String, HashMap<String, CgType>>,
+    _cg_types: HashMap<String, HashMap<String, CgType>>,
 ) -> Result<(), AiviError> {
     let mut runtime = build_runtime_from_program(program.clone())?;
-    let jitted = build_jitted_globals(program, cg_types)?;
+    let jitted = build_jitted_globals(program)?;
+    for name in jitted.keys() {
+        if let Some(original) = runtime.ctx.globals.get(name) {
+            runtime
+                .ctx
+                .globals
+                .set(format!("__jit_orig|{name}"), original);
+        }
+    }
     for (name, value) in jitted {
         runtime.ctx.globals.set(name, value);
     }
@@ -196,235 +282,171 @@ fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
     }
 }
 
-fn build_jitted_globals(
-    program: HirProgram,
-    cg_types: HashMap<String, HashMap<String, CgType>>,
-) -> Result<HashMap<String, Value>, AiviError> {
-    let kernel_program = kernel::lower_hir(program);
-    let mut rust_program = rust_ir::lower_kernel(kernel_program)?;
+struct DispatchJitCompiler {
+    module: JITModule,
+    dispatch_func: FuncId,
+}
 
-    for module in &mut rust_program.modules {
-        if let Some(mod_types) = cg_types.get(&module.name) {
-            for def in &mut module.defs {
-                if let Some(cg) = mod_types.get(&def.name) {
-                    def.cg_type = Some(cg.clone());
-                }
-            }
-        }
+fn wrapper_signature() -> Signature {
+    let mut sig = Signature::new(CallConv::SystemV);
+    sig.params.push(AbiParam::new(types::I64)); // runtime pointer
+    sig.params.push(AbiParam::new(types::I64)); // args pointer
+    sig.params.push(AbiParam::new(types::I64)); // args length
+    sig.returns.push(AbiParam::new(types::I64)); // Value* (0 on error)
+    sig
+}
+
+fn dispatch_signature() -> Signature {
+    let mut sig = Signature::new(CallConv::SystemV);
+    sig.params.push(AbiParam::new(types::I64)); // runtime pointer
+    sig.params.push(AbiParam::new(types::I64)); // def id
+    sig.params.push(AbiParam::new(types::I64)); // args pointer
+    sig.params.push(AbiParam::new(types::I64)); // args length
+    sig.returns.push(AbiParam::new(types::I64)); // Value* (0 on error)
+    sig
+}
+
+impl DispatchJitCompiler {
+    fn new() -> Result<Self, String> {
+        let mut builder = JITBuilder::new(default_libcall_names())
+            .map_err(|err| format!("jit builder init failed: {err}"))?;
+        builder.symbol("__aivi_jit_dispatch", aivi_jit_dispatch as *const u8);
+        let mut module = JITModule::new(builder);
+        let dispatch_sig = dispatch_signature();
+        let dispatch_func = module
+            .declare_function("__aivi_jit_dispatch", Linkage::Import, &dispatch_sig)
+            .map_err(|err| format!("jit declare dispatch failed: {err}"))?;
+        Ok(Self {
+            module,
+            dispatch_func,
+        })
     }
 
-    let mut global_cg_types: HashMap<String, CgType> = HashMap::new();
+    fn define_wrapper(&mut self, symbol: &str, def_id: u64) -> Result<FuncId, String> {
+        let mut ctx = self.module.make_context();
+        ctx.func.signature = wrapper_signature();
+        let dispatch_ref = self
+            .module
+            .declare_func_in_func(self.dispatch_func, &mut ctx.func);
+
+        let mut fb_ctx = FunctionBuilderContext::new();
+        {
+            let mut builder = FunctionBuilder::new(&mut ctx.func, &mut fb_ctx);
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
+            builder.seal_block(entry);
+
+            let params = builder.block_params(entry).to_vec();
+            let def_const = builder.ins().iconst(types::I64, def_id as i64);
+            let call = builder
+                .ins()
+                .call(dispatch_ref, &[params[0], def_const, params[1], params[2]]);
+            let result = builder.inst_results(call)[0];
+            builder.ins().return_(&[result]);
+            builder.finalize();
+        }
+
+        let func_id = self
+            .module
+            .declare_function(symbol, Linkage::Local, &ctx.func.signature)
+            .map_err(|err| format!("jit declare wrapper {symbol} failed: {err}"))?;
+        self.module
+            .define_function(func_id, &mut ctx)
+            .map_err(|err| format!("jit define wrapper {symbol} failed: {err}"))?;
+        self.module.clear_context(&mut ctx);
+        Ok(func_id)
+    }
+
+    fn compile_bindings(mut self, bindings: &[(String, usize)]) -> Result<Vec<(String, usize, usize)>, String> {
+        let mut compiled = Vec::new();
+        for (idx, (name, arity)) in bindings.iter().enumerate() {
+            let symbol = format!("__aivi_jit_dispatch_wrapper_{idx}");
+            let func_id = self.define_wrapper(&symbol, idx as u64)?;
+            compiled.push((name.clone(), *arity, func_id));
+        }
+
+        self.module
+            .finalize_definitions()
+            .map_err(|err| format!("jit finalize wrappers failed: {err}"))?;
+
+        let mut out = Vec::new();
+        for (name, arity, func_id) in compiled {
+            let ptr = self.module.get_finalized_function(func_id);
+            out.push((name, arity, ptr as usize));
+        }
+        std::mem::forget(self.module);
+        Ok(out)
+    }
+}
+
+fn build_jitted_globals(program: HirProgram) -> Result<HashMap<String, Value>, AiviError> {
+    let kernel_program = kernel::lower_hir(program);
+    let rust_program = rust_ir::lower_kernel(kernel_program)?;
+
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut bindings: Vec<(String, usize)> = Vec::new();
     for module in &rust_program.modules {
         for def in &module.defs {
-            if let Some(cg_ty) = &def.cg_type {
-                if cg_ty.is_closed() {
-                    global_cg_types.entry(def.name.clone()).or_insert(cg_ty.clone());
-                }
-            }
+            let arity = lambda_arity(&def.expr);
+            *counts.entry(def.name.clone()).or_insert(0) += 1;
+            bindings.push((def.name.clone(), arity));
         }
     }
+
+    bindings.retain(|(name, _)| counts.get(name).copied() == Some(1));
+    bindings.sort_by(|a, b| a.0.cmp(&b.0));
+    bindings.dedup_by(|a, b| a.0 == b.0);
+    if bindings.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    if let Ok(mut names) = jit_def_names_store().write() {
+        *names = bindings.iter().map(|(name, _)| name.clone()).collect();
+    }
+
+    let compiler = DispatchJitCompiler::new().map_err(AiviError::Runtime)?;
+    let compiled = compiler
+        .compile_bindings(&bindings)
+        .map_err(AiviError::Runtime)?;
 
     let mut jitted = HashMap::new();
-    for module in rust_program.modules {
-        for def in module.defs {
-            let Some(cg_ty) = &def.cg_type else {
-                continue;
-            };
-            let Some(param_tys) = scalar_int_param_types(cg_ty) else {
-                continue;
-            };
-            let Some(ret_ty) = scalar_int_return_type(cg_ty) else {
-                continue;
-            };
-            let (params, body) = peel_lambda_params(&def.expr);
-            if params.len() != param_tys.len() {
-                continue;
+    for (name, arity, code_addr) in compiled {
+        let def_name = name.clone();
+        let builtin = runtime_builtin(&format!("__jit|{def_name}"), arity, move |args, runtime| {
+            let raw = call_jitted_dispatch(code_addr, runtime, &args);
+            if raw == 0 {
+                return Err(RuntimeError::Message(
+                    take_jit_last_error()
+                        .unwrap_or_else(|| format!("jitted call failed for {def_name}")),
+                ));
             }
-            let locals: Vec<(String, CgType)> = params
-                .iter()
-                .cloned()
-                .zip(param_tys.iter().cloned())
-                .collect();
-            let Some(lowered) =
-                typed_cranelift::lower_for_jit(body, ret_ty, &global_cg_types, &locals)
-            else {
-                continue;
-            };
-            if lowered.param_names.len() > 6 {
-                continue;
-            }
-
-            let local_positions: HashMap<String, usize> = params
-                .iter()
-                .enumerate()
-                .map(|(idx, name)| (name.clone(), idx))
-                .collect();
-            if lowered
-                .param_names
-                .iter()
-                .any(|name| name == &def.name && !local_positions.contains_key(name))
-            {
-                continue;
-            }
-
-            let symbol = format!("__aivi_jit_{}_{}", module.name.replace('.', "_"), def.name);
-            let Ok(code_ptr) = compile_jit_i64_function(&symbol, lowered.function) else {
-                continue;
-            };
-            let code_addr = code_ptr as usize;
-            let arity = params.len();
-            if arity == 0 {
-                continue;
-            }
-            let param_order = lowered.param_names;
-            let builtin = runtime_builtin(&format!("__jit|{}|{}", module.name, def.name), arity, {
-                move |args, runtime| {
-                    let mut call_args = Vec::with_capacity(param_order.len());
-                    for name in &param_order {
-                        if let Some(idx) = local_positions.get(name).copied() {
-                            let Some(arg) = args.get(idx) else {
-                                return Err(RuntimeError::Message(format!(
-                                    "missing argument {idx} for jitted function"
-                                )));
-                            };
-                            match arg {
-                                Value::Int(value) => call_args.push(*value),
-                                other => {
-                                    return Err(RuntimeError::Message(format!(
-                                        "jitted function expected Int arg, got {}",
-                                        format_value(other)
-                                    )))
-                                }
-                            }
-                        } else {
-                            let Some(global_value) = runtime.ctx.globals.get(name) else {
-                                return Err(RuntimeError::Message(format!(
-                                    "missing global {name} for jitted function"
-                                )));
-                            };
-                            let forced = runtime.force_value(global_value)?;
-                            match forced {
-                                Value::Int(value) => call_args.push(value),
-                                other => {
-                                    return Err(RuntimeError::Message(format!(
-                                        "jitted global {name} expected Int, got {}",
-                                        format_value(&other)
-                                    )))
-                                }
-                            }
-                        }
-                    }
-                    let Some(result) = call_jitted_i64(code_addr, &call_args) else {
-                        return Err(RuntimeError::Message(
-                            "unsupported jitted function arity".to_string(),
-                        ));
-                    };
-                    Ok(Value::Int(result))
-                }
-            });
-
-            jitted.insert(def.name.clone(), builtin.clone());
-            jitted.insert(format!("{}.{}", module.name, def.name), builtin);
-        }
+            let value = unsafe { Box::from_raw(raw as *mut Value) };
+            Ok(*value)
+        });
+        jitted.insert(name, builtin);
     }
-
     Ok(jitted)
 }
 
-fn scalar_int_param_types(ty: &CgType) -> Option<Vec<CgType>> {
-    let mut params = Vec::new();
-    let mut cursor = ty;
-    while let CgType::Func(arg, ret) = cursor {
-        if !matches!(&**arg, CgType::Int) {
-            return None;
-        }
-        params.push((**arg).clone());
-        cursor = ret;
-    }
-    Some(params)
-}
-
-fn scalar_int_return_type(ty: &CgType) -> Option<&CgType> {
-    let mut cursor = ty;
-    while let CgType::Func(_, ret) = cursor {
-        cursor = ret;
-    }
-    if matches!(cursor, CgType::Int) {
-        Some(cursor)
-    } else {
-        None
-    }
-}
-
-fn peel_lambda_params<'a>(expr: &'a rust_ir::RustIrExpr) -> (Vec<String>, &'a rust_ir::RustIrExpr) {
-    let mut params = Vec::new();
+fn lambda_arity(expr: &rust_ir::RustIrExpr) -> usize {
+    let mut arity = 0usize;
     let mut cursor = expr;
-    while let rust_ir::RustIrExpr::Lambda { param, body, .. } = cursor {
-        params.push(param.clone());
+    while let rust_ir::RustIrExpr::Lambda { body, .. } = cursor {
+        arity += 1;
         cursor = body;
     }
-    (params, cursor)
+    arity
 }
 
-fn compile_jit_i64_function(
-    symbol: &str,
-    function: cranelift_codegen::ir::Function,
-) -> Result<*const u8, String> {
-    let builder = JITBuilder::new(default_libcall_names())
-        .map_err(|err| format!("jit builder init failed for {symbol}: {err}"))?;
-    let mut module = JITModule::new(builder);
-    let mut ctx = module.make_context();
-    ctx.func = function;
-    let func_id = module
-        .declare_function(symbol, Linkage::Local, &ctx.func.signature)
-        .map_err(|err| format!("jit declare_function failed for {symbol}: {err}"))?;
-    module
-        .define_function(func_id, &mut ctx)
-        .map_err(|err| format!("jit define_function failed for {symbol}: {err}"))?;
-    module.clear_context(&mut ctx);
-    module
-        .finalize_definitions()
-        .map_err(|err| format!("jit finalize_definitions failed for {symbol}: {err}"))?;
-    let ptr = module.get_finalized_function(func_id);
-    std::mem::forget(module);
-    Ok(ptr)
-}
-
-fn call_jitted_i64(code_addr: usize, args: &[i64]) -> Option<i64> {
+fn call_jitted_dispatch(code_addr: usize, runtime: &mut Runtime, args: &[Value]) -> u64 {
     let code = code_addr as *const u8;
-    match args.len() {
-        0 => {
-            let f: extern "C" fn() -> i64 = unsafe { std::mem::transmute(code) };
-            Some(f())
-        }
-        1 => {
-            let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(code) };
-            Some(f(args[0]))
-        }
-        2 => {
-            let f: extern "C" fn(i64, i64) -> i64 = unsafe { std::mem::transmute(code) };
-            Some(f(args[0], args[1]))
-        }
-        3 => {
-            let f: extern "C" fn(i64, i64, i64) -> i64 = unsafe { std::mem::transmute(code) };
-            Some(f(args[0], args[1], args[2]))
-        }
-        4 => {
-            let f: extern "C" fn(i64, i64, i64, i64) -> i64 = unsafe { std::mem::transmute(code) };
-            Some(f(args[0], args[1], args[2], args[3]))
-        }
-        5 => {
-            let f: extern "C" fn(i64, i64, i64, i64, i64) -> i64 =
-                unsafe { std::mem::transmute(code) };
-            Some(f(args[0], args[1], args[2], args[3], args[4]))
-        }
-        6 => {
-            let f: extern "C" fn(i64, i64, i64, i64, i64, i64) -> i64 =
-                unsafe { std::mem::transmute(code) };
-            Some(f(args[0], args[1], args[2], args[3], args[4], args[5]))
-        }
-        _ => None,
-    }
+    let f: extern "C" fn(u64, u64, u64) -> u64 = unsafe { std::mem::transmute(code) };
+    f(
+        runtime as *mut Runtime as u64,
+        args.as_ptr() as u64,
+        args.len() as u64,
+    )
 }
 
 pub fn run_test_suite(

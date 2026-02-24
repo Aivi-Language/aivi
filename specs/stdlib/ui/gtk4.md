@@ -125,6 +125,15 @@ Signal handler values must be compile-time expressions (for example constructor-
 Current runtime coverage includes common classes such as `GtkBox`, `AdwClamp`, `GtkLabel`, `GtkButton`, `GtkEntry`, `GtkImage`, `GtkDrawingArea`, `GtkScrolledWindow`, `GtkOverlay`, `GtkSeparator`, `GtkListBox`, and `GtkGestureClick`.
 Supported builder properties include layout/widget basics (`margin-*`, `hexpand`, `vexpand`, `halign`, `valign`, `width-request`, `height-request`, `visible`, `tooltip-text`, `opacity`, style classes), plus class-specific fields like `homogeneous`, `wrap`, `ellipsize`, `xalign`, `max-width-chars`, scrollbar policies, and natural-propagation flags.
 
+Dynamic child lists can be expressed with `<each ...>` inside a GTK element:
+
+- `<each items={items} as={item}> ... </each>`
+- `items` must be a splice expression.
+- `as` must be an identifier splice.
+- The `<each>` body must contain exactly one template node.
+
+`<each>` lowers to mapped child nodes and is flattened into the parent `children` list.
+
 `props={ { ... } }` sugar on any tag expands to normalized GTK properties:
 
 - `marginTop` becomes `prop:margin-top`
@@ -187,6 +196,26 @@ buttonNode =
   </gtk>
 ```
 
+### Example: dynamic list children with `<each>`
+
+```aivi
+items = ["A", "B", "C"]
+
+listNode : GtkNode
+listNode =
+  ~<gtk>
+    <object class="GtkBox" props={ { orientation: "vertical", spacing: 4 } }>
+      <each items={items} as={item}>
+        <child>
+          <object class="GtkLabel">
+            <property name="label">{ item }</property>
+          </object>
+        </child>
+      </each>
+    </object>
+  </gtk>
+```
+
 ### Example: consuming queued signal events
 
 ```aivi
@@ -205,6 +234,7 @@ nextMsg = effect {
 - `E1612`: invalid `props` shape (must be compile-time record literal).
 - `E1613`: non-literal `props` field value.
 - `E1614`: invalid signal binding (`onClick`/`onInput`/`<signal ... on={...}>` requires compile-time values).
+- `E1615`: invalid `<each>` usage (requires `items={...}`, `as={...}`, and exactly one child template node).
 
 ## UI update pattern (state machine + events + repaint)
 
