@@ -383,7 +383,7 @@ pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Opti
     }
 }
 
-fn values_equal(left: &Value, right: &Value) -> bool {
+pub(crate) fn values_equal(left: &Value, right: &Value) -> bool {
     match (left, right) {
         (Value::Unit, Value::Unit) => true,
         (Value::Bool(a), Value::Bool(b)) => a == b,

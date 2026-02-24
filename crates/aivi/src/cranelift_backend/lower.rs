@@ -16,12 +16,24 @@ use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{Linkage, Module};
 
 use crate::rust_ir::{
-    RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrPattern,
-    RustIrRecordField, RustIrTextPart,
+    RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrLiteral, RustIrListItem, RustIrMatchArm,
+    RustIrPattern, RustIrRecordField, RustIrTextPart,
 };
 
 /// Pointer-sized integer type (all values are passed as i64 pointers).
 const PTR: cranelift_codegen::ir::Type = types::I64;
+
+/// Information about a pre-compiled inner lambda function.
+pub(crate) struct CompiledLambda {
+    /// Unique global name where the lambda Builtin is stored in the runtime.
+    /// This is a leaked `&'static str` because `lower_global` embeds the
+    /// string pointer as a constant in the JIT code, which outlives the
+    /// `compile_definition` scope.
+    pub(crate) global_name: &'static str,
+    /// Names of the captured (free) variables, in the order they appear as
+    /// leading parameters of the compiled function.
+    pub(crate) captured_vars: Vec<String>,
+}
 
 /// Context for lowering a single function body.
 pub(crate) struct LowerCtx<'a> {
@@ -31,6 +43,9 @@ pub(crate) struct LowerCtx<'a> {
     ctx_param: Value,
     /// Declared runtime helper function references in this module.
     helpers: &'a HelperRefs,
+    /// Pre-compiled inner lambda functions, keyed by `*const RustIrExpr`
+    /// pointer identity.
+    pub(crate) compiled_lambdas: &'a HashMap<usize, CompiledLambda>,
 }
 
 /// Pre-declared `FuncRef`s for all runtime helpers in a JIT module.
@@ -58,6 +73,24 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_run_effect: FuncRef,
     pub(crate) rt_bind_effect: FuncRef,
     pub(crate) rt_binary_op: FuncRef,
+    // Pattern matching helpers
+    pub(crate) rt_constructor_name_eq: FuncRef,
+    pub(crate) rt_constructor_arity: FuncRef,
+    pub(crate) rt_constructor_arg: FuncRef,
+    pub(crate) rt_tuple_len: FuncRef,
+    pub(crate) rt_tuple_item: FuncRef,
+    pub(crate) rt_list_len: FuncRef,
+    pub(crate) rt_list_tail: FuncRef,
+    pub(crate) rt_value_equals: FuncRef,
+    // Record patching
+    pub(crate) rt_patch_record: FuncRef,
+    // Closure creation
+    pub(crate) rt_make_closure: FuncRef,
+    // Block delegation (generate/resource)
+    pub(crate) rt_env_new: FuncRef,
+    pub(crate) rt_env_set: FuncRef,
+    pub(crate) rt_eval_generate: FuncRef,
+    pub(crate) rt_make_resource: FuncRef,
 }
 
 /// Declare all runtime helper signatures in the module and return FuncRefs
@@ -114,6 +147,34 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_bind_effect: decl!("rt_bind_effect", [PTR, PTR, PTR], [PTR]),
         // (ctx, op_ptr, op_len, lhs_ptr, rhs_ptr) -> ptr
         rt_binary_op: decl!("rt_binary_op", [PTR, PTR, PTR, PTR, PTR], [PTR]),
+        // Pattern matching: (ctx, value_ptr, name_ptr, name_len) -> i64
+        rt_constructor_name_eq: decl!("rt_constructor_name_eq", [PTR, PTR, PTR, PTR], [PTR]),
+        // (ctx, value_ptr) -> i64
+        rt_constructor_arity: decl!("rt_constructor_arity", [PTR, PTR], [PTR]),
+        // (ctx, value_ptr, index) -> ptr
+        rt_constructor_arg: decl!("rt_constructor_arg", [PTR, PTR, PTR], [PTR]),
+        // (ctx, value_ptr) -> i64
+        rt_tuple_len: decl!("rt_tuple_len", [PTR, PTR], [PTR]),
+        // (ctx, value_ptr, index) -> ptr
+        rt_tuple_item: decl!("rt_tuple_item", [PTR, PTR, PTR], [PTR]),
+        // (ctx, value_ptr) -> i64
+        rt_list_len: decl!("rt_list_len", [PTR, PTR], [PTR]),
+        // (ctx, value_ptr, start) -> ptr
+        rt_list_tail: decl!("rt_list_tail", [PTR, PTR, PTR], [PTR]),
+        // (ctx, a, b) -> i64
+        rt_value_equals: decl!("rt_value_equals", [PTR, PTR, PTR], [PTR]),
+        // (ctx, base, names, name_lens, values, len) -> ptr
+        rt_patch_record: decl!("rt_patch_record", [PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
+        // (ctx, func_ptr, captured, count) -> ptr
+        rt_make_closure: decl!("rt_make_closure", [PTR, PTR, PTR, PTR], [PTR]),
+        // Block delegation: (ctx) -> ptr
+        rt_env_new: decl!("rt_env_new", [PTR], [PTR]),
+        // (ctx, env, name_ptr, name_len, value_ptr) -> void
+        rt_env_set: decl!("rt_env_set", [PTR, PTR, PTR, PTR, PTR], []),
+        // (ctx, items_ptr, items_count, env_ptr) -> ptr
+        rt_eval_generate: decl!("rt_eval_generate", [PTR, PTR, PTR, PTR], [PTR]),
+        // (ctx, items_ptr, items_count, env_ptr) -> ptr
+        rt_make_resource: decl!("rt_make_resource", [PTR, PTR, PTR, PTR], [PTR]),
     })
 }
 
@@ -141,6 +202,21 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_run_effect: cranelift_module::FuncId,
     pub(crate) rt_bind_effect: cranelift_module::FuncId,
     pub(crate) rt_binary_op: cranelift_module::FuncId,
+    pub(crate) rt_constructor_name_eq: cranelift_module::FuncId,
+    pub(crate) rt_constructor_arity: cranelift_module::FuncId,
+    pub(crate) rt_constructor_arg: cranelift_module::FuncId,
+    pub(crate) rt_tuple_len: cranelift_module::FuncId,
+    pub(crate) rt_tuple_item: cranelift_module::FuncId,
+    pub(crate) rt_list_len: cranelift_module::FuncId,
+    pub(crate) rt_list_tail: cranelift_module::FuncId,
+    pub(crate) rt_value_equals: cranelift_module::FuncId,
+    pub(crate) rt_patch_record: cranelift_module::FuncId,
+    pub(crate) rt_make_closure: cranelift_module::FuncId,
+    // Block delegation (generate/resource)
+    pub(crate) rt_env_new: cranelift_module::FuncId,
+    pub(crate) rt_env_set: cranelift_module::FuncId,
+    pub(crate) rt_eval_generate: cranelift_module::FuncId,
+    pub(crate) rt_make_resource: cranelift_module::FuncId,
 }
 
 impl DeclaredHelpers {
@@ -178,16 +254,35 @@ impl DeclaredHelpers {
             rt_run_effect: imp!(rt_run_effect),
             rt_bind_effect: imp!(rt_bind_effect),
             rt_binary_op: imp!(rt_binary_op),
+            rt_constructor_name_eq: imp!(rt_constructor_name_eq),
+            rt_constructor_arity: imp!(rt_constructor_arity),
+            rt_constructor_arg: imp!(rt_constructor_arg),
+            rt_tuple_len: imp!(rt_tuple_len),
+            rt_tuple_item: imp!(rt_tuple_item),
+            rt_list_len: imp!(rt_list_len),
+            rt_list_tail: imp!(rt_list_tail),
+            rt_value_equals: imp!(rt_value_equals),
+            rt_patch_record: imp!(rt_patch_record),
+            rt_make_closure: imp!(rt_make_closure),
+            rt_env_new: imp!(rt_env_new),
+            rt_env_set: imp!(rt_env_set),
+            rt_eval_generate: imp!(rt_eval_generate),
+            rt_make_resource: imp!(rt_make_resource),
         }
     }
 }
 
 impl<'a> LowerCtx<'a> {
-    pub(crate) fn new(ctx_param: Value, helpers: &'a HelperRefs) -> Self {
+    pub(crate) fn new(
+        ctx_param: Value,
+        helpers: &'a HelperRefs,
+        compiled_lambdas: &'a HashMap<usize, CompiledLambda>,
+    ) -> Self {
         Self {
             locals: HashMap::new(),
             ctx_param,
             helpers,
+            compiled_lambdas,
         }
     }
 
@@ -217,7 +312,7 @@ impl<'a> LowerCtx<'a> {
             RustIrExpr::ConstructorValue { name, .. } => self.lower_global(builder, name),
 
             // ----- Functions -----
-            RustIrExpr::Lambda { param, body, .. } => self.lower_lambda(builder, param, body),
+            RustIrExpr::Lambda { .. } => self.lower_lambda_expr(builder, expr),
             RustIrExpr::App { func, arg, .. } => self.lower_app(builder, func, arg),
             RustIrExpr::Call { func, args, .. } => self.lower_call(builder, func, args),
 
@@ -345,16 +440,34 @@ impl<'a> LowerCtx<'a> {
     // Function lowering
     // -----------------------------------------------------------------------
 
-    fn lower_lambda(
+    /// Lower a Lambda expression by looking up its pre-compiled global Builtin
+    /// and partially applying captured variables.
+    fn lower_lambda_expr(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
-        _param: &str,
-        _body: &RustIrExpr,
+        expr: &RustIrExpr,
     ) -> Value {
-        // Lambda lowering requires emitting a closure (code pointer + captured env).
-        // For now, fall back to constructing via global lookup of the enclosing def.
-        // Full closure compilation will be implemented in Phase 3.
-        // TODO(cranelift-migration): emit real closure
+        let key = expr as *const RustIrExpr as usize;
+        if let Some(cl) = self.compiled_lambdas.get(&key) {
+            // Look up the pre-compiled function from globals
+            let mut result = self.lower_global(builder, &cl.global_name);
+            // Partially apply captured values one by one via rt_apply
+            for var_name in &cl.captured_vars {
+                let val = if let Some(&v) = self.locals.get(var_name) {
+                    v
+                } else {
+                    self.lower_global(builder, var_name)
+                };
+                let call = builder.ins().call(
+                    self.helpers.rt_apply,
+                    &[self.ctx_param, result, val],
+                );
+                result = builder.inst_results(call)[0];
+            }
+            return result;
+        }
+
+        // Fallback: look up from globals or return unit
         let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
         builder.inst_results(call)[0]
     }
@@ -524,12 +637,51 @@ impl<'a> LowerCtx<'a> {
         target: &RustIrExpr,
         fields: &[RustIrRecordField],
     ) -> Value {
-        // Patch = get the base record, then overlay fields.
-        // For now, lower as: base value, then apply field updates via rt_apply.
-        // TODO(cranelift-migration): implement proper record patching
-        let _base = self.lower_expr(builder, target);
-        // Simplified: just emit the record with the new fields
-        self.lower_record(builder, fields)
+        let base = self.lower_expr(builder, target);
+        let count = fields.len();
+        if count == 0 {
+            return base;
+        }
+
+        // Build overlay: same layout as lower_record but call rt_patch_record
+        let names_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            (count * 8) as u32,
+            0,
+        ));
+        let lens_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            (count * 8) as u32,
+            0,
+        ));
+        let vals_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            (count * 8) as u32,
+            0,
+        ));
+
+        for (i, field) in fields.iter().enumerate() {
+            let field_name = field.path.first().map(|seg| match seg {
+                crate::rust_ir::RustIrPathSegment::Field(name) => name.as_str(),
+                _ => "_",
+            }).unwrap_or("_");
+            let name_ptr = builder.ins().iconst(PTR, field_name.as_ptr() as i64);
+            let name_len = builder.ins().iconst(PTR, field_name.len() as i64);
+            builder.ins().stack_store(name_ptr, names_slot, (i * 8) as i32);
+            builder.ins().stack_store(name_len, lens_slot, (i * 8) as i32);
+            let val = self.lower_expr(builder, &field.value);
+            builder.ins().stack_store(val, vals_slot, (i * 8) as i32);
+        }
+
+        let names_ptr = builder.ins().stack_addr(PTR, names_slot, 0);
+        let lens_ptr = builder.ins().stack_addr(PTR, lens_slot, 0);
+        let vals_ptr = builder.ins().stack_addr(PTR, vals_slot, 0);
+        let len = builder.ins().iconst(PTR, count as i64);
+        let call = builder.ins().call(
+            self.helpers.rt_patch_record,
+            &[self.ctx_param, base, names_ptr, lens_ptr, vals_ptr, len],
+        );
+        builder.inst_results(call)[0]
     }
 
     // -----------------------------------------------------------------------
@@ -633,9 +785,6 @@ impl<'a> LowerCtx<'a> {
         scrutinee: &RustIrExpr,
         arms: &[RustIrMatchArm],
     ) -> Value {
-        // Pattern matching compilation: for now, use chained if-else via rt_apply.
-        // Each arm's pattern is tested by attempting to match and bind.
-        // TODO(cranelift-migration): implement proper pattern compilation
         let scrut_val = self.lower_expr(builder, scrutinee);
 
         if arms.is_empty() {
@@ -643,20 +792,312 @@ impl<'a> LowerCtx<'a> {
             return builder.inst_results(call)[0];
         }
 
-        // For now, just evaluate the first arm's body (wildcard-like fallback)
-        // Full pattern matching will be Phase 2f+
-        if let Some(arm) = arms.first() {
+        // Chained if-else: for each arm, test pattern → body, else → next arm
+        let merge_block = builder.create_block();
+        let result_var = builder.declare_var(PTR);
+
+        // Initialize result to unit (for safety)
+        let unit = {
+            let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
+            builder.inst_results(call)[0]
+        };
+        builder.def_var(result_var, unit);
+
+        for arm in arms {
+            let arm_body_block = builder.create_block();
+            let arm_next_block = builder.create_block();
+
+            // Test the pattern — emits a boolean (i64: 0 or 1)
+            let matched = self.emit_pattern_test(builder, &arm.pattern, scrut_val);
+            let matched_bool = builder.ins().icmp_imm(
+                cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+                matched,
+                0,
+            );
+            builder.ins().brif(matched_bool, arm_body_block, &[], arm_next_block, &[]);
+
+            // Arm body block
+            builder.switch_to_block(arm_body_block);
+            builder.seal_block(arm_body_block);
+            // Bind pattern variables
             self.bind_pattern(builder, &arm.pattern, scrut_val);
-            return self.lower_expr(builder, &arm.body);
+
+            // Guard check (if present)
+            if let Some(guard) = &arm.guard {
+                let guard_val = self.lower_expr(builder, guard);
+                let guard_int = {
+                    let call = builder.ins().call(
+                        self.helpers.rt_unbox_bool,
+                        &[self.ctx_param, guard_val],
+                    );
+                    builder.inst_results(call)[0]
+                };
+                let guard_bool = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+                    guard_int,
+                    0,
+                );
+                let guard_pass_block = builder.create_block();
+                builder.ins().brif(guard_bool, guard_pass_block, &[], arm_next_block, &[]);
+                builder.switch_to_block(guard_pass_block);
+                builder.seal_block(guard_pass_block);
+            }
+
+            let body_val = self.lower_expr(builder, &arm.body);
+            builder.def_var(result_var, body_val);
+            builder.ins().jump(merge_block, &[]);
+
+            // Next arm block
+            builder.switch_to_block(arm_next_block);
+            builder.seal_block(arm_next_block);
         }
 
-        let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
-        builder.inst_results(call)[0]
+        // Fallthrough: non-exhaustive match → return unit
+        builder.ins().jump(merge_block, &[]);
+
+        builder.switch_to_block(merge_block);
+        builder.seal_block(merge_block);
+        builder.use_var(result_var)
+    }
+
+    /// Emit a pattern test that returns i64: 1 if matched, 0 if not.
+    /// Does NOT bind variables — that's done separately by `bind_pattern`.
+    fn emit_pattern_test(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        pattern: &RustIrPattern,
+        value: Value,
+    ) -> Value {
+        match pattern {
+            RustIrPattern::Wildcard { .. } => builder.ins().iconst(PTR, 1),
+            RustIrPattern::Var { .. } => builder.ins().iconst(PTR, 1),
+            RustIrPattern::At { pattern, .. } => {
+                self.emit_pattern_test(builder, pattern, value)
+            }
+            RustIrPattern::Literal { value: lit, .. } => {
+                self.emit_literal_test(builder, lit, value)
+            }
+            RustIrPattern::Constructor { name, args, .. } => {
+                // Check name matches
+                let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
+                let name_len = builder.ins().iconst(PTR, name.len() as i64);
+                let name_match = {
+                    let call = builder.ins().call(
+                        self.helpers.rt_constructor_name_eq,
+                        &[self.ctx_param, value, name_ptr, name_len],
+                    );
+                    builder.inst_results(call)[0]
+                };
+
+                if args.is_empty() {
+                    return name_match;
+                }
+
+                // Check arity
+                let arity = {
+                    let call = builder.ins().call(
+                        self.helpers.rt_constructor_arity,
+                        &[self.ctx_param, value],
+                    );
+                    builder.inst_results(call)[0]
+                };
+                let expected = builder.ins().iconst(PTR, args.len() as i64);
+                let arity_ok = builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    arity,
+                    expected,
+                );
+                let arity_i64 = builder.ins().uextend(PTR, arity_ok);
+
+                // AND name + arity checks
+                let base_ok = builder.ins().band(name_match, arity_i64);
+
+                // Check each arg pattern
+                let mut result = base_ok;
+                for (i, arg_pat) in args.iter().enumerate() {
+                    let idx = builder.ins().iconst(PTR, i as i64);
+                    let arg_val = {
+                        let call = builder.ins().call(
+                            self.helpers.rt_constructor_arg,
+                            &[self.ctx_param, value, idx],
+                        );
+                        builder.inst_results(call)[0]
+                    };
+                    let arg_ok = self.emit_pattern_test(builder, arg_pat, arg_val);
+                    result = builder.ins().band(result, arg_ok);
+                }
+                result
+            }
+            RustIrPattern::Tuple { items, .. } => {
+                // Check length
+                let len = {
+                    let call = builder.ins().call(
+                        self.helpers.rt_tuple_len,
+                        &[self.ctx_param, value],
+                    );
+                    builder.inst_results(call)[0]
+                };
+                let expected = builder.ins().iconst(PTR, items.len() as i64);
+                let len_ok = builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal,
+                    len,
+                    expected,
+                );
+                let mut result = builder.ins().uextend(PTR, len_ok);
+
+                for (i, item_pat) in items.iter().enumerate() {
+                    let idx = builder.ins().iconst(PTR, i as i64);
+                    let item_val = {
+                        let call = builder.ins().call(
+                            self.helpers.rt_tuple_item,
+                            &[self.ctx_param, value, idx],
+                        );
+                        builder.inst_results(call)[0]
+                    };
+                    let item_ok = self.emit_pattern_test(builder, item_pat, item_val);
+                    result = builder.ins().band(result, item_ok);
+                }
+                result
+            }
+            RustIrPattern::List { items, rest, .. } => {
+                // Check minimum length
+                let len = {
+                    let call = builder.ins().call(
+                        self.helpers.rt_list_len,
+                        &[self.ctx_param, value],
+                    );
+                    builder.inst_results(call)[0]
+                };
+                let min_len = builder.ins().iconst(PTR, items.len() as i64);
+
+                let len_ok = if rest.is_some() {
+                    // With rest: len >= items.len()
+                    let cmp = builder.ins().icmp(
+                        cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual,
+                        len,
+                        min_len,
+                    );
+                    builder.ins().uextend(PTR, cmp)
+                } else {
+                    // Without rest: len == items.len()
+                    let cmp = builder.ins().icmp(
+                        cranelift_codegen::ir::condcodes::IntCC::Equal,
+                        len,
+                        min_len,
+                    );
+                    builder.ins().uextend(PTR, cmp)
+                };
+                let mut result = len_ok;
+
+                for (i, item_pat) in items.iter().enumerate() {
+                    let idx = builder.ins().iconst(PTR, i as i64);
+                    let item_val = {
+                        let call = builder.ins().call(
+                            self.helpers.rt_list_index,
+                            &[self.ctx_param, value, idx],
+                        );
+                        builder.inst_results(call)[0]
+                    };
+                    let item_ok = self.emit_pattern_test(builder, item_pat, item_val);
+                    result = builder.ins().band(result, item_ok);
+                }
+
+                if let Some(rest_pat) = rest.as_deref() {
+                    let start = builder.ins().iconst(PTR, items.len() as i64);
+                    let tail_val = {
+                        let call = builder.ins().call(
+                            self.helpers.rt_list_tail,
+                            &[self.ctx_param, value, start],
+                        );
+                        builder.inst_results(call)[0]
+                    };
+                    let rest_ok = self.emit_pattern_test(builder, rest_pat, tail_val);
+                    result = builder.ins().band(result, rest_ok);
+                }
+                result
+            }
+            RustIrPattern::Record { fields, .. } => {
+                let mut result = builder.ins().iconst(PTR, 1);
+                for field in fields {
+                    // Navigate the path to get the nested value
+                    let mut current = value;
+                    for seg in &field.path {
+                        let name_ptr = builder.ins().iconst(PTR, seg.as_ptr() as i64);
+                        let name_len = builder.ins().iconst(PTR, seg.len() as i64);
+                        let call = builder.ins().call(
+                            self.helpers.rt_record_field,
+                            &[self.ctx_param, current, name_ptr, name_len],
+                        );
+                        current = builder.inst_results(call)[0];
+                    }
+                    let field_ok = self.emit_pattern_test(builder, &field.pattern, current);
+                    result = builder.ins().band(result, field_ok);
+                }
+                result
+            }
+        }
+    }
+
+    /// Emit a literal equality test.
+    fn emit_literal_test(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        lit: &RustIrLiteral,
+        value: Value,
+    ) -> Value {
+        match lit {
+            RustIrLiteral::Bool(b) => {
+                let expected = self.lower_lit_bool(builder, *b);
+                let call = builder.ins().call(
+                    self.helpers.rt_value_equals,
+                    &[self.ctx_param, value, expected],
+                );
+                builder.inst_results(call)[0]
+            }
+            RustIrLiteral::String(s) => {
+                let expected = self.lower_lit_string(builder, s);
+                let call = builder.ins().call(
+                    self.helpers.rt_value_equals,
+                    &[self.ctx_param, value, expected],
+                );
+                builder.inst_results(call)[0]
+            }
+            RustIrLiteral::DateTime(s) => {
+                let expected = self.lower_lit_string(builder, s);
+                let call = builder.ins().call(
+                    self.helpers.rt_value_equals,
+                    &[self.ctx_param, value, expected],
+                );
+                builder.inst_results(call)[0]
+            }
+            RustIrLiteral::Number(text) => {
+                let expected = self.lower_lit_number(builder, text);
+                let call = builder.ins().call(
+                    self.helpers.rt_value_equals,
+                    &[self.ctx_param, value, expected],
+                );
+                builder.inst_results(call)[0]
+            }
+            RustIrLiteral::Sigil { tag, body, flags } => {
+                let repr = format!(
+                    "#{}{}{}",
+                    tag,
+                    body,
+                    if flags.is_empty() { String::new() } else { format!("/{}", flags) }
+                );
+                let expected = self.lower_lit_string(builder, &repr);
+                let call = builder.ins().call(
+                    self.helpers.rt_value_equals,
+                    &[self.ctx_param, value, expected],
+                );
+                builder.inst_results(call)[0]
+            }
+        }
     }
 
     fn bind_pattern(
         &mut self,
-        _builder: &mut FunctionBuilder<'_>,
+        builder: &mut FunctionBuilder<'_>,
         pattern: &RustIrPattern,
         value: Value,
     ) {
@@ -667,10 +1108,73 @@ impl<'a> LowerCtx<'a> {
             RustIrPattern::Wildcard { .. } => {}
             RustIrPattern::At { name, pattern, .. } => {
                 self.locals.insert(name.clone(), value);
-                self.bind_pattern(_builder, pattern, value);
+                self.bind_pattern(builder, pattern, value);
             }
-            _ => {
-                // TODO(cranelift-migration): destructuring patterns
+            RustIrPattern::Literal { .. } => {}
+            RustIrPattern::Constructor { args, .. } => {
+                for (i, arg_pat) in args.iter().enumerate() {
+                    let idx = builder.ins().iconst(PTR, i as i64);
+                    let arg_val = {
+                        let call = builder.ins().call(
+                            self.helpers.rt_constructor_arg,
+                            &[self.ctx_param, value, idx],
+                        );
+                        builder.inst_results(call)[0]
+                    };
+                    self.bind_pattern(builder, arg_pat, arg_val);
+                }
+            }
+            RustIrPattern::Tuple { items, .. } => {
+                for (i, item_pat) in items.iter().enumerate() {
+                    let idx = builder.ins().iconst(PTR, i as i64);
+                    let item_val = {
+                        let call = builder.ins().call(
+                            self.helpers.rt_tuple_item,
+                            &[self.ctx_param, value, idx],
+                        );
+                        builder.inst_results(call)[0]
+                    };
+                    self.bind_pattern(builder, item_pat, item_val);
+                }
+            }
+            RustIrPattern::List { items, rest, .. } => {
+                for (i, item_pat) in items.iter().enumerate() {
+                    let idx = builder.ins().iconst(PTR, i as i64);
+                    let item_val = {
+                        let call = builder.ins().call(
+                            self.helpers.rt_list_index,
+                            &[self.ctx_param, value, idx],
+                        );
+                        builder.inst_results(call)[0]
+                    };
+                    self.bind_pattern(builder, item_pat, item_val);
+                }
+                if let Some(rest_pat) = rest.as_deref() {
+                    let start = builder.ins().iconst(PTR, items.len() as i64);
+                    let tail_val = {
+                        let call = builder.ins().call(
+                            self.helpers.rt_list_tail,
+                            &[self.ctx_param, value, start],
+                        );
+                        builder.inst_results(call)[0]
+                    };
+                    self.bind_pattern(builder, rest_pat, tail_val);
+                }
+            }
+            RustIrPattern::Record { fields, .. } => {
+                for field in fields {
+                    let mut current = value;
+                    for seg in &field.path {
+                        let name_ptr = builder.ins().iconst(PTR, seg.as_ptr() as i64);
+                        let name_len = builder.ins().iconst(PTR, seg.len() as i64);
+                        let call = builder.ins().call(
+                            self.helpers.rt_record_field,
+                            &[self.ctx_param, current, name_ptr, name_len],
+                        );
+                        current = builder.inst_results(call)[0];
+                    }
+                    self.bind_pattern(builder, &field.pattern, current);
+                }
             }
         }
     }
@@ -706,8 +1210,8 @@ impl<'a> LowerCtx<'a> {
         match block_kind {
             RustIrBlockKind::Plain => self.lower_plain_block(builder, items),
             RustIrBlockKind::Do { .. } => self.lower_do_block(builder, items),
-            RustIrBlockKind::Generate => self.lower_plain_block(builder, items),
-            RustIrBlockKind::Resource => self.lower_plain_block(builder, items),
+            RustIrBlockKind::Generate => self.lower_delegated_block(builder, items, true),
+            RustIrBlockKind::Resource => self.lower_delegated_block(builder, items, false),
         }
     }
 
@@ -783,5 +1287,58 @@ impl<'a> LowerCtx<'a> {
             }
         }
         current_effect
+    }
+
+    /// Delegate a generate or resource block to the interpreter via runtime helpers.
+    ///
+    /// 1. Create an `Env` with `rt_env_new`
+    /// 2. Populate it with every in-scope local via `rt_env_set`
+    /// 3. Pass a pointer to the `RustIrBlockItem` slice (valid because the
+    ///    `rust_program` is alive during JIT execution) plus the env to
+    ///    `rt_eval_generate` (generate) or `rt_make_resource` (resource).
+    fn lower_delegated_block(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        items: &[RustIrBlockItem],
+        is_generate: bool,
+    ) -> Value {
+        // 1. Create env
+        let env = {
+            let call = builder.ins().call(self.helpers.rt_env_new, &[self.ctx_param]);
+            builder.inst_results(call)[0]
+        };
+
+        // 2. Populate env with all in-scope locals.
+        //    Leak name strings so the raw pointers embedded in JIT code remain
+        //    valid after this function returns (same pattern as lambda globals).
+        let locals_snapshot: Vec<(&'static str, Value)> = self
+            .locals
+            .iter()
+            .map(|(k, v)| {
+                let leaked: &'static str = Box::leak(k.clone().into_boxed_str());
+                (leaked, *v)
+            })
+            .collect();
+        for (name, val) in &locals_snapshot {
+            let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
+            let name_len = builder.ins().iconst(PTR, name.len() as i64);
+            builder.ins().call(
+                self.helpers.rt_env_set,
+                &[self.ctx_param, env, name_ptr, name_len, *val],
+            );
+        }
+
+        // 3. Pass items slice pointer + env to the appropriate runtime helper
+        let items_ptr = builder.ins().iconst(PTR, items.as_ptr() as i64);
+        let items_count = builder.ins().iconst(PTR, items.len() as i64);
+
+        let helper = if is_generate {
+            self.helpers.rt_eval_generate
+        } else {
+            self.helpers.rt_make_resource
+        };
+
+        let call = builder.ins().call(helper, &[self.ctx_param, items_ptr, items_count, env]);
+        builder.inst_results(call)[0]
     }
 }
