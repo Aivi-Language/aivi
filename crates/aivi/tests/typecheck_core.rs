@@ -186,6 +186,28 @@ node =
 }
 
 #[test]
+fn typecheck_gtk_sigil_props_record_literal() {
+    let source = r#"
+module test.gtk_sigil
+export node
+
+use aivi.ui.gtk4
+
+node : GtkNode
+node =
+  ~<gtk>
+    <object class="GtkBox" props={ { spacing: 24, marginTop: 12 } }>
+      <child>
+        <object class="GtkLabel">
+          <property name="label">Hello</property>
+        </object>
+      </child>
+    </object>
+  </gtk>"#;
+    check_ok_with_embedded(source, &["aivi", "aivi.ui.gtk4"]);
+}
+
+#[test]
 fn typecheck_record_field_mismatch_points_at_value() {
     let source = "module test.user\n\
 User = { name: Text, age: Int }\n\

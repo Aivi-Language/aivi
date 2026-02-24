@@ -96,6 +96,23 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 
 <<< ../../snippets/from_md/stdlib/ui/gtk4/example.aivi{aivi}
 
+## GTK XML sigil (`~<gtk>...</gtk>`)
+
+`aivi.ui.gtk4` also exposes typed constructors used by the GTK XML sigil:
+
+- `GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text`
+- `GtkAttr = GtkAttribute Text Text`
+- helpers: `gtkElement`, `gtkTextNode`, `gtkAttr`
+
+The parser lowers `~<gtk>...</gtk>` into those constructors.
+
+`props={ { ... } }` sugar on any tag expands to normalized GTK properties:
+
+- `marginTop` becomes `prop:margin-top`
+- `spacing` stays `prop:spacing`
+
+In v0.1, `props` must be a compile-time record literal; dynamic `props={expr}` is a diagnostic.
+
 ## UI update pattern (state machine + events + repaint)
 
 You can drive GTK updates from an AIVI model/update loop:
