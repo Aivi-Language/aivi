@@ -99,6 +99,7 @@ impl TypedCtx {
         self.locals.insert(name.to_string(), ty);
     }
 
+    #[allow(dead_code)]
     pub(crate) fn with_runtime_local(&mut self, name: &str, ty: CgType) {
         self.with_local(name, ty);
     }

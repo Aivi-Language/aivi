@@ -1,7 +1,11 @@
 # Fuzzing
 
-This repo uses `cargo-fuzz` (libFuzzer) to harden the lexer, parser, formatter,
-front-end pipeline, runtime, and LSP-like stack.
+This repo uses [`bolero`](https://github.com/camshaft/bolero) to harden the lexer, parser,
+formatter, front-end pipeline, runtime, and LSP-like stack.
+
+Bolero is a unified fuzzing and property-testing front-end that supports
+multiple engines (libFuzzer, AFL, honggfuzz) and works on stable Rust for
+regular `cargo test` runs.
 
 ## Targets
 
@@ -16,47 +20,47 @@ front-end pipeline, runtime, and LSP-like stack.
 ## Local setup
 
 ```bash
-cargo install cargo-fuzz
-rustup toolchain install nightly
+cargo install -f cargo-bolero
 ```
 
 ## Running targets
 
+### As property tests (stable Rust, no special tooling)
+
+```bash
+cargo test -p aivi-fuzz
+```
+
+### Fuzz with libFuzzer (requires nightly + cargo-bolero)
+
 Short smoke test (30 s per target):
 
 ```bash
-cargo +nightly fuzz run parser    -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
-cargo +nightly fuzz run formatter -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
-cargo +nightly fuzz run lsp_pipeline -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
-cargo +nightly fuzz run frontend  -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
-cargo +nightly fuzz run runtime   -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+cargo bolero test -p aivi-fuzz parser::parser       --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+cargo bolero test -p aivi-fuzz formatter::formatter  --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+cargo bolero test -p aivi-fuzz lsp_pipeline::lsp_pipeline --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+cargo bolero test -p aivi-fuzz frontend::frontend    --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+cargo bolero test -p aivi-fuzz runtime::runtime      --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
 ```
 
-Extended run (5 min, nightly CI):
+Extended run (5 min):
 
 ```bash
-cargo +nightly fuzz run parser -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
+cargo bolero test -p aivi-fuzz parser::parser --engine libfuzzer -- -max_total_time=300 -timeout=30 -rss_limit_mb=4096
 ```
 
-## libFuzzer flags
+### Fuzz with AFL
 
-| Flag | Meaning |
-| :--- | :--- |
-| `-max_total_time=N` | Stop after N seconds |
-| `-timeout=N` | Kill a single test case if it takes > N seconds (detects hangs) |
-| `-rss_limit_mb=N` | Abort if RSS exceeds N MiB (detects memory explosions) |
-| `-max_len=N` | Cap mutated input length (default: unbounded) |
-| `-jobs=N` | Run N parallel fuzz workers |
+```bash
+cargo bolero test -p aivi-fuzz parser::parser --engine afl --runs 100000
+```
 
 ## Corpus seeds
 
-Seed files live in `fuzz/corpus/<target>/`. The fuzzer uses these as a starting
-point and mutates from there. Good seeds = faster coverage.
+Seed files live in `fuzz/corpus/<target>/`. Bolero automatically discovers
+and uses these as starting points.
 
 ## CI integration
 
-- **PR / push** (`ci.yml`): 30 s smoke run per target with `-timeout=10 -rss_limit_mb=2048`
-- **Nightly** (`nightly.yml`): 5 min extended run per target with `-timeout=30 -rss_limit_mb=4096`
-
-Crash artifacts are saved in `fuzz/artifacts/<target>/` — use
-`cargo +nightly fuzz fmt <target> <artifact>` to minimize and reproduce.
+- **PR / push** (`ci.yml`): `cargo test -p aivi-fuzz` (property-test mode)
+- **Nightly** (`nightly.yml`): Extended libFuzzer runs per target

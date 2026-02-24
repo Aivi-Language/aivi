@@ -47,6 +47,7 @@ pub(super) fn cranelift_lowering_comment(
     Some(text)
 }
 
+#[allow(dead_code)]
 pub(crate) fn lower_for_runtime(
     expr: &RustIrExpr,
     ty: &CgType,
