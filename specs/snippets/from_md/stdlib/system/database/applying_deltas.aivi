@@ -16,5 +16,5 @@ deleteOldPosts = cutoff => do Effect {
 
 upsertActiveUser : User -> Effect DbError Unit
 upsertActiveUser = user => do Effect {
-  _ <- userTable + upsert (id == user.id) user (u => u <| { active: True, loginCount: _ + 1 })
+  _ <- userTable + ups (id == user.id) user (u => u <| { active: True, loginCount: _ + 1 })
 }

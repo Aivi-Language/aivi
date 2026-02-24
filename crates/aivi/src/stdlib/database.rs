@@ -17,7 +17,7 @@ export configureSqlite
 export beginTx, commitTx, rollbackTx, inTransaction
 export savepoint, releaseSavepoint, rollbackToSavepoint
 export chunkDeltas, ftsDoc, ftsMatchAny, ftsMatchAll
-export ins, upd, del, upsert
+export ins, upd, del, ups
 export domain Database
 
 use aivi
@@ -181,8 +181,8 @@ upd = pred patchFn => Update pred patchFn
 del : Pred A -> Delta A
 del = pred => Delete pred
 
-upsert : Pred A -> A -> Patch A -> Delta A
-upsert = pred value patchFn => Upsert pred value patchFn
+ups : Pred A -> A -> Patch A -> Delta A
+ups = pred value patchFn => Upsert pred value patchFn
 
 domain Database over Table A = {
   (+) : Table A -> Delta A -> Effect DbError (Table A)
@@ -191,6 +191,6 @@ domain Database over Table A = {
   ins = Insert
   upd = Update
   del = Delete
-  upsert = Upsert
+  ups = Upsert
 }
 "#;

@@ -590,8 +590,8 @@ userTable = database.table "users" []
 main = do Effect {
   _ <- database.configure { driver: Sqlite, url: ":memory:" }
   _ <- database.runMigrations [ userTable ]
-  _ <- database.applyDelta userTable (database.upsert (u => u.id == 1) { id: 1, name: "A", active: False } (u => u <| { name: "B" }))
-  table1 <- database.applyDelta userTable (database.upsert (u => u.id == 1) { id: 1, name: "X", active: False } (u => u <| { name: "B", active: True }))
+  _ <- database.applyDelta userTable (database.ups (u => u.id == 1) { id: 1, name: "A", active: False } (u => u <| { name: "B" }))
+  table1 <- database.applyDelta userTable (database.ups (u => u.id == 1) { id: 1, name: "X", active: False } (u => u <| { name: "B", active: True }))
   database.load table1
 }
 "#;

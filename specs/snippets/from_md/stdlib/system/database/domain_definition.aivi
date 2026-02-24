@@ -4,8 +4,9 @@ domain Database over Table A = {
   (+) : Table A -> Delta A -> Effect DbError (Table A)
   (+) = table delta => db.applyDelta table delta
 
+  // Constructor aliases exposed by the domain.
   ins = Insert
   upd = Update
   del = Delete
-  upsert = Upsert
+  ups = Upsert
 }
