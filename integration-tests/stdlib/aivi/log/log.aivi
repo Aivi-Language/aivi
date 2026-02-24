@@ -1,0 +1,30 @@
+@no_prelude
+module integrationTests.stdlib.aivi.log.tests
+
+use aivi (attempt, Unit, Ok, Err)
+use aivi.testing
+use aivi.log
+
+@test "info"
+info_functional = do Effect {
+  result <- attempt (info "server started" [("port", "8080")])
+  result match
+    | Ok unit => assertEq unit Unit
+    | Err _   => assert False
+}
+
+@test "explicit level"
+log_with_level_functional = do Effect {
+  result <- attempt (log Warn "disk almost full" [("disk", "root")])
+  result match
+    | Ok unit => assertEq unit Unit
+    | Err _   => assert False
+}
+
+@test "logger re-export"
+logger_reexport_functional = do Effect {
+  result <- attempt (logger.debug "dbg" [("traceId", "abc")])
+  result match
+    | Ok unit => assertEq unit Unit
+    | Err _   => assert False
+}

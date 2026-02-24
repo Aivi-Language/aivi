@@ -40,7 +40,9 @@ If no arm matches at runtime, evaluation fails with a non-exhaustive-match runti
 
 <<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_01.aivi{aivi}
 
-Here is the same multi-clause shape without a pipeline, using rebinding plus record destructuring inside each arm:
+Here is the same multi-clause shape without the `|>` pipeline operator, using rebinding plus record destructuring inside each arm:
+
+The leading `|` tokens below start multi-clause function arms (pattern branches); they are not pipelines.
 
 <<< ../snippets/from_md/syntax/pattern_matching/multi_clause_functions_record_rebinding_01.aivi{aivi}
 

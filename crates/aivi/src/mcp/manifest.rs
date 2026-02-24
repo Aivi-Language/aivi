@@ -33,8 +33,7 @@ pub struct McpPolicy {
     pub allow_effectful_tools: bool,
 }
 
-static SPECS_DIR: Dir<'static> =
-    include_dir!("$CARGO_MANIFEST_DIR/../../specs");
+static SPECS_DIR: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../specs");
 
 pub(crate) fn specs_uri(binding: &str) -> String {
     format!("aivi://specs/{binding}")
@@ -56,7 +55,8 @@ fn spec_mime_type(binding: &str) -> &'static str {
 }
 
 fn spec_binding_from_uri(uri: &str) -> Option<&str> {
-    uri.strip_prefix("aivi://specs/").filter(|rest| !rest.is_empty())
+    uri.strip_prefix("aivi://specs/")
+        .filter(|rest| !rest.is_empty())
 }
 
 pub(crate) fn read_bundled_spec(uri: &str) -> Result<(String, String), AiviError> {
@@ -97,7 +97,81 @@ pub fn bundled_specs_manifest() -> McpManifest {
     visit_dir(&SPECS_DIR, &mut resources_by_binding);
 
     McpManifest {
-        tools: Vec::new(),
+        tools: vec![
+            McpTool {
+                name: "aivi.parse".to_string(),
+                module: "aivi".to_string(),
+                binding: "parse".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["target"],
+                    "properties": {
+                        "target": {
+                            "type": "string",
+                            "description": "Path/target glob accepted by AIVI driver commands."
+                        }
+                    }
+                }),
+                effectful: false,
+            },
+            McpTool {
+                name: "aivi.check".to_string(),
+                module: "aivi".to_string(),
+                binding: "check".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["target"],
+                    "properties": {
+                        "target": {
+                            "type": "string",
+                            "description": "Path/target glob accepted by AIVI driver commands."
+                        },
+                        "checkStdlib": {
+                            "type": "boolean",
+                            "description": "Include embedded stdlib diagnostics.",
+                            "default": false
+                        }
+                    }
+                }),
+                effectful: false,
+            },
+            McpTool {
+                name: "aivi.fmt".to_string(),
+                module: "aivi".to_string(),
+                binding: "fmt".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["target"],
+                    "properties": {
+                        "target": {
+                            "type": "string",
+                            "description": "Single file target to format and return."
+                        }
+                    }
+                }),
+                effectful: false,
+            },
+            McpTool {
+                name: "aivi.fmt.write".to_string(),
+                module: "aivi".to_string(),
+                binding: "fmt.write".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["target"],
+                    "properties": {
+                        "target": {
+                            "type": "string",
+                            "description": "Path/target glob to format in place."
+                        }
+                    }
+                }),
+                effectful: true,
+            },
+        ],
         resources: resources_by_binding.into_values().collect(),
     }
 }

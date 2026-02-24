@@ -247,8 +247,17 @@ aivi mcp serve <path|dir/...> [--allow-effects]
 
 - `--allow-effects`: Allows the MCP server to execute tools that have side effects.
 
-In v0.1, `aivi mcp serve` exposes the bundled language specifications (`specs/`) as MCP resources.
-The `<path|dir/...>` argument is currently accepted for compatibility and ignored in v0.1.
+In v0.1, `aivi mcp serve` exposes:
+
+- bundled language specifications (`specs/`) as MCP resources, and
+- language tooling MCP tools:
+  - `aivi.parse` (`target`)
+  - `aivi.check` (`target`, optional `checkStdlib`)
+  - `aivi.fmt` (`target`, returns formatted text)
+  - `aivi.fmt.write` (`target`, formats files in place; requires `--allow-effects`)
+
+The `<path|dir/...>` argument is accepted for compatibility and currently ignored by the MCP server;
+tool calls pass their own explicit `target` argument.
 
 #### `i18n`
 
