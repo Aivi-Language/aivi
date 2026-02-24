@@ -90,6 +90,43 @@ fn runtime_from_source_with_stdlib(source: &str) -> Runtime {
 }
 
 #[test]
+fn jit_globals_include_int_function_definitions() {
+    let (mut modules, diags) = crate::surface::parse_modules(
+        std::path::Path::new("test.aivi"),
+        r#"
+module app.main
+add : Int -> Int -> Int
+add = a b => a + b
+
+main : Effect Text Unit
+main = do Effect {
+  println "{add 1 2}"
+}
+"#,
+    );
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error)
+        .collect();
+    assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
+
+    let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    let program = crate::hir::desugar_modules(&stdlib_modules);
+    let infer = crate::typecheck::infer_value_types_full(&stdlib_modules);
+
+    let jitted = build_jitted_globals(program, infer.cg_types).expect("build jitted globals");
+    let Some(Value::Builtin(builtin)) = jitted.get("add") else {
+        panic!("expected `add` to be jitted builtin");
+    };
+    assert!(
+        builtin.imp.name.starts_with("__jit|"),
+        "unexpected builtin name: {}",
+        builtin.imp.name
+    );
+}
+
+#[test]
 fn constructor_introspection_returns_name_and_ordinal() {
     let mut runtime = runtime_from_source(
         r#"

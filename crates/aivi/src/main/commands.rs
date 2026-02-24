@@ -371,20 +371,22 @@ fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
     let root = env::current_dir()?;
     let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
     let (release_flag, cargo_args) = parse_project_args(args)?;
-    let release = release_flag || cfg.build.cargo_profile == "release";
-    generate_project_rust(&root, &cfg)?;
-    let mut cmd = Command::new("cargo");
-    cmd.arg("run");
-    if release {
-        cmd.arg("--release");
+    if release_flag || cfg.build.cargo_profile == "release" {
+        return Err(AiviError::InvalidCommand(
+            "run --release is not supported by the native runtime pipeline".to_string(),
+        ));
     }
-    append_native_ui_target_flags(&mut cmd, &cfg.build.native_ui_target, &root)?;
-    cmd.args(cargo_args);
-    let status = cmd.current_dir(&root).status()?;
-    if !status.success() {
-        return Err(AiviError::Cargo("cargo run failed".to_string()));
+    if !cargo_args.is_empty() {
+        return Err(AiviError::InvalidCommand(
+            "extra cargo args are not supported by the native runtime pipeline".to_string(),
+        ));
     }
-    Ok(())
+    let entry_path = resolve_project_entry(&root, &cfg.project.entry);
+    let entry = entry_path
+        .to_str()
+        .ok_or_else(|| AiviError::InvalidPath(entry_path.display().to_string()))?;
+    let (program, cg_types) = aivi::desugar_target_with_cg_types(entry)?;
+    aivi::run_native_jit(program, cg_types)
 }
 
 fn parse_project_args(args: &[String]) -> Result<(bool, Vec<String>), AiviError> {

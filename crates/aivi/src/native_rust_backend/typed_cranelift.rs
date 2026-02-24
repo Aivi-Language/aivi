@@ -12,6 +12,11 @@ use crate::rust_ir::RustIrExpr;
 use super::typed_expr::TypedCtx;
 use super::typed_mir::{lower_typed_mir, TypedMirExpr, TypedMirFunction, TypedMirTerminator};
 
+pub(crate) struct JitLowering {
+    pub(crate) function: Function,
+    pub(crate) param_names: Vec<String>,
+}
+
 pub(super) fn emit_typed_via_cranelift(
     expr: &RustIrExpr,
     ty: &CgType,
@@ -30,7 +35,7 @@ pub(super) fn cranelift_lowering_comment(
     ctx: &TypedCtx,
 ) -> Option<String> {
     let mir = lower_typed_mir(expr, ty, ctx)?;
-    let function = lower_with_cranelift(&mir, ty, ctx)?;
+    let (function, _) = lower_with_cranelift(&mir, ty, ctx)?;
     let mut text = String::new();
     text.push_str("clif.lowering.begin\n");
     text.push_str(&function.to_string());
@@ -38,11 +43,29 @@ pub(super) fn cranelift_lowering_comment(
     Some(text)
 }
 
+pub(crate) fn lower_for_jit(
+    expr: &RustIrExpr,
+    ret_ty: &CgType,
+    globals: &HashMap<String, CgType>,
+    locals: &[(String, CgType)],
+) -> Option<JitLowering> {
+    let mut ctx = TypedCtx::new(globals.clone());
+    for (name, ty) in locals {
+        ctx.with_local_for_jit(name, ty.clone());
+    }
+    let mir = lower_typed_mir(expr, ret_ty, &ctx)?;
+    let (function, param_names) = lower_with_cranelift(&mir, ret_ty, &ctx)?;
+    Some(JitLowering {
+        function,
+        param_names,
+    })
+}
+
 fn lower_with_cranelift(
     mir: &TypedMirFunction,
     ret_ty: &CgType,
     ctx: &TypedCtx,
-) -> Option<Function> {
+) -> Option<(Function, Vec<String>)> {
     let mut sig = cranelift_codegen::ir::Signature::new(CallConv::SystemV);
     let mut param_names = BTreeSet::new();
     collect_mir_names(mir, &mut param_names);
@@ -116,7 +139,7 @@ fn lower_with_cranelift(
     codegen_ctx.compute_cfg();
     codegen_ctx.compute_domtree();
     codegen_ctx.verify(&flag_values).ok()?;
-    Some(codegen_ctx.func)
+    Some((codegen_ctx.func, name_order))
 }
 
 fn emit_expr(

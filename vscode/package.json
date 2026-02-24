@@ -2,7 +2,7 @@
   "name": "aivi-vscode",
   "displayName": "AIVI Language Support",
   "description": "Syntax highlighting and formatting for the AIVI language (from the AIVI specs).",
-  "version": "0.1.176",
+  "version": "0.1.177",
   "publisher": "aivi",
   "packageManager": "pnpm@9.15.4",
   "repository": {
@@ -102,6 +102,17 @@
         ],
         "embeddedLanguages": {
           "text.html.basic": "html",
+          "source.aivi": "aivi"
+        }
+      },
+      {
+        "scopeName": "text.xml.aivi.gtk.injection",
+        "path": "./syntaxes/aivi.gtk.injection.tmLanguage.json",
+        "injectTo": [
+          "source.aivi"
+        ],
+        "embeddedLanguages": {
+          "text.xml": "xml",
           "source.aivi": "aivi"
         }
       }

@@ -1,0 +1,18 @@
+{
+  "scopeName": "text.xml.aivi.gtk.injection",
+  "injectionSelector": "string.quoted.other.sigil.gtk.aivi",
+  "patterns": [
+    {
+      "begin": "(\\{)",
+      "end": "(\\})",
+      "beginCaptures": {
+        "1": { "name": "punctuation.section.embedded.begin.aivi" }
+      },
+      "endCaptures": {
+        "1": { "name": "punctuation.section.embedded.end.aivi" }
+      },
+      "patterns": [{ "include": "source.aivi" }]
+    },
+    { "include": "text.xml" }
+  ]
+}

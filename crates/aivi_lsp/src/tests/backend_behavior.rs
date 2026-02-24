@@ -387,6 +387,40 @@ x = ~<html><div class="a">{ foo }</div></html>
 }
 
 #[test]
+fn semantic_tokens_highlight_xml_inside_gtk_sigil() {
+    let text = r#"module Test.gtk
+x = ~<gtk><object class="GtkBox" props={ { spacing: 1 } } /></gtk>
+"#;
+
+    let tokens = collect_semantic_token_texts(text);
+
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_TYPE && s == "object"),
+        "expected tag name to be highlighted as a type token, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_PROPERTY && s == "class"),
+        "expected attribute name to be highlighted as a property token, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s == "\"GtkBox\""),
+        "expected attribute value to be highlighted as a string token, got: {tokens:?}"
+    );
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_PROPERTY && s == "spacing"),
+        "expected embedded AIVI record label to be highlighted as a property token, got: {tokens:?}"
+    );
+}
+
+#[test]
 fn semantic_tokens_highlight_paths_and_calls() {
     let text = r#"use aivi.net.https (get)
 main = do Effect {

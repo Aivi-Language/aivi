@@ -4,14 +4,19 @@ use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{Datelike, NaiveDate, Timelike, TimeZone as ChronoTimeZone};
+use cranelift_jit::{JITBuilder, JITModule};
+use cranelift_module::{default_libcall_names, Linkage, Module};
 use regex::RegexBuilder;
 use url::Url;
 
+use crate::cg_type::CgType;
 use crate::hir::{
     HirBlockItem, HirExpr, HirListItem, HirLiteral, HirMatchArm, HirPathSegment, HirPattern,
     HirProgram, HirRecordField, HirTextPart,
 };
 use crate::i18n::{parse_message_template, validate_key_text, MessagePart};
+use crate::native_rust_backend::typed_cranelift;
+use crate::{kernel, rust_ir};
 use crate::AiviError;
 
 mod builtins;
@@ -115,29 +120,19 @@ pub struct TestReport {
 
 pub fn run_native(program: HirProgram) -> Result<(), AiviError> {
     let mut runtime = build_runtime_from_program(program)?;
-    let main = runtime
-        .ctx
-        .globals
-        .get("main")
-        .ok_or_else(|| AiviError::Runtime("missing main definition".to_string()))?;
-    let main_value = match runtime.force_value(main) {
-        Ok(value) => value,
-        Err(err) => return Err(AiviError::Runtime(format_runtime_error(err))),
-    };
-    let effect = match main_value {
-        Value::Effect(effect) => Value::Effect(effect),
-        other => {
-            return Err(AiviError::Runtime(format!(
-                "main must be an Effect value, got {}",
-                format_value(&other)
-            )))
-        }
-    };
+    run_main_effect(&mut runtime)
+}
 
-    match runtime.run_effect_value(effect) {
-        Ok(_) => Ok(()),
-        Err(err) => Err(AiviError::Runtime(format_runtime_error(err))),
+pub fn run_native_jit(
+    program: HirProgram,
+    cg_types: HashMap<String, HashMap<String, CgType>>,
+) -> Result<(), AiviError> {
+    let mut runtime = build_runtime_from_program(program.clone())?;
+    let jitted = build_jitted_globals(program, cg_types)?;
+    for (name, value) in jitted {
+        runtime.ctx.globals.set(name, value);
     }
+    run_main_effect(&mut runtime)
 }
 
 /// Runs `main` with a simple "fuel" limit to prevent hangs in fuzzers/tests.
@@ -172,6 +167,263 @@ pub fn run_native_with_fuel(program: HirProgram, fuel: u64) -> Result<(), AiviEr
         Ok(_) => Ok(()),
         Err(RuntimeError::Cancelled) => Ok(()),
         Err(err) => Err(AiviError::Runtime(format_runtime_error(err))),
+    }
+}
+
+fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
+    let main = runtime
+        .ctx
+        .globals
+        .get("main")
+        .ok_or_else(|| AiviError::Runtime("missing main definition".to_string()))?;
+    let main_value = match runtime.force_value(main) {
+        Ok(value) => value,
+        Err(err) => return Err(AiviError::Runtime(format_runtime_error(err))),
+    };
+    let effect = match main_value {
+        Value::Effect(effect) => Value::Effect(effect),
+        other => {
+            return Err(AiviError::Runtime(format!(
+                "main must be an Effect value, got {}",
+                format_value(&other)
+            )))
+        }
+    };
+
+    match runtime.run_effect_value(effect) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(AiviError::Runtime(format_runtime_error(err))),
+    }
+}
+
+fn build_jitted_globals(
+    program: HirProgram,
+    cg_types: HashMap<String, HashMap<String, CgType>>,
+) -> Result<HashMap<String, Value>, AiviError> {
+    let kernel_program = kernel::lower_hir(program);
+    let mut rust_program = rust_ir::lower_kernel(kernel_program)?;
+
+    for module in &mut rust_program.modules {
+        if let Some(mod_types) = cg_types.get(&module.name) {
+            for def in &mut module.defs {
+                if let Some(cg) = mod_types.get(&def.name) {
+                    def.cg_type = Some(cg.clone());
+                }
+            }
+        }
+    }
+
+    let mut global_cg_types: HashMap<String, CgType> = HashMap::new();
+    for module in &rust_program.modules {
+        for def in &module.defs {
+            if let Some(cg_ty) = &def.cg_type {
+                if cg_ty.is_closed() {
+                    global_cg_types.entry(def.name.clone()).or_insert(cg_ty.clone());
+                }
+            }
+        }
+    }
+
+    let mut jitted = HashMap::new();
+    for module in rust_program.modules {
+        for def in module.defs {
+            let Some(cg_ty) = &def.cg_type else {
+                continue;
+            };
+            let Some(param_tys) = scalar_int_param_types(cg_ty) else {
+                continue;
+            };
+            let Some(ret_ty) = scalar_int_return_type(cg_ty) else {
+                continue;
+            };
+            let (params, body) = peel_lambda_params(&def.expr);
+            if params.len() != param_tys.len() {
+                continue;
+            }
+            let locals: Vec<(String, CgType)> = params
+                .iter()
+                .cloned()
+                .zip(param_tys.iter().cloned())
+                .collect();
+            let Some(lowered) =
+                typed_cranelift::lower_for_jit(body, ret_ty, &global_cg_types, &locals)
+            else {
+                continue;
+            };
+            if lowered.param_names.len() > 6 {
+                continue;
+            }
+
+            let local_positions: HashMap<String, usize> = params
+                .iter()
+                .enumerate()
+                .map(|(idx, name)| (name.clone(), idx))
+                .collect();
+            if lowered
+                .param_names
+                .iter()
+                .any(|name| name == &def.name && !local_positions.contains_key(name))
+            {
+                continue;
+            }
+
+            let symbol = format!("__aivi_jit_{}_{}", module.name.replace('.', "_"), def.name);
+            let Ok(code_ptr) = compile_jit_i64_function(&symbol, lowered.function) else {
+                continue;
+            };
+            let code_addr = code_ptr as usize;
+            let arity = params.len();
+            if arity == 0 {
+                continue;
+            }
+            let param_order = lowered.param_names;
+            let builtin = runtime_builtin(&format!("__jit|{}|{}", module.name, def.name), arity, {
+                move |args, runtime| {
+                    let mut call_args = Vec::with_capacity(param_order.len());
+                    for name in &param_order {
+                        if let Some(idx) = local_positions.get(name).copied() {
+                            let Some(arg) = args.get(idx) else {
+                                return Err(RuntimeError::Message(format!(
+                                    "missing argument {idx} for jitted function"
+                                )));
+                            };
+                            match arg {
+                                Value::Int(value) => call_args.push(*value),
+                                other => {
+                                    return Err(RuntimeError::Message(format!(
+                                        "jitted function expected Int arg, got {}",
+                                        format_value(other)
+                                    )))
+                                }
+                            }
+                        } else {
+                            let Some(global_value) = runtime.ctx.globals.get(name) else {
+                                return Err(RuntimeError::Message(format!(
+                                    "missing global {name} for jitted function"
+                                )));
+                            };
+                            let forced = runtime.force_value(global_value)?;
+                            match forced {
+                                Value::Int(value) => call_args.push(value),
+                                other => {
+                                    return Err(RuntimeError::Message(format!(
+                                        "jitted global {name} expected Int, got {}",
+                                        format_value(&other)
+                                    )))
+                                }
+                            }
+                        }
+                    }
+                    let Some(result) = call_jitted_i64(code_addr, &call_args) else {
+                        return Err(RuntimeError::Message(
+                            "unsupported jitted function arity".to_string(),
+                        ));
+                    };
+                    Ok(Value::Int(result))
+                }
+            });
+
+            jitted.insert(def.name.clone(), builtin.clone());
+            jitted.insert(format!("{}.{}", module.name, def.name), builtin);
+        }
+    }
+
+    Ok(jitted)
+}
+
+fn scalar_int_param_types(ty: &CgType) -> Option<Vec<CgType>> {
+    let mut params = Vec::new();
+    let mut cursor = ty;
+    while let CgType::Func(arg, ret) = cursor {
+        if !matches!(&**arg, CgType::Int) {
+            return None;
+        }
+        params.push((**arg).clone());
+        cursor = ret;
+    }
+    Some(params)
+}
+
+fn scalar_int_return_type(ty: &CgType) -> Option<&CgType> {
+    let mut cursor = ty;
+    while let CgType::Func(_, ret) = cursor {
+        cursor = ret;
+    }
+    if matches!(cursor, CgType::Int) {
+        Some(cursor)
+    } else {
+        None
+    }
+}
+
+fn peel_lambda_params<'a>(expr: &'a rust_ir::RustIrExpr) -> (Vec<String>, &'a rust_ir::RustIrExpr) {
+    let mut params = Vec::new();
+    let mut cursor = expr;
+    while let rust_ir::RustIrExpr::Lambda { param, body, .. } = cursor {
+        params.push(param.clone());
+        cursor = body;
+    }
+    (params, cursor)
+}
+
+fn compile_jit_i64_function(
+    symbol: &str,
+    function: cranelift_codegen::ir::Function,
+) -> Result<*const u8, String> {
+    let builder = JITBuilder::new(default_libcall_names())
+        .map_err(|err| format!("jit builder init failed for {symbol}: {err}"))?;
+    let mut module = JITModule::new(builder);
+    let mut ctx = module.make_context();
+    ctx.func = function;
+    let func_id = module
+        .declare_function(symbol, Linkage::Local, &ctx.func.signature)
+        .map_err(|err| format!("jit declare_function failed for {symbol}: {err}"))?;
+    module
+        .define_function(func_id, &mut ctx)
+        .map_err(|err| format!("jit define_function failed for {symbol}: {err}"))?;
+    module.clear_context(&mut ctx);
+    module
+        .finalize_definitions()
+        .map_err(|err| format!("jit finalize_definitions failed for {symbol}: {err}"))?;
+    let ptr = module.get_finalized_function(func_id);
+    std::mem::forget(module);
+    Ok(ptr)
+}
+
+fn call_jitted_i64(code_addr: usize, args: &[i64]) -> Option<i64> {
+    let code = code_addr as *const u8;
+    match args.len() {
+        0 => {
+            let f: extern "C" fn() -> i64 = unsafe { std::mem::transmute(code) };
+            Some(f())
+        }
+        1 => {
+            let f: extern "C" fn(i64) -> i64 = unsafe { std::mem::transmute(code) };
+            Some(f(args[0]))
+        }
+        2 => {
+            let f: extern "C" fn(i64, i64) -> i64 = unsafe { std::mem::transmute(code) };
+            Some(f(args[0], args[1]))
+        }
+        3 => {
+            let f: extern "C" fn(i64, i64, i64) -> i64 = unsafe { std::mem::transmute(code) };
+            Some(f(args[0], args[1], args[2]))
+        }
+        4 => {
+            let f: extern "C" fn(i64, i64, i64, i64) -> i64 = unsafe { std::mem::transmute(code) };
+            Some(f(args[0], args[1], args[2], args[3]))
+        }
+        5 => {
+            let f: extern "C" fn(i64, i64, i64, i64, i64) -> i64 =
+                unsafe { std::mem::transmute(code) };
+            Some(f(args[0], args[1], args[2], args[3], args[4]))
+        }
+        6 => {
+            let f: extern "C" fn(i64, i64, i64, i64, i64, i64) -> i64 =
+                unsafe { std::mem::transmute(code) };
+            Some(f(args[0], args[1], args[2], args[3], args[4], args[5]))
+        }
+        _ => None,
     }
 }
 

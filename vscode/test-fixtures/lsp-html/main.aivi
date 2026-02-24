@@ -10,3 +10,8 @@ main =
       <button onClick={doAiviFn}>ok</button>
     </div>
   </html>
+
+gtkNode =
+  ~<gtk>
+    <object class="GtkBox" />
+  </gtk>
