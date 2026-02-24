@@ -15,14 +15,14 @@
 
 use std::collections::HashMap;
 
-use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder, Value};
 use cranelift_codegen::ir::FuncRef;
+use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder, Value};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{Linkage, Module};
 
 use crate::cg_type::CgType;
 use crate::rust_ir::{
-    RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrLiteral, RustIrListItem, RustIrMatchArm,
+    RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrListItem, RustIrLiteral, RustIrMatchArm,
     RustIrPattern, RustIrRecordField, RustIrTextPart,
 };
 
@@ -113,7 +113,10 @@ pub(crate) struct JitFuncDecl {
 
 /// Decompose a function CgType into parameter types and return type.
 /// `Func(A, Func(B, C))` with arity 2 → `([Some(A), Some(B)], Some(C))`
-pub(crate) fn decompose_func_type(ty: &CgType, arity: usize) -> (Vec<Option<CgType>>, Option<CgType>) {
+pub(crate) fn decompose_func_type(
+    ty: &CgType,
+    arity: usize,
+) -> (Vec<Option<CgType>>, Option<CgType>) {
     let mut params = Vec::new();
     let mut current = ty;
     for _ in 0..arity {
@@ -185,6 +188,10 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_env_set: FuncRef,
     pub(crate) rt_eval_generate: FuncRef,
     pub(crate) rt_make_resource: FuncRef,
+    // Native generate helpers
+    pub(crate) rt_gen_vec_new: FuncRef,
+    pub(crate) rt_gen_vec_push: FuncRef,
+    pub(crate) rt_gen_vec_into_generator: FuncRef,
 }
 
 /// Declare all runtime helper signatures in the module and return FuncRefs
@@ -269,6 +276,13 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_eval_generate: decl!("rt_eval_generate", [PTR, PTR, PTR, PTR], [PTR]),
         // (ctx, items_ptr, items_count, env_ptr) -> ptr
         rt_make_resource: decl!("rt_make_resource", [PTR, PTR, PTR, PTR], [PTR]),
+        // Native generate helpers
+        // (ctx) -> ptr
+        rt_gen_vec_new: decl!("rt_gen_vec_new", [PTR], [PTR]),
+        // (ctx, vec_ptr, value_ptr)
+        rt_gen_vec_push: decl!("rt_gen_vec_push", [PTR, PTR, PTR], []),
+        // (ctx, vec_ptr) -> ptr
+        rt_gen_vec_into_generator: decl!("rt_gen_vec_into_generator", [PTR, PTR], [PTR]),
     })
 }
 
@@ -311,15 +325,15 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_env_set: cranelift_module::FuncId,
     pub(crate) rt_eval_generate: cranelift_module::FuncId,
     pub(crate) rt_make_resource: cranelift_module::FuncId,
+    // Native generate helpers
+    pub(crate) rt_gen_vec_new: cranelift_module::FuncId,
+    pub(crate) rt_gen_vec_push: cranelift_module::FuncId,
+    pub(crate) rt_gen_vec_into_generator: cranelift_module::FuncId,
 }
 
 impl DeclaredHelpers {
     /// Import all helper FuncIds into a specific function, producing `FuncRef`s.
-    pub(crate) fn import_into(
-        &self,
-        module: &mut impl Module,
-        func: &mut Function,
-    ) -> HelperRefs {
+    pub(crate) fn import_into(&self, module: &mut impl Module, func: &mut Function) -> HelperRefs {
         macro_rules! imp {
             ($field:ident) => {
                 module.declare_func_in_func(self.$field, func)
@@ -362,6 +376,9 @@ impl DeclaredHelpers {
             rt_env_set: imp!(rt_env_set),
             rt_eval_generate: imp!(rt_eval_generate),
             rt_make_resource: imp!(rt_make_resource),
+            rt_gen_vec_new: imp!(rt_gen_vec_new),
+            rt_gen_vec_push: imp!(rt_gen_vec_push),
+            rt_gen_vec_into_generator: imp!(rt_gen_vec_into_generator),
         }
     }
 }
@@ -390,7 +407,7 @@ impl<'a> LowerCtx<'a> {
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         param_names: &[String],
-        block_params: &[Value],        // block_params[0] = ctx, [1..] = args
+        block_params: &[Value], // block_params[0] = ctx, [1..] = args
         param_types: &[Option<CgType>],
     ) {
         for (i, name) in param_names.iter().enumerate() {
@@ -415,17 +432,26 @@ impl<'a> LowerCtx<'a> {
     pub(crate) fn ensure_boxed(&self, builder: &mut FunctionBuilder<'_>, tv: TypedValue) -> Value {
         match tv.ty {
             Some(CgType::Int) => {
-                let call = builder.ins().call(self.helpers.rt_box_int, &[self.ctx_param, tv.val]);
+                let call = builder
+                    .ins()
+                    .call(self.helpers.rt_box_int, &[self.ctx_param, tv.val]);
                 builder.inst_results(call)[0]
             }
             Some(CgType::Float) => {
                 // Bitcast f64 → i64 for the C ABI call
-                let bits = builder.ins().bitcast(PTR, cranelift_codegen::ir::MemFlags::new(), tv.val);
-                let call = builder.ins().call(self.helpers.rt_box_float, &[self.ctx_param, bits]);
+                let bits =
+                    builder
+                        .ins()
+                        .bitcast(PTR, cranelift_codegen::ir::MemFlags::new(), tv.val);
+                let call = builder
+                    .ins()
+                    .call(self.helpers.rt_box_float, &[self.ctx_param, bits]);
                 builder.inst_results(call)[0]
             }
             Some(CgType::Bool) => {
-                let call = builder.ins().call(self.helpers.rt_box_bool, &[self.ctx_param, tv.val]);
+                let call = builder
+                    .ins()
+                    .call(self.helpers.rt_box_bool, &[self.ctx_param, tv.val]);
                 builder.inst_results(call)[0]
             }
             _ => tv.val, // already boxed
@@ -434,21 +460,40 @@ impl<'a> LowerCtx<'a> {
 
     /// Try to unbox a boxed `*mut Value` to an unboxed scalar if the target
     /// type is a known scalar.  Returns `None` if the target isn't a scalar.
-    fn try_unbox(&self, builder: &mut FunctionBuilder<'_>, ptr: Value, target: &CgType) -> Option<TypedValue> {
+    fn try_unbox(
+        &self,
+        builder: &mut FunctionBuilder<'_>,
+        ptr: Value,
+        target: &CgType,
+    ) -> Option<TypedValue> {
         match target {
             CgType::Int => {
-                let call = builder.ins().call(self.helpers.rt_unbox_int, &[self.ctx_param, ptr]);
-                Some(TypedValue::typed(builder.inst_results(call)[0], CgType::Int))
+                let call = builder
+                    .ins()
+                    .call(self.helpers.rt_unbox_int, &[self.ctx_param, ptr]);
+                Some(TypedValue::typed(
+                    builder.inst_results(call)[0],
+                    CgType::Int,
+                ))
             }
             CgType::Float => {
-                let call = builder.ins().call(self.helpers.rt_unbox_float, &[self.ctx_param, ptr]);
+                let call = builder
+                    .ins()
+                    .call(self.helpers.rt_unbox_float, &[self.ctx_param, ptr]);
                 let bits = builder.inst_results(call)[0];
-                let fval = builder.ins().bitcast(F64, cranelift_codegen::ir::MemFlags::new(), bits);
+                let fval = builder
+                    .ins()
+                    .bitcast(F64, cranelift_codegen::ir::MemFlags::new(), bits);
                 Some(TypedValue::typed(fval, CgType::Float))
             }
             CgType::Bool => {
-                let call = builder.ins().call(self.helpers.rt_unbox_bool, &[self.ctx_param, ptr]);
-                Some(TypedValue::typed(builder.inst_results(call)[0], CgType::Bool))
+                let call = builder
+                    .ins()
+                    .call(self.helpers.rt_unbox_bool, &[self.ctx_param, ptr]);
+                Some(TypedValue::typed(
+                    builder.inst_results(call)[0],
+                    CgType::Bool,
+                ))
             }
             _ => None,
         }
@@ -466,12 +511,25 @@ impl<'a> LowerCtx<'a> {
             RustIrExpr::LitString { text, .. } => self.lower_lit_string(builder, text),
             RustIrExpr::LitBool { value, .. } => self.lower_lit_bool(builder, *value),
             RustIrExpr::LitDateTime { text, .. } => self.lower_lit_string(builder, text),
-            RustIrExpr::LitSigil { tag, body, flags, .. } => {
+            RustIrExpr::LitSigil {
+                tag, body, flags, ..
+            } => {
                 // Sigils are represented as strings for now: "#tag body flags"
-                let repr = format!("#{}{}{}", tag, body, if flags.is_empty() { String::new() } else { format!("/{}", flags) });
+                let repr = format!(
+                    "#{}{}{}",
+                    tag,
+                    body,
+                    if flags.is_empty() {
+                        String::new()
+                    } else {
+                        format!("/{}", flags)
+                    }
+                );
                 self.lower_lit_string(builder, &repr)
             }
-            RustIrExpr::TextInterpolate { parts, .. } => self.lower_text_interpolate(builder, parts),
+            RustIrExpr::TextInterpolate { parts, .. } => {
+                self.lower_text_interpolate(builder, parts)
+            }
 
             // ----- Variables -----
             RustIrExpr::Local { name, .. } => self.lower_local(builder, name),
@@ -491,18 +549,29 @@ impl<'a> LowerCtx<'a> {
             RustIrExpr::Patch { target, fields, .. } => self.lower_patch(builder, target, fields),
 
             // ----- Access -----
-            RustIrExpr::FieldAccess { base, field, .. } => self.lower_field_access(builder, base, field),
+            RustIrExpr::FieldAccess { base, field, .. } => {
+                self.lower_field_access(builder, base, field)
+            }
             RustIrExpr::Index { base, index, .. } => self.lower_index(builder, base, index),
 
             // ----- Control flow -----
-            RustIrExpr::If { cond, then_branch, else_branch, .. } => {
-                self.lower_if(builder, cond, then_branch, else_branch)
-            }
-            RustIrExpr::Match { scrutinee, arms, .. } => self.lower_match(builder, scrutinee, arms),
-            RustIrExpr::Binary { op, left, right, .. } => self.lower_binary(builder, op, left, right),
+            RustIrExpr::If {
+                cond,
+                then_branch,
+                else_branch,
+                ..
+            } => self.lower_if(builder, cond, then_branch, else_branch),
+            RustIrExpr::Match {
+                scrutinee, arms, ..
+            } => self.lower_match(builder, scrutinee, arms),
+            RustIrExpr::Binary {
+                op, left, right, ..
+            } => self.lower_binary(builder, op, left, right),
 
             // ----- Blocks -----
-            RustIrExpr::Block { block_kind, items, .. } => self.lower_block(builder, block_kind, items),
+            RustIrExpr::Block {
+                block_kind, items, ..
+            } => self.lower_block(builder, block_kind, items),
             RustIrExpr::Pipe { func, arg, .. } => self.lower_app(builder, func, arg),
 
             // ----- Special -----
@@ -626,17 +695,18 @@ impl<'a> LowerCtx<'a> {
                 };
                 let func_ptr = self.ensure_boxed(builder, result);
                 let arg_ptr = self.ensure_boxed(builder, tv);
-                let call = builder.ins().call(
-                    self.helpers.rt_apply,
-                    &[self.ctx_param, func_ptr, arg_ptr],
-                );
+                let call = builder
+                    .ins()
+                    .call(self.helpers.rt_apply, &[self.ctx_param, func_ptr, arg_ptr]);
                 result = TypedValue::boxed(builder.inst_results(call)[0]);
             }
             return result;
         }
 
         // Fallback: look up from globals or return unit
-        let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
+        let call = builder
+            .ins()
+            .call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
         TypedValue::boxed(builder.inst_results(call)[0])
     }
 
@@ -672,10 +742,9 @@ impl<'a> LowerCtx<'a> {
         let arg_tv = self.lower_expr(builder, arg);
         let func_val = self.ensure_boxed(builder, func_tv);
         let arg_val = self.ensure_boxed(builder, arg_tv);
-        let call = builder.ins().call(
-            self.helpers.rt_apply,
-            &[self.ctx_param, func_val, arg_val],
-        );
+        let call = builder
+            .ins()
+            .call(self.helpers.rt_apply, &[self.ctx_param, func_val, arg_val]);
         TypedValue::boxed(builder.inst_results(call)[0])
     }
 
@@ -715,10 +784,9 @@ impl<'a> LowerCtx<'a> {
             let arg_tv = self.lower_expr(builder, arg);
             let func_val = self.ensure_boxed(builder, result);
             let arg_val = self.ensure_boxed(builder, arg_tv);
-            let call = builder.ins().call(
-                self.helpers.rt_apply,
-                &[self.ctx_param, func_val, arg_val],
-            );
+            let call = builder
+                .ins()
+                .call(self.helpers.rt_apply, &[self.ctx_param, func_val, arg_val]);
             result = TypedValue::boxed(builder.inst_results(call)[0]);
         }
         result
@@ -727,11 +795,7 @@ impl<'a> LowerCtx<'a> {
     /// Find a specialization whose param types match the given arg types.
     /// Returns the specialization name rather than a reference, to avoid
     /// keeping an immutable borrow on `self`.
-    fn find_matching_spec(
-        &self,
-        spec_names: &[String],
-        arg_tvs: &[TypedValue],
-    ) -> Option<String> {
+    fn find_matching_spec(&self, spec_names: &[String], arg_tvs: &[TypedValue]) -> Option<String> {
         for spec_name in spec_names {
             if let Some(spec_info) = self.jit_funcs.get(spec_name.as_str()) {
                 if spec_info.arity == arg_tvs.len() && Self::params_match_args(spec_info, arg_tvs) {
@@ -798,10 +862,9 @@ impl<'a> LowerCtx<'a> {
         let call = builder.ins().call(info.func_ref, &call_args);
         let raw = builder.inst_results(call)[0];
         match &info.return_type {
-            Some(ret_ty) => {
-                self.try_unbox(builder, raw, ret_ty)
-                    .unwrap_or_else(|| TypedValue::boxed(raw))
-            }
+            Some(ret_ty) => self
+                .try_unbox(builder, raw, ret_ty)
+                .unwrap_or_else(|| TypedValue::boxed(raw)),
             None => TypedValue::boxed(raw),
         }
     }
@@ -820,10 +883,9 @@ impl<'a> LowerCtx<'a> {
         if count == 0 {
             let null = builder.ins().iconst(PTR, 0);
             let zero = builder.ins().iconst(PTR, 0);
-            let call = builder.ins().call(
-                self.helpers.rt_alloc_list,
-                &[self.ctx_param, null, zero],
-            );
+            let call = builder
+                .ins()
+                .call(self.helpers.rt_alloc_list, &[self.ctx_param, null, zero]);
             return TypedValue::boxed(builder.inst_results(call)[0]);
         }
 
@@ -840,10 +902,9 @@ impl<'a> LowerCtx<'a> {
         }
         let arr_ptr = builder.ins().stack_addr(PTR, slot, 0);
         let len = builder.ins().iconst(PTR, count as i64);
-        let call = builder.ins().call(
-            self.helpers.rt_alloc_list,
-            &[self.ctx_param, arr_ptr, len],
-        );
+        let call = builder
+            .ins()
+            .call(self.helpers.rt_alloc_list, &[self.ctx_param, arr_ptr, len]);
         TypedValue::boxed(builder.inst_results(call)[0])
     }
 
@@ -854,7 +915,9 @@ impl<'a> LowerCtx<'a> {
     ) -> TypedValue {
         let count = items.len();
         if count == 0 {
-            let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
+            let call = builder
+                .ins()
+                .call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
             return TypedValue::boxed(builder.inst_results(call)[0]);
         }
         let slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
@@ -869,10 +932,9 @@ impl<'a> LowerCtx<'a> {
         }
         let arr_ptr = builder.ins().stack_addr(PTR, slot, 0);
         let len = builder.ins().iconst(PTR, count as i64);
-        let call = builder.ins().call(
-            self.helpers.rt_alloc_tuple,
-            &[self.ctx_param, arr_ptr, len],
-        );
+        let call = builder
+            .ins()
+            .call(self.helpers.rt_alloc_tuple, &[self.ctx_param, arr_ptr, len]);
         TypedValue::boxed(builder.inst_results(call)[0])
     }
 
@@ -893,11 +955,12 @@ impl<'a> LowerCtx<'a> {
         }
 
         // Stack slots for name pointers, name lengths, and value pointers
-        let names_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            (count * 8) as u32,
-            0,
-        ));
+        let names_slot =
+            builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                (count * 8) as u32,
+                0,
+            ));
         let lens_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             (count * 8) as u32,
@@ -910,14 +973,22 @@ impl<'a> LowerCtx<'a> {
         ));
 
         for (i, field) in fields.iter().enumerate() {
-            let field_name = field.path.first().map(|seg| match seg {
-                crate::rust_ir::RustIrPathSegment::Field(name) => name.as_str(),
-                _ => "_",
-            }).unwrap_or("_");
+            let field_name = field
+                .path
+                .first()
+                .map(|seg| match seg {
+                    crate::rust_ir::RustIrPathSegment::Field(name) => name.as_str(),
+                    _ => "_",
+                })
+                .unwrap_or("_");
             let name_ptr = builder.ins().iconst(PTR, field_name.as_ptr() as i64);
             let name_len = builder.ins().iconst(PTR, field_name.len() as i64);
-            builder.ins().stack_store(name_ptr, names_slot, (i * 8) as i32);
-            builder.ins().stack_store(name_len, lens_slot, (i * 8) as i32);
+            builder
+                .ins()
+                .stack_store(name_ptr, names_slot, (i * 8) as i32);
+            builder
+                .ins()
+                .stack_store(name_len, lens_slot, (i * 8) as i32);
             let tv = self.lower_expr(builder, &field.value);
             let boxed = self.ensure_boxed(builder, tv);
             builder.ins().stack_store(boxed, vals_slot, (i * 8) as i32);
@@ -948,11 +1019,12 @@ impl<'a> LowerCtx<'a> {
         }
 
         // Build overlay: same layout as lower_record but call rt_patch_record
-        let names_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            (count * 8) as u32,
-            0,
-        ));
+        let names_slot =
+            builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                (count * 8) as u32,
+                0,
+            ));
         let lens_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             (count * 8) as u32,
@@ -965,14 +1037,22 @@ impl<'a> LowerCtx<'a> {
         ));
 
         for (i, field) in fields.iter().enumerate() {
-            let field_name = field.path.first().map(|seg| match seg {
-                crate::rust_ir::RustIrPathSegment::Field(name) => name.as_str(),
-                _ => "_",
-            }).unwrap_or("_");
+            let field_name = field
+                .path
+                .first()
+                .map(|seg| match seg {
+                    crate::rust_ir::RustIrPathSegment::Field(name) => name.as_str(),
+                    _ => "_",
+                })
+                .unwrap_or("_");
             let name_ptr = builder.ins().iconst(PTR, field_name.as_ptr() as i64);
             let name_len = builder.ins().iconst(PTR, field_name.len() as i64);
-            builder.ins().stack_store(name_ptr, names_slot, (i * 8) as i32);
-            builder.ins().stack_store(name_len, lens_slot, (i * 8) as i32);
+            builder
+                .ins()
+                .stack_store(name_ptr, names_slot, (i * 8) as i32);
+            builder
+                .ins()
+                .stack_store(name_len, lens_slot, (i * 8) as i32);
             let tv = self.lower_expr(builder, &field.value);
             let boxed = self.ensure_boxed(builder, tv);
             builder.ins().stack_store(boxed, vals_slot, (i * 8) as i32);
@@ -1024,10 +1104,9 @@ impl<'a> LowerCtx<'a> {
             idx_tv.val
         } else {
             let idx_boxed = self.ensure_boxed(builder, idx_tv);
-            let call = builder.ins().call(
-                self.helpers.rt_unbox_int,
-                &[self.ctx_param, idx_boxed],
-            );
+            let call = builder
+                .ins()
+                .call(self.helpers.rt_unbox_int, &[self.ctx_param, idx_boxed]);
             builder.inst_results(call)[0]
         };
         let call = builder.ins().call(
@@ -1054,10 +1133,9 @@ impl<'a> LowerCtx<'a> {
             cond_tv.val
         } else {
             let cond_boxed = self.ensure_boxed(builder, cond_tv);
-            let call = builder.ins().call(
-                self.helpers.rt_unbox_bool,
-                &[self.ctx_param, cond_boxed],
-            );
+            let call = builder
+                .ins()
+                .call(self.helpers.rt_unbox_bool, &[self.ctx_param, cond_boxed]);
             builder.inst_results(call)[0]
         };
         let cond_bool = builder.ins().icmp_imm(
@@ -1074,7 +1152,9 @@ impl<'a> LowerCtx<'a> {
         // Both branches return boxed values to ensure uniform type in the merge.
         let result_var = builder.declare_var(PTR);
 
-        builder.ins().brif(cond_bool, then_block, &[], else_block, &[]);
+        builder
+            .ins()
+            .brif(cond_bool, then_block, &[], else_block, &[]);
 
         builder.switch_to_block(then_block);
         builder.seal_block(then_block);
@@ -1105,7 +1185,9 @@ impl<'a> LowerCtx<'a> {
         let scrut_val = self.ensure_boxed(builder, scrut_tv);
 
         if arms.is_empty() {
-            let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
+            let call = builder
+                .ins()
+                .call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
             return TypedValue::boxed(builder.inst_results(call)[0]);
         }
 
@@ -1115,7 +1197,9 @@ impl<'a> LowerCtx<'a> {
 
         // Initialize result to unit (for safety)
         let unit = {
-            let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
+            let call = builder
+                .ins()
+                .call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
             builder.inst_results(call)[0]
         };
         builder.def_var(result_var, unit);
@@ -1131,7 +1215,9 @@ impl<'a> LowerCtx<'a> {
                 matched,
                 0,
             );
-            builder.ins().brif(matched_bool, arm_body_block, &[], arm_next_block, &[]);
+            builder
+                .ins()
+                .brif(matched_bool, arm_body_block, &[], arm_next_block, &[]);
 
             // Arm body block
             builder.switch_to_block(arm_body_block);
@@ -1146,10 +1232,9 @@ impl<'a> LowerCtx<'a> {
                     guard_tv.val
                 } else {
                     let guard_boxed = self.ensure_boxed(builder, guard_tv);
-                    let call = builder.ins().call(
-                        self.helpers.rt_unbox_bool,
-                        &[self.ctx_param, guard_boxed],
-                    );
+                    let call = builder
+                        .ins()
+                        .call(self.helpers.rt_unbox_bool, &[self.ctx_param, guard_boxed]);
                     builder.inst_results(call)[0]
                 };
                 let guard_bool = builder.ins().icmp_imm(
@@ -1158,7 +1243,9 @@ impl<'a> LowerCtx<'a> {
                     0,
                 );
                 let guard_pass_block = builder.create_block();
-                builder.ins().brif(guard_bool, guard_pass_block, &[], arm_next_block, &[]);
+                builder
+                    .ins()
+                    .brif(guard_bool, guard_pass_block, &[], arm_next_block, &[]);
                 builder.switch_to_block(guard_pass_block);
                 builder.seal_block(guard_pass_block);
             }
@@ -1192,9 +1279,7 @@ impl<'a> LowerCtx<'a> {
         match pattern {
             RustIrPattern::Wildcard { .. } => builder.ins().iconst(PTR, 1),
             RustIrPattern::Var { .. } => builder.ins().iconst(PTR, 1),
-            RustIrPattern::At { pattern, .. } => {
-                self.emit_pattern_test(builder, pattern, value)
-            }
+            RustIrPattern::At { pattern, .. } => self.emit_pattern_test(builder, pattern, value),
             RustIrPattern::Literal { value: lit, .. } => {
                 self.emit_literal_test(builder, lit, value)
             }
@@ -1216,10 +1301,9 @@ impl<'a> LowerCtx<'a> {
 
                 // Check arity
                 let arity = {
-                    let call = builder.ins().call(
-                        self.helpers.rt_constructor_arity,
-                        &[self.ctx_param, value],
-                    );
+                    let call = builder
+                        .ins()
+                        .call(self.helpers.rt_constructor_arity, &[self.ctx_param, value]);
                     builder.inst_results(call)[0]
                 };
                 let expected = builder.ins().iconst(PTR, args.len() as i64);
@@ -1252,10 +1336,9 @@ impl<'a> LowerCtx<'a> {
             RustIrPattern::Tuple { items, .. } => {
                 // Check length
                 let len = {
-                    let call = builder.ins().call(
-                        self.helpers.rt_tuple_len,
-                        &[self.ctx_param, value],
-                    );
+                    let call = builder
+                        .ins()
+                        .call(self.helpers.rt_tuple_len, &[self.ctx_param, value]);
                     builder.inst_results(call)[0]
                 };
                 let expected = builder.ins().iconst(PTR, items.len() as i64);
@@ -1269,10 +1352,9 @@ impl<'a> LowerCtx<'a> {
                 for (i, item_pat) in items.iter().enumerate() {
                     let idx = builder.ins().iconst(PTR, i as i64);
                     let item_val = {
-                        let call = builder.ins().call(
-                            self.helpers.rt_tuple_item,
-                            &[self.ctx_param, value, idx],
-                        );
+                        let call = builder
+                            .ins()
+                            .call(self.helpers.rt_tuple_item, &[self.ctx_param, value, idx]);
                         builder.inst_results(call)[0]
                     };
                     let item_ok = self.emit_pattern_test(builder, item_pat, item_val);
@@ -1283,10 +1365,9 @@ impl<'a> LowerCtx<'a> {
             RustIrPattern::List { items, rest, .. } => {
                 // Check minimum length
                 let len = {
-                    let call = builder.ins().call(
-                        self.helpers.rt_list_len,
-                        &[self.ctx_param, value],
-                    );
+                    let call = builder
+                        .ins()
+                        .call(self.helpers.rt_list_len, &[self.ctx_param, value]);
                     builder.inst_results(call)[0]
                 };
                 let min_len = builder.ins().iconst(PTR, items.len() as i64);
@@ -1313,10 +1394,9 @@ impl<'a> LowerCtx<'a> {
                 for (i, item_pat) in items.iter().enumerate() {
                     let idx = builder.ins().iconst(PTR, i as i64);
                     let item_val = {
-                        let call = builder.ins().call(
-                            self.helpers.rt_list_index,
-                            &[self.ctx_param, value, idx],
-                        );
+                        let call = builder
+                            .ins()
+                            .call(self.helpers.rt_list_index, &[self.ctx_param, value, idx]);
                         builder.inst_results(call)[0]
                     };
                     let item_ok = self.emit_pattern_test(builder, item_pat, item_val);
@@ -1326,10 +1406,9 @@ impl<'a> LowerCtx<'a> {
                 if let Some(rest_pat) = rest.as_deref() {
                     let start = builder.ins().iconst(PTR, items.len() as i64);
                     let tail_val = {
-                        let call = builder.ins().call(
-                            self.helpers.rt_list_tail,
-                            &[self.ctx_param, value, start],
-                        );
+                        let call = builder
+                            .ins()
+                            .call(self.helpers.rt_list_tail, &[self.ctx_param, value, start]);
                         builder.inst_results(call)[0]
                     };
                     let rest_ok = self.emit_pattern_test(builder, rest_pat, tail_val);
@@ -1408,7 +1487,11 @@ impl<'a> LowerCtx<'a> {
                     "#{}{}{}",
                     tag,
                     body,
-                    if flags.is_empty() { String::new() } else { format!("/{}", flags) }
+                    if flags.is_empty() {
+                        String::new()
+                    } else {
+                        format!("/{}", flags)
+                    }
                 );
                 let expected_tv = self.lower_lit_string(builder, &repr);
                 let expected = self.ensure_boxed(builder, expected_tv);
@@ -1454,10 +1537,9 @@ impl<'a> LowerCtx<'a> {
                 for (i, item_pat) in items.iter().enumerate() {
                     let idx = builder.ins().iconst(PTR, i as i64);
                     let item_val = {
-                        let call = builder.ins().call(
-                            self.helpers.rt_tuple_item,
-                            &[self.ctx_param, value, idx],
-                        );
+                        let call = builder
+                            .ins()
+                            .call(self.helpers.rt_tuple_item, &[self.ctx_param, value, idx]);
                         builder.inst_results(call)[0]
                     };
                     self.bind_pattern(builder, item_pat, item_val);
@@ -1467,10 +1549,9 @@ impl<'a> LowerCtx<'a> {
                 for (i, item_pat) in items.iter().enumerate() {
                     let idx = builder.ins().iconst(PTR, i as i64);
                     let item_val = {
-                        let call = builder.ins().call(
-                            self.helpers.rt_list_index,
-                            &[self.ctx_param, value, idx],
-                        );
+                        let call = builder
+                            .ins()
+                            .call(self.helpers.rt_list_index, &[self.ctx_param, value, idx]);
                         builder.inst_results(call)[0]
                     };
                     self.bind_pattern(builder, item_pat, item_val);
@@ -1478,10 +1559,9 @@ impl<'a> LowerCtx<'a> {
                 if let Some(rest_pat) = rest.as_deref() {
                     let start = builder.ins().iconst(PTR, items.len() as i64);
                     let tail_val = {
-                        let call = builder.ins().call(
-                            self.helpers.rt_list_tail,
-                            &[self.ctx_param, value, start],
-                        );
+                        let call = builder
+                            .ins()
+                            .call(self.helpers.rt_list_tail, &[self.ctx_param, value, start]);
                         builder.inst_results(call)[0]
                     };
                     self.bind_pattern(builder, rest_pat, tail_val);
@@ -1570,32 +1650,52 @@ impl<'a> LowerCtx<'a> {
             "/" => Some(TypedValue::typed(builder.ins().sdiv(l, r), CgType::Int)),
             "%" => Some(TypedValue::typed(builder.ins().srem(l, r), CgType::Int)),
             "==" => {
-                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, l, r);
+                let c = builder
+                    .ins()
+                    .icmp(cranelift_codegen::ir::condcodes::IntCC::Equal, l, r);
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
             "!=" => {
-                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::NotEqual, l, r);
+                let c = builder
+                    .ins()
+                    .icmp(cranelift_codegen::ir::condcodes::IntCC::NotEqual, l, r);
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
             "<" => {
-                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::SignedLessThan, l, r);
+                let c = builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::SignedLessThan,
+                    l,
+                    r,
+                );
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
             "<=" => {
-                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual, l, r);
+                let c = builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::SignedLessThanOrEqual,
+                    l,
+                    r,
+                );
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
             ">" => {
-                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThan, l, r);
+                let c = builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThan,
+                    l,
+                    r,
+                );
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
             ">=" => {
-                let c = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual, l, r);
+                let c = builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::SignedGreaterThanOrEqual,
+                    l,
+                    r,
+                );
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
@@ -1617,32 +1717,52 @@ impl<'a> LowerCtx<'a> {
             "*" => Some(TypedValue::typed(builder.ins().fmul(l, r), CgType::Float)),
             "/" => Some(TypedValue::typed(builder.ins().fdiv(l, r), CgType::Float)),
             "==" => {
-                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::Equal, l, r);
+                let c = builder
+                    .ins()
+                    .fcmp(cranelift_codegen::ir::condcodes::FloatCC::Equal, l, r);
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
             "!=" => {
-                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::NotEqual, l, r);
+                let c =
+                    builder
+                        .ins()
+                        .fcmp(cranelift_codegen::ir::condcodes::FloatCC::NotEqual, l, r);
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
             "<" => {
-                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::LessThan, l, r);
+                let c =
+                    builder
+                        .ins()
+                        .fcmp(cranelift_codegen::ir::condcodes::FloatCC::LessThan, l, r);
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
             "<=" => {
-                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::LessThanOrEqual, l, r);
+                let c = builder.ins().fcmp(
+                    cranelift_codegen::ir::condcodes::FloatCC::LessThanOrEqual,
+                    l,
+                    r,
+                );
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
             ">" => {
-                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::GreaterThan, l, r);
+                let c = builder.ins().fcmp(
+                    cranelift_codegen::ir::condcodes::FloatCC::GreaterThan,
+                    l,
+                    r,
+                );
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
             ">=" => {
-                let c = builder.ins().fcmp(cranelift_codegen::ir::condcodes::FloatCC::GreaterThanOrEqual, l, r);
+                let c = builder.ins().fcmp(
+                    cranelift_codegen::ir::condcodes::FloatCC::GreaterThanOrEqual,
+                    l,
+                    r,
+                );
                 let v = builder.ins().uextend(PTR, c);
                 Some(TypedValue::typed(v, CgType::Bool))
             }
@@ -1663,7 +1783,18 @@ impl<'a> LowerCtx<'a> {
         match block_kind {
             RustIrBlockKind::Plain => self.lower_plain_block(builder, items),
             RustIrBlockKind::Do { .. } => self.lower_do_block(builder, items),
-            RustIrBlockKind::Generate => self.lower_delegated_block(builder, items, true),
+            RustIrBlockKind::Generate => {
+                // Use native compilation for simple generate blocks (no Bind items).
+                // Complex blocks with Bind still delegate to the interpreter.
+                let has_bind = items
+                    .iter()
+                    .any(|item| matches!(item, RustIrBlockItem::Bind { .. }));
+                if has_bind {
+                    self.lower_delegated_block(builder, items, true)
+                } else {
+                    self.lower_native_generate(builder, items)
+                }
+            }
             RustIrBlockKind::Resource => self.lower_delegated_block(builder, items, false),
         }
     }
@@ -1674,7 +1805,9 @@ impl<'a> LowerCtx<'a> {
         items: &[RustIrBlockItem],
     ) -> TypedValue {
         let mut last = {
-            let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
+            let call = builder
+                .ins()
+                .call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
             TypedValue::boxed(builder.inst_results(call)[0])
         };
         for item in items {
@@ -1702,7 +1835,9 @@ impl<'a> LowerCtx<'a> {
         // Effect block: each `<- expr` binds the result of running the effect,
         // each bare `expr` is a sequenced effect.
         let mut current_effect = {
-            let call = builder.ins().call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
+            let call = builder
+                .ins()
+                .call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
             TypedValue::boxed(builder.inst_results(call)[0])
         };
 
@@ -1713,10 +1848,9 @@ impl<'a> LowerCtx<'a> {
                     let effect_boxed = self.ensure_boxed(builder, effect_tv);
                     // Run the effect and bind the result
                     let result = {
-                        let call = builder.ins().call(
-                            self.helpers.rt_run_effect,
-                            &[self.ctx_param, effect_boxed],
-                        );
+                        let call = builder
+                            .ins()
+                            .call(self.helpers.rt_run_effect, &[self.ctx_param, effect_boxed]);
                         builder.inst_results(call)[0]
                     };
                     self.bind_pattern(builder, pattern, result);
@@ -1725,23 +1859,117 @@ impl<'a> LowerCtx<'a> {
                 RustIrBlockItem::Expr { expr } => {
                     let effect_tv = self.lower_expr(builder, expr);
                     let effect_boxed = self.ensure_boxed(builder, effect_tv);
-                    let call = builder.ins().call(
-                        self.helpers.rt_run_effect,
-                        &[self.ctx_param, effect_boxed],
-                    );
+                    let call = builder
+                        .ins()
+                        .call(self.helpers.rt_run_effect, &[self.ctx_param, effect_boxed]);
                     current_effect = TypedValue::boxed(builder.inst_results(call)[0]);
                 }
                 _ => {
-                    current_effect = self.lower_expr(builder, match item {
-                        RustIrBlockItem::Yield { expr } => expr,
-                        RustIrBlockItem::Recurse { expr } => expr,
-                        RustIrBlockItem::Filter { expr } => expr,
-                        _ => unreachable!(),
-                    });
+                    current_effect = self.lower_expr(
+                        builder,
+                        match item {
+                            RustIrBlockItem::Yield { expr } => expr,
+                            RustIrBlockItem::Recurse { expr } => expr,
+                            RustIrBlockItem::Filter { expr } => expr,
+                            _ => unreachable!(),
+                        },
+                    );
                 }
             }
         }
         current_effect
+    }
+
+    /// Compile a generate block natively in Cranelift (no interpreter delegation).
+    ///
+    /// Supports Yield, Filter, and Expr items. Bind items are NOT supported here
+    /// (caller must check and fall back to `lower_delegated_block`).
+    fn lower_native_generate(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        items: &[RustIrBlockItem],
+    ) -> TypedValue {
+        // 1. Allocate an empty Vec<Value>
+        let vec = {
+            let call = builder
+                .ins()
+                .call(self.helpers.rt_gen_vec_new, &[self.ctx_param]);
+            builder.inst_results(call)[0]
+        };
+
+        let vec_var = builder.declare_var(PTR);
+        builder.def_var(vec_var, vec);
+
+        // Create the "done" block — all paths converge here.
+        // rt_gen_vec_into_generator is called exactly once in this block.
+        let done_block = builder.create_block();
+
+        // Check if there are any filters. If so, we need conditional branching.
+        let has_filter = items
+            .iter()
+            .any(|item| matches!(item, RustIrBlockItem::Filter { .. }));
+
+        // Process each item sequentially
+        for item in items {
+            match item {
+                RustIrBlockItem::Yield { expr } => {
+                    let tv = self.lower_expr(builder, expr);
+                    let boxed = self.ensure_boxed(builder, tv);
+                    let current_vec = builder.use_var(vec_var);
+                    builder.ins().call(
+                        self.helpers.rt_gen_vec_push,
+                        &[self.ctx_param, current_vec, boxed],
+                    );
+                }
+                RustIrBlockItem::Filter { expr } => {
+                    let tv = self.lower_expr(builder, expr);
+                    let cond = self.ensure_boxed(builder, tv);
+                    let unboxed = {
+                        let call = builder
+                            .ins()
+                            .call(self.helpers.rt_unbox_bool, &[self.ctx_param, cond]);
+                        builder.inst_results(call)[0]
+                    };
+                    // If false, jump to done (stop yielding). If true, continue.
+                    let continue_block = builder.create_block();
+                    builder
+                        .ins()
+                        .brif(unboxed, continue_block, &[], done_block, &[]);
+                    builder.switch_to_block(continue_block);
+                    builder.seal_block(continue_block);
+                }
+                RustIrBlockItem::Expr { expr } => {
+                    let _tv = self.lower_expr(builder, expr);
+                }
+                RustIrBlockItem::Recurse { expr } => {
+                    let _tv = self.lower_expr(builder, expr);
+                }
+                RustIrBlockItem::Bind { .. } => {
+                    unreachable!("Bind items should be handled by lower_delegated_block");
+                }
+            }
+        }
+
+        // Jump from the end of the sequential items to done
+        builder.ins().jump(done_block, &[]);
+
+        // 2. Wrap Vec into generator fold function (done block)
+        builder.switch_to_block(done_block);
+        if has_filter {
+            // done_block may have multiple predecessors (filter skips + fall-through)
+            // so we DON'T seal it until we switch to it.
+        }
+        builder.seal_block(done_block);
+
+        let current_vec = builder.use_var(vec_var);
+        let gen = {
+            let call = builder.ins().call(
+                self.helpers.rt_gen_vec_into_generator,
+                &[self.ctx_param, current_vec],
+            );
+            builder.inst_results(call)[0]
+        };
+        TypedValue::boxed(gen)
     }
 
     /// Delegate a generate or resource block to the interpreter via runtime helpers.
@@ -1753,7 +1981,9 @@ impl<'a> LowerCtx<'a> {
     ) -> TypedValue {
         // 1. Create env
         let env = {
-            let call = builder.ins().call(self.helpers.rt_env_new, &[self.ctx_param]);
+            let call = builder
+                .ins()
+                .call(self.helpers.rt_env_new, &[self.ctx_param]);
             builder.inst_results(call)[0]
         };
 
@@ -1789,7 +2019,9 @@ impl<'a> LowerCtx<'a> {
             self.helpers.rt_make_resource
         };
 
-        let call = builder.ins().call(helper, &[self.ctx_param, items_ptr, items_count, env]);
+        let call = builder
+            .ins()
+            .call(helper, &[self.ctx_param, items_ptr, items_count, env]);
         TypedValue::boxed(builder.inst_results(call)[0])
     }
 }

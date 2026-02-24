@@ -5,8 +5,8 @@
 //! (heap-boxed); scalar types (Int, Float, Bool) use native unboxed
 //! representations when the `CgType` is known at compile time.
 
-use crate::runtime::Runtime;
 use crate::runtime::values::Value;
+use crate::runtime::Runtime;
 
 /// Opaque context pointer threaded through every JIT-compiled function.
 ///
@@ -26,6 +26,18 @@ impl JitRuntimeCtx {
     pub(crate) unsafe fn from_runtime(runtime: &mut Runtime) -> Self {
         Self {
             runtime: runtime as *mut Runtime,
+        }
+    }
+
+    /// Create a context that owns the runtime (heap-allocated).
+    /// Used by AOT binaries where the runtime lives for the process lifetime.
+    ///
+    /// # Safety
+    /// The caller must ensure this context is dropped before process exit
+    /// to clean up the runtime.
+    pub(crate) unsafe fn from_runtime_owned(runtime: Runtime) -> Self {
+        Self {
+            runtime: Box::into_raw(Box::new(runtime)),
         }
     }
 

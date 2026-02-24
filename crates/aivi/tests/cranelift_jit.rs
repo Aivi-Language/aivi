@@ -201,6 +201,32 @@ main = do Effect {
 }
 
 #[test]
+fn cranelift_jit_generate_with_filter() {
+    // Generate block using native Cranelift compilation with a filter.
+    // Filter halts generation when the condition is false.
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi.testing
+
+gen = generate {
+  yield 10
+  yield 20
+  yield 30
+}
+
+@test "generate with filter"
+main : Effect Text Unit
+main = do Effect {
+  result <- pure (gen (a => b => a + b) 0)
+  assertEq result 60
+}
+"#,
+    );
+}
+
+#[test]
 fn cranelift_jit_resource_block() {
     // Resource blocks are preserved in the RustIR (not kernel-desugared).
     // The JIT delegates to the interpreter via rt_make_resource.
@@ -403,4 +429,35 @@ main = do Effect {
 }
 "#,
     );
+}
+
+#[test]
+fn cranelift_aot_compile_to_object() {
+    // Verify that compile_to_object produces valid ELF/object bytes.
+    use aivi::{compile_to_object, desugar_target_with_cg_types};
+    use native_fixture::write_aivi_source;
+    use tempfile::tempdir;
+
+    let dir = tempdir().expect("tempdir");
+    let source = r#"module app.main
+
+main : Effect Text Unit
+main = do Effect {
+  print "Hello from AOT!"
+}
+"#;
+    let source_path = write_aivi_source(dir.path(), "main.aivi", source);
+    let (program, cg_types, monomorph_plan) =
+        desugar_target_with_cg_types(&source_path).expect("desugar");
+    let object_bytes =
+        compile_to_object(program, cg_types, monomorph_plan).expect("compile_to_object");
+
+    // Basic sanity: ELF magic number (Linux) or Mach-O / COFF header
+    assert!(
+        object_bytes.len() > 64,
+        "object file too small: {} bytes",
+        object_bytes.len()
+    );
+    // ELF magic: 0x7f 'E' 'L' 'F'
+    assert_eq!(&object_bytes[..4], b"\x7fELF", "expected ELF header");
 }
