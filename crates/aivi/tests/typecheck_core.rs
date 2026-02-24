@@ -353,6 +353,65 @@ red = { a: 234, g: 0, b: 0 }"#;
 }
 
 #[test]
+fn typecheck_branded_type_is_nominal() {
+    let source = r#"
+module test.branded_nominal
+export email
+
+Email = Text!
+
+email : Email
+email = "alice@example.com""#;
+    check_err(source);
+}
+
+#[test]
+fn typecheck_branded_type_autoforwards_base_instances() {
+    let source = r#"
+module test.branded_forward
+export render
+
+class ToText A = {
+  toText: A -> Text
+}
+
+instance ToText Text = {
+  toText: value => value
+}
+
+Email = Text!
+
+render : Email -> Text
+render = value => toText value"#;
+    check_ok(source);
+}
+
+#[test]
+fn typecheck_explicit_branded_instance_takes_precedence() {
+    let source = r#"
+module test.branded_override
+export render
+
+class ToText A = {
+  toText: A -> Text
+}
+
+instance ToText Text = {
+  toText: value => value
+}
+
+Email = Text!
+
+instance ToText Email = {
+  toText: _ => "email"
+}
+
+render : Email -> Text
+render = value => toText value"#;
+    check_ok(source);
+}
+
+#[test]
 fn typecheck_error_effect_final() {
     let source = r#"
 module test.err

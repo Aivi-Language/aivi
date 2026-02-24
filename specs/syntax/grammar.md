@@ -78,6 +78,7 @@ DecoratorArg   := Expr | RecordLit
 
 Definition     := ValueSig
                | ValueBinding
+               | BrandedType
                | OpaqueType
                | TypeAlias
                | TypeDef
@@ -88,6 +89,7 @@ Definition     := ValueSig
 ValueSig       := lowerIdent ":" Type Sep
 ValueBinding   := Pattern "=" Expr Sep
 
+BrandedType    := UpperIdent [ TypeParams ] "=" Type "!" Sep
 TypeAlias      := UpperIdent [ TypeParams ] "=" TypeRhs Sep
 OpaqueType     := UpperIdent [ TypeParams ] Sep
 TypeDef        := UpperIdent [ TypeParams ] "=" TypeRhs Sep
