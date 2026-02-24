@@ -5,10 +5,10 @@ use aivi
 use aivi.testing
 
 machine AccountSyncMachine = {
-             -> Idle     : boot {}
-  Idle       -> Acquired : lease {}
-  Acquired   -> Syncing  : run { batchId: Int }
-  Syncing    -> Idle     : done {}
+           -> Idle     : boot {}
+  Idle     -> Acquired : lease {}
+  Acquired -> Syncing  : run { batchId: Int }
+  Syncing  -> Idle     : done {}
 }
 
 @test "machine runtime record api, current state, can checks, and on ordering"
@@ -20,30 +20,30 @@ machineRuntimeFlow = do Effect {
   _ <- assertEq (can.run Unit) False
 
   bootAttempt <- attempt (boot {})
-  _ <- bootAttempt match
+  _           <- bootAttempt match
     | Err err => assertEq (constructorName err) "InvalidTransition"
     | Ok _    => fail "boot should fail after initialization"
 
-  on run => fail "run handler failure"
+    on run => fail "run handler failure"
 
-  _ <- lease {}
-  _ <- assertEq (constructorName (currentState Unit)) "Acquired"
-  _ <- assertEq (can.run Unit) True
+    _ <- lease {}
+    _ <- assertEq (constructorName (currentState Unit)) "Acquired"
+    _ <- assertEq (can.run Unit) True
 
-  runAttempt <- attempt (run { batchId: 42 })
-  _ <- runAttempt match
-    | Err _ => pure Unit
-    | Ok _  => fail "run should fail because handler fails"
+    runAttempt <- attempt (run { batchId: 42 })
+    _          <- runAttempt match
+      | Err _ => pure Unit
+      | Ok _  => fail "run should fail because handler fails"
 
-  _ <- assertEq (constructorName (currentState Unit)) "Syncing"
+    _ <- assertEq (constructorName (currentState Unit)) "Syncing"
 
-  _ <- done {}
-  _ <- assertEq (constructorName (currentState Unit)) "Idle"
+    _ <- done {}
+    _ <- assertEq (constructorName (currentState Unit)) "Idle"
 
-  wrongStateAttempt <- attempt (run { batchId: 7 })
-  _ <- wrongStateAttempt match
-    | Err err => assertEq (constructorName err) "InvalidTransition"
-    | Ok _    => fail "run should fail from Idle"
+    wrongStateAttempt <- attempt (run { batchId: 7 })
+    _                 <- wrongStateAttempt match
+      | Err err => assertEq (constructorName err) "InvalidTransition"
+      | Ok _    => fail "run should fail from Idle"
 
-  pure Unit
+    pure Unit
 }

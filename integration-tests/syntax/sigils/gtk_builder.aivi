@@ -9,7 +9,9 @@ node =
     <object class="GtkBox" props={ { spacing: 24, marginTop: 12 } }>
       <child>
         <object class="GtkLabel">
-          <property name="label">Hello</property>
+          <property name="label">
+            Hello
+          </property>
         </object>
       </child>
     </object>
@@ -19,15 +21,19 @@ interfaceNode : GtkNode
 interfaceNode =
   ~<gtk>
     <interface>
-      <requires lib="gtk" version="4.0"></requires>
+      <requires lib="gtk" version="4.0">
+      </requires>
       <object class="GtkBox">
         <child>
           <object class="GtkLabel" id="headline">
-            <property name="label">Hi</property>
+            <property name="label">
+              Hi
+            </property>
           </object>
         </child>
         <child>
-          <object ref="headline"></object>
+          <object ref="headline">
+          </object>
         </child>
       </object>
     </interface>
@@ -37,25 +43,34 @@ templateNode : GtkNode
 templateNode =
   ~<gtk>
     <template class="AppCard" parent="GtkBox">
-      <property name="orientation">vertical</property>
+      <property name="orientation">
+        vertical
+      </property>
       <child>
         <object class="GtkOverlay">
           <child>
             <object class="GtkLabel" id="baseLabel">
-              <property name="label">Base</property>
+              <property name="label">
+                Base
+              </property>
             </object>
           </child>
           <child type="overlay">
             <object class="GtkLabel">
-              <property name="label">Badge</property>
+              <property name="label">
+                Badge
+              </property>
             </object>
           </child>
         </object>
       </child>
       <child>
         <object class="GtkButton">
-          <property name="label">Open</property>
-          <signal name="clicked" handler="onOpenClicked" swapped="no"></signal>
+          <property name="label">
+            Open
+          </property>
+          <signal name="clicked" handler="onOpenClicked" swapped="no">
+          </signal>
         </object>
       </child>
     </template>
@@ -65,7 +80,10 @@ signalSugarNode : GtkNode
 signalSugarNode =
   ~<gtk>
     <object class="GtkButton" onClick={ Msg.Save }>
-      <property name="label">Save</property>
-      <signal name="clicked" on={ Msg.Save }></signal>
+      <property name="label">
+        Save
+      </property>
+      <signal name="clicked" on={ Msg.Save }>
+      </signal>
     </object>
   </gtk>

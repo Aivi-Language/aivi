@@ -132,7 +132,7 @@ worker_action_helpers = do Effect {
     | RunNow => assert True
     | _      => assert False
 
-  retried = planRetryRun run { ...state, retryState: { attempts: 1, lastError: Some "boom" } } 500
-  assertEq retried.status Planned
-  assertEq retried.attempt 1
+    retried = planRetryRun run { ...state, retryState: { attempts: 1, lastError: Some "boom" } } 500
+    assertEq retried.status Planned
+    assertEq retried.attempt 1
 }
