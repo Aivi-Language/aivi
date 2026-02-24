@@ -819,10 +819,14 @@ GTK sigils also support signal sugar in v0.1:
 ~<gtk>
   <object class="GtkButton" onClick={ Msg.Save } />
   <object class="GtkEntry" onInput={ Msg.Changed } />
+  <object class="GtkButton">
+    <signal name="clicked" on={ Msg.Save } />
+  </object>
 </gtk>
 ```
 
 Signal handlers must be compile-time expressions; they lower into typed GTK signal bindings.
+`onClick` maps to `clicked`, `onInput` maps to `changed`, and invalid dynamic handlers produce `E1614`.
 
 ---
 
