@@ -14,9 +14,9 @@ fn run_jit(source: &str) {
         .spawn(move || {
             let dir = tempdir().expect("tempdir");
             let source_path_str = write_aivi_source(dir.path(), "main.aivi", &source);
-            let (program, cg_types) =
+            let (program, cg_types, _monomorph_plan) =
                 desugar_target_with_cg_types(&source_path_str).expect("desugar");
-            run_cranelift_jit(program, cg_types).expect("cranelift jit");
+            run_cranelift_jit(program, cg_types, _monomorph_plan).expect("cranelift jit");
         })
         .expect("spawn test thread")
         .join();
@@ -223,5 +223,161 @@ main = do Effect {
   assertEq (1 + 1) 2
 }
 "#,
+    );
+}
+
+#[test]
+fn cranelift_jit_typed_arithmetic() {
+    // Verifies that typed Int arithmetic compiles to native iadd/isub/imul/sdiv
+    // when both operands are known Int, avoiding rt_binary_op.
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+
+add : Int -> Int -> Int
+add = a b => a + b
+
+sub : Int -> Int -> Int
+sub = a b => a - b
+
+mul : Int -> Int -> Int
+mul = a b => a * b
+
+@test "native int arithmetic"
+main : Effect Text Unit
+main = do Effect {
+  assertEq (add 3 4) 7
+  assertEq (sub 10 3) 7
+  assertEq (mul 6 7) 42
+}
+"#,
+    );
+}
+
+#[test]
+fn cranelift_jit_literal_arithmetic() {
+    // Literal-to-literal arithmetic should use native iadd
+    // since both operands are known Int from lower_lit_number.
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+
+result = 3 + 4
+
+@test "literal arithmetic"
+main : Effect Text Unit
+main = do Effect {
+  assertEq result 7
+}
+"#,
+    );
+}
+
+#[test]
+fn cranelift_jit_typed_float_arithmetic() {
+    // Verifies typed Float params get unboxed at function entry and
+    // native fadd/fmul are used.
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+
+addF : Float -> Float -> Float
+addF = a b => a + b
+
+mulF : Float -> Float -> Float
+mulF = a b => a * b
+
+@test "native float arithmetic"
+main : Effect Text Unit
+main = do Effect {
+  assertEq (addF 1.5 2.5) 4.0
+  assertEq (mulF 3.0 7.0) 21.0
+}
+"#,
+    );
+}
+
+#[test]
+fn cranelift_jit_typed_function_composition() {
+    // Tests function composition: double calls add, both with typed Int signatures.
+    // Verifies that ensure_boxed at function return correctly re-boxes for the caller.
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+
+add : Int -> Int -> Int
+add = a b => a + b
+
+double : Int -> Int
+double = n => add n n
+
+square : Int -> Int
+square = n => n * n
+
+@test "typed function composition"
+main : Effect Text Unit
+main = do Effect {
+  assertEq (double 21) 42
+  assertEq (square 7) 49
+  assertEq (add (double 3) (square 2)) 10
+}
+"#,
+    );
+}
+
+#[test]
+fn cranelift_jit_monomorph_plan_records_polymorphic_calls() {
+    // Verifies that calling a polymorphic function with concrete types
+    // records the instantiation in the monomorph plan.
+    use aivi::desugar_target_with_cg_types;
+    use native_fixture::write_aivi_source;
+    use tempfile::tempdir;
+
+    let dir = tempdir().expect("tempdir");
+    let source = r#"@no_prelude
+module app.main
+
+use aivi
+
+id : a -> a
+id = x => x
+
+main : Effect Text Unit
+main = do Effect {
+  result <- pure (id 42)
+  print (id "hello")
+}
+"#;
+    let source_path = write_aivi_source(dir.path(), "main.aivi", source);
+    let (_program, _cg_types, monomorph_plan) =
+        desugar_target_with_cg_types(&source_path).expect("desugar");
+
+    // `id` is polymorphic (forall a. a -> a).
+    // Called with Int (id 42) and Text (id "hello"), so the monomorph plan should
+    // contain concrete instantiations for the qualified name `app.main.id`.
+    let key = "app.main.id";
+    assert!(
+        monomorph_plan.contains_key(key),
+        "monomorph_plan should contain {key}, got keys: {:?}",
+        monomorph_plan.keys().collect::<Vec<_>>()
+    );
+    let instantiations = &monomorph_plan[key];
+    assert!(
+        instantiations.len() >= 2,
+        "expected at least 2 instantiations for `id`, got {}: {:?}",
+        instantiations.len(),
+        instantiations
     );
 }

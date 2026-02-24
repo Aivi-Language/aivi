@@ -7,7 +7,7 @@ export Rgb, Hsl, Hex
 export adjustLightness, adjustSaturation, adjustHue
 export toRgb, toHsl, toHex
 export negateDelta
-export domain Color
+export Color
 
 use aivi
 

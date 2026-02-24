@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.number.complex
 export i
-export domain Complex
+export Complex
 
 use aivi
 

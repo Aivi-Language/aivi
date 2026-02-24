@@ -422,7 +422,7 @@ fn run() -> Result<(), AiviError> {
                         )));
                     }
                     let _modules = load_checked_modules_with_progress(&opts.input)?;
-                    let (program, cg_types) =
+                    let (program, cg_types, _monomorph_plan) =
                         aivi::desugar_target_with_cg_types(&opts.input)?;
                     if opts.target == "rust" || opts.target == "rust-native" {
                         let rust = if opts.target == "rust" {
@@ -458,8 +458,8 @@ fn run() -> Result<(), AiviError> {
                             opts.target
                         )));
                     }
-                    let (program, cg_types) = aivi::desugar_target_with_cg_types(&opts.input)?;
-                    aivi::run_cranelift_jit(program, cg_types)
+                    let (program, cg_types, monomorph_plan) = aivi::desugar_target_with_cg_types(&opts.input)?;
+                    aivi::run_cranelift_jit(program, cg_types, monomorph_plan)
                 }
             }
             _ => Ok(()),

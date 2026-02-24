@@ -385,8 +385,8 @@ fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
     let entry = entry_path
         .to_str()
         .ok_or_else(|| AiviError::InvalidPath(entry_path.display().to_string()))?;
-    let (program, cg_types) = aivi::desugar_target_with_cg_types(entry)?;
-    aivi::run_cranelift_jit(program, cg_types)
+    let (program, cg_types, monomorph_plan) = aivi::desugar_target_with_cg_types(entry)?;
+    aivi::run_cranelift_jit(program, cg_types, monomorph_plan)
 }
 
 fn parse_project_args(args: &[String]) -> Result<(bool, Vec<String>), AiviError> {
@@ -474,7 +474,7 @@ fn generate_project_rust(project_root: &Path, cfg: &aivi::AiviToml) -> Result<()
         .ok_or_else(|| AiviError::InvalidPath(entry_path.display().to_string()))?;
 
     let _modules = load_checked_modules(entry_str)?;
-    let (program, cg_types) = aivi::desugar_target_with_cg_types(entry_str)?;
+    let (program, cg_types, _monomorph_plan) = aivi::desugar_target_with_cg_types(entry_str)?;
 
     let gen_dir = project_root.join(&cfg.build.gen_dir);
     let src_out = gen_dir.join("src");

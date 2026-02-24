@@ -22,6 +22,9 @@ pub struct InferResult {
     pub type_strings: HashMap<String, HashMap<String, String>>,
     /// Module → definition name → codegen-friendly type (for the typed codegen path).
     pub cg_types: HashMap<String, HashMap<String, CgType>>,
+    /// Qualified callee name → list of concrete CgType instantiations observed at call sites.
+    /// Used by the monomorphization pass to specialize polymorphic definitions.
+    pub monomorph_plan: HashMap<String, Vec<CgType>>,
 }
 
 pub fn infer_value_types(
@@ -46,6 +49,7 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
     let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
     let mut inferred: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut cg_types: HashMap<String, HashMap<String, CgType>> = HashMap::new();
+    let mut monomorph_plan: HashMap<String, Vec<CgType>> = HashMap::new();
 
     let (global_type_constructors, global_aliases) =
         collect_global_type_info(&mut checker, modules);
@@ -77,6 +81,17 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
 
         let mut module_diags = checker.check_module_defs(module, &sigs, &mut env);
         diagnostics.append(&mut module_diags);
+
+        // Extract polymorphic call-site instantiations recorded during type checking.
+        for (qname, resolved_type) in checker.take_poly_instantiations() {
+            let cg = checker.type_to_cg_type(&resolved_type, &env);
+            if cg.is_closed() {
+                let entry = monomorph_plan.entry(qname).or_default();
+                if !entry.contains(&cg) {
+                    entry.push(cg);
+                }
+            }
+        }
 
         let mut local_names = HashSet::new();
         for item in module.items.iter() {
@@ -204,5 +219,6 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
         diagnostics,
         type_strings: inferred,
         cg_types,
+        monomorph_plan,
     }
 }

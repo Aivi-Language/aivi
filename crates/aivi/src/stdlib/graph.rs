@@ -11,7 +11,7 @@ export neighbors, inNeighbors, edgesFrom, edgesTo, degreeOut, degreeIn
 export bfs, dfs, shortestPathUnweighted, shortestPath
 export topoSort, hasCycle
 export relax, relaxEdges
-export domain Graph
+export Graph
 
 use aivi
 use aivi.collections (Set, Queue)

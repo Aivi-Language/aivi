@@ -5,7 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.probability
 export Distribution
 export clamp, bernoulli, uniform, expectation
-export domain Probability
+export Probability
 
 use aivi
 

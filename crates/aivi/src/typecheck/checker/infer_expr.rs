@@ -290,7 +290,28 @@ impl TypeChecker {
             }
         }
 
+        // Detect polymorphic identifier for call-site type recording (monomorphization)
+        let poly_call_info: Option<String> = if let Expr::Ident(name) = func {
+            env.get(&name.name)
+                .filter(|s| !s.vars.is_empty())
+                .map(|s| {
+                    let prefix = s
+                        .origin
+                        .as_ref()
+                        .map(|o| o.render())
+                        .unwrap_or_else(|| self.current_module_name.clone());
+                    format!("{}.{}", prefix, name.name)
+                })
+        } else {
+            None
+        };
+
         let mut func_ty = self.infer_expr(func, env)?;
+        let original_func_ty = if poly_call_info.is_some() {
+            Some(func_ty.clone())
+        } else {
+            None
+        };
         for arg in args {
             let arg_ty = self.infer_expr(arg, env)?;
             let result_ty = self.fresh_var();
@@ -300,6 +321,10 @@ impl TypeChecker {
                 expr_span(arg),
             )?;
             func_ty = result_ty;
+        }
+        if let (Some(qname), Some(orig_ty)) = (poly_call_info, original_func_ty) {
+            let resolved = self.apply(orig_ty);
+            self.poly_instantiations.push((qname, resolved));
         }
         Ok(func_ty)
     }

@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.chronos.duration
 export Span, negateDelta
-export domain Duration
+export Duration
 
 use aivi
 

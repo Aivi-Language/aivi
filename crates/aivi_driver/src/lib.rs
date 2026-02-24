@@ -246,6 +246,7 @@ pub fn desugar_target_with_cg_types(
             String,
             std::collections::HashMap<String, aivi_core::cg_type::CgType>,
         >,
+        std::collections::HashMap<String, Vec<aivi_core::cg_type::CgType>>,
     ),
     AiviError,
 > {
@@ -274,7 +275,7 @@ pub fn desugar_target_with_cg_types(
 
     let infer_result = aivi_core::infer_value_types_full(&stdlib_modules);
     let program = aivi_core::desugar_modules(&stdlib_modules);
-    Ok((program, infer_result.cg_types))
+    Ok((program, infer_result.cg_types, infer_result.monomorph_plan))
 }
 
 /// Lowers a typed HIR program into kernel IR for backend code generation.

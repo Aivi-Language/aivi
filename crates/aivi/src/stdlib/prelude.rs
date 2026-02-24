@@ -7,10 +7,10 @@ export Int, Float, Bool, Text, Char, Bytes
 export List, Option, Result, Tuple, Patch
 export ToText, toText
 
-export domain Calendar
-export domain Duration
-export domain Color
-export domain Vector
+export Calendar
+export Duration
+export Color
+export Vector
 export panic, not, any, each
 
 use aivi

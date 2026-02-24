@@ -8,7 +8,7 @@ export vec2, vec3, vec4
 export magnitude, normalize, dot, cross
 export negate, lerp, distance
 export transform2, transform3, transform4, transformPoint3, transformDir3
-export domain Vector
+export Vector
 
 use aivi
 use aivi.math (sqrt)

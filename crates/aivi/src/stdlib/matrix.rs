@@ -7,7 +7,7 @@ export Mat2, Mat3, Mat4, Scalar
 export identity2, identity3, identity4
 export transpose2, transpose3, transpose4
 export multiply2, multiply3, multiply4
-export domain Matrix
+export Matrix
 
 use aivi
 use aivi.vector (Vec2, Vec3, Vec4, transform2, transform3, transform4)

@@ -26,6 +26,7 @@ fn runtime() {
         let hir = aivi::desugar_modules(&modules);
         // TODO: re-add fuel mechanism for Cranelift JIT
         let cg_types = std::collections::HashMap::new();
-        let _ = aivi::run_cranelift_jit(hir, cg_types);
+        let monomorph_plan = std::collections::HashMap::new();
+        let _ = aivi::run_cranelift_jit(hir, cg_types, monomorph_plan);
     });
 }
