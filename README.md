@@ -1,5 +1,8 @@
 # AIVI
 
+> [!CAUTION]
+> This is a vibe coded project. Do not use for anything serious. I'm still rewriting a lot of fundamentals.
+
 AIVI is a functional programming language and toolchain for building strongly typed applications on a Rust-powered foundation. It’s for developers who want the confidence of static types and the clarity of explicit effects, without needing to write Rust as their day‑to‑day language.
 
 AIVI is opinionated in a practical way: it tries to make “the right thing” feel normal. You can keep business logic small and readable, model errors instead of hand-waving them away, and let the compiler do a lot of the heavy lifting when the codebase grows.
