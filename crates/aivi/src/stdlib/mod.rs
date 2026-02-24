@@ -20,6 +20,7 @@ mod crypto;
 mod database;
 mod database_pool;
 mod decimal;
+mod defaults;
 mod duration;
 mod email;
 mod file;
@@ -76,6 +77,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: prelude::MODULE_NAME,
         source: prelude::SOURCE,
+    },
+    EmbeddedModule {
+        name: defaults::MODULE_NAME,
+        source: defaults::SOURCE,
     },
     EmbeddedModule {
         name: text::MODULE_NAME,
