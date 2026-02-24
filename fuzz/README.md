@@ -16,6 +16,8 @@ regular `cargo test` runs.
 | `frontend` | Parse → arena lowering → resolve → typecheck (+ stdlib check) → desugar → kernel | Never panic on well-typed input |
 | `runtime` | Full pipeline + native execution with fuel budget | Never panic/hang (fuel-capped at 25 000 steps) |
 | `lsp_pipeline` | Parse → resolve → typecheck → format → render diagnostics | Never panic; simulates LSP didOpen/didChange → formatting flow |
+| `type_inference` | Parse → resolve → infer types → elaborate coercions | Never panic; exercises `infer_value_types`, `infer_value_types_full`, `elaborate_expected_coercions` |
+| `native_codegen` | Parse → check → type infer → desugar → Rust codegen + Rust IR lowering | Never panic; exercises `compile_rust_native`, `compile_rust_native_lib`, `lower_rust_ir` |
 
 ## Local setup
 
@@ -41,6 +43,8 @@ cargo bolero test -p aivi-fuzz formatter::formatter  --engine libfuzzer -- -max_
 cargo bolero test -p aivi-fuzz lsp_pipeline::lsp_pipeline --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
 cargo bolero test -p aivi-fuzz frontend::frontend    --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
 cargo bolero test -p aivi-fuzz runtime::runtime      --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+cargo bolero test -p aivi-fuzz type_inference::type_inference --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+cargo bolero test -p aivi-fuzz native_codegen::native_codegen --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
 ```
 
 Extended run (5 min):
