@@ -23,5 +23,12 @@ fuzz_target!(|data: &[u8]| {
     let (_modules, _parse_diags) = aivi::parse_modules_from_tokens(Path::new("fuzz.aivi"), &tokens);
 
     // Phase 3: Also exercise the combined lex+parse path.
-    let (_modules2, _parse_diags2) = aivi::parse_modules(Path::new("fuzz.aivi"), &src);
+    let (modules2, parse_diags2) = aivi::parse_modules(Path::new("fuzz.aivi"), &src);
+
+    // Phase 4: If parsing succeeded, also exercise arena lowering and parse-after-format path.
+    if !aivi::file_diagnostics_have_errors(&parse_diags2) {
+        let _arena = aivi::lower_modules_to_arena(&modules2);
+        let formatted = aivi::format_text(&src);
+        let _ = aivi::parse_modules(Path::new("fuzz.formatted.aivi"), &formatted);
+    }
 });

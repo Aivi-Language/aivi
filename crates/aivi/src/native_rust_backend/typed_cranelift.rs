@@ -1,6 +1,6 @@
 use std::collections::{BTreeSet, HashMap};
 
-use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder, Value};
+use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder, MemFlags, Value};
 use cranelift_codegen::isa::CallConv;
 use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::{settings, Context};
@@ -15,6 +15,7 @@ use super::typed_mir::{lower_typed_mir, TypedMirExpr, TypedMirFunction, TypedMir
 pub(crate) struct RuntimeLowering {
     pub(crate) function: Function,
     pub(crate) param_names: Vec<String>,
+    pub(crate) param_types: Vec<CgType>,
 }
 
 pub(super) fn emit_typed_via_cranelift(
@@ -24,9 +25,12 @@ pub(super) fn emit_typed_via_cranelift(
     _indent: usize,
 ) -> Option<String> {
     let mir = lower_typed_mir(expr, ty, ctx)?;
-    lower_with_cranelift(&mir, ty, ctx)?;
     let body = render_rust_body_from_mir(&mir, ty, ctx)?;
-    Some(format!("/* typed-clif */ {body}"))
+    if lower_with_cranelift(&mir, ty, ctx).is_some() {
+        Some(format!("/* typed-clif */ {body}"))
+    } else {
+        Some(format!("/* typed-clif-fallback */ {body}"))
+    }
 }
 
 pub(super) fn cranelift_lowering_comment(
@@ -35,7 +39,7 @@ pub(super) fn cranelift_lowering_comment(
     ctx: &TypedCtx,
 ) -> Option<String> {
     let mir = lower_typed_mir(expr, ty, ctx)?;
-    let (function, _) = lower_with_cranelift(&mir, ty, ctx)?;
+    let (function, _, _) = lower_with_cranelift(&mir, ty, ctx)?;
     let mut text = String::new();
     text.push_str("clif.lowering.begin\n");
     text.push_str(&function.to_string());
@@ -54,10 +58,11 @@ pub(crate) fn lower_for_runtime(
         ctx.with_runtime_local(name, local_ty.clone());
     }
     let mir = lower_typed_mir(expr, ty, &ctx)?;
-    let (function, param_names) = lower_with_cranelift(&mir, ty, &ctx)?;
+    let (function, param_names, param_types) = lower_with_cranelift(&mir, ty, &ctx)?;
     Some(RuntimeLowering {
         function,
         param_names,
+        param_types,
     })
 }
 
@@ -65,17 +70,25 @@ fn lower_with_cranelift(
     mir: &TypedMirFunction,
     ret_ty: &CgType,
     ctx: &TypedCtx,
-) -> Option<(Function, Vec<String>)> {
+) -> Option<(Function, Vec<String>, Vec<CgType>)> {
+    if !matches!(ret_ty, CgType::Int | CgType::Float | CgType::Bool) {
+        return None;
+    }
     let mut sig = cranelift_codegen::ir::Signature::new(CallConv::SystemV);
     let mut param_names = BTreeSet::new();
     collect_mir_names(mir, &mut param_names);
     let mut name_order: Vec<String> = param_names.into_iter().collect();
     name_order.sort();
+    let mut param_types = Vec::with_capacity(name_order.len());
     for name in &name_order {
-        let clif_ty = clif_type(ctx.lookup(name)?)?;
-        sig.params.push(AbiParam::new(clif_ty));
+        let ty = ctx.lookup(name)?.clone();
+        if !matches!(ty, CgType::Int | CgType::Float | CgType::Bool) {
+            return None;
+        }
+        param_types.push(ty);
+        sig.params.push(AbiParam::new(types::I64));
     }
-    sig.returns.push(AbiParam::new(clif_type(ret_ty)?));
+    sig.returns.push(AbiParam::new(types::I64));
 
     let mut function =
         Function::with_name_signature(cranelift_codegen::ir::UserFuncName::user(0, 0), sig);
@@ -89,13 +102,16 @@ fn lower_with_cranelift(
 
         let mut params = HashMap::new();
         for (idx, name) in name_order.iter().enumerate() {
-            params.insert(name.clone(), builder.block_params(entry)[idx]);
+            let payload = builder.block_params(entry)[idx];
+            let decoded = decode_payload(&mut builder, payload, &param_types[idx])?;
+            params.insert(name.clone(), decoded);
         }
 
         match &mir.blocks.get(&mir.entry)?.terminator {
             TypedMirTerminator::Return(expr) => {
                 let value = emit_expr(&mut builder, &params, expr, ret_ty, ctx)?;
-                builder.ins().return_(&[value]);
+                let payload = encode_payload(&mut builder, value, ret_ty)?;
+                builder.ins().return_(&[payload]);
             }
             TypedMirTerminator::Branch {
                 cond,
@@ -117,7 +133,8 @@ fn lower_with_cranelift(
                     TypedMirTerminator::Branch { .. } => return None,
                 };
                 let then_value = emit_expr(&mut builder, &params, then_expr, ret_ty, ctx)?;
-                builder.ins().return_(&[then_value]);
+                let then_payload = encode_payload(&mut builder, then_value, ret_ty)?;
+                builder.ins().return_(&[then_payload]);
 
                 builder.switch_to_block(else_block);
                 let else_expr = match &mir.blocks.get(else_bb)?.terminator {
@@ -125,7 +142,8 @@ fn lower_with_cranelift(
                     TypedMirTerminator::Branch { .. } => return None,
                 };
                 let else_value = emit_expr(&mut builder, &params, else_expr, ret_ty, ctx)?;
-                builder.ins().return_(&[else_value]);
+                let else_payload = encode_payload(&mut builder, else_value, ret_ty)?;
+                builder.ins().return_(&[else_payload]);
             }
         }
 
@@ -139,7 +157,7 @@ fn lower_with_cranelift(
     codegen_ctx.compute_cfg();
     codegen_ctx.compute_domtree();
     codegen_ctx.verify(&flag_values).ok()?;
-    Some((codegen_ctx.func, name_order))
+    Some((codegen_ctx.func, name_order, param_types))
 }
 
 fn emit_expr(
@@ -206,11 +224,20 @@ fn emit_expr(
     }
 }
 
-fn clif_type(ty: &CgType) -> Option<cranelift_codegen::ir::Type> {
+fn decode_payload(builder: &mut FunctionBuilder<'_>, payload: Value, ty: &CgType) -> Option<Value> {
     match ty {
-        CgType::Int => Some(types::I64),
-        CgType::Float => Some(types::F64),
-        CgType::Bool => Some(types::I8),
+        CgType::Int => Some(payload),
+        CgType::Float => Some(builder.ins().bitcast(types::F64, MemFlags::new(), payload)),
+        CgType::Bool => Some(builder.ins().ireduce(types::I8, payload)),
+        _ => None,
+    }
+}
+
+fn encode_payload(builder: &mut FunctionBuilder<'_>, value: Value, ty: &CgType) -> Option<Value> {
+    match ty {
+        CgType::Int => Some(value),
+        CgType::Float => Some(builder.ins().bitcast(types::I64, MemFlags::new(), value)),
+        CgType::Bool => Some(builder.ins().uextend(types::I64, value)),
         _ => None,
     }
 }

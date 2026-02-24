@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use uuid::Uuid;
 
+use crate::hir::HirBlockKind;
 use super::values::{shape_record, KeyValue, TaggedValue};
 use super::*;
 
@@ -122,8 +123,8 @@ main = do Effect {
         );
     };
     assert!(
-        builtin.imp.name.starts_with("__jit|"),
-        "unexpected builtin name: {}",
+        builtin.imp.name.starts_with("__jit|native|"),
+        "expected native jitted builtin, got {}",
         builtin.imp.name
     );
 }
@@ -215,10 +216,202 @@ main = do Effect {
         );
     };
     assert!(
-        builtin.imp.name.starts_with("__jit|"),
-        "unexpected builtin name: {}",
+        builtin.imp.name.starts_with("__jit|native|"),
+        "expected native jitted builtin, got {}",
         builtin.imp.name
     );
+}
+
+#[test]
+fn jit_globals_use_native_body_for_typed_float_functions() {
+    let (mut modules, diags) = crate::surface::parse_modules(
+        std::path::Path::new("test.aivi"),
+        r#"
+module app.main
+addf : Float -> Float -> Float
+addf = a b => a + b
+
+main : Effect Text Unit
+main = do Effect {
+  println "{addf 1.0 2.0}"
+}
+"#,
+    );
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error)
+        .collect();
+    assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
+
+    let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    let program = crate::hir::desugar_modules(&stdlib_modules);
+    let mut runtime = build_runtime_from_program(program.clone()).expect("runtime");
+
+    let mut module_types = HashMap::new();
+    module_types.insert(
+        "addf".to_string(),
+        crate::cg_type::CgType::Func(
+            Box::new(crate::cg_type::CgType::Float),
+            Box::new(crate::cg_type::CgType::Func(
+                Box::new(crate::cg_type::CgType::Float),
+                Box::new(crate::cg_type::CgType::Float),
+            )),
+        ),
+    );
+    let mut cg_types = HashMap::new();
+    cg_types.insert("app.main".to_string(), module_types);
+    let jitted = build_jitted_globals_with_types(program, &cg_types).expect("build jitted globals");
+    for (name, value) in jitted {
+        runtime.ctx.globals.set(name, value);
+    }
+
+    let addf = runtime
+        .ctx
+        .globals
+        .get("addf")
+        .or_else(|| runtime.ctx.globals.get("app.main.addf"))
+        .expect("addf binding");
+
+    let partial = expect_ok(runtime.apply(addf, Value::Float(1.5)), "apply addf first arg");
+    let result = expect_ok(runtime.apply(partial, Value::Float(2.25)), "apply addf second arg");
+    assert!(matches!(result, Value::Float(v) if (v - 3.75).abs() < 1e-9));
+}
+
+#[test]
+fn jit_globals_use_native_body_for_typed_bool_functions() {
+    let (mut modules, diags) = crate::surface::parse_modules(
+        std::path::Path::new("test.aivi"),
+        r#"
+module app.main
+both : Bool -> Bool -> Bool
+both = a b => a && b
+
+main : Effect Text Unit
+main = do Effect {
+  println "{both true false}"
+}
+"#,
+    );
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error)
+        .collect();
+    assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
+
+    let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    let program = crate::hir::desugar_modules(&stdlib_modules);
+    let mut runtime = build_runtime_from_program(program.clone()).expect("runtime");
+
+    let mut module_types = HashMap::new();
+    module_types.insert(
+        "both".to_string(),
+        crate::cg_type::CgType::Func(
+            Box::new(crate::cg_type::CgType::Bool),
+            Box::new(crate::cg_type::CgType::Func(
+                Box::new(crate::cg_type::CgType::Bool),
+                Box::new(crate::cg_type::CgType::Bool),
+            )),
+        ),
+    );
+    let mut cg_types = HashMap::new();
+    cg_types.insert("app.main".to_string(), module_types);
+    let jitted = build_jitted_globals_with_types(program, &cg_types).expect("build jitted globals");
+    for (name, value) in jitted {
+        runtime.ctx.globals.set(name, value);
+    }
+
+    let both = runtime
+        .ctx
+        .globals
+        .get("both")
+        .or_else(|| runtime.ctx.globals.get("app.main.both"))
+        .expect("both binding");
+
+    let partial = expect_ok(runtime.apply(both, Value::Bool(true)), "apply both first arg");
+    let result = expect_ok(runtime.apply(partial, Value::Bool(false)), "apply both second arg");
+    assert!(matches!(result, Value::Bool(false)));
+}
+
+#[test]
+fn jit_non_int_builtins_execute_without_eval_expr_fallback() {
+    let (mut modules, diags) = crate::surface::parse_modules(
+        std::path::Path::new("test.aivi"),
+        r#"
+module app.main
+greet : Text -> Text
+greet = name => "hello {name}"
+
+main : Effect Text Unit
+main = do Effect {
+  println (greet "aivi")
+}
+"#,
+    );
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error)
+        .collect();
+    assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
+
+    let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    let program = crate::hir::desugar_modules(&stdlib_modules);
+    let mut runtime = build_runtime_from_program(program.clone()).expect("runtime");
+    let jitted =
+        build_jitted_globals_with_types(program, &HashMap::new()).expect("build jitted globals");
+    for (name, value) in jitted {
+        runtime.ctx.globals.set(name, value);
+    }
+
+    let greet = runtime
+        .ctx
+        .globals
+        .get("greet")
+        .or_else(|| runtime.ctx.globals.get("app.main.greet"))
+        .expect("greet binding");
+    let Value::Builtin(builtin) = greet else {
+        panic!("expected greet builtin, got {}", format_value(&greet));
+    };
+
+    runtime.reset_eval_expr_call_count();
+    let result = expect_ok(
+        runtime.apply(
+            Value::Builtin(builtin),
+            Value::Text("runtime".to_string()),
+        ),
+        "apply greet",
+    );
+    assert!(matches!(result, Value::Text(text) if text == "hello runtime"));
+    assert_eq!(
+        runtime.eval_expr_call_count(),
+        0,
+        "expected direct RustIr execution without eval_expr fallback",
+    );
+}
+
+#[test]
+fn jit_runtime_raw_expr_returns_text_value() {
+    let mut runtime = runtime_from_source(
+        r#"
+module app.main
+main = 0
+"#,
+    );
+    let env = Env::new(Some(runtime.ctx.globals.clone()));
+    let value = expect_ok(
+        eval_runtime_rust_ir_expr(
+            &mut runtime,
+            &crate::rust_ir::RustIrExpr::Raw {
+                id: 1,
+                text: "raw payload".to_string(),
+            },
+            &env,
+        ),
+        "raw expr",
+    );
+    assert!(matches!(value, Value::Text(text) if text == "raw payload"));
 }
 
 #[test]
@@ -254,6 +447,723 @@ main = do Effect {
         );
     };
     assert_eq!(builtin.imp.arity, 0);
+}
+
+#[test]
+fn jit_runtime_lowering_covers_all_rust_ir_shapes() {
+    use crate::rust_ir::{
+        RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrListItem, RustIrLiteral, RustIrMatchArm,
+        RustIrPathSegment, RustIrPattern, RustIrRecordField, RustIrRecordPatternField, RustIrTextPart,
+    };
+
+    let lit_int = || RustIrExpr::LitNumber {
+        id: 1,
+        text: "1".to_string(),
+    };
+    let lit_str = || RustIrExpr::LitString {
+        id: 2,
+        text: "hello".to_string(),
+    };
+    let lit_bool = || RustIrExpr::LitBool { id: 3, value: true };
+
+    let complex_match = RustIrExpr::Match {
+        id: 40,
+        scrutinee: Box::new(lit_int()),
+        arms: vec![
+            RustIrMatchArm {
+                pattern: RustIrPattern::Wildcard { id: 41 },
+                guard: None,
+                body: lit_int(),
+            },
+            RustIrMatchArm {
+                pattern: RustIrPattern::Var {
+                    id: 42,
+                    name: "v".to_string(),
+                },
+                guard: None,
+                body: lit_int(),
+            },
+            RustIrMatchArm {
+                pattern: RustIrPattern::At {
+                    id: 43,
+                    name: "a".to_string(),
+                    pattern: Box::new(RustIrPattern::Literal {
+                        id: 44,
+                        value: RustIrLiteral::Bool(true),
+                    }),
+                },
+                guard: None,
+                body: lit_int(),
+            },
+            RustIrMatchArm {
+                pattern: RustIrPattern::Constructor {
+                    id: 45,
+                    name: "Some".to_string(),
+                    args: vec![RustIrPattern::Var {
+                        id: 46,
+                        name: "x".to_string(),
+                    }],
+                },
+                guard: None,
+                body: lit_int(),
+            },
+            RustIrMatchArm {
+                pattern: RustIrPattern::Tuple {
+                    id: 47,
+                    items: vec![
+                        RustIrPattern::Literal {
+                            id: 48,
+                            value: RustIrLiteral::Number("1".to_string()),
+                        },
+                        RustIrPattern::Wildcard { id: 49 },
+                    ],
+                },
+                guard: None,
+                body: lit_int(),
+            },
+            RustIrMatchArm {
+                pattern: RustIrPattern::List {
+                    id: 50,
+                    items: vec![RustIrPattern::Var {
+                        id: 51,
+                        name: "h".to_string(),
+                    }],
+                    rest: Some(Box::new(RustIrPattern::Var {
+                        id: 52,
+                        name: "t".to_string(),
+                    })),
+                },
+                guard: None,
+                body: lit_int(),
+            },
+            RustIrMatchArm {
+                pattern: RustIrPattern::Record {
+                    id: 53,
+                    fields: vec![RustIrRecordPatternField {
+                        path: vec!["name".to_string()],
+                        pattern: RustIrPattern::Literal {
+                            id: 54,
+                            value: RustIrLiteral::String("aivi".to_string()),
+                        },
+                    }],
+                },
+                guard: Some(lit_bool()),
+                body: lit_int(),
+            },
+        ],
+    };
+
+    let cases = vec![
+        RustIrExpr::Local {
+            id: 10,
+            name: "x".to_string(),
+        },
+        RustIrExpr::Global {
+            id: 11,
+            name: "g".to_string(),
+        },
+        RustIrExpr::Builtin {
+            id: 12,
+            builtin: "println".to_string(),
+        },
+        RustIrExpr::ConstructorValue {
+            id: 13,
+            name: "Some".to_string(),
+        },
+        lit_int(),
+        lit_str(),
+        RustIrExpr::TextInterpolate {
+            id: 14,
+            parts: vec![
+                RustIrTextPart::Text {
+                    text: "x=".to_string(),
+                },
+                RustIrTextPart::Expr { expr: lit_int() },
+            ],
+        },
+        RustIrExpr::LitSigil {
+            id: 15,
+            tag: "r".to_string(),
+            body: "abc".to_string(),
+            flags: "i".to_string(),
+        },
+        lit_bool(),
+        RustIrExpr::LitDateTime {
+            id: 16,
+            text: "2025-01-01T00:00:00Z".to_string(),
+        },
+        RustIrExpr::Lambda {
+            id: 17,
+            param: "x".to_string(),
+            body: Box::new(lit_int()),
+        },
+        RustIrExpr::App {
+            id: 18,
+            func: Box::new(RustIrExpr::Lambda {
+                id: 19,
+                param: "x".to_string(),
+                body: Box::new(RustIrExpr::Local {
+                    id: 20,
+                    name: "x".to_string(),
+                }),
+            }),
+            arg: Box::new(lit_int()),
+        },
+        RustIrExpr::Call {
+            id: 21,
+            func: Box::new(RustIrExpr::Global {
+                id: 22,
+                name: "f".to_string(),
+            }),
+            args: vec![lit_int(), lit_str()],
+        },
+        RustIrExpr::DebugFn {
+            id: 23,
+            fn_name: "f".to_string(),
+            arg_vars: vec!["x".to_string()],
+            log_args: true,
+            log_return: true,
+            log_time: true,
+            body: Box::new(lit_int()),
+        },
+        RustIrExpr::Pipe {
+            id: 24,
+            pipe_id: 1,
+            step: 0,
+            label: "s".to_string(),
+            log_time: true,
+            func: Box::new(RustIrExpr::Global {
+                id: 25,
+                name: "f".to_string(),
+            }),
+            arg: Box::new(lit_int()),
+        },
+        RustIrExpr::List {
+            id: 26,
+            items: vec![RustIrListItem {
+                expr: lit_int(),
+                spread: false,
+            }],
+        },
+        RustIrExpr::Tuple {
+            id: 27,
+            items: vec![lit_int(), lit_str()],
+        },
+        RustIrExpr::Record {
+            id: 28,
+            fields: vec![RustIrRecordField {
+                spread: false,
+                path: vec![
+                    RustIrPathSegment::Field("users".to_string()),
+                    RustIrPathSegment::IndexValue(lit_int()),
+                    RustIrPathSegment::IndexFieldBool("active".to_string()),
+                    RustIrPathSegment::IndexPredicate(RustIrExpr::Binary {
+                        id: 29,
+                        op: ">".to_string(),
+                        left: Box::new(RustIrExpr::Local {
+                            id: 30,
+                            name: "price".to_string(),
+                        }),
+                        right: Box::new(lit_int()),
+                    }),
+                    RustIrPathSegment::IndexAll,
+                    RustIrPathSegment::Field("name".to_string()),
+                ],
+                value: lit_str(),
+            }],
+        },
+        RustIrExpr::Patch {
+            id: 31,
+            target: Box::new(RustIrExpr::Record {
+                id: 32,
+                fields: vec![],
+            }),
+            fields: vec![RustIrRecordField {
+                spread: false,
+                path: vec![RustIrPathSegment::Field("a".to_string())],
+                value: lit_int(),
+            }],
+        },
+        RustIrExpr::FieldAccess {
+            id: 33,
+            base: Box::new(RustIrExpr::Record {
+                id: 34,
+                fields: vec![],
+            }),
+            field: "a".to_string(),
+        },
+        RustIrExpr::Index {
+            id: 35,
+            base: Box::new(RustIrExpr::List {
+                id: 36,
+                items: vec![RustIrListItem {
+                    expr: lit_int(),
+                    spread: false,
+                }],
+            }),
+            index: Box::new(lit_int()),
+        },
+        complex_match,
+        RustIrExpr::If {
+            id: 55,
+            cond: Box::new(lit_bool()),
+            then_branch: Box::new(lit_int()),
+            else_branch: Box::new(lit_int()),
+        },
+        RustIrExpr::Binary {
+            id: 56,
+            op: "+".to_string(),
+            left: Box::new(lit_int()),
+            right: Box::new(lit_int()),
+        },
+        RustIrExpr::Block {
+            id: 57,
+            block_kind: RustIrBlockKind::Plain,
+            items: vec![
+                RustIrBlockItem::Bind {
+                    pattern: RustIrPattern::Var {
+                        id: 58,
+                        name: "x".to_string(),
+                    },
+                    expr: lit_int(),
+                },
+                RustIrBlockItem::Filter { expr: lit_bool() },
+                RustIrBlockItem::Yield { expr: lit_int() },
+                RustIrBlockItem::Recurse { expr: lit_int() },
+                RustIrBlockItem::Expr { expr: lit_int() },
+            ],
+        },
+        RustIrExpr::Block {
+            id: 59,
+            block_kind: RustIrBlockKind::Do {
+                monad: "Effect".to_string(),
+            },
+            items: vec![],
+        },
+        RustIrExpr::Block {
+            id: 60,
+            block_kind: RustIrBlockKind::Generate,
+            items: vec![],
+        },
+        RustIrExpr::Block {
+            id: 61,
+            block_kind: RustIrBlockKind::Resource,
+            items: vec![],
+        },
+        RustIrExpr::Raw {
+            id: 62,
+            text: "raw".to_string(),
+        },
+    ];
+
+    for expr in cases {
+        assert!(
+            super::lower_runtime_rust_ir_expr(&expr).is_some(),
+            "failed lowering shape: {expr:?}"
+        );
+    }
+}
+
+#[test]
+fn jit_runtime_record_index_value_paths_build_nested_structures() {
+    use crate::rust_ir::{RustIrExpr, RustIrPathSegment, RustIrRecordField};
+
+    let mut runtime = runtime_from_source(
+        r#"
+module app.main
+main = 0
+"#,
+    );
+    let env = Env::new(Some(runtime.ctx.globals.clone()));
+    let expr = RustIrExpr::Record {
+        id: 1,
+        fields: vec![RustIrRecordField {
+            spread: false,
+            path: vec![
+                RustIrPathSegment::Field("users".to_string()),
+                RustIrPathSegment::IndexValue(RustIrExpr::LitNumber {
+                    id: 2,
+                    text: "0".to_string(),
+                }),
+                RustIrPathSegment::Field("name".to_string()),
+            ],
+            value: RustIrExpr::LitString {
+                id: 3,
+                text: "Aivi".to_string(),
+            },
+        }],
+    };
+
+    let value = expect_ok(eval_runtime_rust_ir_expr(&mut runtime, &expr, &env), "record path eval");
+    let Value::Record(fields) = value else {
+        panic!("expected record");
+    };
+    let Some(Value::List(users)) = fields.get("users") else {
+        panic!("expected users list");
+    };
+    assert_eq!(users.len(), 1);
+    let Value::Record(user) = &users[0] else {
+        panic!("expected user record");
+    };
+    assert!(matches!(user.get("name"), Some(Value::Text(name)) if name == "Aivi"));
+}
+
+#[test]
+fn jit_runtime_plain_block_rejects_non_plain_items() {
+    use crate::rust_ir::{RustIrBlockItem, RustIrBlockKind, RustIrExpr};
+
+    fn expect_plain_block_error(
+        runtime: &mut Runtime,
+        env: &Env,
+        item: RustIrBlockItem,
+        expected_item: &str,
+    ) {
+        let expr = RustIrExpr::Block {
+            id: 1,
+            block_kind: RustIrBlockKind::Plain,
+            items: vec![item],
+        };
+        match eval_runtime_rust_ir_expr(runtime, &expr, env) {
+            Err(RuntimeError::Message(message)) => {
+                assert!(
+                    message.contains("unsupported block item in plain block")
+                        && message.contains(expected_item),
+                    "unexpected message: {message}"
+                );
+            }
+            Ok(value) => panic!("expected plain block error, got {}", format_value(&value)),
+            Err(RuntimeError::Cancelled) => panic!("expected plain block error, got cancellation"),
+            Err(RuntimeError::Error(value)) => {
+                panic!("expected plain block error, got runtime error {}", format_value(&value))
+            }
+        }
+    }
+
+    let mut runtime = runtime_from_source(
+        r#"
+module app.main
+main = 0
+"#,
+    );
+    let env = Env::new(Some(runtime.ctx.globals.clone()));
+    expect_plain_block_error(
+        &mut runtime,
+        &env,
+        RustIrBlockItem::Filter {
+            expr: RustIrExpr::LitBool { id: 2, value: true },
+        },
+        "Filter",
+    );
+    expect_plain_block_error(
+        &mut runtime,
+        &env,
+        RustIrBlockItem::Yield {
+            expr: RustIrExpr::LitNumber {
+                id: 3,
+                text: "1".to_string(),
+            },
+        },
+        "Yield",
+    );
+    expect_plain_block_error(
+        &mut runtime,
+        &env,
+        RustIrBlockItem::Recurse {
+            expr: RustIrExpr::LitNumber {
+                id: 4,
+                text: "1".to_string(),
+            },
+        },
+        "Recurse",
+    );
+}
+
+#[test]
+fn plain_block_trampoline_rejects_non_plain_items() {
+    let mut runtime = runtime_from_source(
+        r#"
+module app.main
+main = 0
+"#,
+    );
+    let env = Env::new(Some(runtime.ctx.globals.clone()));
+    let expr = HirExpr::Block {
+        id: 1,
+        block_kind: HirBlockKind::Plain,
+        items: vec![HirBlockItem::Filter {
+            expr: HirExpr::LitBool { id: 2, value: true },
+        }],
+    };
+    match runtime.eval_expr(&expr, &env) {
+        Err(RuntimeError::Message(message)) => {
+            assert!(
+                message.contains("unsupported block item in plain block")
+                    && message.contains("Filter"),
+                "unexpected message: {message}"
+            );
+        }
+        Ok(value) => panic!("expected plain block error, got {}", format_value(&value)),
+        Err(RuntimeError::Cancelled) => panic!("expected plain block error, got cancellation"),
+        Err(RuntimeError::Error(value)) => {
+            panic!("expected plain block error, got runtime error {}", format_value(&value))
+        }
+    }
+}
+
+#[test]
+fn jit_runtime_patch_index_field_and_predicate_paths_apply_directly() {
+    use crate::rust_ir::{RustIrExpr, RustIrListItem, RustIrPathSegment, RustIrRecordField};
+
+    let mut runtime = runtime_from_source(
+        r#"
+module app.main
+main = 0
+"#,
+    );
+    let env = Env::new(Some(runtime.ctx.globals.clone()));
+
+    let mk_user = |id: u32, name: &str, active: bool| RustIrExpr::Record {
+        id,
+        fields: vec![
+            RustIrRecordField {
+                spread: false,
+                path: vec![RustIrPathSegment::Field("name".to_string())],
+                value: RustIrExpr::LitString {
+                    id: id + 10,
+                    text: name.to_string(),
+                },
+            },
+            RustIrRecordField {
+                spread: false,
+                path: vec![RustIrPathSegment::Field("active".to_string())],
+                value: RustIrExpr::LitBool {
+                    id: id + 11,
+                    value: active,
+                },
+            },
+        ],
+    };
+
+    let target = RustIrExpr::Record {
+        id: 20,
+        fields: vec![RustIrRecordField {
+            spread: false,
+            path: vec![RustIrPathSegment::Field("users".to_string())],
+            value: RustIrExpr::List {
+                id: 21,
+                items: vec![
+                    RustIrListItem {
+                        expr: mk_user(30, "Aivi", true),
+                        spread: false,
+                    },
+                    RustIrListItem {
+                        expr: mk_user(40, "Other", false),
+                        spread: false,
+                    },
+                ],
+            },
+        }],
+    };
+
+    let predicate = RustIrExpr::Lambda {
+        id: 50,
+        param: "entry".to_string(),
+        body: Box::new(RustIrExpr::Binary {
+            id: 51,
+            op: "==".to_string(),
+            left: Box::new(RustIrExpr::FieldAccess {
+                id: 52,
+                base: Box::new(RustIrExpr::Local {
+                    id: 53,
+                    name: "entry".to_string(),
+                }),
+                field: "name".to_string(),
+            }),
+            right: Box::new(RustIrExpr::LitString {
+                id: 54,
+                text: "Other".to_string(),
+            }),
+        }),
+    };
+
+    let expr = RustIrExpr::Patch {
+        id: 60,
+        target: Box::new(target),
+        fields: vec![
+            RustIrRecordField {
+                spread: false,
+                path: vec![
+                    RustIrPathSegment::Field("users".to_string()),
+                    RustIrPathSegment::IndexFieldBool("active".to_string()),
+                    RustIrPathSegment::Field("tag".to_string()),
+                ],
+                value: RustIrExpr::LitString {
+                    id: 61,
+                    text: "enabled".to_string(),
+                },
+            },
+            RustIrRecordField {
+                spread: false,
+                path: vec![
+                    RustIrPathSegment::Field("users".to_string()),
+                    RustIrPathSegment::IndexPredicate(predicate),
+                    RustIrPathSegment::Field("chosen".to_string()),
+                ],
+                value: RustIrExpr::LitBool {
+                    id: 62,
+                    value: true,
+                },
+            },
+        ],
+    };
+
+    let value = expect_ok(eval_runtime_rust_ir_expr(&mut runtime, &expr, &env), "patch path eval");
+    let Value::Record(fields) = value else {
+        panic!("expected record");
+    };
+    let Some(Value::List(users)) = fields.get("users") else {
+        panic!("expected users list");
+    };
+    assert_eq!(users.len(), 2);
+
+    let Value::Record(user0) = &users[0] else {
+        panic!("expected first user record");
+    };
+    assert!(matches!(user0.get("tag"), Some(Value::Text(tag)) if tag == "enabled"));
+    assert!(user0.get("chosen").is_none());
+
+    let Value::Record(user1) = &users[1] else {
+        panic!("expected second user record");
+    };
+    assert!(user1.get("tag").is_none());
+    assert!(matches!(user1.get("chosen"), Some(Value::Bool(true))));
+}
+
+#[test]
+fn jit_globals_support_scalar_arity_seven() {
+    let (mut modules, diags) = crate::surface::parse_modules(
+        std::path::Path::new("test.aivi"),
+        r#"
+module app.main
+add7 : Int -> Int -> Int -> Int -> Int -> Int -> Int -> Int
+add7 = a b c d e f g => a + b + c + d + e + f + g
+"#,
+    );
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error)
+        .collect();
+    assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
+
+    let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    let program = crate::hir::desugar_modules(&stdlib_modules);
+    let mut runtime = build_runtime_from_program(program.clone()).expect("runtime");
+
+    let mut module_types = HashMap::new();
+    let mut func_ty = crate::cg_type::CgType::Int;
+    for _ in 0..7 {
+        func_ty = crate::cg_type::CgType::Func(
+            Box::new(crate::cg_type::CgType::Int),
+            Box::new(func_ty),
+        );
+    }
+    module_types.insert("add7".to_string(), func_ty);
+    let mut cg_types = HashMap::new();
+    cg_types.insert("app.main".to_string(), module_types);
+
+    let jitted = build_jitted_globals_with_types(program, &cg_types).expect("build jitted globals");
+    for (name, value) in jitted {
+        runtime.ctx.globals.set(name, value);
+    }
+
+    let mut value = runtime
+        .ctx
+        .globals
+        .get("add7")
+        .or_else(|| runtime.ctx.globals.get("app.main.add7"))
+        .expect("add7 binding");
+    for arg in 1..=7 {
+        value = expect_ok(runtime.apply(value, Value::Int(arg)), "apply add7");
+    }
+    assert!(matches!(value, Value::Int(28)));
+}
+
+#[test]
+fn jit_globals_scalar_arity_over_cap_uses_non_scalar_jit_path() {
+    let params: Vec<String> = (0..17).map(|idx| format!("a{idx}")).collect();
+    let signature = std::iter::repeat("Int")
+        .take(18)
+        .collect::<Vec<_>>()
+        .join(" -> ");
+    let source = format!(
+        "module app.main\nadd17 : {signature}\nadd17 = {} => {}\n",
+        params.join(" "),
+        params.join(" + ")
+    );
+    let (mut modules, diags) = crate::surface::parse_modules(std::path::Path::new("test.aivi"), &source);
+    let errors: Vec<_> = diags
+        .iter()
+        .filter(|d| d.diagnostic.severity == crate::diagnostics::DiagnosticSeverity::Error)
+        .collect();
+    assert!(errors.is_empty(), "unexpected diagnostics: {errors:?}");
+
+    let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
+    stdlib_modules.append(&mut modules);
+    let program = crate::hir::desugar_modules(&stdlib_modules);
+    let mut runtime = build_runtime_from_program(program.clone()).expect("runtime");
+
+    let mut module_types = HashMap::new();
+    let mut func_ty = crate::cg_type::CgType::Int;
+    for _ in 0..17 {
+        func_ty = crate::cg_type::CgType::Func(
+            Box::new(crate::cg_type::CgType::Int),
+            Box::new(func_ty),
+        );
+    }
+    module_types.insert("add17".to_string(), func_ty);
+    let mut cg_types = HashMap::new();
+    cg_types.insert("app.main".to_string(), module_types);
+
+    let jitted = build_jitted_globals_with_types(program, &cg_types).expect("build jitted globals");
+    for (name, value) in jitted {
+        runtime.ctx.globals.set(name, value);
+    }
+
+    let mut value = runtime
+        .ctx
+        .globals
+        .get("add17")
+        .or_else(|| runtime.ctx.globals.get("app.main.add17"))
+        .expect("add17 binding");
+    for arg in 1..=17 {
+        value = expect_ok(runtime.apply(value, Value::Int(arg)), "apply add17");
+    }
+    assert!(matches!(value, Value::Int(153)));
+}
+
+#[test]
+fn index_read_reports_canonical_type_error_for_unsupported_base() {
+    let mut runtime = runtime_from_source(
+        r#"
+module app.main
+v = { a: 1 }[0]
+"#,
+    );
+    let value = runtime.ctx.globals.get("v").expect("v binding");
+    match runtime.force_value(value) {
+        Err(RuntimeError::Message(message)) => {
+            assert!(
+                message.contains("expected List/Tuple/Map for indexed access"),
+                "unexpected message: {message}"
+            );
+        }
+        Ok(value) => panic!("expected index error, got {}", format_value(&value)),
+        Err(RuntimeError::Cancelled) => panic!("expected index error, got cancellation"),
+        Err(RuntimeError::Error(value)) => {
+            panic!("expected index error, got runtime error {}", format_value(&value))
+        }
+    }
 }
 
 #[test]

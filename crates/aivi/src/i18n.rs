@@ -274,4 +274,23 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn locale_parse_rejects_short_variant_subtag() {
+        let err = parse_locale_tag("en-US-abc").expect_err("invalid variant should fail");
+        assert!(err.contains("expected 4..=8 alphanumeric"));
+    }
+
+    #[test]
+    fn message_rejects_unescaped_closing_brace() {
+        let err =
+            parse_message_template("Hello }").expect_err("unescaped closing brace should fail");
+        assert!(err.contains("unexpected '}'"));
+    }
+
+    #[test]
+    fn escape_sigil_string_body_keeps_clean_text_borrowed() {
+        let escaped = escape_sigil_string_body("plain-text");
+        assert!(matches!(escaped, Cow::Borrowed("plain-text")));
+    }
 }

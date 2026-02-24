@@ -48,9 +48,6 @@ pub(super) fn emit_typed_via_mir(
     ctx: &TypedCtx,
     indent: usize,
 ) -> Option<String> {
-    if !matches!(ty, CgType::Int | CgType::Float | CgType::Bool) {
-        return None;
-    }
     if !within_mir_depth(expr, 0) {
         return None;
     }
@@ -63,9 +60,6 @@ pub(super) fn lower_typed_mir(
     ty: &CgType,
     ctx: &TypedCtx,
 ) -> Option<TypedMirFunction> {
-    if !matches!(ty, CgType::Int | CgType::Float | CgType::Bool) {
-        return None;
-    }
     if !within_mir_depth(expr, 0) {
         return None;
     }
@@ -202,18 +196,13 @@ fn lower_scalar_expr(expr: &RustIrExpr, ty: &CgType, ctx: &mut TypedCtx) -> Opti
                 else_expr,
             });
         }
-        RustIrExpr::Lambda { .. }
-        | RustIrExpr::App { .. }
-        | RustIrExpr::Call { .. }
-        | RustIrExpr::Match { .. }
-        | RustIrExpr::Block { .. } => {
+        _ => {
             let mut typed_ctx = ctx.clone();
             emit_typed_expr(expr, ty, &mut typed_ctx, 1)
                 .ok()
                 .flatten()
                 .map(TypedMirExpr::Opaque)
         }
-        _ => None,
     }?;
     Some(LoweredRoot::Expr(lowered))
 }

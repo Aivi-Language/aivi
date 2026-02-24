@@ -7,7 +7,7 @@ use parking_lot::RwLock;
 use super::values::Value;
 
 #[derive(Clone)]
-pub(super) struct Env {
+pub(crate) struct Env {
     inner: Arc<EnvInner>,
 }
 
@@ -17,7 +17,7 @@ struct EnvInner {
 }
 
 impl Env {
-    pub(super) fn new(parent: Option<Env>) -> Self {
+    pub(crate) fn new(parent: Option<Env>) -> Self {
         Self {
             inner: Arc::new(EnvInner {
                 parent,
@@ -26,7 +26,7 @@ impl Env {
         }
     }
 
-    pub(super) fn get(&self, name: &str) -> Option<Value> {
+    pub(crate) fn get(&self, name: &str) -> Option<Value> {
         if let Some(value) = self.inner.values.read().get(name) {
             return Some(value.clone());
         }
@@ -36,18 +36,18 @@ impl Env {
             .and_then(|parent| parent.get(name))
     }
 
-    pub(super) fn set(&self, name: String, value: Value) {
+    pub(crate) fn set(&self, name: String, value: Value) {
         self.inner.values.write().insert(name, value);
     }
 
     #[allow(dead_code)]
-    pub(super) fn has_local(&self, name: &str) -> bool {
+    pub(crate) fn has_local(&self, name: &str) -> bool {
         self.inner.values.read().contains_key(name)
     }
 }
 
-pub(super) struct RuntimeContext {
-    pub(super) globals: Env,
+pub(crate) struct RuntimeContext {
+    pub(crate) globals: Env,
     debug_call_id: AtomicU64,
     constructor_ordinals: HashMap<String, Option<usize>>,
     machine_specs: RwLock<HashMap<String, HashMap<String, Vec<MachineEdge>>>>,
@@ -56,21 +56,21 @@ pub(super) struct RuntimeContext {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct MachineEdge {
-    pub(super) source: Option<String>,
-    pub(super) target: String,
+pub(crate) struct MachineEdge {
+    pub(crate) source: Option<String>,
+    pub(crate) target: String,
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct MachineTransitionError {
-    pub(super) machine: String,
-    pub(super) from: String,
-    pub(super) event: String,
-    pub(super) expected_from: Vec<String>,
+pub(crate) struct MachineTransitionError {
+    pub(crate) machine: String,
+    pub(crate) from: String,
+    pub(crate) event: String,
+    pub(crate) expected_from: Vec<String>,
 }
 
 impl MachineTransitionError {
-    pub(super) fn into_value(self) -> Value {
+    pub(crate) fn into_value(self) -> Value {
         let mut detail = HashMap::new();
         detail.insert("machine".to_string(), Value::Text(self.machine));
         detail.insert("from".to_string(), Value::Text(self.from));
@@ -93,11 +93,11 @@ impl MachineTransitionError {
 
 impl RuntimeContext {
     #[allow(dead_code)]
-    pub(super) fn new(globals: Env) -> Self {
+    pub(crate) fn new(globals: Env) -> Self {
         Self::new_with_constructor_ordinals(globals, HashMap::new())
     }
 
-    pub(super) fn new_with_constructor_ordinals(
+    pub(crate) fn new_with_constructor_ordinals(
         globals: Env,
         constructor_ordinals: HashMap<String, Option<usize>>,
     ) -> Self {
@@ -111,15 +111,15 @@ impl RuntimeContext {
         }
     }
 
-    pub(super) fn next_debug_call_id(&self) -> u64 {
+    pub(crate) fn next_debug_call_id(&self) -> u64 {
         self.debug_call_id.fetch_add(1, Ordering::Relaxed)
     }
 
-    pub(super) fn constructor_ordinal(&self, name: &str) -> Option<Option<usize>> {
+    pub(crate) fn constructor_ordinal(&self, name: &str) -> Option<Option<usize>> {
         self.constructor_ordinals.get(name).copied()
     }
 
-    pub(super) fn register_machine(
+    pub(crate) fn register_machine(
         &self,
         machine_name: String,
         initial_state: String,
@@ -132,11 +132,11 @@ impl RuntimeContext {
             .retain(|(name, _), _| name != &machine_name);
     }
 
-    pub(super) fn machine_current_state(&self, machine_name: &str) -> Option<String> {
+    pub(crate) fn machine_current_state(&self, machine_name: &str) -> Option<String> {
         self.machine_states.read().get(machine_name).cloned()
     }
 
-    pub(super) fn machine_can_transition(&self, machine_name: &str, event: &str) -> bool {
+    pub(crate) fn machine_can_transition(&self, machine_name: &str, event: &str) -> bool {
         let Some(current) = self.machine_current_state(machine_name) else {
             return false;
         };
@@ -154,7 +154,7 @@ impl RuntimeContext {
             == 1
     }
 
-    pub(super) fn apply_machine_transition(
+    pub(crate) fn apply_machine_transition(
         &self,
         machine_name: &str,
         event: &str,
@@ -204,7 +204,7 @@ impl RuntimeContext {
         Ok(next)
     }
 
-    pub(super) fn register_machine_handler(&self, machine_name: &str, event: &str, handler: Value) {
+    pub(crate) fn register_machine_handler(&self, machine_name: &str, event: &str, handler: Value) {
         let key = (machine_name.to_string(), event.to_string());
         self.machine_handlers
             .write()
@@ -213,7 +213,7 @@ impl RuntimeContext {
             .push(handler);
     }
 
-    pub(super) fn machine_handlers(&self, machine_name: &str, event: &str) -> Vec<Value> {
+    pub(crate) fn machine_handlers(&self, machine_name: &str, event: &str) -> Vec<Value> {
         self.machine_handlers
             .read()
             .get(&(machine_name.to_string(), event.to_string()))

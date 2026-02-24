@@ -179,19 +179,22 @@ Boxing/unboxing functions for each CgType:
 
 ### Not Yet Implemented
 
-- **Advanced optimization passes over MIR** — LICM/inlining/loop transforms are not implemented yet
-- **Direct Cranelift/LLVM object backend** — codegen still emits Rust source and relies on `rustc` for executable output
+- **Advanced optimization passes** — LICM/inlining/loop transforms are not implemented yet
+- **Cranelift AOT object backend** — `aivi build` currently still emits Rust source; a future phase will emit object files directly via `cranelift-object`
 
-// todo: check this status and maybe update the whole document to be up-to-date
+### Current Architecture (Cranelift JIT)
 
-### Backend abstraction scaffold
-
-- The Cranelift path in `crates/aivi/src/native_rust_backend/typed_cranelift.rs` now emits executable typed bodies (for supported scalar MIR) instead of comment-only placeholders.
-- The typed backend now tries Cranelift first by default, while preserving MIR/typed-expr fallbacks for unsupported shapes.
-- The emitted Rust still targets `rustc` as the final compiler; this is a staged backend integration point, not full native object emission yet.
+- The `aivi run` command now uses a full Cranelift JIT backend (`crates/aivi/src/cranelift_backend/`).
+- All `RustIrExpr` variants are lowered to Cranelift IR via `lower.rs`.
+- Runtime helpers (`runtime_helpers.rs`) provide `extern "C"` functions for boxing/unboxing, allocation, and runtime interaction.
+- Effect blocks (`do Effect { ... }`) are handled by the interpreter runtime; pure function definitions are JIT-compiled.
+- The old Rust source emission path (`native_rust_backend/`) and `rustc` invocation are retained for `aivi build` only.
 
 ### Recently Implemented
 
+- **Full Cranelift JIT backend** — replaces the hybrid interpreter+Cranelift path for `aivi run`
+- **Uniform Value* ABI** — all JIT functions use `(ctx: i64, ...args: i64) -> i64` with boxed `Value` pointers
+- **Runtime helper bridge** — 22 `extern "C"` functions registered as JIT symbols for boxing, allocation, and runtime interaction
 - **Typed call chain emission** — multi-arg calls to known typed globals now chain: `fn_typed(rt)?(arg1)?(arg2)?`
 - **Boxing/unboxing at boundaries** — typed subexpressions that can't be emitted in typed mode fall back to `emit_expr` + `emit_unbox()`, allowing typed code to cross into Value territory
 - **Typed `main` rewrite** — `main` gets a `_typed` variant when its CgType is closed; the entry point calls the typed version and boxes the result

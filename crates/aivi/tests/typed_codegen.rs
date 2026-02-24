@@ -106,6 +106,23 @@ main = do Effect {
 }
 
 #[test]
+fn typed_codegen_emits_runtime_abi_handshake() {
+    let rust = compile_typed(
+        r#"module app.main
+main : Effect Text Unit
+main = do Effect {
+  print "done"
+}
+"#,
+    );
+
+    assert!(
+        rust.contains("runtime_value_abi_handshake(AIVI_EXPECTED_VALUE_ABI_MAJOR, AIVI_EXPECTED_VALUE_ABI_MINOR)?;"),
+        "expected ABI handshake at program entry; generated Rust:\n{rust}"
+    );
+}
+
+#[test]
 fn typed_codegen_polymorphic_no_typed_fn() {
     // Polymorphic definitions should NOT get a _typed variant.
     let rust = compile_typed(

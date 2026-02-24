@@ -222,6 +222,7 @@ export const sidebar = [
     items: [
       { text: 'Concurrency', link: '/runtime/concurrency' },
       { text: 'Memory Management', link: '/runtime/memory_management' },
+      { text: 'Value ABI Contract', link: '/runtime/value_abi' },
       { text: 'Package Manager (Cargo-backed)', link: '/runtime/package_manager' }
     ]
   },

@@ -41,3 +41,24 @@ native_ui_target = "gnome-gtk4-libadwaita"
         NativeUiTarget::GnomeGtk4Libadwaita
     );
 }
+
+#[test]
+fn aivi_toml_rejects_unknown_native_ui_target() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let path = tmp.path().join("aivi.toml");
+    fs::write(
+        &path,
+        r#"[project]
+kind = "bin"
+entry = "main.aivi"
+language_version = "0.1"
+
+[build]
+native_ui_target = "unknown-target"
+"#,
+    )
+    .expect("write aivi.toml");
+
+    let err = read_aivi_toml(&path).expect_err("invalid native_ui_target should fail");
+    assert!(err.to_string().contains("native_ui_target"));
+}

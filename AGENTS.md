@@ -162,7 +162,9 @@ To validate the project end-to-end, run these from the repo root:
 
 ## 7. Stale Build Artefacts
 
-The native-codegen integration test (`native_codegen_examples_compile_with_rustc`) writes generated Rust into a **sharded workspace** at `target/native-check-ws/` with a shared `CARGO_TARGET_DIR` at `target/native-check-target/`. These directories are **stable across runs** for incremental-build speed, but that means old shard contents can linger after structural changes (e.g., changing the number of shards or switching from per-file to whole-program compilation).
+The `aivi run` command now uses a Cranelift JIT backend (`crates/aivi/src/cranelift_backend/`). JIT compilation happens in-memory and does not produce filesystem artefacts.
+
+The `aivi build` command (direct mode) still generates Rust source into `target/aivi-gen/` via the legacy `native_rust_backend`. The native-codegen integration test (`native_codegen_examples_compile_with_rustc`) writes generated Rust into a **sharded workspace** at `target/native-check-ws/` with a shared `CARGO_TARGET_DIR` at `target/native-check-target/`. These directories are **stable across runs** for incremental-build speed, but old shard contents can linger after structural changes.
 
 **If you see unexpected E0425 or other rustc errors after modifying the test infrastructure**, clean the fixture dirs first:
 

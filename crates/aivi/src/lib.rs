@@ -1,3 +1,4 @@
+mod cranelift_backend;
 mod i18n;
 mod i18n_codegen;
 pub mod intern;
@@ -138,9 +139,10 @@ pub use pm::{
     CargoDepSpecParseError, CargoManifestEdits, NativeUiTarget, ProjectKind,
 };
 pub use runtime::{
-    run_native, run_native_jit, run_native_with_fuel, run_test_suite, TestFailure, TestReport,
+    run_test_suite, TestFailure, TestReport,
     TestSuccess,
 };
+pub use cranelift_backend::run_cranelift_jit;
 pub use rust_codegen::{
     compile_rust_native, compile_rust_native_lib, compile_rust_native_lib_typed,
     compile_rust_native_typed,

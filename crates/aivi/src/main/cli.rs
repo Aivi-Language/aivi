@@ -459,7 +459,7 @@ fn run() -> Result<(), AiviError> {
                         )));
                     }
                     let (program, cg_types) = aivi::desugar_target_with_cg_types(&opts.input)?;
-                    aivi::run_native_jit(program, cg_types)
+                    aivi::run_cranelift_jit(program, cg_types)
                 }
             }
             _ => Ok(()),

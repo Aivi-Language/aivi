@@ -188,3 +188,63 @@ kind = "lib"
     assert_eq!(updated, cargo_toml);
     assert!(!root.join("Cargo.lock").exists());
 }
+
+#[test]
+fn install_path_dep_accepts_cargo_toml_file_spec() {
+    let temp = TempDir::new().expect("tempdir");
+    let root = temp.path().join("app");
+    let dep_dir = temp.path().join("dep-dir");
+    let dep_manifest = dep_dir.join("Cargo.toml");
+
+    write_file(
+        &root.join("aivi.toml"),
+        r#"[project]
+kind = "bin"
+entry = "main.aivi"
+language_version = "0.1"
+"#,
+    );
+    write_file(
+        &root.join("Cargo.toml"),
+        r#"[package]
+name = "demo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+"#,
+    );
+    write_file(&root.join("src/lib.rs"), "");
+
+    write_file(
+        &dep_manifest,
+        r#"[package]
+name = "real_dep"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.aivi]
+language_version = "0.1"
+kind = "lib"
+"#,
+    );
+    write_file(&dep_dir.join("src/lib.rs"), "");
+
+    let Some(exe) = aivi_exe() else {
+        eprintln!("skipping: CARGO_BIN_EXE_aivi not set");
+        return;
+    };
+    let spec = format!("path:{}", dep_manifest.display());
+    let output = Command::new(exe)
+        .arg("install")
+        .arg(spec)
+        .arg("--no-fetch")
+        .current_dir(&root)
+        .output()
+        .expect("run aivi install");
+
+    assert!(output.status.success());
+
+    let updated = fs::read_to_string(root.join("Cargo.toml")).expect("read Cargo.toml");
+    assert!(updated.contains("real_dep"));
+}

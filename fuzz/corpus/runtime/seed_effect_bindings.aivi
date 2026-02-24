@@ -1,0 +1,9 @@
+module fuzz.seed.runtime.bindings
+export main
+
+main : Effect Text Unit
+main = effect {
+  value <- pure 41
+  next <- pure (value + 1)
+  pure Unit
+}

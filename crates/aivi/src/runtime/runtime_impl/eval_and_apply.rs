@@ -237,7 +237,26 @@ impl Runtime {
                 }
                 continue;
             }
-            insert_record_path(&mut map, &field.path, value)?;
+            if field.path.iter().all(|seg| matches!(seg, HirPathSegment::Field(_))) {
+                insert_record_path(&mut map, &field.path, value)?;
+                continue;
+            }
+            let resolved_path = self.resolve_runtime_path_segments(&field.path, env)?;
+            let current = std::mem::take(&mut map);
+            let updated = apply_value_path_update(
+                self,
+                Value::Record(Arc::new(current)),
+                &resolved_path,
+                value,
+                PathUpdateMode::Assign,
+            )?;
+            let Value::Record(updated) = updated else {
+                return Err(RuntimeError::Message(format!(
+                    "record update expected Record, got {}",
+                    format_value(&updated)
+                )));
+            };
+            map = updated.as_ref().clone();
         }
         Ok(Value::Record(Arc::new(map)))
     }
@@ -261,7 +280,27 @@ impl Runtime {
                     "patch fields do not support record spread".to_string(),
                 ));
             }
-            self.apply_patch_field(&mut map, &field.path, &field.value, env)?;
+            if field.path.iter().all(|seg| matches!(seg, HirPathSegment::Field(_))) {
+                self.apply_patch_field(&mut map, &field.path, &field.value, env)?;
+                continue;
+            }
+            let resolved_path = self.resolve_runtime_path_segments(&field.path, env)?;
+            let updater = self.eval_expr(&field.value, env)?;
+            let current = std::mem::take(&mut map);
+            let updated = apply_value_path_update(
+                self,
+                Value::Record(Arc::new(current)),
+                &resolved_path,
+                updater,
+                PathUpdateMode::Patch,
+            )?;
+            let Value::Record(updated) = updated else {
+                return Err(RuntimeError::Message(format!(
+                    "patch update expected Record, got {}",
+                    format_value(&updated)
+                )));
+            };
+            map = updated.as_ref().clone();
         }
         Ok(Value::Record(Arc::new(map)))
     }
@@ -298,7 +337,7 @@ impl Runtime {
                 }
                 HirPathSegment::Index(_) | HirPathSegment::All => {
                     return Err(RuntimeError::Message(
-                        "patch index paths are not supported in native runtime yet".to_string(),
+                        "indexed patch segment reached field-only patch path".to_string(),
                     ))
                 }
             }
@@ -321,9 +360,42 @@ impl Runtime {
                 Ok(())
             }
             HirPathSegment::Index(_) | HirPathSegment::All => Err(RuntimeError::Message(
-                "patch index paths are not supported in native runtime yet".to_string(),
+                "indexed patch segment reached field-only patch leaf".to_string(),
             )),
         }
+    }
+
+    fn resolve_runtime_path_segments(
+        &mut self,
+        path: &[HirPathSegment],
+        env: &Env,
+    ) -> Result<Vec<RuntimePathSegment>, RuntimeError> {
+        let mut resolved = Vec::with_capacity(path.len());
+        for segment in path {
+            match segment {
+                HirPathSegment::Field(name) => {
+                    resolved.push(RuntimePathSegment::Field(name.clone()));
+                }
+                HirPathSegment::All => {
+                    resolved.push(RuntimePathSegment::IndexAll);
+                }
+                HirPathSegment::Index(expr) => {
+                    if let HirExpr::Var { name, .. } = expr {
+                        if env.get(name).is_none() && self.ctx.globals.get(name).is_none() {
+                            resolved.push(RuntimePathSegment::IndexFieldBool(name.clone()));
+                            continue;
+                        }
+                    }
+                    let index_value = self.eval_expr(expr, env)?;
+                    if is_callable(&index_value) {
+                        resolved.push(RuntimePathSegment::IndexPredicate(index_value));
+                    } else {
+                        resolved.push(RuntimePathSegment::IndexValue(index_value));
+                    }
+                }
+            }
+        }
+        Ok(resolved)
     }
 
     fn eval_binary(
@@ -350,7 +422,7 @@ impl Runtime {
     ///
     /// Delegates to the trampoline so that deeply-nested effect chains
     /// (e.g. recursive `do Effect { ... }`) do not overflow the Rust stack.
-    fn run_effect_value(&mut self, value: Value) -> Result<Value, RuntimeError> {
+    pub(crate) fn run_effect_value(&mut self, value: Value) -> Result<Value, RuntimeError> {
         self.trampoline(Step::RunEffectValue { value })
     }
 }

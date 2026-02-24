@@ -20,3 +20,36 @@ fn expand_target_directory_filters_to_aivi_sources() {
 
     assert_eq!(resolved, vec![aivi_path]);
 }
+
+#[test]
+fn expand_target_accepts_single_aivi_file() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let aivi_path = dir.path().join("single.aivi");
+    fs::write(&aivi_path, "module Single\n").expect("write single.aivi");
+
+    let resolved =
+        aivi::resolve_target(aivi_path.to_str().expect("utf8 path")).expect("resolve target");
+    assert_eq!(resolved, vec![aivi_path]);
+}
+
+#[test]
+fn expand_target_recursive_alias_collects_nested_aivi_sources() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root_aivi = dir.path().join("main.aivi");
+    let nested_dir = dir.path().join("nested");
+    let nested_aivi = nested_dir.join("util.aivi");
+    let nested_txt = nested_dir.join("notes.txt");
+
+    fs::create_dir_all(&nested_dir).expect("create nested dir");
+    fs::write(&root_aivi, "module Main\n").expect("write main.aivi");
+    fs::write(&nested_aivi, "module Util\n").expect("write util.aivi");
+    fs::write(&nested_txt, "not aivi\n").expect("write notes.txt");
+
+    let target = format!("{}/**", dir.path().display());
+    let mut resolved = aivi::resolve_target(&target).expect("resolve target");
+    resolved.sort();
+
+    let mut expected = vec![root_aivi, nested_aivi];
+    expected.sort();
+    assert_eq!(resolved, expected);
+}

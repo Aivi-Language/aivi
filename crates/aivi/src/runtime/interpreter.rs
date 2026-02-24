@@ -1,16 +1,11 @@
 use std::collections::{HashMap, HashSet};
-use std::panic::AssertUnwindSafe;
-use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{Datelike, NaiveDate, Timelike, TimeZone as ChronoTimeZone};
-use cranelift_codegen::ir::{types, AbiParam, InstBuilder, Signature};
-use cranelift_codegen::isa::CallConv;
-use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{default_libcall_names, FuncId, Linkage, Module};
+use cranelift_module::{default_libcall_names, Linkage, Module};
 use regex::RegexBuilder;
 use url::Url;
 
@@ -25,11 +20,11 @@ use crate::{kernel, rust_ir};
 use crate::AiviError;
 
 mod builtins;
-mod environment;
+pub(crate) mod environment;
 mod http;
 #[cfg(test)]
 mod tests;
-mod values;
+pub(crate) mod values;
 
 use self::builtins::register_builtins;
 use self::environment::{Env, MachineEdge, RuntimeContext};
@@ -77,15 +72,17 @@ impl CancelToken {
     }
 }
 
-struct Runtime {
-    ctx: Arc<RuntimeContext>,
+pub(crate) struct Runtime {
+    pub(crate) ctx: Arc<RuntimeContext>,
     cancel: Arc<CancelToken>,
     cancel_mask: usize,
-    fuel: Option<u64>,
+    pub(crate) fuel: Option<u64>,
     rng_state: u64,
     debug_stack: Vec<DebugFrame>,
     /// Counter used to amortize cancel-token checks (checked every 64 evals).
     check_counter: u32,
+    #[cfg(test)]
+    eval_expr_call_count: usize,
 }
 
 #[derive(Clone)]
@@ -96,7 +93,7 @@ struct DebugFrame {
 }
 
 #[derive(Clone)]
-enum RuntimeError {
+pub(crate) enum RuntimeError {
     Error(Value),
     Cancelled,
     Message(String),
@@ -123,80 +120,6 @@ pub struct TestReport {
     pub successes: Vec<TestSuccess>,
 }
 
-thread_local! {
-    static JIT_LAST_ERROR: RefCell<Option<String>> = const { RefCell::new(None) };
-}
-
-static JIT_DEF_NAMES: OnceLock<RwLock<Vec<String>>> = OnceLock::new();
-
-fn jit_def_names_store() -> &'static RwLock<Vec<String>> {
-    JIT_DEF_NAMES.get_or_init(|| RwLock::new(Vec::new()))
-}
-
-fn set_jit_last_error(message: String) {
-    JIT_LAST_ERROR.with(|slot| {
-        *slot.borrow_mut() = Some(message);
-    });
-}
-
-fn take_jit_last_error() -> Option<String> {
-    JIT_LAST_ERROR.with(|slot| slot.borrow_mut().take())
-}
-
-fn jit_def_name(def_id: u64) -> Option<String> {
-    let names = jit_def_names_store().read().ok()?;
-    names.get(def_id as usize).cloned()
-}
-
-extern "C" fn aivi_jit_dispatch(runtime_ptr: u64, def_id: u64, args_ptr: u64, args_len: u64) -> u64 {
-    let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<Value, String> {
-        let Some(def_name) = jit_def_name(def_id) else {
-            return Err(format!("unknown jitted definition id {def_id}"));
-        };
-        if runtime_ptr == 0 {
-            return Err("null runtime pointer in jit dispatch".to_string());
-        }
-
-        let runtime = unsafe { &mut *(runtime_ptr as *mut Runtime) };
-        let args_len = usize::try_from(args_len).map_err(|_| "jit args length overflow".to_string())?;
-        let args = if args_len == 0 {
-            &[][..]
-        } else {
-            if args_ptr == 0 {
-                return Err("null args pointer in jit dispatch".to_string());
-            }
-            unsafe { std::slice::from_raw_parts(args_ptr as *const Value, args_len) }
-        };
-
-        let hidden_name = format!("__jit_orig|{def_name}");
-        let Some(source) = runtime
-            .ctx
-            .globals
-            .get(&hidden_name)
-            .or_else(|| runtime.ctx.globals.get(&def_name))
-        else {
-            return Err(format!("missing definition {def_name}"));
-        };
-        let mut value = runtime.force_value(source).map_err(format_runtime_error)?;
-        for arg in args {
-            value = runtime.apply(value, arg.clone()).map_err(format_runtime_error)?;
-        }
-        Ok(value)
-    }));
-
-    match outcome {
-        Ok(Ok(value)) => Box::into_raw(Box::new(value)) as u64,
-        Ok(Err(message)) => {
-            set_jit_last_error(message);
-            0
-        }
-        Err(_) => {
-            set_jit_last_error("panic while executing jitted dispatch callback".to_string());
-            0
-        }
-    }
-}
-
 pub fn run_native(program: HirProgram) -> Result<(), AiviError> {
     let mut runtime = build_runtime_from_program(program)?;
     run_main_effect(&mut runtime)
@@ -208,14 +131,6 @@ pub fn run_native_jit(
 ) -> Result<(), AiviError> {
     let mut runtime = build_runtime_from_program(program.clone())?;
     let jitted = build_jitted_globals_with_types(program, &cg_types)?;
-    for name in jitted.keys() {
-        if let Some(original) = runtime.ctx.globals.get(name) {
-            runtime
-                .ctx
-                .globals
-                .set(format!("__jit_orig|{name}"), original);
-        }
-    }
     for (name, value) in jitted {
         runtime.ctx.globals.set(name, value);
     }
@@ -257,7 +172,7 @@ pub fn run_native_with_fuel(program: HirProgram, fuel: u64) -> Result<(), AiviEr
     }
 }
 
-fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
+pub(crate) fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
     let main = runtime
         .ctx
         .globals
@@ -280,104 +195,6 @@ fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
     match runtime.run_effect_value(effect) {
         Ok(_) => Ok(()),
         Err(err) => Err(AiviError::Runtime(format_runtime_error(err))),
-    }
-}
-
-struct DispatchJitCompiler {
-    module: JITModule,
-    dispatch_func: FuncId,
-}
-
-fn wrapper_signature() -> Signature {
-    let mut sig = Signature::new(CallConv::SystemV);
-    sig.params.push(AbiParam::new(types::I64)); // runtime pointer
-    sig.params.push(AbiParam::new(types::I64)); // args pointer
-    sig.params.push(AbiParam::new(types::I64)); // args length
-    sig.returns.push(AbiParam::new(types::I64)); // Value* (0 on error)
-    sig
-}
-
-fn dispatch_signature() -> Signature {
-    let mut sig = Signature::new(CallConv::SystemV);
-    sig.params.push(AbiParam::new(types::I64)); // runtime pointer
-    sig.params.push(AbiParam::new(types::I64)); // def id
-    sig.params.push(AbiParam::new(types::I64)); // args pointer
-    sig.params.push(AbiParam::new(types::I64)); // args length
-    sig.returns.push(AbiParam::new(types::I64)); // Value* (0 on error)
-    sig
-}
-
-impl DispatchJitCompiler {
-    fn new() -> Result<Self, String> {
-        let mut builder = JITBuilder::new(default_libcall_names())
-            .map_err(|err| format!("jit builder init failed: {err}"))?;
-        builder.symbol("__aivi_jit_dispatch", aivi_jit_dispatch as *const u8);
-        let mut module = JITModule::new(builder);
-        let dispatch_sig = dispatch_signature();
-        let dispatch_func = module
-            .declare_function("__aivi_jit_dispatch", Linkage::Import, &dispatch_sig)
-            .map_err(|err| format!("jit declare dispatch failed: {err}"))?;
-        Ok(Self {
-            module,
-            dispatch_func,
-        })
-    }
-
-    fn define_wrapper(&mut self, symbol: &str, def_id: u64) -> Result<FuncId, String> {
-        let mut ctx = self.module.make_context();
-        ctx.func.signature = wrapper_signature();
-        let dispatch_ref = self
-            .module
-            .declare_func_in_func(self.dispatch_func, &mut ctx.func);
-
-        let mut fb_ctx = FunctionBuilderContext::new();
-        {
-            let mut builder = FunctionBuilder::new(&mut ctx.func, &mut fb_ctx);
-            let entry = builder.create_block();
-            builder.append_block_params_for_function_params(entry);
-            builder.switch_to_block(entry);
-            builder.seal_block(entry);
-
-            let params = builder.block_params(entry).to_vec();
-            let def_const = builder.ins().iconst(types::I64, def_id as i64);
-            let call = builder
-                .ins()
-                .call(dispatch_ref, &[params[0], def_const, params[1], params[2]]);
-            let result = builder.inst_results(call)[0];
-            builder.ins().return_(&[result]);
-            builder.finalize();
-        }
-
-        let func_id = self
-            .module
-            .declare_function(symbol, Linkage::Local, &ctx.func.signature)
-            .map_err(|err| format!("jit declare wrapper {symbol} failed: {err}"))?;
-        self.module
-            .define_function(func_id, &mut ctx)
-            .map_err(|err| format!("jit define wrapper {symbol} failed: {err}"))?;
-        self.module.clear_context(&mut ctx);
-        Ok(func_id)
-    }
-
-    fn compile_bindings(mut self, bindings: &[(String, usize)]) -> Result<Vec<(String, usize, usize)>, String> {
-        let mut compiled = Vec::new();
-        for (idx, (name, arity)) in bindings.iter().enumerate() {
-            let symbol = format!("__aivi_jit_dispatch_wrapper_{idx}");
-            let func_id = self.define_wrapper(&symbol, idx as u64)?;
-            compiled.push((name.clone(), *arity, func_id));
-        }
-
-        self.module
-            .finalize_definitions()
-            .map_err(|err| format!("jit finalize wrappers failed: {err}"))?;
-
-        let mut out = Vec::new();
-        for (name, arity, func_id) in compiled {
-            let ptr = self.module.get_finalized_function(func_id);
-            out.push((name, arity, ptr as usize));
-        }
-        std::mem::forget(self.module);
-        Ok(out)
     }
 }
 
@@ -413,46 +230,53 @@ fn build_jitted_globals_with_types(
     }
 
     let mut counts: HashMap<String, usize> = HashMap::new();
-    let mut bindings: Vec<(String, usize)> = Vec::new();
     for module in &rust_program.modules {
         for def in &module.defs {
-            let arity = lambda_arity(&def.expr);
             *counts.entry(def.name.clone()).or_insert(0) += 1;
-            bindings.push((def.name.clone(), arity));
         }
     }
 
-    bindings.retain(|(name, _)| counts.get(name).copied() == Some(1));
-    bindings.sort_by(|a, b| a.0.cmp(&b.0));
-    bindings.dedup_by(|a, b| a.0 == b.0);
-    if bindings.is_empty() {
-        return Ok(HashMap::new());
-    }
-
-    if let Ok(mut names) = jit_def_names_store().write() {
-        *names = bindings.iter().map(|(name, _)| name.clone()).collect();
-    }
-
-    let compiler = DispatchJitCompiler::new().map_err(AiviError::Runtime)?;
-    let compiled = compiler
-        .compile_bindings(&bindings)
-        .map_err(AiviError::Runtime)?;
-
     let mut jitted = HashMap::new();
-    for (name, arity, code_addr) in compiled {
-        let def_name = name.clone();
-        let builtin = runtime_builtin(&format!("__jit|{def_name}"), arity, move |args, runtime| {
-            let raw = call_jitted_dispatch(code_addr, runtime, &args);
-            if raw == 0 {
-                return Err(RuntimeError::Message(
-                    take_jit_last_error()
-                        .unwrap_or_else(|| format!("jitted call failed for {def_name}")),
-                ));
+    for module in &rust_program.modules {
+        for def in &module.defs {
+            if counts.get(&def.name).copied() != Some(1) || jitted.contains_key(&def.name) {
+                continue;
             }
-            let value = unsafe { Box::from_raw(raw as *mut Value) };
-            Ok(*value)
-        });
-        jitted.insert(name, builtin);
+            let arity = lambda_arity(&def.expr);
+            let Some((params, body)) = peel_lambda_params(&def.expr, arity) else {
+                continue;
+            };
+            let body = body.clone();
+            let def_name = def.name.clone();
+            let cache = (arity == 0).then(|| Arc::new(Mutex::new(None)));
+            let builtin = runtime_builtin(
+                &format!("__jit|native|{def_name}"),
+                arity,
+                move |args, runtime| {
+                    if args.len() != arity {
+                        return Err(RuntimeError::Message(format!(
+                            "jitted call expected {arity} args for {def_name}, got {}",
+                            args.len()
+                        )));
+                    }
+                    if let Some(cache) = &cache {
+                        if let Some(value) = cache.lock().expect("jit cache lock").clone() {
+                            return Ok(value);
+                        }
+                    }
+                    let env = Env::new(Some(runtime.ctx.globals.clone()));
+                    for (param, arg) in params.iter().zip(args.into_iter()) {
+                        env.set(param.clone(), arg);
+                    }
+                    let value = eval_runtime_rust_ir_expr(runtime, &body, &env)?;
+                    if let Some(cache) = &cache {
+                        *cache.lock().expect("jit cache lock") = Some(value.clone());
+                    }
+                    Ok(value)
+                },
+            );
+            jitted.insert(def.name.clone(), builtin);
+        }
     }
 
     for module in &rust_program.modules {
@@ -463,23 +287,39 @@ fn build_jitted_globals_with_types(
             let Some(cg_ty) = def.cg_type.as_ref() else {
                 continue;
             };
-            let Some(arity) = int_only_function_arity(cg_ty) else {
+            let Some((param_scalar_tys, ret_scalar_ty)) = scalar_function_signature(cg_ty) else {
                 continue;
             };
+            let arity = param_scalar_tys.len();
             let Some((params, body)) = peel_lambda_params(&def.expr, arity) else {
                 continue;
             };
-            let locals: Vec<(String, CgType)> =
-                params.iter().cloned().map(|name| (name, CgType::Int)).collect();
-            let Some(lowered) =
-                typed_cranelift::lower_for_runtime(body, &CgType::Int, &global_cg_types, &locals)
-            else {
+            let locals: Vec<(String, CgType)> = params
+                .iter()
+                .cloned()
+                .zip(
+                    param_scalar_tys
+                        .iter()
+                        .map(|kind| scalar_kind_to_cg_type(*kind)),
+                )
+                .collect();
+            let ret_cg_ty = scalar_kind_to_cg_type(ret_scalar_ty);
+            let Some(lowered) = typed_cranelift::lower_for_runtime(
+                body,
+                &ret_cg_ty,
+                &global_cg_types,
+                &locals,
+            ) else {
                 continue;
             };
             let typed_cranelift::RuntimeLowering {
                 function,
                 param_names,
+                param_types,
             } = lowered;
+            if param_names.len() > MAX_JITTED_I64_CALL_ARITY {
+                continue;
+            }
             let symbol = format!("__aivi_jit_native_{}", sanitize_symbol(&def.name));
             let Ok(code_addr) = compile_i64_jit_function(&symbol, function) else {
                 continue;
@@ -495,46 +335,40 @@ fn build_jitted_globals_with_types(
                 arity,
                 move |args, runtime| {
                     if args.len() != arity {
-                    return Err(RuntimeError::Message(format!(
-                        "jitted int call expected {arity} args for {def_name}, got {}",
-                        args.len()
-                    )));
+                        return Err(RuntimeError::Message(format!(
+                            "jitted scalar call expected {arity} args for {def_name}, got {}",
+                            args.len()
+                        )));
                     }
 
                     let mut final_args = Vec::with_capacity(param_names.len());
-                    for name in &param_names {
+                    for (idx, name) in param_names.iter().enumerate() {
+                        let expected_ty = param_types.get(idx).ok_or_else(|| {
+                            RuntimeError::Message(format!(
+                                "missing jitted param type {idx} for {def_name}"
+                            ))
+                        })?;
                         if let Some(position) = local_positions.get(name).copied() {
-                            let Some(Value::Int(value)) = args.get(position) else {
+                            let Some(value) = args.get(position) else {
                                 return Err(RuntimeError::Message(format!(
-                                    "jitted int call expected Int arg {position} for {def_name}"
+                                    "missing jitted arg {position} for {def_name}"
                                 )));
                             };
-                            final_args.push(*value);
+                            final_args.push(payload_from_value(expected_ty, value, &def_name)?);
                             continue;
                         }
 
-                        let hidden_name = format!("__jit_orig|{name}");
-                        let Some(source) = runtime
-                            .ctx
-                            .globals
-                            .get(&hidden_name)
-                            .or_else(|| runtime.ctx.globals.get(name))
-                        else {
+                        let Some(source) = runtime.ctx.globals.get(name) else {
                             return Err(RuntimeError::Message(format!(
                                 "missing jitted dependency {name} for {def_name}"
                             )));
                         };
                         let value = runtime.force_value(source)?;
-                        let Value::Int(value) = value else {
-                            return Err(RuntimeError::Message(format!(
-                                "jitted int dependency {name} for {def_name} was not Int"
-                            )));
-                        };
-                        final_args.push(value);
+                        final_args.push(payload_from_value(expected_ty, &value, &def_name)?);
                     }
 
                     let result = call_jitted_i64(code_addr, &final_args)?;
-                    Ok(Value::Int(result))
+                    value_from_payload(ret_scalar_ty, result)
                 },
             );
             jitted.insert(def.name.clone(), builtin);
@@ -542,6 +376,1235 @@ fn build_jitted_globals_with_types(
     }
 
     Ok(jitted)
+}
+
+fn eval_runtime_rust_ir_expr(
+    runtime: &mut Runtime,
+    expr: &rust_ir::RustIrExpr,
+    env: &Env,
+) -> Result<Value, RuntimeError> {
+    runtime.check_cancelled()?;
+    match expr {
+        rust_ir::RustIrExpr::Local { name, .. } => {
+            let value = env
+                .get(name)
+                .ok_or_else(|| RuntimeError::Message(format!("unknown local {name}")))?;
+            runtime.force_value(value)
+        }
+        rust_ir::RustIrExpr::Global { name, .. } => {
+            let value = runtime
+                .ctx
+                .globals
+                .get(name)
+                .ok_or_else(|| RuntimeError::Message(format!("unknown global {name}")))?;
+            runtime.force_value(value)
+        }
+        rust_ir::RustIrExpr::Builtin { builtin, .. } => {
+            let value = runtime
+                .ctx
+                .globals
+                .get(builtin)
+                .ok_or_else(|| RuntimeError::Message(format!("unknown builtin {builtin}")))?;
+            runtime.force_value(value)
+        }
+        rust_ir::RustIrExpr::ConstructorValue { name, .. } => Ok(Value::Constructor {
+            name: name.clone(),
+            args: Vec::new(),
+        }),
+        rust_ir::RustIrExpr::LitNumber { text, .. } => {
+            if let Some(value) = parse_number_value(text) {
+                return Ok(value);
+            }
+            let value = env.get(text).ok_or_else(|| {
+                RuntimeError::Message(format!("unknown numeric literal {text}"))
+            })?;
+            runtime.force_value(value)
+        }
+        rust_ir::RustIrExpr::LitString { text, .. } => Ok(Value::Text(text.clone())),
+        rust_ir::RustIrExpr::TextInterpolate { parts, .. } => {
+            let mut out = String::new();
+            for part in parts {
+                match part {
+                    rust_ir::RustIrTextPart::Text { text } => out.push_str(text),
+                    rust_ir::RustIrTextPart::Expr { expr } => {
+                        let value = eval_runtime_rust_ir_expr(runtime, expr, env)?;
+                        out.push_str(&format_value(&value));
+                    }
+                }
+            }
+            Ok(Value::Text(out))
+        }
+        rust_ir::RustIrExpr::LitSigil {
+            tag, body, flags, ..
+        } => eval_runtime_sigil_literal(tag, body, flags),
+        rust_ir::RustIrExpr::LitBool { value, .. } => Ok(Value::Bool(*value)),
+        rust_ir::RustIrExpr::LitDateTime { text, .. } => Ok(Value::DateTime(text.clone())),
+        rust_ir::RustIrExpr::Lambda {
+            id, param, body, ..
+        } => {
+            let lambda_name = format!("__jit|lambda|{id}");
+            let param = param.clone();
+            let body = Arc::new((**body).clone());
+            let captured_env = env.clone();
+            Ok(runtime_builtin(&lambda_name, 1, move |mut args, runtime| {
+                let arg = args.pop().unwrap_or(Value::Unit);
+                let lambda_env = Env::new(Some(captured_env.clone()));
+                lambda_env.set(param.clone(), arg);
+                eval_runtime_rust_ir_expr(runtime, body.as_ref(), &lambda_env)
+            }))
+        }
+        rust_ir::RustIrExpr::App { func, arg, .. } => {
+            let func_value = eval_runtime_rust_ir_expr(runtime, func, env)?;
+            let arg_value = eval_runtime_rust_ir_expr(runtime, arg, env)?;
+            runtime.apply(func_value, arg_value)
+        }
+        rust_ir::RustIrExpr::Call { func, args, .. } => {
+            let mut func_value = eval_runtime_rust_ir_expr(runtime, func, env)?;
+            for arg in args {
+                let arg_value = eval_runtime_rust_ir_expr(runtime, arg, env)?;
+                func_value = runtime.apply(func_value, arg_value)?;
+            }
+            Ok(func_value)
+        }
+        rust_ir::RustIrExpr::DebugFn {
+            fn_name,
+            arg_vars,
+            log_args,
+            log_return,
+            log_time,
+            body,
+            ..
+        } => {
+            let call_id = runtime.ctx.next_debug_call_id();
+            let start = log_time.then(std::time::Instant::now);
+
+            let ts = log_time.then(now_unix_ms);
+            let args_json = if *log_args {
+                Some(
+                    arg_vars
+                        .iter()
+                        .map(|name| {
+                            env.get(name)
+                                .as_ref()
+                                .map(|v| debug_value_to_json(v, 0))
+                                .unwrap_or(serde_json::Value::Null)
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            } else {
+                None
+            };
+
+            runtime.debug_stack.push(DebugFrame {
+                fn_name: fn_name.clone(),
+                call_id,
+                start,
+            });
+
+            let mut enter = serde_json::Map::new();
+            enter.insert("kind".to_string(), serde_json::Value::String("fn.enter".to_string()));
+            enter.insert("fn".to_string(), serde_json::Value::String(fn_name.clone()));
+            enter.insert(
+                "callId".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(call_id)),
+            );
+            if let Some(args_json) = args_json {
+                enter.insert("args".to_string(), serde_json::Value::Array(args_json));
+            }
+            if let Some(ts) = ts {
+                enter.insert(
+                    "ts".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(ts)),
+                );
+            }
+            emit_debug_event(serde_json::Value::Object(enter));
+
+            let result = eval_runtime_rust_ir_expr(runtime, body, env);
+
+            let frame = runtime.debug_stack.pop();
+            if let Some(frame) = frame {
+                let dur_ms = if *log_time {
+                    frame
+                        .start
+                        .map(|s| s.elapsed().as_millis() as u64)
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
+
+                let mut exit = serde_json::Map::new();
+                exit.insert("kind".to_string(), serde_json::Value::String("fn.exit".to_string()));
+                exit.insert("fn".to_string(), serde_json::Value::String(frame.fn_name));
+                exit.insert(
+                    "callId".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(frame.call_id)),
+                );
+                if *log_return {
+                    if let Ok(ref value) = result {
+                        exit.insert("ret".to_string(), debug_value_to_json(value, 0));
+                    }
+                }
+                if *log_time {
+                    exit.insert(
+                        "durMs".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(dur_ms)),
+                    );
+                }
+                emit_debug_event(serde_json::Value::Object(exit));
+            }
+
+            result
+        }
+        rust_ir::RustIrExpr::Pipe {
+            pipe_id,
+            step,
+            label,
+            log_time,
+            func,
+            arg,
+            ..
+        } => {
+            let func_value = eval_runtime_rust_ir_expr(runtime, func, env)?;
+            let arg_value = eval_runtime_rust_ir_expr(runtime, arg, env)?;
+
+            let Some(frame) = runtime.debug_stack.last().cloned() else {
+                return runtime.apply(func_value, arg_value);
+            };
+
+            let ts_in = log_time.then(now_unix_ms);
+            let mut pipe_in = serde_json::Map::new();
+            pipe_in.insert("kind".to_string(), serde_json::Value::String("pipe.in".to_string()));
+            pipe_in.insert("fn".to_string(), serde_json::Value::String(frame.fn_name.clone()));
+            pipe_in.insert(
+                "callId".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(frame.call_id)),
+            );
+            pipe_in.insert(
+                "pipeId".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(*pipe_id)),
+            );
+            pipe_in.insert(
+                "step".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(*step)),
+            );
+            pipe_in.insert("label".to_string(), serde_json::Value::String(label.clone()));
+            pipe_in.insert("value".to_string(), debug_value_to_json(&arg_value, 0));
+            if let Some(ts) = ts_in {
+                pipe_in.insert(
+                    "ts".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(ts)),
+                );
+            }
+            emit_debug_event(serde_json::Value::Object(pipe_in));
+
+            let step_start = log_time.then(std::time::Instant::now);
+            let out_value = runtime.apply(func_value, arg_value)?;
+
+            let dur_ms = if *log_time {
+                step_start
+                    .map(|s| s.elapsed().as_millis() as u64)
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+            let shape = debug_shape_tag(&out_value);
+
+            let mut pipe_out = serde_json::Map::new();
+            pipe_out.insert(
+                "kind".to_string(),
+                serde_json::Value::String("pipe.out".to_string()),
+            );
+            pipe_out.insert("fn".to_string(), serde_json::Value::String(frame.fn_name));
+            pipe_out.insert(
+                "callId".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(frame.call_id)),
+            );
+            pipe_out.insert(
+                "pipeId".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(*pipe_id)),
+            );
+            pipe_out.insert(
+                "step".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(*step)),
+            );
+            pipe_out.insert("label".to_string(), serde_json::Value::String(label.clone()));
+            pipe_out.insert("value".to_string(), debug_value_to_json(&out_value, 0));
+            if *log_time {
+                pipe_out.insert(
+                    "durMs".to_string(),
+                    serde_json::Value::Number(serde_json::Number::from(dur_ms)),
+                );
+            }
+            if let Some(shape) = shape {
+                pipe_out.insert("shape".to_string(), serde_json::Value::String(shape));
+            }
+            emit_debug_event(serde_json::Value::Object(pipe_out));
+
+            Ok(out_value)
+        }
+        rust_ir::RustIrExpr::List { items, .. } => {
+            let mut values = Vec::new();
+            for item in items {
+                let value = eval_runtime_rust_ir_expr(runtime, &item.expr, env)?;
+                if item.spread {
+                    let Value::List(inner) = value else {
+                        return Err(RuntimeError::Message(
+                            "list spread expects a list".to_string(),
+                        ));
+                    };
+                    values.extend(inner.iter().cloned());
+                } else {
+                    values.push(value);
+                }
+            }
+            Ok(Value::List(Arc::new(values)))
+        }
+        rust_ir::RustIrExpr::Tuple { items, .. } => {
+            let mut values = Vec::with_capacity(items.len());
+            for item in items {
+                values.push(eval_runtime_rust_ir_expr(runtime, item, env)?);
+            }
+            Ok(Value::Tuple(values))
+        }
+        rust_ir::RustIrExpr::Record { fields, .. } => {
+            eval_runtime_rust_ir_record(runtime, fields, env)
+        }
+        rust_ir::RustIrExpr::Patch { target, fields, .. } => {
+            eval_runtime_rust_ir_patch(runtime, target, fields, env)
+        }
+        rust_ir::RustIrExpr::FieldAccess { base, field, .. } => {
+            let base_value = eval_runtime_rust_ir_expr(runtime, base, env)?;
+            match base_value {
+                Value::Record(map) => shape_record(map.as_ref())
+                    .get(field)
+                    .cloned()
+                    .ok_or_else(|| RuntimeError::Message(format!("missing field {field}"))),
+                _ => Err(RuntimeError::Message(format!(
+                    "field access on non-record {field}"
+                ))),
+            }
+        }
+        rust_ir::RustIrExpr::Index { base, index, .. } => {
+            let base_value = eval_runtime_rust_ir_expr(runtime, base, env)?;
+            let index_value = eval_runtime_rust_ir_expr(runtime, index, env)?;
+            read_indexed_value(base_value, index_value)
+        }
+        rust_ir::RustIrExpr::Match {
+            scrutinee, arms, ..
+        } => {
+            let value = eval_runtime_rust_ir_expr(runtime, scrutinee, env)?;
+            for arm in arms {
+                let pattern = lower_runtime_rust_ir_pattern(&arm.pattern);
+                let Some(bindings) = collect_pattern_bindings(&pattern, &value) else {
+                    continue;
+                };
+                if let Some(guard) = &arm.guard {
+                    let guard_env = Env::new(Some(env.clone()));
+                    for (name, value) in bindings.clone() {
+                        guard_env.set(name, value);
+                    }
+                    let guard_value = eval_runtime_rust_ir_expr(runtime, guard, &guard_env)?;
+                    if !matches!(guard_value, Value::Bool(true)) {
+                        continue;
+                    }
+                }
+                let arm_env = Env::new(Some(env.clone()));
+                for (name, value) in bindings {
+                    arm_env.set(name, value);
+                }
+                return eval_runtime_rust_ir_expr(runtime, &arm.body, &arm_env);
+            }
+            Err(RuntimeError::Message("non-exhaustive match".to_string()))
+        }
+        rust_ir::RustIrExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            let cond_value = eval_runtime_rust_ir_expr(runtime, cond, env)?;
+            if matches!(cond_value, Value::Bool(true)) {
+                eval_runtime_rust_ir_expr(runtime, then_branch, env)
+            } else {
+                eval_runtime_rust_ir_expr(runtime, else_branch, env)
+            }
+        }
+        rust_ir::RustIrExpr::Binary {
+            op, left, right, ..
+        } => {
+            if op == "&&" {
+                let left_value = eval_runtime_rust_ir_expr(runtime, left, env)?;
+                return match left_value {
+                    Value::Bool(false) => Ok(Value::Bool(false)),
+                    Value::Bool(true) => eval_runtime_rust_ir_expr(runtime, right, env),
+                    _ => {
+                        let right_value = eval_runtime_rust_ir_expr(runtime, right, env)?;
+                        runtime.eval_binary(op, left_value, right_value, env)
+                    }
+                };
+            }
+            if op == "||" {
+                let left_value = eval_runtime_rust_ir_expr(runtime, left, env)?;
+                return match left_value {
+                    Value::Bool(true) => Ok(Value::Bool(true)),
+                    Value::Bool(false) => eval_runtime_rust_ir_expr(runtime, right, env),
+                    _ => {
+                        let right_value = eval_runtime_rust_ir_expr(runtime, right, env)?;
+                        runtime.eval_binary(op, left_value, right_value, env)
+                    }
+                };
+            }
+            let left_value = eval_runtime_rust_ir_expr(runtime, left, env)?;
+            let right_value = eval_runtime_rust_ir_expr(runtime, right, env)?;
+            runtime.eval_binary(op, left_value, right_value, env)
+        }
+        rust_ir::RustIrExpr::Block {
+            block_kind, items, ..
+        } => match block_kind {
+            rust_ir::RustIrBlockKind::Plain => eval_runtime_rust_ir_plain_block(runtime, items, env),
+            rust_ir::RustIrBlockKind::Do { monad } if monad == "Effect" => {
+                let lowered = lower_runtime_rust_ir_block_items(items)?;
+                Ok(Value::Effect(Arc::new(EffectValue::Block {
+                    env: env.clone(),
+                    items: Arc::new(lowered),
+                })))
+            }
+            rust_ir::RustIrBlockKind::Do { monad } => {
+                let lowered = lower_runtime_rust_ir_block_items(items)?;
+                runtime.eval_generic_do_block(monad, &lowered, env)
+            }
+            rust_ir::RustIrBlockKind::Generate => {
+                let lowered = lower_runtime_rust_ir_block_items(items)?;
+                runtime.eval_generate_block(&lowered, env)
+            }
+            rust_ir::RustIrBlockKind::Resource => {
+                let lowered = lower_runtime_rust_ir_block_items(items)?;
+                Ok(Value::Resource(Arc::new(ResourceValue {
+                    items: Arc::new(lowered),
+                })))
+            }
+        },
+        rust_ir::RustIrExpr::Raw { text, .. } => Ok(Value::Text(text.clone())),
+    }
+}
+
+fn eval_runtime_sigil_literal(tag: &str, body: &str, flags: &str) -> Result<Value, RuntimeError> {
+    match tag {
+        "r" => {
+            let mut builder = RegexBuilder::new(body);
+            for flag in flags.chars() {
+                match flag {
+                    'i' => {
+                        builder.case_insensitive(true);
+                    }
+                    'm' => {
+                        builder.multi_line(true);
+                    }
+                    's' => {
+                        builder.dot_matches_new_line(true);
+                    }
+                    'x' => {
+                        builder.ignore_whitespace(true);
+                    }
+                    _ => {}
+                }
+            }
+            let regex = builder.build().map_err(|err| {
+                RuntimeError::Message(format!("invalid regex literal: {err}"))
+            })?;
+            Ok(Value::Regex(Arc::new(regex)))
+        }
+        "u" | "url" => {
+            let parsed = Url::parse(body).map_err(|err| {
+                RuntimeError::Message(format!("invalid url literal: {err}"))
+            })?;
+            Ok(Value::Record(Arc::new(url_to_record(&parsed))))
+        }
+        "p" | "path" => {
+            let cleaned = body.trim().replace('\\', "/");
+            if cleaned.contains('\0') {
+                return Err(RuntimeError::Message(
+                    "invalid path literal: contains NUL byte".to_string(),
+                ));
+            }
+            let absolute = cleaned.starts_with('/');
+            let mut segments: Vec<String> = Vec::new();
+            for raw in cleaned.split('/') {
+                if raw.is_empty() || raw == "." {
+                    continue;
+                }
+                if raw == ".." {
+                    if let Some(last) = segments.last() {
+                        if last != ".." {
+                            segments.pop();
+                            continue;
+                        }
+                    }
+                    if !absolute {
+                        segments.push("..".to_string());
+                    }
+                    continue;
+                }
+                segments.push(raw.to_string());
+            }
+
+            let mut map = HashMap::new();
+            map.insert("absolute".to_string(), Value::Bool(absolute));
+            map.insert(
+                "segments".to_string(),
+                Value::List(Arc::new(
+                    segments.into_iter().map(Value::Text).collect::<Vec<_>>(),
+                )),
+            );
+            Ok(Value::Record(Arc::new(map)))
+        }
+        "d" => {
+            let date = NaiveDate::parse_from_str(body, "%Y-%m-%d").map_err(|err| {
+                RuntimeError::Message(format!("invalid date literal: {err}"))
+            })?;
+            Ok(Value::Record(Arc::new(date_to_record(date))))
+        }
+        "t" | "dt" => {
+            let _ = chrono::DateTime::parse_from_rfc3339(body).map_err(|err| {
+                RuntimeError::Message(format!("invalid datetime literal: {err}"))
+            })?;
+            Ok(Value::DateTime(body.to_string()))
+        }
+        "tz" => {
+            let zone_id = body.trim();
+            let _: chrono_tz::Tz = zone_id.parse().map_err(|_| {
+                RuntimeError::Message(format!("invalid timezone id: {zone_id}"))
+            })?;
+            let mut map = HashMap::new();
+            map.insert("id".to_string(), Value::Text(zone_id.to_string()));
+            Ok(Value::Record(Arc::new(map)))
+        }
+        "zdt" => {
+            let text = body.trim();
+            let (dt_text, zone_id) = parse_zdt_parts(text)?;
+            let tz: chrono_tz::Tz = zone_id.parse().map_err(|_| {
+                RuntimeError::Message(format!("invalid timezone id: {zone_id}"))
+            })?;
+
+            let zdt = if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(dt_text) {
+                parsed.with_timezone(&tz)
+            } else {
+                let naive = parse_naive_datetime(dt_text)?;
+                tz.from_local_datetime(&naive)
+                    .single()
+                    .ok_or_else(|| {
+                        RuntimeError::Message("ambiguous or invalid local time".to_string())
+                    })?
+            };
+
+            let offset_millis = i64::from(chrono::offset::Offset::fix(zdt.offset()).local_minus_utc()) * 1000;
+
+            let mut dt_map = HashMap::new();
+            dt_map.insert("year".to_string(), Value::Int(zdt.year() as i64));
+            dt_map.insert("month".to_string(), Value::Int(zdt.month() as i64));
+            dt_map.insert("day".to_string(), Value::Int(zdt.day() as i64));
+            dt_map.insert("hour".to_string(), Value::Int(zdt.hour() as i64));
+            dt_map.insert("minute".to_string(), Value::Int(zdt.minute() as i64));
+            dt_map.insert("second".to_string(), Value::Int(zdt.second() as i64));
+            dt_map.insert(
+                "millisecond".to_string(),
+                Value::Int(zdt.timestamp_subsec_millis() as i64),
+            );
+
+            let mut zone_map = HashMap::new();
+            zone_map.insert("id".to_string(), Value::Text(zone_id.to_string()));
+
+            let mut offset_map = HashMap::new();
+            offset_map.insert("millis".to_string(), Value::Int(offset_millis));
+
+            let mut map = HashMap::new();
+            map.insert("dateTime".to_string(), Value::Record(Arc::new(dt_map)));
+            map.insert("zone".to_string(), Value::Record(Arc::new(zone_map)));
+            map.insert("offset".to_string(), Value::Record(Arc::new(offset_map)));
+            Ok(Value::Record(Arc::new(map)))
+        }
+        "k" => {
+            validate_key_text(body).map_err(|msg| {
+                RuntimeError::Message(format!("invalid i18n key literal: {msg}"))
+            })?;
+            let mut map = HashMap::new();
+            map.insert("tag".to_string(), Value::Text(tag.to_string()));
+            map.insert("body".to_string(), Value::Text(body.trim().to_string()));
+            map.insert("flags".to_string(), Value::Text(flags.to_string()));
+            Ok(Value::Record(Arc::new(map)))
+        }
+        "m" => {
+            let parsed = parse_message_template(body).map_err(|msg| {
+                RuntimeError::Message(format!("invalid i18n message literal: {msg}"))
+            })?;
+            let mut map = HashMap::new();
+            map.insert("tag".to_string(), Value::Text(tag.to_string()));
+            map.insert("body".to_string(), Value::Text(body.to_string()));
+            map.insert("flags".to_string(), Value::Text(flags.to_string()));
+            map.insert("parts".to_string(), i18n_message_parts_value(&parsed.parts));
+            Ok(Value::Record(Arc::new(map)))
+        }
+        _ => {
+            let mut map = HashMap::new();
+            map.insert("tag".to_string(), Value::Text(tag.to_string()));
+            map.insert("body".to_string(), Value::Text(body.to_string()));
+            map.insert("flags".to_string(), Value::Text(flags.to_string()));
+            Ok(Value::Record(Arc::new(map)))
+        }
+    }
+}
+
+fn eval_runtime_rust_ir_plain_block(
+    runtime: &mut Runtime,
+    items: &[rust_ir::RustIrBlockItem],
+    env: &Env,
+) -> Result<Value, RuntimeError> {
+    if items.is_empty() {
+        return Ok(Value::Unit);
+    }
+    let local_env = Env::new(Some(env.clone()));
+    let mut result = Value::Unit;
+    for item in items {
+        match item {
+            rust_ir::RustIrBlockItem::Bind { pattern, expr } => {
+                let value = eval_runtime_rust_ir_expr(runtime, expr, &local_env)?;
+                let pattern = lower_runtime_rust_ir_pattern(pattern);
+                let bindings = collect_pattern_bindings(&pattern, &value)
+                    .ok_or_else(|| RuntimeError::Message("pattern match failed".to_string()))?;
+                for (name, value) in bindings {
+                    local_env.set(name, value);
+                }
+                result = Value::Unit;
+            }
+            rust_ir::RustIrBlockItem::Expr { expr } => {
+                result = eval_runtime_rust_ir_expr(runtime, expr, &local_env)?;
+            }
+            rust_ir::RustIrBlockItem::Filter { .. } => {
+                return Err(RuntimeError::Message(
+                    "unsupported block item in plain block: Filter".to_string(),
+                ));
+            }
+            rust_ir::RustIrBlockItem::Yield { .. } => {
+                return Err(RuntimeError::Message(
+                    "unsupported block item in plain block: Yield".to_string(),
+                ));
+            }
+            rust_ir::RustIrBlockItem::Recurse { .. } => {
+                return Err(RuntimeError::Message(
+                    "unsupported block item in plain block: Recurse".to_string(),
+                ));
+            }
+        }
+    }
+    Ok(result)
+}
+
+fn lower_runtime_rust_ir_block_items(
+    items: &[rust_ir::RustIrBlockItem],
+) -> Result<Vec<HirBlockItem>, RuntimeError> {
+    items
+        .iter()
+        .enumerate()
+        .map(|(index, item)| {
+            lower_runtime_rust_ir_block_item(item).ok_or_else(|| {
+                RuntimeError::Message(format!(
+                    "failed to lower jitted block item at index {index}"
+                ))
+            })
+        })
+        .collect()
+}
+
+fn eval_runtime_rust_ir_record(
+    runtime: &mut Runtime,
+    fields: &[rust_ir::RustIrRecordField],
+    env: &Env,
+) -> Result<Value, RuntimeError> {
+    let mut map = HashMap::new();
+    for field in fields {
+        let value = eval_runtime_rust_ir_expr(runtime, &field.value, env)?;
+        if field.spread {
+            match value {
+                Value::Record(inner) => {
+                    for (k, v) in inner.as_ref().iter() {
+                        map.insert(k.clone(), v.clone());
+                    }
+                }
+                _ => {
+                    return Err(RuntimeError::Message(
+                        "record spread expects a record".to_string(),
+                    ))
+                }
+            }
+            continue;
+        }
+        if field
+            .path
+            .iter()
+            .all(|seg| matches!(seg, rust_ir::RustIrPathSegment::Field(_)))
+        {
+            insert_runtime_rust_ir_record_path(&mut map, &field.path, value)?;
+            continue;
+        }
+
+        let resolved_path = resolve_runtime_rust_ir_path_segments(runtime, &field.path, env)?;
+        let current = std::mem::take(&mut map);
+        let updated = apply_value_path_update(
+            runtime,
+            Value::Record(Arc::new(current)),
+            &resolved_path,
+            value,
+            PathUpdateMode::Assign,
+        )?;
+        let Value::Record(updated) = updated else {
+            return Err(RuntimeError::Message(format!(
+                "record update expected Record, got {}",
+                format_value(&updated)
+            )));
+        };
+        map = updated.as_ref().clone();
+    }
+    Ok(Value::Record(Arc::new(map)))
+}
+
+fn insert_runtime_rust_ir_record_path(
+    record: &mut HashMap<String, Value>,
+    path: &[rust_ir::RustIrPathSegment],
+    value: Value,
+) -> Result<(), RuntimeError> {
+    if path.is_empty() {
+        return Err(RuntimeError::Message(
+            "record path must contain at least one segment".to_string(),
+        ));
+    }
+    let mut current = record;
+    for (index, segment) in path.iter().enumerate() {
+        match segment {
+            rust_ir::RustIrPathSegment::Field(name) => {
+                if index + 1 == path.len() {
+                    current.insert(name.clone(), value);
+                    return Ok(());
+                }
+                let entry = current
+                    .entry(name.clone())
+                    .or_insert_with(|| Value::Record(Arc::new(HashMap::new())));
+                match entry {
+                    Value::Record(map) => {
+                        current = Arc::make_mut(map);
+                    }
+                    _ => {
+                        return Err(RuntimeError::Message(format!(
+                            "record path conflict at {name}"
+                        )))
+                    }
+                }
+            }
+            rust_ir::RustIrPathSegment::IndexValue(_)
+            | rust_ir::RustIrPathSegment::IndexFieldBool(_)
+            | rust_ir::RustIrPathSegment::IndexPredicate(_)
+            | rust_ir::RustIrPathSegment::IndexAll => {
+                return Err(RuntimeError::Message(
+                    "record index path reached field-only insert path".to_string(),
+                ))
+            }
+        }
+    }
+    Ok(())
+}
+
+fn eval_runtime_rust_ir_patch(
+    runtime: &mut Runtime,
+    target: &rust_ir::RustIrExpr,
+    fields: &[rust_ir::RustIrRecordField],
+    env: &Env,
+) -> Result<Value, RuntimeError> {
+    let base_value = eval_runtime_rust_ir_expr(runtime, target, env)?;
+    let Value::Record(map) = base_value else {
+        return Err(RuntimeError::Message(
+            "patch target must be a record".to_string(),
+        ));
+    };
+    let mut map = map.as_ref().clone();
+    for field in fields {
+        if field.spread {
+            return Err(RuntimeError::Message(
+                "patch fields do not support record spread".to_string(),
+            ));
+        }
+        if field
+            .path
+            .iter()
+            .all(|seg| matches!(seg, rust_ir::RustIrPathSegment::Field(_)))
+        {
+            apply_runtime_rust_ir_patch_field(runtime, &mut map, &field.path, &field.value, env)?;
+            continue;
+        }
+
+        let resolved_path = resolve_runtime_rust_ir_path_segments(runtime, &field.path, env)?;
+        let updater = eval_runtime_rust_ir_expr(runtime, &field.value, env)?;
+        let current = std::mem::take(&mut map);
+        let updated = apply_value_path_update(
+            runtime,
+            Value::Record(Arc::new(current)),
+            &resolved_path,
+            updater,
+            PathUpdateMode::Patch,
+        )?;
+        let Value::Record(updated) = updated else {
+            return Err(RuntimeError::Message(format!(
+                "patch update expected Record, got {}",
+                format_value(&updated)
+            )));
+        };
+        map = updated.as_ref().clone();
+    }
+    Ok(Value::Record(Arc::new(map)))
+}
+
+fn apply_runtime_rust_ir_patch_field(
+    runtime: &mut Runtime,
+    record: &mut HashMap<String, Value>,
+    path: &[rust_ir::RustIrPathSegment],
+    expr: &rust_ir::RustIrExpr,
+    env: &Env,
+) -> Result<(), RuntimeError> {
+    if path.is_empty() {
+        return Err(RuntimeError::Message(
+            "patch field path must not be empty".to_string(),
+        ));
+    }
+    let mut current = record;
+    for segment in &path[..path.len() - 1] {
+        match segment {
+            rust_ir::RustIrPathSegment::Field(name) => {
+                let entry = current
+                    .entry(name.clone())
+                    .or_insert_with(|| Value::Record(Arc::new(HashMap::new())));
+                match entry {
+                    Value::Record(map) => {
+                        current = Arc::make_mut(map);
+                    }
+                    _ => {
+                        return Err(RuntimeError::Message(format!(
+                            "patch path conflict at {name}"
+                        )))
+                    }
+                }
+            }
+            rust_ir::RustIrPathSegment::IndexValue(_)
+            | rust_ir::RustIrPathSegment::IndexFieldBool(_)
+            | rust_ir::RustIrPathSegment::IndexPredicate(_)
+            | rust_ir::RustIrPathSegment::IndexAll => {
+                return Err(RuntimeError::Message(
+                    "indexed patch segment reached field-only patch path".to_string(),
+                ))
+            }
+        }
+    }
+    let segment = path.last().unwrap();
+    match segment {
+        rust_ir::RustIrPathSegment::Field(name) => {
+            let existing = current.get(name).cloned();
+            let value = eval_runtime_rust_ir_expr(runtime, expr, env)?;
+            let new_value = match existing {
+                Some(existing) if is_callable(&value) => runtime.apply(value, existing)?,
+                Some(_) | None if is_callable(&value) => {
+                    return Err(RuntimeError::Message(format!(
+                        "patch transform expects existing field {name}"
+                    )));
+                }
+                _ => value,
+            };
+            current.insert(name.clone(), new_value);
+            Ok(())
+        }
+        rust_ir::RustIrPathSegment::IndexValue(_)
+        | rust_ir::RustIrPathSegment::IndexFieldBool(_)
+        | rust_ir::RustIrPathSegment::IndexPredicate(_)
+        | rust_ir::RustIrPathSegment::IndexAll => Err(RuntimeError::Message(
+            "indexed patch segment reached field-only patch leaf".to_string(),
+        )),
+    }
+}
+
+fn resolve_runtime_rust_ir_path_segments(
+    runtime: &mut Runtime,
+    path: &[rust_ir::RustIrPathSegment],
+    env: &Env,
+) -> Result<Vec<RuntimePathSegment>, RuntimeError> {
+    let mut resolved = Vec::with_capacity(path.len());
+    for segment in path {
+        match segment {
+            rust_ir::RustIrPathSegment::Field(name) => {
+                resolved.push(RuntimePathSegment::Field(name.clone()));
+            }
+            rust_ir::RustIrPathSegment::IndexValue(expr) => {
+                let value = eval_runtime_rust_ir_expr(runtime, expr, env)?;
+                if is_callable(&value) {
+                    resolved.push(RuntimePathSegment::IndexPredicate(value));
+                } else {
+                    resolved.push(RuntimePathSegment::IndexValue(value));
+                }
+            }
+            rust_ir::RustIrPathSegment::IndexFieldBool(name) => {
+                resolved.push(RuntimePathSegment::IndexFieldBool(name.clone()));
+            }
+            rust_ir::RustIrPathSegment::IndexPredicate(expr) => {
+                let predicate = eval_runtime_rust_ir_expr(runtime, expr, env)?;
+                resolved.push(RuntimePathSegment::IndexPredicate(predicate));
+            }
+            rust_ir::RustIrPathSegment::IndexAll => {
+                resolved.push(RuntimePathSegment::IndexAll);
+            }
+        }
+    }
+    Ok(resolved)
+}
+
+fn lower_runtime_rust_ir_expr(expr: &rust_ir::RustIrExpr) -> Option<HirExpr> {
+    Some(match expr {
+        rust_ir::RustIrExpr::Local { id, name }
+        | rust_ir::RustIrExpr::Global { id, name } => HirExpr::Var {
+            id: *id,
+            name: name.clone(),
+        },
+        rust_ir::RustIrExpr::Builtin { id, builtin } => HirExpr::Var {
+            id: *id,
+            name: builtin.clone(),
+        },
+        rust_ir::RustIrExpr::ConstructorValue { id, name } => HirExpr::Var {
+            id: *id,
+            name: name.clone(),
+        },
+        rust_ir::RustIrExpr::LitNumber { id, text } => HirExpr::LitNumber {
+            id: *id,
+            text: text.clone(),
+        },
+        rust_ir::RustIrExpr::LitString { id, text } => HirExpr::LitString {
+            id: *id,
+            text: text.clone(),
+        },
+        rust_ir::RustIrExpr::TextInterpolate { id, parts } => HirExpr::TextInterpolate {
+            id: *id,
+            parts: parts
+                .iter()
+                .map(lower_runtime_rust_ir_text_part)
+                .collect::<Option<Vec<_>>>()?,
+        },
+        rust_ir::RustIrExpr::LitSigil {
+            id,
+            tag,
+            body,
+            flags,
+        } => HirExpr::LitSigil {
+            id: *id,
+            tag: tag.clone(),
+            body: body.clone(),
+            flags: flags.clone(),
+        },
+        rust_ir::RustIrExpr::LitBool { id, value } => HirExpr::LitBool {
+            id: *id,
+            value: *value,
+        },
+        rust_ir::RustIrExpr::LitDateTime { id, text } => HirExpr::LitDateTime {
+            id: *id,
+            text: text.clone(),
+        },
+        rust_ir::RustIrExpr::Lambda { id, param, body } => HirExpr::Lambda {
+            id: *id,
+            param: param.clone(),
+            body: Box::new(lower_runtime_rust_ir_expr(body)?),
+        },
+        rust_ir::RustIrExpr::App { id, func, arg } => HirExpr::App {
+            id: *id,
+            func: Box::new(lower_runtime_rust_ir_expr(func)?),
+            arg: Box::new(lower_runtime_rust_ir_expr(arg)?),
+        },
+        rust_ir::RustIrExpr::Call { id, func, args } => HirExpr::Call {
+            id: *id,
+            func: Box::new(lower_runtime_rust_ir_expr(func)?),
+            args: args
+                .iter()
+                .map(lower_runtime_rust_ir_expr)
+                .collect::<Option<Vec<_>>>()?,
+        },
+        rust_ir::RustIrExpr::DebugFn {
+            id,
+            fn_name,
+            arg_vars,
+            log_args,
+            log_return,
+            log_time,
+            body,
+        } => HirExpr::DebugFn {
+            id: *id,
+            fn_name: fn_name.clone(),
+            arg_vars: arg_vars.clone(),
+            log_args: *log_args,
+            log_return: *log_return,
+            log_time: *log_time,
+            body: Box::new(lower_runtime_rust_ir_expr(body)?),
+        },
+        rust_ir::RustIrExpr::Pipe {
+            id,
+            pipe_id,
+            step,
+            label,
+            log_time,
+            func,
+            arg,
+        } => HirExpr::Pipe {
+            id: *id,
+            pipe_id: *pipe_id,
+            step: *step,
+            label: label.clone(),
+            log_time: *log_time,
+            func: Box::new(lower_runtime_rust_ir_expr(func)?),
+            arg: Box::new(lower_runtime_rust_ir_expr(arg)?),
+        },
+        rust_ir::RustIrExpr::List { id, items } => HirExpr::List {
+            id: *id,
+            items: items
+                .iter()
+                .map(|item| {
+                    Some(HirListItem {
+                        expr: lower_runtime_rust_ir_expr(&item.expr)?,
+                        spread: item.spread,
+                    })
+                })
+                .collect::<Option<Vec<_>>>()?,
+        },
+        rust_ir::RustIrExpr::Tuple { id, items } => HirExpr::Tuple {
+            id: *id,
+            items: items
+                .iter()
+                .map(lower_runtime_rust_ir_expr)
+                .collect::<Option<Vec<_>>>()?,
+        },
+        rust_ir::RustIrExpr::Record { id, fields } => HirExpr::Record {
+            id: *id,
+            fields: fields
+                .iter()
+                .map(lower_runtime_rust_ir_record_field)
+                .collect::<Option<Vec<_>>>()?,
+        },
+        rust_ir::RustIrExpr::Patch { id, target, fields } => HirExpr::Patch {
+            id: *id,
+            target: Box::new(lower_runtime_rust_ir_expr(target)?),
+            fields: fields
+                .iter()
+                .map(lower_runtime_rust_ir_record_field)
+                .collect::<Option<Vec<_>>>()?,
+        },
+        rust_ir::RustIrExpr::FieldAccess { id, base, field } => HirExpr::FieldAccess {
+            id: *id,
+            base: Box::new(lower_runtime_rust_ir_expr(base)?),
+            field: field.clone(),
+        },
+        rust_ir::RustIrExpr::Index { id, base, index } => HirExpr::Index {
+            id: *id,
+            base: Box::new(lower_runtime_rust_ir_expr(base)?),
+            index: Box::new(lower_runtime_rust_ir_expr(index)?),
+        },
+        rust_ir::RustIrExpr::Match {
+            id,
+            scrutinee,
+            arms,
+        } => HirExpr::Match {
+            id: *id,
+            scrutinee: Box::new(lower_runtime_rust_ir_expr(scrutinee)?),
+            arms: arms
+                .iter()
+                .map(lower_runtime_rust_ir_match_arm)
+                .collect::<Option<Vec<_>>>()?,
+        },
+        rust_ir::RustIrExpr::If {
+            id,
+            cond,
+            then_branch,
+            else_branch,
+        } => HirExpr::If {
+            id: *id,
+            cond: Box::new(lower_runtime_rust_ir_expr(cond)?),
+            then_branch: Box::new(lower_runtime_rust_ir_expr(then_branch)?),
+            else_branch: Box::new(lower_runtime_rust_ir_expr(else_branch)?),
+        },
+        rust_ir::RustIrExpr::Binary {
+            id,
+            op,
+            left,
+            right,
+        } => HirExpr::Binary {
+            id: *id,
+            op: op.clone(),
+            left: Box::new(lower_runtime_rust_ir_expr(left)?),
+            right: Box::new(lower_runtime_rust_ir_expr(right)?),
+        },
+        rust_ir::RustIrExpr::Block {
+            id,
+            block_kind,
+            items,
+        } => HirExpr::Block {
+            id: *id,
+            block_kind: lower_runtime_rust_ir_block_kind(block_kind)?,
+            items: items
+                .iter()
+                .map(lower_runtime_rust_ir_block_item)
+                .collect::<Option<Vec<_>>>()?,
+        },
+        rust_ir::RustIrExpr::Raw { id, text } => HirExpr::Raw {
+            id: *id,
+            text: text.clone(),
+        },
+    })
+}
+
+fn lower_runtime_rust_ir_text_part(part: &rust_ir::RustIrTextPart) -> Option<HirTextPart> {
+    Some(match part {
+        rust_ir::RustIrTextPart::Text { text } => HirTextPart::Text { text: text.clone() },
+        rust_ir::RustIrTextPart::Expr { expr } => HirTextPart::Expr {
+            expr: lower_runtime_rust_ir_expr(expr)?,
+        },
+    })
+}
+
+fn lower_runtime_rust_ir_record_field(field: &rust_ir::RustIrRecordField) -> Option<HirRecordField> {
+    Some(HirRecordField {
+        spread: field.spread,
+        path: field
+            .path
+            .iter()
+            .map(lower_runtime_rust_ir_path_segment)
+            .collect::<Option<Vec<_>>>()?,
+        value: lower_runtime_rust_ir_expr(&field.value)?,
+    })
+}
+
+fn lower_runtime_rust_ir_path_segment(seg: &rust_ir::RustIrPathSegment) -> Option<HirPathSegment> {
+    Some(match seg {
+        rust_ir::RustIrPathSegment::Field(name) => HirPathSegment::Field(name.clone()),
+        rust_ir::RustIrPathSegment::IndexValue(expr)
+        | rust_ir::RustIrPathSegment::IndexPredicate(expr) => {
+            HirPathSegment::Index(lower_runtime_rust_ir_expr(expr)?)
+        }
+        rust_ir::RustIrPathSegment::IndexFieldBool(name) => HirPathSegment::Index(HirExpr::Var {
+            id: 0,
+            name: name.clone(),
+        }),
+        rust_ir::RustIrPathSegment::IndexAll => HirPathSegment::All,
+    })
+}
+
+fn lower_runtime_rust_ir_match_arm(arm: &rust_ir::RustIrMatchArm) -> Option<HirMatchArm> {
+    Some(HirMatchArm {
+        pattern: lower_runtime_rust_ir_pattern(&arm.pattern),
+        guard: match arm.guard.as_ref() {
+            Some(guard) => Some(lower_runtime_rust_ir_expr(guard)?),
+            None => None,
+        },
+        body: lower_runtime_rust_ir_expr(&arm.body)?,
+    })
+}
+
+fn lower_runtime_rust_ir_pattern(pattern: &rust_ir::RustIrPattern) -> HirPattern {
+    match pattern {
+        rust_ir::RustIrPattern::Wildcard { id } => HirPattern::Wildcard { id: *id },
+        rust_ir::RustIrPattern::Var { id, name } => HirPattern::Var {
+            id: *id,
+            name: name.clone(),
+        },
+        rust_ir::RustIrPattern::At { id, name, pattern } => HirPattern::At {
+            id: *id,
+            name: name.clone(),
+            pattern: Box::new(lower_runtime_rust_ir_pattern(pattern)),
+        },
+        rust_ir::RustIrPattern::Literal { id, value } => HirPattern::Literal {
+            id: *id,
+            value: lower_runtime_rust_ir_literal(value),
+        },
+        rust_ir::RustIrPattern::Constructor { id, name, args } => HirPattern::Constructor {
+            id: *id,
+            name: name.clone(),
+            args: args
+                .iter()
+                .map(lower_runtime_rust_ir_pattern)
+                .collect(),
+        },
+        rust_ir::RustIrPattern::Tuple { id, items } => HirPattern::Tuple {
+            id: *id,
+            items: items
+                .iter()
+                .map(lower_runtime_rust_ir_pattern)
+                .collect(),
+        },
+        rust_ir::RustIrPattern::List { id, items, rest } => HirPattern::List {
+            id: *id,
+            items: items
+                .iter()
+                .map(lower_runtime_rust_ir_pattern)
+                .collect(),
+            rest: match rest.as_ref() {
+                Some(rest) => Some(Box::new(lower_runtime_rust_ir_pattern(rest.as_ref()))),
+                None => None,
+            },
+        },
+        rust_ir::RustIrPattern::Record { id, fields } => HirPattern::Record {
+            id: *id,
+            fields: fields
+                .iter()
+                .map(|field| crate::hir::HirRecordPatternField {
+                    path: field.path.clone(),
+                    pattern: lower_runtime_rust_ir_pattern(&field.pattern),
+                })
+                .collect(),
+        },
+    }
+}
+
+fn lower_runtime_rust_ir_literal(literal: &rust_ir::RustIrLiteral) -> HirLiteral {
+    match literal {
+        rust_ir::RustIrLiteral::Number(value) => HirLiteral::Number(value.clone()),
+        rust_ir::RustIrLiteral::String(value) => HirLiteral::String(value.clone()),
+        rust_ir::RustIrLiteral::Sigil { tag, body, flags } => HirLiteral::Sigil {
+            tag: tag.clone(),
+            body: body.clone(),
+            flags: flags.clone(),
+        },
+        rust_ir::RustIrLiteral::Bool(value) => HirLiteral::Bool(*value),
+        rust_ir::RustIrLiteral::DateTime(value) => HirLiteral::DateTime(value.clone()),
+    }
+}
+
+fn lower_runtime_rust_ir_block_kind(kind: &rust_ir::RustIrBlockKind) -> Option<crate::hir::HirBlockKind> {
+    Some(match kind {
+        rust_ir::RustIrBlockKind::Plain => crate::hir::HirBlockKind::Plain,
+        rust_ir::RustIrBlockKind::Do { monad } => crate::hir::HirBlockKind::Do {
+            monad: monad.clone(),
+        },
+        rust_ir::RustIrBlockKind::Generate => crate::hir::HirBlockKind::Generate,
+        rust_ir::RustIrBlockKind::Resource => crate::hir::HirBlockKind::Resource,
+    })
+}
+
+fn lower_runtime_rust_ir_block_item(item: &rust_ir::RustIrBlockItem) -> Option<HirBlockItem> {
+    Some(match item {
+        rust_ir::RustIrBlockItem::Bind { pattern, expr } => HirBlockItem::Bind {
+            pattern: lower_runtime_rust_ir_pattern(pattern),
+            expr: lower_runtime_rust_ir_expr(expr)?,
+        },
+        rust_ir::RustIrBlockItem::Filter { expr } => HirBlockItem::Filter {
+            expr: lower_runtime_rust_ir_expr(expr)?,
+        },
+        rust_ir::RustIrBlockItem::Yield { expr } => HirBlockItem::Yield {
+            expr: lower_runtime_rust_ir_expr(expr)?,
+        },
+        rust_ir::RustIrBlockItem::Recurse { expr } => HirBlockItem::Recurse {
+            expr: lower_runtime_rust_ir_expr(expr)?,
+        },
+        rust_ir::RustIrBlockItem::Expr { expr } => HirBlockItem::Expr {
+            expr: lower_runtime_rust_ir_expr(expr)?,
+        },
+    })
 }
 
 fn lambda_arity(expr: &rust_ir::RustIrExpr) -> usize {
@@ -570,22 +1633,87 @@ fn peel_lambda_params<'a>(
     Some((params, cursor))
 }
 
-fn int_only_function_arity(ty: &CgType) -> Option<usize> {
-    let mut arity = 0usize;
+#[derive(Clone, Copy)]
+enum ScalarKind {
+    Int,
+    Float,
+    Bool,
+}
+
+fn scalar_kind_to_cg_type(kind: ScalarKind) -> CgType {
+    match kind {
+        ScalarKind::Int => CgType::Int,
+        ScalarKind::Float => CgType::Float,
+        ScalarKind::Bool => CgType::Bool,
+    }
+}
+
+fn scalar_kind(ty: &CgType) -> Option<ScalarKind> {
+    match ty {
+        CgType::Int => Some(ScalarKind::Int),
+        CgType::Float => Some(ScalarKind::Float),
+        CgType::Bool => Some(ScalarKind::Bool),
+        _ => None,
+    }
+}
+
+fn scalar_function_signature(ty: &CgType) -> Option<(Vec<ScalarKind>, ScalarKind)> {
+    let mut params = Vec::new();
     let mut cursor = ty;
     loop {
         match cursor {
             CgType::Func(param, ret) => {
-                if !matches!(param.as_ref(), CgType::Int) {
-                    return None;
-                }
-                arity += 1;
+                params.push(scalar_kind(param.as_ref())?);
                 cursor = ret.as_ref();
             }
-            CgType::Int => return Some(arity),
-            _ => return None,
+            _ => return Some((params, scalar_kind(cursor)?)),
         }
     }
+}
+
+fn payload_from_value(ty: &CgType, value: &Value, def_name: &str) -> Result<i64, RuntimeError> {
+    match ty {
+        CgType::Int => {
+            let Value::Int(v) = value else {
+                return Err(RuntimeError::Message(format!(
+                    "jitted scalar dependency for {def_name} expected Int, got {}",
+                    format_value(value)
+                )));
+            };
+            Ok(*v)
+        }
+        CgType::Float => match value {
+            Value::Float(v) => Ok(i64::from_ne_bytes(v.to_bits().to_ne_bytes())),
+            Value::Int(v) => Ok(i64::from_ne_bytes((*v as f64).to_bits().to_ne_bytes())),
+            other => Err(RuntimeError::Message(format!(
+                "jitted scalar dependency for {def_name} expected Float, got {}",
+                format_value(other)
+            ))),
+        },
+        CgType::Bool => {
+            let Value::Bool(v) = value else {
+                return Err(RuntimeError::Message(format!(
+                    "jitted scalar dependency for {def_name} expected Bool, got {}",
+                    format_value(value)
+                )));
+            };
+            Ok(i64::from(*v))
+        }
+        _ => Err(RuntimeError::Message(format!(
+            "jitted scalar dependency for {def_name} has unsupported type"
+        ))),
+    }
+}
+
+fn value_from_payload(kind: ScalarKind, payload: i64) -> Result<Value, RuntimeError> {
+    Ok(match kind {
+        ScalarKind::Int => Value::Int(payload),
+        ScalarKind::Float => {
+            let bits = u64::from_ne_bytes(payload.to_ne_bytes());
+            Value::Float(f64::from_bits(bits))
+        }
+        ScalarKind::Bool => Value::Bool(payload != 0),
+    })
 }
 
 fn sanitize_symbol(name: &str) -> String {
@@ -618,59 +1746,59 @@ fn compile_i64_jit_function(
     Ok(ptr as usize)
 }
 
+const MAX_JITTED_I64_CALL_ARITY: usize = 16;
+
 fn call_jitted_i64(code_addr: usize, args: &[i64]) -> Result<i64, RuntimeError> {
     let code = code_addr as *const u8;
     let value = unsafe {
-        match args {
-            [] => {
-                let f: extern "C" fn() -> i64 = std::mem::transmute(code);
-                f()
-            }
-            [a0] => {
-                let f: extern "C" fn(i64) -> i64 = std::mem::transmute(code);
-                f(*a0)
-            }
-            [a0, a1] => {
-                let f: extern "C" fn(i64, i64) -> i64 = std::mem::transmute(code);
-                f(*a0, *a1)
-            }
-            [a0, a1, a2] => {
-                let f: extern "C" fn(i64, i64, i64) -> i64 = std::mem::transmute(code);
-                f(*a0, *a1, *a2)
-            }
-            [a0, a1, a2, a3] => {
-                let f: extern "C" fn(i64, i64, i64, i64) -> i64 = std::mem::transmute(code);
-                f(*a0, *a1, *a2, *a3)
-            }
-            [a0, a1, a2, a3, a4] => {
-                let f: extern "C" fn(i64, i64, i64, i64, i64) -> i64 =
-                    std::mem::transmute(code);
-                f(*a0, *a1, *a2, *a3, *a4)
-            }
-            [a0, a1, a2, a3, a4, a5] => {
-                let f: extern "C" fn(i64, i64, i64, i64, i64, i64) -> i64 =
-                    std::mem::transmute(code);
-                f(*a0, *a1, *a2, *a3, *a4, *a5)
-            }
-            _ => {
-                return Err(RuntimeError::Message(format!(
-                    "jitted int call arity {} not supported",
-                    args.len()
-                )));
-            }
+        macro_rules! jit_arg_ty {
+            ($arg:ident) => {
+                i64
+            };
         }
+
+        macro_rules! dispatch_jit_call {
+            ($(($($arg:ident),*)),+ $(,)?) => {
+                match args {
+                    $(
+                        [$($arg),*] => {
+                            let f: extern "C" fn($(jit_arg_ty!($arg)),*) -> i64 =
+                                std::mem::transmute(code);
+                            f($(*$arg),*)
+                        }
+                    )+
+                    _ => {
+                        return Err(RuntimeError::Message(format!(
+                            "internal error: jitted int call arity {} exceeded lowering cap {}",
+                            args.len(),
+                            MAX_JITTED_I64_CALL_ARITY
+                        )));
+                    }
+                }
+            };
+        }
+
+        dispatch_jit_call!(
+            (),
+            (a0),
+            (a0, a1),
+            (a0, a1, a2),
+            (a0, a1, a2, a3),
+            (a0, a1, a2, a3, a4),
+            (a0, a1, a2, a3, a4, a5),
+            (a0, a1, a2, a3, a4, a5, a6),
+            (a0, a1, a2, a3, a4, a5, a6, a7),
+            (a0, a1, a2, a3, a4, a5, a6, a7, a8),
+            (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9),
+            (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10),
+            (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11),
+            (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12),
+            (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13),
+            (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14),
+            (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15),
+        )
     };
     Ok(value)
-}
-
-fn call_jitted_dispatch(code_addr: usize, runtime: &mut Runtime, args: &[Value]) -> u64 {
-    let code = code_addr as *const u8;
-    let f: extern "C" fn(u64, u64, u64) -> u64 = unsafe { std::mem::transmute(code) };
-    f(
-        runtime as *mut Runtime as u64,
-        args.as_ptr() as u64,
-        args.len() as u64,
-    )
 }
 
 pub fn run_test_suite(
@@ -748,7 +1876,7 @@ pub fn run_test_suite(
     Ok(report)
 }
 
-fn build_runtime_from_program(program: HirProgram) -> Result<Runtime, AiviError> {
+pub(crate) fn build_runtime_from_program(program: HirProgram) -> Result<Runtime, AiviError> {
     if program.modules.is_empty() {
         return Err(AiviError::Runtime("no modules to run".to_string()));
     }
@@ -1317,7 +2445,7 @@ fn bind_module_machine_values(
     }
 }
 
-fn format_runtime_error(err: RuntimeError) -> String {
+pub(crate) fn format_runtime_error(err: RuntimeError) -> String {
     match err {
         RuntimeError::Cancelled => "execution cancelled".to_string(),
         RuntimeError::Message(message) => message,

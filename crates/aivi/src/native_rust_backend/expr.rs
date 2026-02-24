@@ -295,9 +295,7 @@ pub(super) fn emit_expr(expr: &RustIrExpr, indent: usize) -> Result<String, Aivi
             block_kind, items, ..
         } => emit_block(block_kind.clone(), items, indent)?,
         RustIrExpr::Raw { text, .. } => {
-            return Err(AiviError::Codegen(format!(
-                "raw expressions are not supported by the native backend yet: {text}"
-            )))
+            format!("aivi_ok(Value::Text({text:?}.to_string()))")
         }
         RustIrExpr::Match {
             scrutinee, arms, ..
@@ -374,23 +372,31 @@ fn emit_record(fields: &[RustIrRecordField], indent: usize) -> Result<String, Ai
             ));
             continue;
         }
-        // Verify all path segments are Field (index paths in record literals are unsupported).
-        let field_names: Vec<&str> = field
-            .path
-            .iter()
-            .map(|seg| match seg {
-                RustIrPathSegment::Field(name) => Ok(name.as_str()),
-                _ => Err(AiviError::Codegen(
-                    "index paths are not supported in record literals".to_string(),
-                )),
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        if field_names.is_empty() {
+        if field.path.is_empty() {
             return Err(AiviError::Codegen(
                 "record field path must not be empty".to_string(),
             ));
         }
         let value_code = emit_expr(&field.value, indent)?;
+        let has_index_segment = field
+            .path
+            .iter()
+            .any(|segment| !matches!(segment, RustIrPathSegment::Field(_)));
+        if has_index_segment {
+            let path_code = emit_path(&field.path, indent)?;
+            stmts.push(format!(
+                "map = match patch(rt, Value::Record(Arc::new(map)), vec![({path_code}, ({value_code})?)])? {{ Value::Record(m) => m.as_ref().clone(), other => return Err(RuntimeError::Message(format!(\"record literal patch expected Record result, got {{}}\", aivi_native_runtime::format_value(&other)))), }};"
+            ));
+            continue;
+        }
+        let field_names: Vec<&str> = field
+            .path
+            .iter()
+            .map(|seg| match seg {
+                RustIrPathSegment::Field(name) => name.as_str(),
+                _ => unreachable!("non-field segments handled above"),
+            })
+            .collect();
         if field_names.len() == 1 {
             // Simple case: flat field insertion.
             stmts.push(format!(

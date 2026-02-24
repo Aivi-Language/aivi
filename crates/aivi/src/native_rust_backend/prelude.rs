@@ -4,8 +4,10 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("use std::collections::HashMap;\n");
     out.push_str("use std::sync::{Arc, Mutex};\n\n");
     out.push_str(
-        "use aivi_native_runtime::{get_builtin, ok as aivi_ok, BuiltinImpl, BuiltinValue, EffectValue, KeyValue, ResourceValue, Runtime, RuntimeError, R, Value};\n\n",
+        "use aivi_native_runtime::{get_builtin, ok as aivi_ok, runtime_value_abi_handshake, BuiltinImpl, BuiltinValue, EffectValue, KeyValue, ResourceValue, Runtime, RuntimeError, R, Value};\n",
     );
+    out.push_str("const AIVI_EXPECTED_VALUE_ABI_MAJOR: u16 = 0;\n");
+    out.push_str("const AIVI_EXPECTED_VALUE_ABI_MINOR: u16 = 1;\n\n");
     out.push_str("fn __builtin(name: &str) -> Value {\n");
     out.push_str("    get_builtin(name).unwrap_or_else(|| panic!(\"missing builtin {name}\"))\n");
     out.push_str("}\n\n");
@@ -70,6 +72,7 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("        },\n");
     out.push_str("        PathSeg::IndexValue(idx) => match (target, idx.clone()) {\n");
     out.push_str("            (Value::List(items), Value::Int(i)) => {\n");
+    out.push_str("                if i < 0 { return Err(RuntimeError::Message(\"index out of bounds\".to_string())); }\n");
     out.push_str("                let i = i as usize;\n");
     out.push_str("                if i >= items.len() { return Err(RuntimeError::Message(\"index out of bounds\".to_string())); }\n");
     out.push_str("                let mut items = items;\n");
@@ -79,6 +82,7 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("                aivi_ok(Value::List(items))\n");
     out.push_str("            }\n");
     out.push_str("            (Value::Tuple(mut items), Value::Int(i)) => {\n");
+    out.push_str("                if i < 0 { return Err(RuntimeError::Message(\"index out of bounds\".to_string())); }\n");
     out.push_str("                let i = i as usize;\n");
     out.push_str("                if i >= items.len() { return Err(RuntimeError::Message(\"index out of bounds\".to_string())); }\n");
     out.push_str("                let old = items[i].clone();\n");
@@ -94,6 +98,27 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("                let new_val = patch_path(rt, old, &path[1..], updater)?;\n");
     out.push_str("                Arc::make_mut(&mut entries).insert(key, new_val);\n");
     out.push_str("                aivi_ok(Value::Map(entries))\n");
+    out.push_str("            }\n");
+    out.push_str("            (Value::Unit, Value::Int(i)) => {\n");
+    out.push_str("                if i < 0 { return Err(RuntimeError::Message(\"index out of bounds\".to_string())); }\n");
+    out.push_str("                let i = i as usize;\n");
+    out.push_str("                let mut items = vec![Value::Unit; i + 1];\n");
+    out.push_str(
+        "                let new_val = patch_path(rt, Value::Unit, &path[1..], updater)?;\n",
+    );
+    out.push_str("                items[i] = new_val;\n");
+    out.push_str("                aivi_ok(Value::List(Arc::new(items)))\n");
+    out.push_str("            }\n");
+    out.push_str("            (Value::Unit, idx) => {\n");
+    out.push_str("                let Some(key) = KeyValue::try_from_value(&idx) else {\n");
+    out.push_str("                    return Err(RuntimeError::Message(format!(\"map key is not a valid key type: {}\", aivi_native_runtime::format_value(&idx))));\n");
+    out.push_str("                };\n");
+    out.push_str("                let mut entries = HashMap::new();\n");
+    out.push_str(
+        "                let new_val = patch_path(rt, Value::Unit, &path[1..], updater)?;\n",
+    );
+    out.push_str("                entries.insert(key, new_val);\n");
+    out.push_str("                aivi_ok(Value::Map(Arc::new(entries)))\n");
     out.push_str("            }\n");
     out.push_str(
         "            (other, _) => Err(RuntimeError::Message(format!(\"expected List/Tuple + Int for index patch, got {}\", aivi_native_runtime::format_value(&other)))),\n",

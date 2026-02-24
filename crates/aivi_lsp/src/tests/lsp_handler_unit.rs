@@ -14,8 +14,7 @@ fn hover_handler_serializes_to_json() {
 
     let position = position_for(&item.text, "add 1 2");
     let doc_index = DocIndex::default();
-    let hover = Backend::build_hover(&item.text, &item.uri, position, &doc_index)
-        .expect("hover");
+    let hover = Backend::build_hover(&item.text, &item.uri, position, &doc_index).expect("hover");
 
     let json = serde_json::to_value(&hover).expect("hover json");
     assert!(json.get("contents").is_some());
@@ -38,8 +37,7 @@ fn definition_handler_serializes_to_json() {
     };
 
     let position = position_for(&item.text, "add 1 2");
-    let location = Backend::build_definition(&item.text, &item.uri, position)
-        .expect("definition");
+    let location = Backend::build_definition(&item.text, &item.uri, position).expect("definition");
 
     let json = serde_json::to_value(&location).expect("definition json");
     assert_eq!(json.get("uri").and_then(Value::as_str), Some(uri.as_str()));
@@ -87,4 +85,31 @@ fn diagnostics_handler_serializes_to_json() {
     let json = serde_json::to_value(&diagnostics).expect("diagnostics json");
     let array = json.as_array().expect("diagnostics array");
     assert!(array.iter().any(|diag| diag.get("severity").is_some()));
+}
+
+#[test]
+fn hover_handler_returns_none_for_empty_document() {
+    let uri = sample_uri();
+    let hover = Backend::build_hover("", &uri, Position::new(0, 0), &DocIndex::default());
+    assert!(hover.is_none());
+}
+
+#[test]
+fn completion_handler_handles_position_at_eof() {
+    let text = "module examples.app\nadd = a b => a + b\nrun = add 1 2\n";
+    let uri = sample_uri();
+    let item = TextDocumentItem {
+        uri: uri.clone(),
+        language_id: "aivi".to_string(),
+        version: 1,
+        text: text.to_string(),
+    };
+
+    let eof_position = Position::new(10, 100);
+    let items =
+        Backend::build_completion_items(&item.text, &item.uri, eof_position, &HashMap::new());
+    assert!(
+        items.iter().any(|entry| entry.label == "add"),
+        "expected completion to include local defs at EOF, got: {items:#?}"
+    );
 }

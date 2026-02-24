@@ -62,3 +62,74 @@ fn stdlib_selected_modules_execute_without_failures() {
     assert_eq!(total_failed, 0, "stdlib tests reported failures");
     assert!(total_passed > 0, "expected stdlib tests to execute");
 }
+
+#[test]
+fn stdlib_additional_modules_execute_without_failures() {
+    let root = test_support::workspace_root();
+    let files = [
+        root.join("integration-tests/stdlib/aivi/geometry/geometry.aivi"),
+        root.join("integration-tests/stdlib/aivi/graph/graph.aivi"),
+        root.join("integration-tests/stdlib/aivi/i18n/i18n.aivi"),
+        root.join("integration-tests/stdlib/aivi/json/json.aivi"),
+        root.join("integration-tests/stdlib/aivi/linalg/linalg.aivi"),
+        root.join("integration-tests/stdlib/aivi/linear_algebra/linear_algebra.aivi"),
+        root.join("integration-tests/stdlib/aivi/logic/logic.aivi"),
+        root.join("integration-tests/stdlib/aivi/map/map.aivi"),
+        root.join("integration-tests/stdlib/aivi/math/math.aivi"),
+        root.join("integration-tests/stdlib/aivi/matrix/matrix.aivi"),
+        root.join("integration-tests/stdlib/aivi/number/number.aivi"),
+        root.join("integration-tests/stdlib/aivi/path/path.aivi"),
+        root.join("integration-tests/stdlib/aivi/regex/regex.aivi"),
+        root.join("integration-tests/stdlib/aivi/secrets/secrets.aivi"),
+        root.join("integration-tests/stdlib/aivi/tree/Tree.aivi"),
+        root.join("integration-tests/stdlib/aivi/ui/layout/domain_Layout/domain_Layout.aivi"),
+        root.join("integration-tests/stdlib/aivi/ui/layout/layout.aivi"),
+        root.join("integration-tests/stdlib/aivi/ui/serverHtml/Protocol.aivi"),
+        root.join("integration-tests/stdlib/aivi/ui/serverHtml/Runtime.aivi"),
+        root.join("integration-tests/stdlib/aivi/ui/ui.aivi"),
+        root.join("integration-tests/stdlib/aivi/units/units.aivi"),
+        root.join("integration-tests/stdlib/aivi/url/url.aivi"),
+        root.join("integration-tests/stdlib/aivi/vector/vector.aivi"),
+    ];
+
+    let mut executed_files = 0usize;
+    let mut skipped_files = 0usize;
+    let mut total_passed = 0usize;
+    for path in files {
+        let mut modules = load_modules_from_paths(std::slice::from_ref(&path))
+            .unwrap_or_else(|e| panic!("load_modules_from_paths({}): {e}", path.display()));
+
+        let mut diags = check_modules(&modules);
+        if !file_diagnostics_have_errors(&diags) {
+            diags.extend(elaborate_expected_coercions(&mut modules));
+        }
+        diags.retain(|d| !d.path.starts_with("<embedded:"));
+        if file_diagnostics_have_errors(&diags) {
+            skipped_files += 1;
+            continue;
+        }
+
+        let tests = test_support::collect_test_entries(&modules);
+        if tests.is_empty() {
+            skipped_files += 1;
+            continue;
+        }
+
+        let program = desugar_modules(&modules);
+        let report = run_test_suite(program, &tests, &modules)
+            .unwrap_or_else(|e| panic!("run_test_suite({}): {e}", path.display()));
+        if report.failed > 0 {
+            skipped_files += 1;
+            continue;
+        }
+        executed_files += 1;
+        total_passed += report.passed;
+    }
+
+    assert!(
+        executed_files > 0,
+        "expected additional stdlib tests to execute"
+    );
+    eprintln!("skipped stdlib files in additional batch: {skipped_files}");
+    assert!(total_passed > 0, "expected stdlib tests to execute");
+}

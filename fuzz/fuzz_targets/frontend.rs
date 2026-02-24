@@ -12,6 +12,8 @@ fuzz_target!(|data: &[u8]| {
     if aivi::file_diagnostics_have_errors(&parse_diags) {
         return;
     }
+    let _arena = aivi::lower_modules_to_arena(&modules);
+    let _ = aivi::check_types_including_stdlib(&modules);
 
     let mut diags = aivi::check_modules(&modules);
     if aivi::file_diagnostics_have_errors(&diags) {

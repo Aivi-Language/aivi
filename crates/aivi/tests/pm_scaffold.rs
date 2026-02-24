@@ -22,3 +22,22 @@ fn init_bin_writes_expected_files() {
     assert!(cargo.contains("runtime-gnome = [\"aivi_native_runtime/gtk4-libadwaita\"]"));
     assert!(aivi_toml.contains("native_ui_target = \"portable\""));
 }
+
+#[test]
+fn init_lib_writes_expected_files() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let dir = tmp.path().join("my-lib");
+    write_scaffold(&dir, "my-lib", ProjectKind::Lib, "2024", "0.1", false).expect("scaffold");
+
+    assert!(dir.join("aivi.toml").exists());
+    assert!(dir.join("Cargo.toml").exists());
+    assert!(dir.join("src").join("lib.aivi").exists());
+    assert!(!dir.join("src").join("main.aivi").exists());
+
+    let cargo = std::fs::read_to_string(dir.join("Cargo.toml")).expect("read Cargo.toml");
+    let aivi_toml = std::fs::read_to_string(dir.join("aivi.toml")).expect("read aivi.toml");
+    assert!(cargo.contains("kind = \"lib\""));
+    assert!(cargo.contains("path = \"target/aivi-gen/src/lib.rs\""));
+    assert!(!cargo.contains("[[bin]]"));
+    assert!(aivi_toml.contains("entry = \"lib.aivi\""));
+}

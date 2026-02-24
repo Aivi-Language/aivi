@@ -12,7 +12,19 @@ impl Runtime {
             rng_state: seed ^ 0x9E37_79B9_7F4A_7C15,
             debug_stack: Vec::new(),
             check_counter: 0,
+            #[cfg(test)]
+            eval_expr_call_count: 0,
         }
+    }
+
+    #[cfg(test)]
+    fn reset_eval_expr_call_count(&mut self) {
+        self.eval_expr_call_count = 0;
+    }
+
+    #[cfg(test)]
+    fn eval_expr_call_count(&self) -> usize {
+        self.eval_expr_call_count
     }
 
     fn check_cancelled(&mut self) -> Result<(), RuntimeError> {
@@ -59,7 +71,7 @@ impl Runtime {
         self.rng_state
     }
 
-    fn force_value(&mut self, value: Value) -> Result<Value, RuntimeError> {
+    pub(crate) fn force_value(&mut self, value: Value) -> Result<Value, RuntimeError> {
         match value {
             Value::Thunk(thunk) => self.eval_thunk(thunk),
             Value::Builtin(builtin)
@@ -93,6 +105,10 @@ impl Runtime {
 
     fn eval_expr(&mut self, expr: &HirExpr, env: &Env) -> Result<Value, RuntimeError> {
         self.check_cancelled()?;
+        #[cfg(test)]
+        {
+            self.eval_expr_call_count = self.eval_expr_call_count.saturating_add(1);
+        }
         match expr {
             HirExpr::Var { name, .. } => {
                 if let Some(value) = env.get(name) {
@@ -517,47 +533,7 @@ impl Runtime {
             HirExpr::Index { base, index, .. } => {
                 let base_value = self.eval_expr(base, env)?;
                 let index_value = self.eval_expr(index, env)?;
-                match base_value {
-                    Value::List(items) => {
-                        let Value::Int(idx) = index_value else {
-                            return Err(RuntimeError::Message(
-                                "list index expects an Int".to_string(),
-                            ));
-                        };
-                        let idx = idx as usize;
-                        items
-                            .get(idx)
-                            .cloned()
-                            .ok_or_else(|| RuntimeError::Message("index out of bounds".to_string()))
-                    }
-                    Value::Tuple(items) => {
-                        let Value::Int(idx) = index_value else {
-                            return Err(RuntimeError::Message(
-                                "tuple index expects an Int".to_string(),
-                            ));
-                        };
-                        let idx = idx as usize;
-                        items
-                            .get(idx)
-                            .cloned()
-                            .ok_or_else(|| RuntimeError::Message("index out of bounds".to_string()))
-                    }
-                    Value::Map(entries) => {
-                        let Some(key) = KeyValue::try_from_value(&index_value) else {
-                            return Err(RuntimeError::Message(format!(
-                                "map key is not a valid key type: {}",
-                                format_value(&index_value)
-                            )));
-                        };
-                        entries
-                            .get(&key)
-                            .cloned()
-                            .ok_or_else(|| RuntimeError::Message("missing map key".to_string()))
-                    }
-                    _ => Err(RuntimeError::Message(
-                        "index on unsupported value".to_string(),
-                    )),
-                }
+                read_indexed_value(base_value, index_value)
             }
             HirExpr::Match { .. } | HirExpr::If { .. } => {
                 let step = self.eval_expr_step(expr, env, &mut Vec::new())?;
@@ -623,13 +599,11 @@ impl Runtime {
                 }
                 crate::hir::HirBlockKind::Generate => self.eval_generate_block(items, env),
             },
-            HirExpr::Raw { .. } => Err(RuntimeError::Message(
-                "raw expressions are not supported in native runtime yet".to_string(),
-            )),
+            HirExpr::Raw { text, .. } => Ok(Value::Text(text.clone())),
         }
     }
 
-    fn apply(&mut self, func: Value, arg: Value) -> Result<Value, RuntimeError> {
+    pub(crate) fn apply(&mut self, func: Value, arg: Value) -> Result<Value, RuntimeError> {
         let step = self.apply_step(func, arg)?;
         match step {
             Step::Return(value) => Ok(value),
