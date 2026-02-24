@@ -24,6 +24,8 @@ fuzz_target!(|data: &[u8]| {
 
     // ── Phase 1: Parse (what LSP does on didOpen / didChange) ──
     let (modules, parse_diags) = aivi::parse_modules(path, &src);
+    let (tokens, _lex_diags) = aivi::lex_cst(&src);
+    let _ = aivi::parse_modules_from_tokens(path, &tokens);
 
     // ── Phase 2: Resolve (name resolution) ── must not panic even on invalid input.
     let resolve_diags = aivi::check_modules(&modules);
@@ -43,6 +45,8 @@ fuzz_target!(|data: &[u8]| {
         .chain(resolve_diags)
         .chain(type_diags)
         .collect();
+    let rendered_diags: Vec<_> = all_diags.iter().map(|d| d.diagnostic.clone()).collect();
+    let _ = aivi::render_diagnostics("fuzz.aivi", &rendered_diags);
     if !aivi::file_diagnostics_have_errors(&all_diags) {
         let hir = aivi::desugar_modules(&modules);
         let _kernel = aivi::lower_kernel(hir);

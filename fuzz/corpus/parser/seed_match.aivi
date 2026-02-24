@@ -1,0 +1,9 @@
+module fuzz.seed.parser.match
+export Maybe, foldMaybe
+
+type Maybe a = None | Some a
+
+foldMaybe : b -> (a -> b) -> Maybe a -> b
+foldMaybe onNone onSome value = case value of
+None => onNone
+Some x => onSome x

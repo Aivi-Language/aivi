@@ -291,6 +291,33 @@ Done.
     }
 
     #[test]
+    fn lookup_best_returns_none_for_ambiguous_entries_without_module() {
+        let json = r#"
+[
+  {"kind":"function","name":"load","module":"aivi.file","content":"file load","signature":null},
+  {"kind":"function","name":"load","module":"aivi.database","content":"db load","signature":null}
+]
+"#;
+        let index = DocIndex::from_json(json).expect("doc index parses");
+        assert!(index.lookup_best("load", None).is_none());
+    }
+
+    #[test]
+    fn lookup_best_prefers_exact_module_match_when_ambiguous() {
+        let json = r#"
+[
+  {"kind":"function","name":"load","module":"aivi.file","content":"file load","signature":null},
+  {"kind":"function","name":"load","module":"aivi.database","content":"db load","signature":null}
+]
+"#;
+        let index = DocIndex::from_json(json).expect("doc index parses");
+        let entry = index
+            .lookup_best("load", Some("aivi.database"))
+            .expect("module-specific entry");
+        assert_eq!(entry.content, "db load");
+    }
+
+    #[test]
     fn built_doc_index_includes_match_and_pipe_quick_info() {
         // Regression guard: core syntax operators should be indexed for hover/quick-info.
         let index = DocIndex::from_json(DOC_INDEX_JSON).expect("doc index JSON parses");

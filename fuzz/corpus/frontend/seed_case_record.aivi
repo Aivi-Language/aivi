@@ -1,0 +1,13 @@
+module fuzz.seed.frontend.case_record
+export Maybe, Point, maybeInc, move
+
+type Maybe a = None | Some a
+type Point = { x: Int, y: Int }
+
+maybeInc : Maybe Int -> Maybe Int
+maybeInc m = case m of
+None => None
+Some n => Some (n + 1)
+
+move : Int -> Int -> Point -> Point
+move dx dy p = p { x = p.x + dx, y = p.y + dy }

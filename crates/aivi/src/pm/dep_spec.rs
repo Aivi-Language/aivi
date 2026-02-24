@@ -49,10 +49,15 @@ impl CargoDepSpec {
             return Ok(Self::Git { name, git, rev });
         }
 
-        let (name, version_req) = match spec.split_once('@') {
-            Some((name, "latest")) => (name, "*"),
+        let (name, version_req_raw) = match spec.split_once('@') {
             Some((name, version_req)) => (name, version_req),
             None => (spec, "*"),
+        };
+        let version_req = version_req_raw.trim();
+        let version_req = if version_req == "latest" {
+            "*"
+        } else {
+            version_req
         };
         let name = name.trim();
         if name.is_empty() {
@@ -67,7 +72,7 @@ impl CargoDepSpec {
 
         Ok(Self::Registry {
             name: name.to_string(),
-            version_req: version_req.trim().to_string(),
+            version_req: version_req.to_string(),
         })
     }
 
@@ -162,4 +167,47 @@ fn read_package_name_for_path_dep(
         .and_then(|t| t.get("name"))
         .and_then(|i| i.as_str())
         .map(|s| s.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_registry_latest_with_whitespace_maps_to_wildcard() {
+        let parsed = CargoDepSpec::parse("serde @ latest").expect("parse dep spec");
+        assert_eq!(
+            parsed,
+            CargoDepSpec::Registry {
+                name: "serde".to_string(),
+                version_req: "*".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn parse_path_spec_trims_whitespace() {
+        let parsed = CargoDepSpec::parse("path: ./dep ").expect("parse dep spec");
+        assert_eq!(
+            parsed,
+            CargoDepSpec::Path {
+                name: "dep".to_string(),
+                path: "./dep".to_string(),
+            }
+        );
+    }
+
+    #[test]
+    fn split_git_rev_extracts_rev_parameter() {
+        let (git, rev) =
+            split_git_rev("https://example.com/org/repo.git?x=y#rev=abc123").expect("split git");
+        assert_eq!(git, "https://example.com/org/repo.git?x=y");
+        assert_eq!(rev.as_deref(), Some("abc123"));
+    }
+
+    #[test]
+    fn split_git_rev_rejects_invalid_fragment_pairs() {
+        let err = split_git_rev("https://example.com/org/repo.git#broken").unwrap_err();
+        assert!(err.0.contains("invalid git fragment"));
+    }
 }

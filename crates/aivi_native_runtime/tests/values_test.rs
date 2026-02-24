@@ -164,6 +164,22 @@ fn equal_record() {
 }
 
 #[test]
+fn equal_record_is_order_independent() {
+    let mut left = HashMap::new();
+    left.insert("a".into(), Value::Int(1));
+    left.insert("b".into(), Value::Int(2));
+
+    let mut right = HashMap::new();
+    right.insert("b".into(), Value::Int(2));
+    right.insert("a".into(), Value::Int(1));
+
+    assert!(values_equal(
+        &Value::Record(Arc::new(left)),
+        &Value::Record(Arc::new(right))
+    ));
+}
+
+#[test]
 fn equal_constructor() {
     let a = Value::Constructor {
         name: "Some".into(),

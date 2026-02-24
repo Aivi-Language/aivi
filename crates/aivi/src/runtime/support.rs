@@ -54,7 +54,7 @@ fn insert_record_path(
             }
             HirPathSegment::Index(_) | HirPathSegment::All => {
                 return Err(RuntimeError::Message(
-                    "record index paths are not supported in native runtime yet".to_string(),
+                    "record index path requires runtime-evaluated path segments".to_string(),
                 ))
             }
         }
@@ -62,7 +62,270 @@ fn insert_record_path(
     Ok(())
 }
 
-fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Option<Value> {
+#[derive(Clone)]
+enum RuntimePathSegment {
+    Field(String),
+    IndexValue(Value),
+    IndexFieldBool(String),
+    IndexPredicate(Value),
+    IndexAll,
+}
+
+#[derive(Clone, Copy)]
+enum PathUpdateMode {
+    Assign,
+    Patch,
+}
+
+fn list_or_tuple_index(index: &Value, target: &str) -> Result<usize, RuntimeError> {
+    let Value::Int(raw) = index else {
+        return Err(RuntimeError::Message(format!("{target} index expects an Int")));
+    };
+    if *raw < 0 {
+        return Err(RuntimeError::Message("index out of bounds".to_string()));
+    }
+    Ok(*raw as usize)
+}
+
+fn map_index_key(index: &Value) -> Result<KeyValue, RuntimeError> {
+    KeyValue::try_from_value(index).ok_or_else(|| {
+        RuntimeError::Message(format!(
+            "map key is not a valid key type: {}",
+            format_value(index)
+        ))
+    })
+}
+
+fn read_indexed_value(base_value: Value, index_value: Value) -> Result<Value, RuntimeError> {
+    match base_value {
+        Value::List(items) => {
+            let idx = list_or_tuple_index(&index_value, "list")?;
+            items
+                .get(idx)
+                .cloned()
+                .ok_or_else(|| RuntimeError::Message("index out of bounds".to_string()))
+        }
+        Value::Tuple(items) => {
+            let idx = list_or_tuple_index(&index_value, "tuple")?;
+            items
+                .get(idx)
+                .cloned()
+                .ok_or_else(|| RuntimeError::Message("index out of bounds".to_string()))
+        }
+        Value::Map(entries) => {
+            let key = map_index_key(&index_value)?;
+            entries
+                .get(&key)
+                .cloned()
+                .ok_or_else(|| RuntimeError::Message("missing map key".to_string()))
+        }
+        other => Err(RuntimeError::Message(format!(
+            "expected List/Tuple/Map for indexed access, got {}",
+            format_value(&other)
+        ))),
+    }
+}
+
+fn apply_value_path_update(
+    runtime: &mut Runtime,
+    target: Value,
+    path: &[RuntimePathSegment],
+    updater: Value,
+    mode: PathUpdateMode,
+) -> Result<Value, RuntimeError> {
+    if path.is_empty() {
+        return match mode {
+            PathUpdateMode::Assign => Ok(updater),
+            PathUpdateMode::Patch if is_callable(&updater) => runtime.apply(updater, target),
+            PathUpdateMode::Patch => Ok(updater),
+        };
+    }
+
+    match &path[0] {
+        RuntimePathSegment::Field(name) => match target {
+            Value::Record(mut map) => {
+                let old = Arc::make_mut(&mut map).remove(name).unwrap_or(Value::Unit);
+                let next = apply_value_path_update(runtime, old, &path[1..], updater, mode)?;
+                Arc::make_mut(&mut map).insert(name.clone(), next);
+                Ok(Value::Record(map))
+            }
+            Value::Unit => {
+                let next = apply_value_path_update(runtime, Value::Unit, &path[1..], updater, mode)?;
+                let mut map = HashMap::new();
+                map.insert(name.clone(), next);
+                Ok(Value::Record(Arc::new(map)))
+            }
+            other => Err(RuntimeError::Message(format!(
+                "expected Record for field path, got {}",
+                format_value(&other)
+            ))),
+        },
+        RuntimePathSegment::IndexAll => match target {
+            Value::List(mut items) => {
+                for item in Arc::make_mut(&mut items).iter_mut() {
+                    *item = apply_value_path_update(
+                        runtime,
+                        item.clone(),
+                        &path[1..],
+                        updater.clone(),
+                        mode,
+                    )?;
+                }
+                Ok(Value::List(items))
+            }
+            Value::Map(mut entries) => {
+                let snapshot = entries.as_ref().clone();
+                for (key, value) in snapshot {
+                    let next = apply_value_path_update(runtime, value, &path[1..], updater.clone(), mode)?;
+                    Arc::make_mut(&mut entries).insert(key, next);
+                }
+                Ok(Value::Map(entries))
+            }
+            other => Err(RuntimeError::Message(format!(
+                "expected List/Map for index-all path, got {}",
+                format_value(&other)
+            ))),
+        },
+        RuntimePathSegment::IndexValue(index) => match target {
+            Value::List(items) => {
+                let idx = list_or_tuple_index(index, "list")?;
+                if idx >= items.len() {
+                    return Err(RuntimeError::Message("index out of bounds".to_string()));
+                }
+                let mut items = items;
+                let out = Arc::make_mut(&mut items);
+                let next =
+                    apply_value_path_update(runtime, out[idx].clone(), &path[1..], updater, mode)?;
+                out[idx] = next;
+                Ok(Value::List(items))
+            }
+            Value::Tuple(mut items) => {
+                let idx = list_or_tuple_index(index, "tuple")?;
+                if idx >= items.len() {
+                    return Err(RuntimeError::Message("index out of bounds".to_string()));
+                }
+                let next =
+                    apply_value_path_update(runtime, items[idx].clone(), &path[1..], updater, mode)?;
+                items[idx] = next;
+                Ok(Value::Tuple(items))
+            }
+            Value::Map(entries) => {
+                let key = map_index_key(index)?;
+                let mut entries = entries;
+                let old = entries.get(&key).cloned().unwrap_or(Value::Unit);
+                let next = apply_value_path_update(runtime, old, &path[1..], updater, mode)?;
+                Arc::make_mut(&mut entries).insert(key, next);
+                Ok(Value::Map(entries))
+            }
+            Value::Unit => match index {
+                Value::Int(raw) => {
+                    if *raw < 0 {
+                        return Err(RuntimeError::Message("index out of bounds".to_string()));
+                    }
+                    let idx = *raw as usize;
+                    let mut items = vec![Value::Unit; idx + 1];
+                    let next =
+                        apply_value_path_update(runtime, Value::Unit, &path[1..], updater, mode)?;
+                    items[idx] = next;
+                    Ok(Value::List(Arc::new(items)))
+                }
+                _ => {
+                    let key = map_index_key(index)?;
+                    let mut entries = im::HashMap::new();
+                    let next =
+                        apply_value_path_update(runtime, Value::Unit, &path[1..], updater, mode)?;
+                    entries.insert(key, next);
+                    Ok(Value::Map(Arc::new(entries)))
+                }
+            },
+            other => Err(RuntimeError::Message(format!(
+                "expected List/Tuple/Map for indexed path, got {}",
+                format_value(&other)
+            ))),
+        },
+        RuntimePathSegment::IndexFieldBool(field) => match target {
+            Value::List(mut items) => {
+                for item in Arc::make_mut(&mut items).iter_mut() {
+                    let should_update = matches!(
+                        item,
+                        Value::Record(map) if matches!(map.get(field), Some(Value::Bool(true)))
+                    );
+                    if should_update {
+                        *item = apply_value_path_update(
+                            runtime,
+                            item.clone(),
+                            &path[1..],
+                            updater.clone(),
+                            mode,
+                        )?;
+                    }
+                }
+                Ok(Value::List(items))
+            }
+            other => Err(RuntimeError::Message(format!(
+                "expected List for boolean-field index path, got {}",
+                format_value(&other)
+            ))),
+        },
+        RuntimePathSegment::IndexPredicate(predicate) => match target {
+            Value::List(mut items) => {
+                for item in Arc::make_mut(&mut items).iter_mut() {
+                    let keep = match runtime.apply(predicate.clone(), item.clone())? {
+                        Value::Bool(value) => value,
+                        other => {
+                            return Err(RuntimeError::Message(format!(
+                                "predicate index expects Bool, got {}",
+                                format_value(&other)
+                            )))
+                        }
+                    };
+                    if keep {
+                        *item = apply_value_path_update(
+                            runtime,
+                            item.clone(),
+                            &path[1..],
+                            updater.clone(),
+                            mode,
+                        )?;
+                    }
+                }
+                Ok(Value::List(items))
+            }
+            Value::Map(mut entries) => {
+                let snapshot = entries.as_ref().clone();
+                for (key, value) in snapshot {
+                    let mut entry = HashMap::new();
+                    entry.insert("key".to_string(), key.to_value());
+                    entry.insert("value".to_string(), value.clone());
+                    let keep = match runtime.apply(
+                        predicate.clone(),
+                        Value::Record(Arc::new(entry)),
+                    )? {
+                        Value::Bool(value) => value,
+                        other => {
+                            return Err(RuntimeError::Message(format!(
+                                "predicate index expects Bool, got {}",
+                                format_value(&other)
+                            )))
+                        }
+                    };
+                    if keep {
+                        let next =
+                            apply_value_path_update(runtime, value, &path[1..], updater.clone(), mode)?;
+                        Arc::make_mut(&mut entries).insert(key, next);
+                    }
+                }
+                Ok(Value::Map(entries))
+            }
+            other => Err(RuntimeError::Message(format!(
+                "expected List/Map for predicate index path, got {}",
+                format_value(&other)
+            ))),
+        },
+    }
+}
+
+pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Option<Value> {
     match (op, left, right) {
         ("..", Value::Int(start), Value::Int(end)) => {
             if start > end {
@@ -498,7 +761,7 @@ fn debug_summary_json(value: &Value) -> serde_json::Value {
     serde_json::Value::Object(out)
 }
 
-fn format_value(value: &Value) -> String {
+pub(crate) fn format_value(value: &Value) -> String {
     match value {
         Value::Unit => "Unit".to_string(),
         Value::Bool(value) => {

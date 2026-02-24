@@ -16,26 +16,26 @@ use aivi_http_server::{ServerHandle, WebSocketHandle};
 use super::environment::Env;
 use super::{Runtime, RuntimeError};
 
-pub(super) type BuiltinFunc =
+pub(crate) type BuiltinFunc =
     dyn Fn(Vec<Value>, &mut Runtime) -> Result<Value, RuntimeError> + Send + Sync;
-pub(super) type ThunkFunc = dyn Fn(&mut Runtime) -> Result<Value, RuntimeError> + Send + Sync;
+pub(crate) type ThunkFunc = dyn Fn(&mut Runtime) -> Result<Value, RuntimeError> + Send + Sync;
 
 #[derive(Clone)]
-pub(super) struct SourceValue {
-    pub(super) kind: String,
-    pub(super) effect: Arc<EffectValue>,
+pub(crate) struct SourceValue {
+    pub(crate) kind: String,
+    pub(crate) effect: Arc<EffectValue>,
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct RecordShape {
+pub(crate) struct RecordShape {
     fields: Arc<Vec<String>>,
     offsets: Arc<HashMap<String, usize>>,
 }
 
 #[derive(Clone)]
-pub(super) struct ShapedRecord {
-    pub(super) shape: Arc<RecordShape>,
-    pub(super) values: Arc<Vec<Value>>,
+pub(crate) struct ShapedRecord {
+    pub(crate) shape: Arc<RecordShape>,
+    pub(crate) values: Arc<Vec<Value>>,
 }
 
 #[derive(Default)]
@@ -70,7 +70,7 @@ fn intern_record_shape(mut fields: Vec<String>) -> Arc<RecordShape> {
     shape
 }
 
-pub(super) fn shape_record(record: &HashMap<String, Value>) -> ShapedRecord {
+pub(crate) fn shape_record(record: &HashMap<String, Value>) -> ShapedRecord {
     let mut names: Vec<String> = record.keys().cloned().collect();
     names.sort();
     let shape = intern_record_shape(names);
@@ -86,14 +86,14 @@ pub(super) fn shape_record(record: &HashMap<String, Value>) -> ShapedRecord {
 }
 
 impl ShapedRecord {
-    pub(super) fn get(&self, name: &str) -> Option<&Value> {
+    pub(crate) fn get(&self, name: &str) -> Option<&Value> {
         self.shape
             .offsets
             .get(name)
             .and_then(|idx| self.values.get(*idx))
     }
 
-    pub(super) fn has_field(&self, name: &str) -> bool {
+    pub(crate) fn has_field(&self, name: &str) -> bool {
         self.shape.offsets.contains_key(name)
     }
 }
@@ -101,7 +101,7 @@ impl ShapedRecord {
 /// Transitional compact scalar container for future NaN-tagged values.
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) struct TaggedValue(u64);
+pub(crate) struct TaggedValue(u64);
 
 #[allow(dead_code)]
 impl TaggedValue {
@@ -109,11 +109,11 @@ impl TaggedValue {
     const TAG_BOOL_FALSE: u64 = 0b10;
     const TAG_BOOL_TRUE: u64 = 0b11;
 
-    pub(super) fn from_int(value: i64) -> Self {
+    pub(crate) fn from_int(value: i64) -> Self {
         Self(((value as u64) << 2) | Self::TAG_INT)
     }
 
-    pub(super) fn from_bool(value: bool) -> Self {
+    pub(crate) fn from_bool(value: bool) -> Self {
         if value {
             Self(Self::TAG_BOOL_TRUE)
         } else {
@@ -121,7 +121,7 @@ impl TaggedValue {
         }
     }
 
-    pub(super) fn from_value(value: &Value) -> Option<Self> {
+    pub(crate) fn from_value(value: &Value) -> Option<Self> {
         match value {
             Value::Int(value) => Some(Self::from_int(*value)),
             Value::Bool(value) => Some(Self::from_bool(*value)),
@@ -129,7 +129,7 @@ impl TaggedValue {
         }
     }
 
-    pub(super) fn to_value(self) -> Value {
+    pub(crate) fn to_value(self) -> Value {
         match self.0 {
             Self::TAG_BOOL_FALSE => Value::Bool(false),
             Self::TAG_BOOL_TRUE => Value::Bool(true),
@@ -140,7 +140,7 @@ impl TaggedValue {
 }
 
 #[derive(Clone)]
-pub(super) enum Value {
+pub(crate) enum Value {
     Unit,
     Bool(bool),
     Int(i64),
@@ -225,25 +225,25 @@ impl std::fmt::Debug for Value {
 }
 
 #[derive(Clone)]
-pub(super) struct BuiltinValue {
-    pub(super) imp: Arc<BuiltinImpl>,
-    pub(super) args: Vec<Value>,
-    pub(super) tagged_args: Option<Vec<TaggedValue>>,
+pub(crate) struct BuiltinValue {
+    pub(crate) imp: Arc<BuiltinImpl>,
+    pub(crate) args: Vec<Value>,
+    pub(crate) tagged_args: Option<Vec<TaggedValue>>,
 }
 
-pub(super) struct BuiltinImpl {
-    pub(super) name: String,
-    pub(super) arity: usize,
-    pub(super) func: Arc<BuiltinFunc>,
+pub(crate) struct BuiltinImpl {
+    pub(crate) name: String,
+    pub(crate) arity: usize,
+    pub(crate) func: Arc<BuiltinFunc>,
 }
 
-pub(super) struct ClosureValue {
-    pub(super) param: String,
-    pub(super) body: Arc<HirExpr>,
-    pub(super) env: Env,
+pub(crate) struct ClosureValue {
+    pub(crate) param: String,
+    pub(crate) body: Arc<HirExpr>,
+    pub(crate) env: Env,
 }
 
-pub(super) enum EffectValue {
+pub(crate) enum EffectValue {
     Block {
         env: Env,
         items: Arc<Vec<HirBlockItem>>,
@@ -253,41 +253,41 @@ pub(super) enum EffectValue {
     },
 }
 
-pub(super) struct ResourceValue {
-    pub(super) items: Arc<Vec<HirBlockItem>>,
+pub(crate) struct ResourceValue {
+    pub(crate) items: Arc<Vec<HirBlockItem>>,
 }
 
-pub(super) struct ThunkValue {
-    pub(super) expr: Arc<HirExpr>,
-    pub(super) env: Env,
-    pub(super) cached: Mutex<Option<Value>>,
-    pub(super) in_progress: AtomicBool,
+pub(crate) struct ThunkValue {
+    pub(crate) expr: Arc<HirExpr>,
+    pub(crate) env: Env,
+    pub(crate) cached: Mutex<Option<Value>>,
+    pub(crate) in_progress: AtomicBool,
 }
 
-pub(super) struct ChannelInner {
-    pub(super) sender: Mutex<Option<ChannelSender>>,
-    pub(super) receiver: Mutex<mpsc::Receiver<Value>>,
-    pub(super) closed: AtomicBool,
+pub(crate) struct ChannelInner {
+    pub(crate) sender: Mutex<Option<ChannelSender>>,
+    pub(crate) receiver: Mutex<mpsc::Receiver<Value>>,
+    pub(crate) closed: AtomicBool,
 }
 
-pub(super) enum ChannelSender {
+pub(crate) enum ChannelSender {
     Unbounded(mpsc::Sender<Value>),
     Bounded(mpsc::SyncSender<Value>),
 }
 
-pub(super) struct ChannelSend {
-    pub(super) inner: Arc<ChannelInner>,
+pub(crate) struct ChannelSend {
+    pub(crate) inner: Arc<ChannelInner>,
 }
 
-pub(super) struct ChannelRecv {
-    pub(super) inner: Arc<ChannelInner>,
+pub(crate) struct ChannelRecv {
+    pub(crate) inner: Arc<ChannelInner>,
 }
 
-pub(super) struct StreamHandle {
-    pub(super) state: Mutex<StreamState>,
+pub(crate) struct StreamHandle {
+    pub(crate) state: Mutex<StreamState>,
 }
 
-pub(super) enum StreamState {
+pub(crate) enum StreamState {
     Socket {
         stream: Arc<Mutex<TcpStream>>,
         chunk_size: usize,
@@ -300,7 +300,7 @@ pub(super) enum StreamState {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub(super) enum KeyValue {
+pub(crate) enum KeyValue {
     Unit,
     Bool(bool),
     Int(i64),
@@ -316,7 +316,7 @@ pub(super) enum KeyValue {
 }
 
 impl KeyValue {
-    pub(super) fn try_from_value(value: &Value) -> Option<Self> {
+    pub(crate) fn try_from_value(value: &Value) -> Option<Self> {
         match value {
             Value::Unit => Some(KeyValue::Unit),
             Value::Bool(value) => Some(KeyValue::Bool(*value)),
@@ -345,7 +345,7 @@ impl KeyValue {
         }
     }
 
-    pub(super) fn to_value(&self) -> Value {
+    pub(crate) fn to_value(&self) -> Value {
         match self {
             KeyValue::Unit => Value::Unit,
             KeyValue::Bool(value) => Value::Bool(*value),

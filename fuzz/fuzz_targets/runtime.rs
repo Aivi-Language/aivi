@@ -25,5 +25,7 @@ fuzz_target!(|data: &[u8]| {
     }
 
     let hir = aivi::desugar_modules(&modules);
-    let _ = aivi::run_native_with_fuel(hir, 25_000);
+    // TODO: re-add fuel mechanism for Cranelift JIT
+    let cg_types = std::collections::HashMap::new();
+    let _ = aivi::run_cranelift_jit(hir, cg_types);
 });

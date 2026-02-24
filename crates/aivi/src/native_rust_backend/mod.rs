@@ -168,6 +168,9 @@ fn emit_module(module: RustIrModule, kind: EmitKind) -> Result<String, AiviError
         out.push_str("fn main() {\n");
         out.push_str("    let mut rt = Runtime::new();\n");
         out.push_str("    let result: Result<(), RuntimeError> = (|| {\n");
+        out.push_str(
+            "        runtime_value_abi_handshake(AIVI_EXPECTED_VALUE_ABI_MAJOR, AIVI_EXPECTED_VALUE_ABI_MINOR)?;\n",
+        );
         if let Some(ref cg_ty) = main_typed_cg {
             // Typed main: call the typed version and box the result for run_effect_value.
             let typed_fn = format!("{main_fn}_typed");

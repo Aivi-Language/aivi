@@ -644,6 +644,24 @@ f = x => x
     }
 
     #[test]
+    fn debug_non_identifier_param_is_error() {
+        let source = r#"
+module test.debug_params
+
+@debug(pipes, 1, time)
+f = x => x
+"#;
+        let (modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let diags = check_modules(&modules);
+        assert!(
+            diags.iter().any(|d| d.diagnostic.code == "E2011"),
+            "expected E2011, got: {diags:?}"
+        );
+    }
+
+    #[test]
     fn debug_requires_function_binding() {
         let source = r#"
 module test.debug_params

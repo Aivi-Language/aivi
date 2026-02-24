@@ -45,6 +45,15 @@ describe('Extension Test Suite', () => {
         expect(extractHoverToken(text, offset)).toBe('@test');
     });
 
+    it('extracts hover token at EOF offsets', () => {
+        const text = 'run = add 1 2';
+        expect(extractHoverToken(text, text.length + 10)).toBe('2');
+    });
+
+    it('returns no fallback docs for unknown token', () => {
+        expect(fallbackHoverMarkdownForToken('not-a-known-token')).toBeUndefined();
+    });
+
     it('has fallback docs for core syntax tokens', () => {
         expect(fallbackHoverMarkdownForToken('module')).toBeTruthy();
         expect(fallbackHoverMarkdownForToken('=>')).toBeTruthy();

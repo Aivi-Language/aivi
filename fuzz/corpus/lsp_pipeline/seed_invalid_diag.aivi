@@ -1,0 +1,5 @@
+module fuzz.seed.lsp.invalid_diag
+export bad
+
+bad : Int
+bad = "oops"

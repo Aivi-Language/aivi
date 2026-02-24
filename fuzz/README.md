@@ -7,9 +7,9 @@ front-end pipeline, runtime, and LSP-like stack.
 
 | Target | What it exercises | Key invariants |
 | :--- | :--- | :--- |
-| `parser` | Lexer + CST parser | Never panic/UB; always returns tokens + AST or diagnostics |
+| `parser` | Lexer + CST parser (+ parse-after-format on valid inputs) | Never panic/UB; always returns tokens + AST or diagnostics |
 | `formatter` | `format_text` / `format_text_with_options` | Never panic; output ≤ 8× input + 4 KiB; idempotent; preserves validity |
-| `frontend` | Parse → resolve → typecheck → desugar → kernel | Never panic on well-typed input |
+| `frontend` | Parse → arena lowering → resolve → typecheck (+ stdlib check) → desugar → kernel | Never panic on well-typed input |
 | `runtime` | Full pipeline + native execution with fuel budget | Never panic/hang (fuel-capped at 25 000 steps) |
 | `lsp_pipeline` | Parse → resolve → typecheck → format → render diagnostics | Never panic; simulates LSP didOpen/didChange → formatting flow |
 
@@ -60,4 +60,3 @@ point and mutates from there. Good seeds = faster coverage.
 
 Crash artifacts are saved in `fuzz/artifacts/<target>/` — use
 `cargo +nightly fuzz fmt <target> <artifact>` to minimize and reproduce.
-

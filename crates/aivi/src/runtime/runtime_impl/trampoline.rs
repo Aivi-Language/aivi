@@ -162,7 +162,7 @@ impl Runtime {
                 // Push continuation frame for first item, then eval it.
                 let is_first_last = items.len() == 1;
                 self.push_plain_block_continuation(stack, &items, 0, &local_env, is_first_last);
-                Ok(self.start_plain_block_item(&items, 0, local_env))
+                self.start_plain_block_item(&items, 0, local_env)
             }
             // App: evaluate func and arg, then delegate apply to the trampoline loop.
             HirExpr::App { func, arg, .. } => {
@@ -203,16 +203,21 @@ impl Runtime {
         items: &Arc<Vec<HirBlockItem>>,
         index: usize,
         env: Env,
-    ) -> Step {
+    ) -> Result<Step, RuntimeError> {
         match &items[index] {
-            HirBlockItem::Bind { expr, .. } | HirBlockItem::Expr { expr } => Step::Eval {
+            HirBlockItem::Bind { expr, .. } | HirBlockItem::Expr { expr } => Ok(Step::Eval {
                 expr: Arc::new(expr.clone()),
                 env,
-            },
-            _ => {
-                // Filter/Yield/Recurse not supported in plain blocks.
-                Step::Return(Value::Unit)
-            }
+            }),
+            HirBlockItem::Filter { .. } => Err(RuntimeError::Message(
+                "unsupported block item in plain block: Filter".to_string(),
+            )),
+            HirBlockItem::Yield { .. } => Err(RuntimeError::Message(
+                "unsupported block item in plain block: Yield".to_string(),
+            )),
+            HirBlockItem::Recurse { .. } => Err(RuntimeError::Message(
+                "unsupported block item in plain block: Recurse".to_string(),
+            )),
         }
     }
 
@@ -466,7 +471,7 @@ impl Runtime {
                     self.push_plain_block_continuation(
                         stack, &items, next_index, &env, is_next_last,
                     );
-                    Ok(self.start_plain_block_item(&items, next_index, env))
+                    self.start_plain_block_item(&items, next_index, env)
                 }
             }
 
@@ -491,7 +496,7 @@ impl Runtime {
                     self.push_plain_block_continuation(
                         stack, &items, next_index, &env, is_next_last,
                     );
-                    Ok(self.start_plain_block_item(&items, next_index, env))
+                    self.start_plain_block_item(&items, next_index, env)
                 }
             }
 

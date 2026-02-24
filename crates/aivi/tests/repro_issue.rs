@@ -40,3 +40,37 @@ main = 1.0
         mismatch_diag.diagnostic.message
     );
 }
+
+#[test]
+fn repro_type_mismatch_order_opposite_direction() {
+    let source = r#"
+module test.repro
+export main
+
+main : Float
+main = 1
+"#;
+    let (modules, diagnostics) = parse_modules(Path::new("test.aivi"), source);
+    assert!(
+        !file_diagnostics_have_errors(&diagnostics),
+        "parse errors: {:?}",
+        diagnostics
+    );
+
+    let mut module_diags = check_modules(&modules);
+    module_diags.extend(check_types(&modules));
+
+    let mismatch_diag = module_diags
+        .iter()
+        .find(|d| d.diagnostic.message.contains("type mismatch"))
+        .expect("expected type mismatch diagnostic");
+
+    assert!(
+        mismatch_diag
+            .diagnostic
+            .message
+            .contains("expected Float, found Int"),
+        "Message was: {}",
+        mismatch_diag.diagnostic.message
+    );
+}

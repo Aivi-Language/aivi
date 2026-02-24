@@ -42,5 +42,13 @@ fn stdlib_ui_exports_v_element() {
         );
     }
 
+    let export_names: Vec<&str> = ui.exports.iter().map(|e| e.name.name.as_str()).collect();
+    for expected in ["vText", "vKeyed", "vClass", "vId", "vStyle", "vAttr"] {
+        assert!(
+            export_names.iter().any(|n| *n == expected),
+            "expected aivi.ui to export {expected}; exports={export_names:?}"
+        );
+    }
+
     let _def = v_element_def.expect("vElement def");
 }

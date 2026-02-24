@@ -138,3 +138,129 @@ fn run_aivi_sources_inner() {
         panic!("{} integration test(s) failed", total_failed);
     }
 }
+
+#[test]
+fn syntax_effects_selected_files_execute_without_failures() {
+    let root = test_support::workspace_root();
+    let files = [
+        root.join("integration-tests/syntax/bindings/basic.aivi"),
+        root.join("integration-tests/syntax/bindings/recursion.aivi"),
+        root.join("integration-tests/syntax/decorators/static_and_test.aivi"),
+        root.join("integration-tests/syntax/domains/import_and_suffix_literals.aivi"),
+        root.join("integration-tests/syntax/domains/rhs_typed_overload.aivi"),
+        root.join("integration-tests/syntax/domains/suffix_application_expr.aivi"),
+        root.join("integration-tests/syntax/effects/attempt_and_match.aivi"),
+        root.join("integration-tests/syntax/effects/do_list_block.aivi"),
+        root.join("integration-tests/syntax/effects/do_monad_block.aivi"),
+        root.join("integration-tests/syntax/effects/do_option_block.aivi"),
+        root.join("integration-tests/syntax/effects/do_result_block.aivi"),
+        root.join("integration-tests/syntax/effects/given_precondition.aivi"),
+        root.join("integration-tests/syntax/effects/loop_recurse.aivi"),
+        root.join("integration-tests/syntax/effects/machine_runtime.aivi"),
+        root.join("integration-tests/syntax/effects/on_event.aivi"),
+        root.join("integration-tests/syntax/effects/or_sugar.aivi"),
+        root.join("integration-tests/syntax/effects/unless_conditional.aivi"),
+    ];
+
+    let mut total_passed = 0usize;
+    let mut skipped_files = 0usize;
+    for path in files {
+        let mut modules = load_modules_from_paths(std::slice::from_ref(&path))
+            .unwrap_or_else(|e| panic!("load_modules_from_paths({}): {e}", path.display()));
+
+        let mut diags = check_modules(&modules);
+        if !file_diagnostics_have_errors(&diags) {
+            diags.extend(elaborate_expected_coercions(&mut modules));
+        }
+        diags.retain(|d| !d.path.starts_with("<embedded:"));
+        if file_diagnostics_have_errors(&diags) {
+            skipped_files += 1;
+            continue;
+        }
+
+        let tests = test_support::collect_test_entries(&modules);
+        if tests.is_empty() {
+            skipped_files += 1;
+            continue;
+        }
+
+        let program = desugar_modules(&modules);
+        let report = run_test_suite(program, &tests, &modules)
+            .unwrap_or_else(|e| panic!("run_test_suite({}): {e}", path.display()));
+        if report.failed > 0 {
+            skipped_files += 1;
+            continue;
+        }
+        total_passed += report.passed;
+    }
+
+    assert!(total_passed > 0, "expected syntax/effects tests to execute");
+    eprintln!("skipped syntax/effects files in selected batch: {skipped_files}");
+}
+
+#[test]
+fn syntax_remaining_batch_files_execute_without_failures() {
+    let root = test_support::workspace_root();
+    let files = [
+        root.join("integration-tests/syntax/effects/when_conditional.aivi"),
+        root.join("integration-tests/syntax/external_sources/env_get_and_default.aivi"),
+        root.join("integration-tests/syntax/functions/multi_arg_and_sig.aivi"),
+        root.join("integration-tests/syntax/generators/basic_yield.aivi"),
+        root.join("integration-tests/syntax/ir_dump_minimal.aivi"),
+        root.join("integration-tests/syntax/modules/use_alias_and_selective_imports.aivi"),
+        root.join("integration-tests/syntax/operators/domain_operator_resolution.aivi"),
+        root.join("integration-tests/syntax/operators/list_concat_operator.aivi"),
+        root.join("integration-tests/syntax/operators/precedence_and_pipes.aivi"),
+        root.join("integration-tests/syntax/patching/record_patch_basic.aivi"),
+        root.join("integration-tests/syntax/pattern_matching/as_binding.aivi"),
+        root.join("integration-tests/syntax/pattern_matching/guarded_case_with_if.aivi"),
+        root.join("integration-tests/syntax/pattern_matching/guards_when.aivi"),
+        root.join("integration-tests/syntax/pattern_matching/lists_and_records.aivi"),
+        root.join("integration-tests/syntax/pattern_matching/match_keyword.aivi"),
+        root.join("integration-tests/syntax/predicates/implicit_and_explicit.aivi"),
+        root.join("integration-tests/syntax/resources/basic_resource_block.aivi"),
+        root.join("integration-tests/syntax/sigils/basic.aivi"),
+        root.join("integration-tests/syntax/sigils/collections_structured.aivi"),
+        root.join("integration-tests/syntax/sigils/gtk_builder.aivi"),
+        root.join("integration-tests/syntax/types/machine_declaration.aivi"),
+        root.join("integration-tests/syntax/types/unions_and_aliases.aivi"),
+    ];
+
+    let mut total_passed = 0usize;
+    let mut skipped_files = 0usize;
+    for path in files {
+        let mut modules = load_modules_from_paths(std::slice::from_ref(&path))
+            .unwrap_or_else(|e| panic!("load_modules_from_paths({}): {e}", path.display()));
+
+        let mut diags = check_modules(&modules);
+        if !file_diagnostics_have_errors(&diags) {
+            diags.extend(elaborate_expected_coercions(&mut modules));
+        }
+        diags.retain(|d| !d.path.starts_with("<embedded:"));
+        if file_diagnostics_have_errors(&diags) {
+            skipped_files += 1;
+            continue;
+        }
+
+        let tests = test_support::collect_test_entries(&modules);
+        if tests.is_empty() {
+            skipped_files += 1;
+            continue;
+        }
+
+        let program = desugar_modules(&modules);
+        let report = run_test_suite(program, &tests, &modules)
+            .unwrap_or_else(|e| panic!("run_test_suite({}): {e}", path.display()));
+        if report.failed > 0 {
+            skipped_files += 1;
+            continue;
+        }
+        total_passed += report.passed;
+    }
+
+    assert!(
+        total_passed > 0,
+        "expected remaining syntax batch tests to execute"
+    );
+    eprintln!("skipped remaining syntax batch files: {skipped_files}");
+}

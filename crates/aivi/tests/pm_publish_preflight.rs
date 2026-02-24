@@ -74,3 +74,62 @@ entry = "src/lib.aivi"
     let err = validate_publish_preflight(root, &cfg).unwrap_err();
     assert!(err.to_string().contains("kind"));
 }
+
+#[test]
+fn publish_preflight_rejects_language_version_mismatch() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let root = tmp.path();
+
+    write_file(
+        &root.join("aivi.toml"),
+        r#"[project]
+kind = "bin"
+entry = "main.aivi"
+language_version = "0.2"
+"#,
+    );
+    write_file(
+        &root.join("Cargo.toml"),
+        r#"[package]
+name = "demo"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.aivi]
+language_version = "0.1"
+kind = "bin"
+entry = "src/main.aivi"
+"#,
+    );
+
+    let cfg = read_aivi_toml(&root.join("aivi.toml")).expect("read aivi.toml");
+    let err = validate_publish_preflight(root, &cfg).unwrap_err();
+    assert!(err.to_string().contains("language_version"));
+}
+
+#[test]
+fn publish_preflight_rejects_missing_package_metadata_aivi() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let root = tmp.path();
+
+    write_file(
+        &root.join("aivi.toml"),
+        r#"[project]
+kind = "bin"
+entry = "main.aivi"
+language_version = "0.1"
+"#,
+    );
+    write_file(
+        &root.join("Cargo.toml"),
+        r#"[package]
+name = "demo"
+version = "0.1.0"
+edition = "2024"
+"#,
+    );
+
+    let cfg = read_aivi_toml(&root.join("aivi.toml")).expect("read aivi.toml");
+    let err = validate_publish_preflight(root, &cfg).unwrap_err();
+    assert!(err.to_string().contains("missing [package.metadata.aivi]"));
+}

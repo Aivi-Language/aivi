@@ -386,7 +386,7 @@ fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
         .to_str()
         .ok_or_else(|| AiviError::InvalidPath(entry_path.display().to_string()))?;
     let (program, cg_types) = aivi::desugar_target_with_cg_types(entry)?;
-    aivi::run_native_jit(program, cg_types)
+    aivi::run_cranelift_jit(program, cg_types)
 }
 
 fn parse_project_args(args: &[String]) -> Result<(bool, Vec<String>), AiviError> {
