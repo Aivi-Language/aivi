@@ -20,3 +20,17 @@ Numeric suffixes:
 * `~t(12:00:00)` → `Time`
 * `~tz(Europe/Paris)` → `TimeZone`
 * `~zdt(2024-05-21T12:00:00Z[Europe/Paris])` → `ZonedDateTime`
+
+## Branded nominal newtypes (`T = U!`)
+
+You can define a distinct nominal type from an existing base type with `!`:
+
+```aivi
+Email = Text!
+
+mkEmail : Text -> Email
+mkEmail = value => Email value
+```
+
+`Email` is now distinct from `Text` at type-check time, while still using the `Email` constructor to wrap values explicitly.
+If you prefer `String` naming, define `String = Text` and then `Email = String!`.

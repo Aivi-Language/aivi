@@ -4,3 +4,9 @@ logger.debug: Text -> Context -> Effect Text Unit
 logger.info: Text -> Context -> Effect Text Unit
 logger.warn: Text -> Context -> Effect Text Unit
 logger.error: Text -> Context -> Effect Text Unit
+log: Level -> Text -> Context -> Effect Text Unit
+trace: Text -> Context -> Effect Text Unit
+debug: Text -> Context -> Effect Text Unit
+info: Text -> Context -> Effect Text Unit
+warn: Text -> Context -> Effect Text Unit
+error: Text -> Context -> Effect Text Unit

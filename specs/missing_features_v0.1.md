@@ -33,7 +33,7 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 
 | Module | File                                  | Status                                           |
 |:------ |:------------------------------------- |:------------------------------------------------ |
-| Log    | [system/log.md](stdlib/system/log.md) | Specified-only (not implemented in runtime v0.1) |
+| Log    | [system/log.md](stdlib/system/log.md) | Implemented in runtime v0.1; covered by integration tests |
 
 ### Runtime
 
@@ -41,4 +41,4 @@ This page tracks **documentation and implementation gaps** between the `specs/` 
 
 ### Tooling (LSP / formatter / docs)
 
-- `aivi mcp serve`: currently only serves spec resources; tool execution is not yet available.
+- MCP tool execution surface is intentionally minimal in v0.1 (`aivi.parse`, `aivi.check`, `aivi.fmt`, `aivi.fmt.write`); richer project-wide and code-action style MCP tooling remains pending.

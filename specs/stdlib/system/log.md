@@ -1,6 +1,6 @@
 # Log Module
 
-> **Status: Specified, not implemented in runtime v0.1.**
+> **Status: Implemented in runtime v0.1.**
 
 <!-- quick-info: {"kind":"module","name":"aivi.log"} -->
 The `Log` module provides **Structured Logging** for modern observability.
@@ -33,6 +33,7 @@ The `Log` module provides **Structured Logging** for modern observability.
 
 Notes:
 - `Context` is `List (Text, Text)` — a simple key-value pair list attached to each log output.
+- `aivi.log` also exports convenience wrappers `log`, `trace`, `debug`, `info`, `warn`, and `error` with the same signatures as `logger.*`.
 - The runtime provides a default log handler that writes to stdout. Custom handlers can be injected via effect handlers.
 
 ## Type Signatures

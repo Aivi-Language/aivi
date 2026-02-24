@@ -109,7 +109,6 @@ fn find_def_expr<'a>(module: &'a crate::surface::Module, def_name: &str) -> &'a 
         .unwrap_or_else(|| panic!("expected def '{def_name}'"))
 }
 
-
 #[test]
 fn inserts_to_text_for_record_when_text_expected() {
     let source = r#"

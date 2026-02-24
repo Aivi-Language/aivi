@@ -1,64 +1,39 @@
 # AIVI
 
-AIVI is a functional programming language and toolchain for building strongly typed applications on a Rust-powered foundation.
-It is designed for developers who want high confidence in correctness, explicit effect handling, and fast execution, without writing Rust as their day-to-day language.
+AIVI is a functional programming language and toolchain for building strongly typed applications on a Rust-powered foundation. It’s for developers who want the confidence of static types and the clarity of explicit effects, without needing to write Rust as their day‑to‑day language.
 
-## What makes AIVI special
+AIVI is opinionated in a practical way: it tries to make “the right thing” feel normal. You can keep business logic small and readable, model errors instead of hand-waving them away, and let the compiler do a lot of the heavy lifting when the codebase grows.
 
-AIVI sits in a focused niche: **domain-first functional programming with systems-level runtime credibility**.
+## A language you can live in
 
-- **High-level language, low-level foundation**  
-  Model business logic in a concise, expressive language while relying on a Rust implementation for speed and reliability.
-- **Correctness without ownership overhead**  
-  Keep strong typing and compositional modeling without carrying Rust's full ownership/borrowing mental load in application code.
-- **Explicit effects and errors**  
-  Build effectful programs where side effects and failures stay visible in program design rather than hidden in ad hoc conventions.
-- **Tooling as a first-class feature**  
-  CLI, language server support, and workspace-oriented architecture are part of the core platform, not afterthoughts.
-- **Built to scale from model to runtime**  
-  The language pipeline and runtime path are designed together, so high-level abstractions remain practical in real systems.
+A big part of choosing a language is whether it keeps up with you after the first week. AIVI is built with tooling as part of the product. The language server powers autocomplete, go-to definition, rename, and real-time diagnostics, and it also makes type information easy to reach when you need it. In VS Code, the extension brings formatting and language intelligence together so your editor stays in sync with how the language actually works.
 
-## Where AIVI fits in the language landscape
+Instead of treating formatting and “type help” as separate worlds, AIVI leans into the feedback loop: you write a little, you get fast answers, you keep moving. The goal is not just correctness on paper, but a smoother day-to-day experience.
 
-AIVI is not trying to replace every language category.
-It is meant for teams that want stronger guarantees than dynamic ecosystems, a more domain-centric developer experience than systems languages, and more runtime pragmatism than purely academic functional stacks.
+## UI without switching ecosystems
 
-| Language space | Typical strength | Common trade-off | Where AIVI fits |
-| --- | --- | --- | --- |
-| Dynamic scripting (Python/JS) | Fast iteration, huge ecosystems | Weaker static guarantees | Offers stronger type-driven modeling and explicit effects |
-| Systems languages (Rust/C++) | Performance, control, predictability | Higher cognitive load for application logic | Keeps Rust-backed performance with a higher-level language surface |
-| Mainstream typed app languages (TypeScript/Kotlin/Go) | Practical productivity and tooling | Less algebraic/domain-centric modeling in many codebases | Emphasizes functional composition and domain precision |
-| Pure FP ecosystems (Haskell/OCaml/F#) | Powerful type systems and abstractions | Ecosystem/runtime integration varies by context | Brings FP modeling style with a Rust-native implementation path |
+AIVI also has a clear story for building user interfaces without hopping between stacks. If you want interactive web UIs, `aivi.ui.ServerHtml` lets the server render typed view trees to HTML and handle user events in a structured way. There’s a small browser client in `ui-client/` that handles the browser-side wiring (events, patches, and a few platform capabilities) and gets synced into the Rust runtime crates, so the whole system stays cohesive.
 
-## When to choose AIVI
+If you’d rather ship a native desktop app, `aivi.ui.gtk4` gives you a GTK4 path with AIVI types and functions mapped to runtime bindings. You can keep the same language and modeling approach while targeting a very different UI surface.
 
-AIVI is a strong fit when you are building:
+## Domains that make math feel safer
 
-- Domain-heavy services where correctness matters (finance, compliance, workflow engines, policy systems).
-- Type-safe core business logic that should remain easy to reason about as complexity grows.
-- Effectful applications where you want explicit control over side effects and error propagation.
-- Rust-adjacent platforms where runtime performance and operational reliability are key requirements.
+AIVI’s “domains” feature is a quiet superpower: it helps you express real-world concepts directly in code. Instead of turning everything into plain numbers and hoping conventions hold, domains can give meaning to operators and literals, including unit suffixes and delta values. Writing things like `10ms` or `20deg` can stay readable while still being checked and interpreted in a way that matches the problem space.
 
-## Architecture at a glance
+This pairs naturally with the standard library’s math modules (vectors, matrices, linear algebra, geometry, probability, and signal work), so you can do serious calculations without rebuilding foundations in every project.
 
-AIVI is organized as a Rust workspace with language, runtime, and tooling crates:
+## Specs and AI-friendly workflows
 
-- `crates/aivi`: CLI and developer entry point
-- `crates/aivi_core`: core language pipeline
-- `crates/aivi_driver`: compilation orchestration
-- `crates/aivi_native_runtime`: native runtime support
-- `crates/aivi_http_server`: HTTP serving integration
-- `crates/aivi_lsp`: language server support
-- `crates/doc_index_gen`: documentation indexing utilities
+AIVI keeps its specs close to the implementation, and the toolchain can serve them to other tools. In v0.1, `aivi mcp serve` exposes the language specifications as MCP resources, which makes it easier to plug AIVI into modern AI-assisted workflows and internal developer tooling.
 
-High-level flow:
+## Getting started
 
-1. Lexing and parsing
-2. AST/HIR-style lowering and resolution
-3. Desugaring to a compact core representation
-4. Type inference and checking
-5. Runtime execution and/or backend emission
+If you have Rust installed, you can install the CLI from this repo and explore what it can do:
 
-## Project direction
+```bash
+cargo install --path crates/aivi
 
-AIVI's direction is clear: **make high-assurance, typed application development feel expressive and practical**, while preserving the reliability and performance profile enabled by a Rust foundation.
+aivi --help
+```
+
+From there, you can format and check AIVI code, run the language server (for editors that use LSP), and explore the `specs/` folder for the language and standard library documentation.
