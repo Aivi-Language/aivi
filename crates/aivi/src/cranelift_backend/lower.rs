@@ -87,10 +87,14 @@ pub(crate) struct LowerCtx<'a> {
     /// Registry of JIT-compiled functions available for direct calls.
     /// Maps qualified name → (FuncRef, param count, param types, return type).
     jit_funcs: &'a HashMap<String, JitFuncInfo>,
+    /// Maps original short name → list of specialization short names.
+    /// Used for call-site routing to monomorphized versions.
+    spec_map: &'a HashMap<String, Vec<String>>,
 }
 
 /// Metadata about a JIT-compiled function, used for direct calls.
 #[allow(dead_code)]
+#[derive(Clone)]
 pub(crate) struct JitFuncInfo {
     pub(crate) func_ref: FuncRef,
     pub(crate) arity: usize,
@@ -368,6 +372,7 @@ impl<'a> LowerCtx<'a> {
         helpers: &'a HelperRefs,
         compiled_lambdas: &'a HashMap<usize, CompiledLambda>,
         jit_funcs: &'a HashMap<String, JitFuncInfo>,
+        spec_map: &'a HashMap<String, Vec<String>>,
     ) -> Self {
         Self {
             locals: HashMap::new(),
@@ -375,6 +380,7 @@ impl<'a> LowerCtx<'a> {
             helpers,
             compiled_lambdas,
             jit_funcs,
+            spec_map,
         }
     }
 
@@ -642,10 +648,22 @@ impl<'a> LowerCtx<'a> {
     ) -> TypedValue {
         // Check for direct call: App(Global(name), arg) where name is a JIT function with arity 1
         if let RustIrExpr::Global { name, .. } = func {
-            if let Some(info) = self.jit_funcs.get(name.as_str()) {
+            let maybe_info = self.jit_funcs.get(name.as_str()).cloned();
+            if let Some(info) = maybe_info {
                 if info.arity == 1 {
+                    // Try specialization routing
+                    let maybe_specs = self.spec_map.get(name.as_str()).cloned();
+                    if let Some(spec_names) = maybe_specs {
+                        let arg_tv = self.lower_expr(builder, arg);
+                        let arg_tvs = [arg_tv];
+                        if let Some(spec_name) = self.find_matching_spec(&spec_names, &arg_tvs) {
+                            let si = self.jit_funcs.get(spec_name.as_str()).unwrap().clone();
+                            return self.emit_direct_call_typed(builder, &si, &arg_tvs);
+                        }
+                        return self.emit_direct_call_typed(builder, &info, &arg_tvs);
+                    }
                     let args_vec = vec![arg.clone()];
-                    return self.emit_direct_call(builder, info, &args_vec);
+                    return self.emit_direct_call(builder, &info, &args_vec);
                 }
             }
         }
@@ -670,9 +688,23 @@ impl<'a> LowerCtx<'a> {
         // Check for direct call: Call(Global(name), args) where name is a
         // JIT function with matching arity.
         if let RustIrExpr::Global { name, .. } = func {
-            if let Some(info) = self.jit_funcs.get(name.as_str()) {
+            let maybe_info = self.jit_funcs.get(name.as_str()).cloned();
+            if let Some(info) = maybe_info {
                 if info.arity == args.len() {
-                    return self.emit_direct_call(builder, info, args);
+                    // Try specialization routing: lower args first to get types,
+                    // then check for a matching specialization.
+                    let maybe_specs = self.spec_map.get(name.as_str()).cloned();
+                    if let Some(spec_names) = maybe_specs {
+                        let arg_tvs: Vec<TypedValue> =
+                            args.iter().map(|a| self.lower_expr(builder, a)).collect();
+                        if let Some(spec_name) = self.find_matching_spec(&spec_names, &arg_tvs) {
+                            let si = self.jit_funcs.get(spec_name.as_str()).unwrap().clone();
+                            return self.emit_direct_call_typed(builder, &si, &arg_tvs);
+                        }
+                        // No matching specialization; use the args we already lowered
+                        return self.emit_direct_call_typed(builder, &info, &arg_tvs);
+                    }
+                    return self.emit_direct_call(builder, &info, args);
                 }
             }
         }
@@ -690,6 +722,37 @@ impl<'a> LowerCtx<'a> {
             result = TypedValue::boxed(builder.inst_results(call)[0]);
         }
         result
+    }
+
+    /// Find a specialization whose param types match the given arg types.
+    /// Returns the specialization name rather than a reference, to avoid
+    /// keeping an immutable borrow on `self`.
+    fn find_matching_spec(
+        &self,
+        spec_names: &[String],
+        arg_tvs: &[TypedValue],
+    ) -> Option<String> {
+        for spec_name in spec_names {
+            if let Some(spec_info) = self.jit_funcs.get(spec_name.as_str()) {
+                if spec_info.arity == arg_tvs.len() && Self::params_match_args(spec_info, arg_tvs) {
+                    return Some(spec_name.clone());
+                }
+            }
+        }
+        None
+    }
+
+    /// Check if a specialization's declared param types match the actual arg types.
+    fn params_match_args(info: &JitFuncInfo, arg_tvs: &[TypedValue]) -> bool {
+        for (i, arg_tv) in arg_tvs.iter().enumerate() {
+            let param_ty = info.param_types.get(i).and_then(|t| t.as_ref());
+            match (param_ty, &arg_tv.ty) {
+                (Some(p), Some(a)) if p == a => continue,
+                (None, None) => continue,
+                _ => return false,
+            }
+        }
+        true
     }
 
     /// Emit a direct Cranelift `call` to a JIT-compiled function, bypassing
@@ -712,6 +775,30 @@ impl<'a> LowerCtx<'a> {
         match &info.return_type {
             Some(ret_ty) => {
                 // Callee returned a boxed value; we know the type so unbox it
+                self.try_unbox(builder, raw, ret_ty)
+                    .unwrap_or_else(|| TypedValue::boxed(raw))
+            }
+            None => TypedValue::boxed(raw),
+        }
+    }
+
+    /// Like `emit_direct_call` but takes pre-lowered TypedValues instead of
+    /// unevaluated expressions. Used for specialization routing where args
+    /// are already lowered to determine their types.
+    fn emit_direct_call_typed(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        info: &JitFuncInfo,
+        arg_tvs: &[TypedValue],
+    ) -> TypedValue {
+        let mut call_args = vec![self.ctx_param];
+        for arg_tv in arg_tvs {
+            call_args.push(self.ensure_boxed(builder, arg_tv.clone()));
+        }
+        let call = builder.ins().call(info.func_ref, &call_args);
+        let raw = builder.inst_results(call)[0];
+        match &info.return_type {
+            Some(ret_ty) => {
                 self.try_unbox(builder, raw, ret_ty)
                     .unwrap_or_else(|| TypedValue::boxed(raw))
             }

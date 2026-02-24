@@ -381,3 +381,26 @@ main = do Effect {
         instantiations
     );
 }
+
+#[test]
+fn cranelift_jit_monomorphized_polymorphic_function() {
+    // End-to-end: a polymorphic `id` function is monomorphized for Int
+    // and Text, and the JIT produces correct results.
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+
+id : a -> a
+id = x => x
+
+main : Effect Text Unit
+main = do Effect {
+  assertEq (id 42) 42
+  assertEq (id "hello") "hello"
+}
+"#,
+    );
+}
