@@ -111,4 +111,33 @@ mod tests {
         );
         assert!(!formatted.contains("\n\n\n"));
     }
+
+    #[test]
+    fn format_html_sigil_uses_one_tag_per_line_and_nested_indent() {
+        let text = "module demo\n\nx=~<html><div class=\"card\"><span>ok</span></div></html>\n";
+        let formatted = format_text(text);
+        assert_eq!(
+            formatted,
+            "module demo\n\nx = ~<html>\n      <div class=\"card\">\n        <span>\n          ok\n        </span>\n      </div>\n    </html>\n"
+        );
+    }
+
+    #[test]
+    fn format_gtk_sigil_keeps_short_attr_lists_on_single_line() {
+        let text = "module demo\n\nx=~<gtk><object a=\"1\" b=\"2\" c=\"3\" d=\"4\"><child><object class=\"GtkLabel\"/></child></object></gtk>\n";
+        let formatted = format_text(text);
+        assert!(formatted.contains("<object a=\"1\" b=\"2\" c=\"3\" d=\"4\">"));
+        assert!(formatted.contains("\n          <object class=\"GtkLabel\" />\n"));
+    }
+
+    #[test]
+    fn format_gtk_sigil_wraps_five_plus_attributes_and_indents_nested_tags() {
+        let text = "module demo\n\nx=~<gtk><object a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\"><child><object class=\"GtkLabel\"/></child></object></gtk>\n";
+        let formatted = format_text(text);
+        assert!(formatted.contains("\n      <object\n"));
+        assert!(formatted.contains("\n        a=\"1\"\n"));
+        assert!(formatted.contains("\n        e=\"5\">\n"));
+        assert!(formatted.contains("\n        <child>\n"));
+        assert!(formatted.contains("\n          <object class=\"GtkLabel\" />\n"));
+    }
 }

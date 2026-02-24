@@ -396,6 +396,318 @@
         rows: Vec<Vec<String>>,
     }
 
+    #[derive(Debug, Clone)]
+    struct MarkupSigil {
+        open: &'static str,
+        close: &'static str,
+        body: String,
+    }
+
+    fn parse_markup_sigil(text: &str) -> Option<MarkupSigil> {
+        for (open, close) in [("~<html>", "</html>"), ("~<gtk>", "</gtk>")] {
+            if text.starts_with(open) && text.ends_with(close) {
+                let body_start = open.chars().count();
+                let body_end = text.chars().count().saturating_sub(close.chars().count());
+                let body: String = text
+                    .chars()
+                    .skip(body_start)
+                    .take(body_end.saturating_sub(body_start))
+                    .collect();
+                return Some(MarkupSigil { open, close, body });
+            }
+        }
+        None
+    }
+
+    fn parse_open_markup_tag(tag_text: &str) -> Option<(String, Vec<String>, bool)> {
+        let raw = tag_text.trim();
+        if !raw.starts_with('<') || raw.starts_with("</") || !raw.ends_with('>') {
+            return None;
+        }
+        let mut inner = raw
+            .trim_start_matches('<')
+            .trim_end_matches('>')
+            .trim()
+            .to_string();
+        let self_close = inner.ends_with('/');
+        if self_close {
+            inner = inner.trim_end_matches('/').trim_end().to_string();
+        }
+        if inner.is_empty() {
+            return None;
+        }
+
+        let chars: Vec<char> = inner.chars().collect();
+        let mut i = 0usize;
+        while i < chars.len() && !chars[i].is_whitespace() {
+            i += 1;
+        }
+        let tag_name: String = chars[0..i].iter().collect();
+        if tag_name.is_empty() {
+            return None;
+        }
+
+        let mut attrs = Vec::new();
+        while i < chars.len() {
+            while i < chars.len() && chars[i].is_whitespace() {
+                i += 1;
+            }
+            if i >= chars.len() {
+                break;
+            }
+
+            let name_start = i;
+            while i < chars.len()
+                && !chars[i].is_whitespace()
+                && chars[i] != '='
+                && chars[i] != '>'
+                && chars[i] != '/'
+            {
+                i += 1;
+            }
+            let name: String = chars[name_start..i].iter().collect();
+            if name.is_empty() {
+                i += 1;
+                continue;
+            }
+
+            while i < chars.len() && chars[i].is_whitespace() {
+                i += 1;
+            }
+
+            if i < chars.len() && chars[i] == '=' {
+                i += 1;
+                while i < chars.len() && chars[i].is_whitespace() {
+                    i += 1;
+                }
+                if i >= chars.len() {
+                    attrs.push(name);
+                    break;
+                }
+                let value_start = i;
+                if chars[i] == '"' || chars[i] == '\'' {
+                    let quote = chars[i];
+                    i += 1;
+                    while i < chars.len() {
+                        if chars[i] == '\\' && i + 1 < chars.len() {
+                            i += 2;
+                            continue;
+                        }
+                        if chars[i] == quote {
+                            i += 1;
+                            break;
+                        }
+                        i += 1;
+                    }
+                } else if chars[i] == '{' {
+                    let mut depth = 1isize;
+                    i += 1;
+                    let mut in_quote: Option<char> = None;
+                    while i < chars.len() && depth > 0 {
+                        let ch = chars[i];
+                        if let Some(q) = in_quote {
+                            if q != '`' && ch == '\\' && i + 1 < chars.len() {
+                                i += 2;
+                                continue;
+                            }
+                            if ch == q {
+                                in_quote = None;
+                            }
+                            i += 1;
+                            continue;
+                        }
+                        match ch {
+                            '"' | '\'' | '`' => in_quote = Some(ch),
+                            '{' => depth += 1,
+                            '}' => depth -= 1,
+                            _ => {}
+                        }
+                        i += 1;
+                    }
+                } else {
+                    while i < chars.len() && !chars[i].is_whitespace() {
+                        i += 1;
+                    }
+                }
+                let value: String = chars[value_start..i.min(chars.len())].iter().collect();
+                attrs.push(format!("{name}={value}"));
+            } else {
+                attrs.push(name);
+            }
+        }
+
+        Some((tag_name, attrs, self_close))
+    }
+
+    fn format_markup_sigil(text: &str) -> Option<Vec<String>> {
+        let MarkupSigil { open, close, body } = parse_markup_sigil(text)?;
+        let body_chars: Vec<char> = body.chars().collect();
+        let mut lines = vec![open.to_string()];
+        let mut depth = 1usize;
+        let mut i = 0usize;
+
+        while i < body_chars.len() {
+            let ch = body_chars[i];
+            if ch.is_whitespace() {
+                i += 1;
+                continue;
+            }
+
+            if ch == '<' {
+                if i + 3 < body_chars.len()
+                    && body_chars[i + 1] == '!'
+                    && body_chars[i + 2] == '-'
+                    && body_chars[i + 3] == '-'
+                {
+                    let start = i;
+                    i += 4;
+                    while i + 2 < body_chars.len() {
+                        if body_chars[i] == '-'
+                            && body_chars[i + 1] == '-'
+                            && body_chars[i + 2] == '>'
+                        {
+                            i += 3;
+                            break;
+                        }
+                        i += 1;
+                    }
+                    let comment: String = body_chars[start..i.min(body_chars.len())].iter().collect();
+                    lines.push(format!("{}{}", " ".repeat(depth * 2), comment.trim()));
+                    continue;
+                }
+
+                let start = i;
+                i += 1;
+                let mut in_quote: Option<char> = None;
+                let mut brace_depth = 0isize;
+                while i < body_chars.len() {
+                    let c = body_chars[i];
+                    if let Some(q) = in_quote {
+                        if q != '`' && c == '\\' && i + 1 < body_chars.len() {
+                            i += 2;
+                            continue;
+                        }
+                        if c == q {
+                            in_quote = None;
+                        }
+                        i += 1;
+                        continue;
+                    }
+                    match c {
+                        '"' | '\'' | '`' => in_quote = Some(c),
+                        '{' => brace_depth += 1,
+                        '}' => {
+                            if brace_depth > 0 {
+                                brace_depth -= 1;
+                            }
+                        }
+                        '>' if brace_depth == 0 => {
+                            i += 1;
+                            break;
+                        }
+                        _ => {}
+                    }
+                    i += 1;
+                }
+                if i > body_chars.len() {
+                    return None;
+                }
+                let tag_text: String = body_chars[start..i.min(body_chars.len())].iter().collect();
+                let trimmed = tag_text.trim();
+                if trimmed.starts_with("</") {
+                    let name = trimmed
+                        .trim_start_matches("</")
+                        .trim_end_matches('>')
+                        .trim();
+                    depth = depth.saturating_sub(1);
+                    lines.push(format!("{}</{}>", " ".repeat(depth * 2), name));
+                    continue;
+                }
+                let (tag, attrs, self_close) = parse_open_markup_tag(trimmed)?;
+                let indent = " ".repeat(depth * 2);
+                if attrs.len() < 5 {
+                    let mut line = format!("{indent}<{tag}");
+                    for attr in attrs {
+                        line.push(' ');
+                        line.push_str(&attr);
+                    }
+                    if self_close {
+                        line.push_str(" />");
+                    } else {
+                        line.push('>');
+                    }
+                    lines.push(line);
+                } else {
+                    lines.push(format!("{indent}<{tag}"));
+                    let attr_indent = format!("{indent}  ");
+                    for (idx, attr) in attrs.iter().enumerate() {
+                        if idx + 1 == attrs.len() {
+                            if self_close {
+                                lines.push(format!("{attr_indent}{attr} />"));
+                            } else {
+                                lines.push(format!("{attr_indent}{attr}>"));
+                            }
+                        } else {
+                            lines.push(format!("{attr_indent}{attr}"));
+                        }
+                    }
+                }
+                if !self_close {
+                    depth += 1;
+                }
+                continue;
+            }
+
+            if ch == '{' {
+                let start = i;
+                i += 1;
+                let mut brace_depth = 1isize;
+                let mut in_quote: Option<char> = None;
+                while i < body_chars.len() && brace_depth > 0 {
+                    let c = body_chars[i];
+                    if let Some(q) = in_quote {
+                        if q != '`' && c == '\\' && i + 1 < body_chars.len() {
+                            i += 2;
+                            continue;
+                        }
+                        if c == q {
+                            in_quote = None;
+                        }
+                        i += 1;
+                        continue;
+                    }
+                    match c {
+                        '"' | '\'' | '`' => in_quote = Some(c),
+                        '{' => brace_depth += 1,
+                        '}' => brace_depth -= 1,
+                        _ => {}
+                    }
+                    i += 1;
+                }
+                let end = i.min(body_chars.len());
+                let inner: String = body_chars[start + 1..end.saturating_sub(1)].iter().collect();
+                let inner = inner.trim();
+                if !inner.is_empty() {
+                    lines.push(format!("{}{{ {inner} }}", " ".repeat(depth * 2)));
+                }
+                continue;
+            }
+
+            let start = i;
+            while i < body_chars.len() && body_chars[i] != '<' && body_chars[i] != '{' {
+                i += 1;
+            }
+            let text: String = body_chars[start..i].iter().collect();
+            let text = text.trim();
+            if !text.is_empty() {
+                lines.push(format!("{}{}", " ".repeat(depth * 2), text));
+            }
+        }
+
+        lines.push(close.to_string());
+        Some(lines)
+    }
+
     fn parse_matrix_sigil(text: &str) -> Option<MatrixSigil> {
         let mut iter = text.chars();
         if iter.next()? != '~' {
@@ -695,6 +1007,28 @@
             }
 
             if t.kind == "sigil" {
+                if let Some(markup_lines) = format_markup_sigil(&t.text) {
+                    if !markup_lines.is_empty() {
+                        let row_start_col = current_col;
+                        out.push_str(&markup_lines[0]);
+                        advance_column(&mut current_col, &markup_lines[0]);
+                        for line in markup_lines.iter().skip(1) {
+                            out.push('\n');
+                            advance_column(&mut current_col, "\n");
+                            out.push_str(base_indent);
+                            advance_column(&mut current_col, base_indent);
+                            let pad = " ".repeat(row_start_col);
+                            out.push_str(&pad);
+                            advance_column(&mut current_col, &pad);
+                            out.push_str(line);
+                            advance_column(&mut current_col, line);
+                        }
+                        prev_token = Some(t);
+                        prevprev = prev;
+                        prev = Some(curr);
+                        continue;
+                    }
+                }
                 if let Some(matrix) = parse_matrix_sigil(&t.text) {
                     let rows = format_matrix_rows(&matrix.rows);
                     if !rows.is_empty() {

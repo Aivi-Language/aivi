@@ -12,6 +12,11 @@ use crate::rust_ir::RustIrExpr;
 use super::typed_expr::TypedCtx;
 use super::typed_mir::{lower_typed_mir, TypedMirExpr, TypedMirFunction, TypedMirTerminator};
 
+pub(crate) struct RuntimeLowering {
+    pub(crate) function: Function,
+    pub(crate) param_names: Vec<String>,
+}
+
 pub(super) fn emit_typed_via_cranelift(
     expr: &RustIrExpr,
     ty: &CgType,
@@ -36,6 +41,24 @@ pub(super) fn cranelift_lowering_comment(
     text.push_str(&function.to_string());
     text.push_str("\nclif.lowering.end");
     Some(text)
+}
+
+pub(crate) fn lower_for_runtime(
+    expr: &RustIrExpr,
+    ty: &CgType,
+    globals: &HashMap<String, CgType>,
+    locals: &[(String, CgType)],
+) -> Option<RuntimeLowering> {
+    let mut ctx = TypedCtx::new(globals.clone());
+    for (name, local_ty) in locals {
+        ctx.with_runtime_local(name, local_ty.clone());
+    }
+    let mir = lower_typed_mir(expr, ty, &ctx)?;
+    let (function, param_names) = lower_with_cranelift(&mir, ty, &ctx)?;
+    Some(RuntimeLowering {
+        function,
+        param_names,
+    })
 }
 
 fn lower_with_cranelift(

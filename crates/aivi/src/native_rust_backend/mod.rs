@@ -5,7 +5,7 @@ mod expr;
 mod pattern;
 mod perceus;
 mod prelude;
-mod typed_cranelift;
+pub(crate) mod typed_cranelift;
 pub(crate) mod typed_expr;
 mod typed_mir;
 mod utils;

@@ -410,6 +410,43 @@ impl Parser {
             }
         }
 
+        fn component_tag_expr(tag: &str, span: &Span) -> Option<Expr> {
+            let mut segments = tag.split('.');
+            let first = segments.next()?;
+            if first.is_empty() || !first.chars().next().is_some_and(|ch| ch.is_ascii_uppercase()) {
+                return None;
+            }
+            let is_ident_segment = |segment: &str| -> bool {
+                let mut chars = segment.chars();
+                let Some(head) = chars.next() else {
+                    return false;
+                };
+                (head.is_ascii_alphabetic() || head == '_')
+                    && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+            };
+            if !is_ident_segment(first) {
+                return None;
+            }
+            let mut expr = Expr::Ident(SpannedName {
+                name: first.to_string(),
+                span: span.clone(),
+            });
+            for segment in segments {
+                if !is_ident_segment(segment) {
+                    return None;
+                }
+                expr = Expr::FieldAccess {
+                    base: Box::new(expr),
+                    field: SpannedName {
+                        name: segment.to_string(),
+                        span: span.clone(),
+                    },
+                    span: span.clone(),
+                };
+            }
+            Some(expr)
+        }
+
         fn lower_node(this: &mut Parser, node: HtmlNode, span: &Span) -> Expr {
             let mk_ui = |name: &str| {
                 Expr::Ident(SpannedName {
@@ -468,10 +505,21 @@ impl Parser {
                         .map(|child| lower_node(this, child, span))
                         .collect();
 
-                    let element_expr = Expr::Call {
-                        func: Box::new(mk_ui("vElement")),
-                        args: vec![mk_string(&tag), list(lowered_attrs), list(lowered_children)],
-                        span: span.clone(),
+                    let attrs_expr = list(lowered_attrs);
+                    let children_expr = list(lowered_children);
+                    let element_expr = if let Some(component_expr) = component_tag_expr(&tag, span)
+                    {
+                        Expr::Call {
+                            func: Box::new(component_expr),
+                            args: vec![attrs_expr, children_expr],
+                            span: span.clone(),
+                        }
+                    } else {
+                        Expr::Call {
+                            func: Box::new(mk_ui("vElement")),
+                            args: vec![mk_string(&tag), attrs_expr, children_expr],
+                            span: span.clone(),
+                        }
                     };
                     if let Some(key_expr) = key_expr {
                         Expr::Call {
@@ -910,6 +958,43 @@ impl Parser {
             call2("gtkAttr", mk_string(&attr.name), value_expr)
         }
 
+        fn component_tag_expr(tag: &str, span: &Span) -> Option<Expr> {
+            let mut segments = tag.split('.');
+            let first = segments.next()?;
+            if first.is_empty() || !first.chars().next().is_some_and(|ch| ch.is_ascii_uppercase()) {
+                return None;
+            }
+            let is_ident_segment = |segment: &str| -> bool {
+                let mut chars = segment.chars();
+                let Some(head) = chars.next() else {
+                    return false;
+                };
+                (head.is_ascii_alphabetic() || head == '_')
+                    && chars.all(|ch| ch.is_ascii_alphanumeric() || ch == '_')
+            };
+            if !is_ident_segment(first) {
+                return None;
+            }
+            let mut expr = Expr::Ident(SpannedName {
+                name: first.to_string(),
+                span: span.clone(),
+            });
+            for segment in segments {
+                if !is_ident_segment(segment) {
+                    return None;
+                }
+                expr = Expr::FieldAccess {
+                    base: Box::new(expr),
+                    field: SpannedName {
+                        name: segment.to_string(),
+                        span: span.clone(),
+                    },
+                    span: span.clone(),
+                };
+            }
+            Some(expr)
+        }
+
         fn lower_children(this: &mut Parser, children: Vec<GtkNode>, span: &Span) -> Expr {
             let mut lowered_items: Vec<ListItem> = Vec::new();
             for child in children {
@@ -1215,14 +1300,20 @@ impl Parser {
                         ));
                     }
 
-                    Expr::Call {
-                        func: Box::new(mk_ui("gtkElement")),
-                        args: vec![
-                            mk_string(&tag),
-                            list(lowered_attrs),
-                            lower_children(this, kept_children, span),
-                        ],
-                        span: span.clone(),
+                    let attrs_expr = list(lowered_attrs);
+                    let children_expr = lower_children(this, kept_children, span);
+                    if let Some(component_expr) = component_tag_expr(&tag, span) {
+                        Expr::Call {
+                            func: Box::new(component_expr),
+                            args: vec![attrs_expr, children_expr],
+                            span: span.clone(),
+                        }
+                    } else {
+                        Expr::Call {
+                            func: Box::new(mk_ui("gtkElement")),
+                            args: vec![mk_string(&tag), attrs_expr, children_expr],
+                            span: span.clone(),
+                        }
                     }
                 }
             }

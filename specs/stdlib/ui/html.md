@@ -38,6 +38,20 @@ All other attributes lower to `Attr name value`:
 - `title="Hello"` -> `Attr "title" "Hello"`
 - `data-x={ expr }` -> `Attr "data-x" (toText expr)` (via expected-type `Text` coercion)
 
+## Component tags
+
+Uppercase or dotted tag names are treated as component calls instead of intrinsic HTML elements:
+
+- `<Card ...>...</Card>`
+- `<Ui.Card ...>...</Ui.Card>`
+
+Lowering shape:
+
+- `Card [attrs...] [children...]`
+- `Ui.Card [attrs...] [children...]`
+
+Intrinsic lowercase tags still lower to `Element`.
+
 ## Keys
 
 The `key=` attribute is special-cased to produce keyed nodes:
