@@ -749,6 +749,10 @@ use aivi.chronos.duration (domain Duration)  // import domain
 ```aivi
 export add, subtract, pi                 // selective
 export domain Color                      // export domain
+export add = a b => a + b                // inline exported binding
+export machine Flow = {                  // inline exported declaration
+  -> Idle : boot {}
+}
 ```
 
 ### Prelude
@@ -943,6 +947,7 @@ domain Vector over Vec3 = { ... }
 ```aivi
 use aivi.chronos.duration (domain Duration)    // import domain
 export domain Color                             // export domain
+export domain Color over Rgb = { ... }         // inline exported domain declaration
 ```
 
 ### Built-in vs domain-resolved operators

@@ -46,6 +46,73 @@ x = 1
 }
 
 #[test]
+fn parses_export_prefixed_declarations() {
+    let src = r#"
+module Example
+
+export answer = 42
+
+export domain Color over Int = {
+  brighten : Int -> Int
+  brighten = x => x + 1
+}
+
+export machine Workflow = {
+  -> Idle : boot {}
+}
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    assert!(module.exports.iter().any(|item| {
+        item.kind == crate::surface::ScopeItemKind::Value && item.name.name == "answer"
+    }));
+    assert!(module.exports.iter().any(|item| {
+        item.kind == crate::surface::ScopeItemKind::Domain && item.name.name == "Color"
+    }));
+    assert!(module.exports.iter().any(|item| {
+        item.kind == crate::surface::ScopeItemKind::Value && item.name.name == "Workflow"
+    }));
+}
+
+#[test]
+fn bare_export_name_stays_export_list() {
+    let src = r#"
+module Example
+
+Value = Int | Other
+export Value
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let value_type_items = module
+        .items
+        .iter()
+        .filter(|item| matches!(item, ModuleItem::TypeDecl(ty) if ty.name.name == "Value"))
+        .count();
+    assert_eq!(
+        value_type_items, 1,
+        "expected a single `Value` type declaration"
+    );
+    assert!(module.exports.iter().any(|item| {
+        item.kind == crate::surface::ScopeItemKind::Value && item.name.name == "Value"
+    }));
+}
+
+#[test]
 fn lowers_surface_module_to_arena() {
     let src = r#"
 module Example
