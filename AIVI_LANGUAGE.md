@@ -840,6 +840,13 @@ Dynamic child lists are supported with `<each>`:
 </gtk>
 ```
 
+Component-style tags are also supported in both sigils:
+
+```aivi
+~<html><Ui.Card title="Hello"><span>Body</span></Ui.Card></html>
+~<gtk><Ui.Row id="r1" /></gtk>
+```
+
 ---
 
 ## 15 Decorators (v0.1)

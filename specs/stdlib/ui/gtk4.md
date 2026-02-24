@@ -134,6 +134,18 @@ Dynamic child lists can be expressed with `<each ...>` inside a GTK element:
 
 `<each>` lowers to mapped child nodes and is flattened into the parent `children` list.
 
+Uppercase or dotted GTK tags are treated as component calls:
+
+- `<Row ... />`
+- `<Ui.Row ... />`
+
+Lowering shape:
+
+- `Row [gtkAttrs...] [gtkChildren...]`
+- `Ui.Row [gtkAttrs...] [gtkChildren...]`
+
+Lowercase GTK tags continue to lower to `gtkElement`.
+
 `props={ { ... } }` sugar on any tag expands to normalized GTK properties:
 
 - `marginTop` becomes `prop:margin-top`

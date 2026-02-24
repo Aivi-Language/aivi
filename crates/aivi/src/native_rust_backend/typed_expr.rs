@@ -98,6 +98,10 @@ impl TypedCtx {
     fn with_local(&mut self, name: &str, ty: CgType) {
         self.locals.insert(name.to_string(), ty);
     }
+
+    pub(crate) fn with_runtime_local(&mut self, name: &str, ty: CgType) {
+        self.with_local(name, ty);
+    }
 }
 
 /// Emit a typed expression that returns an unboxed Rust value of the given `CgType`.

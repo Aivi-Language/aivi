@@ -147,4 +147,5 @@ mod tests {
         let formatted = format_text(text);
         assert!(formatted.contains("f = x => {"));
     }
+
 }

@@ -23,7 +23,9 @@ The `Matrix` domain defines a structured matrix literal sigil, `~mat[...]`; see 
 In addition, the UI layer defines a structured HTML sigil:
 
 - `~<html>...</html>` for HTML literals to typed `aivi.ui.VNode` constructors and supports `{ expr }` splices.
+  - Uppercase/dotted tags are treated as component calls (for example `<Ui.Card ...>...</Ui.Card>`).
 - `~<gtk>...</gtk>` for GtkBuilder-style XML literals to typed `aivi.ui.gtk4.GtkNode` constructors.
+  - Uppercase/dotted tags are treated as component calls (for example `<Ui.Row ... />`).
   - `props={ { marginTop: 24, spacing: 24 } }` is sugar that lowers to normalized GTK property entries (`margin-top`, `spacing`).
   - `props` only accepts compile-time record literals in v0.1; non-literal values are diagnostics.
   - Dynamic repeated children can be expressed with `<each items={items} as={item}>...</each>` inside GTK elements.

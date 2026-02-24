@@ -838,6 +838,38 @@ x = ~<html><div key="k">Hi</div></html>
 }
 
 #[test]
+fn html_sigil_component_tag_lowers_to_component_call() {
+    let src = r#"
+module Example
+
+x = ~<html><Ui.Card title="Hello"><span>Body</span></Ui.Card></html>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    assert!(
+        expr_contains_ident(&def.expr, "Ui")
+            && expr_contains_ident(&def.expr, "Card")
+            && expr_contains_ident(&def.expr, "vAttr"),
+        "expected component tag to lower into component call with lowered attrs"
+    );
+}
+
+#[test]
 fn html_sigil_multiple_roots_is_error() {
     let src = r#"
 module Example
@@ -893,6 +925,45 @@ x =
     assert!(
         expr_contains_ident(&def.expr, "gtkElement") && expr_contains_ident(&def.expr, "gtkAttr"),
         "expected ~<gtk> to lower into GTK helper constructors"
+    );
+}
+
+#[test]
+fn gtk_sigil_component_tag_lowers_to_component_call() {
+    let src = r#"
+module Example
+
+x =
+  ~<gtk>
+    <object class="GtkBox">
+      <child>
+        <Ui.Row id="one" />
+      </child>
+    </object>
+  </gtk>
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    assert!(
+        expr_contains_ident(&def.expr, "Ui")
+            && expr_contains_ident(&def.expr, "Row")
+            && expr_contains_ident(&def.expr, "gtkAttr"),
+        "expected GTK component tag to lower into component call with gtkAttr props"
     );
 }
 
