@@ -1,0 +1,58 @@
+@no_prelude
+module integrationTests.runtime.generatorsAdvanced
+
+use aivi
+use aivi.testing
+use aivi.generator
+
+// --- Basic yield order ---
+
+@test "generator yields in order"
+generatorOrder = do Effect {
+  g = generate {
+    yield 1
+    yield 2
+    yield 3
+  }
+  assertEq (toList g)[1, 2, 3]
+}
+
+// --- Generator fold ---
+
+@test "generator fold sums"
+generatorFoldSum = do Effect {
+  g = generate {
+    yield 10
+    yield 20
+    yield 30
+  }
+  result = g (a => b => a + b) 0
+  assertEq result 60
+}
+
+// --- Generator with bind (flatmap) ---
+
+@test "generator with bind"
+generatorBind = do Effect {
+  numbers = generate {
+    yield 1
+    yield 2
+  }
+  pairSums = generate {
+    x <- numbers
+    y <- numbers
+    yield (x + y)
+  }
+  result = pairSums (a => b => a + b) 0
+  assertEq result 12
+}
+
+// --- Single yield ---
+
+@test "generator single yield"
+generatorSingle = do Effect {
+  g = generate {
+    yield 42
+  }
+  assertEq (toList g)[42]
+}

@@ -13,7 +13,7 @@ Based on codebase analysis, the following syntax and semantics are confirmed:
 - Prelude:             implicit `use aivi.prelude`; disable with `@no_prelude`
 - Bindings:            `name = expr` (immutable, no `let`/`var`)
 - Functions:           curried, `f = a b => expr`
-- Type signatures:     `name : Type -> Type`
+- Type signatures:     `Name : Type -> Type`
 - ADTs:                `Option A = None | Some A`
 - Records:             `{ field: Type }`, structural/open
 - Pattern matching:    `expr match | pat => expr`

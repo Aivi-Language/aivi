@@ -1,0 +1,17 @@
+// EXPECT-ERROR: E3000
+@no_prelude
+module integrationTests.compileFail.overlappingInstances
+
+use aivi
+
+class Show2 (F *) = {
+  show2: F -> Text
+}
+
+instance Show2 Int = {
+  show2 = x => "a"
+}
+
+instance Show2 Int = {
+  show2 = x => "b"
+}

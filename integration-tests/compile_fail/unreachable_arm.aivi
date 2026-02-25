@@ -1,0 +1,13 @@
+// EXPECT-WARN: W3101
+@no_prelude
+module integrationTests.compileFail.unreachableArm
+
+use aivi
+
+Bool2 = True2 | False2
+
+f : Bool2 -> Int
+f = b => b match
+  | True2  => 1
+  | True2  => 2
+  | False2 => 0

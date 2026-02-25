@@ -1,0 +1,16 @@
+// EXPECT-ERROR: E3000
+@no_prelude
+module integrationTests.compileFail.brandTypeMismatch
+
+use aivi
+
+Email = Text!
+
+idText : Text -> Text
+idText = t => t
+
+email : Email
+email = "a@b.com"
+
+// Brand should not be accepted where base type is expected
+bad = idText email

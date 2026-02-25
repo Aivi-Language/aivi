@@ -1,0 +1,69 @@
+@no_prelude
+module integrationTests.runtime.adtsAndMatching
+
+use aivi
+use aivi.testing
+
+// --- ADT definitions ---
+
+Option A = None | Some A
+Shape = Circle Int | Rect Int Int | Point
+
+// --- Basic constructor matching ---
+
+unwrapOr : A -> Option A -> A
+unwrapOr = d opt => opt match
+  | None   => d
+  | Some x => x
+
+@test "option unwrapOr some"
+optionUnwrapSome = do Effect {
+  assertEq (unwrapOr 0 (Some 5)) 5
+}
+
+@test "option unwrapOr none"
+optionUnwrapNone = do Effect {
+  assertEq (unwrapOr 7 None) 7
+}
+
+// --- Multi-constructor ADT matching ---
+
+area : Shape -> Int
+area = s => s match
+  | Circle r => r * r
+  | Rect w h => w * h
+  | Point    => 0
+
+@test "multi-constructor shape area"
+shapeArea = do Effect {
+  assertEq (area (Circle 5)) 25
+  assertEq (area (Rect 3 4)) 12
+  assertEq (area Point) 0
+}
+
+// --- Nested matching ---
+
+isSome : Option A -> Bool
+isSome = o => o match
+  | Some _ => True
+  | None   => False
+
+@test "nested option matching"
+nestedOptionMatching = do Effect {
+  assertEq (isSome (Some 1)) True
+  assertEq (isSome None) False
+}
+
+// --- Wildcard matching ---
+
+describe : Shape -> Text
+describe = s => s match
+  | Circle _ => "circle"
+  | _        => "other"
+
+@test "wildcard in match"
+wildcardMatch = do Effect {
+  assertEq (describe (Circle 1)) "circle"
+  assertEq (describe (Rect 1 1)) "other"
+  assertEq (describe Point) "other"
+}

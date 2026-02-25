@@ -1,0 +1,12 @@
+// EXPECT-ERROR: E3100
+@no_prelude
+module integrationTests.compileFail.nonExhaustiveMatch
+
+use aivi
+
+Option A = None | Some A
+
+// Missing the None case
+bad : Option Int -> Int
+bad = o => o match
+  | Some x => x
