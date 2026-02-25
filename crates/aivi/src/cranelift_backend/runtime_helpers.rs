@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::runtime::values::Value;
+use crate::runtime::format_runtime_error;
 
 use super::abi::{self, JitRuntimeCtx};
 
@@ -86,6 +87,17 @@ pub extern "C" fn rt_alloc_string(
 ) -> *mut Value {
     let s = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, len)) };
     abi::box_value(Value::Text(s.to_string()))
+}
+
+/// Allocate a `Value::DateTime` from a UTF-8 string.
+#[no_mangle]
+pub extern "C" fn rt_alloc_datetime(
+    _ctx: *mut JitRuntimeCtx,
+    ptr: *const u8,
+    len: usize,
+) -> *mut Value {
+    let s = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, len)) };
+    abi::box_value(Value::DateTime(s.to_string()))
 }
 
 /// Allocate a `Value::List` from an array of `*const Value` pointers.
@@ -292,7 +304,10 @@ pub extern "C" fn rt_apply(
             let runtime = unsafe { (*ctx).runtime_mut() };
             match (b.imp.func)(all_args, runtime) {
                 Ok(val) => return abi::box_value(val),
-                Err(_) => return abi::box_value(Value::Unit),
+                Err(e) => {
+                    eprintln!("aivi: error in builtin '{}': {}", b.imp.name, format_runtime_error(e));
+                    return abi::box_value(Value::Unit);
+                }
             }
         }
         // Partial application: accumulate arg without going through trampoline
@@ -327,7 +342,10 @@ pub extern "C" fn rt_apply(
     let runtime = unsafe { (*ctx).runtime_mut() };
     match runtime.apply(func.clone(), arg.clone()) {
         Ok(val) => abi::box_value(val),
-        Err(_) => abi::box_value(Value::Unit),
+        Err(e) => {
+            eprintln!("aivi: apply error: {}", format_runtime_error(e));
+            abi::box_value(Value::Unit)
+        }
     }
 }
 
@@ -339,8 +357,13 @@ pub extern "C" fn rt_apply(
 pub extern "C" fn rt_force_thunk(ctx: *mut JitRuntimeCtx, ptr: *const Value) -> *mut Value {
     let value = unsafe { (*ptr).clone() };
     let runtime = unsafe { (*ctx).runtime_mut() };
-    let forced = runtime.force_value(value).unwrap_or(Value::Unit);
-    abi::box_value(forced)
+    match runtime.force_value(value) {
+        Ok(val) => abi::box_value(val),
+        Err(e) => {
+            eprintln!("aivi: force_thunk error: {}", format_runtime_error(e));
+            abi::box_value(Value::Unit)
+        }
+    }
 }
 
 /// Run an effect value (for the `main` entrypoint).
@@ -353,7 +376,10 @@ pub extern "C" fn rt_run_effect(ctx: *mut JitRuntimeCtx, ptr: *const Value) -> *
     let runtime = unsafe { (*ctx).runtime_mut() };
     match runtime.run_effect_value(value) {
         Ok(val) => abi::box_value(val),
-        Err(_) => abi::box_value(Value::Unit),
+        Err(e) => {
+            eprintln!("aivi: effect error: {}", format_runtime_error(e));
+            abi::box_value(Value::Unit)
+        }
     }
 }
 
@@ -375,9 +401,15 @@ pub extern "C" fn rt_bind_effect(
     match runtime.run_effect_value(effect) {
         Ok(result) => match runtime.apply(cont, result) {
             Ok(val) => abi::box_value(val),
-            Err(_) => abi::box_value(Value::Unit),
+            Err(e) => {
+                eprintln!("aivi: bind continuation error: {}", format_runtime_error(e));
+                abi::box_value(Value::Unit)
+            }
         },
-        Err(_) => abi::box_value(Value::Unit),
+        Err(e) => {
+            eprintln!("aivi: bind effect error: {}", format_runtime_error(e));
+            abi::box_value(Value::Unit)
+        }
     }
 }
 
@@ -825,6 +857,33 @@ pub extern "C" fn rt_register_jit_fn(
     runtime.ctx.globals.set(name.to_string(), builtin);
 }
 
+/// Evaluate a sigil literal into the correct runtime value.
+/// Dispatches to the shared `eval_sigil_literal` function from the runtime.
+#[no_mangle]
+pub extern "C" fn rt_eval_sigil(
+    _ctx: *mut JitRuntimeCtx,
+    tag_ptr: *const u8,
+    tag_len: i64,
+    body_ptr: *const u8,
+    body_len: i64,
+    flags_ptr: *const u8,
+    flags_len: i64,
+) -> *mut Value {
+    let tag =
+        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(tag_ptr, tag_len as usize)) };
+    let body =
+        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(body_ptr, body_len as usize)) };
+    let flags =
+        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(flags_ptr, flags_len as usize)) };
+    match crate::runtime::eval_sigil_literal(tag, body, flags) {
+        Ok(val) => abi::box_value(val),
+        Err(e) => {
+            eprintln!("aivi: sigil error: {}", format_runtime_error(e));
+            abi::box_value(Value::Unit)
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Symbol table for JITBuilder registration
 // ---------------------------------------------------------------------------
@@ -843,6 +902,7 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_unbox_bool", rt_unbox_bool as *const u8),
         ("rt_alloc_unit", rt_alloc_unit as *const u8),
         ("rt_alloc_string", rt_alloc_string as *const u8),
+        ("rt_alloc_datetime", rt_alloc_datetime as *const u8),
         ("rt_alloc_list", rt_alloc_list as *const u8),
         ("rt_alloc_tuple", rt_alloc_tuple as *const u8),
         ("rt_alloc_record", rt_alloc_record as *const u8),
@@ -889,6 +949,8 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
             "rt_register_jit_fn",
             rt_register_jit_fn as *const u8,
         ),
+        // Sigil evaluation
+        ("rt_eval_sigil", rt_eval_sigil as *const u8),
     ]
 }
 

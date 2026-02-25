@@ -190,6 +190,10 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_gen_vec_into_generator: FuncRef,
     // AOT function registration
     pub(crate) rt_register_jit_fn: FuncRef,
+    // DateTime allocation
+    pub(crate) rt_alloc_datetime: FuncRef,
+    // Sigil evaluation
+    pub(crate) rt_eval_sigil: FuncRef,
 }
 
 /// Declare all runtime helper signatures in the module and return FuncRefs
@@ -278,6 +282,10 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         // AOT function registration
         // (ctx, name_ptr, name_len, func_ptr, arity)
         rt_register_jit_fn: decl!("rt_register_jit_fn", [PTR, PTR, PTR, PTR, PTR], []),
+        // (ctx, str_ptr, str_len) -> ptr
+        rt_alloc_datetime: decl!("rt_alloc_datetime", [PTR, PTR, PTR], [PTR]),
+        // (ctx, tag_ptr, tag_len, body_ptr, body_len, flags_ptr, flags_len) -> ptr
+        rt_eval_sigil: decl!("rt_eval_sigil", [PTR, PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
     })
 }
 
@@ -322,6 +330,10 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_gen_vec_into_generator: cranelift_module::FuncId,
     // AOT function registration
     pub(crate) rt_register_jit_fn: cranelift_module::FuncId,
+    // DateTime allocation
+    pub(crate) rt_alloc_datetime: cranelift_module::FuncId,
+    // Sigil evaluation
+    pub(crate) rt_eval_sigil: cranelift_module::FuncId,
 }
 
 impl DeclaredHelpers {
@@ -370,6 +382,8 @@ impl DeclaredHelpers {
             rt_gen_vec_push: imp!(rt_gen_vec_push),
             rt_gen_vec_into_generator: imp!(rt_gen_vec_into_generator),
             rt_register_jit_fn: imp!(rt_register_jit_fn),
+            rt_alloc_datetime: imp!(rt_alloc_datetime),
+            rt_eval_sigil: imp!(rt_eval_sigil),
         }
     }
 }
@@ -501,22 +515,41 @@ impl<'a> LowerCtx<'a> {
             RustIrExpr::LitNumber { text, .. } => self.lower_lit_number(builder, text),
             RustIrExpr::LitString { text, .. } => self.lower_lit_string(builder, text),
             RustIrExpr::LitBool { value, .. } => self.lower_lit_bool(builder, *value),
-            RustIrExpr::LitDateTime { text, .. } => self.lower_lit_string(builder, text),
+            RustIrExpr::LitDateTime { text, .. } => {
+                let bytes = text.as_bytes();
+                let str_ptr = builder.ins().iconst(PTR, bytes.as_ptr() as i64);
+                let str_len = builder.ins().iconst(PTR, bytes.len() as i64);
+                let inst = builder.ins().call(
+                    self.helpers.rt_alloc_datetime,
+                    &[self.ctx_param, str_ptr, str_len],
+                );
+                TypedValue::boxed(builder.inst_results(inst)[0])
+            }
             RustIrExpr::LitSigil {
                 tag, body, flags, ..
             } => {
-                // Sigils are represented as strings for now: "#tag body flags"
-                let repr = format!(
-                    "#{}{}{}",
-                    tag,
-                    body,
-                    if flags.is_empty() {
-                        String::new()
-                    } else {
-                        format!("/{}", flags)
-                    }
+                let tag_bytes = tag.as_bytes();
+                let body_bytes = body.as_bytes();
+                let flags_bytes = flags.as_bytes();
+                let tag_ptr = builder.ins().iconst(PTR, tag_bytes.as_ptr() as i64);
+                let tag_len = builder.ins().iconst(PTR, tag_bytes.len() as i64);
+                let body_ptr = builder.ins().iconst(PTR, body_bytes.as_ptr() as i64);
+                let body_len = builder.ins().iconst(PTR, body_bytes.len() as i64);
+                let flags_ptr = builder.ins().iconst(PTR, flags_bytes.as_ptr() as i64);
+                let flags_len = builder.ins().iconst(PTR, flags_bytes.len() as i64);
+                let inst = builder.ins().call(
+                    self.helpers.rt_eval_sigil,
+                    &[
+                        self.ctx_param,
+                        tag_ptr,
+                        tag_len,
+                        body_ptr,
+                        body_len,
+                        flags_ptr,
+                        flags_len,
+                    ],
                 );
-                self.lower_lit_string(builder, &repr)
+                TypedValue::boxed(builder.inst_results(inst)[0])
             }
             RustIrExpr::TextInterpolate { parts, .. } => {
                 self.lower_text_interpolate(builder, parts)
