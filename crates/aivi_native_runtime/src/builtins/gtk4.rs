@@ -1387,7 +1387,8 @@ fn build_gtk4_record_mock() -> Value {
         builtin("gtk4.appSetCss", 2, |mut args, _| {
             let css = match args.remove(1) {
                 Value::Record(v) => Value::Record(v),
-                _ => return Err(invalid("gtk4.appSetCss expects Record css style")),
+                Value::Text(v) => Value::Text(v),
+                _ => return Err(invalid("gtk4.appSetCss expects Text css or Record")),
             };
             let app_id = match args.remove(0) {
                 Value::Int(v) => v,
@@ -1405,6 +1406,17 @@ fn build_gtk4_record_mock() -> Value {
                     Ok(Value::Unit)
                 })
             }))
+        }),
+    );
+
+    fields.insert(
+        "iconThemeAddSearchPath".to_string(),
+        builtin("gtk4.iconThemeAddSearchPath", 1, |mut args, _| {
+            let _path = match args.remove(0) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.iconThemeAddSearchPath expects Text path")),
+            };
+            Ok(effect(move |_| Ok(Value::Unit)))
         }),
     );
 
