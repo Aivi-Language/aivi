@@ -35,8 +35,7 @@ fn p1_single_file_accepted() {
     let aivi_path = dir.path().join("single.aivi");
     std::fs::write(&aivi_path, "module Single\n").expect("write");
 
-    let resolved =
-        aivi::resolve_target(aivi_path.to_str().expect("utf8")).expect("resolve target");
+    let resolved = aivi::resolve_target(aivi_path.to_str().expect("utf8")).expect("resolve target");
     assert_eq!(resolved, vec![aivi_path]);
 }
 

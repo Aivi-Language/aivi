@@ -311,7 +311,6 @@ fn value_type_name(value: &Value) -> &'static str {
         Value::Effect(_) => "Effect",
         Value::Source(_) => "Source",
         Value::Resource(_) => "Resource",
-        Value::Thunk(_) => "Thunk",
         Value::MultiClause(_) => "MultiClause",
         Value::ChannelSend(_) => "Send",
         Value::ChannelRecv(_) => "Recv",

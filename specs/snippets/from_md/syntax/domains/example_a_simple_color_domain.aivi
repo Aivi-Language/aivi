@@ -11,7 +11,7 @@ domain Color over Rgb = {
   (+) = color (Lightness amount) => adjust_lightness color amount
   (+) = color (Hue amount) => adjust_hue color amount
 
-  // Define suffix literals 
+  // Define suffix literals
   // "10l" desugars to "Lightness 10"
   1l = Lightness 1
   1h = Hue 1

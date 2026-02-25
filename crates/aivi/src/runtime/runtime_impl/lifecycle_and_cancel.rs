@@ -58,16 +58,6 @@ impl Runtime {
 
     pub(crate) fn force_value(&mut self, value: Value) -> Result<Value, RuntimeError> {
         match value {
-            Value::Thunk(thunk) => {
-                let cached = thunk.cached.lock().expect("thunk cache lock");
-                if let Some(value) = cached.clone() {
-                    return Ok(value);
-                }
-                drop(cached);
-                Err(RuntimeError::Message(
-                    "cannot force non-JIT thunk: interpreter has been removed".to_string(),
-                ))
-            }
             Value::Builtin(builtin)
                 if builtin.imp.arity == 0
                     && builtin.args.is_empty()

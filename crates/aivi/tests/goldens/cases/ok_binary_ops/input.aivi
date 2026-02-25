@@ -2,4 +2,3 @@ module test.ok_binary_ops
 export x
 
 x = 1 + 2 * 3
-

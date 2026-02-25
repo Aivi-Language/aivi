@@ -4,6 +4,6 @@ export classify, x
 classify : Int -> Text
 classify = n => n ?
   | n when n < 0 => "neg"
-  | _ => "pos"
+  | _            => "pos"
 
 x = classify -1

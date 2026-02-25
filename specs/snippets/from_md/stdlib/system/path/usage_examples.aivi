@@ -1,7 +1,7 @@
 use aivi.path
 
-root = ~path[/usr/local]
+root = ~path[/ usr / local]
 bin = root / ~path[bin]
 
-cfg = ~path[./config/../config/app.json]
+cfg = ~path[./ config / .. / config / app.json]
 cfgText = toString cfg

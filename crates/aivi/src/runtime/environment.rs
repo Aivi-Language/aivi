@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::sync::Arc;
-
 use parking_lot::RwLock;
 
 use super::values::Value;
@@ -38,63 +37,14 @@ impl Env {
     pub(crate) fn set(&self, name: String, value: Value) {
         self.inner.values.write().insert(name, value);
     }
-
-    #[allow(dead_code)]
-    pub(crate) fn has_local(&self, name: &str) -> bool {
-        self.inner.values.read().contains_key(name)
-    }
 }
 
 pub(crate) struct RuntimeContext {
     pub(crate) globals: Env,
     constructor_ordinals: HashMap<String, Option<usize>>,
-    machine_specs: RwLock<HashMap<String, HashMap<String, Vec<MachineEdge>>>>,
-    machine_states: RwLock<HashMap<String, String>>,
-    machine_handlers: RwLock<HashMap<(String, String), Vec<Value>>>,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct MachineEdge {
-    pub(crate) source: Option<String>,
-    pub(crate) target: String,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct MachineTransitionError {
-    pub(crate) machine: String,
-    pub(crate) from: String,
-    pub(crate) event: String,
-    pub(crate) expected_from: Vec<String>,
-}
-
-impl MachineTransitionError {
-    pub(crate) fn into_value(self) -> Value {
-        let mut detail = HashMap::new();
-        detail.insert("machine".to_string(), Value::Text(self.machine));
-        detail.insert("from".to_string(), Value::Text(self.from));
-        detail.insert("event".to_string(), Value::Text(self.event));
-        detail.insert(
-            "expectedFrom".to_string(),
-            Value::List(Arc::new(
-                self.expected_from
-                    .into_iter()
-                    .map(Value::Text)
-                    .collect::<Vec<_>>(),
-            )),
-        );
-        Value::Constructor {
-            name: "InvalidTransition".to_string(),
-            args: vec![Value::Record(Arc::new(detail))],
-        }
-    }
 }
 
 impl RuntimeContext {
-    #[allow(dead_code)]
-    pub(crate) fn new(globals: Env) -> Self {
-        Self::new_with_constructor_ordinals(globals, HashMap::new())
-    }
-
     pub(crate) fn new_with_constructor_ordinals(
         globals: Env,
         constructor_ordinals: HashMap<String, Option<usize>>,
@@ -102,122 +52,10 @@ impl RuntimeContext {
         Self {
             globals,
             constructor_ordinals,
-            machine_specs: RwLock::new(HashMap::new()),
-            machine_states: RwLock::new(HashMap::new()),
-            machine_handlers: RwLock::new(HashMap::new()),
         }
     }
 
     pub(crate) fn constructor_ordinal(&self, name: &str) -> Option<Option<usize>> {
         self.constructor_ordinals.get(name).copied()
-    }
-
-    pub(crate) fn register_machine(
-        &self,
-        machine_name: String,
-        initial_state: String,
-        transitions: HashMap<String, Vec<MachineEdge>>,
-    ) {
-        self.machine_specs
-            .write()
-            .insert(machine_name.clone(), transitions);
-        self.machine_states
-            .write()
-            .insert(machine_name.clone(), initial_state);
-        self.machine_handlers
-            .write()
-            .retain(|(name, _), _| name != &machine_name);
-    }
-
-    pub(crate) fn machine_current_state(&self, machine_name: &str) -> Option<String> {
-        self.machine_states.read().get(machine_name).cloned()
-    }
-
-    pub(crate) fn machine_can_transition(&self, machine_name: &str, event: &str) -> bool {
-        let Some(current) = self.machine_current_state(machine_name) else {
-            return false;
-        };
-        let specs = self.machine_specs.read();
-        let Some(events) = specs.get(machine_name) else {
-            return false;
-        };
-        let Some(edges) = events.get(event) else {
-            return false;
-        };
-        edges
-            .iter()
-            .filter(|edge| edge.source.as_deref() == Some(current.as_str()))
-            .count()
-            == 1
-    }
-
-    pub(crate) fn apply_machine_transition(
-        &self,
-        machine_name: &str,
-        event: &str,
-    ) -> Result<String, MachineTransitionError> {
-        let Some(current) = self.machine_current_state(machine_name) else {
-            return Err(MachineTransitionError {
-                machine: machine_name.to_string(),
-                from: "<unknown>".to_string(),
-                event: event.to_string(),
-                expected_from: Vec::new(),
-            });
-        };
-
-        let specs = self.machine_specs.read();
-        let edges = specs
-            .get(machine_name)
-            .and_then(|events| events.get(event))
-            .cloned()
-            .unwrap_or_default();
-        drop(specs);
-
-        let expected_from = {
-            let mut names: Vec<String> = edges
-                .iter()
-                .filter_map(|edge| edge.source.clone())
-                .collect();
-            names.sort();
-            names.dedup();
-            names
-        };
-
-        let matching: Vec<MachineEdge> = edges
-            .iter()
-            .filter(|edge| edge.source.as_deref() == Some(current.as_str()))
-            .cloned()
-            .collect();
-        if matching.len() != 1 {
-            return Err(MachineTransitionError {
-                machine: machine_name.to_string(),
-                from: current,
-                event: event.to_string(),
-                expected_from,
-            });
-        }
-
-        let next = matching[0].target.clone();
-        self.machine_states
-            .write()
-            .insert(machine_name.to_string(), next.clone());
-        Ok(next)
-    }
-
-    pub(crate) fn register_machine_handler(&self, machine_name: &str, event: &str, handler: Value) {
-        let key = (machine_name.to_string(), event.to_string());
-        self.machine_handlers
-            .write()
-            .entry(key)
-            .or_default()
-            .push(handler);
-    }
-
-    pub(crate) fn machine_handlers(&self, machine_name: &str, event: &str) -> Vec<Value> {
-        self.machine_handlers
-            .read()
-            .get(&(machine_name.to_string(), event.to_string()))
-            .cloned()
-            .unwrap_or_default()
     }
 }

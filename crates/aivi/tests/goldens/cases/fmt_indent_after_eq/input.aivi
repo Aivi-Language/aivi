@@ -6,9 +6,9 @@ class Functor (F *) = {
 }
 
 class Apply (F *) =
-Functor {
-  ap: F A -> F (A -> B) -> F B
-}
+  Functor {
+    ap: F A -> F (A -> B) -> F B
+  }
 
 users = [
   { name: "Alice", active: True }
@@ -16,8 +16,7 @@ users = [
 ]
 
 activeNames = users
-|> filter active
-|> map.name
-|> sort
-|> join ", "
-
+  |> filter active
+  |> map.name
+  |> sort
+  |> join ", "

@@ -9,9 +9,15 @@ Msg = Inc | Dec
 view = model =>
   ~<html>
     <main>
-      <button onClick={ Dec }>-</button>
-      <span>{ model.count }</span>
-      <button onClick={ Inc }>+</button>
+      <button onClick={ Dec }>
+        -
+      </button>
+      <span>
+        { model.count }
+      </span>
+      <button onClick={ Inc }>
+        +
+      </button>
     </main>
   </html>
 

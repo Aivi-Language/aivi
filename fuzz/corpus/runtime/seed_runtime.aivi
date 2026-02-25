@@ -5,4 +5,3 @@ main : Effect Text Unit
 main = effect {
   pure Unit
 }
-

@@ -31,8 +31,3 @@ mod util;
 
 pub(crate) use core::register_builtins;
 pub(crate) use util::builtin;
-
-#[cfg(test)]
-pub(crate) fn build_concurrent_record() -> crate::runtime::Value {
-    concurrency::build_concurrent_record()
-}

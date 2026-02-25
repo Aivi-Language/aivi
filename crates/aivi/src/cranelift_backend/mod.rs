@@ -5,9 +5,9 @@ pub(crate) mod lower;
 mod object_module;
 mod runtime_helpers;
 
+pub(crate) use compile::compile_cranelift_runtime;
 pub use compile::compile_to_object;
 pub use compile::run_cranelift_jit;
-pub(crate) use compile::compile_cranelift_runtime;
 
 pub fn init_aot_runtime(program: crate::hir::HirProgram) -> usize {
     let ptr = Box::into_raw(Box::new(program));

@@ -201,7 +201,6 @@ pub(crate) fn format_value(value: &Value) -> String {
         Value::Effect(_) => "<effect>".to_string(),
         Value::Source(source) => format!("<source:{}>", source.kind),
         Value::Resource(_) => "<resource>".to_string(),
-        Value::Thunk(_) => "<thunk>".to_string(),
         Value::MultiClause(_) => "<multi-clause>".to_string(),
         Value::ChannelSend(_) => "<send>".to_string(),
         Value::ChannelRecv(_) => "<recv>".to_string(),

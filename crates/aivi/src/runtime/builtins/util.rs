@@ -35,7 +35,6 @@ pub(super) fn value_type_name(value: &Value) -> &'static str {
         Value::Effect(_) => "Effect",
         Value::Source(_) => "Source",
         Value::Resource(_) => "Resource",
-        Value::Thunk(_) => "Thunk",
         Value::ChannelSend(_) => "ChannelSend",
         Value::ChannelRecv(_) => "ChannelRecv",
         Value::FileHandle(_) => "FileHandle",

@@ -8,4 +8,3 @@ mkUser = id name => { id, name, active: True }
 x = mkUser 1 "Alice"
 y = x <| { active: _ && False }
 z = y.active
-

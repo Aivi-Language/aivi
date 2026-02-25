@@ -10,10 +10,9 @@ use num_rational::BigRational;
 use regex::Regex;
 use rust_decimal::Decimal;
 
-use crate::hir::{HirBlockItem, HirExpr};
+use crate::hir::HirBlockItem;
 use aivi_http_server::{ServerHandle, WebSocketHandle};
 
-use super::environment::Env;
 use super::{Runtime, RuntimeError};
 
 pub(crate) type BuiltinFunc =
@@ -94,7 +93,6 @@ pub(crate) enum Value {
     Source(Arc<SourceValue>),
     #[allow(dead_code)]
     Resource(Arc<ResourceValue>),
-    Thunk(Arc<ThunkValue>),
     MultiClause(Vec<Value>),
     ChannelSend(Arc<ChannelSend>),
     ChannelRecv(Arc<ChannelRecv>),
@@ -137,7 +135,6 @@ impl std::fmt::Debug for Value {
             Value::Effect(_) => write!(f, "Effect(<thunk>)"),
             Value::Source(_) => write!(f, "Source(<stream>)"),
             Value::Resource(_) => write!(f, "Resource(<scope>)"),
-            Value::Thunk(_) => write!(f, "Thunk(<lazy>)"),
             Value::MultiClause(v) => f.debug_tuple("MultiClause").field(v).finish(),
             Value::ChannelSend(_) => write!(f, "ChannelSend(<chan>)"),
             Value::ChannelRecv(_) => write!(f, "ChannelRecv(<chan>)"),
@@ -173,14 +170,6 @@ pub(crate) enum EffectValue {
 #[allow(dead_code)]
 pub(crate) struct ResourceValue {
     pub(crate) items: Arc<Vec<HirBlockItem>>,
-}
-
-#[allow(dead_code)]
-pub(crate) struct ThunkValue {
-    pub(crate) expr: Arc<HirExpr>,
-    pub(crate) env: Env,
-    pub(crate) cached: Mutex<Option<Value>>,
-    pub(crate) in_progress: AtomicBool,
 }
 
 pub(crate) struct ChannelInner {

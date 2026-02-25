@@ -574,12 +574,7 @@ fn generate_aot_entry<M: Module>(
 
         // Embed short name
         let short_data_id = module
-            .declare_data(
-                &format!("__nm_s_{i}"),
-                Linkage::Local,
-                false,
-                false,
-            )
+            .declare_data(&format!("__nm_s_{i}"), Linkage::Local, false, false)
             .map_err(|e| format!("declare name data: {e}"))?;
         let mut dd = DataDescription::new();
         dd.define(entry.short_name.as_bytes().to_vec().into_boxed_slice());
@@ -590,21 +585,10 @@ fn generate_aot_entry<M: Module>(
 
         // Embed qualified name
         let qual_data_id = module
-            .declare_data(
-                &format!("__nm_q_{i}"),
-                Linkage::Local,
-                false,
-                false,
-            )
+            .declare_data(&format!("__nm_q_{i}"), Linkage::Local, false, false)
             .map_err(|e| format!("declare qual name data: {e}"))?;
         let mut dd = DataDescription::new();
-        dd.define(
-            entry
-                .qualified_name
-                .as_bytes()
-                .to_vec()
-                .into_boxed_slice(),
-        );
+        dd.define(entry.qualified_name.as_bytes().to_vec().into_boxed_slice());
         module
             .define_data(qual_data_id, &dd)
             .map_err(|e| format!("define qual name data: {e}"))?;
@@ -647,20 +631,36 @@ fn generate_aot_entry<M: Module>(
         for reg in &regs {
             let func_ptr = builder.ins().func_addr(PTR, reg.func_ref);
             let arity_val = builder.ins().iconst(PTR, reg.arity as i64);
-            let is_effect_val = builder.ins().iconst(PTR, if reg.is_effect_block { 1i64 } else { 0i64 });
+            let is_effect_val = builder
+                .ins()
+                .iconst(PTR, if reg.is_effect_block { 1i64 } else { 0i64 });
 
             let short_ptr = builder.ins().global_value(PTR, reg.short_name_gv);
             let short_len = builder.ins().iconst(PTR, reg.short_name_len as i64);
             builder.ins().call(
                 helper_refs.rt_register_jit_fn,
-                &[ctx_param, short_ptr, short_len, func_ptr, arity_val, is_effect_val],
+                &[
+                    ctx_param,
+                    short_ptr,
+                    short_len,
+                    func_ptr,
+                    arity_val,
+                    is_effect_val,
+                ],
             );
 
             let qual_ptr = builder.ins().global_value(PTR, reg.qual_name_gv);
             let qual_len = builder.ins().iconst(PTR, reg.qual_name_len as i64);
             builder.ins().call(
                 helper_refs.rt_register_jit_fn,
-                &[ctx_param, qual_ptr, qual_len, func_ptr, arity_val, is_effect_val],
+                &[
+                    ctx_param,
+                    qual_ptr,
+                    qual_len,
+                    func_ptr,
+                    arity_val,
+                    is_effect_val,
+                ],
             );
         }
 
@@ -1435,7 +1435,18 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
         }
         12 => {
             let f: extern "C" fn(
-                i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
             ) -> i64 = std::mem::transmute(code);
             f(
                 args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
@@ -1444,7 +1455,19 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
         }
         13 => {
             let f: extern "C" fn(
-                i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
             ) -> i64 = std::mem::transmute(code);
             f(
                 args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
@@ -1453,7 +1476,20 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
         }
         14 => {
             let f: extern "C" fn(
-                i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
             ) -> i64 = std::mem::transmute(code);
             f(
                 args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
@@ -1462,7 +1498,21 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
         }
         15 => {
             let f: extern "C" fn(
-                i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
             ) -> i64 = std::mem::transmute(code);
             f(
                 args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
@@ -1471,7 +1521,22 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
         }
         16 => {
             let f: extern "C" fn(
-                i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
+                i64,
             ) -> i64 = std::mem::transmute(code);
             f(
                 args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
@@ -1479,9 +1544,7 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
             )
         }
         n => {
-            eprintln!(
-                "aivi: call_jit_function: unsupported arity {n} (max 15 params + ctx)"
-            );
+            eprintln!("aivi: call_jit_function: unsupported arity {n} (max 15 params + ctx)");
             0
         }
     }

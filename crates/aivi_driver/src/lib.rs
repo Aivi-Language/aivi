@@ -37,8 +37,7 @@ pub enum AiviError {
 /// Prints diagnostics to stderr so the user sees errors before a `Diagnostics` exit.
 fn emit_diagnostics(diagnostics: &[FileDiagnostic]) {
     for diag in diagnostics {
-        let rendered =
-            render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+        let rendered = render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
         if !rendered.is_empty() {
             eprintln!("{rendered}");
         }

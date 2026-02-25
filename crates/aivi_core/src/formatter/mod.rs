@@ -198,7 +198,8 @@ mod tests {
 
     #[test]
     fn format_html_sigil_formats_long_wrapped_record_attribute_values() {
-        let text = "module demo\n\nx=~<html><div props={ { a: 1, b: 2, c: 3, d: 4 } }></div></html>\n";
+        let text =
+            "module demo\n\nx=~<html><div props={ { a: 1, b: 2, c: 3, d: 4 } }></div></html>\n";
         let formatted = format_text(text);
         assert!(formatted.contains("<div props={{\n"));
         assert!(formatted.contains("\n        a: 1,\n"));

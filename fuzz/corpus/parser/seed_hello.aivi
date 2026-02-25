@@ -2,4 +2,3 @@ module fuzz.seed.hello
 export x
 
 x = 1 + 2 * 3
-

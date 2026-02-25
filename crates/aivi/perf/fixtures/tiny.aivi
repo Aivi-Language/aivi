@@ -2,4 +2,3 @@ module perf.fixture.tiny
 export x
 
 x = 1 + 2 * 3
-

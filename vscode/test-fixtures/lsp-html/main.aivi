@@ -7,7 +7,9 @@ doAiviFn = pure Unit
 main =
   ~<html>
     <div class="a">
-      <button onClick={doAiviFn}>ok</button>
+      <button onClick={doAiviFn}>
+        ok
+      </button>
     </div>
   </html>
 
