@@ -564,7 +564,9 @@ impl<'a> LowerCtx<'a> {
             RustIrExpr::Local { name, .. } => self.lower_local(builder, name),
             RustIrExpr::Global { name, .. } => self.lower_global(builder, name),
             RustIrExpr::Builtin { builtin, .. } => self.lower_global(builder, builtin),
-            RustIrExpr::ConstructorValue { name, .. } => self.lower_global(builder, name),
+            RustIrExpr::ConstructorValue { name, .. } => {
+                self.lower_constructor_value(builder, name)
+            }
 
             // ----- Functions -----
             RustIrExpr::Lambda { .. } => self.lower_lambda_expr(builder, expr),
@@ -696,6 +698,26 @@ impl<'a> LowerCtx<'a> {
         let call = builder.ins().call(
             self.helpers.rt_get_global,
             &[self.ctx_param, name_ptr, name_len],
+        );
+        TypedValue::boxed(builder.inst_results(call)[0])
+    }
+
+    /// Lower a bare constructor reference (e.g. `Sqlite`, `GtkAttribute`) by
+    /// allocating a zero-arg `Value::Constructor` directly instead of looking
+    /// it up in the globals map.  When applied to arguments later, `apply()`
+    /// accumulates them naturally.
+    fn lower_constructor_value(
+        &self,
+        builder: &mut FunctionBuilder<'_>,
+        name: &str,
+    ) -> TypedValue {
+        let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
+        let name_len = builder.ins().iconst(PTR, name.len() as i64);
+        let null = builder.ins().iconst(PTR, 0);
+        let zero = builder.ins().iconst(PTR, 0);
+        let call = builder.ins().call(
+            self.helpers.rt_alloc_constructor,
+            &[self.ctx_param, name_ptr, name_len, null, zero],
         );
         TypedValue::boxed(builder.inst_results(call)[0])
     }

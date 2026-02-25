@@ -8,6 +8,8 @@ mod database;
 mod email;
 mod goa;
 mod graph;
+mod gtk4;
+mod gtk4_real;
 mod i18n;
 mod instant;
 mod linalg;

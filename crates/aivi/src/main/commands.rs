@@ -336,6 +336,14 @@ fn install_stdlib_module(root: &Path, spec: &str) -> Result<bool, AiviError> {
 }
 
 fn should_use_project_pipeline(args: &[String]) -> bool {
+    // Always prefer the project pipeline when aivi.toml is present,
+    // even if the user passes a file path (e.g. `aivi run src/main.aivi`).
+    if env::current_dir()
+        .map(|d| d.join("aivi.toml").exists())
+        .unwrap_or(false)
+    {
+        return true;
+    }
     if args.is_empty() {
         return true;
     }
@@ -493,6 +501,9 @@ fn parse_project_args(args: &[String]) -> Result<(bool, Vec<String>), AiviError>
     for arg in before {
         match arg.as_str() {
             "--release" => release = true,
+            // Ignore positional file paths (e.g. `aivi run src/main.aivi`) —
+            // the project pipeline uses aivi.toml's entry instead.
+            _ if !arg.starts_with('-') => {}
             _ => return Err(AiviError::InvalidCommand(format!("unknown flag {arg}"))),
         }
     }
