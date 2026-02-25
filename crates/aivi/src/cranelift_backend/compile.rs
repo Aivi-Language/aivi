@@ -39,10 +39,8 @@ pub fn run_cranelift_jit(
     cg_types: HashMap<String, HashMap<String, CgType>>,
     _monomorph_plan: HashMap<String, Vec<CgType>>,
 ) -> Result<(), AiviError> {
-    // 1. Build the interpreter runtime (for builtins, thunks, globals).
-    //    During the migration this is still needed because lambdas/closures
-    //    and complex builtins fall back to the interpreter.
-    let mut runtime = build_runtime_from_program(program.clone())?;
+    // 1. Build the runtime context for globals/builtins/effects.
+    let mut runtime = build_runtime_from_program(&program)?;
 
     // 2. Lower HIR → Kernel → RustIR
     let kernel_program = kernel::lower_hir(program);
@@ -113,10 +111,27 @@ pub fn run_cranelift_jit(
                     continue;
                 }
             }
-            if params.len() > 7 || !expr_supported(body) {
-                continue;
-            }
             let qualified = format!("{}.{}", ir_module.name, def.name);
+            let is_stdlib_module = ir_module.name.starts_with("aivi.");
+            if params.len() > 7 {
+                if is_stdlib_module {
+                    continue;
+                }
+                return Err(AiviError::Runtime(format!(
+                    "cranelift compile {}: unsupported arity {} (max 7)",
+                    qualified,
+                    params.len()
+                )));
+            }
+            if !expr_supported(body) {
+                if is_stdlib_module {
+                    continue;
+                }
+                return Err(AiviError::Runtime(format!(
+                    "cranelift compile {}: unsupported expression shape",
+                    qualified
+                )));
+            }
             let func_name = format!("__aivi_jit_{}", sanitize_name(&qualified));
             if declared_names.contains(&func_name) {
                 continue;
@@ -224,7 +239,10 @@ pub fn run_cranelift_jit(
                 );
             }
             Err(e) => {
-                eprintln!("warning: cranelift compile {}: {e}", dd.qualified);
+                return Err(AiviError::Runtime(format!(
+                    "cranelift compile {}: {e}",
+                    dd.qualified
+                )))
             }
         }
     }
@@ -331,10 +349,27 @@ pub fn compile_to_object(
                     continue;
                 }
             }
-            if params.len() > 7 || !expr_supported(body) {
-                continue;
-            }
             let qualified = format!("{}.{}", ir_module.name, def.name);
+            let is_stdlib_module = ir_module.name.starts_with("aivi.");
+            if params.len() > 7 {
+                if is_stdlib_module {
+                    continue;
+                }
+                return Err(AiviError::Runtime(format!(
+                    "cranelift aot compile {}: unsupported arity {} (max 7)",
+                    qualified,
+                    params.len()
+                )));
+            }
+            if !expr_supported(body) {
+                if is_stdlib_module {
+                    continue;
+                }
+                return Err(AiviError::Runtime(format!(
+                    "cranelift aot compile {}: unsupported expression shape",
+                    qualified
+                )));
+            }
             let func_name = format!("__aivi_jit_{}", sanitize_name(&qualified));
             if declared_names.contains(&func_name) {
                 continue;
@@ -390,7 +425,7 @@ pub fn compile_to_object(
 
     // Pass 2: Compile function bodies
     let mut lambda_counter: usize = 0;
-    let mut compiled_func_names: Vec<(String, String)> = Vec::new(); // (short_name, qualified)
+    let mut compiled_func_entries: Vec<AotFuncEntry> = Vec::new();
 
     for dd in &declared_defs {
         match compile_definition_body(
@@ -410,16 +445,24 @@ pub fn compile_to_object(
             Ok(_lambdas) => {
                 // AOT: lambdas are already compiled as functions in the module.
                 // No need to finalize them separately — they'll be in the object file.
-                compiled_func_names.push((dd.def.name.clone(), dd.qualified.clone()));
+                compiled_func_entries.push(AotFuncEntry {
+                    short_name: dd.def.name.clone(),
+                    qualified_name: dd.qualified.clone(),
+                    func_id: dd.func_id,
+                    arity: dd.arity,
+                });
             }
             Err(e) => {
-                eprintln!("warning: cranelift aot compile {}: {e}", dd.qualified);
+                return Err(AiviError::Runtime(format!(
+                    "cranelift aot compile {}: {e}",
+                    dd.qualified
+                )))
             }
         }
     }
 
     // 7. Generate the entry point wrapper: __aivi_main()
-    generate_aot_entry(&mut module, &helpers, &compiled_func_names)
+    generate_aot_entry(&mut module, &helpers, &compiled_func_entries)
         .map_err(|e| AiviError::Runtime(format!("aot entry point: {e}")))?;
 
     // 8. Emit the object file
@@ -431,20 +474,29 @@ pub fn compile_to_object(
     Ok(bytes)
 }
 
+/// Information about a compiled function for AOT entry-point registration.
+pub(crate) struct AotFuncEntry {
+    pub(crate) short_name: String,
+    pub(crate) qualified_name: String,
+    pub(crate) func_id: cranelift_module::FuncId,
+    pub(crate) arity: usize,
+}
+
 /// Generate the AOT entry point `__aivi_main` that:
-/// 1. Calls `__aivi_rt_init` to set up the runtime context
-/// 2. Registers all compiled functions as globals
-/// 3. Calls the AIVI `main` function
-/// 4. Returns exit code (0 = success)
+/// 1. Registers all compiled functions as globals via `rt_register_jit_fn`
+/// 2. Looks up and runs the `main` function as an effect
+/// 3. Returns the result
 fn generate_aot_entry<M: Module>(
     module: &mut M,
     helpers: &DeclaredHelpers,
-    _compiled_funcs: &[(String, String)],
+    compiled_funcs: &[AotFuncEntry],
 ) -> Result<(), String> {
-    // Declare the entry function: () -> i64
+    use cranelift_module::DataDescription;
+
+    // Declare the entry function: (ctx) -> ptr
     let mut sig = module.make_signature();
     sig.params.push(AbiParam::new(PTR)); // ctx
-    sig.returns.push(AbiParam::new(PTR)); // exit code / result
+    sig.returns.push(AbiParam::new(PTR)); // result
 
     let func_id = module
         .declare_function("__aivi_main", Linkage::Export, &sig)
@@ -455,8 +507,83 @@ fn generate_aot_entry<M: Module>(
         sig,
     );
 
+    // Import helpers
     let helper_refs = helpers.import_into(module, &mut function);
 
+    // Embed function name strings as data sections and declare func refs
+    struct FuncReg {
+        func_ref: cranelift_codegen::ir::FuncRef,
+        short_name_gv: cranelift_codegen::ir::GlobalValue,
+        short_name_len: usize,
+        qual_name_gv: cranelift_codegen::ir::GlobalValue,
+        qual_name_len: usize,
+        arity: usize,
+    }
+    let mut regs = Vec::new();
+
+    for (i, entry) in compiled_funcs.iter().enumerate() {
+        let func_ref = module.declare_func_in_func(entry.func_id, &mut function);
+
+        // Embed short name
+        let short_data_id = module
+            .declare_data(
+                &format!("__nm_s_{i}"),
+                Linkage::Local,
+                false,
+                false,
+            )
+            .map_err(|e| format!("declare name data: {e}"))?;
+        let mut dd = DataDescription::new();
+        dd.define(entry.short_name.as_bytes().to_vec().into_boxed_slice());
+        module
+            .define_data(short_data_id, &dd)
+            .map_err(|e| format!("define name data: {e}"))?;
+        let short_gv = module.declare_data_in_func(short_data_id, &mut function);
+
+        // Embed qualified name
+        let qual_data_id = module
+            .declare_data(
+                &format!("__nm_q_{i}"),
+                Linkage::Local,
+                false,
+                false,
+            )
+            .map_err(|e| format!("declare qual name data: {e}"))?;
+        let mut dd = DataDescription::new();
+        dd.define(
+            entry
+                .qualified_name
+                .as_bytes()
+                .to_vec()
+                .into_boxed_slice(),
+        );
+        module
+            .define_data(qual_data_id, &dd)
+            .map_err(|e| format!("define qual name data: {e}"))?;
+        let qual_gv = module.declare_data_in_func(qual_data_id, &mut function);
+
+        regs.push(FuncReg {
+            func_ref,
+            short_name_gv: short_gv,
+            short_name_len: entry.short_name.len(),
+            qual_name_gv: qual_gv,
+            qual_name_len: entry.qualified_name.len(),
+            arity: entry.arity,
+        });
+    }
+
+    // Embed "main" string for the final lookup
+    let main_data_id = module
+        .declare_data("__nm_main", Linkage::Local, false, false)
+        .map_err(|e| format!("declare main name: {e}"))?;
+    let mut dd = DataDescription::new();
+    dd.define(b"main".to_vec().into_boxed_slice());
+    module
+        .define_data(main_data_id, &dd)
+        .map_err(|e| format!("define main name: {e}"))?;
+    let main_name_gv = module.declare_data_in_func(main_data_id, &mut function);
+
+    // Build the function body
     let mut fb_ctx = FunctionBuilderContext::new();
     {
         let mut builder = FunctionBuilder::new(&mut function, &mut fb_ctx);
@@ -467,16 +594,34 @@ fn generate_aot_entry<M: Module>(
 
         let ctx_param = builder.block_params(entry)[0];
 
-        // Look up "main" via rt_get_global and run it as an effect
-        let main_name = "main";
-        let name_ptr = builder.ins().iconst(PTR, main_name.as_ptr() as i64);
-        let name_len = builder.ins().iconst(PTR, main_name.len() as i64);
+        // Register each compiled function (short + qualified name)
+        for reg in &regs {
+            let func_ptr = builder.ins().func_addr(PTR, reg.func_ref);
+            let arity_val = builder.ins().iconst(PTR, reg.arity as i64);
+
+            let short_ptr = builder.ins().global_value(PTR, reg.short_name_gv);
+            let short_len = builder.ins().iconst(PTR, reg.short_name_len as i64);
+            builder.ins().call(
+                helper_refs.rt_register_jit_fn,
+                &[ctx_param, short_ptr, short_len, func_ptr, arity_val],
+            );
+
+            let qual_ptr = builder.ins().global_value(PTR, reg.qual_name_gv);
+            let qual_len = builder.ins().iconst(PTR, reg.qual_name_len as i64);
+            builder.ins().call(
+                helper_refs.rt_register_jit_fn,
+                &[ctx_param, qual_ptr, qual_len, func_ptr, arity_val],
+            );
+        }
+
+        // Look up "main" and run as effect
+        let main_ptr = builder.ins().global_value(PTR, main_name_gv);
+        let main_len = builder.ins().iconst(PTR, 4i64);
         let main_val = builder
             .ins()
-            .call(helper_refs.rt_get_global, &[ctx_param, name_ptr, name_len]);
+            .call(helper_refs.rt_get_global, &[ctx_param, main_ptr, main_len]);
         let main_val = builder.inst_results(main_val)[0];
 
-        // Run it as an effect
         let result = builder
             .ins()
             .call(helper_refs.rt_run_effect, &[ctx_param, main_val]);
@@ -852,9 +997,7 @@ fn expr_supported(expr: &RustIrExpr) -> bool {
         } => match block_kind {
             // Plain blocks: all items must be individually supported
             RustIrBlockKind::Plain => items.iter().all(block_item_supported),
-            // Generate and Resource blocks are delegated to the interpreter;
-            // the items don't need to be individually supported since they'll
-            // be evaluated by the interpreter at runtime.
+            // Generate and Resource blocks are compiled natively in Cranelift.
             RustIrBlockKind::Generate | RustIrBlockKind::Resource => true,
             // Do blocks: items must be individually supported
             RustIrBlockKind::Do { .. } => items.iter().all(block_item_supported),
@@ -1079,7 +1222,7 @@ fn sanitize_name(name: &str) -> String {
 }
 
 /// Create a runtime `Value::Builtin` that calls a JIT-compiled function.
-fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) -> Value {
+pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) -> Value {
     use crate::runtime::values::{BuiltinImpl, BuiltinValue};
     use std::sync::Arc;
 
@@ -1170,7 +1313,7 @@ fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) -> Value {
 ///
 /// # Safety
 /// `func_ptr` must point to valid JIT-compiled code with the matching signature.
-unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
+pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
     let code = func_ptr as *const u8;
     match args.len() {
         1 => {

@@ -6,7 +6,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::runtime::environment::Env;
 use crate::runtime::values::Value;
 
 use super::abi::{self, JitRuntimeCtx};
@@ -678,36 +677,6 @@ pub extern "C" fn rt_binary_op(
 }
 
 // ---------------------------------------------------------------------------
-// Environment helpers for block delegation
-// ---------------------------------------------------------------------------
-
-/// Create a new empty `Env` for passing local scope to interpreter-delegated blocks.
-/// The env's parent is the runtime's global scope so global lookups work.
-#[no_mangle]
-pub extern "C" fn rt_env_new(ctx: *mut JitRuntimeCtx) -> *mut Env {
-    let runtime = unsafe { &*(*ctx).runtime };
-    let globals = runtime.ctx.globals.clone();
-    Box::into_raw(Box::new(Env::new(Some(globals))))
-}
-
-/// Set a variable in an environment created by `rt_env_new`.
-#[no_mangle]
-pub extern "C" fn rt_env_set(
-    _ctx: *mut JitRuntimeCtx,
-    env_ptr: *mut Env,
-    name_ptr: *const u8,
-    name_len: usize,
-    value_ptr: *const Value,
-) {
-    let env = unsafe { &*env_ptr };
-    let name = unsafe {
-        std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)).to_string()
-    };
-    let value = unsafe { (*value_ptr).clone() };
-    env.set(name, value);
-}
-
-// ---------------------------------------------------------------------------
 // Native generate block helpers
 // ---------------------------------------------------------------------------
 
@@ -769,85 +738,21 @@ pub extern "C" fn rt_gen_vec_into_generator(
     abi::box_value(builtin)
 }
 
-/// Evaluate a `generate { ... }` block by delegating to the interpreter.
+/// Convert a generator fold function into a `Value::List` containing all elements.
 ///
-/// `items_ptr` / `items_count` point to the `&[RustIrBlockItem]` slice from the
-/// live `RustIrDef` (valid for the duration of JIT execution).
-/// `env_ptr` is an `Env` populated with all in-scope locals.
+/// The generator is a function `\k -> \z -> foldl k z values`. This helper
+/// applies it with a list-append step and empty list to collect all elements.
 #[no_mangle]
-pub extern "C" fn rt_eval_generate(
+pub extern "C" fn rt_generator_to_list(
     ctx: *mut JitRuntimeCtx,
-    items_ptr: *const crate::rust_ir::RustIrBlockItem,
-    items_count: usize,
-    env_ptr: *mut Env,
+    gen_ptr: *mut Value,
 ) -> *mut Value {
-    use crate::runtime::values::{BuiltinImpl, BuiltinValue};
-
-    let items = unsafe { std::slice::from_raw_parts(items_ptr, items_count) };
-    let env = unsafe { Box::from_raw(env_ptr) };
+    let gen = unsafe { (*gen_ptr).clone() };
     let runtime = unsafe { &mut *(*ctx).runtime };
-
-    // Lower RustIrBlockItems → HirBlockItems, then materialize via interpreter
-    let lowered = match crate::runtime::lower_runtime_rust_ir_block_items(items) {
-        Ok(l) => l,
-        Err(_) => return abi::box_value(Value::List(Arc::new(Vec::new()))),
-    };
-
-    let mut values = Vec::new();
-    if runtime
-        .materialize_generate(&lowered, &env, &mut values)
-        .is_err()
-    {
-        return abi::box_value(Value::List(Arc::new(Vec::new())));
+    match runtime.generator_to_list(gen) {
+        Ok(items) => abi::box_value(Value::List(Arc::new(items))),
+        Err(_) => abi::box_value(Value::List(Arc::new(Vec::new()))),
     }
-
-    // Drop env (we consumed it above via Box::from_raw)
-    // env is already dropped when Box goes out of scope
-
-    // Wrap as fold function: \k -> \z -> foldl k z values
-    let values = Arc::new(values);
-    let builtin = Value::Builtin(BuiltinValue {
-        imp: Arc::new(BuiltinImpl {
-            name: "<jit_generator>".to_string(),
-            arity: 2,
-            func: Arc::new(move |mut args, runtime| {
-                let z = args.pop().unwrap();
-                let k = args.pop().unwrap();
-                let mut acc = z;
-                for val in values.iter() {
-                    let partial = runtime.apply(k.clone(), acc)?;
-                    acc = runtime.apply(partial, val.clone())?;
-                }
-                Ok(acc)
-            }),
-        }),
-        args: Vec::new(),
-        tagged_args: Some(Vec::new()),
-    });
-    abi::box_value(builtin)
-}
-
-/// Create a `Value::Resource` wrapping the given block items and env.
-#[no_mangle]
-pub extern "C" fn rt_make_resource(
-    _ctx: *mut JitRuntimeCtx,
-    items_ptr: *const crate::rust_ir::RustIrBlockItem,
-    items_count: usize,
-    env_ptr: *mut Env,
-) -> *mut Value {
-    use crate::runtime::values::ResourceValue;
-
-    let items = unsafe { std::slice::from_raw_parts(items_ptr, items_count) };
-    let _env = unsafe { Box::from_raw(env_ptr) };
-
-    let lowered = match crate::runtime::lower_runtime_rust_ir_block_items(items) {
-        Ok(l) => l,
-        Err(_) => return abi::box_value(Value::Unit),
-    };
-
-    abi::box_value(Value::Resource(Arc::new(ResourceValue {
-        items: Arc::new(lowered),
-    })))
 }
 
 // ---------------------------------------------------------------------------
@@ -868,7 +773,7 @@ use crate::runtime::build_runtime_from_program;
 pub extern "C" fn aivi_rt_init(program_ptr: *mut HirProgram) -> *mut JitRuntimeCtx {
     let program = unsafe { Box::from_raw(program_ptr) };
     let runtime =
-        build_runtime_from_program(*program).expect("aivi_rt_init: failed to build runtime");
+        build_runtime_from_program(&*program).expect("aivi_rt_init: failed to build runtime");
     let ctx = unsafe { JitRuntimeCtx::from_runtime_owned(runtime) };
     Box::into_raw(Box::new(ctx))
 }
@@ -884,6 +789,40 @@ pub extern "C" fn aivi_rt_destroy(ctx: *mut JitRuntimeCtx) {
             drop(Box::from_raw(ctx));
         }
     }
+}
+
+/// Initialize a minimal AIVI runtime with only builtins (no user program).
+/// Used by the AOT path where compiled functions are registered via
+/// `rt_register_jit_fn`.
+#[no_mangle]
+pub extern "C" fn aivi_rt_init_base() -> *mut JitRuntimeCtx {
+    use crate::runtime::build_runtime_base;
+    let runtime = build_runtime_base();
+    let ctx = unsafe { JitRuntimeCtx::from_runtime_owned(runtime) };
+    Box::into_raw(Box::new(ctx))
+}
+
+/// Register an AOT/JIT-compiled function as a global in the runtime.
+/// Does not overwrite existing globals (e.g. builtins).
+#[no_mangle]
+pub extern "C" fn rt_register_jit_fn(
+    ctx: *mut JitRuntimeCtx,
+    name_ptr: *const u8,
+    name_len: i64,
+    func_ptr: i64,
+    arity: i64,
+) {
+    let name = unsafe {
+        std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len as usize))
+    };
+    let runtime = unsafe { &mut *(*ctx).runtime };
+    // Don't overwrite builtins
+    if runtime.ctx.globals.get(name).is_some() {
+        return;
+    }
+    let builtin =
+        super::compile::make_jit_builtin(name, arity as usize, func_ptr as usize);
+    runtime.ctx.globals.set(name.to_string(), builtin);
 }
 
 // ---------------------------------------------------------------------------
@@ -934,17 +873,45 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_patch_record", rt_patch_record as *const u8),
         // Closure creation
         ("rt_make_closure", rt_make_closure as *const u8),
-        // Block delegation
-        ("rt_env_new", rt_env_new as *const u8),
-        ("rt_env_set", rt_env_set as *const u8),
-        ("rt_eval_generate", rt_eval_generate as *const u8),
-        ("rt_make_resource", rt_make_resource as *const u8),
         // Native generate helpers
+        (
+            "rt_generator_to_list",
+            rt_generator_to_list as *const u8,
+        ),
         ("rt_gen_vec_new", rt_gen_vec_new as *const u8),
         ("rt_gen_vec_push", rt_gen_vec_push as *const u8),
         (
             "rt_gen_vec_into_generator",
             rt_gen_vec_into_generator as *const u8,
         ),
+        // AOT function registration
+        (
+            "rt_register_jit_fn",
+            rt_register_jit_fn as *const u8,
+        ),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Regression: no interpreter-delegation helpers should be registered.
+    /// These were removed during the Cranelift migration.
+    #[test]
+    fn no_interpreter_delegation_symbols() {
+        let forbidden = [
+            "rt_env_new",
+            "rt_env_set",
+            "rt_eval_generate",
+            "rt_make_resource",
+        ];
+        let symbols = runtime_helper_symbols();
+        for (name, _) in &symbols {
+            assert!(
+                !forbidden.contains(name),
+                "interpreter delegation helper '{name}' should not be in Cranelift symbol table"
+            );
+        }
+    }
 }

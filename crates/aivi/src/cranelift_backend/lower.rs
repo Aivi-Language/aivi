@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use cranelift_codegen::ir::FuncRef;
 use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder, Value};
-use cranelift_frontend::FunctionBuilder;
+use cranelift_frontend::{FunctionBuilder, Variable};
 use cranelift_module::{Linkage, Module};
 
 use crate::cg_type::CgType;
@@ -183,15 +183,13 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_patch_record: FuncRef,
     // Closure creation
     pub(crate) rt_make_closure: FuncRef,
-    // Block delegation (generate/resource)
-    pub(crate) rt_env_new: FuncRef,
-    pub(crate) rt_env_set: FuncRef,
-    pub(crate) rt_eval_generate: FuncRef,
-    pub(crate) rt_make_resource: FuncRef,
     // Native generate helpers
+    pub(crate) rt_generator_to_list: FuncRef,
     pub(crate) rt_gen_vec_new: FuncRef,
     pub(crate) rt_gen_vec_push: FuncRef,
     pub(crate) rt_gen_vec_into_generator: FuncRef,
+    // AOT function registration
+    pub(crate) rt_register_jit_fn: FuncRef,
 }
 
 /// Declare all runtime helper signatures in the module and return FuncRefs
@@ -268,21 +266,18 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_patch_record: decl!("rt_patch_record", [PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
         // (ctx, func_ptr, captured, count) -> ptr
         rt_make_closure: decl!("rt_make_closure", [PTR, PTR, PTR, PTR], [PTR]),
-        // Block delegation: (ctx) -> ptr
-        rt_env_new: decl!("rt_env_new", [PTR], [PTR]),
-        // (ctx, env, name_ptr, name_len, value_ptr) -> void
-        rt_env_set: decl!("rt_env_set", [PTR, PTR, PTR, PTR, PTR], []),
-        // (ctx, items_ptr, items_count, env_ptr) -> ptr
-        rt_eval_generate: decl!("rt_eval_generate", [PTR, PTR, PTR, PTR], [PTR]),
-        // (ctx, items_ptr, items_count, env_ptr) -> ptr
-        rt_make_resource: decl!("rt_make_resource", [PTR, PTR, PTR, PTR], [PTR]),
         // Native generate helpers
+        // (ctx, gen_ptr) -> ptr
+        rt_generator_to_list: decl!("rt_generator_to_list", [PTR, PTR], [PTR]),
         // (ctx) -> ptr
         rt_gen_vec_new: decl!("rt_gen_vec_new", [PTR], [PTR]),
         // (ctx, vec_ptr, value_ptr)
         rt_gen_vec_push: decl!("rt_gen_vec_push", [PTR, PTR, PTR], []),
         // (ctx, vec_ptr) -> ptr
         rt_gen_vec_into_generator: decl!("rt_gen_vec_into_generator", [PTR, PTR], [PTR]),
+        // AOT function registration
+        // (ctx, name_ptr, name_len, func_ptr, arity)
+        rt_register_jit_fn: decl!("rt_register_jit_fn", [PTR, PTR, PTR, PTR, PTR], []),
     })
 }
 
@@ -320,15 +315,13 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_value_equals: cranelift_module::FuncId,
     pub(crate) rt_patch_record: cranelift_module::FuncId,
     pub(crate) rt_make_closure: cranelift_module::FuncId,
-    // Block delegation (generate/resource)
-    pub(crate) rt_env_new: cranelift_module::FuncId,
-    pub(crate) rt_env_set: cranelift_module::FuncId,
-    pub(crate) rt_eval_generate: cranelift_module::FuncId,
-    pub(crate) rt_make_resource: cranelift_module::FuncId,
     // Native generate helpers
+    pub(crate) rt_generator_to_list: cranelift_module::FuncId,
     pub(crate) rt_gen_vec_new: cranelift_module::FuncId,
     pub(crate) rt_gen_vec_push: cranelift_module::FuncId,
     pub(crate) rt_gen_vec_into_generator: cranelift_module::FuncId,
+    // AOT function registration
+    pub(crate) rt_register_jit_fn: cranelift_module::FuncId,
 }
 
 impl DeclaredHelpers {
@@ -372,13 +365,11 @@ impl DeclaredHelpers {
             rt_value_equals: imp!(rt_value_equals),
             rt_patch_record: imp!(rt_patch_record),
             rt_make_closure: imp!(rt_make_closure),
-            rt_env_new: imp!(rt_env_new),
-            rt_env_set: imp!(rt_env_set),
-            rt_eval_generate: imp!(rt_eval_generate),
-            rt_make_resource: imp!(rt_make_resource),
+            rt_generator_to_list: imp!(rt_generator_to_list),
             rt_gen_vec_new: imp!(rt_gen_vec_new),
             rt_gen_vec_push: imp!(rt_gen_vec_push),
             rt_gen_vec_into_generator: imp!(rt_gen_vec_into_generator),
+            rt_register_jit_fn: imp!(rt_register_jit_fn),
         }
     }
 }
@@ -1783,19 +1774,8 @@ impl<'a> LowerCtx<'a> {
         match block_kind {
             RustIrBlockKind::Plain => self.lower_plain_block(builder, items),
             RustIrBlockKind::Do { .. } => self.lower_do_block(builder, items),
-            RustIrBlockKind::Generate => {
-                // Use native compilation for simple generate blocks (no Bind items).
-                // Complex blocks with Bind still delegate to the interpreter.
-                let has_bind = items
-                    .iter()
-                    .any(|item| matches!(item, RustIrBlockItem::Bind { .. }));
-                if has_bind {
-                    self.lower_delegated_block(builder, items, true)
-                } else {
-                    self.lower_native_generate(builder, items)
-                }
-            }
-            RustIrBlockKind::Resource => self.lower_delegated_block(builder, items, false),
+            RustIrBlockKind::Generate => self.lower_native_generate(builder, items),
+            RustIrBlockKind::Resource => self.lower_resource_block(builder, items),
         }
     }
 
@@ -1880,10 +1860,9 @@ impl<'a> LowerCtx<'a> {
         current_effect
     }
 
-    /// Compile a generate block natively in Cranelift (no interpreter delegation).
+    /// Compile a generate block natively in Cranelift.
     ///
-    /// Supports Yield, Filter, and Expr items. Bind items are NOT supported here
-    /// (caller must check and fall back to `lower_delegated_block`).
+    /// Supports all item types including Bind (generator binding via loops).
     fn lower_native_generate(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
@@ -1901,16 +1880,43 @@ impl<'a> LowerCtx<'a> {
         builder.def_var(vec_var, vec);
 
         // Create the "done" block — all paths converge here.
-        // rt_gen_vec_into_generator is called exactly once in this block.
         let done_block = builder.create_block();
 
-        // Check if there are any filters. If so, we need conditional branching.
-        let has_filter = items
-            .iter()
-            .any(|item| matches!(item, RustIrBlockItem::Filter { .. }));
+        // Process all items (may create nested loops for Bind)
+        self.lower_generate_items(builder, items, vec_var, done_block);
 
-        // Process each item sequentially
-        for item in items {
+        // Jump from the end of item processing to done
+        builder.ins().jump(done_block, &[]);
+
+        // 2. Wrap Vec into generator fold function (done block)
+        builder.switch_to_block(done_block);
+        builder.seal_block(done_block);
+
+        let current_vec = builder.use_var(vec_var);
+        let gen = {
+            let call = builder.ins().call(
+                self.helpers.rt_gen_vec_into_generator,
+                &[self.ctx_param, current_vec],
+            );
+            builder.inst_results(call)[0]
+        };
+        TypedValue::boxed(gen)
+    }
+
+    /// Process generate block items, creating loops for Bind items.
+    ///
+    /// `vec_var` — Cranelift variable holding the `Vec<Value>*` accumulator.
+    /// `skip_block` — block to jump to when a filter fails or we need to
+    ///   skip remaining items (done block at top level, loop-continue inside
+    ///   a Bind loop).
+    fn lower_generate_items(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        items: &[RustIrBlockItem],
+        vec_var: Variable,
+        skip_block: cranelift_codegen::ir::Block,
+    ) {
+        for (i, item) in items.iter().enumerate() {
             match item {
                 RustIrBlockItem::Yield { expr } => {
                     let tv = self.lower_expr(builder, expr);
@@ -1930,11 +1936,11 @@ impl<'a> LowerCtx<'a> {
                             .call(self.helpers.rt_unbox_bool, &[self.ctx_param, cond]);
                         builder.inst_results(call)[0]
                     };
-                    // If false, jump to done (stop yielding). If true, continue.
+                    // If false, skip remaining items. If true, continue.
                     let continue_block = builder.create_block();
                     builder
                         .ins()
-                        .brif(unboxed, continue_block, &[], done_block, &[]);
+                        .brif(unboxed, continue_block, &[], skip_block, &[]);
                     builder.switch_to_block(continue_block);
                     builder.seal_block(continue_block);
                 }
@@ -1944,84 +1950,127 @@ impl<'a> LowerCtx<'a> {
                 RustIrBlockItem::Recurse { expr } => {
                     let _tv = self.lower_expr(builder, expr);
                 }
-                RustIrBlockItem::Bind { .. } => {
-                    unreachable!("Bind items should be handled by lower_delegated_block");
+                RustIrBlockItem::Bind { pattern, expr } => {
+                    // 1. Evaluate the source expression (a generator)
+                    let source_tv = self.lower_expr(builder, expr);
+                    let source_boxed = self.ensure_boxed(builder, source_tv);
+
+                    // 2. Convert generator to list via runtime helper
+                    let list = {
+                        let call = builder.ins().call(
+                            self.helpers.rt_generator_to_list,
+                            &[self.ctx_param, source_boxed],
+                        );
+                        builder.inst_results(call)[0]
+                    };
+
+                    // 3. Get list length
+                    let len = {
+                        let call = builder.ins().call(
+                            self.helpers.rt_list_len,
+                            &[self.ctx_param, list],
+                        );
+                        builder.inst_results(call)[0]
+                    };
+
+                    // 4. Set up loop: counter starts at 0
+                    let counter_var = builder.declare_var(PTR);
+                    let zero = builder.ins().iconst(PTR, 0);
+                    builder.def_var(counter_var, zero);
+
+                    let loop_header = builder.create_block();
+                    let loop_body = builder.create_block();
+                    let loop_exit = builder.create_block();
+                    let loop_continue = builder.create_block();
+
+                    builder.ins().jump(loop_header, &[]);
+
+                    // Loop header: check counter < length
+                    builder.switch_to_block(loop_header);
+                    // Don't seal yet (back-edge from loop_continue)
+                    let counter = builder.use_var(counter_var);
+                    let cond = builder.ins().icmp(
+                        cranelift_codegen::ir::condcodes::IntCC::SignedLessThan,
+                        counter,
+                        len,
+                    );
+                    builder
+                        .ins()
+                        .brif(cond, loop_body, &[], loop_exit, &[]);
+
+                    // Loop body: get element, bind pattern
+                    builder.switch_to_block(loop_body);
+                    builder.seal_block(loop_body);
+
+                    let elem = {
+                        let call = builder.ins().call(
+                            self.helpers.rt_list_index,
+                            &[self.ctx_param, list, counter],
+                        );
+                        builder.inst_results(call)[0]
+                    };
+                    self.bind_pattern(builder, pattern, elem);
+
+                    // Process remaining items inside the loop body.
+                    // Filters inside the loop jump to loop_continue (skip iteration).
+                    let remaining = &items[i + 1..];
+                    self.lower_generate_items(builder, remaining, vec_var, loop_continue);
+
+                    // After remaining items: jump to loop_continue
+                    builder.ins().jump(loop_continue, &[]);
+
+                    // Loop continue: increment counter, jump back to header
+                    builder.switch_to_block(loop_continue);
+                    builder.seal_block(loop_continue);
+                    let cur = builder.use_var(counter_var);
+                    let next = builder.ins().iadd_imm(cur, 1);
+                    builder.def_var(counter_var, next);
+                    builder.ins().jump(loop_header, &[]);
+
+                    // Seal loop header (two predecessors: entry + back-edge)
+                    builder.seal_block(loop_header);
+
+                    // Continue after the loop
+                    builder.switch_to_block(loop_exit);
+                    builder.seal_block(loop_exit);
+
+                    // All remaining items already processed inside loop — return
+                    return;
                 }
             }
         }
-
-        // Jump from the end of the sequential items to done
-        builder.ins().jump(done_block, &[]);
-
-        // 2. Wrap Vec into generator fold function (done block)
-        builder.switch_to_block(done_block);
-        if has_filter {
-            // done_block may have multiple predecessors (filter skips + fall-through)
-            // so we DON'T seal it until we switch to it.
-        }
-        builder.seal_block(done_block);
-
-        let current_vec = builder.use_var(vec_var);
-        let gen = {
-            let call = builder.ins().call(
-                self.helpers.rt_gen_vec_into_generator,
-                &[self.ctx_param, current_vec],
-            );
-            builder.inst_results(call)[0]
-        };
-        TypedValue::boxed(gen)
+        // No more items — falls through to caller (which adds jump to done)
     }
 
-    /// Delegate a generate or resource block to the interpreter via runtime helpers.
-    fn lower_delegated_block(
+    fn lower_resource_block(
         &mut self,
         builder: &mut FunctionBuilder<'_>,
         items: &[RustIrBlockItem],
-        is_generate: bool,
     ) -> TypedValue {
-        // 1. Create env
-        let env = {
-            let call = builder
-                .ins()
-                .call(self.helpers.rt_env_new, &[self.ctx_param]);
-            builder.inst_results(call)[0]
+        // Pre-convert RustIR → HIR at compile time to avoid runtime bridge
+        let hir_items = match crate::runtime::lower_runtime_rust_ir_block_items(items) {
+            Ok(items) => items,
+            Err(_) => {
+                let call = builder
+                    .ins()
+                    .call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
+                return TypedValue::boxed(builder.inst_results(call)[0]);
+            }
         };
 
-        // 2. Populate env with all in-scope locals.
-        //    Leak name strings so the raw pointers embedded in JIT code remain
-        //    valid after this function returns (same pattern as lambda globals).
-        //    All locals must be boxed before storing in the interpreter Env.
-        let locals_snapshot: Vec<(&'static str, TypedValue)> = self
-            .locals
-            .iter()
-            .map(|(k, v)| {
-                let leaked: &'static str = Box::leak(k.clone().into_boxed_str());
-                (leaked, v.clone())
-            })
-            .collect();
-        for (name, tv) in &locals_snapshot {
-            let boxed = self.ensure_boxed(builder, tv.clone());
-            let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
-            let name_len = builder.ins().iconst(PTR, name.len() as i64);
-            builder.ins().call(
-                self.helpers.rt_env_set,
-                &[self.ctx_param, env, name_ptr, name_len, boxed],
-            );
-        }
+        // Construct the Resource value at compile time and leak it
+        let resource = crate::runtime::values::Value::Resource(std::sync::Arc::new(
+            crate::runtime::values::ResourceValue {
+                items: std::sync::Arc::new(hir_items),
+            },
+        ));
+        let leaked_ptr = Box::into_raw(Box::new(resource));
 
-        // 3. Pass items slice pointer + env to the appropriate runtime helper
-        let items_ptr = builder.ins().iconst(PTR, items.as_ptr() as i64);
-        let items_count = builder.ins().iconst(PTR, items.len() as i64);
-
-        let helper = if is_generate {
-            self.helpers.rt_eval_generate
-        } else {
-            self.helpers.rt_make_resource
-        };
-
+        // At runtime: clone the pre-built resource value
+        let ptr_const = builder.ins().iconst(PTR, leaked_ptr as i64);
         let call = builder
             .ins()
-            .call(helper, &[self.ctx_param, items_ptr, items_count, env]);
+            .call(self.helpers.rt_clone_value, &[self.ctx_param, ptr_const]);
         TypedValue::boxed(builder.inst_results(call)[0])
     }
 }

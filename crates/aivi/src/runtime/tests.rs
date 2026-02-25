@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use uuid::Uuid;
 
-use crate::hir::HirBlockKind;
 use super::values::{shape_record, KeyValue, TaggedValue};
 use super::*;
+use crate::hir::HirBlockKind;
 
 fn expect_ok<T>(result: Result<T, RuntimeError>, msg: &str) -> T {
     match result {
@@ -87,7 +87,7 @@ fn runtime_from_source_with_stdlib(source: &str) -> Runtime {
     let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
     stdlib_modules.append(&mut modules);
     let program = crate::hir::desugar_modules(&stdlib_modules);
-    build_runtime_from_program(program).expect("runtime")
+    build_runtime_from_program(&program).expect("runtime")
 }
 
 #[test]
@@ -116,8 +116,9 @@ main = 0
 #[test]
 fn jit_runtime_lowering_covers_all_rust_ir_shapes() {
     use crate::rust_ir::{
-        RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrListItem, RustIrLiteral, RustIrMatchArm,
-        RustIrPathSegment, RustIrPattern, RustIrRecordField, RustIrRecordPatternField, RustIrTextPart,
+        RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrListItem, RustIrLiteral,
+        RustIrMatchArm, RustIrPathSegment, RustIrPattern, RustIrRecordField,
+        RustIrRecordPatternField, RustIrTextPart,
     };
 
     let lit_int = || RustIrExpr::LitNumber {
@@ -458,7 +459,10 @@ main = 0
         }],
     };
 
-    let value = expect_ok(eval_runtime_rust_ir_expr(&mut runtime, &expr, &env), "record path eval");
+    let value = expect_ok(
+        eval_runtime_rust_ir_expr(&mut runtime, &expr, &env),
+        "record path eval",
+    );
     let Value::Record(fields) = value else {
         panic!("expected record");
     };
@@ -498,7 +502,10 @@ fn jit_runtime_plain_block_rejects_non_plain_items() {
             Ok(value) => panic!("expected plain block error, got {}", format_value(&value)),
             Err(RuntimeError::Cancelled) => panic!("expected plain block error, got cancellation"),
             Err(RuntimeError::Error(value)) => {
-                panic!("expected plain block error, got runtime error {}", format_value(&value))
+                panic!(
+                    "expected plain block error, got runtime error {}",
+                    format_value(&value)
+                )
             }
         }
     }
@@ -569,7 +576,10 @@ main = 0
         Ok(value) => panic!("expected plain block error, got {}", format_value(&value)),
         Err(RuntimeError::Cancelled) => panic!("expected plain block error, got cancellation"),
         Err(RuntimeError::Error(value)) => {
-            panic!("expected plain block error, got runtime error {}", format_value(&value))
+            panic!(
+                "expected plain block error, got runtime error {}",
+                format_value(&value)
+            )
         }
     }
 }
@@ -681,7 +691,10 @@ main = 0
         ],
     };
 
-    let value = expect_ok(eval_runtime_rust_ir_expr(&mut runtime, &expr, &env), "patch path eval");
+    let value = expect_ok(
+        eval_runtime_rust_ir_expr(&mut runtime, &expr, &env),
+        "patch path eval",
+    );
     let Value::Record(fields) = value else {
         panic!("expected record");
     };
@@ -722,7 +735,10 @@ v = { a: 1 }[0]
         Ok(value) => panic!("expected index error, got {}", format_value(&value)),
         Err(RuntimeError::Cancelled) => panic!("expected index error, got cancellation"),
         Err(RuntimeError::Error(value)) => {
-            panic!("expected index error, got runtime error {}", format_value(&value))
+            panic!(
+                "expected index error, got runtime error {}",
+                format_value(&value)
+            )
         }
     }
 }
@@ -1092,7 +1108,7 @@ joined = toString (~path[/a/b] / ~path[../c])
     let mut stdlib_modules = crate::stdlib::embedded_stdlib_modules();
     stdlib_modules.append(&mut modules);
     let program = crate::hir::desugar_modules(&stdlib_modules);
-    let mut runtime = build_runtime_from_program(program).expect("runtime");
+    let mut runtime = build_runtime_from_program(&program).expect("runtime");
 
     let u = runtime.ctx.globals.get("u").unwrap();
     let u = expect_ok(runtime.force_value(u), "evaluate u");
@@ -1158,7 +1174,7 @@ x = 10px
         .any(|m| m.defs.iter().any(|d| d.name == "1px"));
     assert!(has_template, "expected embedded stdlib to define `1px`");
 
-    let mut runtime = build_runtime_from_program(program).expect("runtime");
+    let mut runtime = build_runtime_from_program(&program).expect("runtime");
     let x = runtime.ctx.globals.get("x").expect("x");
     let value = runtime.force_value(x);
     if let Err(err) = value {

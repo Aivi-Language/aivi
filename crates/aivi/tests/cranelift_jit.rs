@@ -81,7 +81,7 @@ main = do Effect {
 }
 
 #[test]
-fn cranelift_jit_match_expression_falls_back_to_interpreter() {
+fn cranelift_jit_match_expression() {
     run_jit(
         r#"@no_prelude
 module app.main
@@ -227,9 +227,40 @@ main = do Effect {
 }
 
 #[test]
+fn cranelift_jit_generate_with_bind() {
+    // Covers generate-bind semantics currently delegated through runtime helpers.
+    // This test stays as parity coverage while bind lowering is migrated natively.
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi.testing
+
+numbers = generate {
+  yield 1
+  yield 2
+}
+
+pairSums = generate {
+  x <- numbers
+  y <- numbers
+  yield (x + y)
+}
+
+@test "generate with bind"
+main : Effect Text Unit
+main = do Effect {
+  result <- pure (pairSums (a => b => a + b) 0)
+  assertEq result 12
+}
+"#,
+    );
+}
+
+#[test]
 fn cranelift_jit_resource_block() {
     // Resource blocks are preserved in the RustIR (not kernel-desugared).
-    // The JIT delegates to the interpreter via rt_make_resource.
+    // The JIT constructs a Resource value via runtime helpers.
     // Here we verify that a module with a resource block compiles
     // and runs without crashing (matching integration test coverage).
     run_jit(

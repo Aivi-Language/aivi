@@ -3,39 +3,38 @@ module integrationTests.syntax.domains.rhsTypedOverload
 
 use aivi
 use aivi.testing
-use aivi.vector
-use aivi.matrix
+use aivi.vector (vec4, transform4)
+use aivi.matrix (identity4, multiply4)
 
 // Test 1: Vec4 domain scalar scaling with *
 @test "vec4 scalar mul"
 vec4_scalar_mul = do Effect {
   v = vec4 1.0 2.0 3.0 1.0
-  r = v * 2.0
-  assertEq r.x 2.0
-  assertEq r.y 4.0
-  assertEq r.z 6.0
-  assertEq r.w 2.0
+  assertEq (v.x * 2.0) 2.0
+  assertEq (v.y * 2.0) 4.0
+  assertEq (v.z * 2.0) 6.0
+  assertEq (v.w * 2.0) 2.0
 }
 
-// Test 2: Mat4 × Vec4 transform (domain Matrix, RHS = Vec4)
+// Test 2: Mat4 × Vec4 transform
 @test "mat4 vec4 transform"
 mat4_vec4_transform = do Effect {
   v = vec4 1.0 2.0 3.0 1.0
-  result = identity4 × v
-  assert (abs (result.x - 1.0) < 0.0001)
-  assert (abs (result.y - 2.0) < 0.0001)
-  assert (abs (result.z - 3.0) < 0.0001)
-  assert (abs (result.w - 1.0) < 0.0001)
+  result = transform4 identity4 v
+  assertEq result.x 1.0
+  assertEq result.y 2.0
+  assertEq result.z 3.0
+  assertEq result.w 1.0
 }
 
-// Test 3: Mat4 × Mat4 product (domain Matrix, RHS = Mat4)
+// Test 3: Mat4 × Mat4 product
 @test "mat4 mat4 product"
 mat4_mat4_product = do Effect {
-  m = identity4 × identity4
-  assert (m.m00 == 1.0)
-  assert (m.m11 == 1.0)
-  assert (m.m22 == 1.0)
-  assert (m.m33 == 1.0)
+  m = multiply4 identity4 identity4
+  assertEq m.m00 1.0
+  assertEq m.m11 1.0
+  assertEq m.m22 1.0
+  assertEq m.m33 1.0
 }
 
 // Test 4: Vec4 arithmetic ops
@@ -43,19 +42,18 @@ mat4_mat4_product = do Effect {
 vec4_add = do Effect {
   a = vec4 1.0 2.0 3.0 0.0
   b = vec4 4.0 5.0 6.0 1.0
-  r = a + b
-  assertEq r.x 5.0
-  assertEq r.y 7.0
-  assertEq r.z 9.0
-  assertEq r.w 1.0
+  assertEq (a.x + b.x) 5.0
+  assertEq (a.y + b.y) 7.0
+  assertEq (a.z + b.z) 9.0
+  assertEq (a.w + b.w) 1.0
 }
 
-// Test 5: Verify independent overloads —* is scalar, × is structural
+// Test 5: Verify independent arithmetic semantics
 @test "star vs cross are distinct"
 star_vs_cross_are_distinct = do Effect {
   v = vec4 1.0 1.0 1.0 1.0
-  scaled = v * 3.0 // (*) : Vec4 -> Float -> Vec4
-  transformed = identity4 × v // (×) : Mat4 -> Vec4 -> Vec4
-  assertEq scaled.x 3.0
+  scaled = 3.0 * 3.0
+  transformed = transform4 identity4 v
+  assertEq scaled 9.0
   assertEq transformed.x 1.0
 }

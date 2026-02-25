@@ -125,8 +125,12 @@ impl RuntimeContext {
         initial_state: String,
         transitions: HashMap<String, Vec<MachineEdge>>,
     ) {
-        self.machine_specs.write().insert(machine_name.clone(), transitions);
-        self.machine_states.write().insert(machine_name.clone(), initial_state);
+        self.machine_specs
+            .write()
+            .insert(machine_name.clone(), transitions);
+        self.machine_states
+            .write()
+            .insert(machine_name.clone(), initial_state);
         self.machine_handlers
             .write()
             .retain(|(name, _), _| name != &machine_name);
@@ -177,7 +181,10 @@ impl RuntimeContext {
         drop(specs);
 
         let expected_from = {
-            let mut names: Vec<String> = edges.iter().filter_map(|edge| edge.source.clone()).collect();
+            let mut names: Vec<String> = edges
+                .iter()
+                .filter_map(|edge| edge.source.clone())
+                .collect();
             names.sort();
             names.dedup();
             names

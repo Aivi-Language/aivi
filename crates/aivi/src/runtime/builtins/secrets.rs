@@ -21,7 +21,9 @@ pub(super) fn build_secrets_record() -> Value {
                         move |_| {
                             store
                                 .lock()
-                                .map_err(|_| RuntimeError::Message("secrets store poisoned".to_string()))?
+                                .map_err(|_| {
+                                    RuntimeError::Message("secrets store poisoned".to_string())
+                                })?
                                 .insert(key.clone(), value.clone());
                             Ok(Value::Unit)
                         }
@@ -44,7 +46,9 @@ pub(super) fn build_secrets_record() -> Value {
                         move |_| {
                             let value = store
                                 .lock()
-                                .map_err(|_| RuntimeError::Message("secrets store poisoned".to_string()))?
+                                .map_err(|_| {
+                                    RuntimeError::Message("secrets store poisoned".to_string())
+                                })?
                                 .get(&key)
                                 .cloned();
                             Ok(match value {
@@ -77,7 +81,9 @@ pub(super) fn build_secrets_record() -> Value {
                         move |_| {
                             store
                                 .lock()
-                                .map_err(|_| RuntimeError::Message("secrets store poisoned".to_string()))?
+                                .map_err(|_| {
+                                    RuntimeError::Message("secrets store poisoned".to_string())
+                                })?
                                 .remove(&key);
                             Ok(Value::Unit)
                         }
