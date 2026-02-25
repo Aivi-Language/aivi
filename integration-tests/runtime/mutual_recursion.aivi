@@ -1,0 +1,41 @@
+@no_prelude
+module integrationTests.runtime.mutualRecursion
+
+use aivi
+use aivi.testing
+
+// --- Mutual recursion (even/odd) ---
+
+even: Int -> Bool
+odd: Int -> Bool
+
+even = n => if n == 0 then True else odd (n - 1)
+odd = n => if n == 0 then False else even (n - 1)
+
+@test "even recognizes even numbers"
+evenWorks = do Effect {
+  assertEq (even 0) True
+  assertEq (even 4) True
+  assertEq (even 10) True
+}
+
+@test "odd recognizes odd numbers"
+oddWorks = do Effect {
+  assertEq (odd 1) True
+  assertEq (odd 3) True
+  assertEq (odd 11) True
+}
+
+@test "even rejects odd numbers"
+evenRejectsOdd = do Effect {
+  assertEq (even 1) False
+  assertEq (even 3) False
+  assertEq (even 7) False
+}
+
+@test "odd rejects even numbers"
+oddRejectsEven = do Effect {
+  assertEq (odd 0) False
+  assertEq (odd 2) False
+  assertEq (odd 10) False
+}

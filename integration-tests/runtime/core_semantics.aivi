@@ -1,0 +1,58 @@
+@no_prelude
+module integrationTests.runtime.coreSemantics
+
+use aivi
+use aivi.testing
+
+// --- Pipes and application ---
+
+@test "pipe is function application"
+pipeIsApp = do Effect {
+  inc = x => x + 1
+  result = 41 |> inc
+  assertEq result 42
+}
+
+@test "chained pipes"
+chainedPipes = do Effect {
+  double = x => x * 2
+  inc = x => x + 1
+  result = 5 |> double |> inc
+  assertEq result 11
+}
+
+// --- Currying and partial application ---
+
+@test "currying works"
+curryingWorks = do Effect {
+  add = a b => a + b
+  add2 = add 2
+  assertEq (add2 40) 42
+}
+
+@test "multi-stage currying"
+multiStageCurry = do Effect {
+  add3 = a b c => a + b + c
+  f = add3 10
+  g = f 20
+  assertEq (g 12) 42
+}
+
+// --- Application associativity ---
+
+@test "application is left-associative"
+appLeftAssoc = do Effect {
+  apply = f x => f x
+  inc = x => x + 1
+  assertEq (apply inc 5) 6
+}
+
+// --- Immutable bindings ---
+
+@test "bindings are immutable values"
+immutableBindings = do Effect {
+  x = 42
+  y = x
+  assertEq x y
+  assertEq x 42
+}

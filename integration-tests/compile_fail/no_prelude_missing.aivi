@@ -1,0 +1,11 @@
+// EXPECT-ERROR: type mismatch
+@no_prelude
+module integrationTests.compileFail.typeMismatchArg
+
+use aivi
+
+addOne : Int -> Int
+addOne = n => n + 1
+
+// Passing a Text where Int is expected
+bad = addOne "hello"

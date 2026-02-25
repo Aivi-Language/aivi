@@ -1,0 +1,61 @@
+@no_prelude
+module integrationTests.runtime.closuresHof
+
+use aivi
+use aivi.testing
+
+// --- Closures capture environment ---
+
+makeAdder = n => x => n + x
+
+@test "closure captures outer binding"
+closureCapture = do Effect {
+  addFive = makeAdder 5
+  assertEq (addFive 3) 8
+  assertEq (addFive 10) 15
+}
+
+// --- Higher-order functions ---
+
+map = f xs => xs match
+  | []           => []
+  | [x, ...rest] => [f x, ...(map f rest)]
+
+@test "map with lambda"
+mapLambda = do Effect {
+  result = map (x => x * 2)[1, 2, 3]
+  assertEq result [2, 4, 6]
+}
+
+// --- Function composition ---
+
+compose = f g x => f (g x)
+
+@test "function composition"
+functionComposition = do Effect {
+  double = x => x * 2
+  inc = x => x + 1
+  doubleInc = compose double inc
+  assertEq (doubleInc 3) 8
+}
+
+// --- Nested closures ---
+
+@test "nested closures"
+nestedClosures = do Effect {
+  outer = a => b => c => a + b + c
+  f = outer 10
+  g = f 20
+  assertEq (g 12) 42
+}
+
+// --- Apply twice higher-order ---
+
+applyTwice = f x => f (f x)
+
+@test "apply twice"
+applyTwiceTest = do Effect {
+  inc = x => x + 1
+  assertEq (applyTwice inc 0) 2
+  assertEq (applyTwice (x => x * 2) 3) 12
+}

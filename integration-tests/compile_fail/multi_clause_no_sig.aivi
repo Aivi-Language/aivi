@@ -1,0 +1,8 @@
+// EXPECT-ERROR: unknown name
+@no_prelude
+module integrationTests.compileFail.unknownNameRef
+
+use aivi
+
+// Reference to an undefined name should produce an error
+bad = missingFunction 42

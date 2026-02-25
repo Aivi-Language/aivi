@@ -1,0 +1,50 @@
+@no_prelude
+module integrationTests.runtime.recordsAdvanced
+
+use aivi
+use aivi.testing
+
+// --- Record creation and field access ---
+
+@test "record field access"
+recordFieldAccess = do Effect {
+  r = { x: 1, y: 2, name: "test" }
+  assertEq r.x 1
+  assertEq r.y 2
+  assertEq r.name "test"
+}
+
+// --- Record patching ---
+
+@test "record patch updates field"
+patchUpdates = do Effect {
+  r = { x: 1, y: 2 }
+  r2 = r <| { y: 9 }
+  assertEq r2.y 9
+  assertEq r2.x 1
+}
+
+@test "record patch computed update"
+patchComputed = do Effect {
+  r = { age: 30 }
+  r2 = r <| { age: _ + 1 }
+  assertEq r2.age 31
+}
+
+// --- Nested records ---
+
+@test "nested record access"
+nestedRecordAccess = do Effect {
+  r = { user: { name: "A", age: 25 }, active: True }
+  assertEq r.user.name "A"
+  assertEq r.active True
+}
+
+// --- Record as function argument ---
+
+getName = person => person.name
+
+@test "record passed to function"
+recordToFunction = do Effect {
+  assertEq (getName { name: "Bob", age: 30 }) "Bob"
+}
