@@ -3,10 +3,8 @@ mod i18n;
 mod i18n_codegen;
 pub mod intern;
 mod mcp;
-mod native_rust_backend;
 mod pm;
 mod runtime;
-mod rust_codegen;
 mod rust_ir;
 
 pub mod cst {
@@ -135,7 +133,6 @@ pub use mcp::{
     bundled_specs_manifest, serve_mcp_stdio, serve_mcp_stdio_with_policy, McpManifest, McpPolicy,
     McpResource, McpTool,
 };
-pub use native_rust_backend::{emit_native_rust_source, emit_native_rust_source_lib};
 pub use pm::{
     collect_aivi_sources, edit_cargo_toml_dependencies, ensure_aivi_dependency,
     parse_aivi_cargo_metadata, read_aivi_toml, validate_publish_preflight, write_scaffold,
@@ -143,10 +140,6 @@ pub use pm::{
     CargoDepSpecParseError, CargoManifestEdits, NativeUiTarget, ProjectKind,
 };
 pub use runtime::{run_test_suite, TestFailure, TestReport, TestSuccess};
-pub use rust_codegen::{
-    compile_rust_native, compile_rust_native_lib, compile_rust_native_lib_typed,
-    compile_rust_native_typed,
-};
 pub use rust_ir::cg_type::CgType;
 pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
 

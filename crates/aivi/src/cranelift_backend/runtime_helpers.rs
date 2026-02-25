@@ -891,6 +891,7 @@ pub extern "C" fn aivi_rt_init_base() -> *mut JitRuntimeCtx {
 
 /// Register an AOT/JIT-compiled function as a global in the runtime.
 /// Does not overwrite existing globals (e.g. builtins).
+/// `is_effect`: if non-zero, wraps the function as an `EffectValue::Thunk`.
 #[no_mangle]
 pub extern "C" fn rt_register_jit_fn(
     ctx: *mut JitRuntimeCtx,
@@ -898,6 +899,7 @@ pub extern "C" fn rt_register_jit_fn(
     name_len: i64,
     func_ptr: i64,
     arity: i64,
+    is_effect: i64,
 ) {
     let name = unsafe {
         std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len as usize))
@@ -907,9 +909,32 @@ pub extern "C" fn rt_register_jit_fn(
     if runtime.ctx.globals.get(name).is_some() {
         return;
     }
-    let builtin =
-        super::compile::make_jit_builtin(name, arity as usize, func_ptr as usize);
-    runtime.ctx.globals.set(name.to_string(), builtin);
+    if is_effect != 0 {
+        // Wrap zero-arity effect blocks as EffectValue::Thunk
+        let def_name = name.to_string();
+        let fp = func_ptr as usize;
+        let effect = Value::Effect(std::sync::Arc::new(
+            crate::runtime::values::EffectValue::Thunk {
+                func: std::sync::Arc::new(move |rt: &mut crate::runtime::Runtime| {
+                    let ctx = unsafe { JitRuntimeCtx::from_runtime(rt) };
+                    let ctx_ptr = &ctx as *const JitRuntimeCtx as usize;
+                    let call_args = [ctx_ptr as i64];
+                    let result_ptr = unsafe { super::compile::call_jit_function(fp, &call_args) };
+                    if result_ptr == 0 {
+                        eprintln!("aivi: AOT effect '{}' returned null pointer", def_name);
+                        Ok(Value::Unit)
+                    } else {
+                        Ok(unsafe { abi::unbox_value(result_ptr as *mut Value) })
+                    }
+                }),
+            },
+        ));
+        runtime.ctx.globals.set(name.to_string(), effect);
+    } else {
+        let builtin =
+            super::compile::make_jit_builtin(name, arity as usize, func_ptr as usize);
+        runtime.ctx.globals.set(name.to_string(), builtin);
+    }
 }
 
 /// Evaluate a sigil literal into the correct runtime value.

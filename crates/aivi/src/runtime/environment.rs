@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -48,7 +47,6 @@ impl Env {
 
 pub(crate) struct RuntimeContext {
     pub(crate) globals: Env,
-    debug_call_id: AtomicU64,
     constructor_ordinals: HashMap<String, Option<usize>>,
     machine_specs: RwLock<HashMap<String, HashMap<String, Vec<MachineEdge>>>>,
     machine_states: RwLock<HashMap<String, String>>,
@@ -103,16 +101,11 @@ impl RuntimeContext {
     ) -> Self {
         Self {
             globals,
-            debug_call_id: AtomicU64::new(1),
             constructor_ordinals,
             machine_specs: RwLock::new(HashMap::new()),
             machine_states: RwLock::new(HashMap::new()),
             machine_handlers: RwLock::new(HashMap::new()),
         }
-    }
-
-    pub(crate) fn next_debug_call_id(&self) -> u64 {
-        self.debug_call_id.fetch_add(1, Ordering::Relaxed)
     }
 
     pub(crate) fn constructor_ordinal(&self, name: &str) -> Option<Option<usize>> {

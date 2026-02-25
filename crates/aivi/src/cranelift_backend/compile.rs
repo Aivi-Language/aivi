@@ -91,6 +91,7 @@ pub fn run_cranelift_jit(
         arity: usize,
         param_types: Vec<Option<CgType>>,
         return_type: Option<CgType>,
+        is_effect_block: bool,
     }
     let mut declared_defs: Vec<DeclaredDef> = Vec::new();
     let mut declared_names: HashSet<String> = HashSet::new();
@@ -100,17 +101,6 @@ pub fn run_cranelift_jit(
     for ir_module in &rust_program.modules {
         for def in &ir_module.defs {
             let (params, body) = peel_params(&def.expr);
-            if params.is_empty() {
-                if matches!(
-                    body,
-                    RustIrExpr::Block {
-                        block_kind: RustIrBlockKind::Do { .. },
-                        ..
-                    }
-                ) {
-                    continue;
-                }
-            }
             let qualified = format!("{}.{}", ir_module.name, def.name);
             let is_stdlib_module = ir_module.name.starts_with("aivi.");
             if params.len() > 15 {
@@ -157,6 +147,15 @@ pub fn run_cranelift_jit(
                 (vec![None; arity], None)
             };
 
+            let is_effect_block = params.is_empty()
+                && matches!(
+                    body,
+                    RustIrExpr::Block {
+                        block_kind: RustIrBlockKind::Do { .. },
+                        ..
+                    }
+                );
+
             declared_defs.push(DeclaredDef {
                 def,
                 module_name: ir_module.name.clone(),
@@ -166,6 +165,7 @@ pub fn run_cranelift_jit(
                 arity,
                 param_types: param_types.clone(),
                 return_type: return_type.clone(),
+                is_effect_block,
             });
 
             // Register only under the qualified name — short names collide across modules
@@ -188,6 +188,7 @@ pub fn run_cranelift_jit(
         qualified: String,
         func_id: cranelift_module::FuncId,
         arity: usize,
+        is_effect_block: bool,
     }
     let mut pending: Vec<PendingDef> = Vec::new();
     let mut lambda_counter: usize = 0;
@@ -226,6 +227,7 @@ pub fn run_cranelift_jit(
                     qualified: dd.qualified.clone(),
                     func_id: dd.func_id,
                     arity: dd.arity,
+                    is_effect_block: dd.is_effect_block,
                 });
                 // Register under qualified name only
                 compiled_decls.insert(
@@ -255,9 +257,34 @@ pub fn run_cranelift_jit(
     let mut compiled_globals: HashMap<String, Value> = HashMap::new();
     for pd in &pending {
         let ptr = module.get_finalized_function(pd.func_id);
-        let jit_value = make_jit_builtin(&pd.qualified, pd.arity, ptr as usize);
-        compiled_globals.insert(pd.name.clone(), jit_value.clone());
-        compiled_globals.insert(pd.qualified.clone(), jit_value);
+        if pd.is_effect_block {
+            // Zero-arity effect blocks: wrap in EffectValue::Thunk to defer execution.
+            // The thunk calls the JIT function only when the effect is run.
+            let def_name = pd.qualified.clone();
+            let func_ptr = ptr as usize;
+            let effect = Value::Effect(std::sync::Arc::new(
+                crate::runtime::values::EffectValue::Thunk {
+                    func: std::sync::Arc::new(move |runtime: &mut crate::runtime::Runtime| {
+                        let ctx = unsafe { JitRuntimeCtx::from_runtime(runtime) };
+                        let ctx_ptr = &ctx as *const JitRuntimeCtx as usize;
+                        let call_args = [ctx_ptr as i64];
+                        let result_ptr = unsafe { call_jit_function(func_ptr, &call_args) };
+                        if result_ptr == 0 {
+                            eprintln!("aivi: JIT effect '{}' returned null pointer", def_name);
+                            Ok(Value::Unit)
+                        } else {
+                            Ok(unsafe { super::abi::unbox_value(result_ptr as *mut Value) })
+                        }
+                    }),
+                },
+            ));
+            compiled_globals.insert(pd.name.clone(), effect.clone());
+            compiled_globals.insert(pd.qualified.clone(), effect);
+        } else {
+            let jit_value = make_jit_builtin(&pd.qualified, pd.arity, ptr as usize);
+            compiled_globals.insert(pd.name.clone(), jit_value.clone());
+            compiled_globals.insert(pd.qualified.clone(), jit_value);
+        }
     }
 
     // 8. Install compiled globals into the runtime (overriding interpreter thunks).
@@ -330,6 +357,7 @@ pub fn compile_to_object(
         arity: usize,
         param_types: Vec<Option<CgType>>,
         return_type: Option<CgType>,
+        is_effect_block: bool,
     }
     let mut declared_defs: Vec<DeclaredDef> = Vec::new();
     let mut declared_names: HashSet<String> = HashSet::new();
@@ -338,17 +366,6 @@ pub fn compile_to_object(
     for ir_module in &rust_program.modules {
         for def in &ir_module.defs {
             let (params, body) = peel_params(&def.expr);
-            if params.is_empty() {
-                if matches!(
-                    body,
-                    RustIrExpr::Block {
-                        block_kind: RustIrBlockKind::Do { .. },
-                        ..
-                    }
-                ) {
-                    continue;
-                }
-            }
             let qualified = format!("{}.{}", ir_module.name, def.name);
             let is_stdlib_module = ir_module.name.starts_with("aivi.");
             if params.len() > 15 {
@@ -395,6 +412,15 @@ pub fn compile_to_object(
                 (vec![None; arity], None)
             };
 
+            let is_effect_block = params.is_empty()
+                && matches!(
+                    body,
+                    RustIrExpr::Block {
+                        block_kind: RustIrBlockKind::Do { .. },
+                        ..
+                    }
+                );
+
             declared_defs.push(DeclaredDef {
                 def,
                 module_name: ir_module.name.clone(),
@@ -404,6 +430,7 @@ pub fn compile_to_object(
                 arity,
                 param_types: param_types.clone(),
                 return_type: return_type.clone(),
+                is_effect_block,
             });
         }
     }
@@ -450,6 +477,7 @@ pub fn compile_to_object(
                     qualified_name: dd.qualified.clone(),
                     func_id: dd.func_id,
                     arity: dd.arity,
+                    is_effect_block: dd.is_effect_block,
                 });
             }
             Err(e) => {
@@ -480,6 +508,7 @@ pub(crate) struct AotFuncEntry {
     pub(crate) qualified_name: String,
     pub(crate) func_id: cranelift_module::FuncId,
     pub(crate) arity: usize,
+    pub(crate) is_effect_block: bool,
 }
 
 /// Generate the AOT entry point `__aivi_main` that:
@@ -518,6 +547,7 @@ fn generate_aot_entry<M: Module>(
         qual_name_gv: cranelift_codegen::ir::GlobalValue,
         qual_name_len: usize,
         arity: usize,
+        is_effect_block: bool,
     }
     let mut regs = Vec::new();
 
@@ -569,6 +599,7 @@ fn generate_aot_entry<M: Module>(
             qual_name_gv: qual_gv,
             qual_name_len: entry.qualified_name.len(),
             arity: entry.arity,
+            is_effect_block: entry.is_effect_block,
         });
     }
 
@@ -598,19 +629,20 @@ fn generate_aot_entry<M: Module>(
         for reg in &regs {
             let func_ptr = builder.ins().func_addr(PTR, reg.func_ref);
             let arity_val = builder.ins().iconst(PTR, reg.arity as i64);
+            let is_effect_val = builder.ins().iconst(PTR, if reg.is_effect_block { 1i64 } else { 0i64 });
 
             let short_ptr = builder.ins().global_value(PTR, reg.short_name_gv);
             let short_len = builder.ins().iconst(PTR, reg.short_name_len as i64);
             builder.ins().call(
                 helper_refs.rt_register_jit_fn,
-                &[ctx_param, short_ptr, short_len, func_ptr, arity_val],
+                &[ctx_param, short_ptr, short_len, func_ptr, arity_val, is_effect_val],
             );
 
             let qual_ptr = builder.ins().global_value(PTR, reg.qual_name_gv);
             let qual_len = builder.ins().iconst(PTR, reg.qual_name_len as i64);
             builder.ins().call(
                 helper_refs.rt_register_jit_fn,
-                &[ctx_param, qual_ptr, qual_len, func_ptr, arity_val],
+                &[ctx_param, qual_ptr, qual_len, func_ptr, arity_val, is_effect_val],
             );
         }
 
