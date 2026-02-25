@@ -6,7 +6,7 @@ module aivi.geometry
 export Point2, Point3, Line2, Segment2, Ray3, Polygon
 export point2, point3, line2, segment2, ray3
 export distance, midpoint, area
-export Geometry
+export domain Geometry
 
 use aivi
 use aivi.math (sqrt, abs)

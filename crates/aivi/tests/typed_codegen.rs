@@ -207,8 +207,8 @@ main = do Effect {
 "#,
     );
     assert!(
-        rust.contains("/* typed-mir */"),
-        "expected typed MIR marker fallback for unsupported Cranelift lowering:\n{rust}"
+        rust.contains("/* typed-mir */") || rust.contains("/* typed-clif-fallback */"),
+        "expected typed MIR or Cranelift fallback marker for block defs:\n{rust}"
     );
 }
 

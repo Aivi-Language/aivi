@@ -14,7 +14,7 @@ export countActiveForTenant, canStartForTenant
 export metricScheduled, metricStarted, metricRetried, metricCompleted
 export logScheduled, logLease, logRetry, logCompleted
 export WorkerDecision, WorkerState, chooseWorkerAction, renewLease, planRetryRun
-export Scheduler
+export domain Scheduler
 
 use aivi
 use aivi.chronos.instant (Timestamp)

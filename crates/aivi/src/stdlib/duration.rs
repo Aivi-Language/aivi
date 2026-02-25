@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.duration
 export Span, negateDelta
-export Duration
+export domain Duration
 
 use aivi
 

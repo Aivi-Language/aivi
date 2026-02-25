@@ -7,7 +7,7 @@ export Date, DateTime, EndOfMonth
 export isLeapYear, daysInMonth, endOfMonth
 export addDays, addMonths, addYears, negateDelta
 export now
-export Calendar
+export domain Calendar
 
 use aivi
 

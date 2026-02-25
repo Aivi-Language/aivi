@@ -4,7 +4,7 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("use std::collections::HashMap;\n");
     out.push_str("use std::sync::{Arc, Mutex};\n\n");
     out.push_str(
-        "use aivi_native_runtime::{get_builtin, ok as aivi_ok, runtime_value_abi_handshake, BuiltinImpl, BuiltinValue, EffectValue, KeyValue, ResourceValue, Runtime, RuntimeError, R, Value};\n",
+        "use aivi_native_runtime::{get_builtin, ok as aivi_ok, runtime_value_abi_handshake, BuiltinImpl, BuiltinValue, EffectValue, ImHashMap, KeyValue, ResourceValue, Runtime, RuntimeError, R, Value};\n",
     );
     out.push_str("const AIVI_EXPECTED_VALUE_ABI_MAJOR: u16 = 0;\n");
     out.push_str("const AIVI_EXPECTED_VALUE_ABI_MINOR: u16 = 1;\n\n");
@@ -113,7 +113,7 @@ pub(super) fn emit_runtime_prelude() -> String {
     out.push_str("                let Some(key) = KeyValue::try_from_value(&idx) else {\n");
     out.push_str("                    return Err(RuntimeError::Message(format!(\"map key is not a valid key type: {}\", aivi_native_runtime::format_value(&idx))));\n");
     out.push_str("                };\n");
-    out.push_str("                let mut entries = HashMap::new();\n");
+    out.push_str("                let mut entries = ImHashMap::new();\n");
     out.push_str(
         "                let new_val = patch_path(rt, Value::Unit, &path[1..], updater)?;\n",
     );
