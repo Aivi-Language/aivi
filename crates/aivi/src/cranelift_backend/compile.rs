@@ -30,17 +30,14 @@ use super::lower::{
 /// Pointer type used throughout.
 const PTR: cranelift_codegen::ir::Type = types::I64;
 
-/// Compile and execute an AIVI program entirely via Cranelift JIT.
-///
-/// This replaces `run_native_jit`: every definition is compiled to native
-/// machine code, then `main` is executed.
-pub fn run_cranelift_jit(
+/// Compile an AIVI program into a runtime populated with Cranelift-compiled globals.
+pub(crate) fn compile_cranelift_runtime(
     program: HirProgram,
     cg_types: HashMap<String, HashMap<String, CgType>>,
-    _monomorph_plan: HashMap<String, Vec<CgType>>,
-) -> Result<(), AiviError> {
+    monomorph_plan: HashMap<String, Vec<CgType>>,
+) -> Result<Runtime, AiviError> {
     // 1. Build the runtime context for globals/builtins/effects.
-    let mut runtime = build_runtime_from_program(&program)?;
+    let runtime = build_runtime_from_program(&program)?;
 
     // 2. Lower HIR → Kernel → RustIR
     let kernel_program = kernel::lower_hir(program);
@@ -67,7 +64,7 @@ pub fn run_cranelift_jit(
     //     based on the call-site type recordings from Phase 6.
     //     Single-instantiation defs get their cg_type set directly.
     //     Multi-instantiation defs get cloned with specialized names.
-    let spec_map = monomorphize_program(&mut rust_program.modules, &_monomorph_plan);
+    let spec_map = monomorphize_program(&mut rust_program.modules, &monomorph_plan);
 
     // 4. Create JIT module with runtime helpers registered
     let mut module =
@@ -308,7 +305,19 @@ pub fn run_cranelift_jit(
         runtime.ctx.globals.set(name, value);
     }
 
-    // 9. Run main
+    Ok(runtime)
+}
+
+/// Compile and execute an AIVI program entirely via Cranelift JIT.
+///
+/// This replaces `run_native_jit`: every definition is compiled to native
+/// machine code, then `main` is executed.
+pub fn run_cranelift_jit(
+    program: HirProgram,
+    cg_types: HashMap<String, HashMap<String, CgType>>,
+    monomorph_plan: HashMap<String, Vec<CgType>>,
+) -> Result<(), AiviError> {
+    let mut runtime = compile_cranelift_runtime(program, cg_types, monomorph_plan)?;
     run_main_effect(&mut runtime)
 }
 

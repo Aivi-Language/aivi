@@ -136,7 +136,12 @@ pub fn run_test_suite(
     surface_modules: &[crate::surface::Module],
 ) -> Result<TestReport, AiviError> {
     const TEST_FUEL_BUDGET: u64 = 500_000;
-    let mut runtime = build_runtime_from_program_scoped(program, surface_modules)?;
+    let inferred = crate::infer_value_types_full(surface_modules);
+    let mut runtime = crate::cranelift_backend::compile_cranelift_runtime(
+        program,
+        inferred.cg_types,
+        inferred.monomorph_plan,
+    )?;
     let mut report = TestReport {
         passed: 0,
         failed: 0,

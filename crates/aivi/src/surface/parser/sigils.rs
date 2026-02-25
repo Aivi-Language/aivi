@@ -650,6 +650,29 @@ impl Parser {
             }
         }
 
+        fn compile_time_literal_expr_text(expr: &Expr) -> Option<String> {
+            match expr {
+                Expr::Literal(Literal::Number { text, .. }) => Some(text.clone()),
+                Expr::Literal(Literal::String { text, .. }) => Some(text.clone()),
+                Expr::Literal(Literal::Bool { value, .. }) => Some(value.to_string()),
+                Expr::Literal(Literal::DateTime { text, .. }) => Some(text.clone()),
+                Expr::UnaryNeg { expr, .. } => {
+                    let inner = compile_time_literal_expr_text(expr)?;
+                    if inner.starts_with('-') {
+                        Some(inner)
+                    } else {
+                        Some(format!("-{inner}"))
+                    }
+                }
+                Expr::Suffixed { base, suffix, .. } => Some(format!(
+                    "{}{}",
+                    compile_time_literal_expr_text(base)?,
+                    suffix.name
+                )),
+                _ => None,
+            }
+        }
+
         // Compute the body offset inside the full sigil token (`~<gtk> ... </gtk>`).
         let body_start_offset = sigil
             .text
@@ -1202,7 +1225,7 @@ impl Parser {
                                             continue;
                                         }
                                         let Some(prop_value_text) =
-                                            compile_time_expr_text(&field.value)
+                                            compile_time_literal_expr_text(&field.value)
                                         else {
                                             this.emit_diag(
                                                 "E1613",

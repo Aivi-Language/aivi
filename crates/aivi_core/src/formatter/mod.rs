@@ -38,11 +38,31 @@ pub fn format_text(content: &str) -> String {
 }
 
 pub fn format_text_with_options(content: &str, options: FormatOptions) -> String {
+    fn contains_multiline_matrix(text: &str) -> bool {
+        let mut start = 0usize;
+        while let Some(rel) = text[start..].find("~mat[") {
+            let open = start + rel;
+            if let Some(close_rel) = text[open + 5..].find(']') {
+                let close = open + 5 + close_rel;
+                if text[open..=close].contains('\n') {
+                    return true;
+                }
+                start = close + 1;
+            } else {
+                break;
+            }
+        }
+        false
+    }
+
     // Transformations like semicolon removal or comma stripping can change the
     // token stream on re-lexing (e.g. `& ; &` → `& &` → `&&`).  Iterate
     // until a fixed point is reached (typically 1-3 passes).
     let mut result = engine::format_text_with_options(content, options);
     for _ in 0..4 {
+        if contains_multiline_matrix(&result) {
+            break;
+        }
         let next = engine::format_text_with_options(&result, options);
         if next == result {
             break;
