@@ -914,3 +914,177 @@ fn i18n_message_parts_value(parts: &[MessagePart]) -> Value {
     }
     Value::List(Arc::new(out))
 }
+
+/// Evaluate a sigil literal into its runtime value.
+///
+/// Extracted as a standalone function so both the interpreter and JIT can use it.
+pub(crate) fn eval_sigil_literal(
+    tag: &str,
+    body: &str,
+    flags: &str,
+) -> Result<Value, RuntimeError> {
+    match tag {
+        "r" => {
+            let mut builder = RegexBuilder::new(body);
+            for flag in flags.chars() {
+                match flag {
+                    'i' => {
+                        builder.case_insensitive(true);
+                    }
+                    'm' => {
+                        builder.multi_line(true);
+                    }
+                    's' => {
+                        builder.dot_matches_new_line(true);
+                    }
+                    'x' => {
+                        builder.ignore_whitespace(true);
+                    }
+                    _ => {}
+                }
+            }
+            let regex = builder.build().map_err(|err| {
+                RuntimeError::Message(format!("invalid regex literal: {err}"))
+            })?;
+            Ok(Value::Regex(Arc::new(regex)))
+        }
+        "u" | "url" => {
+            let parsed = Url::parse(body).map_err(|err| {
+                RuntimeError::Message(format!("invalid url literal: {err}"))
+            })?;
+            Ok(Value::Record(Arc::new(url_to_record(&parsed))))
+        }
+        "p" | "path" => {
+            let cleaned = body.trim().replace('\\', "/");
+            if cleaned.contains('\0') {
+                return Err(RuntimeError::Message(
+                    "invalid path literal: contains NUL byte".to_string(),
+                ));
+            }
+            let absolute = cleaned.starts_with('/');
+            let mut segments: Vec<String> = Vec::new();
+            for raw in cleaned.split('/') {
+                if raw.is_empty() || raw == "." {
+                    continue;
+                }
+                if raw == ".." {
+                    if let Some(last) = segments.last() {
+                        if last != ".." {
+                            segments.pop();
+                            continue;
+                        }
+                    }
+                    if !absolute {
+                        segments.push("..".to_string());
+                    }
+                    continue;
+                }
+                segments.push(raw.to_string());
+            }
+
+            let mut map = HashMap::new();
+            map.insert("absolute".to_string(), Value::Bool(absolute));
+            map.insert(
+                "segments".to_string(),
+                Value::List(Arc::new(
+                    segments.into_iter().map(Value::Text).collect::<Vec<_>>(),
+                )),
+            );
+            Ok(Value::Record(Arc::new(map)))
+        }
+        "d" => {
+            let date = NaiveDate::parse_from_str(body, "%Y-%m-%d").map_err(|err| {
+                RuntimeError::Message(format!("invalid date literal: {err}"))
+            })?;
+            Ok(Value::Record(Arc::new(date_to_record(date))))
+        }
+        "t" | "dt" => {
+            let _ = chrono::DateTime::parse_from_rfc3339(body).map_err(|err| {
+                RuntimeError::Message(format!("invalid datetime literal: {err}"))
+            })?;
+            Ok(Value::DateTime(body.to_string()))
+        }
+        "tz" => {
+            let zone_id = body.trim();
+            let _: chrono_tz::Tz = zone_id.parse().map_err(|_| {
+                RuntimeError::Message(format!("invalid timezone id: {zone_id}"))
+            })?;
+            let mut map = HashMap::new();
+            map.insert("id".to_string(), Value::Text(zone_id.to_string()));
+            Ok(Value::Record(Arc::new(map)))
+        }
+        "zdt" => {
+            let text = body.trim();
+            let (dt_text, zone_id) = parse_zdt_parts(text)?;
+            let tz: chrono_tz::Tz = zone_id.parse().map_err(|_| {
+                RuntimeError::Message(format!("invalid timezone id: {zone_id}"))
+            })?;
+
+            let zdt = if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(dt_text) {
+                parsed.with_timezone(&tz)
+            } else {
+                let naive = parse_naive_datetime(dt_text)?;
+                tz.from_local_datetime(&naive)
+                    .single()
+                    .ok_or_else(|| {
+                        RuntimeError::Message("ambiguous or invalid local time".to_string())
+                    })?
+            };
+
+            let offset_millis =
+                i64::from(chrono::offset::Offset::fix(zdt.offset()).local_minus_utc()) * 1000;
+
+            let mut dt_map = HashMap::new();
+            dt_map.insert("year".to_string(), Value::Int(zdt.year() as i64));
+            dt_map.insert("month".to_string(), Value::Int(zdt.month() as i64));
+            dt_map.insert("day".to_string(), Value::Int(zdt.day() as i64));
+            dt_map.insert("hour".to_string(), Value::Int(zdt.hour() as i64));
+            dt_map.insert("minute".to_string(), Value::Int(zdt.minute() as i64));
+            dt_map.insert("second".to_string(), Value::Int(zdt.second() as i64));
+            dt_map.insert(
+                "millisecond".to_string(),
+                Value::Int(zdt.timestamp_subsec_millis() as i64),
+            );
+
+            let mut zone_map = HashMap::new();
+            zone_map.insert("id".to_string(), Value::Text(zone_id.to_string()));
+
+            let mut offset_map = HashMap::new();
+            offset_map.insert("millis".to_string(), Value::Int(offset_millis));
+
+            let mut map = HashMap::new();
+            map.insert("dateTime".to_string(), Value::Record(Arc::new(dt_map)));
+            map.insert("zone".to_string(), Value::Record(Arc::new(zone_map)));
+            map.insert("offset".to_string(), Value::Record(Arc::new(offset_map)));
+            Ok(Value::Record(Arc::new(map)))
+        }
+        "k" => {
+            validate_key_text(body).map_err(|msg| {
+                RuntimeError::Message(format!("invalid i18n key literal: {msg}"))
+            })?;
+            let mut map = HashMap::new();
+            map.insert("tag".to_string(), Value::Text(tag.to_string()));
+            map.insert("body".to_string(), Value::Text(body.trim().to_string()));
+            map.insert("flags".to_string(), Value::Text(flags.to_string()));
+            Ok(Value::Record(Arc::new(map)))
+        }
+        "m" => {
+            let parsed = parse_message_template(body).map_err(|msg| {
+                RuntimeError::Message(format!("invalid i18n message literal: {msg}"))
+            })?;
+            let mut map = HashMap::new();
+            map.insert("tag".to_string(), Value::Text(tag.to_string()));
+            map.insert("body".to_string(), Value::Text(body.to_string()));
+            map.insert("flags".to_string(), Value::Text(flags.to_string()));
+            map.insert("parts".to_string(), i18n_message_parts_value(&parsed.parts));
+            Ok(Value::Record(Arc::new(map)))
+        }
+        _ => {
+            let mut map = HashMap::new();
+            map.insert("tag".to_string(), Value::Text(tag.to_string()));
+            map.insert("body".to_string(), Value::Text(body.to_string()));
+            map.insert("flags".to_string(), Value::Text(flags.to_string()));
+            Ok(Value::Record(Arc::new(map)))
+        }
+    }
+}
