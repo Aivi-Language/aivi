@@ -153,6 +153,17 @@ mod tests {
     }
 
     #[test]
+    fn format_gtk_sigil_keeps_short_wrapped_record_attribute_values_inline() {
+        let text = "module demo\n\nx=~<gtk><object class=\"GtkBox\" props={ { orientation: \"vertical\", spacing: 0, marginStart: 8 } }></object></gtk>\n";
+        let formatted = format_text(text);
+        assert!(
+            formatted
+                .contains("<object class=\"GtkBox\" props={{ orientation: \"vertical\", spacing: 0, marginStart: 8 }}>")
+        );
+        assert!(!formatted.contains("\n        orientation: \"vertical\",\n"));
+    }
+
+    #[test]
     fn format_gtk_sigil_formats_wrapped_record_attribute_values() {
         let text = "module demo\n\nx=~<gtk><object class=\"GtkBox\" props={ { orientation: \"vertical\", spacing: 0, marginStart: 8, marginEnd: 8, marginBottom: 8 } }></object></gtk>\n";
         let formatted = format_text(text);
@@ -162,6 +173,18 @@ mod tests {
         assert!(formatted.contains("\n        marginStart: 8,\n"));
         assert!(formatted.contains("\n        marginEnd: 8,\n"));
         assert!(formatted.contains("\n        marginBottom: 8\n"));
+        assert!(formatted.contains("\n      }}>\n"));
+    }
+
+    #[test]
+    fn format_html_sigil_formats_long_wrapped_record_attribute_values() {
+        let text = "module demo\n\nx=~<html><div props={ { a: 1, b: 2, c: 3, d: 4 } }></div></html>\n";
+        let formatted = format_text(text);
+        assert!(formatted.contains("<div props={{\n"));
+        assert!(formatted.contains("\n        a: 1,\n"));
+        assert!(formatted.contains("\n        b: 2,\n"));
+        assert!(formatted.contains("\n        c: 3,\n"));
+        assert!(formatted.contains("\n        d: 4\n"));
         assert!(formatted.contains("\n      }}>\n"));
     }
 
