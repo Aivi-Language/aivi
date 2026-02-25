@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.chronos.timezone";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.chronos.timezone
-export TimeZone, ZonedDateTime
+export domain TimeZone, domain ZonedDateTime
 
 use aivi
 use aivi.chronos.calendar (DateTime)

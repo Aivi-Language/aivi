@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.number.quaternion
 export fromAxisAngle, conjugate, magnitude, normalize
-export Quaternion
+export domain Quaternion
 
 use aivi
 use aivi.math (sqrt, sin, cos, radians)

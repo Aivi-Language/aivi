@@ -355,4 +355,42 @@ pub(super) fn register_builtins(env: &mut HashMap<String, Value>) {
     env.insert("logger".to_string(), build_log_record());
     env.insert("database".to_string(), build_database_record());
     env.insert("i18n".to_string(), build_i18n_record());
+
+    // Core introspection builtins
+    env.insert(
+        "constructorName".to_string(),
+        builtin("constructorName", 1, |mut args, _| {
+            let value = args.pop().unwrap();
+            match value {
+                Value::Constructor { name, .. } => Ok(Value::Text(name)),
+                other => Err(RuntimeError::Message(format!(
+                    "constructorName expects an ADT constructor value, got {}",
+                    format_value(&other)
+                ))),
+            }
+        }),
+    );
+
+    env.insert(
+        "constructorOrdinal".to_string(),
+        builtin("constructorOrdinal", 1, |_args, _| {
+            // In the native runtime we don't have the type registry, so
+            // constructorOrdinal always returns -1 (unknown).
+            Ok(Value::Int(-1))
+        }),
+    );
+
+    env.insert(
+        "__machine_on".to_string(),
+        builtin("__machine_on", 2, |mut args, _| {
+            // __machine_on : event -> handler -> MachineSpec
+            // Returns a record describing one event handler for a state machine.
+            let handler = args.pop().unwrap();
+            let event = args.pop().unwrap();
+            let mut fields = HashMap::new();
+            fields.insert("event".to_string(), event);
+            fields.insert("handler".to_string(), handler);
+            Ok(Value::Record(Arc::new(fields)))
+        }),
+    );
 }

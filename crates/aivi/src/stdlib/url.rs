@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.url";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.url
-export Url
+export domain Url
 export parse, toString
 
 use aivi

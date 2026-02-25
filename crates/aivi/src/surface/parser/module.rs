@@ -350,9 +350,23 @@ impl Parser {
         } else if self.match_keyword("instance") {
             self.parse_instance_decl(decorators.clone())
                 .map(ModuleItem::InstanceDecl)
-        } else if self.match_keyword("domain") {
-            self.parse_domain_decl(decorators.clone())
-                .map(ModuleItem::DomainDecl)
+        } else if self.peek_keyword("domain") {
+            // Check if this is `export domain DomainName over ...` (a domain declaration)
+            // vs. `export domain DomainName` (an export-list entry).
+            // Only parse as a declaration if `over` keyword follows the name.
+            let looks_like_decl = self.tokens.get(self.pos + 1).is_some_and(|tok| {
+                tok.kind == TokenKind::Ident
+            }) && self.tokens.get(self.pos + 2).is_some_and(|tok| {
+                tok.kind == TokenKind::Ident && tok.text == "over"
+            });
+            if looks_like_decl {
+                let _ = self.match_keyword("domain");
+                self.parse_domain_decl(decorators.clone())
+                    .map(ModuleItem::DomainDecl)
+            } else {
+                // Not a domain declaration — let parse_export_list handle `domain Name` syntax.
+                None
+            }
         } else if self.match_keyword("machine") {
             self.parse_machine_decl(decorators.clone())
                 .map(ModuleItem::MachineDecl)

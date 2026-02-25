@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.number";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.number
-export BigInt, Rational, Decimal, Complex, i
+export domain BigInt, domain Rational, domain Decimal, domain Complex, i
 export fromInt, toInt
 export fromFloat, toFloat, round
 export normalize, numerator, denominator

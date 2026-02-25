@@ -5,7 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.linear_algebra
 export Vec, Mat
 export dot, matMul, solve2x2
-export LinearAlgebra
+export domain LinearAlgebra
 
 use aivi
 

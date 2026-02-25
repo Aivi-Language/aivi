@@ -10,6 +10,7 @@ pub use abi::{
     AIVI_VALUE_ABI_PATCH, AIVI_VALUE_ABI_VERSION,
 };
 pub use builtins::get_builtin;
+pub use im::HashMap as ImHashMap;
 pub use values::ClosureValue;
 pub use values::KeyValue;
 pub use values::{

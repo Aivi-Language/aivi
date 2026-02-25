@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.number.decimal
 export fromFloat, toFloat, round
-export Decimal
+export domain Decimal
 export 1dec
 
 use aivi
