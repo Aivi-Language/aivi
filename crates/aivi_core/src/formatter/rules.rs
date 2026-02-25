@@ -686,10 +686,14 @@
             return None;
         }
         let fields = split_top_level_commas(inner);
-        if fields.len() < 2 {
+        if fields.is_empty() {
             return None;
         }
         Some((name.trim().to_string(), fields))
+    }
+
+    fn format_wrapped_record_attr_inline(name: &str, fields: &[String]) -> String {
+        format!("{name}={{{{ {} }}}}", fields.join(", "))
     }
 
     fn format_markup_sigil(text: &str) -> Option<Vec<String>> {
@@ -785,35 +789,58 @@
                         .find_map(|(idx, attr)| parse_wrapped_record_attr(attr).map(|v| (idx, v)));
 
                     if let Some((wrapped_idx, (wrapped_name, wrapped_fields))) = wrapped {
-                        let mut open_line = format!("{indent}<{tag}");
-                        for attr in attrs.iter().take(wrapped_idx) {
-                            open_line.push(' ');
-                            open_line.push_str(attr);
-                        }
-                        open_line.push(' ');
-                        open_line.push_str(&format!("{wrapped_name}={{{{"));
-                        lines.push(open_line);
-
-                        let field_indent = format!("{indent}  ");
-                        for (idx, field) in wrapped_fields.iter().enumerate() {
-                            if idx + 1 == wrapped_fields.len() {
-                                lines.push(format!("{field_indent}{field}"));
-                            } else {
-                                lines.push(format!("{field_indent}{field},"));
+                        if wrapped_fields.len() <= 3 {
+                            let mut line = format!("{indent}<{tag}");
+                            for attr in attrs.iter().take(wrapped_idx) {
+                                line.push(' ');
+                                line.push_str(attr);
                             }
-                        }
-
-                        let mut close_line = format!("{indent}}}}}");
-                        for attr in attrs.iter().skip(wrapped_idx + 1) {
-                            close_line.push(' ');
-                            close_line.push_str(attr);
-                        }
-                        if self_close {
-                            close_line.push_str(" />");
+                            line.push(' ');
+                            line.push_str(&format_wrapped_record_attr_inline(
+                                &wrapped_name,
+                                &wrapped_fields,
+                            ));
+                            for attr in attrs.iter().skip(wrapped_idx + 1) {
+                                line.push(' ');
+                                line.push_str(attr);
+                            }
+                            if self_close {
+                                line.push_str(" />");
+                            } else {
+                                line.push('>');
+                            }
+                            lines.push(line);
                         } else {
-                            close_line.push('>');
+                            let mut open_line = format!("{indent}<{tag}");
+                            for attr in attrs.iter().take(wrapped_idx) {
+                                open_line.push(' ');
+                                open_line.push_str(attr);
+                            }
+                            open_line.push(' ');
+                            open_line.push_str(&format!("{wrapped_name}={{{{"));
+                            lines.push(open_line);
+
+                            let field_indent = format!("{indent}  ");
+                            for (idx, field) in wrapped_fields.iter().enumerate() {
+                                if idx + 1 == wrapped_fields.len() {
+                                    lines.push(format!("{field_indent}{field}"));
+                                } else {
+                                    lines.push(format!("{field_indent}{field},"));
+                                }
+                            }
+
+                            let mut close_line = format!("{indent}}}}}");
+                            for attr in attrs.iter().skip(wrapped_idx + 1) {
+                                close_line.push(' ');
+                                close_line.push_str(attr);
+                            }
+                            if self_close {
+                                close_line.push_str(" />");
+                            } else {
+                                close_line.push('>');
+                            }
+                            lines.push(close_line);
                         }
-                        lines.push(close_line);
                     } else {
                         let mut line = format!("{indent}<{tag}");
                         for attr in attrs {
