@@ -38,7 +38,18 @@ pub fn format_text(content: &str) -> String {
 }
 
 pub fn format_text_with_options(content: &str, options: FormatOptions) -> String {
-    engine::format_text_with_options(content, options)
+    // Transformations like semicolon removal or comma stripping can change the
+    // token stream on re-lexing (e.g. `& ; &` → `& &` → `&&`).  Iterate
+    // until a fixed point is reached (typically 1-3 passes).
+    let mut result = engine::format_text_with_options(content, options);
+    for _ in 0..4 {
+        let next = engine::format_text_with_options(&result, options);
+        if next == result {
+            break;
+        }
+        result = next;
+    }
+    result
 }
 
 fn is_op(text: &str) -> bool {
@@ -139,5 +150,13 @@ mod tests {
         assert!(formatted.contains("\n        e=\"5\">\n"));
         assert!(formatted.contains("\n        <child>\n"));
         assert!(formatted.contains("\n          <object class=\"GtkLabel\" />\n"));
+    }
+
+    #[test]
+    fn fuzz_crash_idempotent() {
+        let input = "\u{00da}\n???;";
+        let out1 = format_text(input);
+        let out2 = format_text(&out1);
+        assert_eq!(out1, out2, "not idempotent on crash input: pass1={:?} pass2={:?}", out1, out2);
     }
 }

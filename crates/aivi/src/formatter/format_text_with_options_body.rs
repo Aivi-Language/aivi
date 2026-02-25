@@ -83,14 +83,14 @@
     fn first_code_index(tokens: &[&crate::cst::CstToken]) -> Option<usize> {
         tokens
             .iter()
-            .position(|t| t.kind != "comment" && t.text != "\n")
+            .position(|t| t.kind != "comment" && t.text != "\n" && t.text != ";")
     }
 
     fn last_code_token_is(tokens: &[&crate::cst::CstToken], expected: &[&str]) -> bool {
         let Some(last) = tokens
             .iter()
             .rev()
-            .find(|t| t.kind != "comment" && t.text != "\n")
+            .find(|t| t.kind != "comment" && t.text != "\n" && t.text != ";")
         else {
             return false;
         };
@@ -341,28 +341,42 @@
         // This is safe for record/list/map/set forms where `,` is an alternative `FieldSep`,
         // but *not* for multiline tuples, where commas are required separators.
         let strip_commas = top_delim != Some('(');
-        let trailing_comma_idx = {
-            let mut idx = None;
-            for (i, t) in tokens.iter().enumerate() {
-                if t.kind != "comment" && t.text != "\n" {
-                    idx = Some(i);
+        let trailing_commas_start: Option<usize> = if strip_commas {
+            let mut first_trailing = None;
+            for (i, t) in tokens.iter().enumerate().rev() {
+                if t.kind == "comment" || t.text == "\n" || t.text == ";" {
+                    continue;
+                }
+                if t.text == "," {
+                    first_trailing = Some(i);
+                } else {
+                    break;
                 }
             }
-            idx.filter(|&i| strip_commas && tokens[i].text == ",")
+            first_trailing
+        } else {
+            None
         };
 
         let mut out = String::new();
         let mut prevprev: Option<(&str, &str)> = None;
         let mut prev: Option<(&str, &str)> = None;
         let mut prev_token: Option<&crate::cst::CstToken> = None;
-        let leading_comma_idx = first_code_index(tokens)
-            .filter(|&i| strip_commas && tokens[i].text == ",");
+        let mut in_leading_commas = strip_commas;
         for (i, t) in tokens.iter().enumerate() {
-            if leading_comma_idx == Some(i) {
-                continue;
+            if in_leading_commas {
+                if t.text == "," || t.text == ";" || t.kind == "comment" || t.text == "\n" {
+                    if t.text == "," {
+                        continue;
+                    }
+                } else {
+                    in_leading_commas = false;
+                }
             }
-            if trailing_comma_idx == Some(i) {
-                continue;
+            if let Some(start) = trailing_commas_start {
+                if i >= start && t.text == "," {
+                    continue;
+                }
             }
             if t.kind == "comment" {
                 if !out.is_empty() && !out.ends_with(' ') {
@@ -834,14 +848,24 @@
         base_indent: &str,
     ) -> String {
         let strip_commas = top_delim != Some('(');
-        let trailing_comma_idx = {
-            let mut idx = None;
-            for (i, t) in tokens.iter().enumerate() {
-                if t.kind != "comment" && t.text != "\n" {
-                    idx = Some(i);
+        // Find the index from which all remaining code tokens are commas.
+        // This strips ALL trailing commas in one pass (not just the last one)
+        // to ensure idempotency when consecutive commas appear.
+        let trailing_commas_start: Option<usize> = if strip_commas {
+            let mut first_trailing = None;
+            for (i, t) in tokens.iter().enumerate().rev() {
+                if t.kind == "comment" || t.text == "\n" || t.text == ";" {
+                    continue;
+                }
+                if t.text == "," {
+                    first_trailing = Some(i);
+                } else {
+                    break;
                 }
             }
-            idx.filter(|&i| strip_commas && tokens[i].text == ",")
+            first_trailing
+        } else {
+            None
         };
 
         // Detect inline matrix sigil pattern: `~` `mat` `[` ... `;` ... `]`
@@ -885,8 +909,9 @@
         let mut prev: Option<(&str, &str)> = None;
         let mut prev_token: Option<&crate::cst::CstToken> = None;
         let mut current_col = 0usize;
-        let leading_comma_idx = first_code_index(tokens)
-            .filter(|&i| strip_commas && tokens[i].text == ",");
+        // Track whether we're still in the leading-comma region (all commas before
+        // the first non-comma code token).
+        let mut in_leading_commas = strip_commas;
 
         let mut skip_until: Option<usize> = None;
 
@@ -897,11 +922,22 @@
                 }
                 skip_until = None;
             }
-            if leading_comma_idx == Some(i) {
-                continue;
+            // Skip all leading commas (not just the first) so formatting is
+            // idempotent when the input has multiple consecutive commas.
+            if in_leading_commas {
+                if t.text == "," || t.text == ";" || t.kind == "comment" || t.text == "\n" {
+                    if t.text == "," {
+                        continue;
+                    }
+                } else {
+                    in_leading_commas = false;
+                }
             }
-            if trailing_comma_idx == Some(i) {
-                continue;
+            // Skip all trailing commas (not just the last one) for idempotency.
+            if let Some(start) = trailing_commas_start {
+                if i >= start && t.text == "," {
+                    continue;
+                }
             }
             if t.kind == "comment" {
                 if !out.is_empty() && !out.ends_with(' ') {
@@ -996,6 +1032,18 @@
                 }
             }
 
+            // Skip stray `;` tokens (they're not part of AIVI syntax outside matrix literals).
+            // Must be checked before spacing logic to avoid inserting a phantom space.
+            // Emit a space separator to prevent adjacent tokens from merging into a
+            // different token (e.g. two separate `&` tokens becoming `&&`).
+            if t.text == ";" {
+                if !out.is_empty() && !out.ends_with(' ') {
+                    out.push(' ');
+                    current_col += 1;
+                }
+                continue;
+            }
+
             let curr = (t.kind.as_str(), t.text.as_str());
             let adjacent_in_input = prev_token.is_some_and(|p| {
                 p.span.start.line == t.span.start.line
@@ -1064,11 +1112,6 @@
                 }
             }
 
-            // Skip stray `;` tokens (they're not part of AIVI syntax outside matrix literals).
-            if t.text == ";" {
-                continue;
-            }
-
             out.push_str(curr.1);
             advance_column(&mut current_col, curr.1);
             prev_token = Some(t);
@@ -1124,7 +1167,7 @@
             let first_code = first_code_index(&line_tokens);
             let last_code_idx = line_tokens
                 .iter()
-                .rposition(|t| t.kind != "comment" && t.text != "\n");
+                .rposition(|t| t.kind != "comment" && t.text != "\n" && t.text != ";");
             if first_code == last_code_idx {
                 // Only token on the line is the closer — nothing to split.
                 split_raw_lines.push(*raw);
@@ -1174,7 +1217,10 @@
                 }
             }
             let same_line = opener_line == Some(line_index);
-            if same_line {
+            if same_line || opener_line.is_none() {
+                // Don't split if opener is on the same line, or if there is no
+                // matching opener (unmatched closer — splitting would be
+                // non-idempotent because the closer wasn't originally alone).
                 split_raw_lines.push(*raw);
                 split_tokens_by_line.push(line_tokens);
                 continue;
@@ -2551,7 +2597,13 @@
     // formatter architecture ready for width-aware grouping in future rules.
     let mut doc_items = Vec::with_capacity(rendered_lines.len().saturating_mul(2));
     for line in rendered_lines.into_iter() {
-        doc_items.push(super::doc::Doc::text(line));
+        // Strip trailing whitespace so formatting is idempotent.
+        // Only strip ASCII whitespace (space/tab) — not all Unicode whitespace —
+        // to avoid removing unknown tokens (e.g. \x0c form-feed) that the lexer
+        // emits as content tokens, which would change the token structure between
+        // formatting passes.
+        let trimmed = line.trim_end_matches(|c: char| c == ' ' || c == '\t').to_string();
+        doc_items.push(super::doc::Doc::text(trimmed));
         doc_items.push(super::doc::Doc::hardline());
     }
     let mut result = super::doc::render(super::doc::Doc::concat(doc_items), options.max_width);
