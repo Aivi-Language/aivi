@@ -1700,6 +1700,7 @@
             if lines[i].top_context == Some(ContextKind::Effect) {
                 // Effect bind alignment groups: consecutive `<-` lines, unbroken.
                 if find_top_level_token(&lines[i].tokens, "<-", first_idx).is_some() {
+                    let this_indent = lines[i].indent_len;
                     let mut j = i;
                     let mut max_lhs = 0usize;
                     while j < lines.len() {
@@ -1707,6 +1708,9 @@
                             break;
                         }
                         if lines[j].top_context != Some(ContextKind::Effect) {
+                            break;
+                        }
+                        if lines[j].indent_len != this_indent {
                             break;
                         }
                         let first_idx_j = match first_code_index(&lines[j].tokens) {
@@ -2161,6 +2165,25 @@
         let is_decorator_only_line = is_decorator_line
             && find_top_level_token(&state.tokens, "=", first_idx).is_none()
             && find_top_level_token(&state.tokens, ":", first_idx).is_none();
+        let first_text = state.tokens[first_idx].text.as_str();
+        let (prev_starts_with_then, prev_is_split_if_header) = lines[..line_index]
+            .iter()
+            .rev()
+            .find_map(|prev| {
+                let prev_first_idx = first_code_index(&prev.tokens)?;
+                let prev_first_text = prev.tokens[prev_first_idx].text.as_str();
+                let has_top_level_if =
+                    find_top_level_token_clamped(&prev.tokens, "if", prev_first_idx).is_some();
+                let has_top_level_then =
+                    find_top_level_token_clamped(&prev.tokens, "then", prev_first_idx).is_some();
+                let has_top_level_else =
+                    find_top_level_token_clamped(&prev.tokens, "else", prev_first_idx).is_some();
+                Some((
+                    prev_first_text == "then",
+                    has_top_level_if && !has_top_level_then && !has_top_level_else,
+                ))
+            })
+            .unwrap_or((false, false));
 
         // Continuation blocks:
         // - Multi-line `| ...` blocks (multi-clause functions and `match` expressions).
@@ -2168,8 +2191,8 @@
         //   keep the block active until we hit a same-indent non-`|` line (or a blank line).
         // - Multi-line `|> ...` pipeline blocks (common after `=`, even when RHS starts on same line).
         // - A single continuation line after a trailing `=` (e.g. `x =\n  expr`).
-        let starts_with_pipe = state.tokens[first_idx].text == "|";
-        let starts_with_pipeop = state.tokens[first_idx].text == "|>";
+        let starts_with_pipe = first_text == "|";
+        let starts_with_pipeop = first_text == "|>";
         let is_arm_line =
             starts_with_pipe && find_top_level_token(&state.tokens, "=>", first_idx + 1).is_some();
         let should_start_pipe_block =
@@ -2321,7 +2344,6 @@
         // - `else` header lines align with their matching `if`.
         // - `} else {` is handled by delimiter/hang indentation; we only update stack state.
         if !hang_is_close {
-            let first_text = state.tokens[first_idx].text.as_str();
             let is_else_line = first_text == "else";
 
             if is_else_line {
@@ -2347,6 +2369,13 @@
                 .max()
             {
                 effective_indent_len = effective_indent_len.max(min_indent);
+            }
+        }
+        if !hang_is_close {
+            if first_text == "then" && prev_is_split_if_header {
+                effective_indent_len = effective_indent_len.max(prev_effective_indent_len + indent_size);
+            } else if first_text == "else" && prev_starts_with_then {
+                effective_indent_len = effective_indent_len.max(prev_effective_indent_len);
             }
         }
 

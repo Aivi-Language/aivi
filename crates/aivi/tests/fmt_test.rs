@@ -227,6 +227,30 @@ other = do Maybe {
 }
 
 #[test]
+fn test_fmt_nested_do_effect_bind_alignment_restarts_in_inner_block() {
+    let input = r#"
+setupTray = app => unreadCount => onAction => do Effect {
+  trayResult <- attempt do Effect {
+    icon       <- trayIconNew "mail-unread-symbolic" (trayTooltip unreadCount)
+  }
+}
+"#;
+    let expected = "setupTray = app => unreadCount => onAction => do Effect {\n  trayResult <- attempt do Effect {\n    icon <- trayIconNew \"mail-unread-symbolic\" (trayTooltip unreadCount)\n  }\n}\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
+fn test_fmt_multiline_if_then_else_indents_then_and_else_headers() {
+    let input = r#"
+trayTooltip = unreadCount => if unreadCount > 0
+then "Mailfox ({unreadCount} unread)"
+else "Mailfox"
+"#;
+    let expected = "trayTooltip = unreadCount => if unreadCount > 0\n  then \"Mailfox ({unreadCount} unread)\"\n  else \"Mailfox\"\n";
+    assert_eq!(format_text(input), expected);
+}
+
+#[test]
 fn test_fmt_allman_brace_style_is_configurable() {
     let input = "f = x => {\n  x\n}\n";
     let formatted = format_text_with_options(
