@@ -7,8 +7,9 @@ use std::path::{Path, PathBuf};
 
 use aivi_core::{
     check_modules, elaborate_expected_coercions, embedded_stdlib_modules,
-    file_diagnostics_have_errors, format_text, parse_modules, parse_modules_from_tokens, CstBundle,
-    CstFile, Diagnostic, FileDiagnostic, HirProgram, Module, ModuleItem,
+    file_diagnostics_have_errors, format_text, parse_modules, parse_modules_from_tokens,
+    render_diagnostics, CstBundle, CstFile, Diagnostic, FileDiagnostic, HirProgram, Module,
+    ModuleItem,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -31,6 +32,17 @@ pub enum AiviError {
     Config(String),
     #[error("Cargo error: {0}")]
     Cargo(String),
+}
+
+/// Prints diagnostics to stderr so the user sees errors before a `Diagnostics` exit.
+fn emit_diagnostics(diagnostics: &[FileDiagnostic]) {
+    for diag in diagnostics {
+        let rendered =
+            render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+        if !rendered.is_empty() {
+            eprintln!("{rendered}");
+        }
+    }
 }
 
 /// Expands a user target and parses each file into a CST bundle for editor/tooling entrypoints.
@@ -252,6 +264,7 @@ pub fn desugar_target_with_cg_types(
 > {
     let diagnostics = load_module_diagnostics(target)?;
     if file_diagnostics_have_errors(&diagnostics) {
+        emit_diagnostics(&diagnostics);
         return Err(AiviError::Diagnostics);
     }
 
@@ -270,6 +283,7 @@ pub fn desugar_target_with_cg_types(
         diagnostics.extend(elaborate_expected_coercions(&mut stdlib_modules));
     }
     if file_diagnostics_have_errors(&diagnostics) {
+        emit_diagnostics(&diagnostics);
         return Err(AiviError::Diagnostics);
     }
 

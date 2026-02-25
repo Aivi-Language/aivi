@@ -365,12 +365,12 @@ fn cmd_project_build_cranelift(
     cfg: &aivi::AiviToml,
     release: bool,
 ) -> Result<(), AiviError> {
-    let entry_path = resolve_project_entry(root, &cfg.project.entry);
-    let entry_str = entry_path
+    let source_target = resolve_project_source_target(root, &cfg.project.entry);
+    let target_str = source_target
         .to_str()
-        .ok_or_else(|| AiviError::InvalidPath(entry_path.display().to_string()))?;
+        .ok_or_else(|| AiviError::InvalidPath(source_target.display().to_string()))?;
 
-    let (program, cg_types, monomorph_plan) = aivi::desugar_target_with_cg_types(entry_str)?;
+    let (program, cg_types, monomorph_plan) = aivi::desugar_target_with_cg_types(target_str)?;
 
     // 1. Compile to object file
     eprintln!("  Compiling AIVI → Cranelift AOT...");
@@ -465,11 +465,11 @@ fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
             "extra cargo args are not supported by the native runtime pipeline".to_string(),
         ));
     }
-    let entry_path = resolve_project_entry(&root, &cfg.project.entry);
-    let entry = entry_path
+    let source_target = resolve_project_source_target(&root, &cfg.project.entry);
+    let target = source_target
         .to_str()
-        .ok_or_else(|| AiviError::InvalidPath(entry_path.display().to_string()))?;
-    let (program, cg_types, monomorph_plan) = aivi::desugar_target_with_cg_types(entry)?;
+        .ok_or_else(|| AiviError::InvalidPath(source_target.display().to_string()))?;
+    let (program, cg_types, monomorph_plan) = aivi::desugar_target_with_cg_types(target)?;
     aivi::run_cranelift_jit(program, cg_types, monomorph_plan)
 }
 
@@ -540,6 +540,18 @@ fn resolve_project_entry(project_root: &Path, entry: &str) -> PathBuf {
     } else {
         project_root.join(entry_path)
     }
+}
+
+/// Derives the recursive source target from the project entry.
+///
+/// For an entry like `src/main.aivi` the source directory is `<root>/src/...`
+/// so that all `.aivi` files under `src/` are included in compilation.
+fn resolve_project_source_target(project_root: &Path, entry: &str) -> PathBuf {
+    let entry_path = resolve_project_entry(project_root, entry);
+    let src_dir = entry_path
+        .parent()
+        .unwrap_or(project_root);
+    src_dir.join("...")
 }
 
 #[cfg(test)]

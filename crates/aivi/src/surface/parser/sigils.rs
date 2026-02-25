@@ -1301,7 +1301,23 @@ impl Parser {
                     }
 
                     let attrs_expr = list(lowered_attrs);
-                    let children_expr = lower_children(this, kept_children, span);
+                    // <property> children are text content: wrap splices with gtkTextNode
+                    let children_expr = if tag == "property" {
+                        let wrapped: Vec<GtkNode> = kept_children
+                            .into_iter()
+                            .map(|child| match child {
+                                GtkNode::Splice(expr) => GtkNode::Splice(Expr::Call {
+                                    func: Box::new(mk_ui("gtkTextNode")),
+                                    args: vec![expr],
+                                    span: span.clone(),
+                                }),
+                                other => other,
+                            })
+                            .collect();
+                        lower_children(this, wrapped, span)
+                    } else {
+                        lower_children(this, kept_children, span)
+                    };
                     if let Some(component_expr) = component_tag_expr(&tag, span) {
                         Expr::Call {
                             func: Box::new(component_expr),
