@@ -6,14 +6,10 @@ use super::{BraceStyle, FormatOptions};
 
 // Current formatter engine implementation.
 //
-// The legacy formatter lives in `crates/aivi/src/formatter/format_text_with_options_body.rs`.
-// We include it here (using an absolute path) so this module is independent of the original
-// file layout while remaining behavior-identical.
+// The formatter rule source-of-truth lives in this crate at
+// `crates/aivi_core/src/formatter/rules.rs`.
 
 pub fn format_text_with_options(content: &str, options: FormatOptions) -> String {
     let _ = BraceStyle::Kr; // keep the enum reachable for `include!`-local logic
-    include!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../aivi/src/formatter/format_text_with_options_body.rs"
-    ))
+    include!("rules.rs")
 }
