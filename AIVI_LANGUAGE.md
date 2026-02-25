@@ -1078,3 +1078,5 @@ topoSmoke = do Effect {
 | `return x`             | No return statement              | Expression result is implicit; `pure x` in effects  |
 | `{ x = 1 }` in records | `=` is binding, not record field | `{ x: 1 }`                                          |
 | `import X`             | No `import` keyword              | `use module.path`                                   |
+| `x = 1;`               | No semicolons                    | continue in new lines                               |
+
