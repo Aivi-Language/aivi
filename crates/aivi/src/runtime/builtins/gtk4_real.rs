@@ -7,7 +7,7 @@ mod linux {
     use std::ffi::{CStr, CString};
     use std::os::raw::{c_char, c_int, c_ulong, c_void};
     use std::ptr::null_mut;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use super::super::util::builtin;
     use crate::runtime::{EffectValue, RuntimeError, Value};
@@ -164,7 +164,143 @@ mod linux {
         separators: HashMap<i64, *mut c_void>,
         gesture_clicks: HashMap<i64, GestureClickState>,
         signal_events: VecDeque<SignalEventState>,
+        tray_handles: HashMap<i64, Arc<Mutex<SniTrayState>>>,
         resources_registered: bool,
+    }
+
+    struct SniTrayState {
+        icon_name: String,
+        tooltip: String,
+        visible: bool,
+    }
+
+    impl Default for SniTrayState {
+        fn default() -> Self {
+            Self {
+                icon_name: String::new(),
+                tooltip: String::new(),
+                visible: true,
+            }
+        }
+    }
+
+    fn spawn_sni_tray(state: Arc<Mutex<SniTrayState>>) -> Result<(), String> {
+        let state_clone = state.clone();
+        std::thread::Builder::new()
+            .name("sni-tray".to_string())
+            .spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("tokio rt");
+                rt.block_on(async {
+                    let conn = match zbus::Connection::session().await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("sni-tray: D-Bus session error: {e}");
+                            return;
+                        }
+                    };
+                    let pid = std::process::id();
+                    let bus_name = format!("org.kde.StatusNotifierItem-{pid}-1");
+                    let obj_path = "/StatusNotifierItem";
+
+                    // Create the interface at obj_path using raw method calls
+                    // We register an interface implementor manually
+                    let sni = SniObject { state: state_clone };
+                    if let Err(e) = conn.object_server().at(obj_path, sni).await {
+                        eprintln!("sni-tray: object_server error: {e}");
+                        return;
+                    }
+                    if let Err(e) = conn.request_name(bus_name.as_str()).await {
+                        eprintln!("sni-tray: request_name error: {e}");
+                        return;
+                    }
+                    // Register with StatusNotifierWatcher
+                    let _ = conn
+                        .call_method(
+                            Some("org.kde.StatusNotifierWatcher"),
+                            "/StatusNotifierWatcher",
+                            Some("org.kde.StatusNotifierWatcher"),
+                            "RegisterStatusNotifierItem",
+                            &(bus_name.as_str(),),
+                        )
+                        .await;
+                    // Keep alive
+                    std::future::pending::<()>().await;
+                });
+            })
+            .map(|_| ())
+            .map_err(|e| format!("spawn sni thread: {e}"))
+    }
+
+    struct SniObject {
+        state: Arc<Mutex<SniTrayState>>,
+    }
+
+    #[zbus::interface(name = "org.kde.StatusNotifierItem")]
+    impl SniObject {
+        #[zbus(property)]
+        fn category(&self) -> &str {
+            "Communications"
+        }
+
+        #[zbus(property)]
+        fn id(&self) -> &str {
+            "com-mailfox-desktop"
+        }
+
+        #[zbus(property)]
+        fn title(&self) -> &str {
+            "Mailfox"
+        }
+
+        #[zbus(property)]
+        fn status(&self) -> &str {
+            if self.state.lock().map(|s| s.visible).unwrap_or(true) {
+                "Active"
+            } else {
+                "Passive"
+            }
+        }
+
+        #[zbus(property)]
+        fn icon_name(&self) -> String {
+            self.state
+                .lock()
+                .map(|s| s.icon_name.clone())
+                .unwrap_or_default()
+        }
+
+        #[zbus(property)]
+        fn icon_theme_path(&self) -> &str {
+            ""
+        }
+
+        #[zbus(property)]
+        fn tool_tip(&self) -> (String, Vec<(i32, i32, Vec<u8>)>, String, String) {
+            let tip = self
+                .state
+                .lock()
+                .map(|s| s.tooltip.clone())
+                .unwrap_or_default();
+            (String::new(), Vec::new(), tip, String::new())
+        }
+
+        #[zbus(property)]
+        fn item_is_menu(&self) -> bool {
+            false
+        }
+
+        #[zbus(property)]
+        fn menu(&self) -> zbus::zvariant::OwnedObjectPath {
+            zbus::zvariant::OwnedObjectPath::try_from("/MenuBar")
+                .unwrap_or_else(|_| zbus::zvariant::OwnedObjectPath::try_from("/").unwrap())
+        }
+
+        fn activate(&self, _x: i32, _y: i32) {}
+        fn secondary_activate(&self, _x: i32, _y: i32) {}
+        fn scroll(&self, _delta: i32, _orientation: &str) {}
     }
 
     struct GestureClickState {
@@ -2719,6 +2855,157 @@ mod linux {
                     unsafe { gtk_css_provider_load_from_string(provider, css_c.as_ptr()) };
                     // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION = 600
                     unsafe { gtk_style_context_add_provider_for_display(display, provider, 600) };
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
+
+        // ── tray icon (StatusNotifierItem via zbus) ──────────────────
+
+        fields.insert(
+            "trayIconNew".to_string(),
+            builtin("gtk4.trayIconNew", 2, |mut args, _| {
+                let tooltip = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.trayIconNew expects Text tooltip")),
+                };
+                let icon_name = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.trayIconNew expects Text icon_name")),
+                };
+                Ok(effect(move |_| {
+                    let state = Arc::new(Mutex::new(SniTrayState {
+                        icon_name: icon_name.clone(),
+                        tooltip: tooltip.clone(),
+                        visible: true,
+                    }));
+                    if let Err(e) = spawn_sni_tray(state.clone()) {
+                        return Err(RuntimeError::Error(Value::Text(format!(
+                            "gtk4.trayIconNew: {e}"
+                        ))));
+                    }
+                    let id = GTK_STATE.with(|s| {
+                        let mut s = s.borrow_mut();
+                        let id = s.alloc_id();
+                        s.tray_handles.insert(id, state);
+                        id
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "trayIconSetTooltip".to_string(),
+            builtin("gtk4.trayIconSetTooltip", 2, |mut args, _| {
+                let tooltip = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.trayIconSetTooltip expects Text")),
+                };
+                let tray_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.trayIconSetTooltip expects Int")),
+                };
+                Ok(effect(move |_| {
+                    let arc = GTK_STATE.with(|s| {
+                        s.borrow().tray_handles.get(&tray_id).cloned()
+                    });
+                    if let Some(arc) = arc {
+                        if let Ok(mut ts) = arc.lock() {
+                            ts.tooltip = tooltip.clone();
+                        }
+                    }
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
+
+        fields.insert(
+            "trayIconSetVisible".to_string(),
+            builtin("gtk4.trayIconSetVisible", 2, |mut args, _| {
+                let visible = match args.remove(1) {
+                    Value::Bool(v) => v,
+                    Value::Constructor { ref name, .. } => name == "True",
+                    _ => return Err(invalid("gtk4.trayIconSetVisible expects Bool")),
+                };
+                let tray_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.trayIconSetVisible expects Int")),
+                };
+                Ok(effect(move |_| {
+                    let arc = GTK_STATE.with(|s| {
+                        s.borrow().tray_handles.get(&tray_id).cloned()
+                    });
+                    if let Some(arc) = arc {
+                        if let Ok(mut ts) = arc.lock() {
+                            ts.visible = visible;
+                        }
+                    }
+                    Ok(Value::Unit)
+                }))
+            }),
+        );
+
+        fields.insert(
+            "menuModelNew".to_string(),
+            builtin("gtk4.menuModelNew", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("gtk4.menuModelNew expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    let id = GTK_STATE.with(|s| {
+                        let mut s = s.borrow_mut();
+                        s.alloc_id()
+                    });
+                    Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "menuModelAppendItem".to_string(),
+            builtin("gtk4.menuModelAppendItem", 3, |mut args, _| {
+                let _action = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.menuModelAppendItem expects Text")),
+                };
+                let _label = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.menuModelAppendItem expects Text")),
+                };
+                let _menu_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.menuModelAppendItem expects Int")),
+                };
+                Ok(effect(move |_| Ok(Value::Unit)))
+            }),
+        );
+
+        fields.insert(
+            "osSetBadgeCount".to_string(),
+            builtin("gtk4.osSetBadgeCount", 2, |mut args, _| {
+                let count = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.osSetBadgeCount expects Int")),
+                };
+                let _app_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.osSetBadgeCount expects Int")),
+                };
+                Ok(effect(move |_| {
+                    let arc = GTK_STATE.with(|s| {
+                        s.borrow().tray_handles.values().last().cloned()
+                    });
+                    if let Some(arc) = arc {
+                        if let Ok(mut ts) = arc.lock() {
+                            ts.tooltip = if count > 0 {
+                                format!("Mailfox ({count} unread)")
+                            } else {
+                                "Mailfox".to_string()
+                            };
+                        }
+                    }
                     Ok(Value::Unit)
                 }))
             }),
