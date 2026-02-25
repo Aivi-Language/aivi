@@ -113,12 +113,12 @@ pub fn run_cranelift_jit(
             }
             let qualified = format!("{}.{}", ir_module.name, def.name);
             let is_stdlib_module = ir_module.name.starts_with("aivi.");
-            if params.len() > 7 {
+            if params.len() > 15 {
                 if is_stdlib_module {
                     continue;
                 }
                 return Err(AiviError::Runtime(format!(
-                    "cranelift compile {}: unsupported arity {} (max 7)",
+                    "cranelift compile {}: unsupported arity {} (max 15)",
                     qualified,
                     params.len()
                 )));
@@ -351,12 +351,12 @@ pub fn compile_to_object(
             }
             let qualified = format!("{}.{}", ir_module.name, def.name);
             let is_stdlib_module = ir_module.name.starts_with("aivi.");
-            if params.len() > 7 {
+            if params.len() > 15 {
                 if is_stdlib_module {
                     continue;
                 }
                 return Err(AiviError::Runtime(format!(
-                    "cranelift aot compile {}: unsupported arity {} (max 7)",
+                    "cranelift aot compile {}: unsupported arity {} (max 15)",
                     qualified,
                     params.len()
                 )));
@@ -687,8 +687,12 @@ fn compile_definition_body<M: Module>(
         };
 
         let total_arity = captured_vars.len() + 1; // captures + the actual param
-        if total_arity > 7 {
-            // Too many captures + param for call_jit_function
+        if total_arity > 15 {
+            eprintln!(
+                "aivi: lambda skipped: too many captures ({} captures + 1 param = {} > 15)",
+                captured_vars.len(),
+                total_arity
+            );
             continue;
         }
 
@@ -1241,6 +1245,7 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                     let call_args = [ctx_ptr as i64];
                     let result_ptr = unsafe { call_jit_function(func_ptr, &call_args) };
                     if result_ptr == 0 {
+                        eprintln!("aivi: JIT function '{}' returned null pointer", def_name);
                         Ok(Value::Unit)
                     } else {
                         Ok(unsafe { super::abi::unbox_value(result_ptr as *mut Value) })
@@ -1280,6 +1285,7 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                 // Clone the result from the pointer (don't take ownership — the
                 // pointer might alias one of the input args).
                 let result = if result_ptr == 0 {
+                    eprintln!("aivi: JIT function '{}' returned null pointer", def_name);
                     Value::Unit
                 } else {
                     let rp = result_ptr as *const Value;
@@ -1354,7 +1360,80 @@ pub(crate) unsafe fn call_jit_function(func_ptr: usize, args: &[i64]) -> i64 {
                 args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7],
             )
         }
-        n => panic!("call_jit_function: unsupported arity {n} (max 7 params + ctx)"),
+        9 => {
+            let f: extern "C" fn(i64, i64, i64, i64, i64, i64, i64, i64, i64) -> i64 =
+                std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+            )
+        }
+        10 => {
+            let f: extern "C" fn(i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) -> i64 =
+                std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9],
+            )
+        }
+        11 => {
+            let f: extern "C" fn(i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64) -> i64 =
+                std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10],
+            )
+        }
+        12 => {
+            let f: extern "C" fn(
+                i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+            ) -> i64 = std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11],
+            )
+        }
+        13 => {
+            let f: extern "C" fn(
+                i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+            ) -> i64 = std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12],
+            )
+        }
+        14 => {
+            let f: extern "C" fn(
+                i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+            ) -> i64 = std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13],
+            )
+        }
+        15 => {
+            let f: extern "C" fn(
+                i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+            ) -> i64 = std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14],
+            )
+        }
+        16 => {
+            let f: extern "C" fn(
+                i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i64,
+            ) -> i64 = std::mem::transmute(code);
+            f(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                args[9], args[10], args[11], args[12], args[13], args[14], args[15],
+            )
+        }
+        n => {
+            eprintln!(
+                "aivi: call_jit_function: unsupported arity {n} (max 15 params + ctx)"
+            );
+            0
+        }
     }
 }
 

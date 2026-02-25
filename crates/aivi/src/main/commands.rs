@@ -405,6 +405,9 @@ fn cmd_project_build_cranelift(
     let gen_dir = root.join(&cfg.build.gen_dir);
     std::fs::create_dir_all(&gen_dir)?;
     let obj_path = gen_dir.join("aivi_program.o");
+    let obj_path_abs = std::fs::canonicalize(gen_dir.as_path())
+        .unwrap_or_else(|_| gen_dir.clone())
+        .join("aivi_program.o");
     std::fs::write(&obj_path, &object_bytes)?;
 
     // 3. Generate a thin Rust harness that builds the runtime and calls __aivi_main
@@ -414,15 +417,18 @@ fn cmd_project_build_cranelift(
     let harness_code = generate_aot_harness("aivi_program");
     std::fs::write(&harness_main, harness_code)?;
 
-    // 4. Compile with cargo, linking the .o file
+    // 4. Generate build.rs that links the compiled object file
+    let build_rs_path = root.join("build.rs");
+    let build_rs_code = generate_aot_build_rs(&obj_path_abs);
+    std::fs::write(&build_rs_path, build_rs_code)?;
+
+    // 5. Compile with cargo, linking the .o file
     eprintln!("  Linking...");
     let mut cmd = Command::new("cargo");
     cmd.arg("build");
     if release {
         cmd.arg("--release");
     }
-    // Tell cargo to link our object file via a build script env var
-    cmd.env("AIVI_AOT_OBJECT", obj_path.display().to_string());
     let status = cmd.current_dir(root).status()?;
     if !status.success() {
         return Err(AiviError::Cargo(
@@ -450,6 +456,21 @@ fn main() {{
     let ctx = aivi::init_aot_runtime_base();
     let _result = unsafe {{ __aivi_main(ctx as i64) }};
     aivi::destroy_aot_runtime(ctx);
+}}
+"#
+    )
+}
+
+/// Generate a `build.rs` that tells cargo to link the AOT object file.
+fn generate_aot_build_rs(obj_path: &Path) -> String {
+    let obj_display = obj_path.display();
+    format!(
+        r#"//! Auto-generated build script for AIVI Cranelift AOT.
+//! Links the compiled object file into the final binary.
+
+fn main() {{
+    println!("cargo:rerun-if-changed={obj_display}");
+    println!("cargo:rustc-link-arg={obj_display}");
 }}
 "#
     )
