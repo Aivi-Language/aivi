@@ -35,7 +35,3 @@ path = "fuzz_targets/lsp_pipeline.rs"
 [[test]]
 name = "type_inference"
 path = "fuzz_targets/type_inference.rs"
-
-[[test]]
-name = "native_codegen"
-path = "fuzz_targets/native_codegen.rs"

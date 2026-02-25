@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::AtomicBool;
-use std::sync::{mpsc, Arc, Mutex, OnceLock};
+use std::sync::{mpsc, Arc, Mutex};
 
 use im::{HashMap as ImHashMap, HashSet as ImHashSet, Vector as ImVector};
 use num_bigint::BigInt;
@@ -24,78 +24,6 @@ pub(crate) type ThunkFunc = dyn Fn(&mut Runtime) -> Result<Value, RuntimeError> 
 pub(crate) struct SourceValue {
     pub(crate) kind: String,
     pub(crate) effect: Arc<EffectValue>,
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct RecordShape {
-    fields: Arc<Vec<String>>,
-    offsets: Arc<HashMap<String, usize>>,
-}
-
-#[derive(Clone)]
-pub(crate) struct ShapedRecord {
-    pub(crate) shape: Arc<RecordShape>,
-    pub(crate) values: Arc<Vec<Value>>,
-}
-
-#[derive(Default)]
-struct RecordShapeRegistry {
-    by_fields: HashMap<Vec<String>, Arc<RecordShape>>,
-}
-
-static RECORD_SHAPES: OnceLock<Mutex<RecordShapeRegistry>> = OnceLock::new();
-
-fn record_shape_registry() -> &'static Mutex<RecordShapeRegistry> {
-    RECORD_SHAPES.get_or_init(|| Mutex::new(RecordShapeRegistry::default()))
-}
-
-fn intern_record_shape(mut fields: Vec<String>) -> Arc<RecordShape> {
-    fields.sort();
-    let mut registry = record_shape_registry()
-        .lock()
-        .expect("record shape registry lock poisoned");
-    if let Some(shape) = registry.by_fields.get(&fields) {
-        return shape.clone();
-    }
-    let offsets: HashMap<String, usize> = fields
-        .iter()
-        .enumerate()
-        .map(|(idx, name)| (name.clone(), idx))
-        .collect();
-    let shape = Arc::new(RecordShape {
-        fields: Arc::new(fields.clone()),
-        offsets: Arc::new(offsets),
-    });
-    registry.by_fields.insert(fields, shape.clone());
-    shape
-}
-
-pub(crate) fn shape_record(record: &HashMap<String, Value>) -> ShapedRecord {
-    let mut names: Vec<String> = record.keys().cloned().collect();
-    names.sort();
-    let shape = intern_record_shape(names);
-    let values = shape
-        .fields
-        .iter()
-        .map(|field| record.get(field).cloned().unwrap_or(Value::Unit))
-        .collect();
-    ShapedRecord {
-        shape,
-        values: Arc::new(values),
-    }
-}
-
-impl ShapedRecord {
-    pub(crate) fn get(&self, name: &str) -> Option<&Value> {
-        self.shape
-            .offsets
-            .get(name)
-            .and_then(|idx| self.values.get(*idx))
-    }
-
-    pub(crate) fn has_field(&self, name: &str) -> bool {
-        self.shape.offsets.contains_key(name)
-    }
 }
 
 /// Transitional compact scalar container for future NaN-tagged values.
@@ -161,10 +89,10 @@ pub(crate) enum Value {
     Tuple(Vec<Value>),
     Record(Arc<HashMap<String, Value>>),
     Constructor { name: String, args: Vec<Value> },
-    Closure(Arc<ClosureValue>),
     Builtin(BuiltinValue),
     Effect(Arc<EffectValue>),
     Source(Arc<SourceValue>),
+    #[allow(dead_code)]
     Resource(Arc<ResourceValue>),
     Thunk(Arc<ThunkValue>),
     MultiClause(Vec<Value>),
@@ -205,7 +133,6 @@ impl std::fmt::Debug for Value {
                 .field("name", name)
                 .field("args", args)
                 .finish(),
-            Value::Closure(_) => write!(f, "Closure(<fn>)"),
             Value::Builtin(_) => write!(f, "Builtin(<fn>)"),
             Value::Effect(_) => write!(f, "Effect(<thunk>)"),
             Value::Source(_) => write!(f, "Source(<stream>)"),
@@ -237,26 +164,18 @@ pub(crate) struct BuiltinImpl {
     pub(crate) func: Arc<BuiltinFunc>,
 }
 
-pub(crate) struct ClosureValue {
-    pub(crate) param: String,
-    pub(crate) body: Arc<HirExpr>,
-    pub(crate) env: Env,
-}
-
 pub(crate) enum EffectValue {
-    Block {
-        env: Env,
-        items: Arc<Vec<HirBlockItem>>,
-    },
     Thunk {
         func: Arc<ThunkFunc>,
     },
 }
 
+#[allow(dead_code)]
 pub(crate) struct ResourceValue {
     pub(crate) items: Arc<Vec<HirBlockItem>>,
 }
 
+#[allow(dead_code)]
 pub(crate) struct ThunkValue {
     pub(crate) expr: Arc<HirExpr>,
     pub(crate) env: Env,

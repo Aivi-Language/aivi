@@ -31,7 +31,7 @@ pub(super) fn value_type_name(value: &Value) -> &'static str {
         Value::Tuple(_) => "Tuple",
         Value::Record(_) => "Record",
         Value::Constructor { .. } => "Constructor",
-        Value::Closure(_) | Value::Builtin(_) | Value::MultiClause(_) => "Function",
+        Value::Builtin(_) | Value::MultiClause(_) => "Function",
         Value::Effect(_) => "Effect",
         Value::Source(_) => "Source",
         Value::Resource(_) => "Resource",

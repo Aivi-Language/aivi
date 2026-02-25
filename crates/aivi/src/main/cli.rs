@@ -1,11 +1,10 @@
 use aivi::{
-    check_modules, check_types, compile_rust_native_lib_typed, compile_rust_native_typed,
+    check_modules, check_types,
     desugar_target, embedded_stdlib_source, ensure_aivi_dependency, format_target, kernel_target,
     load_module_diagnostics, load_modules, parse_target, render_diagnostics,
     rust_ir_target, serve_mcp_stdio_with_policy, validate_publish_preflight, write_scaffold,
     AiviError, CargoDepSpec, McpPolicy, ProjectKind,
 };
-use sha2::{Digest, Sha256};
 use std::env;
 use std::io;
 use std::io::Write;
@@ -413,33 +412,18 @@ fn run() -> Result<(), AiviError> {
                         return Ok(());
                     };
                     maybe_enable_debug_trace(opts.debug_trace);
-                    if opts.target != "rust"
-                        && opts.target != "rust-native"
-                    {
-                        return Err(AiviError::InvalidCommand(format!(
-                            "unsupported target {}",
-                            opts.target
-                        )));
-                    }
                     let _modules = load_checked_modules_with_progress(&opts.input)?;
-                    let (program, cg_types, _monomorph_plan) =
+                    let (program, cg_types, monomorph_plan) =
                         aivi::desugar_target_with_cg_types(&opts.input)?;
-                    if opts.target == "rust" || opts.target == "rust-native" {
-                        let rust = if opts.target == "rust" {
-                            compile_rust_native_lib_typed(program, cg_types)?
-                        } else {
-                            compile_rust_native_typed(program, cg_types)?
-                        };
-                        let out_dir = opts
-                            .output
-                            .unwrap_or_else(|| PathBuf::from("target/aivi-gen"));
-                        if opts.target == "rust" {
-                            write_rust_project_native_lib(&out_dir, &rust)?;
-                        } else {
-                            write_rust_project_native(&out_dir, &rust)?;
-                        }
-                        println!("{}", out_dir.display());
-                    }
+                    let object_bytes =
+                        aivi::compile_to_object(program, cg_types, monomorph_plan)?;
+                    let out_dir = opts
+                        .output
+                        .unwrap_or_else(|| PathBuf::from("target/aivi-gen"));
+                    std::fs::create_dir_all(&out_dir)?;
+                    let obj_path = out_dir.join("aivi_program.o");
+                    std::fs::write(&obj_path, &object_bytes)?;
+                    println!("{}", obj_path.display());
                     Ok(())
                 }
             }
@@ -861,38 +845,6 @@ impl Drop for Spinner {
     }
 }
 
-fn write_rust_project_native(out_dir: &Path, main_rs: &str) -> Result<(), AiviError> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let rt_path = normalize_path(&manifest_dir.join("../aivi_native_runtime"));
-    let cargo_toml = format!(
-        "[package]\nname = \"aivi-gen\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[dependencies]\naivi_native_runtime = {{ path = \"{}\" }}\n",
-        rt_path
-    );
-    let src_dir = out_dir.join("src");
-    std::fs::create_dir_all(&src_dir)?;
-    std::fs::write(out_dir.join("Cargo.toml"), cargo_toml)?;
-    std::fs::write(src_dir.join("main.rs"), main_rs)?;
-    Ok(())
-}
-
-fn write_rust_project_native_lib(out_dir: &Path, lib_rs: &str) -> Result<(), AiviError> {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let rt_path = normalize_path(&manifest_dir.join("../aivi_native_runtime"));
-    let cargo_toml = format!(
-        "[package]\nname = \"aivi-gen\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n\n[dependencies]\naivi_native_runtime = {{ path = \"{}\" }}\n",
-        rt_path
-    );
-    let src_dir = out_dir.join("src");
-    std::fs::create_dir_all(&src_dir)?;
-    std::fs::write(out_dir.join("Cargo.toml"), cargo_toml)?;
-    std::fs::write(src_dir.join("lib.rs"), lib_rs)?;
-    Ok(())
-}
-
-fn normalize_path(path: &Path) -> String {
-    path.to_string_lossy().replace('\\', "/")
-}
-
 fn load_checked_modules_with_progress(target: &str) -> Result<Vec<aivi::Module>, AiviError> {
     let paths = aivi::resolve_target(target)?;
     let mut spinner = Spinner::new("checking sources".to_string());
@@ -917,25 +869,6 @@ fn load_checked_modules_with_progress(target: &str) -> Result<Vec<aivi::Module>,
     }
     if !aivi::file_diagnostics_have_errors(&diagnostics) {
         return Ok(stdlib_modules);
-    }
-    for diag in diagnostics {
-        let rendered = render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
-        if !rendered.is_empty() {
-            eprintln!("{rendered}");
-        }
-    }
-    Err(AiviError::Diagnostics)
-}
-
-fn load_checked_modules(target: &str) -> Result<Vec<aivi::Module>, AiviError> {
-    let mut diagnostics = load_module_diagnostics(target)?;
-    let modules = load_modules(target)?;
-    diagnostics.extend(check_modules(&modules));
-    if !aivi::file_diagnostics_have_errors(&diagnostics) {
-        diagnostics.extend(check_types(&modules));
-    }
-    if !aivi::file_diagnostics_have_errors(&diagnostics) {
-        return Ok(modules);
     }
     for diag in diagnostics {
         let rendered = render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));

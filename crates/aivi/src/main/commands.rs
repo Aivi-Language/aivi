@@ -349,35 +349,10 @@ fn should_use_project_pipeline(args: &[String]) -> bool {
 fn cmd_project_build(args: &[String]) -> Result<(), AiviError> {
     let root = env::current_dir()?;
     let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
-    let (release_flag, cargo_args) = parse_project_args(args)?;
+    let (release_flag, _cargo_args) = parse_project_args(args)?;
     let release = release_flag || cfg.build.cargo_profile == "release";
 
-    // --native-rust opts into the legacy Rust-codegen pipeline
-    let use_native_rust = cargo_args.iter().any(|a| a == "--native-rust");
-    let cargo_args: Vec<String> = cargo_args
-        .into_iter()
-        .filter(|a| a != "--native-rust")
-        .collect();
-
-    if !use_native_rust {
-        // Default: Cranelift AOT pipeline
-        return cmd_project_build_cranelift(&root, &cfg, release);
-    }
-
-    // Legacy: generate Rust source and compile with cargo
-    generate_project_rust(&root, &cfg)?;
-    let mut cmd = Command::new("cargo");
-    cmd.arg("build");
-    if release {
-        cmd.arg("--release");
-    }
-    append_native_ui_target_flags(&mut cmd, &cfg.build.native_ui_target, &root)?;
-    cmd.args(cargo_args);
-    let status = cmd.current_dir(&root).status()?;
-    if !status.success() {
-        return Err(AiviError::Cargo("cargo build failed".to_string()));
-    }
-    Ok(())
+    cmd_project_build_cranelift(&root, &cfg, release)
 }
 
 /// Build an AIVI project using the Cranelift AOT pipeline.
@@ -525,18 +500,7 @@ fn parse_project_args(args: &[String]) -> Result<(bool, Vec<String>), AiviError>
     Ok((release, after))
 }
 
-fn append_native_ui_target_flags(
-    cmd: &mut Command,
-    target: &aivi::NativeUiTarget,
-    project_root: &Path,
-) -> Result<(), AiviError> {
-    if let Some(feature) = cargo_feature_for_native_ui_target(project_root, target)? {
-        cmd.arg("--features");
-        cmd.arg(feature);
-    }
-    Ok(())
-}
-
+#[cfg(test)]
 fn cargo_feature_for_native_ui_target(
     project_root: &Path,
     target: &aivi::NativeUiTarget,
@@ -554,6 +518,7 @@ fn cargo_feature_for_native_ui_target(
     }
 }
 
+#[cfg(test)]
 fn cargo_feature_declared(cargo_toml_path: &Path, feature: &str) -> Result<bool, AiviError> {
     let content = std::fs::read_to_string(cargo_toml_path)?;
     let manifest: toml::Value = toml::from_str(&content).map_err(|err| {
@@ -568,42 +533,6 @@ fn cargo_feature_declared(cargo_toml_path: &Path, feature: &str) -> Result<bool,
         .is_some_and(|features| features.contains_key(feature)))
 }
 
-fn generate_project_rust(project_root: &Path, cfg: &aivi::AiviToml) -> Result<(), AiviError> {
-    let aivi_toml_path = project_root.join("aivi.toml");
-    let cargo_toml_path = project_root.join("Cargo.toml");
-    if !aivi_toml_path.exists() || !cargo_toml_path.exists() {
-        return Err(AiviError::Config(
-            "build expects a directory containing aivi.toml and Cargo.toml".to_string(),
-        ));
-    }
-
-    let entry_path = resolve_project_entry(project_root, &cfg.project.entry);
-    let entry_str = entry_path
-        .to_str()
-        .ok_or_else(|| AiviError::InvalidPath(entry_path.display().to_string()))?;
-
-    let _modules = load_checked_modules(entry_str)?;
-    let (program, cg_types, _monomorph_plan) = aivi::desugar_target_with_cg_types(entry_str)?;
-
-    let gen_dir = project_root.join(&cfg.build.gen_dir);
-    let src_out = gen_dir.join("src");
-    std::fs::create_dir_all(&src_out)?;
-
-    let (out_path, rust) = match cfg.project.kind {
-        ProjectKind::Bin => (
-            src_out.join("main.rs"),
-            compile_rust_native_typed(program, cg_types)?,
-        ),
-        ProjectKind::Lib => (
-            src_out.join("lib.rs"),
-            compile_rust_native_lib_typed(program, cg_types)?,
-        ),
-    };
-    std::fs::write(&out_path, rust)?;
-    write_build_stamp(project_root, cfg, &gen_dir, &entry_path)?;
-    Ok(())
-}
-
 fn resolve_project_entry(project_root: &Path, entry: &str) -> PathBuf {
     let entry_path = Path::new(entry);
     if entry_path.components().count() == 1 {
@@ -611,49 +540,6 @@ fn resolve_project_entry(project_root: &Path, entry: &str) -> PathBuf {
     } else {
         project_root.join(entry_path)
     }
-}
-
-fn write_build_stamp(
-    project_root: &Path,
-    cfg: &aivi::AiviToml,
-    gen_dir: &Path,
-    entry_path: &Path,
-) -> Result<(), AiviError> {
-    let src_dir = project_root.join("src");
-    let sources = aivi::collect_aivi_sources(&src_dir)?;
-    let mut inputs = Vec::new();
-    for path in sources {
-        let bytes = std::fs::read(&path)?;
-        let hash = Sha256::digest(&bytes);
-        inputs.push(serde_json::json!({
-            "path": normalize_path(path.strip_prefix(project_root).unwrap_or(&path)),
-            "sha256": hex_lower(&hash),
-        }));
-    }
-
-    let stamp = serde_json::json!({
-        "tool": { "aivi": env!("CARGO_PKG_VERSION") },
-        "language_version": cfg.project.language_version.clone().unwrap_or_else(|| "unknown".to_string()),
-        "kind": match cfg.project.kind { ProjectKind::Bin => "bin", ProjectKind::Lib => "lib" },
-        "entry": normalize_path(entry_path.strip_prefix(project_root).unwrap_or(entry_path)),
-        "rust_edition": cfg.build.rust_edition.clone(),
-        "inputs": inputs,
-    });
-
-    std::fs::create_dir_all(gen_dir)?;
-    std::fs::write(
-        gen_dir.join("aivi.json"),
-        serde_json::to_vec_pretty(&stamp).unwrap(),
-    )?;
-    Ok(())
-}
-
-fn hex_lower(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for b in bytes {
-        out.push_str(&format!("{:02x}", b));
-    }
-    out
 }
 
 #[cfg(test)]

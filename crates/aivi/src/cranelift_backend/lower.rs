@@ -281,7 +281,7 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_gen_vec_into_generator: decl!("rt_gen_vec_into_generator", [PTR, PTR], [PTR]),
         // AOT function registration
         // (ctx, name_ptr, name_len, func_ptr, arity)
-        rt_register_jit_fn: decl!("rt_register_jit_fn", [PTR, PTR, PTR, PTR, PTR], []),
+        rt_register_jit_fn: decl!("rt_register_jit_fn", [PTR, PTR, PTR, PTR, PTR, PTR], []),
         // (ctx, str_ptr, str_len) -> ptr
         rt_alloc_datetime: decl!("rt_alloc_datetime", [PTR, PTR, PTR], [PTR]),
         // (ctx, tag_ptr, tag_len, body_ptr, body_len, flags_ptr, flags_len) -> ptr
