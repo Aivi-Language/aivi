@@ -1335,18 +1335,19 @@ mod linux {
                     _ => return Err(invalid("gtk4.appRun expects Int app id")),
                 };
                 Ok(effect(move |_| {
-                    GTK_STATE.with(|state| {
+                    let app = GTK_STATE.with(|state| {
                         let state = state.borrow();
-                        let app = state.apps.get(&app_id).copied().ok_or_else(|| {
+                        state.apps.get(&app_id).copied().ok_or_else(|| {
                             RuntimeError::Error(Value::Text(format!(
                                 "gtk4.appRun unknown app id {app_id}"
                             )))
-                        })?;
-                        unsafe {
-                            let _ = g_application_run(app, 0, null_mut());
-                        }
-                        Ok(Value::Unit)
-                    })
+                        })
+                    })?;
+                    // Run outside the borrow so signal callbacks can borrow_mut
+                    unsafe {
+                        let _ = g_application_run(app, 0, null_mut());
+                    }
+                    Ok(Value::Unit)
                 }))
             }),
         );
