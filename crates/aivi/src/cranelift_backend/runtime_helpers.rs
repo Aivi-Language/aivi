@@ -35,33 +35,42 @@ pub extern "C" fn rt_box_bool(_ctx: *mut JitRuntimeCtx, value: i64) -> *mut Valu
     abi::box_value(Value::Bool(value != 0))
 }
 
-/// Unbox `Value::Int` → i64.  Panics on type mismatch.
+/// Unbox `Value::Int` → i64. Returns 0 and logs on type mismatch.
 #[no_mangle]
 pub extern "C" fn rt_unbox_int(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };
     match value {
         Value::Int(v) => *v,
-        _ => panic!("rt_unbox_int: expected Int"),
+        other => {
+            eprintln!("aivi: rt_unbox_int: expected Int, got {other:?}");
+            0
+        }
     }
 }
 
-/// Unbox `Value::Float` → i64 (f64 bit pattern).  Panics on type mismatch.
+/// Unbox `Value::Float` → i64 (f64 bit pattern). Returns 0.0 bits and logs on type mismatch.
 #[no_mangle]
 pub extern "C" fn rt_unbox_float(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };
     match value {
         Value::Float(v) => v.to_bits() as i64,
-        _ => panic!("rt_unbox_float: expected Float"),
+        other => {
+            eprintln!("aivi: rt_unbox_float: expected Float, got {other:?}");
+            0f64.to_bits() as i64
+        }
     }
 }
 
-/// Unbox `Value::Bool` → i64 (0 or 1).  Panics on type mismatch.
+/// Unbox `Value::Bool` → i64 (0 or 1). Returns 0 (false) and logs on type mismatch.
 #[no_mangle]
 pub extern "C" fn rt_unbox_bool(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };
     match value {
         Value::Bool(v) => i64::from(*v),
-        _ => panic!("rt_unbox_bool: expected Bool"),
+        other => {
+            eprintln!("aivi: rt_unbox_bool: expected Bool, got {other:?}");
+            0
+        }
     }
 }
 
@@ -187,7 +196,7 @@ pub extern "C" fn rt_alloc_constructor(
 // Value access helpers
 // ---------------------------------------------------------------------------
 
-/// Access a record field by name.  Returns `*mut Value` (Unit if missing).
+/// Access a record field by name. Returns `*mut Value` (Unit with diagnostic if missing).
 ///
 /// # Safety
 /// `value_ptr` must be a valid `Value::Record`.
@@ -202,15 +211,21 @@ pub extern "C" fn rt_record_field(
     let name =
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
     match value {
-        Value::Record(rec) => {
-            let v = rec.get(name).cloned().unwrap_or(Value::Unit);
-            abi::box_value(v)
+        Value::Record(rec) => match rec.get(name) {
+            Some(v) => abi::box_value(v.clone()),
+            None => {
+                eprintln!("aivi: record field '{name}' not found");
+                abi::box_value(Value::Unit)
+            }
+        },
+        other => {
+            eprintln!("aivi: rt_record_field: expected Record, got {other:?}");
+            abi::box_value(Value::Unit)
         }
-        _ => abi::box_value(Value::Unit),
     }
 }
 
-/// Access a list element by index.  Returns `*mut Value` (Unit if out of bounds).
+/// Access a list element by index. Returns `*mut Value` (Unit with diagnostic if out of bounds).
 ///
 /// # Safety
 /// `value_ptr` must be a valid `Value::List`.
@@ -228,10 +243,21 @@ pub extern "C" fn rt_list_index(
             } else {
                 index as usize
             };
-            let v = list.get(idx).cloned().unwrap_or(Value::Unit);
-            abi::box_value(v)
+            match list.get(idx) {
+                Some(v) => abi::box_value(v.clone()),
+                None => {
+                    eprintln!(
+                        "aivi: list index {index} out of bounds (len {})",
+                        list.len()
+                    );
+                    abi::box_value(Value::Unit)
+                }
+            }
         }
-        _ => abi::box_value(Value::Unit),
+        other => {
+            eprintln!("aivi: rt_list_index: expected List, got {other:?}");
+            abi::box_value(Value::Unit)
+        }
     }
 }
 
@@ -277,9 +303,20 @@ pub extern "C" fn rt_get_global(
     let name =
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
     let runtime = unsafe { (*ctx).runtime_mut() };
-    let val = runtime.ctx.globals.get(name).unwrap_or(Value::Unit);
-    let forced = runtime.force_value(val).unwrap_or(Value::Unit);
-    abi::box_value(forced)
+    let val = match runtime.ctx.globals.get(name) {
+        Some(v) => v,
+        None => {
+            eprintln!("aivi: global '{name}' not found");
+            return abi::box_value(Value::Unit);
+        }
+    };
+    match runtime.force_value(val) {
+        Ok(forced) => abi::box_value(forced),
+        Err(e) => {
+            eprintln!("aivi: force global '{name}': {}", format_runtime_error(e));
+            abi::box_value(Value::Unit)
+        }
+    }
 }
 
 /// Apply a closure/builtin value to one argument.
@@ -454,12 +491,20 @@ pub extern "C" fn rt_constructor_arg(
 ) -> *mut Value {
     let value = unsafe { &*ptr };
     match value {
-        Value::Constructor { args, .. } => args
-            .get(index as usize)
-            .cloned()
-            .map(abi::box_value)
-            .unwrap_or_else(|| abi::box_value(Value::Unit)),
-        _ => abi::box_value(Value::Unit),
+        Value::Constructor { args, name } => match args.get(index as usize) {
+            Some(v) => abi::box_value(v.clone()),
+            None => {
+                eprintln!(
+                    "aivi: constructor '{name}' arg index {index} out of bounds (has {})",
+                    args.len()
+                );
+                abi::box_value(Value::Unit)
+            }
+        },
+        other => {
+            eprintln!("aivi: rt_constructor_arg: expected Constructor, got {other:?}");
+            abi::box_value(Value::Unit)
+        }
     }
 }
 
@@ -482,12 +527,20 @@ pub extern "C" fn rt_tuple_item(
 ) -> *mut Value {
     let value = unsafe { &*ptr };
     match value {
-        Value::Tuple(items) => items
-            .get(index as usize)
-            .cloned()
-            .map(abi::box_value)
-            .unwrap_or_else(|| abi::box_value(Value::Unit)),
-        _ => abi::box_value(Value::Unit),
+        Value::Tuple(items) => match items.get(index as usize) {
+            Some(v) => abi::box_value(v.clone()),
+            None => {
+                eprintln!(
+                    "aivi: tuple index {index} out of bounds (len {})",
+                    items.len()
+                );
+                abi::box_value(Value::Unit)
+            }
+        },
+        other => {
+            eprintln!("aivi: rt_tuple_item: expected Tuple, got {other:?}");
+            abi::box_value(Value::Unit)
+        }
     }
 }
 
@@ -630,6 +683,7 @@ pub extern "C" fn rt_make_closure(
                 let result_ptr = f(ctx_ptr as i64, env_ptr as i64, arg_ptr as i64);
 
                 let result = if result_ptr == 0 {
+                    eprintln!("aivi: closure returned null pointer");
                     Value::Unit
                 } else {
                     let rp = result_ptr as *const Value;
@@ -705,6 +759,7 @@ pub extern "C" fn rt_binary_op(
             }
         }
     }
+    eprintln!("aivi: binary op '{op}' failed for operand types");
     abi::box_value(Value::Unit)
 }
 
