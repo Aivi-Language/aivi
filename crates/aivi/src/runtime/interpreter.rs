@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chrono::{Datelike, NaiveDate, Timelike, TimeZone as ChronoTimeZone};
+use chrono::{Datelike, NaiveDate, TimeZone as ChronoTimeZone, Timelike};
 use regex::RegexBuilder;
 use url::Url;
 
@@ -25,8 +25,8 @@ pub(crate) mod values;
 use self::builtins::register_builtins;
 use self::environment::{Env, MachineEdge, RuntimeContext};
 use self::values::{
-    BuiltinImpl, BuiltinValue, ClosureValue, EffectValue, KeyValue, ResourceValue, SourceValue,
-    TaggedValue, ThunkValue, Value, shape_record,
+    shape_record, BuiltinImpl, BuiltinValue, ClosureValue, EffectValue, KeyValue, ResourceValue,
+    SourceValue, TaggedValue, ThunkValue, Value,
 };
 
 #[derive(Debug)]
@@ -116,7 +116,6 @@ pub struct TestReport {
     pub successes: Vec<TestSuccess>,
 }
 
-
 pub(crate) fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
     let main = runtime
         .ctx
@@ -142,7 +141,6 @@ pub(crate) fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
         Err(err) => Err(AiviError::Runtime(format_runtime_error(err))),
     }
 }
-
 
 // RustIR interpreter: retained for existing test coverage. Production execution
 // routes through the Cranelift JIT backend (cranelift_backend/).
@@ -184,9 +182,9 @@ fn eval_runtime_rust_ir_expr(
             if let Some(value) = parse_number_value(text) {
                 return Ok(value);
             }
-            let value = env.get(text).ok_or_else(|| {
-                RuntimeError::Message(format!("unknown numeric literal {text}"))
-            })?;
+            let value = env
+                .get(text)
+                .ok_or_else(|| RuntimeError::Message(format!("unknown numeric literal {text}")))?;
             runtime.force_value(value)
         }
         rust_ir::RustIrExpr::LitString { text, .. } => Ok(Value::Text(text.clone())),
@@ -215,12 +213,16 @@ fn eval_runtime_rust_ir_expr(
             let param = param.clone();
             let body = Arc::new((**body).clone());
             let captured_env = env.clone();
-            Ok(runtime_builtin(&lambda_name, 1, move |mut args, runtime| {
-                let arg = args.pop().unwrap_or(Value::Unit);
-                let lambda_env = Env::new(Some(captured_env.clone()));
-                lambda_env.set(param.clone(), arg);
-                eval_runtime_rust_ir_expr(runtime, body.as_ref(), &lambda_env)
-            }))
+            Ok(runtime_builtin(
+                &lambda_name,
+                1,
+                move |mut args, runtime| {
+                    let arg = args.pop().unwrap_or(Value::Unit);
+                    let lambda_env = Env::new(Some(captured_env.clone()));
+                    lambda_env.set(param.clone(), arg);
+                    eval_runtime_rust_ir_expr(runtime, body.as_ref(), &lambda_env)
+                },
+            ))
         }
         rust_ir::RustIrExpr::App { func, arg, .. } => {
             let func_value = eval_runtime_rust_ir_expr(runtime, func, env)?;
@@ -271,7 +273,10 @@ fn eval_runtime_rust_ir_expr(
             });
 
             let mut enter = serde_json::Map::new();
-            enter.insert("kind".to_string(), serde_json::Value::String("fn.enter".to_string()));
+            enter.insert(
+                "kind".to_string(),
+                serde_json::Value::String("fn.enter".to_string()),
+            );
             enter.insert("fn".to_string(), serde_json::Value::String(fn_name.clone()));
             enter.insert(
                 "callId".to_string(),
@@ -302,7 +307,10 @@ fn eval_runtime_rust_ir_expr(
                 };
 
                 let mut exit = serde_json::Map::new();
-                exit.insert("kind".to_string(), serde_json::Value::String("fn.exit".to_string()));
+                exit.insert(
+                    "kind".to_string(),
+                    serde_json::Value::String("fn.exit".to_string()),
+                );
                 exit.insert("fn".to_string(), serde_json::Value::String(frame.fn_name));
                 exit.insert(
                     "callId".to_string(),
@@ -342,8 +350,14 @@ fn eval_runtime_rust_ir_expr(
 
             let ts_in = log_time.then(now_unix_ms);
             let mut pipe_in = serde_json::Map::new();
-            pipe_in.insert("kind".to_string(), serde_json::Value::String("pipe.in".to_string()));
-            pipe_in.insert("fn".to_string(), serde_json::Value::String(frame.fn_name.clone()));
+            pipe_in.insert(
+                "kind".to_string(),
+                serde_json::Value::String("pipe.in".to_string()),
+            );
+            pipe_in.insert(
+                "fn".to_string(),
+                serde_json::Value::String(frame.fn_name.clone()),
+            );
             pipe_in.insert(
                 "callId".to_string(),
                 serde_json::Value::Number(serde_json::Number::from(frame.call_id)),
@@ -356,7 +370,10 @@ fn eval_runtime_rust_ir_expr(
                 "step".to_string(),
                 serde_json::Value::Number(serde_json::Number::from(*step)),
             );
-            pipe_in.insert("label".to_string(), serde_json::Value::String(label.clone()));
+            pipe_in.insert(
+                "label".to_string(),
+                serde_json::Value::String(label.clone()),
+            );
             pipe_in.insert("value".to_string(), debug_value_to_json(&arg_value, 0));
             if let Some(ts) = ts_in {
                 pipe_in.insert(
@@ -396,7 +413,10 @@ fn eval_runtime_rust_ir_expr(
                 "step".to_string(),
                 serde_json::Value::Number(serde_json::Number::from(*step)),
             );
-            pipe_out.insert("label".to_string(), serde_json::Value::String(label.clone()));
+            pipe_out.insert(
+                "label".to_string(),
+                serde_json::Value::String(label.clone()),
+            );
             pipe_out.insert("value".to_string(), debug_value_to_json(&out_value, 0));
             if *log_time {
                 pipe_out.insert(
@@ -530,7 +550,9 @@ fn eval_runtime_rust_ir_expr(
         rust_ir::RustIrExpr::Block {
             block_kind, items, ..
         } => match block_kind {
-            rust_ir::RustIrBlockKind::Plain => eval_runtime_rust_ir_plain_block(runtime, items, env),
+            rust_ir::RustIrBlockKind::Plain => {
+                eval_runtime_rust_ir_plain_block(runtime, items, env)
+            }
             rust_ir::RustIrBlockKind::Do { monad } if monad == "Effect" => {
                 let lowered = lower_runtime_rust_ir_block_items(items)?;
                 Ok(Value::Effect(Arc::new(EffectValue::Block {
@@ -578,15 +600,14 @@ fn eval_runtime_sigil_literal(tag: &str, body: &str, flags: &str) -> Result<Valu
                     _ => {}
                 }
             }
-            let regex = builder.build().map_err(|err| {
-                RuntimeError::Message(format!("invalid regex literal: {err}"))
-            })?;
+            let regex = builder
+                .build()
+                .map_err(|err| RuntimeError::Message(format!("invalid regex literal: {err}")))?;
             Ok(Value::Regex(Arc::new(regex)))
         }
         "u" | "url" => {
-            let parsed = Url::parse(body).map_err(|err| {
-                RuntimeError::Message(format!("invalid url literal: {err}"))
-            })?;
+            let parsed = Url::parse(body)
+                .map_err(|err| RuntimeError::Message(format!("invalid url literal: {err}")))?;
             Ok(Value::Record(Arc::new(url_to_record(&parsed))))
         }
         "p" | "path" => {
@@ -628,22 +649,20 @@ fn eval_runtime_sigil_literal(tag: &str, body: &str, flags: &str) -> Result<Valu
             Ok(Value::Record(Arc::new(map)))
         }
         "d" => {
-            let date = NaiveDate::parse_from_str(body, "%Y-%m-%d").map_err(|err| {
-                RuntimeError::Message(format!("invalid date literal: {err}"))
-            })?;
+            let date = NaiveDate::parse_from_str(body, "%Y-%m-%d")
+                .map_err(|err| RuntimeError::Message(format!("invalid date literal: {err}")))?;
             Ok(Value::Record(Arc::new(date_to_record(date))))
         }
         "t" | "dt" => {
-            let _ = chrono::DateTime::parse_from_rfc3339(body).map_err(|err| {
-                RuntimeError::Message(format!("invalid datetime literal: {err}"))
-            })?;
+            let _ = chrono::DateTime::parse_from_rfc3339(body)
+                .map_err(|err| RuntimeError::Message(format!("invalid datetime literal: {err}")))?;
             Ok(Value::DateTime(body.to_string()))
         }
         "tz" => {
             let zone_id = body.trim();
-            let _: chrono_tz::Tz = zone_id.parse().map_err(|_| {
-                RuntimeError::Message(format!("invalid timezone id: {zone_id}"))
-            })?;
+            let _: chrono_tz::Tz = zone_id
+                .parse()
+                .map_err(|_| RuntimeError::Message(format!("invalid timezone id: {zone_id}")))?;
             let mut map = HashMap::new();
             map.insert("id".to_string(), Value::Text(zone_id.to_string()));
             Ok(Value::Record(Arc::new(map)))
@@ -651,22 +670,21 @@ fn eval_runtime_sigil_literal(tag: &str, body: &str, flags: &str) -> Result<Valu
         "zdt" => {
             let text = body.trim();
             let (dt_text, zone_id) = parse_zdt_parts(text)?;
-            let tz: chrono_tz::Tz = zone_id.parse().map_err(|_| {
-                RuntimeError::Message(format!("invalid timezone id: {zone_id}"))
-            })?;
+            let tz: chrono_tz::Tz = zone_id
+                .parse()
+                .map_err(|_| RuntimeError::Message(format!("invalid timezone id: {zone_id}")))?;
 
             let zdt = if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(dt_text) {
                 parsed.with_timezone(&tz)
             } else {
                 let naive = parse_naive_datetime(dt_text)?;
-                tz.from_local_datetime(&naive)
-                    .single()
-                    .ok_or_else(|| {
-                        RuntimeError::Message("ambiguous or invalid local time".to_string())
-                    })?
+                tz.from_local_datetime(&naive).single().ok_or_else(|| {
+                    RuntimeError::Message("ambiguous or invalid local time".to_string())
+                })?
             };
 
-            let offset_millis = i64::from(chrono::offset::Offset::fix(zdt.offset()).local_minus_utc()) * 1000;
+            let offset_millis =
+                i64::from(chrono::offset::Offset::fix(zdt.offset()).local_minus_utc()) * 1000;
 
             let mut dt_map = HashMap::new();
             dt_map.insert("year".to_string(), Value::Int(zdt.year() as i64));
@@ -693,9 +711,8 @@ fn eval_runtime_sigil_literal(tag: &str, body: &str, flags: &str) -> Result<Valu
             Ok(Value::Record(Arc::new(map)))
         }
         "k" => {
-            validate_key_text(body).map_err(|msg| {
-                RuntimeError::Message(format!("invalid i18n key literal: {msg}"))
-            })?;
+            validate_key_text(body)
+                .map_err(|msg| RuntimeError::Message(format!("invalid i18n key literal: {msg}")))?;
             let mut map = HashMap::new();
             map.insert("tag".to_string(), Value::Text(tag.to_string()));
             map.insert("body".to_string(), Value::Text(body.trim().to_string()));
@@ -766,22 +783,6 @@ fn eval_runtime_rust_ir_plain_block(
         }
     }
     Ok(result)
-}
-
-pub(crate) fn lower_runtime_rust_ir_block_items(
-    items: &[rust_ir::RustIrBlockItem],
-) -> Result<Vec<HirBlockItem>, RuntimeError> {
-    items
-        .iter()
-        .enumerate()
-        .map(|(index, item)| {
-            lower_runtime_rust_ir_block_item(item).ok_or_else(|| {
-                RuntimeError::Message(format!(
-                    "failed to lower jitted block item at index {index}"
-                ))
-            })
-        })
-        .collect()
 }
 
 fn eval_runtime_rust_ir_record(
@@ -1030,353 +1031,6 @@ fn resolve_runtime_rust_ir_path_segments(
     Ok(resolved)
 }
 
-fn lower_runtime_rust_ir_expr(expr: &rust_ir::RustIrExpr) -> Option<HirExpr> {
-    Some(match expr {
-        rust_ir::RustIrExpr::Local { id, name }
-        | rust_ir::RustIrExpr::Global { id, name } => HirExpr::Var {
-            id: *id,
-            name: name.clone(),
-        },
-        rust_ir::RustIrExpr::Builtin { id, builtin } => HirExpr::Var {
-            id: *id,
-            name: builtin.clone(),
-        },
-        rust_ir::RustIrExpr::ConstructorValue { id, name } => HirExpr::Var {
-            id: *id,
-            name: name.clone(),
-        },
-        rust_ir::RustIrExpr::LitNumber { id, text } => HirExpr::LitNumber {
-            id: *id,
-            text: text.clone(),
-        },
-        rust_ir::RustIrExpr::LitString { id, text } => HirExpr::LitString {
-            id: *id,
-            text: text.clone(),
-        },
-        rust_ir::RustIrExpr::TextInterpolate { id, parts } => HirExpr::TextInterpolate {
-            id: *id,
-            parts: parts
-                .iter()
-                .map(lower_runtime_rust_ir_text_part)
-                .collect::<Option<Vec<_>>>()?,
-        },
-        rust_ir::RustIrExpr::LitSigil {
-            id,
-            tag,
-            body,
-            flags,
-        } => HirExpr::LitSigil {
-            id: *id,
-            tag: tag.clone(),
-            body: body.clone(),
-            flags: flags.clone(),
-        },
-        rust_ir::RustIrExpr::LitBool { id, value } => HirExpr::LitBool {
-            id: *id,
-            value: *value,
-        },
-        rust_ir::RustIrExpr::LitDateTime { id, text } => HirExpr::LitDateTime {
-            id: *id,
-            text: text.clone(),
-        },
-        rust_ir::RustIrExpr::Lambda { id, param, body } => HirExpr::Lambda {
-            id: *id,
-            param: param.clone(),
-            body: Box::new(lower_runtime_rust_ir_expr(body)?),
-        },
-        rust_ir::RustIrExpr::App { id, func, arg } => HirExpr::App {
-            id: *id,
-            func: Box::new(lower_runtime_rust_ir_expr(func)?),
-            arg: Box::new(lower_runtime_rust_ir_expr(arg)?),
-        },
-        rust_ir::RustIrExpr::Call { id, func, args } => HirExpr::Call {
-            id: *id,
-            func: Box::new(lower_runtime_rust_ir_expr(func)?),
-            args: args
-                .iter()
-                .map(lower_runtime_rust_ir_expr)
-                .collect::<Option<Vec<_>>>()?,
-        },
-        rust_ir::RustIrExpr::DebugFn {
-            id,
-            fn_name,
-            arg_vars,
-            log_args,
-            log_return,
-            log_time,
-            body,
-        } => HirExpr::DebugFn {
-            id: *id,
-            fn_name: fn_name.clone(),
-            arg_vars: arg_vars.clone(),
-            log_args: *log_args,
-            log_return: *log_return,
-            log_time: *log_time,
-            body: Box::new(lower_runtime_rust_ir_expr(body)?),
-        },
-        rust_ir::RustIrExpr::Pipe {
-            id,
-            pipe_id,
-            step,
-            label,
-            log_time,
-            func,
-            arg,
-        } => HirExpr::Pipe {
-            id: *id,
-            pipe_id: *pipe_id,
-            step: *step,
-            label: label.clone(),
-            log_time: *log_time,
-            func: Box::new(lower_runtime_rust_ir_expr(func)?),
-            arg: Box::new(lower_runtime_rust_ir_expr(arg)?),
-        },
-        rust_ir::RustIrExpr::List { id, items } => HirExpr::List {
-            id: *id,
-            items: items
-                .iter()
-                .map(|item| {
-                    Some(HirListItem {
-                        expr: lower_runtime_rust_ir_expr(&item.expr)?,
-                        spread: item.spread,
-                    })
-                })
-                .collect::<Option<Vec<_>>>()?,
-        },
-        rust_ir::RustIrExpr::Tuple { id, items } => HirExpr::Tuple {
-            id: *id,
-            items: items
-                .iter()
-                .map(lower_runtime_rust_ir_expr)
-                .collect::<Option<Vec<_>>>()?,
-        },
-        rust_ir::RustIrExpr::Record { id, fields } => HirExpr::Record {
-            id: *id,
-            fields: fields
-                .iter()
-                .map(lower_runtime_rust_ir_record_field)
-                .collect::<Option<Vec<_>>>()?,
-        },
-        rust_ir::RustIrExpr::Patch { id, target, fields } => HirExpr::Patch {
-            id: *id,
-            target: Box::new(lower_runtime_rust_ir_expr(target)?),
-            fields: fields
-                .iter()
-                .map(lower_runtime_rust_ir_record_field)
-                .collect::<Option<Vec<_>>>()?,
-        },
-        rust_ir::RustIrExpr::FieldAccess { id, base, field } => HirExpr::FieldAccess {
-            id: *id,
-            base: Box::new(lower_runtime_rust_ir_expr(base)?),
-            field: field.clone(),
-        },
-        rust_ir::RustIrExpr::Index { id, base, index } => HirExpr::Index {
-            id: *id,
-            base: Box::new(lower_runtime_rust_ir_expr(base)?),
-            index: Box::new(lower_runtime_rust_ir_expr(index)?),
-        },
-        rust_ir::RustIrExpr::Match {
-            id,
-            scrutinee,
-            arms,
-        } => HirExpr::Match {
-            id: *id,
-            scrutinee: Box::new(lower_runtime_rust_ir_expr(scrutinee)?),
-            arms: arms
-                .iter()
-                .map(lower_runtime_rust_ir_match_arm)
-                .collect::<Option<Vec<_>>>()?,
-        },
-        rust_ir::RustIrExpr::If {
-            id,
-            cond,
-            then_branch,
-            else_branch,
-        } => HirExpr::If {
-            id: *id,
-            cond: Box::new(lower_runtime_rust_ir_expr(cond)?),
-            then_branch: Box::new(lower_runtime_rust_ir_expr(then_branch)?),
-            else_branch: Box::new(lower_runtime_rust_ir_expr(else_branch)?),
-        },
-        rust_ir::RustIrExpr::Binary {
-            id,
-            op,
-            left,
-            right,
-        } => HirExpr::Binary {
-            id: *id,
-            op: op.clone(),
-            left: Box::new(lower_runtime_rust_ir_expr(left)?),
-            right: Box::new(lower_runtime_rust_ir_expr(right)?),
-        },
-        rust_ir::RustIrExpr::Block {
-            id,
-            block_kind,
-            items,
-        } => HirExpr::Block {
-            id: *id,
-            block_kind: lower_runtime_rust_ir_block_kind(block_kind)?,
-            items: items
-                .iter()
-                .map(lower_runtime_rust_ir_block_item)
-                .collect::<Option<Vec<_>>>()?,
-        },
-        rust_ir::RustIrExpr::Raw { id, text } => HirExpr::Raw {
-            id: *id,
-            text: text.clone(),
-        },
-    })
-}
-
-fn lower_runtime_rust_ir_text_part(part: &rust_ir::RustIrTextPart) -> Option<HirTextPart> {
-    Some(match part {
-        rust_ir::RustIrTextPart::Text { text } => HirTextPart::Text { text: text.clone() },
-        rust_ir::RustIrTextPart::Expr { expr } => HirTextPart::Expr {
-            expr: lower_runtime_rust_ir_expr(expr)?,
-        },
-    })
-}
-
-fn lower_runtime_rust_ir_record_field(field: &rust_ir::RustIrRecordField) -> Option<HirRecordField> {
-    Some(HirRecordField {
-        spread: field.spread,
-        path: field
-            .path
-            .iter()
-            .map(lower_runtime_rust_ir_path_segment)
-            .collect::<Option<Vec<_>>>()?,
-        value: lower_runtime_rust_ir_expr(&field.value)?,
-    })
-}
-
-fn lower_runtime_rust_ir_path_segment(seg: &rust_ir::RustIrPathSegment) -> Option<HirPathSegment> {
-    Some(match seg {
-        rust_ir::RustIrPathSegment::Field(name) => HirPathSegment::Field(name.clone()),
-        rust_ir::RustIrPathSegment::IndexValue(expr)
-        | rust_ir::RustIrPathSegment::IndexPredicate(expr) => {
-            HirPathSegment::Index(lower_runtime_rust_ir_expr(expr)?)
-        }
-        rust_ir::RustIrPathSegment::IndexFieldBool(name) => HirPathSegment::Index(HirExpr::Var {
-            id: 0,
-            name: name.clone(),
-        }),
-        rust_ir::RustIrPathSegment::IndexAll => HirPathSegment::All,
-    })
-}
-
-fn lower_runtime_rust_ir_match_arm(arm: &rust_ir::RustIrMatchArm) -> Option<HirMatchArm> {
-    Some(HirMatchArm {
-        pattern: lower_runtime_rust_ir_pattern(&arm.pattern),
-        guard: match arm.guard.as_ref() {
-            Some(guard) => Some(lower_runtime_rust_ir_expr(guard)?),
-            None => None,
-        },
-        body: lower_runtime_rust_ir_expr(&arm.body)?,
-    })
-}
-
-fn lower_runtime_rust_ir_pattern(pattern: &rust_ir::RustIrPattern) -> HirPattern {
-    match pattern {
-        rust_ir::RustIrPattern::Wildcard { id } => HirPattern::Wildcard { id: *id },
-        rust_ir::RustIrPattern::Var { id, name } => HirPattern::Var {
-            id: *id,
-            name: name.clone(),
-        },
-        rust_ir::RustIrPattern::At { id, name, pattern } => HirPattern::At {
-            id: *id,
-            name: name.clone(),
-            pattern: Box::new(lower_runtime_rust_ir_pattern(pattern)),
-        },
-        rust_ir::RustIrPattern::Literal { id, value } => HirPattern::Literal {
-            id: *id,
-            value: lower_runtime_rust_ir_literal(value),
-        },
-        rust_ir::RustIrPattern::Constructor { id, name, args } => HirPattern::Constructor {
-            id: *id,
-            name: name.clone(),
-            args: args
-                .iter()
-                .map(lower_runtime_rust_ir_pattern)
-                .collect(),
-        },
-        rust_ir::RustIrPattern::Tuple { id, items } => HirPattern::Tuple {
-            id: *id,
-            items: items
-                .iter()
-                .map(lower_runtime_rust_ir_pattern)
-                .collect(),
-        },
-        rust_ir::RustIrPattern::List { id, items, rest } => HirPattern::List {
-            id: *id,
-            items: items
-                .iter()
-                .map(lower_runtime_rust_ir_pattern)
-                .collect(),
-            rest: match rest.as_ref() {
-                Some(rest) => Some(Box::new(lower_runtime_rust_ir_pattern(rest.as_ref()))),
-                None => None,
-            },
-        },
-        rust_ir::RustIrPattern::Record { id, fields } => HirPattern::Record {
-            id: *id,
-            fields: fields
-                .iter()
-                .map(|field| crate::hir::HirRecordPatternField {
-                    path: field.path.clone(),
-                    pattern: lower_runtime_rust_ir_pattern(&field.pattern),
-                })
-                .collect(),
-        },
-    }
-}
-
-fn lower_runtime_rust_ir_literal(literal: &rust_ir::RustIrLiteral) -> HirLiteral {
-    match literal {
-        rust_ir::RustIrLiteral::Number(value) => HirLiteral::Number(value.clone()),
-        rust_ir::RustIrLiteral::String(value) => HirLiteral::String(value.clone()),
-        rust_ir::RustIrLiteral::Sigil { tag, body, flags } => HirLiteral::Sigil {
-            tag: tag.clone(),
-            body: body.clone(),
-            flags: flags.clone(),
-        },
-        rust_ir::RustIrLiteral::Bool(value) => HirLiteral::Bool(*value),
-        rust_ir::RustIrLiteral::DateTime(value) => HirLiteral::DateTime(value.clone()),
-    }
-}
-
-fn lower_runtime_rust_ir_block_kind(kind: &rust_ir::RustIrBlockKind) -> Option<crate::hir::HirBlockKind> {
-    Some(match kind {
-        rust_ir::RustIrBlockKind::Plain => crate::hir::HirBlockKind::Plain,
-        rust_ir::RustIrBlockKind::Do { monad } => crate::hir::HirBlockKind::Do {
-            monad: monad.clone(),
-        },
-        rust_ir::RustIrBlockKind::Generate => crate::hir::HirBlockKind::Generate,
-        rust_ir::RustIrBlockKind::Resource => crate::hir::HirBlockKind::Resource,
-    })
-}
-
-fn lower_runtime_rust_ir_block_item(item: &rust_ir::RustIrBlockItem) -> Option<HirBlockItem> {
-    Some(match item {
-        rust_ir::RustIrBlockItem::Bind { pattern, expr } => HirBlockItem::Bind {
-            pattern: lower_runtime_rust_ir_pattern(pattern),
-            expr: lower_runtime_rust_ir_expr(expr)?,
-        },
-        rust_ir::RustIrBlockItem::Filter { expr } => HirBlockItem::Filter {
-            expr: lower_runtime_rust_ir_expr(expr)?,
-        },
-        rust_ir::RustIrBlockItem::Yield { expr } => HirBlockItem::Yield {
-            expr: lower_runtime_rust_ir_expr(expr)?,
-        },
-        rust_ir::RustIrBlockItem::Recurse { expr } => HirBlockItem::Recurse {
-            expr: lower_runtime_rust_ir_expr(expr)?,
-        },
-        rust_ir::RustIrBlockItem::Expr { expr } => HirBlockItem::Expr {
-            expr: lower_runtime_rust_ir_expr(expr)?,
-        },
-    })
-}
-
-
 pub fn run_test_suite(
     program: HirProgram,
     test_entries: &[(String, String)],
@@ -1452,15 +1106,15 @@ pub fn run_test_suite(
     Ok(report)
 }
 
-pub(crate) fn build_runtime_from_program(program: HirProgram) -> Result<Runtime, AiviError> {
+pub(crate) fn build_runtime_from_program(program: &HirProgram) -> Result<Runtime, AiviError> {
     if program.modules.is_empty() {
         return Err(AiviError::Runtime("no modules to run".to_string()));
     }
 
     let mut grouped: HashMap<String, Vec<HirExpr>> = HashMap::new();
-    for module in program.modules {
-        let module_name = module.name.clone();
-        for def in module.defs {
+    for module in &program.modules {
+        let module_name = &module.name;
+        for def in &module.defs {
             // Unqualified entry (legacy/global namespace).
             grouped
                 .entry(def.name.clone())
@@ -1472,7 +1126,7 @@ pub(crate) fn build_runtime_from_program(program: HirProgram) -> Result<Runtime,
             grouped
                 .entry(format!("{module_name}.{}", def.name))
                 .or_default()
-                .push(def.expr);
+                .push(def.expr.clone());
         }
     }
     if grouped.is_empty() {
@@ -1516,6 +1170,20 @@ pub(crate) fn build_runtime_from_program(program: HirProgram) -> Result<Runtime,
     ));
     let cancel = CancelToken::root();
     Ok(Runtime::new(ctx, cancel))
+}
+
+/// Create a runtime with only builtins registered (no user program).
+/// Used by the AOT path where compiled functions are registered separately.
+pub(crate) fn build_runtime_base() -> Runtime {
+    let globals = Env::new(None);
+    register_builtins(&globals);
+    globals.set("__machine_on".to_string(), make_machine_on_builtin());
+    let ctx = Arc::new(RuntimeContext::new_with_constructor_ordinals(
+        globals,
+        core_constructor_ordinals(),
+    ));
+    let cancel = CancelToken::root();
+    Runtime::new(ctx, cancel)
 }
 
 fn build_runtime_from_program_scoped(
@@ -1686,10 +1354,8 @@ fn build_runtime_from_program_scoped(
                         if let Some(value) = globals.get(&qualified) {
                             if let Some(existing) = module_env.get(name) {
                                 if method_names.contains(name) {
-                                    module_env.set(
-                                        name.clone(),
-                                        merge_method_binding(existing, value),
-                                    );
+                                    module_env
+                                        .set(name.clone(), merge_method_binding(existing, value));
                                     continue;
                                 }
                             }
@@ -1708,10 +1374,8 @@ fn build_runtime_from_program_scoped(
                         if let Some(value) = globals.get(&qualified) {
                             if let Some(existing) = module_env.get(&name) {
                                 if method_names.contains(&name) {
-                                    module_env.set(
-                                        name.clone(),
-                                        merge_method_binding(existing, value),
-                                    );
+                                    module_env
+                                        .set(name.clone(), merge_method_binding(existing, value));
                                     continue;
                                 }
                             }
@@ -1846,9 +1510,11 @@ fn make_machine_on_builtin() -> Value {
         if let Some((machine_name, event_name)) = parse_machine_transition_ref(&transition) {
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |runtime| {
-                    runtime
-                        .ctx
-                        .register_machine_handler(&machine_name, &event_name, handler.clone());
+                    runtime.ctx.register_machine_handler(
+                        &machine_name,
+                        &event_name,
+                        handler.clone(),
+                    );
                     Ok(Value::Unit)
                 }),
             };
@@ -1946,7 +1612,12 @@ fn bind_module_machine_values(
                     .first()
                     .map(|transition| transition.target.name.clone())
             })
-            .or_else(|| machine_decl.states.first().map(|state| state.name.name.clone()))
+            .or_else(|| {
+                machine_decl
+                    .states
+                    .first()
+                    .map(|state| state.name.name.clone())
+            })
             .unwrap_or_else(|| "Closed".to_string());
 
         for transition in &machine_decl.transitions {
@@ -2106,11 +1777,17 @@ impl BuiltinValue {
         let mut tagged_args = self.tagged_args.clone();
         let mut pending_arg = Some(arg);
         if let Some(existing) = tagged_args.as_mut() {
-            if let Some(tagged) = TaggedValue::from_value(pending_arg.as_ref().expect("pending arg")) {
+            if let Some(tagged) =
+                TaggedValue::from_value(pending_arg.as_ref().expect("pending arg"))
+            {
                 existing.push(tagged);
                 pending_arg = None;
             } else {
-                args = existing.iter().copied().map(TaggedValue::to_value).collect();
+                args = existing
+                    .iter()
+                    .copied()
+                    .map(TaggedValue::to_value)
+                    .collect();
                 tagged_args = None;
             }
         }
@@ -2120,7 +1797,11 @@ impl BuiltinValue {
         if args.is_empty() {
             if let Some(existing) = tagged_args.as_ref() {
                 if existing.len() == self.imp.arity {
-                    args = existing.iter().copied().map(TaggedValue::to_value).collect();
+                    args = existing
+                        .iter()
+                        .copied()
+                        .map(TaggedValue::to_value)
+                        .collect();
                 } else {
                     return Ok(Value::Builtin(BuiltinValue {
                         imp: self.imp.clone(),

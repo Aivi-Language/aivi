@@ -357,9 +357,7 @@ impl KeyValue {
             KeyValue::BigInt(value) => Value::BigInt(value.clone()),
             KeyValue::Rational(value) => Value::Rational(value.clone()),
             KeyValue::Decimal(value) => Value::Decimal(*value),
-            KeyValue::Tuple(items) => {
-                Value::Tuple(items.iter().map(KeyValue::to_value).collect())
-            }
+            KeyValue::Tuple(items) => Value::Tuple(items.iter().map(KeyValue::to_value).collect()),
             KeyValue::Record(pairs) => {
                 let fields: HashMap<String, Value> = pairs
                     .iter()

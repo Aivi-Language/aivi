@@ -1,7 +1,5 @@
 # AIVI Language Specification (v0.1)
 
-> Note: **AIVI** executes via a tree-walking interpreter (CST → HIR → Kernel → native runtime) or compiles to Rust (CST → HIR → Kernel → Rust IR → Rust source).
-
 ## Overview
 
 AIVI is a statically typed, purely functional language designed for **high-integrity data pipelines** and **domain-driven design**.

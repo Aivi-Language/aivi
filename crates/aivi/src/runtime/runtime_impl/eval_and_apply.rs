@@ -157,7 +157,7 @@ impl Runtime {
         Ok(())
     }
 
-    fn generator_to_list(&mut self, gen: Value) -> Result<Vec<Value>, RuntimeError> {
+    pub(crate) fn generator_to_list(&mut self, gen: Value) -> Result<Vec<Value>, RuntimeError> {
         // A generator is a function (k -> z -> R).
         // We fold it with a list-append step: k = \acc x -> acc ++ [x], z = []
         // Cache the step builtin implementation to avoid re-allocating on every call.

@@ -213,14 +213,18 @@ fn send_smtp_message(config: HashMap<String, Value>) -> Result<Value, RuntimeErr
 }
 
 fn parse_mime_parts(raw: &str) -> Result<Value, RuntimeError> {
-    let parsed = mailparse::parse_mail(raw.as_bytes())
-        .map_err(|err| RuntimeError::Error(Value::Text(format!("email.mimeParts decode error: {err}"))))?;
+    let parsed = mailparse::parse_mail(raw.as_bytes()).map_err(|err| {
+        RuntimeError::Error(Value::Text(format!("email.mimeParts decode error: {err}")))
+    })?;
     let mut parts = Vec::new();
     collect_parts(&parsed, &mut parts)?;
     Ok(Value::List(Arc::new(parts)))
 }
 
-fn collect_parts(parsed: &mailparse::ParsedMail<'_>, out: &mut Vec<Value>) -> Result<(), RuntimeError> {
+fn collect_parts(
+    parsed: &mailparse::ParsedMail<'_>,
+    out: &mut Vec<Value>,
+) -> Result<(), RuntimeError> {
     let mut fields = HashMap::new();
     fields.insert(
         "contentType".to_string(),

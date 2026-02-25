@@ -188,13 +188,38 @@ Boxing/unboxing functions for each CgType:
 - All `RustIrExpr` variants are lowered to Cranelift IR via `lower.rs`.
 - Runtime helpers (`runtime_helpers.rs`) provide `extern "C"` functions for boxing/unboxing, allocation, and runtime interaction.
 - Effect blocks (`do Effect { ... }`) are handled by the interpreter runtime; pure function definitions are JIT-compiled.
+- Cranelift compilation failures are surfaced as runtime/compile errors; they no longer silently fall back.
 - The old Rust source emission path (`native_rust_backend/`) and `rustc` invocation are retained for `aivi build` only.
+
+### Cranelift migration checklist (interpreter fallback inventory)
+
+This checklist tracks every remaining interpreter-linked surface in the Cranelift path.
+
+| Area | Source location(s) | Current status | Migration target |
+| --- | --- | --- | --- |
+| Generate block fallback for `Bind` | `crates/aivi/src/cranelift_backend/lower.rs` (`lower_generate_items`) | ✅ **Done** — native lowering with nested loops for Bind items | — |
+| Resource block construction | `crates/aivi/src/cranelift_backend/lower.rs` (`lower_resource_block`) | ✅ **Done** — pre-converts RustIR→HIR at compile time | — |
+| Delegation helper ABI imports | `crates/aivi/src/cranelift_backend/lower.rs` | ✅ **Done** — `rt_env_new`, `rt_env_set`, `rt_eval_generate`, `rt_make_resource` removed | — |
+| Delegation helper runtime symbols | `crates/aivi/src/cranelift_backend/runtime_helpers.rs` | ✅ **Done** — symbols and helper implementations removed | — |
+| JIT runtime bootstrap coupling | `crates/aivi/src/cranelift_backend/compile.rs` (`run_cranelift_jit`) | ✅ **Done** — borrows `&HirProgram`; no interpreter `eval` in JIT path | — |
+| AOT entry point | `crates/aivi/src/cranelift_backend/compile.rs` (`generate_aot_entry`) | ✅ **Done** — registers AOT functions via `rt_register_jit_fn`; embeds name data in object sections | — |
+| CLI run/build routing | `crates/aivi/src/main/commands.rs` | ✅ **Done** — `aivi build` defaults to Cranelift AOT; `--native-rust` opts into legacy | — |
+| Legacy Rust backend in pipeline | `crates/aivi/src/native_rust_backend/*` | ✅ **Done** — retired from default pipeline; available via `--native-rust` flag | — |
+
+Baseline regression command matrix for this migration:
+
+- `cargo test --workspace`
+- `cargo test -p aivi --test cranelift_jit`
 
 ### Recently Implemented
 
 - **Full Cranelift JIT backend** — replaces the hybrid interpreter+Cranelift path for `aivi run`
 - **Uniform Value* ABI** — all JIT functions use `(ctx: i64, ...args: i64) -> i64` with boxed `Value` pointers
-- **Runtime helper bridge** — 22 `extern "C"` functions registered as JIT symbols for boxing, allocation, and runtime interaction
+- **Runtime helper bridge** — `extern "C"` functions registered as JIT symbols for boxing, allocation, and runtime interaction
+- **Native generate/resource lowering** — `Bind` items use nested Cranelift basic-block loops; resource blocks pre-convert at compile time
+- **AOT function registration** — `__aivi_main` embeds name strings in object data sections and registers AOT functions via `rt_register_jit_fn`
+- **Minimal AOT runtime** — `init_aot_runtime_base()` creates runtime with builtins only; no source re-parsing needed
+- **Cranelift AOT as default build** — `aivi build` uses Cranelift AOT pipeline; `--native-rust` opts into legacy Rust codegen
 - **Typed call chain emission** — multi-arg calls to known typed globals now chain: `fn_typed(rt)?(arg1)?(arg2)?`
 - **Boxing/unboxing at boundaries** — typed subexpressions that can't be emitted in typed mode fall back to `emit_expr` + `emit_unbox()`, allowing typed code to cross into Value territory
 - **Typed `main` rewrite** — `main` gets a `_typed` variant when its CgType is closed; the entry point calls the typed version and boxes the result

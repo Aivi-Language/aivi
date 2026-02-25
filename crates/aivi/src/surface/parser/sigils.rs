@@ -1091,7 +1091,7 @@ impl Parser {
                 };
                 let mapped_expr = Expr::Call {
                     func: Box::new(Expr::Ident(SpannedName {
-                        name: "map".into(),
+                        name: "each".into(),
                         span: span.clone(),
                     })),
                     args: vec![lambda_expr, items_expr],

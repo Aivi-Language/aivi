@@ -1154,7 +1154,7 @@ x =
         .expect("x def");
 
     assert!(
-        expr_contains_ident(&def.expr, "map") && expr_contains_ident(&def.expr, "gtkElement"),
+        expr_contains_ident(&def.expr, "each") && expr_contains_ident(&def.expr, "gtkElement"),
         "expected <each> to lower to mapped GtkNode children"
     );
 }

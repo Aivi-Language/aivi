@@ -4,8 +4,10 @@ use std::sync::Arc;
 use super::util::{builtin, expect_text};
 use crate::runtime::{EffectValue, RuntimeError, Value};
 
-type ManagedObjects =
-    HashMap<zbus::zvariant::OwnedObjectPath, HashMap<String, HashMap<String, zbus::zvariant::OwnedValue>>>;
+type ManagedObjects = HashMap<
+    zbus::zvariant::OwnedObjectPath,
+    HashMap<String, HashMap<String, zbus::zvariant::OwnedValue>>,
+>;
 
 pub(super) fn build_goa_record() -> Value {
     let mut fields = HashMap::new();
