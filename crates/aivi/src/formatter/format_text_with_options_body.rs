@@ -553,6 +553,145 @@
         Some((tag_name, attrs, self_close))
     }
 
+    fn normalize_top_level_colon_spacing(field: &str) -> String {
+        let mut brace_depth = 0isize;
+        let mut paren_depth = 0isize;
+        let mut bracket_depth = 0isize;
+        let mut in_quote: Option<char> = None;
+        let mut escaped = false;
+        let mut colon_idx: Option<usize> = None;
+
+        for (idx, ch) in field.char_indices() {
+            if let Some(q) = in_quote {
+                if q != '`' && !escaped && ch == '\\' {
+                    escaped = true;
+                    continue;
+                }
+                if escaped {
+                    escaped = false;
+                    continue;
+                }
+                if ch == q {
+                    in_quote = None;
+                }
+                continue;
+            }
+
+            match ch {
+                '"' | '\'' | '`' => in_quote = Some(ch),
+                '{' => brace_depth += 1,
+                '}' => {
+                    if brace_depth > 0 {
+                        brace_depth -= 1;
+                    }
+                }
+                '(' => paren_depth += 1,
+                ')' => {
+                    if paren_depth > 0 {
+                        paren_depth -= 1;
+                    }
+                }
+                '[' => bracket_depth += 1,
+                ']' => {
+                    if bracket_depth > 0 {
+                        bracket_depth -= 1;
+                    }
+                }
+                ':' if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 => {
+                    colon_idx = Some(idx);
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        if let Some(idx) = colon_idx {
+            let lhs = field[..idx].trim();
+            let rhs = field[idx + 1..].trim();
+            format!("{lhs}: {rhs}")
+        } else {
+            field.trim().to_string()
+        }
+    }
+
+    fn split_top_level_commas(text: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut start = 0usize;
+        let mut brace_depth = 0isize;
+        let mut paren_depth = 0isize;
+        let mut bracket_depth = 0isize;
+        let mut in_quote: Option<char> = None;
+        let mut escaped = false;
+
+        for (idx, ch) in text.char_indices() {
+            if let Some(q) = in_quote {
+                if q != '`' && !escaped && ch == '\\' {
+                    escaped = true;
+                    continue;
+                }
+                if escaped {
+                    escaped = false;
+                    continue;
+                }
+                if ch == q {
+                    in_quote = None;
+                }
+                continue;
+            }
+
+            match ch {
+                '"' | '\'' | '`' => in_quote = Some(ch),
+                '{' => brace_depth += 1,
+                '}' => {
+                    if brace_depth > 0 {
+                        brace_depth -= 1;
+                    }
+                }
+                '(' => paren_depth += 1,
+                ')' => {
+                    if paren_depth > 0 {
+                        paren_depth -= 1;
+                    }
+                }
+                '[' => bracket_depth += 1,
+                ']' => {
+                    if bracket_depth > 0 {
+                        bracket_depth -= 1;
+                    }
+                }
+                ',' if brace_depth == 0 && paren_depth == 0 && bracket_depth == 0 => {
+                    let item = text[start..idx].trim();
+                    if !item.is_empty() {
+                        out.push(normalize_top_level_colon_spacing(item));
+                    }
+                    start = idx + ch.len_utf8();
+                }
+                _ => {}
+            }
+        }
+
+        let tail = text[start..].trim();
+        if !tail.is_empty() {
+            out.push(normalize_top_level_colon_spacing(tail));
+        }
+        out
+    }
+
+    fn parse_wrapped_record_attr(attr: &str) -> Option<(String, Vec<String>)> {
+        let (name, value) = attr.split_once('=')?;
+        let value = value.trim();
+        let outer = value.strip_prefix('{')?.strip_suffix('}')?.trim();
+        let inner = outer.strip_prefix('{')?.strip_suffix('}')?.trim();
+        if inner.is_empty() || !inner.contains(':') {
+            return None;
+        }
+        let fields = split_top_level_commas(inner);
+        if fields.len() < 2 {
+            return None;
+        }
+        Some((name.trim().to_string(), fields))
+    }
+
     fn format_markup_sigil(text: &str) -> Option<Vec<String>> {
         let MarkupSigil { open, close, body } = parse_markup_sigil(text)?;
         let body_chars: Vec<char> = body.chars().collect();
@@ -640,17 +779,54 @@
                 let (tag, attrs, self_close) = parse_open_markup_tag(trimmed)?;
                 let indent = " ".repeat(depth * 2);
                 if attrs.len() < 5 {
-                    let mut line = format!("{indent}<{tag}");
-                    for attr in attrs {
-                        line.push(' ');
-                        line.push_str(&attr);
-                    }
-                    if self_close {
-                        line.push_str(" />");
+                    let wrapped = attrs
+                        .iter()
+                        .enumerate()
+                        .find_map(|(idx, attr)| parse_wrapped_record_attr(attr).map(|v| (idx, v)));
+
+                    if let Some((wrapped_idx, (wrapped_name, wrapped_fields))) = wrapped {
+                        let mut open_line = format!("{indent}<{tag}");
+                        for attr in attrs.iter().take(wrapped_idx) {
+                            open_line.push(' ');
+                            open_line.push_str(attr);
+                        }
+                        open_line.push(' ');
+                        open_line.push_str(&format!("{wrapped_name}={{{{"));
+                        lines.push(open_line);
+
+                        let field_indent = format!("{indent}  ");
+                        for (idx, field) in wrapped_fields.iter().enumerate() {
+                            if idx + 1 == wrapped_fields.len() {
+                                lines.push(format!("{field_indent}{field}"));
+                            } else {
+                                lines.push(format!("{field_indent}{field},"));
+                            }
+                        }
+
+                        let mut close_line = format!("{indent}}}}}");
+                        for attr in attrs.iter().skip(wrapped_idx + 1) {
+                            close_line.push(' ');
+                            close_line.push_str(attr);
+                        }
+                        if self_close {
+                            close_line.push_str(" />");
+                        } else {
+                            close_line.push('>');
+                        }
+                        lines.push(close_line);
                     } else {
-                        line.push('>');
+                        let mut line = format!("{indent}<{tag}");
+                        for attr in attrs {
+                            line.push(' ');
+                            line.push_str(&attr);
+                        }
+                        if self_close {
+                            line.push_str(" />");
+                        } else {
+                            line.push('>');
+                        }
+                        lines.push(line);
                     }
-                    lines.push(line);
                 } else {
                     lines.push(format!("{indent}<{tag}"));
                     let attr_indent = format!("{indent}  ");

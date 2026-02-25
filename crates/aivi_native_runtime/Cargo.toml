@@ -23,8 +23,7 @@ sha2 = "0.10.9"
 serde_json = "1.0.149"
 csv = "1.4.0"
 image = { version = "0.25.9", default-features = true }
-imap = "2.4.1"
-native-tls = "0.2.18"
+imap = "3.0.0-alpha.15"
 mailparse = "0.16.1"
 tokio = { version = "1.49.0", features = ["rt", "sync"] }
 unicode-normalization = "0.1.25"

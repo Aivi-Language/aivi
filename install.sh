@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-cargo install --path crates/aivi
+cargo install --path crates/aivi --features gtk4-libadwaita
 cd vscode
 pnpm build
 

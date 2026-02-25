@@ -153,10 +153,27 @@ mod tests {
     }
 
     #[test]
+    fn format_gtk_sigil_formats_wrapped_record_attribute_values() {
+        let text = "module demo\n\nx=~<gtk><object class=\"GtkBox\" props={ { orientation: \"vertical\", spacing: 0, marginStart: 8, marginEnd: 8, marginBottom: 8 } }></object></gtk>\n";
+        let formatted = format_text(text);
+        assert!(formatted.contains("<object class=\"GtkBox\" props={{\n"));
+        assert!(formatted.contains("\n        orientation: \"vertical\",\n"));
+        assert!(formatted.contains("\n        spacing: 0,\n"));
+        assert!(formatted.contains("\n        marginStart: 8,\n"));
+        assert!(formatted.contains("\n        marginEnd: 8,\n"));
+        assert!(formatted.contains("\n        marginBottom: 8\n"));
+        assert!(formatted.contains("\n      }}>\n"));
+    }
+
+    #[test]
     fn fuzz_crash_idempotent() {
         let input = "\u{00da}\n???;";
         let out1 = format_text(input);
         let out2 = format_text(&out1);
-        assert_eq!(out1, out2, "not idempotent on crash input: pass1={:?} pass2={:?}", out1, out2);
+        assert_eq!(
+            out1, out2,
+            "not idempotent on crash input: pass1={:?} pass2={:?}",
+            out1, out2
+        );
     }
 }

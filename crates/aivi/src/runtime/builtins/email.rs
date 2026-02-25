@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use native_tls::TlsConnector;
-
 use super::util::{builtin, expect_int, expect_record, expect_text, make_none};
 use crate::runtime::{EffectValue, RuntimeError, SourceValue, Value};
 
@@ -50,10 +48,7 @@ fn load_imap_messages(config: HashMap<String, Value>) -> Result<Value, RuntimeEr
     let limit = optional_int(&config, "limit", 50, "email.imap")?;
     let port = optional_int(&config, "port", 993, "email.imap")?;
 
-    let tls = TlsConnector::builder()
-        .build()
-        .map_err(|err| RuntimeError::Error(Value::Text(format!("email.imap TLS error: {err}"))))?;
-    let client = imap::connect((host.as_str(), port as u16), &host, &tls).map_err(|err| {
+    let client = imap::ClientBuilder::new(&host, port as u16).connect().map_err(|err| {
         RuntimeError::Error(Value::Text(format!("email.imap transport error: {err}")))
     })?;
     let mut session = client.login(user, password).map_err(|(err, _)| {
