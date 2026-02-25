@@ -487,9 +487,9 @@ pub fn compile_to_object(
             &mut lambda_counter,
             &spec_map,
         ) {
-            Ok(_lambdas) => {
+            Ok(lambdas) => {
                 // AOT: lambdas are already compiled as functions in the module.
-                // No need to finalize them separately — they'll be in the object file.
+                // Register them in __aivi_main so global lookups can resolve.
                 compiled_func_entries.push(AotFuncEntry {
                     short_name: dd.def.name.clone(),
                     qualified_name: dd.qualified.clone(),
@@ -497,6 +497,15 @@ pub fn compile_to_object(
                     arity: dd.arity,
                     is_effect_block: dd.is_effect_block,
                 });
+                for pl in lambdas {
+                    compiled_func_entries.push(AotFuncEntry {
+                        short_name: pl.global_name.clone(),
+                        qualified_name: pl.global_name,
+                        func_id: pl.func_id,
+                        arity: pl.total_arity,
+                        is_effect_block: false,
+                    });
+                }
             }
             Err(e) => {
                 return Err(AiviError::Runtime(format!(
@@ -779,6 +788,13 @@ fn compile_definition_body<M: Module>(
             cranelift_codegen::ir::UserFuncName::user(0, func_id.as_u32()),
             sig,
         );
+        let string_globals = embed_expr_strings_for_function(
+            module,
+            &mut function,
+            &func_name,
+            body,
+            &compiled_lambdas,
+        )?;
 
         let helper_refs = helpers.import_into(module, &mut function);
 
@@ -801,6 +817,7 @@ fn compile_definition_body<M: Module>(
                 &compiled_lambdas,
                 &empty_jit_funcs,
                 &empty_spec_map,
+                &string_globals,
             );
 
             // Bind captured vars as leading params (boxed — received as *mut Value)
@@ -846,6 +863,13 @@ fn compile_definition_body<M: Module>(
         cranelift_codegen::ir::UserFuncName::user(0, func_id.as_u32()),
         sig,
     );
+    let string_globals = embed_expr_strings_for_function(
+        module,
+        &mut function,
+        qualified_name,
+        body,
+        &compiled_lambdas,
+    )?;
 
     let helper_refs = helpers.import_into(module, &mut function);
 
@@ -922,6 +946,7 @@ fn compile_definition_body<M: Module>(
             &compiled_lambdas,
             &local_jit_funcs,
             &local_spec_map,
+            &string_globals,
         );
 
         // Bind params with typed unboxing when types are known
@@ -1162,6 +1187,265 @@ fn collect_called_globals(expr: &RustIrExpr, out: &mut HashSet<String>) {
         RustIrExpr::DebugFn { body, .. } => collect_called_globals(body, out),
         _ => {}
     }
+}
+
+fn collect_embedded_strings(expr: &RustIrExpr, out: &mut HashSet<String>) {
+    match expr {
+        RustIrExpr::Local { name, .. }
+        | RustIrExpr::Global { name, .. }
+        | RustIrExpr::ConstructorValue { name, .. } => {
+            out.insert(name.clone());
+        }
+        RustIrExpr::Builtin { builtin, .. } => {
+            out.insert(builtin.clone());
+        }
+        RustIrExpr::LitString { text, .. }
+        | RustIrExpr::LitDateTime { text, .. }
+        | RustIrExpr::Raw { text, .. } => {
+            out.insert(text.clone());
+        }
+        RustIrExpr::LitSigil {
+            tag, body, flags, ..
+        } => {
+            out.insert(tag.clone());
+            out.insert(body.clone());
+            out.insert(flags.clone());
+        }
+        RustIrExpr::TextInterpolate { parts, .. } => {
+            for part in parts {
+                match part {
+                    RustIrTextPart::Text { text } => {
+                        out.insert(text.clone());
+                    }
+                    RustIrTextPart::Expr { expr } => collect_embedded_strings(expr, out),
+                }
+            }
+        }
+        RustIrExpr::Lambda { param, body, .. } => {
+            out.insert(param.clone());
+            collect_embedded_strings(body, out);
+        }
+        RustIrExpr::App { func, arg, .. } => {
+            collect_embedded_strings(func, out);
+            collect_embedded_strings(arg, out);
+        }
+        RustIrExpr::Call { func, args, .. } => {
+            collect_embedded_strings(func, out);
+            for arg in args {
+                collect_embedded_strings(arg, out);
+            }
+        }
+        RustIrExpr::DebugFn {
+            fn_name,
+            arg_vars,
+            body,
+            ..
+        } => {
+            out.insert(fn_name.clone());
+            out.extend(arg_vars.iter().cloned());
+            collect_embedded_strings(body, out);
+        }
+        RustIrExpr::Pipe {
+            label, func, arg, ..
+        } => {
+            out.insert(label.clone());
+            collect_embedded_strings(func, out);
+            collect_embedded_strings(arg, out);
+        }
+        RustIrExpr::List { items, .. } => {
+            for item in items {
+                collect_embedded_strings(&item.expr, out);
+            }
+        }
+        RustIrExpr::Tuple { items, .. } => {
+            for item in items {
+                collect_embedded_strings(item, out);
+            }
+        }
+        RustIrExpr::Record { fields, .. } => {
+            for field in fields {
+                collect_record_field_strings(field, out);
+            }
+        }
+        RustIrExpr::Patch { target, fields, .. } => {
+            collect_embedded_strings(target, out);
+            for field in fields {
+                collect_record_field_strings(field, out);
+            }
+        }
+        RustIrExpr::FieldAccess { base, field, .. } => {
+            collect_embedded_strings(base, out);
+            out.insert(field.clone());
+        }
+        RustIrExpr::Index { base, index, .. } => {
+            collect_embedded_strings(base, out);
+            collect_embedded_strings(index, out);
+        }
+        RustIrExpr::Match {
+            scrutinee, arms, ..
+        } => {
+            collect_embedded_strings(scrutinee, out);
+            for arm in arms {
+                collect_pattern_strings(&arm.pattern, out);
+                if let Some(guard) = &arm.guard {
+                    collect_embedded_strings(guard, out);
+                }
+                collect_embedded_strings(&arm.body, out);
+            }
+        }
+        RustIrExpr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            collect_embedded_strings(cond, out);
+            collect_embedded_strings(then_branch, out);
+            collect_embedded_strings(else_branch, out);
+        }
+        RustIrExpr::Binary {
+            op, left, right, ..
+        } => {
+            out.insert(op.clone());
+            collect_embedded_strings(left, out);
+            collect_embedded_strings(right, out);
+        }
+        RustIrExpr::Block {
+            block_kind, items, ..
+        } => {
+            if let RustIrBlockKind::Do { monad } = block_kind {
+                out.insert(monad.clone());
+            }
+            for item in items {
+                match item {
+                    RustIrBlockItem::Bind { pattern, expr } => {
+                        collect_pattern_strings(pattern, out);
+                        collect_embedded_strings(expr, out);
+                    }
+                    RustIrBlockItem::Filter { expr }
+                    | RustIrBlockItem::Yield { expr }
+                    | RustIrBlockItem::Recurse { expr }
+                    | RustIrBlockItem::Expr { expr } => collect_embedded_strings(expr, out),
+                }
+            }
+        }
+        RustIrExpr::LitNumber { text, .. } => {
+            out.insert(text.clone());
+        }
+        RustIrExpr::LitBool { .. } => {}
+    }
+}
+
+fn collect_record_field_strings(field: &RustIrRecordField, out: &mut HashSet<String>) {
+    for seg in &field.path {
+        match seg {
+            RustIrPathSegment::Field(name) | RustIrPathSegment::IndexFieldBool(name) => {
+                out.insert(name.clone());
+            }
+            RustIrPathSegment::IndexValue(expr) | RustIrPathSegment::IndexPredicate(expr) => {
+                collect_embedded_strings(expr, out);
+            }
+            RustIrPathSegment::IndexAll => {}
+        }
+    }
+    collect_embedded_strings(&field.value, out);
+}
+
+fn collect_pattern_strings(pattern: &RustIrPattern, out: &mut HashSet<String>) {
+    match pattern {
+        RustIrPattern::Wildcard { .. } => {}
+        RustIrPattern::Var { name, .. } => {
+            out.insert(name.clone());
+        }
+        RustIrPattern::At { name, pattern, .. } => {
+            out.insert(name.clone());
+            collect_pattern_strings(pattern, out);
+        }
+        RustIrPattern::Literal { value, .. } => collect_literal_strings(value, out),
+        RustIrPattern::Constructor { name, args, .. } => {
+            out.insert(name.clone());
+            for arg in args {
+                collect_pattern_strings(arg, out);
+            }
+        }
+        RustIrPattern::Tuple { items, .. } => {
+            for item in items {
+                collect_pattern_strings(item, out);
+            }
+        }
+        RustIrPattern::List { items, rest, .. } => {
+            for item in items {
+                collect_pattern_strings(item, out);
+            }
+            if let Some(rest) = rest {
+                collect_pattern_strings(rest, out);
+            }
+        }
+        RustIrPattern::Record { fields, .. } => {
+            for field in fields {
+                out.extend(field.path.iter().cloned());
+                collect_pattern_strings(&field.pattern, out);
+            }
+        }
+    }
+}
+
+fn collect_literal_strings(lit: &crate::rust_ir::RustIrLiteral, out: &mut HashSet<String>) {
+    match lit {
+        crate::rust_ir::RustIrLiteral::Number(text)
+        | crate::rust_ir::RustIrLiteral::String(text)
+        | crate::rust_ir::RustIrLiteral::DateTime(text) => {
+            out.insert(text.clone());
+        }
+        crate::rust_ir::RustIrLiteral::Sigil { tag, body, flags } => {
+            out.insert(tag.clone());
+            out.insert(body.clone());
+            out.insert(flags.clone());
+        }
+        crate::rust_ir::RustIrLiteral::Bool(_) => {}
+    }
+}
+
+fn embed_expr_strings_for_function<M: Module>(
+    module: &mut M,
+    function: &mut Function,
+    symbol_prefix: &str,
+    expr: &RustIrExpr,
+    compiled_lambdas: &HashMap<usize, CompiledLambda>,
+) -> Result<HashMap<String, cranelift_codegen::ir::GlobalValue>, String> {
+    use cranelift_module::DataDescription;
+
+    let mut strings = HashSet::new();
+    collect_embedded_strings(expr, &mut strings);
+    strings.insert("++".to_string());
+    strings.insert("_".to_string());
+    for lambda in compiled_lambdas.values() {
+        strings.insert(lambda.global_name.to_string());
+    }
+
+    let mut ordered: Vec<String> = strings.into_iter().collect();
+    ordered.sort();
+
+    let mut globals = HashMap::new();
+    let prefix = sanitize_name(symbol_prefix);
+    for (i, s) in ordered.iter().enumerate() {
+        let data_id = module
+            .declare_data(
+                &format!("__aivi_str_{prefix}_{i}"),
+                Linkage::Local,
+                false,
+                false,
+            )
+            .map_err(|e| format!("declare embedded string data: {e}"))?;
+        let mut dd = DataDescription::new();
+        dd.define(s.as_bytes().to_vec().into_boxed_slice());
+        module
+            .define_data(data_id, &dd)
+            .map_err(|e| format!("define embedded string data: {e}"))?;
+        let gv = module.declare_data_in_func(data_id, function);
+        globals.insert(s.clone(), gv);
+    }
+    Ok(globals)
 }
 
 /// Build a human-readable suffix for a CgType, used for specialization naming.

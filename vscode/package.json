@@ -245,6 +245,10 @@
     "configurationDefaults": {
       "[aivi]": {
         "editor.defaultFormatter": "aivi.aivi-vscode"
+      },
+      "[css]": {
+        "css.lint.unknownAtRules": "ignore",
+        "css.validate": false
       }
     }
   },

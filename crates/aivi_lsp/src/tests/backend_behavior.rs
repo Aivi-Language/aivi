@@ -421,6 +421,28 @@ x = ~<gtk><object class="GtkBox" props={ { spacing: 1 } } /></gtk>
 }
 
 #[test]
+fn semantic_tokens_keep_gtk_css_as_plain_content() {
+    let text = r#"module Test.gtk_css
+x = ~<gtk><object class="GtkBox"><style>window { background-color: @headerbar_bg_color; }</style></object></gtk>
+"#;
+
+    let tokens = collect_semantic_token_texts(text);
+
+    assert!(
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_TYPE && s == "style"),
+        "expected style tag to be highlighted as a type token, got: {tokens:?}"
+    );
+    assert!(
+        !tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_DECORATOR && s == "@"),
+        "GTK CSS @values should not be tokenized as AIVI decorators, got: {tokens:?}"
+    );
+}
+
+#[test]
 fn semantic_tokens_highlight_paths_and_calls() {
     let text = r#"use aivi.net.https (get)
 main = do Effect {

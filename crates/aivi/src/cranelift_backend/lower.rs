@@ -90,6 +90,8 @@ pub(crate) struct LowerCtx<'a> {
     /// Maps original short name → list of specialization short names.
     /// Used for call-site routing to monomorphized versions.
     spec_map: &'a HashMap<String, Vec<String>>,
+    /// Per-function embedded string literals used for relocatable pointers.
+    string_globals: &'a HashMap<String, cranelift_codegen::ir::GlobalValue>,
 }
 
 /// Metadata about a JIT-compiled function, used for direct calls.
@@ -405,6 +407,7 @@ impl<'a> LowerCtx<'a> {
         compiled_lambdas: &'a HashMap<usize, CompiledLambda>,
         jit_funcs: &'a HashMap<String, JitFuncInfo>,
         spec_map: &'a HashMap<String, Vec<String>>,
+        string_globals: &'a HashMap<String, cranelift_codegen::ir::GlobalValue>,
     ) -> Self {
         Self {
             locals: HashMap::new(),
@@ -413,7 +416,18 @@ impl<'a> LowerCtx<'a> {
             compiled_lambdas,
             jit_funcs,
             spec_map,
+            string_globals,
         }
+    }
+
+    fn lower_static_bytes(&self, builder: &mut FunctionBuilder<'_>, text: &str) -> (Value, Value) {
+        let ptr = if let Some(gv) = self.string_globals.get(text) {
+            builder.ins().global_value(PTR, *gv)
+        } else {
+            builder.ins().iconst(PTR, text.as_ptr() as i64)
+        };
+        let len = builder.ins().iconst(PTR, text.len() as i64);
+        (ptr, len)
     }
 
     /// Insert function params into `locals`, eagerly unboxing scalars when
@@ -526,9 +540,7 @@ impl<'a> LowerCtx<'a> {
             RustIrExpr::LitString { text, .. } => self.lower_lit_string(builder, text),
             RustIrExpr::LitBool { value, .. } => self.lower_lit_bool(builder, *value),
             RustIrExpr::LitDateTime { text, .. } => {
-                let bytes = text.as_bytes();
-                let str_ptr = builder.ins().iconst(PTR, bytes.as_ptr() as i64);
-                let str_len = builder.ins().iconst(PTR, bytes.len() as i64);
+                let (str_ptr, str_len) = self.lower_static_bytes(builder, text);
                 let inst = builder.ins().call(
                     self.helpers.rt_alloc_datetime,
                     &[self.ctx_param, str_ptr, str_len],
@@ -538,15 +550,9 @@ impl<'a> LowerCtx<'a> {
             RustIrExpr::LitSigil {
                 tag, body, flags, ..
             } => {
-                let tag_bytes = tag.as_bytes();
-                let body_bytes = body.as_bytes();
-                let flags_bytes = flags.as_bytes();
-                let tag_ptr = builder.ins().iconst(PTR, tag_bytes.as_ptr() as i64);
-                let tag_len = builder.ins().iconst(PTR, tag_bytes.len() as i64);
-                let body_ptr = builder.ins().iconst(PTR, body_bytes.as_ptr() as i64);
-                let body_len = builder.ins().iconst(PTR, body_bytes.len() as i64);
-                let flags_ptr = builder.ins().iconst(PTR, flags_bytes.as_ptr() as i64);
-                let flags_len = builder.ins().iconst(PTR, flags_bytes.len() as i64);
+                let (tag_ptr, tag_len) = self.lower_static_bytes(builder, tag);
+                let (body_ptr, body_len) = self.lower_static_bytes(builder, body);
+                let (flags_ptr, flags_len) = self.lower_static_bytes(builder, flags);
                 let inst = builder.ins().call(
                     self.helpers.rt_eval_sigil,
                     &[
@@ -635,10 +641,7 @@ impl<'a> LowerCtx<'a> {
     }
 
     fn lower_lit_string(&mut self, builder: &mut FunctionBuilder<'_>, text: &str) -> TypedValue {
-        let ptr = text.as_ptr() as i64;
-        let len = text.len() as i64;
-        let ptr_val = builder.ins().iconst(PTR, ptr);
-        let len_val = builder.ins().iconst(PTR, len);
+        let (ptr_val, len_val) = self.lower_static_bytes(builder, text);
         let call = builder.ins().call(
             self.helpers.rt_alloc_string,
             &[self.ctx_param, ptr_val, len_val],
@@ -666,8 +669,7 @@ impl<'a> LowerCtx<'a> {
             RustIrTextPart::Expr { expr } => self.lower_expr(builder, expr),
         };
         let op = "++";
-        let op_ptr = builder.ins().iconst(PTR, op.as_ptr() as i64);
-        let op_len = builder.ins().iconst(PTR, op.len() as i64);
+        let (op_ptr, op_len) = self.lower_static_bytes(builder, op);
         for part in &parts[1..] {
             let part_tv = match part {
                 RustIrTextPart::Text { text } => self.lower_lit_string(builder, text),
@@ -698,8 +700,7 @@ impl<'a> LowerCtx<'a> {
     }
 
     fn lower_global(&self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
-        let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
-        let name_len = builder.ins().iconst(PTR, name.len() as i64);
+        let (name_ptr, name_len) = self.lower_static_bytes(builder, name);
         let call = builder.ins().call(
             self.helpers.rt_get_global,
             &[self.ctx_param, name_ptr, name_len],
@@ -712,8 +713,7 @@ impl<'a> LowerCtx<'a> {
     /// it up in the globals map.  When applied to arguments later, `apply()`
     /// accumulates them naturally.
     fn lower_constructor_value(&self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
-        let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
-        let name_len = builder.ins().iconst(PTR, name.len() as i64);
+        let (name_ptr, name_len) = self.lower_static_bytes(builder, name);
         let null = builder.ins().iconst(PTR, 0);
         let zero = builder.ins().iconst(PTR, 0);
         let call = builder.ins().call(
@@ -1107,8 +1107,7 @@ impl<'a> LowerCtx<'a> {
                     _ => "_",
                 })
                 .unwrap_or("_");
-            let name_ptr = builder.ins().iconst(PTR, field_name.as_ptr() as i64);
-            let name_len = builder.ins().iconst(PTR, field_name.len() as i64);
+            let (name_ptr, name_len) = self.lower_static_bytes(builder, field_name);
             builder
                 .ins()
                 .stack_store(name_ptr, names_slot, (i * 8) as i32);
@@ -1171,8 +1170,7 @@ impl<'a> LowerCtx<'a> {
                     _ => "_",
                 })
                 .unwrap_or("_");
-            let name_ptr = builder.ins().iconst(PTR, field_name.as_ptr() as i64);
-            let name_len = builder.ins().iconst(PTR, field_name.len() as i64);
+            let (name_ptr, name_len) = self.lower_static_bytes(builder, field_name);
             builder
                 .ins()
                 .stack_store(name_ptr, names_slot, (i * 8) as i32);
@@ -1207,8 +1205,7 @@ impl<'a> LowerCtx<'a> {
     ) -> TypedValue {
         let base_tv = self.lower_expr(builder, base);
         let base_val = self.ensure_boxed(builder, base_tv);
-        let name_ptr = builder.ins().iconst(PTR, field.as_ptr() as i64);
-        let name_len = builder.ins().iconst(PTR, field.len() as i64);
+        let (name_ptr, name_len) = self.lower_static_bytes(builder, field);
         let call = builder.ins().call(
             self.helpers.rt_record_field,
             &[self.ctx_param, base_val, name_ptr, name_len],
@@ -1411,8 +1408,7 @@ impl<'a> LowerCtx<'a> {
             }
             RustIrPattern::Constructor { name, args, .. } => {
                 // Check name matches
-                let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
-                let name_len = builder.ins().iconst(PTR, name.len() as i64);
+                let (name_ptr, name_len) = self.lower_static_bytes(builder, name);
                 let name_match = {
                     let call = builder.ins().call(
                         self.helpers.rt_constructor_name_eq,
@@ -1548,8 +1544,7 @@ impl<'a> LowerCtx<'a> {
                     // Navigate the path to get the nested value
                     let mut current = value;
                     for seg in &field.path {
-                        let name_ptr = builder.ins().iconst(PTR, seg.as_ptr() as i64);
-                        let name_len = builder.ins().iconst(PTR, seg.len() as i64);
+                        let (name_ptr, name_len) = self.lower_static_bytes(builder, seg);
                         let call = builder.ins().call(
                             self.helpers.rt_record_field,
                             &[self.ctx_param, current, name_ptr, name_len],
@@ -1697,8 +1692,7 @@ impl<'a> LowerCtx<'a> {
                 for field in fields {
                     let mut current = value;
                     for seg in &field.path {
-                        let name_ptr = builder.ins().iconst(PTR, seg.as_ptr() as i64);
-                        let name_len = builder.ins().iconst(PTR, seg.len() as i64);
+                        let (name_ptr, name_len) = self.lower_static_bytes(builder, seg);
                         let call = builder.ins().call(
                             self.helpers.rt_record_field,
                             &[self.ctx_param, current, name_ptr, name_len],
@@ -1752,8 +1746,7 @@ impl<'a> LowerCtx<'a> {
         // Fallback: box both and call rt_binary_op
         let lhs_boxed = self.ensure_boxed(builder, lhs);
         let rhs_boxed = self.ensure_boxed(builder, rhs);
-        let op_ptr = builder.ins().iconst(PTR, op.as_ptr() as i64);
-        let op_len = builder.ins().iconst(PTR, op.len() as i64);
+        let (op_ptr, op_len) = self.lower_static_bytes(builder, op);
         let call = builder.ins().call(
             self.helpers.rt_binary_op,
             &[self.ctx_param, op_ptr, op_len, lhs_boxed, rhs_boxed],

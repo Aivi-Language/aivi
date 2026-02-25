@@ -194,10 +194,11 @@ impl Backend {
 
         let mut i = prefix_len;
         let end_limit = chars.len().saturating_sub(suffix_len);
+        let mut in_style_text_content = false;
 
         while i < end_limit {
             // Skip AIVI interpolation blocks in GTK/XML attributes/content: `{ ... }`.
-            if chars[i] == '{' {
+            if chars[i] == '{' && !in_style_text_content {
                 let mut depth: i32 = 1;
                 let mut j = i + 1;
                 let mut in_quote: Option<char> = None;
@@ -262,7 +263,9 @@ impl Backend {
             }
 
             let mut j = i + 1;
+            let mut is_closing_tag = false;
             if j < end_limit && chars[j] == '/' {
+                is_closing_tag = true;
                 j += 1;
             }
 
@@ -280,6 +283,8 @@ impl Backend {
                 j += 1;
             }
             let tag_end = j;
+            let tag_name: String = chars[tag_start..tag_end].iter().collect();
+            let is_style_tag = tag_name.eq_ignore_ascii_case("style");
             push(
                 data,
                 last_line,
@@ -292,6 +297,7 @@ impl Backend {
             );
 
             // Parse attributes until tag closes.
+            let mut self_closing_tag = false;
             while j < end_limit {
                 // stop at tag close
                 if chars[j] == '>' {
@@ -299,6 +305,7 @@ impl Backend {
                     break;
                 }
                 if chars[j] == '/' && j + 1 < end_limit && chars[j + 1] == '>' {
+                    self_closing_tag = true;
                     j += 2;
                     break;
                 }
@@ -388,6 +395,14 @@ impl Backend {
                             0,
                         );
                     }
+                }
+            }
+
+            if is_style_tag {
+                if is_closing_tag {
+                    in_style_text_content = false;
+                } else {
+                    in_style_text_content = !self_closing_tag;
                 }
             }
 

@@ -412,6 +412,9 @@ fn cmd_project_build_cranelift(
     if release {
         cmd.arg("--release");
     }
+    if let Some(feature) = cargo_feature_for_native_ui_target(root, &cfg.build.native_ui_target)? {
+        cmd.arg("--features").arg(feature);
+    }
     let status = cmd.current_dir(root).status()?;
     if !status.success() {
         return Err(AiviError::Cargo(
@@ -511,7 +514,6 @@ fn parse_project_args(args: &[String]) -> Result<(bool, Vec<String>), AiviError>
     Ok((release, after))
 }
 
-#[cfg(test)]
 fn cargo_feature_for_native_ui_target(
     project_root: &Path,
     target: &aivi::NativeUiTarget,
@@ -529,7 +531,6 @@ fn cargo_feature_for_native_ui_target(
     }
 }
 
-#[cfg(test)]
 fn cargo_feature_declared(cargo_toml_path: &Path, feature: &str) -> Result<bool, AiviError> {
     let content = std::fs::read_to_string(cargo_toml_path)?;
     let manifest: toml::Value = toml::from_str(&content).map_err(|err| {
