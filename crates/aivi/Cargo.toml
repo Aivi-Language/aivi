@@ -7,45 +7,45 @@ edition = "2021"
 aivi_core = { path = "../aivi_core" }
 aivi_driver = { path = "../aivi_driver" }
 aivi_http_server = { path = "../aivi_http_server" }
-chrono = "0.4.38"
-chrono-tz = "0.8.6"
+chrono = "0.4.44"
+chrono-tz = "0.10.4"
 num-bigint = "0.4.6"
 num-rational = "0.4.2"
 num-traits = "0.2.19"
 im = "15.1.0"
-palette = "0.7.5"
+palette = "0.7.6"
 ordered-float = "5.1.0"
-regex = "1.10.6"
-rust_decimal = "1.36.0"
-rustfft = "6.2.0"
-serde = { version = "1.0.209", features = ["derive"] }
-serde_json = "1.0.127"
-csv = "1.3.1"
-image = { version = "0.25.6", default-features = true }
+regex = "1.12.3"
+rust_decimal = "1.40.0"
+rustfft = "6.4.1"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+csv = "1.4.0"
+image = { version = "0.25.9", default-features = true }
 imap = "2.4.1"
-native-tls = "0.2.12"
-mailparse = "0.15.0"
-sha2 = "0.10.8"
+native-tls = "0.2.18"
+mailparse = "0.16.1"
+sha2 = "0.10.9"
 getrandom = "0.4.1"
-uuid = { version = "1.10.0", features = ["v4"] }
+uuid = { version = "1.21.0", features = ["v4"] }
 thiserror = "2.0.18"
-toml = "1.0.2"
-toml_edit = "0.25.2"
-tokio = { version = "1.40.0", features = ["rt", "sync"] }
-unicode-normalization = "0.1.24"
-unicode-segmentation = "1.11.0"
-url = "2.5.2"
+toml = "1.0.3"
+toml_edit = "0.25.3"
+tokio = { version = "1.49.0", features = ["rt", "sync"] }
+unicode-normalization = "0.1.25"
+unicode-segmentation = "1.12.0"
+url = "2.5.8"
 ureq = "3.2.0"
 include_dir = "0.7.4"
 rusqlite = { version = "0.38.0", features = ["bundled"] }
-postgres = "0.19.9"
+postgres = "0.19.12"
 mysql = "27.0.0"
 parking_lot = "0.12"
-cranelift-codegen = "0.126.0"
-cranelift-frontend = "0.126.0"
-cranelift-jit = "0.126.0"
-cranelift-module = "0.126.0"
-cranelift-object = "0.126.0"
+cranelift-codegen = "0.126.2"
+cranelift-frontend = "0.126.2"
+cranelift-jit = "0.126.2"
+cranelift-module = "0.126.2"
+cranelift-object = "0.126.2"
 target-lexicon = "0.13.5"
 zbus = "4.4.0"
 
@@ -55,5 +55,5 @@ insta = []
 
 [dev-dependencies]
 aivi_native_runtime = { path = "../aivi_native_runtime" }
-tempfile = "3.12.0"
+tempfile = "3.26.0"
 walkdir = "2.5.0"
