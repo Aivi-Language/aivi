@@ -169,6 +169,7 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_force_thunk: FuncRef,
     pub(crate) rt_run_effect: FuncRef,
     pub(crate) rt_bind_effect: FuncRef,
+    pub(crate) rt_wrap_effect: FuncRef,
     pub(crate) rt_binary_op: FuncRef,
     // Pattern matching helpers
     pub(crate) rt_constructor_name_eq: FuncRef,
@@ -249,6 +250,8 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_run_effect: decl!("rt_run_effect", [PTR, PTR], [PTR]),
         // (ctx, effect_ptr, cont_ptr) -> ptr
         rt_bind_effect: decl!("rt_bind_effect", [PTR, PTR, PTR], [PTR]),
+        // (ctx, value_ptr) -> ptr (wrap value in Effect thunk)
+        rt_wrap_effect: decl!("rt_wrap_effect", [PTR, PTR], [PTR]),
         // (ctx, op_ptr, op_len, lhs_ptr, rhs_ptr) -> ptr
         rt_binary_op: decl!("rt_binary_op", [PTR, PTR, PTR, PTR, PTR], [PTR]),
         // Pattern matching: (ctx, value_ptr, name_ptr, name_len) -> i64
@@ -315,6 +318,7 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_force_thunk: cranelift_module::FuncId,
     pub(crate) rt_run_effect: cranelift_module::FuncId,
     pub(crate) rt_bind_effect: cranelift_module::FuncId,
+    pub(crate) rt_wrap_effect: cranelift_module::FuncId,
     pub(crate) rt_binary_op: cranelift_module::FuncId,
     pub(crate) rt_constructor_name_eq: cranelift_module::FuncId,
     pub(crate) rt_constructor_arity: cranelift_module::FuncId,
@@ -370,6 +374,7 @@ impl DeclaredHelpers {
             rt_force_thunk: imp!(rt_force_thunk),
             rt_run_effect: imp!(rt_run_effect),
             rt_bind_effect: imp!(rt_bind_effect),
+            rt_wrap_effect: imp!(rt_wrap_effect),
             rt_binary_op: imp!(rt_binary_op),
             rt_constructor_name_eq: imp!(rt_constructor_name_eq),
             rt_constructor_arity: imp!(rt_constructor_arity),
@@ -1991,7 +1996,13 @@ impl<'a> LowerCtx<'a> {
                 }
             }
         }
-        current_effect
+        // Wrap the result in an Effect thunk so callers that use
+        // `rt_run_effect` on the block's return value see a proper Effect.
+        let wrapped = self.ensure_boxed(builder, current_effect);
+        let call = builder
+            .ins()
+            .call(self.helpers.rt_wrap_effect, &[self.ctx_param, wrapped]);
+        TypedValue::boxed(builder.inst_results(call)[0])
     }
 
     /// Compile a generate block natively in Cranelift.

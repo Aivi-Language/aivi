@@ -273,7 +273,16 @@ pub fn run_cranelift_jit(
                             eprintln!("aivi: JIT effect '{}' returned null pointer", def_name);
                             Ok(Value::Unit)
                         } else {
-                            Ok(unsafe { super::abi::unbox_value(result_ptr as *mut Value) })
+                            let result =
+                                unsafe { super::abi::unbox_value(result_ptr as *mut Value) };
+                            // The JIT's lower_do_block wraps results via rt_wrap_effect.
+                            // Unwrap the extra Effect layer to avoid double-wrapping.
+                            match result {
+                                Value::Effect(_) | Value::Source(_) => {
+                                    runtime.run_effect_value(result)
+                                }
+                                other => Ok(other),
+                            }
                         }
                     }),
                 },

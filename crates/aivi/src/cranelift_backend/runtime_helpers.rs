@@ -451,6 +451,29 @@ pub extern "C" fn rt_bind_effect(
 }
 
 // ---------------------------------------------------------------------------
+// Effect wrapping
+// ---------------------------------------------------------------------------
+
+/// Wrap a value in an `Effect` thunk so that `rt_run_effect` can consume it.
+/// Used at the end of JIT-compiled `do Effect` blocks to ensure the return
+/// type is always `Value::Effect`, matching what the caller expects.
+///
+/// # Safety
+/// `ptr` must be a valid `*const Value`.
+#[no_mangle]
+pub extern "C" fn rt_wrap_effect(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> *mut Value {
+    let value = unsafe { (*ptr).clone() };
+    // If it's already an Effect or Source, return as-is to avoid double-wrapping.
+    if matches!(value, Value::Effect(_) | Value::Source(_)) {
+        return abi::box_value(value);
+    }
+    let effect = crate::runtime::values::EffectValue::Thunk {
+        func: Arc::new(move |_| Ok(value.clone())),
+    };
+    abi::box_value(Value::Effect(Arc::new(effect)))
+}
+
+// ---------------------------------------------------------------------------
 // Pattern matching helpers
 // ---------------------------------------------------------------------------
 
@@ -1016,6 +1039,7 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_force_thunk", rt_force_thunk as *const u8),
         ("rt_run_effect", rt_run_effect as *const u8),
         ("rt_bind_effect", rt_bind_effect as *const u8),
+        ("rt_wrap_effect", rt_wrap_effect as *const u8),
         ("rt_binary_op", rt_binary_op as *const u8),
         // Pattern matching helpers
         (
