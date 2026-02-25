@@ -42,6 +42,15 @@ mod linux {
         fn gtk_box_new(orientation: c_int, spacing: c_int) -> *mut c_void;
         fn gtk_box_append(container: *mut c_void, child: *mut c_void);
         fn gtk_box_set_homogeneous(boxw: *mut c_void, homogeneous: c_int);
+        fn gtk_header_bar_new() -> *mut c_void;
+        fn gtk_header_bar_pack_start(header_bar: *mut c_void, child: *mut c_void);
+        fn gtk_header_bar_pack_end(header_bar: *mut c_void, child: *mut c_void);
+        fn gtk_header_bar_set_title_widget(header_bar: *mut c_void, title_widget: *mut c_void);
+        fn gtk_header_bar_set_show_title_buttons(header_bar: *mut c_void, setting: c_int);
+        fn gtk_header_bar_set_decoration_layout(
+            header_bar: *mut c_void,
+            layout: *const c_char,
+        );
         fn gtk_list_box_new() -> *mut c_void;
         fn gtk_list_box_append(list_box: *mut c_void, child: *mut c_void);
 
@@ -87,6 +96,12 @@ mod linux {
         fn gtk_overlay_new() -> *mut c_void;
         fn gtk_overlay_set_child(overlay: *mut c_void, child: *mut c_void);
         fn gtk_overlay_add_overlay(overlay: *mut c_void, widget: *mut c_void);
+        fn gtk_buildable_add_child(
+            buildable: *mut c_void,
+            builder: *mut c_void,
+            child: *mut c_void,
+            type_: *const c_char,
+        );
 
         fn gtk_css_provider_new() -> *mut c_void;
         fn gtk_css_provider_load_from_string(provider: *mut c_void, css: *const c_char);
@@ -124,6 +139,8 @@ mod linux {
 
     #[link(name = "gobject-2.0")]
     unsafe extern "C" {
+        fn g_type_from_name(name: *const c_char) -> usize;
+        fn g_object_new(object_type: usize, first_property_name: *const c_char, ...) -> *mut c_void;
         fn g_signal_connect_data(
             instance: *mut c_void,
             detailed_signal: *const c_char,
@@ -226,6 +243,133 @@ mod linux {
         CString::new(text.as_bytes()).map_err(|_| invalid(what))
     }
 
+    fn create_adw_widget_type(type_name: &str) -> Result<*mut c_void, RuntimeError> {
+        try_adw_init();
+        let class_c = c_text(type_name, "gtk4.buildFromNode invalid Adw class name")?;
+        let g_type = unsafe { g_type_from_name(class_c.as_ptr()) };
+        if g_type == 0 {
+            return Err(RuntimeError::Error(Value::Text(format!(
+                "gtk4.buildFromNode unknown Adw class {type_name}"
+            ))));
+        }
+        let raw = unsafe { g_object_new(g_type, std::ptr::null::<c_char>()) };
+        if raw.is_null() {
+            return Err(RuntimeError::Error(Value::Text(format!(
+                "gtk4.buildFromNode failed to create {type_name}"
+            ))));
+        }
+        Ok(raw)
+    }
+
+    fn create_adw_widget(class_name: &str) -> Result<*mut c_void, RuntimeError> {
+        match class_name {
+            "AdwAboutDialog" => create_adw_widget_type("AdwAboutDialog"),
+            "AdwAboutWindow" => create_adw_widget_type("AdwAboutWindow"),
+            "AdwActionRow" => create_adw_widget_type("AdwActionRow"),
+            "AdwAlertDialog" => create_adw_widget_type("AdwAlertDialog"),
+            "AdwApplication" => create_adw_widget_type("AdwApplication"),
+            "AdwApplicationWindow" => create_adw_widget_type("AdwApplicationWindow"),
+            "AdwAvatar" => create_adw_widget_type("AdwAvatar"),
+            "AdwBanner" => create_adw_widget_type("AdwBanner"),
+            "AdwBin" => create_adw_widget_type("AdwBin"),
+            "AdwBottomSheet" => create_adw_widget_type("AdwBottomSheet"),
+            "AdwBreakpoint" => create_adw_widget_type("AdwBreakpoint"),
+            "AdwBreakpointBin" => create_adw_widget_type("AdwBreakpointBin"),
+            "AdwButtonContent" => create_adw_widget_type("AdwButtonContent"),
+            "AdwButtonRow" => create_adw_widget_type("AdwButtonRow"),
+            "AdwCallbackAnimationTarget" => create_adw_widget_type("AdwCallbackAnimationTarget"),
+            "AdwCarousel" => create_adw_widget_type("AdwCarousel"),
+            "AdwCarouselIndicatorDots" => create_adw_widget_type("AdwCarouselIndicatorDots"),
+            "AdwCarouselIndicatorLines" => create_adw_widget_type("AdwCarouselIndicatorLines"),
+            "AdwClamp" => create_adw_widget_type("AdwClamp"),
+            "AdwClampLayout" => create_adw_widget_type("AdwClampLayout"),
+            "AdwClampScrollable" => create_adw_widget_type("AdwClampScrollable"),
+            "AdwComboRow" => create_adw_widget_type("AdwComboRow"),
+            "AdwDialog" => create_adw_widget_type("AdwDialog"),
+            "AdwEntryRow" => create_adw_widget_type("AdwEntryRow"),
+            "AdwEnumListModel" => create_adw_widget_type("AdwEnumListModel"),
+            "AdwExpanderRow" => create_adw_widget_type("AdwExpanderRow"),
+            "AdwFlap" => create_adw_widget_type("AdwFlap"),
+            "AdwHeaderBar" => create_adw_widget_type("AdwHeaderBar"),
+            "AdwInlineViewSwitcher" => create_adw_widget_type("AdwInlineViewSwitcher"),
+            "AdwLayout" => create_adw_widget_type("AdwLayout"),
+            "AdwLayoutSlot" => create_adw_widget_type("AdwLayoutSlot"),
+            "AdwLeaflet" => create_adw_widget_type("AdwLeaflet"),
+            "AdwMessageDialog" => create_adw_widget_type("AdwMessageDialog"),
+            "AdwMultiLayoutView" => create_adw_widget_type("AdwMultiLayoutView"),
+            "AdwNavigationPage" => create_adw_widget_type("AdwNavigationPage"),
+            "AdwNavigationSplitView" => create_adw_widget_type("AdwNavigationSplitView"),
+            "AdwNavigationView" => create_adw_widget_type("AdwNavigationView"),
+            "AdwOverlaySplitView" => create_adw_widget_type("AdwOverlaySplitView"),
+            "AdwPasswordEntryRow" => create_adw_widget_type("AdwPasswordEntryRow"),
+            "AdwPreferencesDialog" => create_adw_widget_type("AdwPreferencesDialog"),
+            "AdwPreferencesGroup" => create_adw_widget_type("AdwPreferencesGroup"),
+            "AdwPreferencesPage" => create_adw_widget_type("AdwPreferencesPage"),
+            "AdwPreferencesRow" => create_adw_widget_type("AdwPreferencesRow"),
+            "AdwPreferencesWindow" => create_adw_widget_type("AdwPreferencesWindow"),
+            "AdwPropertyAnimationTarget" => create_adw_widget_type("AdwPropertyAnimationTarget"),
+            "AdwShortcutLabel" => create_adw_widget_type("AdwShortcutLabel"),
+            "AdwShortcutsDialog" => create_adw_widget_type("AdwShortcutsDialog"),
+            "AdwShortcutsItem" => create_adw_widget_type("AdwShortcutsItem"),
+            "AdwShortcutsSection" => create_adw_widget_type("AdwShortcutsSection"),
+            "AdwSpinRow" => create_adw_widget_type("AdwSpinRow"),
+            "AdwSpinner" => create_adw_widget_type("AdwSpinner"),
+            "AdwSpinnerPaintable" => create_adw_widget_type("AdwSpinnerPaintable"),
+            "AdwSplitButton" => create_adw_widget_type("AdwSplitButton"),
+            "AdwSpringAnimation" => create_adw_widget_type("AdwSpringAnimation"),
+            "AdwSpringParams" => create_adw_widget_type("AdwSpringParams"),
+            "AdwSqueezer" => create_adw_widget_type("AdwSqueezer"),
+            "AdwStatusPage" => create_adw_widget_type("AdwStatusPage"),
+            "AdwSwipeTracker" => create_adw_widget_type("AdwSwipeTracker"),
+            "AdwSwitchRow" => create_adw_widget_type("AdwSwitchRow"),
+            "AdwTabBar" => create_adw_widget_type("AdwTabBar"),
+            "AdwTabButton" => create_adw_widget_type("AdwTabButton"),
+            "AdwTabOverview" => create_adw_widget_type("AdwTabOverview"),
+            "AdwTabView" => create_adw_widget_type("AdwTabView"),
+            "AdwTimedAnimation" => create_adw_widget_type("AdwTimedAnimation"),
+            "AdwToast" => create_adw_widget_type("AdwToast"),
+            "AdwToastOverlay" => create_adw_widget_type("AdwToastOverlay"),
+            "AdwToggle" => create_adw_widget_type("AdwToggle"),
+            "AdwToggleGroup" => create_adw_widget_type("AdwToggleGroup"),
+            "AdwToolbarView" => create_adw_widget_type("AdwToolbarView"),
+            "AdwViewStack" => create_adw_widget_type("AdwViewStack"),
+            "AdwViewSwitcher" => create_adw_widget_type("AdwViewSwitcher"),
+            "AdwViewSwitcherBar" => create_adw_widget_type("AdwViewSwitcherBar"),
+            "AdwViewSwitcherTitle" => create_adw_widget_type("AdwViewSwitcherTitle"),
+            "AdwWindow" => create_adw_widget_type("AdwWindow"),
+            "AdwWindowTitle" => create_adw_widget_type("AdwWindowTitle"),
+            "AdwWrapBox" => create_adw_widget_type("AdwWrapBox"),
+            "AdwWrapLayout" => create_adw_widget_type("AdwWrapLayout"),
+            _ => Err(RuntimeError::Error(Value::Text(format!(
+                "gtk4.buildFromNode unsupported class {class_name}"
+            )))),
+        }
+    }
+
+    fn buildable_add_child(
+        parent: *mut c_void,
+        child: *mut c_void,
+        child_type: Option<&str>,
+    ) -> Result<(), RuntimeError> {
+        let child_type_c = if let Some(kind) = child_type {
+            Some(c_text(kind, "gtk4.buildFromNode invalid child type")?)
+        } else {
+            None
+        };
+        unsafe {
+            gtk_buildable_add_child(
+                parent,
+                null_mut(),
+                child,
+                child_type_c
+                    .as_ref()
+                    .map(|v| v.as_ptr())
+                    .unwrap_or(std::ptr::null()),
+            )
+        };
+        Ok(())
+    }
+
     fn widget_ptr(state: &RealGtkState, id: i64, ctx: &str) -> Result<*mut c_void, RuntimeError> {
         state.widgets.get(&id).copied().ok_or_else(|| {
             RuntimeError::Error(Value::Text(format!("gtk4.{ctx} unknown widget id {id}")))
@@ -245,6 +389,7 @@ mod linux {
     #[derive(Debug, Clone, Copy)]
     enum CreatedWidgetKind {
         Box,
+        HeaderBar,
         ScrolledWindow,
         Overlay,
         ListBox,
@@ -728,6 +873,22 @@ mod linux {
                     unsafe { gtk_box_set_homogeneous(widget, if value { 1 } else { 0 }) };
                 }
             }
+            "GtkHeaderBar" | "AdwHeaderBar" => {
+                if let Some(value) = props.get("decoration-layout") {
+                    let layout_c =
+                        c_text(value, "gtk4.buildFromNode invalid headerbar decoration-layout")?;
+                    unsafe { gtk_header_bar_set_decoration_layout(widget, layout_c.as_ptr()) };
+                }
+                if let Some(value) = props
+                    .get("show-title-buttons")
+                    .or_else(|| props.get("show-end-title-buttons"))
+                    .and_then(|v| parse_bool_text(v))
+                {
+                    unsafe {
+                        gtk_header_bar_set_show_title_buttons(widget, if value { 1 } else { 0 })
+                    };
+                }
+            }
             "GtkScrolledWindow" => {
                 let h_policy = props
                     .get("hscrollbar-policy")
@@ -809,6 +970,9 @@ mod linux {
                     CreatedWidgetKind::Box,
                 )
             }
+            "GtkHeaderBar" | "AdwHeaderBar" => {
+                (unsafe { gtk_header_bar_new() }, CreatedWidgetKind::HeaderBar)
+            }
             "GtkLabel" => {
                 let label = props
                     .get("label")
@@ -878,6 +1042,83 @@ mod linux {
                 }
             }
             "GtkListBox" => (unsafe { gtk_list_box_new() }, CreatedWidgetKind::ListBox),
+            "AdwAboutDialog"
+            | "AdwAboutWindow"
+            | "AdwActionRow"
+            | "AdwAlertDialog"
+            | "AdwApplication"
+            | "AdwApplicationWindow"
+            | "AdwAvatar"
+            | "AdwBanner"
+            | "AdwBin"
+            | "AdwBottomSheet"
+            | "AdwBreakpoint"
+            | "AdwBreakpointBin"
+            | "AdwButtonContent"
+            | "AdwButtonRow"
+            | "AdwCallbackAnimationTarget"
+            | "AdwCarousel"
+            | "AdwCarouselIndicatorDots"
+            | "AdwCarouselIndicatorLines"
+            | "AdwClamp"
+            | "AdwClampLayout"
+            | "AdwClampScrollable"
+            | "AdwComboRow"
+            | "AdwDialog"
+            | "AdwEntryRow"
+            | "AdwEnumListModel"
+            | "AdwExpanderRow"
+            | "AdwFlap"
+            | "AdwHeaderBar"
+            | "AdwInlineViewSwitcher"
+            | "AdwLayout"
+            | "AdwLayoutSlot"
+            | "AdwLeaflet"
+            | "AdwMessageDialog"
+            | "AdwMultiLayoutView"
+            | "AdwNavigationPage"
+            | "AdwNavigationSplitView"
+            | "AdwNavigationView"
+            | "AdwOverlaySplitView"
+            | "AdwPasswordEntryRow"
+            | "AdwPreferencesDialog"
+            | "AdwPreferencesGroup"
+            | "AdwPreferencesPage"
+            | "AdwPreferencesRow"
+            | "AdwPreferencesWindow"
+            | "AdwPropertyAnimationTarget"
+            | "AdwShortcutLabel"
+            | "AdwShortcutsDialog"
+            | "AdwShortcutsItem"
+            | "AdwShortcutsSection"
+            | "AdwSpinRow"
+            | "AdwSpinner"
+            | "AdwSpinnerPaintable"
+            | "AdwSplitButton"
+            | "AdwSpringAnimation"
+            | "AdwSpringParams"
+            | "AdwSqueezer"
+            | "AdwStatusPage"
+            | "AdwSwipeTracker"
+            | "AdwSwitchRow"
+            | "AdwTabBar"
+            | "AdwTabButton"
+            | "AdwTabOverview"
+            | "AdwTabView"
+            | "AdwTimedAnimation"
+            | "AdwToast"
+            | "AdwToastOverlay"
+            | "AdwToggle"
+            | "AdwToggleGroup"
+            | "AdwToolbarView"
+            | "AdwViewStack"
+            | "AdwViewSwitcher"
+            | "AdwViewSwitcherBar"
+            | "AdwViewSwitcherTitle"
+            | "AdwWindow"
+            | "AdwWindowTitle"
+            | "AdwWrapBox"
+            | "AdwWrapLayout" => (create_adw_widget(class_name)?, CreatedWidgetKind::Other),
             _ => {
                 return Err(RuntimeError::Error(Value::Text(format!(
                     "gtk4.buildFromNode unsupported class {class_name}"
@@ -956,6 +1197,11 @@ mod linux {
             }
             match kind {
                 CreatedWidgetKind::Box => unsafe { gtk_box_append(raw, child_raw) },
+                CreatedWidgetKind::HeaderBar => match child.child_type.as_deref() {
+                    Some("end") => unsafe { gtk_header_bar_pack_end(raw, child_raw) },
+                    Some("title") => unsafe { gtk_header_bar_set_title_widget(raw, child_raw) },
+                    _ => unsafe { gtk_header_bar_pack_start(raw, child_raw) },
+                },
                 CreatedWidgetKind::ScrolledWindow => {
                     if child.child_type.as_deref() != Some("overlay") {
                         unsafe { gtk_scrolled_window_set_child(raw, child_raw) };
@@ -972,7 +1218,9 @@ mod linux {
                     }
                 }
                 CreatedWidgetKind::ListBox => unsafe { gtk_list_box_append(raw, child_raw) },
-                CreatedWidgetKind::Other => {}
+                CreatedWidgetKind::Other => {
+                    buildable_add_child(raw, child_raw, child.child_type.as_deref())?;
+                }
             }
         }
 

@@ -114,6 +114,8 @@ Instantiate the resulting node tree with `buildFromNode`.
 For `<interface>`/`<template>`, the first nested `<object>` becomes the instantiated root.
 Object references via `ref`/`idref` are resolved against `id` attributes.
 `<child type="overlay">` and `<child type="controller">` are supported for overlay/controller wiring.
+Header-bar child placement is supported via `<child type="title">` and `<child type="end">` (`start` is the default).
+For classes handled through `GtkBuildable` (including dynamically-created `Adw*` classes), `<child type="...">` is forwarded to the native builder.
 Signal sugar is supported and lowered to typed signal attrs:
 
 - `<object ... onClick={ Msg.Save } />` -> `signal:clicked`
@@ -122,8 +124,8 @@ Signal sugar is supported and lowered to typed signal attrs:
 
 Signal handler values must be compile-time expressions (for example constructor-like tags such as `Msg.Save`), not runtime lambdas.
 
-Current runtime coverage includes common classes such as `GtkBox`, `AdwClamp`, `GtkLabel`, `GtkButton`, `GtkEntry`, `GtkImage`, `GtkDrawingArea`, `GtkScrolledWindow`, `GtkOverlay`, `GtkSeparator`, `GtkListBox`, and `GtkGestureClick`.
-Supported builder properties include layout/widget basics (`margin-*`, `hexpand`, `vexpand`, `halign`, `valign`, `width-request`, `height-request`, `visible`, `tooltip-text`, `opacity`, style classes), plus class-specific fields like `homogeneous`, `wrap`, `ellipsize`, `xalign`, `max-width-chars`, scrollbar policies, and natural-propagation flags.
+Current runtime coverage includes common classes such as `GtkBox`, `GtkHeaderBar`, `AdwHeaderBar`, `AdwClamp`, `GtkLabel`, `GtkButton`, `GtkEntry`, `GtkImage`, `GtkDrawingArea`, `GtkScrolledWindow`, `GtkOverlay`, `GtkSeparator`, `GtkListBox`, and `GtkGestureClick`. Additional `Adw*` classes are created dynamically when the runtime can resolve their GType.
+Supported builder properties include layout/widget basics (`margin-*`, `hexpand`, `vexpand`, `halign`, `valign`, `width-request`, `height-request`, `visible`, `tooltip-text`, `opacity`, style classes), plus class-specific fields like `homogeneous`, `wrap`, `ellipsize`, `xalign`, `max-width-chars`, scrollbar policies, natural-propagation flags, `decoration-layout`, and `show-title-buttons`/`show-end-title-buttons`.
 
 Dynamic child lists can be expressed with `<each ...>` inside a GTK element:
 

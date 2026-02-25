@@ -71,6 +71,7 @@ fn stdlib_additional_modules_execute_without_failures() {
         root.join("integration-tests/stdlib/aivi/graph/graph.aivi"),
         root.join("integration-tests/stdlib/aivi/i18n/i18n.aivi"),
         root.join("integration-tests/stdlib/aivi/json/json.aivi"),
+        root.join("integration-tests/stdlib/aivi/list/list.aivi"),
         root.join("integration-tests/stdlib/aivi/linalg/linalg.aivi"),
         root.join("integration-tests/stdlib/aivi/linear_algebra/linear_algebra.aivi"),
         root.join("integration-tests/stdlib/aivi/logic/logic.aivi"),
