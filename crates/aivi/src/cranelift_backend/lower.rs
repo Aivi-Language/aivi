@@ -178,6 +178,7 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_tuple_item: FuncRef,
     pub(crate) rt_list_len: FuncRef,
     pub(crate) rt_list_tail: FuncRef,
+    pub(crate) rt_list_concat: FuncRef,
     pub(crate) rt_value_equals: FuncRef,
     // Record patching
     pub(crate) rt_patch_record: FuncRef,
@@ -264,6 +265,8 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_list_len: decl!("rt_list_len", [PTR, PTR], [PTR]),
         // (ctx, value_ptr, start) -> ptr
         rt_list_tail: decl!("rt_list_tail", [PTR, PTR, PTR], [PTR]),
+        // (ctx, list_a, list_b) -> ptr
+        rt_list_concat: decl!("rt_list_concat", [PTR, PTR, PTR], [PTR]),
         // (ctx, a, b) -> i64
         rt_value_equals: decl!("rt_value_equals", [PTR, PTR, PTR], [PTR]),
         // (ctx, base, names, name_lens, values, len) -> ptr
@@ -320,6 +323,7 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_tuple_item: cranelift_module::FuncId,
     pub(crate) rt_list_len: cranelift_module::FuncId,
     pub(crate) rt_list_tail: cranelift_module::FuncId,
+    pub(crate) rt_list_concat: cranelift_module::FuncId,
     pub(crate) rt_value_equals: cranelift_module::FuncId,
     pub(crate) rt_patch_record: cranelift_module::FuncId,
     pub(crate) rt_make_closure: cranelift_module::FuncId,
@@ -374,6 +378,7 @@ impl DeclaredHelpers {
             rt_tuple_item: imp!(rt_tuple_item),
             rt_list_len: imp!(rt_list_len),
             rt_list_tail: imp!(rt_list_tail),
+            rt_list_concat: imp!(rt_list_concat),
             rt_value_equals: imp!(rt_value_equals),
             rt_patch_record: imp!(rt_patch_record),
             rt_make_closure: imp!(rt_make_closure),
@@ -902,34 +907,108 @@ impl<'a> LowerCtx<'a> {
         builder: &mut FunctionBuilder<'_>,
         items: &[RustIrListItem],
     ) -> TypedValue {
-        // Allocate a stack slot for the item pointers array
-        let count = items.len();
-        if count == 0 {
-            let null = builder.ins().iconst(PTR, 0);
-            let zero = builder.ins().iconst(PTR, 0);
+        // Check if any items use spread
+        let has_spread = items.iter().any(|i| i.spread);
+
+        if !has_spread {
+            // Fast path: no spreads, allocate a flat list
+            let count = items.len();
+            if count == 0 {
+                let null = builder.ins().iconst(PTR, 0);
+                let zero = builder.ins().iconst(PTR, 0);
+                let call = builder
+                    .ins()
+                    .call(self.helpers.rt_alloc_list, &[self.ctx_param, null, zero]);
+                return TypedValue::boxed(builder.inst_results(call)[0]);
+            }
+
+            let slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                (count * 8) as u32,
+                0,
+            ));
+            for (i, item) in items.iter().enumerate() {
+                let tv = self.lower_expr(builder, &item.expr);
+                let boxed = self.ensure_boxed(builder, tv);
+                builder.ins().stack_store(boxed, slot, (i * 8) as i32);
+            }
+            let arr_ptr = builder.ins().stack_addr(PTR, slot, 0);
+            let len = builder.ins().iconst(PTR, count as i64);
             let call = builder
                 .ins()
+                .call(self.helpers.rt_alloc_list, &[self.ctx_param, arr_ptr, len]);
+            TypedValue::boxed(builder.inst_results(call)[0])
+        } else {
+            // Spread path: group items into chunks of non-spread items and spread items,
+            // build each chunk as a list, then concatenate with rt_list_concat.
+            let null = builder.ins().iconst(PTR, 0);
+            let zero = builder.ins().iconst(PTR, 0);
+            let empty_call = builder
+                .ins()
                 .call(self.helpers.rt_alloc_list, &[self.ctx_param, null, zero]);
-            return TypedValue::boxed(builder.inst_results(call)[0]);
-        }
+            let mut result = builder.inst_results(empty_call)[0];
 
-        // Emit each item and store pointers in a stack slot
+            // Collect consecutive non-spread items into a chunk, flush when we hit a spread
+            let mut chunk: Vec<cranelift_codegen::ir::Value> = Vec::new();
+            for item in items {
+                if item.spread {
+                    // Flush any accumulated non-spread chunk
+                    if !chunk.is_empty() {
+                        let chunk_list = self.build_list_from_values(builder, &chunk);
+                        let call = builder.ins().call(
+                            self.helpers.rt_list_concat,
+                            &[self.ctx_param, result, chunk_list],
+                        );
+                        result = builder.inst_results(call)[0];
+                        chunk.clear();
+                    }
+                    // Concat the spread expression (which should evaluate to a list)
+                    let spread_val = self.lower_expr(builder, &item.expr);
+                    let spread_boxed = self.ensure_boxed(builder, spread_val);
+                    let call = builder.ins().call(
+                        self.helpers.rt_list_concat,
+                        &[self.ctx_param, result, spread_boxed],
+                    );
+                    result = builder.inst_results(call)[0];
+                } else {
+                    let tv = self.lower_expr(builder, &item.expr);
+                    let boxed = self.ensure_boxed(builder, tv);
+                    chunk.push(boxed);
+                }
+            }
+            // Flush any remaining non-spread chunk
+            if !chunk.is_empty() {
+                let chunk_list = self.build_list_from_values(builder, &chunk);
+                let call = builder.ins().call(
+                    self.helpers.rt_list_concat,
+                    &[self.ctx_param, result, chunk_list],
+                );
+                result = builder.inst_results(call)[0];
+            }
+            TypedValue::boxed(result)
+        }
+    }
+
+    fn build_list_from_values(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        values: &[cranelift_codegen::ir::Value],
+    ) -> cranelift_codegen::ir::Value {
+        let count = values.len();
         let slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             (count * 8) as u32,
             0,
         ));
-        for (i, item) in items.iter().enumerate() {
-            let tv = self.lower_expr(builder, &item.expr);
-            let boxed = self.ensure_boxed(builder, tv);
-            builder.ins().stack_store(boxed, slot, (i * 8) as i32);
+        for (i, &val) in values.iter().enumerate() {
+            builder.ins().stack_store(val, slot, (i * 8) as i32);
         }
         let arr_ptr = builder.ins().stack_addr(PTR, slot, 0);
         let len = builder.ins().iconst(PTR, count as i64);
         let call = builder
             .ins()
             .call(self.helpers.rt_alloc_list, &[self.ctx_param, arr_ptr, len]);
-        TypedValue::boxed(builder.inst_results(call)[0])
+        builder.inst_results(call)[0]
     }
 
     fn lower_tuple(

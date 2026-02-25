@@ -576,6 +576,26 @@ pub extern "C" fn rt_list_tail(
     }
 }
 
+/// Concatenate two lists into a new list.
+#[no_mangle]
+pub extern "C" fn rt_list_concat(
+    _ctx: *mut JitRuntimeCtx,
+    a: *const Value,
+    b: *const Value,
+) -> *mut Value {
+    let va = unsafe { &*a };
+    let vb = unsafe { &*b };
+    let mut result = match va {
+        Value::List(items) => items.as_ref().clone(),
+        _ => Vec::new(),
+    };
+    match vb {
+        Value::List(items) => result.extend(items.iter().cloned()),
+        _ => {}
+    }
+    abi::box_value(Value::List(Arc::new(result)))
+}
+
 /// Check structural equality of two values.
 /// Returns 1 if equal, 0 otherwise.
 #[no_mangle]
@@ -1008,6 +1028,7 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_tuple_item", rt_tuple_item as *const u8),
         ("rt_list_len", rt_list_len as *const u8),
         ("rt_list_tail", rt_list_tail as *const u8),
+        ("rt_list_concat", rt_list_concat as *const u8),
         ("rt_value_equals", rt_value_equals as *const u8),
         // Record patching
         ("rt_patch_record", rt_patch_record as *const u8),

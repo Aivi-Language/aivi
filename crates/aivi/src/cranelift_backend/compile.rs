@@ -937,7 +937,7 @@ fn record_field_supported(field: &RustIrRecordField) -> bool {
 }
 
 fn list_item_supported(item: &RustIrListItem) -> bool {
-    !item.spread && expr_supported(&item.expr)
+    expr_supported(&item.expr)
 }
 
 fn pattern_supported(pattern: &RustIrPattern) -> bool {
