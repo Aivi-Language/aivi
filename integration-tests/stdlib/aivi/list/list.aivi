@@ -1,0 +1,23 @@
+@no_prelude
+module integrationTests.stdlib.aivi.list.tests
+
+use aivi
+use aivi.testing
+use aivi.list
+
+@test "list wrappers"
+list_wrappers = do Effect {
+  xs = [1, 2, 3, 4, 5]
+  assertEq (filter (x => x % 2 == 0) xs) [2, 4]
+  assertEq (take 2 xs) [1, 2]
+  assertEq (drop 3 xs) [4, 5]
+  assertEq (find (x => x == 4) xs) (Some 4)
+}
+
+@test "effect traversal helpers"
+effect_traversal_helpers = do Effect {
+  ys <- mapM (x => pure (x + 10)) [1, 2, 3]
+  assertEq ys [11, 12, 13]
+  _ <- forEachEffect (_ => pure Unit) [1, 2, 3]
+  pure Unit
+}

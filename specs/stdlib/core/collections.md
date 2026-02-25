@@ -86,6 +86,15 @@ While `List` is a built-in type, AIVI provides a standard `List` API for pipelin
 | **chunk** size list<br><pre><code>`Int -> List a -> List (List a)`</code></pre> | Chunks into sublists of length `size`. For `size <= 0`, returns `[]`. |
 | **dedup** list<br><pre><code>`List a -> List a`</code></pre> | Stable consecutive de-duplication (`[a,a,b,b,a] -> [a,b,a]`). |
 | **uniqueBy** key list<br><pre><code>`(a -> k) -> List a -> List a`</code></pre> | Stable uniqueness by key (keeps first occurrence). Key must be hashable. |
+| **traverse** f list<br><pre><code>`(a -> Effect e b) -> List a -> Effect e (List b)`</code></pre> | Runs effectful mapping left-to-right, collecting results. |
+| **traverse_** f list<br><pre><code>`(a -> Effect e b) -> List a -> Effect e Unit`</code></pre> | Runs effectful mapping left-to-right and discards results. |
+| **sequence** list<br><pre><code>`List (Effect e a) -> Effect e (List a)`</code></pre> | Executes a list of effects left-to-right and collects results. |
+| **sequence_** list<br><pre><code>`List (Effect e a) -> Effect e Unit`</code></pre> | Executes a list of effects left-to-right and discards results. |
+| **mapM** f list<br><pre><code>`(a -> Effect e b) -> List a -> Effect e (List b)`</code></pre> | Alias of `traverse`. |
+| **mapM_** f list<br><pre><code>`(a -> Effect e b) -> List a -> Effect e Unit`</code></pre> | Alias of `traverse_`. |
+| **forM** list f<br><pre><code>`List a -> (a -> Effect e b) -> Effect e (List b)`</code></pre> | Flipped-argument alias of `traverse`. |
+| **forM_** list f<br><pre><code>`List a -> (a -> Effect e b) -> Effect e Unit`</code></pre> | Flipped-argument alias of `traverse_`. |
+| **forEachEffect** f list<br><pre><code>`(a -> Effect e b) -> List a -> Effect e Unit`</code></pre> | Alias of `mapM_` for side-effecting iteration. |
 
 ## `aivi.map`
 

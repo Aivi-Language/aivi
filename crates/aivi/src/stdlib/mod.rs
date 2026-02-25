@@ -33,6 +33,7 @@ mod i18n;
 mod json;
 mod linalg_facade;
 mod linear_algebra;
+mod list;
 mod log;
 mod logic;
 mod map;
@@ -102,6 +103,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: log::MODULE_NAME,
         source: log::SOURCE,
+    },
+    EmbeddedModule {
+        name: list::MODULE_NAME,
+        source: list::SOURCE,
     },
     EmbeddedModule {
         name: regex::MODULE_NAME,
