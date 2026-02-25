@@ -1,0 +1,1459 @@
+================================================================================
+AIVI COMPILER QA — FULL PIPELINE TEST PLAN
+================================================================================
+
+
+================================================================================
+1. LANGUAGE ASSUMPTIONS
+================================================================================
+
+Based on codebase analysis, the following syntax and semantics are confirmed:
+
+- Module declaration:  `module some.path.name`
+- Prelude:             implicit `use aivi.prelude`; disable with `@no_prelude`
+- Bindings:            `name = expr` (immutable, no `let`/`var`)
+- Functions:           curried, `f = a b => expr`
+- Type signatures:     `name : Type -> Type`
+- ADTs:                `Option A = None | Some A`
+- Records:             `{ field: Type }`, structural/open
+- Pattern matching:    `expr match | pat => expr`
+- Multi-clause fns:    `f = | pat => expr | pat => expr` (requires type sig)
+- do-blocks:           `do Effect { ... }`, `do Option { ... }`, `do Result { ... }`
+- Generators:          `generate { yield expr }`
+- Pipes:               `x |> f` = `f x`
+- Resources:           `resource { handle <- acquire; yield handle; cleanup }`
+- Decorators:          `@test "desc"`, `@static`, `@native "mod.fn"`,
+                       `@inline`, `@deprecated`, `@debug`, `@no_prelude`
+- Domains:             `domain Name over Carrier = { ... }`
+- Patching:            `record <| { field: newVal }`
+- Branded types:       `Email = Text!`
+- Classes:             `class Name (F *) = { ... }`
+- Instances:           `instance Name Type = { ... }`
+- Sigils:              `~r/regex/`, `~u(url)`, `~map{ k => v }`
+- Exhaustiveness:      non-exhaustive `match` is compile error (E3100)
+- Unreachable arms:    warning (W3101)
+- Comments:            `//` line, `/* */` block (non-nesting)
+
+Test harness conventions (from existing tests):
+- Rust unit tests call `parse_modules(Path, src)` → `check_modules` → `check_types`
+- Integration `.aivi` files use `@test "description"` + `do Effect { assertEq ... }`
+- Cranelift JIT tests use `run_jit(source)` helper
+- `@native` diagnostics: E1511 (missing arg), E1510 (non-string arg), E1526 (no type sig / non-top-level / bad target / non-ident params)
+
+
+================================================================================
+2. COVERAGE MATRIX
+================================================================================
+
+Legend:  ✓ = primary target  · = also exercised
+
+Test ID                              | P1 | P2 | P3 | P4 | P5 | P6 | P7 | Category
+-------------------------------------|----|----|----|----|----|----|----|---------
+P1_01_glob_filters_non_aivi          | ✓  |    |    |    |    |    |    | Phase 1 positive
+P1_02_no_matches_error               | ✓  |    |    |    |    |    |    | Phase 1 negative
+P1_03_recursive_glob_deterministic   | ✓  |    |    |    |    |    |    | Phase 1 boundary
+P2_01_parse_unicode_comment_escape   |    | ✓  |    |    |    |    |    | Phase 2 positive
+P2_02_unclosed_paren_recovery        |    | ✓  |    |    |    |    |    | Phase 2 negative
+P2_03_decorator_expansion_native     |    | ✓  |    |    |    |    |    | Phase 2 boundary (@native)
+P2_04_native_no_string_arg           |    | ✓  |    |    |    |    |    | Phase 2 negative (@native)
+P2_05_native_no_type_sig             |    | ✓  |    |    |    |    |    | Phase 2 negative (@native)
+P2_06_native_non_toplevel_rejected   |    | ✓  |    |    |    |    |    | Phase 2 negative (@native)
+P2_07_native_bad_target_path         |    | ✓  |    |    |    |    |    | Phase 2 negative (@native)
+P2_08_native_multi_param_rewrite     |    | ✓  |    |    |    |    |    | Phase 2 positive (@native)
+P2_09_native_zero_param_rewrite      |    | ✓  |    |    |    |    |    | Phase 2 positive (@native)
+P2_10_native_on_typesig_propagation  |    | ✓  |    |    |    |    |    | Phase 2 positive (@native)
+P3_01_syntax_error_blocks_typing     |    |    | ✓  |    |    |    |    | Phase 3 positive
+P3_02_multiple_errors_aggregated     |    |    | ✓  |    |    |    |    | Phase 3 boundary
+P3_03_clean_source_passes_gate       |    |    | ✓  | ·  | ·  |    |    | Phase 3 positive
+P4_01_builtins_resolve               |    |    |    | ✓  |    |    |    | Stdlib positive
+P4_02_user_shadows_stdlib            |    |    |    | ✓  | ·  |    |    | Stdlib boundary
+P4_03_prelude_injection_order        |    |    |    | ✓  |    |    |    | Stdlib positive
+P4_04_decorator_with_stdlib_symbol   |    |    |    | ✓  | ·  |    |    | Stdlib+decorator
+P5_01_occurs_check                   |    |    |    |    | ✓  |    |    | Type soundness
+P5_02_polymorphic_generalization     |    |    |    |    | ✓  |    |    | Type soundness
+P5_03_monomorphization_dedup         |    |    |    |    | ✓  |    |    | Type soundness
+P5_04_coercion_only_permitted        |    |    |    |    | ✓  |    |    | Type soundness
+P5_05_exhaustive_match_error         |    |    |    |    | ✓  |    |    | Type soundness
+P5_06_unreachable_arm_warning        |    |    |    |    | ✓  |    |    | Type soundness
+P5_07_kind_mismatch                  |    |    |    |    | ✓  |    |    | Type soundness
+P5_08_missing_module_import          |    |    |    |    | ✓  |    |    | Semantic
+P6_01_desugar_preserves_semantics    |    |    |    |    |    | ✓  | ·  | Lowering
+P6_02_closure_lowering               |    |    |    |    |    | ✓  | ·  | Lowering
+P6_03_pattern_match_lowering         |    |    |    |    |    | ✓  | ·  | Lowering
+P6_04_generics_to_mono               |    |    |    |    |    | ✓  | ·  | Lowering
+P7_01_forward_ref_mutual_recursion   |    |    |    |    |    |    | ✓  | Codegen
+P7_02_int_float_width_correctness    |    |    |    |    |    |    | ✓  | Codegen
+P7_03_short_circuit_bool             |    |    |    |    |    |    | ✓  | Codegen
+P7_04_abi_calling_convention         |    |    |    |    |    |    | ✓  | Codegen
+E2E_01_full_pipeline                 | ✓  | ✓  | ✓  | ✓  | ✓  | ✓  | ✓  | Cross-phase
+
+
+================================================================================
+3. TEST CASES
+================================================================================
+
+
+--------------------------------------------------------------------------------
+TEST P1_01:
+  TITLE: Glob expansion filters non-.aivi files
+  TARGET_PHASES: [1]
+  FILES:
+    - path: tmpdir/main.aivi
+      contents: |
+        module Main
+    - path: tmpdir/notes.txt
+      contents: |
+        not aivi
+    - path: tmpdir/Cargo.lock
+      contents: |
+        # auto-generated
+  COMMANDS:
+    - compile: resolve_target("tmpdir/")
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_not_contain: notes.txt
+      - must_not_contain: Cargo.lock
+    ir_assertions:
+      - dump: resolved_paths
+        must_contain: main.aivi
+        must_not_contain: notes.txt
+  INVARIANTS:
+    - Only .aivi files are included in the resolved file list
+  NOTES:
+    - Existing test: workspace_expand_target.rs::expand_target_directory_filters_to_aivi_sources
+
+
+--------------------------------------------------------------------------------
+TEST P1_02:
+  TITLE: No .aivi matches produces an error
+  TARGET_PHASES: [1]
+  FILES:
+    - path: tmpdir/readme.md
+      contents: |
+        # no aivi here
+  COMMANDS:
+    - compile: resolve_target("tmpdir/")
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: no .aivi files found
+  INVARIANTS:
+    - Empty target directories must not silently succeed
+  NOTES:
+    - Verifies that the compiler fails gracefully when no sources match
+
+
+--------------------------------------------------------------------------------
+TEST P1_03:
+  TITLE: Recursive glob collects nested .aivi files in deterministic order
+  TARGET_PHASES: [1]
+  FILES:
+    - path: tmpdir/main.aivi
+      contents: |
+        module Main
+    - path: tmpdir/nested/util.aivi
+      contents: |
+        module Util
+    - path: tmpdir/nested/deep/helper.aivi
+      contents: |
+        module Helper
+  COMMANDS:
+    - compile: resolve_target("tmpdir/**")
+  EXPECT:
+    status: success
+    ir_assertions:
+      - dump: resolved_paths
+        must_contain: main.aivi
+        must_contain: util.aivi
+        must_contain: helper.aivi
+  INVARIANTS:
+    - Recursive glob must be deterministic (sorted) across runs
+    - All nested .aivi files are collected
+  NOTES:
+    - Existing test: workspace_expand_target.rs::expand_target_recursive_alias_collects_nested_aivi_sources
+
+
+--------------------------------------------------------------------------------
+TEST P2_01:
+  TITLE: Parse comments, string escapes, and basic expressions without errors
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module parse.basics
+
+        // line comment
+        /* block comment */
+        greeting = "hello { "world" }"
+        escaped = "line1\nline2"
+        num = 42
+        flt = 3.14
+        ch = 'a'
+  COMMANDS:
+    - compile: parse_modules("test.aivi", contents)
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_not_contain: error
+  INVARIANTS:
+    - Lexer handles comments, string interpolation, escape sequences, numeric/char literals
+  NOTES:
+    - Boundary: tests that valid lexemes produce zero diagnostics
+
+
+--------------------------------------------------------------------------------
+TEST P2_02:
+  TITLE: Parser recovers after unclosed paren and still parses later defs
+  TARGET_PHASES: [2]
+  FILES:
+    - path: recovery.aivi
+      contents: |
+        module parse.recovery
+
+        good = 1
+
+        badIf = if True then 1 else
+        badOp = 1 +
+        badTuple = (1, 2
+
+        stillGood = 42
+  COMMANDS:
+    - compile: parse_modules("recovery.aivi", contents)
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: error
+    ir_assertions:
+      - dump: ast
+        must_contain: stillGood
+  INVARIANTS:
+    - Error-tolerant parser recovers from syntax errors
+    - Definitions after errors are still parsed
+  NOTES:
+    - Existing test: parser_error_recovery.rs::parser_recovers_after_multiple_errors
+
+
+--------------------------------------------------------------------------------
+TEST P2_03:
+  TITLE: @native decorator rewrites body to target call
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module native.rewrite
+
+        @native "gtk4.windowPresent"
+        windowPresent : Int -> Effect Text Unit
+        windowPresent = windowId => Unit
+  COMMANDS:
+    - compile: parse_modules("test.aivi", contents)
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_not_contain: error
+    ir_assertions:
+      - dump: ast
+        must_contain: gtk4
+        must_contain: windowPresent
+  INVARIANTS:
+    - @native rewrites `windowPresent = windowId => Unit` to `windowPresent = windowId => gtk4.windowPresent windowId`
+    - The rewritten body is a Call node wrapping a FieldAccess on the target path
+    - Original decorator is preserved in AST metadata
+  NOTES:
+    - Existing test: surface/tests.rs::native_decorator_rewrites_to_target_call
+
+
+--------------------------------------------------------------------------------
+TEST P2_04:
+  TITLE: @native without string argument emits E1511
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module native.noarg
+
+        @native
+        x : Int -> Int
+        x = n => n
+  COMMANDS:
+    - compile: parse_modules("test.aivi", contents)
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: E1511
+      - must_contain: "@native" expects a target string
+  INVARIANTS:
+    - @native requires a string literal argument; bare @native is rejected
+  NOTES:
+    - Verifies error code stability for missing @native argument
+
+
+--------------------------------------------------------------------------------
+TEST P2_05:
+  TITLE: @native without type signature emits E1526
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module native.nosig
+
+        @native "gtk4.appRun"
+        appRun = appId => Unit
+  COMMANDS:
+    - compile: parse_modules("test.aivi", contents)
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: E1526
+      - must_contain: requires an explicit type signature
+  INVARIANTS:
+    - @native definitions MUST have an explicit type signature for type safety
+  NOTES:
+    - Type safety gate: without a sig, the native binding cannot be checked
+
+
+--------------------------------------------------------------------------------
+TEST P2_06:
+  TITLE: @native inside domain block def is rejected (non-top-level)
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module native.domain
+
+        domain Vec over Int = {
+          (+) : Int -> Int -> Int
+          @native "rt.vecAdd"
+          (+) = a b => a + b
+        }
+  COMMANDS:
+    - compile: parse_modules + expand_decorators
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: E1526
+      - must_contain: only supported on top-level
+  INVARIANTS:
+    - @native is restricted to top-level module definitions; use inside domain blocks is rejected
+    - Domain blocks parse decorators on defs, so the @native is found and rejected
+  NOTES:
+    - Instance blocks do NOT parse decorators on defs (parser gap); only domain blocks validate this
+
+
+--------------------------------------------------------------------------------
+TEST P2_07:
+  TITLE: @native with non-dotted-path target emits E1526
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module native.badtarget
+
+        @native "not a valid path!"
+        bad : Int -> Int
+        bad = n => n
+  COMMANDS:
+    - compile: parse_modules + expand_decorators
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: E1526
+      - must_contain: dotted identifier path
+  INVARIANTS:
+    - @native target must be a dotted identifier (e.g. "mod.fn"), not arbitrary text
+  NOTES:
+    - Spaces and special characters in the target string are rejected
+
+
+--------------------------------------------------------------------------------
+TEST P2_08:
+  TITLE: @native multi-parameter function rewrites all args
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module native.multiarg
+
+        @native "math.add"
+        add : Int -> Int -> Int
+        add = a b => 0
+  COMMANDS:
+    - compile: parse_modules("test.aivi", contents)
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_not_contain: error
+    ir_assertions:
+      - dump: ast
+        must_contain: math.add
+  INVARIANTS:
+    - Multi-parameter @native functions rewrite to `math.add a b`
+    - All parameter identifiers are forwarded as arguments to the target call
+  NOTES:
+    - Verifies that params are extracted from the lambda and forwarded correctly
+
+
+--------------------------------------------------------------------------------
+TEST P2_09:
+  TITLE: @native zero-parameter definition rewrites to bare target expression
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module native.zeroparam
+
+        @native "config.defaultTimeout"
+        defaultTimeout : Int
+        defaultTimeout = 0
+  COMMANDS:
+    - compile: parse_modules("test.aivi", contents)
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_not_contain: error
+    ir_assertions:
+      - dump: ast
+        must_contain: config
+        must_contain: defaultTimeout
+  INVARIANTS:
+    - Zero-parameter @native produces a bare FieldAccess expression, not a Call
+  NOTES:
+    - Edge case: no params means the body is just the target expression
+
+
+--------------------------------------------------------------------------------
+TEST P2_10:
+  TITLE: @native on type signature propagates to matching def
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module native.sigprop
+
+        @native "system.exit"
+        exit : Int -> Effect Text Unit
+
+        exit = code => Unit
+  COMMANDS:
+    - compile: parse_modules + expand_decorators
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_not_contain: error
+    ir_assertions:
+      - dump: ast
+        must_contain: system.exit
+  INVARIANTS:
+    - When @native is on the type signature, the matching def body is still rewritten
+    - native_sig_targets propagation from TypeSig to Def works correctly
+  NOTES:
+    - Tests the native_sig_targets HashMap lookup path
+
+
+--------------------------------------------------------------------------------
+TEST P3_01:
+  TITLE: Syntax error prevents type-checking diagnostics
+  TARGET_PHASES: [3]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module gate.test
+
+        bad = if True then 1 else
+        wrongType : Int
+        wrongType = "not an int"
+  COMMANDS:
+    - compile: parse_modules → check if syntax errors → skip check_modules
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: error
+      - must_not_contain: type mismatch
+  INVARIANTS:
+    - Phase 3 gate halts on parse errors; no cascaded type errors emitted
+    - Type checking is never reached if syntax errors exist
+  NOTES:
+    - Prevents confusing secondary diagnostics from reaching the user
+
+
+--------------------------------------------------------------------------------
+TEST P3_02:
+  TITLE: Multiple syntax errors are aggregated in one file
+  TARGET_PHASES: [3]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module gate.multi
+
+        bad1 = if True then
+        bad2 = (1, 2
+        ok = 42
+  COMMANDS:
+    - compile: parse_modules("test.aivi", contents)
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: error
+  INVARIANTS:
+    - Multiple syntax errors per file are reported (not just the first)
+    - Error spans are stable and point to the correct lines
+  NOTES:
+    - At least 2 error diagnostics expected
+
+
+--------------------------------------------------------------------------------
+TEST P3_03:
+  TITLE: Clean source passes the early diagnostics gate
+  TARGET_PHASES: [3, 4, 5]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module gate.clean
+
+        x = 1
+        y = x + 2
+  COMMANDS:
+    - compile: parse_modules → file_diagnostics_have_errors == false → proceed to check_modules
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_not_contain: error
+  INVARIANTS:
+    - Well-formed source with no errors passes through to semantic checking
+  NOTES:
+    - Baseline positive test for the gate
+
+
+--------------------------------------------------------------------------------
+TEST P4_01:
+  TITLE: Stdlib builtins (Int, Bool, Text, print) resolve without explicit import
+  TARGET_PHASES: [4]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module stdlib.builtins
+
+        x : Int
+        x = 42
+
+        flag : Bool
+        flag = True
+
+        msg : Text
+        msg = "hello"
+
+        main : Effect Text Unit
+        main = do Effect {
+          print msg
+        }
+  COMMANDS:
+    - compile: load_modules_from_paths → check_modules → check_types
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_not_contain: error
+  INVARIANTS:
+    - Int, Bool, Text, True, print are available from prelude without explicit import
+  NOTES:
+    - Tests prelude injection (implicit `use aivi.prelude`)
+
+
+--------------------------------------------------------------------------------
+TEST P4_02:
+  TITLE: User module binding shadows stdlib name
+  TARGET_PHASES: [4, 5]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module stdlib.shadow
+
+        use aivi
+        use aivi.testing
+
+        map = f xs => xs match
+          | []           => []
+          | [x, ...rest] => [f x, ...(map f rest)]
+
+        @test "user map shadows stdlib map"
+        shadowMapWorks = do Effect {
+          result = map (n => n * 2) [1, 2, 3]
+          assertEq result [2, 4, 6]
+        }
+  COMMANDS:
+    - compile: load_modules_from_paths → check_modules → desugar → run_test_suite
+  EXPECT:
+    status: success
+    stdout:
+      - contains: PASS
+  INVARIANTS:
+    - User-defined `map` takes precedence over any stdlib `map`
+    - Name resolution prioritizes local module scope over imports
+  NOTES:
+    - Tests name resolution priority (user > stdlib)
+
+
+--------------------------------------------------------------------------------
+TEST P4_03:
+  TITLE: Prelude injection ordering — @no_prelude skips prelude
+  TARGET_PHASES: [4]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module stdlib.noprelude
+
+        use aivi
+
+        x = 42
+  COMMANDS:
+    - compile: load_modules_from_paths → check_modules
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_not_contain: error
+  INVARIANTS:
+    - @no_prelude suppresses automatic `use aivi.prelude`
+    - Explicit `use aivi` provides needed symbols
+  NOTES:
+    - Nearly all integration tests use @no_prelude
+
+
+--------------------------------------------------------------------------------
+TEST P4_04:
+  TITLE: @test decorator interacts with stdlib testing module
+  TARGET_PHASES: [4, 5]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module stdlib.testdecorator
+
+        use aivi
+        use aivi.testing
+
+        @test "stdlib assert available"
+        assertWorks = do Effect {
+          assertEq 1 1
+          assert (True == True)
+        }
+  COMMANDS:
+    - compile: load_modules_from_paths → check_modules → desugar → run_test_suite
+  EXPECT:
+    status: success
+    stdout:
+      - contains: PASS
+  INVARIANTS:
+    - @test decorator marks functions as test entries
+    - assertEq and assert from aivi.testing are callable
+  NOTES:
+    - Tests interaction between decorator expansion and stdlib symbol resolution
+
+
+--------------------------------------------------------------------------------
+TEST P5_01:
+  TITLE: Occurs check prevents infinite type (self-application)
+  TARGET_PHASES: [5]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module types.occurs
+
+        selfApply = f => f f
+  COMMANDS:
+    - compile: parse_modules → check_modules → check_types
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: error
+  INVARIANTS:
+    - `f f` requires `f : a -> b` and `f : a` simultaneously → infinite type
+    - The occurs check rejects this during unification
+  NOTES:
+    - Classic type soundness test; prevents infinite type loops
+
+
+--------------------------------------------------------------------------------
+TEST P5_02:
+  TITLE: Polymorphic generalization — id used at multiple types
+  TARGET_PHASES: [5]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module types.poly
+
+        id : a -> a
+        id = x => x
+
+        intVal = id 42
+        textVal = id "hello"
+        boolVal = id True
+  COMMANDS:
+    - compile: parse_modules → check_modules → check_types
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_not_contain: error
+  INVARIANTS:
+    - `id` is polymorphic (forall a. a -> a) and can be instantiated at Int, Text, Bool
+    - No premature monomorphization during type checking
+  NOTES:
+    - Let-polymorphism: each use site instantiates fresh type variables
+
+
+--------------------------------------------------------------------------------
+TEST P5_03:
+  TITLE: Monomorphization plan deduplicates identical instantiations
+  TARGET_PHASES: [5, 6, 7]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module types.mono
+
+        use aivi
+
+        id : a -> a
+        id = x => x
+
+        main : Effect Text Unit
+        main = do Effect {
+          result <- pure (id 42)
+          print (id "hello")
+        }
+  COMMANDS:
+    - compile: desugar_target_with_cg_types → inspect monomorph_plan
+  EXPECT:
+    status: success
+    ir_assertions:
+      - dump: mono_plan
+        must_contain: types.mono.id
+  INVARIANTS:
+    - monomorph_plan contains at least 2 instantiations for `id` (Int, Text)
+    - Identical instantiations (same concrete types) are deduplicated
+  NOTES:
+    - Existing test: cranelift_jit.rs::cranelift_jit_monomorph_plan_records_polymorphic_calls
+
+
+--------------------------------------------------------------------------------
+TEST P5_04:
+  TITLE: Coercion only inserts permitted toText — rejects unsupported coercion
+  TARGET_PHASES: [5]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module types.coercion
+
+        bad : Int
+        bad = "not an int"
+  COMMANDS:
+    - compile: parse_modules → check_modules → check_types
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: type mismatch
+      - must_contain: expected Int, found Text
+  INVARIANTS:
+    - Only Text coercion (toText) is auto-inserted; Text → Int is never coerced
+    - No implicit numeric casts
+  NOTES:
+    - Existing test: typecheck_core.rs::typecheck_error_mismatch_order
+
+
+--------------------------------------------------------------------------------
+TEST P5_05:
+  TITLE: Non-exhaustive match is a compile error (E3100)
+  TARGET_PHASES: [5]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module types.exhaustive
+
+        Option A = None | Some A
+
+        value = Some 1 match
+          | Some _ => 1
+  COMMANDS:
+    - compile: parse_modules → check_modules → check_types
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: E3100
+  INVARIANTS:
+    - All match expressions must be exhaustive
+    - Missing `None` arm in Option match is caught
+  NOTES:
+    - Existing test: typecheck_core.rs::typecheck_non_exhaustive_match_is_error
+
+
+--------------------------------------------------------------------------------
+TEST P5_06:
+  TITLE: Unreachable match arm is a warning (W3101)
+  TARGET_PHASES: [5]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module types.unreachable
+
+        Option A = None | Some A
+
+        value = Some 1 match
+          | _ => 0
+          | Some _ => 1
+  COMMANDS:
+    - compile: parse_modules → check_modules → check_types
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_contain: W3101
+  INVARIANTS:
+    - Wildcard before specific constructors makes later arms unreachable
+    - Unreachable arms produce a warning, not an error
+  NOTES:
+    - Existing test: typecheck_core.rs::typecheck_unreachable_match_arm_is_warning
+
+
+--------------------------------------------------------------------------------
+TEST P5_07:
+  TITLE: Kind mismatch in type application (List List)
+  TARGET_PHASES: [5]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module types.kind
+
+        bad : List List
+        bad = []
+  COMMANDS:
+    - compile: parse_modules → check_modules → check_types
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: kind mismatch in type application
+  INVARIANTS:
+    - List expects a type argument of kind *, not kind * -> *
+    - Kind checking is enforced in type signatures
+  NOTES:
+    - Existing test: typecheck_core.rs::typecheck_reports_kind_mismatch_in_type_application
+
+
+--------------------------------------------------------------------------------
+TEST P5_08:
+  TITLE: Unknown name is a compile error
+  TARGET_PHASES: [5]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module types.missing
+
+        export value
+        value = missing
+  COMMANDS:
+    - compile: parse_modules → check_modules → check_types
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: error
+  INVARIANTS:
+    - Unresolved names produce a diagnostic at the semantic phase
+    - No silent fallback to dynamic dispatch
+  NOTES:
+    - Existing test: typecheck_core.rs::typecheck_error_unknown_name
+
+
+--------------------------------------------------------------------------------
+TEST P6_01:
+  TITLE: Desugaring preserves semantics — arithmetic through pipeline
+  TARGET_PHASES: [6, 7]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module desugar.semantics
+
+        use aivi
+        use aivi.testing
+
+        double = n => n * 2
+        result = 5 |> double
+
+        @test "desugar pipe preserves semantics"
+        pipeWorks = do Effect {
+          assertEq result 10
+        }
+  COMMANDS:
+    - compile: load_modules_from_paths → check → desugar → run_test_suite
+  EXPECT:
+    status: success
+    stdout:
+      - contains: PASS
+  INVARIANTS:
+    - `5 |> double` desugars to `double 5` = `10`
+    - Pipe desugaring preserves evaluation semantics
+  NOTES:
+    - Run-based equivalence test for desugaring correctness
+
+
+--------------------------------------------------------------------------------
+TEST P6_02:
+  TITLE: Closure lowering — captured variable is correct
+  TARGET_PHASES: [6, 7]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module desugar.closure
+
+        use aivi
+        use aivi.testing
+
+        makeAdder = n => x => n + x
+
+        @test "closure captures work"
+        closureWorks = do Effect {
+          addFive <- pure (makeAdder 5)
+          assertEq (addFive 3) 8
+          assertEq (addFive 10) 15
+        }
+  COMMANDS:
+    - compile: load + check + desugar + run_test_suite
+  EXPECT:
+    status: success
+    stdout:
+      - contains: PASS
+  INVARIANTS:
+    - Inner lambda captures `n` from outer scope
+    - Captured variable value is stable across multiple calls
+  NOTES:
+    - Existing test: cranelift_jit.rs::cranelift_jit_lambda_closure
+
+
+--------------------------------------------------------------------------------
+TEST P6_03:
+  TITLE: Pattern match lowering preserves all branches
+  TARGET_PHASES: [6, 7]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module desugar.pmatch
+
+        use aivi
+        use aivi.testing
+
+        Option A = None | Some A
+
+        unwrapOr = default => opt => opt match
+          | Some x => x
+          | None   => default
+
+        @test "pattern match lowering"
+        pmatchWorks = do Effect {
+          assertEq (unwrapOr 0 (Some 42)) 42
+          assertEq (unwrapOr 0 None) 0
+        }
+  COMMANDS:
+    - compile: load + check + desugar + run
+  EXPECT:
+    status: success
+    stdout:
+      - contains: PASS
+  INVARIANTS:
+    - All constructor branches are preserved through lowering
+    - Default value branch (None) executes correctly
+  NOTES:
+    - Existing test: cranelift_jit.rs::cranelift_jit_pattern_matching_constructor
+
+
+--------------------------------------------------------------------------------
+TEST P6_04:
+  TITLE: Generics lowered to mono code with correct call sites
+  TARGET_PHASES: [6, 7]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module desugar.generics
+
+        use aivi
+        use aivi.testing
+
+        id : a -> a
+        id = x => x
+
+        @test "monomorphized polymorphic function"
+        monoWorks = do Effect {
+          assertEq (id 42) 42
+          assertEq (id "hello") "hello"
+        }
+  COMMANDS:
+    - compile: load + check + desugar + run (Cranelift JIT)
+  EXPECT:
+    status: success
+    stdout:
+      - contains: PASS
+  INVARIANTS:
+    - Polymorphic `id` is monomorphized for both Int and Text
+    - Each call site dispatches to the correct specialization
+  NOTES:
+    - Existing test: cranelift_jit.rs::cranelift_jit_monomorphized_polymorphic_function
+
+
+--------------------------------------------------------------------------------
+TEST P7_01:
+  TITLE: Forward references / mutual recursion in codegen
+  TARGET_PHASES: [7]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module codegen.fwdref
+
+        use aivi
+        use aivi.testing
+
+        isEven = n => if n == 0 then True else isOdd (n - 1)
+        isOdd = n => if n == 0 then False else isEven (n - 1)
+
+        @test "mutual recursion"
+        mutualRecursion = do Effect {
+          assertEq (isEven 4) True
+          assertEq (isOdd 3) True
+          assertEq (isEven 5) False
+        }
+  COMMANDS:
+    - compile: run_jit(source)
+  EXPECT:
+    status: success
+    stdout:
+      - contains: PASS
+  INVARIANTS:
+    - Two-pass codegen (declare pass then body pass) resolves forward references
+    - `isEven` calls `isOdd` which is declared later → forward ref
+    - Mutual recursion terminates correctly
+  NOTES:
+    - Tests Cranelift declare-pass / body-pass ordering
+
+
+--------------------------------------------------------------------------------
+TEST P7_02:
+  TITLE: Integer and float width correctness in native codegen
+  TARGET_PHASES: [7]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module codegen.widths
+
+        use aivi
+        use aivi.testing
+
+        add : Int -> Int -> Int
+        add = a b => a + b
+
+        sub : Int -> Int -> Int
+        sub = a b => a - b
+
+        mul : Int -> Int -> Int
+        mul = a b => a * b
+
+        addF : Float -> Float -> Float
+        addF = a b => a + b
+
+        mulF : Float -> Float -> Float
+        mulF = a b => a * b
+
+        @test "native int and float arithmetic"
+        nativeArith = do Effect {
+          assertEq (add 3 4) 7
+          assertEq (sub 10 3) 7
+          assertEq (mul 6 7) 42
+          assertEq (addF 1.5 2.5) 4.0
+          assertEq (mulF 3.0 7.0) 21.0
+        }
+  COMMANDS:
+    - compile: run_jit(source)
+  EXPECT:
+    status: success
+    stdout:
+      - contains: PASS
+  INVARIANTS:
+    - Int operations use iadd/isub/imul (i64 width)
+    - Float operations use fadd/fmul (f64 width)
+    - No silent truncation or widening
+  NOTES:
+    - Combines tests from cranelift_jit_typed_arithmetic and cranelift_jit_typed_float_arithmetic
+
+
+--------------------------------------------------------------------------------
+TEST P7_03:
+  TITLE: Short-circuit boolean operators and control flow
+  TARGET_PHASES: [7]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module codegen.boolops
+
+        use aivi
+        use aivi.testing
+
+        clamp = x => if x > 10 then 10 else x
+
+        andTest = a b => a && b
+        orTest = a b => a || b
+
+        @test "short-circuit bool and control flow"
+        boolControlFlow = do Effect {
+          assertEq (clamp 5) 5
+          assertEq (clamp 15) 10
+          assertEq (andTest True False) False
+          assertEq (andTest True True) True
+          assertEq (orTest False True) True
+          assertEq (orTest False False) False
+        }
+  COMMANDS:
+    - compile: run_jit(source)
+  EXPECT:
+    status: success
+    stdout:
+      - contains: PASS
+  INVARIANTS:
+    - if/then/else generates correct branch blocks in Cranelift
+    - && short-circuits (does not evaluate RHS if LHS is False)
+    - || short-circuits (does not evaluate RHS if LHS is True)
+  NOTES:
+    - Tests phi nodes / block structure in Cranelift IR
+
+
+--------------------------------------------------------------------------------
+TEST P7_04:
+  TITLE: Calling convention — composed function calls pass values correctly
+  TARGET_PHASES: [7]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module codegen.abi
+
+        use aivi
+        use aivi.testing
+
+        add : Int -> Int -> Int
+        add = a b => a + b
+
+        double : Int -> Int
+        double = n => add n n
+
+        square : Int -> Int
+        square = n => n * n
+
+        @test "typed function composition ABI"
+        compositionABI = do Effect {
+          assertEq (double 21) 42
+          assertEq (square 7) 49
+          assertEq (add (double 3) (square 2)) 10
+        }
+  COMMANDS:
+    - compile: run_jit(source)
+  EXPECT:
+    status: success
+    stdout:
+      - contains: PASS
+  INVARIANTS:
+    - Function return values are correctly boxed/unboxed at call boundaries
+    - Nested function calls (add (double 3) (square 2)) pass through ABI correctly
+  NOTES:
+    - Existing test: cranelift_jit.rs::cranelift_jit_typed_function_composition
+
+
+--------------------------------------------------------------------------------
+TEST E2E_01:
+  TITLE: Full pipeline — parse → typecheck → desugar → codegen → run
+  TARGET_PHASES: [1, 2, 3, 4, 5, 6, 7]
+  FILES:
+    - path: test.aivi
+      contents: |
+        @no_prelude
+        module e2e.full
+
+        use aivi
+        use aivi.testing
+
+        Option A = None | Some A
+
+        map = f xs => xs match
+          | []           => []
+          | [x, ...rest] => [f x, ...(map f rest)]
+
+        safeHead = xs => xs match
+          | []       => None
+          | [x, ...] => Some x
+
+        describe = opt => opt match
+          | None   => "nothing"
+          | Some _ => "something"
+
+        @test "full pipeline end-to-end"
+        fullPipeline = do Effect {
+          nums = [1, 2, 3]
+          doubled = map (n => n * 2) nums
+          assertEq doubled [2, 4, 6]
+          assertEq (safeHead doubled) (Some 2)
+          assertEq (safeHead []) None
+          assertEq (describe (Some 1)) "something"
+          assertEq (describe None) "nothing"
+        }
+  COMMANDS:
+    - compile: load_modules_from_paths → check_modules → desugar → run_test_suite
+    - also: run_jit (Cranelift path)
+  EXPECT:
+    status: success
+    stdout:
+      - contains: PASS
+  INVARIANTS:
+    - Complete pipeline from source text to runtime output produces correct results
+    - ADT definition, pattern matching, list operations, and closures all interoperate
+    - Both interpreter and JIT paths produce identical results
+  NOTES:
+    - Cross-phase integration test: exercises all 7 phases
+
+
+================================================================================
+METAMORPHIC / DIFFERENTIAL TESTS
+================================================================================
+
+
+--------------------------------------------------------------------------------
+TEST META_01:
+  TITLE: Whitespace variation does not change semantics
+  TARGET_PHASES: [2, 6, 7]
+  FILES:
+    - path: compact.aivi
+      contents: |
+        @no_prelude
+        module meta.compact
+        use aivi
+        use aivi.testing
+        add = a b => a + b
+        @test "compact" compactTest = do Effect { assertEq (add 1 2) 3 }
+    - path: spaced.aivi
+      contents: |
+        @no_prelude
+        module meta.spaced
+
+        use aivi
+        use aivi.testing
+
+        add = a b => a + b
+
+        @test "spaced"
+        spacedTest = do Effect {
+          assertEq (add 1 2) 3
+        }
+  COMMANDS:
+    - compile + run: both files
+  EXPECT:
+    status: success for both
+    stdout:
+      - both contain: PASS
+  INVARIANTS:
+    - Extra blank lines / whitespace do not change program semantics
+    - Both versions produce identical runtime results
+  NOTES:
+    - Metamorphic test: whitespace variation
+
+
+--------------------------------------------------------------------------------
+TEST META_02:
+  TITLE: Explicit vs inferred type annotation — same behavior
+  TARGET_PHASES: [5, 6, 7]
+  FILES:
+    - path: explicit.aivi
+      contents: |
+        @no_prelude
+        module meta.explicit
+        use aivi
+        use aivi.testing
+
+        add : Int -> Int -> Int
+        add = a b => a + b
+
+        @test "explicit types"
+        explicitTest = do Effect { assertEq (add 1 2) 3 }
+    - path: inferred.aivi
+      contents: |
+        @no_prelude
+        module meta.inferred
+        use aivi
+        use aivi.testing
+
+        add = a b => a + b
+
+        @test "inferred types"
+        inferredTest = do Effect { assertEq (add 1 2) 3 }
+  COMMANDS:
+    - compile + run: both files
+  EXPECT:
+    status: success for both
+    stdout:
+      - both contain: PASS
+  INVARIANTS:
+    - Explicit type annotation and inferred types produce the same runtime behavior
+    - Type inference for `a + b` resolves to Int when called with Int literals
+  NOTES:
+    - Metamorphic test: explicit vs inferred types
+
+
+--------------------------------------------------------------------------------
+TEST META_03:
+  TITLE: Reordering non-dependent top-level defs does not change semantics
+  TARGET_PHASES: [2, 5, 6, 7]
+  FILES:
+    - path: order_a.aivi
+      contents: |
+        @no_prelude
+        module meta.orderA
+        use aivi
+        use aivi.testing
+
+        x = 1
+        y = 2
+        z = x + y
+
+        @test "order A"
+        orderATest = do Effect { assertEq z 3 }
+    - path: order_b.aivi
+      contents: |
+        @no_prelude
+        module meta.orderB
+        use aivi
+        use aivi.testing
+
+        y = 2
+        x = 1
+        z = x + y
+
+        @test "order B"
+        orderBTest = do Effect { assertEq z 3 }
+  COMMANDS:
+    - compile + run: both files
+  EXPECT:
+    status: success for both
+    stdout:
+      - both contain: PASS
+  INVARIANTS:
+    - Top-level bindings are recursive; order of non-dependent defs doesn't matter
+    - x and y can be swapped without affecting z
+  NOTES:
+    - Metamorphic test: declaration reordering
+
+
+================================================================================
+@native FOCUSED TESTS (ADDITIONAL)
+================================================================================
+
+
+--------------------------------------------------------------------------------
+TEST NATIVE_01:
+  TITLE: @native with non-string argument (integer) emits E1510
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module native.nonstring
+
+        @native 42
+        x : Int -> Int
+        x = n => n
+  COMMANDS:
+    - compile: parse_modules("test.aivi", contents)
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: E1510
+      - must_contain: "@native" expects a string literal argument
+  INVARIANTS:
+    - @native argument must be a string literal; integer literal is rejected
+    - Different error code (E1510) from missing argument (E1511)
+  NOTES:
+    - Distinguishes E1510 (wrong type) from E1511 (missing entirely)
+
+
+--------------------------------------------------------------------------------
+TEST NATIVE_02:
+  TITLE: @native with destructuring parameter is rejected (E1526)
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module native.destructure
+
+        @native "mod.fn"
+        fn : { x: Int } -> Int
+        fn = { x } => x
+  COMMANDS:
+    - compile: parse_modules + expand_decorators
+  EXPECT:
+    status: compile_error
+    diagnostics:
+      - must_contain: E1526
+      - must_contain: only supports identifier parameters
+  INVARIANTS:
+    - @native params must be plain identifiers, not patterns/destructuring
+    - Record destructuring in @native parameter is rejected
+  NOTES:
+    - The apply_native_to_def function only allows Pattern::Ident
+
+
+--------------------------------------------------------------------------------
+TEST NATIVE_03:
+  TITLE: @native deeply nested dotted path (3+ segments) works
+  TARGET_PHASES: [2]
+  FILES:
+    - path: test.aivi
+      contents: |
+        module native.deeppath
+
+        @native "system.io.file.readAll"
+        readAll : Text -> Effect Text Text
+        readAll = path => ""
+  COMMANDS:
+    - compile: parse_modules + expand_decorators
+  EXPECT:
+    status: success
+    diagnostics:
+      - must_not_contain: error
+    ir_assertions:
+      - dump: ast
+        must_contain: system
+        must_contain: readAll
+  INVARIANTS:
+    - Dotted paths with 3+ segments are valid @native targets
+    - Each segment becomes a nested FieldAccess in the AST
+  NOTES:
+    - Edge case: deeply nested native paths (system.io.file.readAll)
+
+
+================================================================================
+SUMMARY
+================================================================================
+
+Total tests:        36
+  Phase 1:           3 (1 negative)
+  Phase 2:          11 (4 negative, 8 @native-specific)
+  Phase 3:           3 (2 negative)
+  Phase 4:           4 (0 negative, all positive/boundary)
+  Phase 5:           8 (5 negative)
+  Phase 6:           4 (0 negative, all positive/equivalence)
+  Phase 7:           4 (0 negative, all positive)
+  Cross-phase:       1 (E2E)
+  Metamorphic:       3
+  @native focused:   3 additional (overlaps with Phase 2)
+
+Type soundness tests:  7 (P5_01..P5_07)
+Stdlib context tests:  4 (P4_01..P4_04)
+Lowering/IR tests:     4 (P6_01..P6_04)
+Cranelift/codegen:     4 (P7_01..P7_04)
+@native tests:        11 (P2_03..P2_10, NATIVE_01..NATIVE_03)
