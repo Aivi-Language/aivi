@@ -16,7 +16,7 @@ The server currently supports the following LSP capabilities:
 
 ### Information
 
-- **Hover**: Show type information and documentation when hovering over a symbol.
+- **Hover**: Show type information and documentation when hovering over a symbol. The server uses multiple resolution strategies: first it attempts definition-based lookup, then falls back to **span-type lookup** which finds the smallest typed span containing the cursor position. This ensures hover information is available even for expressions without a named definition (e.g. intermediate sub-expressions).
 - **Signature Help**: Show function signature and parameter information while typing function calls.
 
 ### Editing

@@ -39,7 +39,7 @@ The v0.1 parser recognizes these infix operators (from lowest to highest precede
 7. `|` (bitwise or)
 8. `^` (bitwise xor)
 9. `<<`, `>>` (shift)
-10. `+`, `-`, `++` (additive / concatenation)
+10. `+`, `-`, `++` (additive / collection concatenation)
 11. `*`, `×`, `/`, `%` (multiplicative)
 12. `<|` (patch   binds tighter than arithmetic, just below application; see [Patching](patching.md))
 
@@ -70,6 +70,8 @@ Some operators are **domain-resolved** when operand types are not plain `Int`. I
 
 - Domain-resolved (when non-`Int` is involved): `+`, `-`, `*`, `×`, `/`, `%`, `<`, `<=`, `>`, `>=`
 - Not domain-resolved in v0.1 (built-in): `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`, `??`, `++`
+
+> **Note (v0.1):** `++` is supported for `List` concatenation, `Map` merge, and `Set` union. It is **not** supported for `Text` concatenation — use text interpolation (`"Hello, {name}!"`) instead.
 
 Domain operator resolution is a static rewrite to an in-scope function named like `(+)` or `(<)` (see [Desugaring: Domains and Operators](../desugaring/domains.md)).
 
