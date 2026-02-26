@@ -65,10 +65,7 @@ fn compile_fail_fixtures_produce_expected_diagnostics() {
         .collect();
     entries.sort();
 
-    assert!(
-        !entries.is_empty(),
-        "No .aivi files found in compile_fail/"
-    );
+    assert!(!entries.is_empty(), "No .aivi files found in compile_fail/");
 
     let mut passed = 0usize;
     let mut failed_cases: Vec<String> = Vec::new();
@@ -127,7 +124,12 @@ fn compile_fail_fixtures_produce_expected_diagnostics() {
                 };
                 let actual: Vec<String> = diags
                     .iter()
-                    .map(|d| format!("[{:?}] {} {}", d.diagnostic.severity, d.diagnostic.code, d.diagnostic.message))
+                    .map(|d| {
+                        format!(
+                            "[{:?}] {} {}",
+                            d.diagnostic.severity, d.diagnostic.code, d.diagnostic.message
+                        )
+                    })
                     .collect();
                 failed_cases.push(format!(
                     "{}: expected {} containing '{}', got: {:?}",

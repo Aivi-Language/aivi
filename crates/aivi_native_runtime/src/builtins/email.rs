@@ -31,9 +31,11 @@ fn load_imap_messages(config: HashMap<String, Value>) -> Result<Value, RuntimeEr
     let limit = optional_int(&config, "limit", 50, "email.imap")?;
     let port = optional_int(&config, "port", 993, "email.imap")?;
 
-    let client = imap::ClientBuilder::new(&host, port as u16).connect().map_err(|err| {
-        RuntimeError::Error(Value::Text(format!("email.imap transport error: {err}")))
-    })?;
+    let client = imap::ClientBuilder::new(&host, port as u16)
+        .connect()
+        .map_err(|err| {
+            RuntimeError::Error(Value::Text(format!("email.imap transport error: {err}")))
+        })?;
     let mut session = client.login(user, password).map_err(|(err, _)| {
         RuntimeError::Error(Value::Text(format!("email.imap auth error: {err}")))
     })?;

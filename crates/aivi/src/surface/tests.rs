@@ -110,6 +110,39 @@ export Value
     assert!(module.exports.iter().any(|item| {
         item.kind == crate::surface::ScopeItemKind::Value && item.name.name == "Value"
     }));
+    assert!(module.exports.iter().any(|item| {
+        item.kind == crate::surface::ScopeItemKind::Value && item.name.name == "Int"
+    }));
+    assert!(module.exports.iter().any(|item| {
+        item.kind == crate::surface::ScopeItemKind::Value && item.name.name == "Other"
+    }));
+}
+
+#[test]
+fn export_prefixed_type_exports_its_constructors() {
+    let src = r#"
+module Example
+
+export UiMsg = ComposeNew | QuickReplySend Text
+"#;
+
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    assert!(module.exports.iter().any(|item| {
+        item.kind == crate::surface::ScopeItemKind::Value && item.name.name == "UiMsg"
+    }));
+    assert!(module.exports.iter().any(|item| {
+        item.kind == crate::surface::ScopeItemKind::Value && item.name.name == "ComposeNew"
+    }));
+    assert!(module.exports.iter().any(|item| {
+        item.kind == crate::surface::ScopeItemKind::Value && item.name.name == "QuickReplySend"
+    }));
 }
 
 #[test]

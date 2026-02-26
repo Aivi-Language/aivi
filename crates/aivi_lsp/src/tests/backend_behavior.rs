@@ -213,6 +213,53 @@ main = magnitude { x: 3.0, y: 4.0 }
 }
 
 #[test]
+fn diagnostics_prefer_embedded_stdlib_over_workspace_shadow() {
+    let text = r#"module demo
+use aivi.list
+
+main = [1, 2, 3] |> filter (x => x > 1)
+"#;
+    let uri = sample_uri();
+
+    let shadow_text = r#"module aivi.list
+export find
+find = pred xs => xs
+"#;
+    let shadow_path = PathBuf::from("shadow_list.aivi");
+    let (shadow_modules, _) = parse_modules(&shadow_path, shadow_text);
+    let shadow_module = shadow_modules
+        .into_iter()
+        .next()
+        .expect("shadow module should parse");
+
+    let shadow_uri = Url::parse("file:///shadow_list.aivi").expect("valid uri");
+    let mut workspace = HashMap::new();
+    workspace.insert(
+        "aivi.list".to_string(),
+        IndexedModule {
+            uri: shadow_uri,
+            module: shadow_module,
+            text: Some(shadow_text.to_string()),
+        },
+    );
+
+    let diagnostics = Backend::build_diagnostics_with_workspace(
+        text,
+        &uri,
+        &workspace,
+        false,
+        &crate::strict::StrictConfig::default(),
+    );
+
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diag| diag.message.contains("unknown name 'filter'")),
+        "embedded stdlib should win over workspace shadow for aivi.list"
+    );
+}
+
+#[test]
 fn strict_mode_warns_on_unused_match_arm_bindings() {
     let text = r#"module demo
 

@@ -396,3 +396,97 @@ fn rewrite_implicit_field_vars(
         },
     }
 }
+
+fn lift_predicate_expr(expr: &Expr, env: &TypeEnv, implicit_param: &str) -> Option<Expr> {
+    if matches!(expr, Expr::Lambda { .. }) || expr_contains_placeholder(expr) {
+        return None;
+    }
+
+    let unbound = collect_unbound_names(expr, env);
+    if unbound.is_empty() {
+        return None;
+    }
+
+    let body = rewrite_implicit_field_vars(expr.clone(), implicit_param, &unbound);
+    let span = expr_span(expr);
+    Some(Expr::Lambda {
+        params: vec![Pattern::Ident(SpannedName {
+            name: implicit_param.to_string(),
+            span: span.clone(),
+        })],
+        body: Box::new(body),
+        span,
+    })
+}
+
+fn expr_contains_placeholder(expr: &Expr) -> bool {
+    match expr {
+        Expr::Ident(name) => name.name == "_",
+        Expr::UnaryNeg { expr, .. } => expr_contains_placeholder(expr),
+        Expr::Suffixed { base, .. } => expr_contains_placeholder(base),
+        Expr::Literal(_) | Expr::FieldSection { .. } | Expr::Raw { .. } => false,
+        Expr::TextInterpolate { parts, .. } => parts.iter().any(|part| match part {
+            TextPart::Text { .. } => false,
+            TextPart::Expr { expr, .. } => expr_contains_placeholder(expr),
+        }),
+        Expr::List { items, .. } => items.iter().any(|item| expr_contains_placeholder(&item.expr)),
+        Expr::Tuple { items, .. } => items.iter().any(expr_contains_placeholder),
+        Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => fields.iter().any(|field| {
+            field.path.iter().any(|seg| match seg {
+                PathSegment::Field(_) | PathSegment::All(_) => false,
+                PathSegment::Index(expr, _) => expr_contains_placeholder(expr),
+            }) || expr_contains_placeholder(&field.value)
+        }),
+        Expr::FieldAccess { base, .. } => expr_contains_placeholder(base),
+        Expr::Index { base, index, .. } => {
+            expr_contains_placeholder(base) || expr_contains_placeholder(index)
+        }
+        Expr::Call { func, args, .. } => {
+            expr_contains_placeholder(func) || args.iter().any(expr_contains_placeholder)
+        }
+        Expr::Lambda { body, .. } => expr_contains_placeholder(body),
+        Expr::Match {
+            scrutinee, arms, ..
+        } => {
+            scrutinee
+                .as_ref()
+                .is_some_and(|expr| expr_contains_placeholder(expr))
+                || arms.iter().any(|arm| {
+                    arm.guard
+                        .as_ref()
+                        .is_some_and(expr_contains_placeholder)
+                        || expr_contains_placeholder(&arm.body)
+                })
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+            ..
+        } => {
+            expr_contains_placeholder(cond)
+                || expr_contains_placeholder(then_branch)
+                || expr_contains_placeholder(else_branch)
+        }
+        Expr::Binary { left, right, .. } => {
+            expr_contains_placeholder(left) || expr_contains_placeholder(right)
+        }
+        Expr::Block { items, .. } => items.iter().any(|item| match item {
+            BlockItem::Bind { expr, .. }
+            | BlockItem::Let { expr, .. }
+            | BlockItem::Filter { expr, .. }
+            | BlockItem::Yield { expr, .. }
+            | BlockItem::Recurse { expr, .. }
+            | BlockItem::Expr { expr, .. } => expr_contains_placeholder(expr),
+            BlockItem::When { cond, effect, .. } | BlockItem::Unless { cond, effect, .. } => {
+                expr_contains_placeholder(cond) || expr_contains_placeholder(effect)
+            }
+            BlockItem::Given { cond, fail_expr, .. } => {
+                expr_contains_placeholder(cond) || expr_contains_placeholder(fail_expr)
+            }
+            BlockItem::On {
+                transition, handler, ..
+            } => expr_contains_placeholder(transition) || expr_contains_placeholder(handler),
+        }),
+    }
+}

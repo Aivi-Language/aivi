@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::runtime::values::Value;
 use crate::runtime::format_runtime_error;
+use crate::runtime::values::Value;
 
 use super::abi::{self, JitRuntimeCtx};
 
@@ -342,7 +342,11 @@ pub extern "C" fn rt_apply(
             match (b.imp.func)(all_args, runtime) {
                 Ok(val) => return abi::box_value(val),
                 Err(e) => {
-                    eprintln!("aivi: error in builtin '{}': {}", b.imp.name, format_runtime_error(e));
+                    eprintln!(
+                        "aivi: error in builtin '{}': {}",
+                        b.imp.name,
+                        format_runtime_error(e)
+                    );
                     return abi::box_value(Value::Unit);
                 }
             }
@@ -873,10 +877,7 @@ pub extern "C" fn rt_gen_vec_into_generator(
 /// The generator is a function `\k -> \z -> foldl k z values`. This helper
 /// applies it with a list-append step and empty list to collect all elements.
 #[no_mangle]
-pub extern "C" fn rt_generator_to_list(
-    ctx: *mut JitRuntimeCtx,
-    gen_ptr: *mut Value,
-) -> *mut Value {
+pub extern "C" fn rt_generator_to_list(ctx: *mut JitRuntimeCtx, gen_ptr: *mut Value) -> *mut Value {
     let gen = unsafe { (*gen_ptr).clone() };
     let runtime = unsafe { &mut *(*ctx).runtime };
     match runtime.generator_to_list(gen) {
@@ -974,8 +975,7 @@ pub extern "C" fn rt_register_jit_fn(
         ));
         runtime.ctx.globals.set(name.to_string(), effect);
     } else {
-        let builtin =
-            super::compile::make_jit_builtin(name, arity as usize, func_ptr as usize);
+        let builtin = super::compile::make_jit_builtin(name, arity as usize, func_ptr as usize);
         runtime.ctx.globals.set(name.to_string(), builtin);
     }
 }
@@ -992,12 +992,15 @@ pub extern "C" fn rt_eval_sigil(
     flags_ptr: *const u8,
     flags_len: i64,
 ) -> *mut Value {
-    let tag =
-        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(tag_ptr, tag_len as usize)) };
-    let body =
-        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(body_ptr, body_len as usize)) };
-    let flags =
-        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(flags_ptr, flags_len as usize)) };
+    let tag = unsafe {
+        std::str::from_utf8_unchecked(std::slice::from_raw_parts(tag_ptr, tag_len as usize))
+    };
+    let body = unsafe {
+        std::str::from_utf8_unchecked(std::slice::from_raw_parts(body_ptr, body_len as usize))
+    };
+    let flags = unsafe {
+        std::str::from_utf8_unchecked(std::slice::from_raw_parts(flags_ptr, flags_len as usize))
+    };
     match crate::runtime::eval_sigil_literal(tag, body, flags) {
         Ok(val) => abi::box_value(val),
         Err(e) => {
@@ -1059,10 +1062,7 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         // Closure creation
         ("rt_make_closure", rt_make_closure as *const u8),
         // Native generate helpers
-        (
-            "rt_generator_to_list",
-            rt_generator_to_list as *const u8,
-        ),
+        ("rt_generator_to_list", rt_generator_to_list as *const u8),
         ("rt_gen_vec_new", rt_gen_vec_new as *const u8),
         ("rt_gen_vec_push", rt_gen_vec_push as *const u8),
         (
@@ -1070,10 +1070,7 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
             rt_gen_vec_into_generator as *const u8,
         ),
         // AOT function registration
-        (
-            "rt_register_jit_fn",
-            rt_register_jit_fn as *const u8,
-        ),
+        ("rt_register_jit_fn", rt_register_jit_fn as *const u8),
         // Sigil evaluation
         ("rt_eval_sigil", rt_eval_sigil as *const u8),
     ]

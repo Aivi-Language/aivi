@@ -43,13 +43,134 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
     // until a fixed point is reached (typically 1-3 passes).
     let mut result = engine::format_text_with_options(content, options);
     for _ in 0..4 {
-        let next = engine::format_text_with_options(&result, options);
+        // Collapse any multi-line `~mat[...]` back to a single line with `;`
+        // row separators so the next pass can re-detect and re-align the matrix.
+        let collapsed = collapse_multiline_matrix(&result);
+        let next = engine::format_text_with_options(&collapsed, options);
         if next == result {
             break;
         }
         result = next;
     }
     result
+}
+
+/// Collapse multi-line `~mat[row1\n      row2]` back to `~mat[row1;row2]`.
+///
+/// After the first format pass the matrix is spread across lines (with
+/// column-aligned padding) and the closing `]` appears at the END of the last
+/// row.  Subsequent passes don't recognise the pattern because the `;` row
+/// separator is gone.  This helper re-inserts `;` so the engine can re-detect
+/// and re-format the matrix correctly.
+///
+/// Matrices where the `]` is on its own line (written directly in source) are
+/// left untouched — those are handled stably without collapsing.
+fn collapse_multiline_matrix(text: &str) -> String {
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut out: Vec<String> = Vec::with_capacity(lines.len());
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        // Find `~mat[` in the line and check whether the `[` is unclosed.
+        if let Some(mat_pos) = line.find("~mat[") {
+            let bracket_pos = mat_pos + "~mat[".len() - 1; // position of `[`
+            let mut depth: i32 = 0;
+            let mut closed = false;
+            for ch in line[bracket_pos..].chars() {
+                if ch == '[' {
+                    depth += 1;
+                } else if ch == ']' {
+                    depth -= 1;
+                    if depth == 0 {
+                        closed = true;
+                        break;
+                    }
+                }
+            }
+            if !closed {
+                // Look ahead to see if the closing `]` ends a content line
+                // (i.e. the formatted multi-row style where `]` trails content).
+                // If `]` is alone on its own line, leave the matrix untouched.
+                let mut lookahead = i + 1;
+                let mut depth2 = depth;
+                let mut closer_on_own_line = false;
+                let mut found_closer = false;
+                while lookahead < lines.len() && depth2 != 0 {
+                    let cont = lines[lookahead].trim();
+                    if cont.is_empty() {
+                        lookahead += 1;
+                        continue;
+                    }
+                    for ch in cont.chars() {
+                        if ch == '[' {
+                            depth2 += 1;
+                        } else if ch == ']' {
+                            depth2 -= 1;
+                            if depth2 == 0 {
+                                found_closer = true;
+                                // `]` is alone on this line if the trimmed content
+                                // is exactly `]`.
+                                closer_on_own_line = cont == "]";
+                                break;
+                            }
+                        }
+                    }
+                    if found_closer {
+                        break;
+                    }
+                    lookahead += 1;
+                }
+                // Only collapse the pattern produced by the formatter itself
+                // (where `]` trails content, not on its own line).
+                if found_closer && !closer_on_own_line {
+                    let mut merged = line.trim_end().to_string();
+                    i += 1;
+                    let mut depth3 = depth;
+                    while i < lines.len() && depth3 != 0 {
+                        let cont = lines[i].trim();
+                        if cont.is_empty() {
+                            i += 1;
+                            continue;
+                        }
+                        let mut ends_with_close = false;
+                        for ch in cont.chars() {
+                            if ch == '[' {
+                                depth3 += 1;
+                            } else if ch == ']' {
+                                depth3 -= 1;
+                                if depth3 == 0 {
+                                    ends_with_close = true;
+                                    break;
+                                }
+                            }
+                        }
+                        let row_content = if ends_with_close {
+                            if let Some(pos) = cont.rfind(']') {
+                                cont[..pos].trim_end()
+                            } else {
+                                cont
+                            }
+                        } else {
+                            cont
+                        };
+                        if !row_content.is_empty() {
+                            merged.push(';');
+                            merged.push_str(row_content);
+                        }
+                        if ends_with_close {
+                            merged.push(']');
+                        }
+                        i += 1;
+                    }
+                    out.push(merged);
+                    continue;
+                }
+            }
+        }
+        out.push(line.to_string());
+        i += 1;
+    }
+    out.join("\n")
 }
 
 fn is_op(text: &str) -> bool {
@@ -178,7 +299,8 @@ mod tests {
 
     #[test]
     fn format_html_sigil_formats_long_wrapped_record_attribute_values() {
-        let text = "module demo\n\nx=~<html><div props={ { a: 1, b: 2, c: 3, d: 4 } }></div></html>\n";
+        let text =
+            "module demo\n\nx=~<html><div props={ { a: 1, b: 2, c: 3, d: 4 } }></div></html>\n";
         let formatted = format_text(text);
         assert!(formatted.contains("<div props={{\n"));
         assert!(formatted.contains("\n        a: 1,\n"));
@@ -198,5 +320,26 @@ mod tests {
             "not idempotent on crash input: pass1={:?} pass2={:?}",
             out1, out2
         );
+    }
+}
+
+#[cfg(test)]
+mod align_tests {
+    use super::*;
+    #[test]
+    fn align_uniform_records_in_list() {
+        let input = "module demo\n\nappShortcuts = [\n  { key: \"n\", modifiers: \"ctrl\", action: \"compose\", label: \"New email\" }\n  { key: \"k\", modifiers: \"ctrl\", action: \"search\", label: \"Search\" }\n]\n";
+        let out = format_text(input);
+        // label should align (same column) across rows
+        let lines: Vec<&str> = out.lines().collect();
+        let label_cols: Vec<usize> = lines.iter()
+            .filter(|l| l.contains("label:"))
+            .map(|l| l.find("label:").unwrap())
+            .collect();
+        assert!(label_cols.len() >= 2, "at least 2 label fields");
+        assert_eq!(label_cols[0], label_cols[1], "label fields should be aligned");
+        // Verify idempotency
+        let out2 = format_text(&out);
+        assert_eq!(out, out2, "alignment should be idempotent");
     }
 }

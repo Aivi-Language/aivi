@@ -88,6 +88,8 @@ impl TypeChecker {
             "WsError",
             "ServerReply",
             "WsMessage",
+            "GtkNode",
+            "GtkSignalEvent",
         ] {
             self.builtin_types.insert(name.to_string(), star.clone());
         }

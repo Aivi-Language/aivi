@@ -466,12 +466,27 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
             left,
             right,
             span,
-        } => Expr::Binary {
-            op,
-            left: Box::new(desugar_placeholder_lambdas(*left)),
-            right: Box::new(desugar_placeholder_lambdas(*right)),
-            span,
-        },
+        } => {
+            let capture_predicate_binary = matches!(
+                op.as_str(),
+                "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||"
+            );
+            if capture_predicate_binary {
+                Expr::Binary {
+                    op,
+                    left,
+                    right,
+                    span,
+                }
+            } else {
+                Expr::Binary {
+                    op,
+                    left: Box::new(desugar_placeholder_lambdas(*left)),
+                    right: Box::new(desugar_placeholder_lambdas(*right)),
+                    span,
+                }
+            }
+        }
         Expr::Block { kind, items, span } => Expr::Block {
             kind,
             items: items

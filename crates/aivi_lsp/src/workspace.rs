@@ -257,15 +257,30 @@ impl Backend {
             HashMap::new()
         };
 
-        let mut merged = disk_modules;
-        merged.extend(open_modules);
+        let mut merged = HashMap::new();
         for module in embedded_stdlib_modules() {
             let name = module.name.name.clone();
-            merged.entry(name.clone()).or_insert_with(|| IndexedModule {
-                uri: Self::stdlib_uri(&name),
-                module,
-                text: None,
-            });
+            merged.insert(
+                name.clone(),
+                IndexedModule {
+                    uri: Self::stdlib_uri(&name),
+                    module,
+                    text: None,
+                },
+            );
+        }
+        // Keep embedded stdlib authoritative for `aivi.*` module names.
+        for (name, indexed) in disk_modules {
+            if name.starts_with("aivi.") {
+                continue;
+            }
+            merged.entry(name).or_insert(indexed);
+        }
+        for (name, indexed) in open_modules {
+            if name.starts_with("aivi.") {
+                continue;
+            }
+            merged.insert(name, indexed);
         }
         merged
     }

@@ -196,7 +196,7 @@ impl TypeChecker {
             {
                 let arg_tys: Vec<Type> = args
                     .iter()
-                    .map(|arg| self.infer_expr(arg, env))
+                    .map(|arg| self.infer_arg_with_predicate_fallback(arg, env))
                     .collect::<Result<_, _>>()?;
 
                 let Some(candidates) = env.get_all(&name.name) else {
@@ -313,13 +313,30 @@ impl TypeChecker {
             None
         };
         for arg in args {
-            let arg_ty = self.infer_expr(arg, env)?;
+            let param_ty = self.fresh_var();
             let result_ty = self.fresh_var();
             self.unify_with_span(
                 func_ty,
-                Type::Func(Box::new(arg_ty), Box::new(result_ty.clone())),
+                Type::Func(Box::new(param_ty.clone()), Box::new(result_ty.clone())),
                 expr_span(arg),
             )?;
+            let expected_arg_ty = self.apply(param_ty.clone());
+            let arg_checkpoint = self.subst.clone();
+            let arg_ty = match self.check_or_coerce(arg.clone(), Some(expected_arg_ty), env) {
+                Ok((_arg_expr, arg_ty)) => arg_ty,
+                Err(original_err) if original_err.message.starts_with("unknown name '") => {
+                    self.subst = arg_checkpoint.clone();
+                    match self.infer_arg_with_predicate_fallback(arg, env) {
+                        Ok(arg_ty) => arg_ty,
+                        Err(_) => {
+                            self.subst = arg_checkpoint;
+                            return Err(original_err);
+                        }
+                    }
+                }
+                Err(err) => return Err(err),
+            };
+            self.unify_with_span(arg_ty, param_ty, expr_span(arg))?;
             func_ty = result_ty;
         }
         if let (Some(qname), Some(orig_ty)) = (poly_call_info, original_func_ty) {
@@ -327,6 +344,28 @@ impl TypeChecker {
             self.poly_instantiations.push((qname, resolved));
         }
         Ok(func_ty)
+    }
+
+    fn infer_arg_with_predicate_fallback(
+        &mut self,
+        arg: &Expr,
+        env: &mut TypeEnv,
+    ) -> Result<Type, TypeError> {
+        let checkpoint = self.subst.clone();
+        match self.infer_expr(arg, env) {
+            Ok(ty) => Ok(ty),
+            Err(original_err) => {
+                self.subst = checkpoint.clone();
+                let Some(rewritten) = lift_predicate_expr(arg, env, "__pred") else {
+                    return Err(original_err);
+                };
+                let Ok(rewritten_ty) = self.infer_expr(&rewritten, env) else {
+                    self.subst = checkpoint;
+                    return Err(original_err);
+                };
+                Ok(rewritten_ty)
+            }
+        }
     }
 
     fn infer_method_call(
@@ -338,7 +377,7 @@ impl TypeChecker {
     ) -> Result<Type, TypeError> {
         let mut arg_tys = Vec::new();
         for arg in args {
-            arg_tys.push(self.infer_expr(arg, env)?);
+            arg_tys.push(self.infer_arg_with_predicate_fallback(arg, env)?);
         }
 
         let Some(classes) = self.method_to_classes.get(&method.name).cloned() else {

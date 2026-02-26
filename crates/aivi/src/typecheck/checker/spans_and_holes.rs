@@ -199,12 +199,27 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
             left,
             right,
             span,
-        } => Expr::Binary {
-            op,
-            left: Box::new(desugar_holes_inner(*left, false)),
-            right: Box::new(desugar_holes_inner(*right, false)),
-            span,
-        },
+        } => {
+            let capture_predicate_binary = matches!(
+                op.as_str(),
+                "==" | "!=" | "<" | ">" | "<=" | ">=" | "&&" | "||"
+            );
+            if capture_predicate_binary {
+                Expr::Binary {
+                    op,
+                    left,
+                    right,
+                    span,
+                }
+            } else {
+                Expr::Binary {
+                    op,
+                    left: Box::new(desugar_holes_inner(*left, false)),
+                    right: Box::new(desugar_holes_inner(*right, false)),
+                    span,
+                }
+            }
+        }
         Expr::Block { kind, items, span } => {
             let items = items
                 .into_iter()
