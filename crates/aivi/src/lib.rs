@@ -124,7 +124,7 @@ pub use aivi_core::{CstBundle, CstFile, CstToken};
 pub use aivi_core::{HirModule, HirProgram};
 pub use cranelift_backend::{
     compile_to_object, destroy_aot_runtime, init_aot_runtime, init_aot_runtime_base,
-    run_cranelift_jit, run_test_suite_jit,
+    run_cranelift_jit, run_cranelift_jit_cancellable, run_test_suite_jit,
 };
 pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
@@ -140,6 +140,37 @@ pub use pm::{
     CargoDepSpecParseError, CargoManifestEdits, NativeUiTarget, ProjectKind,
 };
 pub use runtime::{TestFailure, TestReport, TestSuccess};
+
+/// Opaque handle for cancelling a running AIVI program from another thread.
+/// Used by `--watch` mode to stop the current execution before restarting.
+#[derive(Clone)]
+pub struct CancelHandle {
+    token: std::sync::Arc<runtime::CancelToken>,
+}
+
+impl CancelHandle {
+    /// Create a new cancel handle.
+    pub fn new() -> Self {
+        Self {
+            token: runtime::CancelToken::root(),
+        }
+    }
+
+    /// Signal cancellation. Any runtime using this handle's token will stop.
+    pub fn cancel(&self) {
+        self.token.cancel();
+    }
+}
+
+/// Run JIT with an external cancel handle so the caller can stop execution.
+pub fn run_cranelift_jit_with_handle(
+    program: HirProgram,
+    cg_types: std::collections::HashMap<String, std::collections::HashMap<String, CgType>>,
+    monomorph_plan: std::collections::HashMap<String, Vec<CgType>>,
+    handle: &CancelHandle,
+) -> Result<(), AiviError> {
+    run_cranelift_jit_cancellable(program, cg_types, monomorph_plan, handle.token.clone())
+}
 
 /// Run the AIVI test suite via JIT compilation.
 pub fn run_test_suite(

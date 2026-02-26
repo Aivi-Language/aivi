@@ -39,6 +39,9 @@ include_dir = "0.7.4"
 rusqlite = { version = "0.38.0", features = ["bundled"] }
 postgres = "0.19.12"
 mysql = "27.0.0"
+notify = { version = "7", default-features = false, features = ["macos_fsevent"] }
+notify-debouncer-mini = "0.5"
+libc = "0.2"
 parking_lot = "0.12"
 cranelift-codegen = "0.129.1"
 cranelift-frontend = "0.129.1"

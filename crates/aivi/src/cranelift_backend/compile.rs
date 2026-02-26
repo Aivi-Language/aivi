@@ -4,6 +4,7 @@
 //! `compile_to_object` is the AOT entrypoint that emits a native object file.
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
@@ -12,7 +13,10 @@ use cranelift_module::{Linkage, Module};
 use crate::cg_type::CgType;
 use crate::hir::HirProgram;
 use crate::runtime::values::Value;
-use crate::runtime::{build_runtime_from_program, run_main_effect, Runtime};
+use crate::runtime::{
+    build_runtime_from_program, build_runtime_from_program_with_cancel, run_main_effect,
+    CancelToken, Runtime,
+};
 use crate::rust_ir::{
     RustIrBlockItem, RustIrBlockKind, RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment,
     RustIrPattern, RustIrRecordField, RustIrTextPart,
@@ -318,6 +322,19 @@ pub fn run_cranelift_jit(
     monomorph_plan: HashMap<String, Vec<CgType>>,
 ) -> Result<(), AiviError> {
     let mut runtime = build_runtime_from_program(&program)?;
+    let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, &mut runtime)?;
+    run_main_effect(&mut runtime)
+}
+
+/// Like [`run_cranelift_jit`] but accepts an external cancel token so the
+/// caller can cancel execution from another thread (used by `--watch`).
+pub fn run_cranelift_jit_cancellable(
+    program: HirProgram,
+    cg_types: HashMap<String, HashMap<String, CgType>>,
+    monomorph_plan: HashMap<String, Vec<CgType>>,
+    cancel: Arc<CancelToken>,
+) -> Result<(), AiviError> {
+    let mut runtime = build_runtime_from_program_with_cancel(&program, cancel)?;
     let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, &mut runtime)?;
     run_main_effect(&mut runtime)
 }
