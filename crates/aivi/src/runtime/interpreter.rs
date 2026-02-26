@@ -78,6 +78,9 @@ pub(crate) struct Runtime {
     pub(crate) jit_call_depth: u32,
     /// Maximum JIT call depth before bailing out.
     pub(crate) jit_max_call_depth: u32,
+    /// Flag set by JIT match fallthrough to signal "non-exhaustive match" to
+    /// `make_jit_builtin`, enabling `apply_multi_clause` to try the next clause.
+    pub(crate) jit_match_failed: bool,
 }
 
 #[derive(Clone)]

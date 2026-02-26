@@ -161,6 +161,8 @@ pub(crate) struct HelperRefs {
     // Call-depth guard
     pub(crate) rt_check_call_depth: FuncRef,
     pub(crate) rt_dec_call_depth: FuncRef,
+    // Match failure signaling
+    pub(crate) rt_signal_match_fail: FuncRef,
     // Boxing/unboxing
     pub(crate) rt_box_int: FuncRef,
     pub(crate) rt_box_float: FuncRef,
@@ -232,6 +234,8 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_check_call_depth: decl!("rt_check_call_depth", [PTR], [PTR]),
         // (ctx) -> void
         rt_dec_call_depth: decl!("rt_dec_call_depth", [PTR], []),
+        // (ctx) -> ptr  (signal non-exhaustive match)
+        rt_signal_match_fail: decl!("rt_signal_match_fail", [PTR], [PTR]),
         // (ctx, i64) -> ptr
         rt_box_int: decl!("rt_box_int", [PTR, PTR], [PTR]),
         rt_box_float: decl!("rt_box_float", [PTR, PTR], [PTR]),
@@ -318,6 +322,8 @@ pub(crate) struct DeclaredHelpers {
     // Call-depth guard
     pub(crate) rt_check_call_depth: cranelift_module::FuncId,
     pub(crate) rt_dec_call_depth: cranelift_module::FuncId,
+    // Match failure signaling
+    pub(crate) rt_signal_match_fail: cranelift_module::FuncId,
     // Boxing/unboxing
     pub(crate) rt_box_int: cranelift_module::FuncId,
     pub(crate) rt_box_float: cranelift_module::FuncId,

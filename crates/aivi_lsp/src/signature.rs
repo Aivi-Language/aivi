@@ -29,7 +29,7 @@ impl Backend {
         // keep signature help responsive in large projects.
         let relevant_modules =
             Self::collect_relevant_modules(&modules, current_module, workspace_modules);
-        let (_, inferred) = infer_value_types(&relevant_modules);
+        let (_, inferred, _) = infer_value_types(&relevant_modules);
 
         let call = current_module
             .items

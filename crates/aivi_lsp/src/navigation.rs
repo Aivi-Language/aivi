@@ -888,7 +888,7 @@ impl Backend {
         let ident = Self::extract_identifier(text, position)?;
         let path = PathBuf::from(Self::path_from_uri(uri));
         let (modules, _) = parse_modules(&path, text);
-        let (_, inferred) = infer_value_types(&modules);
+        let (_, inferred, span_types) = infer_value_types(&modules);
         for module in modules.iter() {
             let doc = Self::doc_for_ident(text, module, &ident);
             let inferred = inferred.get(&module.name.name);
@@ -912,6 +912,16 @@ impl Backend {
                 inferred.get(&module.name.name),
                 None,
             ) {
+                return Some(Hover {
+                    contents: HoverContents::Markup(MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: contents,
+                    }),
+                    range: None,
+                });
+            }
+            // Fallback: look up the smallest span containing the cursor position.
+            if let Some(contents) = Self::hover_from_span_types(&ident, position, &span_types, &module.name.name) {
                 return Some(Hover {
                     contents: HoverContents::Markup(MarkupContent {
                         kind: MarkupKind::Markdown,
@@ -1137,7 +1147,7 @@ impl Backend {
         // entire workspace) to keep hover responsive in large projects.
         let relevant_modules =
             Self::collect_relevant_modules(&modules, current_module, workspace_modules);
-        let (_, inferred) = infer_value_types(&relevant_modules);
+        let (_, inferred, span_types) = infer_value_types(&relevant_modules);
 
         // Handle dotted identifiers: first check if it's a full module name (e.g.
         // "aivi.collections"), then check Domain.method / Type.constructor patterns.
@@ -1242,6 +1252,16 @@ impl Backend {
             inferred_current,
             Some(workspace_modules),
         ) {
+            return Some(Hover {
+                contents: HoverContents::Markup(MarkupContent {
+                    kind: MarkupKind::Markdown,
+                    value: contents,
+                }),
+                range: None,
+            });
+        }
+        // Fallback: look up the smallest span containing the cursor position.
+        if let Some(contents) = Self::hover_from_span_types(&ident, position, &span_types, &current_module.name.name) {
             return Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
                     kind: MarkupKind::Markdown,

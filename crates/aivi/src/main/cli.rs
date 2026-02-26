@@ -7,7 +7,7 @@ use aivi::{
 };
 use std::env;
 use std::io;
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -31,6 +31,7 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), AiviError> {
+    let use_color = io::stderr().is_terminal();
     let mut args = env::args().skip(1);
     let Some(command) = args.next() else {
         print_help();
@@ -65,7 +66,8 @@ fn run() -> Result<(), AiviError> {
             let mut had_errors = false;
             for file in &bundle.files {
                 if !file.diagnostics.is_empty() {
-                    let rendered = render_diagnostics(&file.path, &file.diagnostics);
+                    let rendered =
+                        render_diagnostics(&file.path, &file.diagnostics, use_color);
                     if !rendered.is_empty() {
                         eprintln!("{rendered}");
                     }
@@ -104,8 +106,11 @@ fn run() -> Result<(), AiviError> {
             }
             let has_errors = aivi::file_diagnostics_have_errors(&diagnostics);
             for diag in &diagnostics {
-                let rendered =
-                    render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+                let rendered = render_diagnostics(
+                    &diag.path,
+                    std::slice::from_ref(&diag.diagnostic),
+                    use_color,
+                );
                 if !rendered.is_empty() {
                     eprintln!("{rendered}");
                 }
@@ -183,7 +188,7 @@ fn run() -> Result<(), AiviError> {
             }
             for diag in &diagnostics {
                 let rendered =
-                    render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+                    render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic), use_color);
                 if !rendered.is_empty() {
                     eprintln!("{rendered}");
                 }
@@ -259,7 +264,7 @@ fn run() -> Result<(), AiviError> {
             }
             for diag in &check_diags {
                 let rendered =
-                    render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+                    render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic), use_color);
                 if !rendered.is_empty() {
                     eprintln!("{rendered}");
                 }
@@ -354,7 +359,7 @@ fn run() -> Result<(), AiviError> {
             if aivi::file_diagnostics_have_errors(&diagnostics) {
                 for diag in diagnostics {
                     let rendered =
-                        render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+                        render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic), use_color);
                     if !rendered.is_empty() {
                         eprintln!("{rendered}");
                     }
@@ -412,7 +417,7 @@ fn run() -> Result<(), AiviError> {
                         return Ok(());
                     };
                     maybe_enable_debug_trace(opts.debug_trace);
-                    let _modules = load_checked_modules_with_progress(&opts.input)?;
+                    let _modules = load_checked_modules_with_progress(&opts.input, use_color)?;
                     let (program, cg_types, monomorph_plan) =
                         aivi::desugar_target_with_cg_types(&opts.input)?;
                     let object_bytes =
@@ -859,7 +864,10 @@ impl Drop for Spinner {
     }
 }
 
-fn load_checked_modules_with_progress(target: &str) -> Result<Vec<aivi::Module>, AiviError> {
+fn load_checked_modules_with_progress(
+    target: &str,
+    use_color: bool,
+) -> Result<Vec<aivi::Module>, AiviError> {
     let paths = aivi::resolve_target(target)?;
     let mut spinner = Spinner::new("checking sources".to_string());
     let mut diagnostics = Vec::new();
@@ -885,7 +893,8 @@ fn load_checked_modules_with_progress(target: &str) -> Result<Vec<aivi::Module>,
         return Ok(stdlib_modules);
     }
     for diag in diagnostics {
-        let rendered = render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+        let rendered =
+            render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic), use_color);
         if !rendered.is_empty() {
             eprintln!("{rendered}");
         }

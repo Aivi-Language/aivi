@@ -39,6 +39,9 @@ pub(super) struct TypeChecker {
     /// Records `(qualified_callee_name, resolved_type)` for polymorphic call sites.
     /// Used to build the monomorphization plan.
     poly_instantiations: Vec<(String, Type)>,
+    /// Records `(span, type)` for every successfully inferred expression.
+    /// Used by the LSP to provide hover information at arbitrary positions.
+    pub(super) span_types: Vec<(Span, Type)>,
 }
 
 impl TypeChecker {
@@ -66,6 +69,7 @@ impl TypeChecker {
             constraints: ConstraintState::default(),
             query_cache: TypeQueryCache::default(),
             poly_instantiations: Vec::new(),
+            span_types: Vec::new(),
         };
         checker.register_builtin_types();
         checker.register_builtin_aliases();
@@ -104,6 +108,7 @@ impl TypeChecker {
         self.constraints = ConstraintState::default();
         self.query_cache.clear_module(&_module.name.name);
         self.poly_instantiations.clear();
+        self.span_types.clear();
     }
 
     fn collect_enabled_record_default_types(module: &Module) -> HashSet<String> {
@@ -144,6 +149,20 @@ impl TypeChecker {
     /// Drain the recorded polymorphic call-site instantiations for the current module.
     pub(super) fn take_poly_instantiations(&mut self) -> Vec<(String, Type)> {
         std::mem::take(&mut self.poly_instantiations)
+    }
+
+    /// Drain the recorded span→type pairs for the current module, applying final substitutions
+    /// and rendering types as strings.
+    pub(super) fn take_span_types(&mut self) -> Vec<(Span, String)> {
+        let entries = std::mem::take(&mut self.span_types);
+        entries
+            .into_iter()
+            .map(|(span, ty)| {
+                let applied = self.apply(ty);
+                let rendered = self.type_to_string(&applied);
+                (span, rendered)
+            })
+            .collect()
     }
 
     fn emit_extra_diag(

@@ -35,6 +35,18 @@ pub extern "C" fn rt_dec_call_depth(ctx: *mut JitRuntimeCtx) {
     runtime.jit_call_depth = runtime.jit_call_depth.saturating_sub(1);
 }
 
+/// Signal that a JIT-compiled pattern match was non-exhaustive.
+///
+/// Sets `runtime.jit_match_failed` so that `make_jit_builtin` can return
+/// `Err("non-exhaustive match")`, allowing `apply_multi_clause` to try the
+/// next clause.
+#[no_mangle]
+pub extern "C" fn rt_signal_match_fail(ctx: *mut JitRuntimeCtx) -> *mut Value {
+    let runtime = unsafe { (*ctx).runtime_mut() };
+    runtime.jit_match_failed = true;
+    abi::box_value(Value::Unit)
+}
+
 // ---------------------------------------------------------------------------
 // Boxing / unboxing helpers
 // ---------------------------------------------------------------------------
@@ -1055,6 +1067,8 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         // Call-depth guard
         ("rt_check_call_depth", rt_check_call_depth as *const u8),
         ("rt_dec_call_depth", rt_dec_call_depth as *const u8),
+        // Match failure signaling
+        ("rt_signal_match_fail", rt_signal_match_fail as *const u8),
         ("rt_box_int", rt_box_int as *const u8),
         ("rt_box_float", rt_box_float as *const u8),
         ("rt_box_bool", rt_box_bool as *const u8),

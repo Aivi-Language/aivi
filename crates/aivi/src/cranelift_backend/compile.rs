@@ -15,7 +15,7 @@ use crate::hir::HirProgram;
 use crate::runtime::values::Value;
 use crate::runtime::{
     build_runtime_from_program, build_runtime_from_program_with_cancel, run_main_effect,
-    CancelToken, Runtime,
+    CancelToken, Runtime, RuntimeError,
 };
 use crate::rust_ir::{
     RustIrBlockItem, RustIrBlockKind, RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment,
@@ -98,6 +98,9 @@ fn jit_compile_into_runtime(
     let mut declared_defs: Vec<DeclaredDef> = Vec::new();
     let mut declared_names: HashSet<String> = HashSet::new();
     let mut jit_func_ids: HashMap<String, JitFuncDecl> = HashMap::new();
+    // Counter per qualified name to generate unique Cranelift function names for
+    // multi-clause definitions (e.g., domain operators with several pattern clauses).
+    let mut clause_counters: HashMap<String, usize> = HashMap::new();
 
     // Pass 1: Declare all eligible functions
     for ir_module in &rust_program.modules {
@@ -124,10 +127,17 @@ fn jit_compile_into_runtime(
                     qualified
                 )));
             }
-            let func_name = format!("__aivi_jit_{}", sanitize_name(&qualified));
-            if declared_names.contains(&func_name) {
-                continue;
-            }
+            let base_func_name = format!("__aivi_jit_{}", sanitize_name(&qualified));
+            // Give each clause a unique Cranelift function name so all clauses
+            // of a multi-clause def (like domain operators) get compiled.
+            let func_name = if declared_names.contains(&base_func_name) {
+                let counter = clause_counters.entry(qualified.clone()).or_insert(1);
+                let name = format!("{}_{}", base_func_name, counter);
+                *counter += 1;
+                name
+            } else {
+                base_func_name.clone()
+            };
             declared_names.insert(func_name.clone());
 
             let arity = params.len();
@@ -259,6 +269,29 @@ fn jit_compile_into_runtime(
         .map_err(|e| AiviError::Runtime(format!("cranelift finalize: {e}")))?;
 
     let mut compiled_globals: HashMap<String, Value> = HashMap::new();
+
+    // Insert-or-merge: when the same name appears multiple times (multi-clause
+    // domain operators), wrap all clauses in Value::MultiClause so the runtime
+    // can try each clause in order via apply_multi_clause.
+    fn insert_or_merge(map: &mut HashMap<String, Value>, key: String, value: Value) {
+        use std::collections::hash_map::Entry;
+        match map.entry(key) {
+            Entry::Vacant(e) => {
+                e.insert(value);
+            }
+            Entry::Occupied(mut e) => {
+                let existing = e.get_mut();
+                match existing {
+                    Value::MultiClause(clauses) => clauses.push(value),
+                    _ => {
+                        let prev = std::mem::replace(existing, Value::Unit);
+                        *existing = Value::MultiClause(vec![prev, value]);
+                    }
+                }
+            }
+        }
+    }
+
     for pd in &pending {
         let ptr = module.get_finalized_function(pd.func_id);
         if pd.is_effect_block {
@@ -291,12 +324,12 @@ fn jit_compile_into_runtime(
                     }),
                 },
             ));
-            compiled_globals.insert(pd.name.clone(), effect.clone());
-            compiled_globals.insert(pd.qualified.clone(), effect);
+            insert_or_merge(&mut compiled_globals, pd.name.clone(), effect.clone());
+            insert_or_merge(&mut compiled_globals, pd.qualified.clone(), effect);
         } else {
             let jit_value = make_jit_builtin(&pd.qualified, pd.arity, ptr as usize);
-            compiled_globals.insert(pd.name.clone(), jit_value.clone());
-            compiled_globals.insert(pd.qualified.clone(), jit_value);
+            insert_or_merge(&mut compiled_globals, pd.name.clone(), jit_value.clone());
+            insert_or_merge(&mut compiled_globals, pd.qualified.clone(), jit_value);
         }
     }
 
@@ -1531,6 +1564,28 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
 
                 // Call the JIT function
                 let result_ptr = unsafe { call_jit_function(func_ptr, &call_args) };
+
+                // Check if the JIT function signalled a non-exhaustive match.
+                // This lets apply_multi_clause try the next clause.
+                if runtime.jit_match_failed {
+                    runtime.jit_match_failed = false;
+                    // Clean up boxed arguments
+                    for arg_ptr in boxed_args {
+                        unsafe {
+                            drop(Box::from_raw(arg_ptr));
+                        }
+                    }
+                    if result_ptr != 0
+                        && !call_args[1..].iter().any(|a| *a == result_ptr)
+                    {
+                        unsafe {
+                            drop(Box::from_raw(result_ptr as *mut Value));
+                        }
+                    }
+                    return Err(RuntimeError::Message(
+                        "non-exhaustive match".to_string(),
+                    ));
+                }
 
                 // Clone the result from the pointer (don't take ownership — the
                 // pointer might alias one of the input args).
