@@ -96,7 +96,10 @@ impl Backend {
         out
     }
 
-    fn project_root_for_path(path: &Path, workspace_folders: &[PathBuf]) -> Option<PathBuf> {
+    pub(super) fn project_root_for_path(
+        path: &Path,
+        workspace_folders: &[PathBuf],
+    ) -> Option<PathBuf> {
         // Prefer an AIVI project root defined by `aivi.toml` (per `specs/tools/packaging.md`).
         for ancestor in path.ancestors() {
             if ancestor.join("aivi.toml").is_file() {

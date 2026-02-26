@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -279,10 +281,18 @@ impl LanguageServer for Backend {
     async fn did_change_watched_files(&self, params: DidChangeWatchedFilesParams) {
         // Prefer client-side watchers (VS Code `FileSystemWatcher`) for reliability across OSes.
         // Keep the on-disk module index in sync so cross-file navigation stays fresh.
+        let workspace_folders = {
+            let state = self.state.lock().await;
+            state.workspace_folders.clone()
+        };
+        let mut affected_roots: HashSet<PathBuf> = HashSet::new();
         for change in params.changes {
             let Ok(path) = change.uri.to_file_path() else {
                 continue;
             };
+            if let Some(root) = Self::project_root_for_path(&path, &workspace_folders) {
+                affected_roots.insert(root);
+            }
             match change.typ {
                 FileChangeType::CREATED | FileChangeType::CHANGED => {
                     if path.extension().and_then(|e| e.to_str()) == Some("aivi") {
@@ -304,6 +314,46 @@ impl LanguageServer for Backend {
                     }
                 }
                 _ => {}
+            }
+        }
+        if affected_roots.is_empty() {
+            return;
+        }
+
+        let (open_uris, include_specs_snippets, strict) = {
+            let state = self.state.lock().await;
+            (
+                state.documents.keys().cloned().collect::<Vec<_>>(),
+                state.diagnostics_in_specs_snippets,
+                state.strict.clone(),
+            )
+        };
+
+        for uri in open_uris {
+            let doc_path = PathBuf::from(Self::path_from_uri(&uri));
+            let Some(root) = Self::project_root_for_path(&doc_path, &workspace_folders) else {
+                continue;
+            };
+            if !affected_roots.contains(&root) {
+                continue;
+            }
+
+            let workspace = self.workspace_modules_for_diagnostics(&uri).await;
+            if let Some(diagnostics) = self
+                .with_document_text(&uri, |content| {
+                    Self::build_diagnostics_with_workspace(
+                        content,
+                        &uri,
+                        &workspace,
+                        include_specs_snippets,
+                        &strict,
+                    )
+                })
+                .await
+            {
+                self.client
+                    .publish_diagnostics(uri, diagnostics, None)
+                    .await;
             }
         }
     }

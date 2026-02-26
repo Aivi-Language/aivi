@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use aivi::{check_modules, check_types, embedded_stdlib_modules, parse_modules};
@@ -9,9 +9,40 @@ use tower_lsp::lsp_types::{
 
 use crate::backend::Backend;
 use crate::state::IndexedModule;
-use crate::strict::{build_strict_diagnostics, StrictConfig};
+use crate::strict::{StrictConfig, build_strict_diagnostics};
 
 impl Backend {
+    fn collect_transitive_modules_for_diagnostics(
+        file_modules: &[aivi::Module],
+        module_map: &HashMap<String, aivi::Module>,
+    ) -> Vec<aivi::Module> {
+        let mut queue: VecDeque<String> = VecDeque::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut out = Vec::new();
+
+        for module in file_modules {
+            let name = module.name.name.clone();
+            if seen.insert(name.clone()) {
+                queue.push_back(name);
+            }
+        }
+
+        while let Some(module_name) = queue.pop_front() {
+            let Some(module) = module_map.get(&module_name) else {
+                continue;
+            };
+            out.push(module.clone());
+            for use_decl in module.uses.iter() {
+                let dep = use_decl.module.name.clone();
+                if module_map.contains_key(&dep) && seen.insert(dep.clone()) {
+                    queue.push_back(dep);
+                }
+            }
+        }
+
+        out
+    }
+
     fn is_specs_snippet_path(path: &Path) -> bool {
         let mut comps = path.components().map(|c| c.as_os_str());
         while let Some(comp) = comps.next() {
@@ -78,10 +109,10 @@ impl Backend {
             }
             module_map.insert(module_name, indexed.module.clone());
         }
-        for module in file_modules {
-            module_map.insert(module.name.name.clone(), module);
+        for module in file_modules.iter() {
+            module_map.insert(module.name.name.clone(), module.clone());
         }
-        let modules: Vec<aivi::Module> = module_map.into_values().collect();
+        let modules = Self::collect_transitive_modules_for_diagnostics(&file_modules, &module_map);
 
         let semantic_diags = std::panic::catch_unwind(|| {
             let mut diags = check_modules(&modules);
