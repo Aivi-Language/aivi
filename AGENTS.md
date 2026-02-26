@@ -164,17 +164,7 @@ To validate the project end-to-end, run these from the repo root:
 
 The `aivi run` command uses a Cranelift JIT backend (`crates/aivi/src/cranelift_backend/`). JIT compilation happens in-memory and does not produce filesystem artefacts.
 
-The `aivi build` command now defaults to the **Cranelift AOT pipeline**: it compiles all AIVI code to a native object file (`.o`), generates a thin Rust harness, and links them via `cargo build`. The object file is written to `target/aivi-gen/aivi_program.o`. The AOT entry point (`__aivi_main`) registers all compiled functions in the runtime before executing `main`.
-
-The legacy Rust-codegen backend (`native_rust_backend`) is still available via `aivi build --native-rust`. When used, it generates Rust source into `target/aivi-gen/`. The native-codegen integration test (`native_codegen_examples_compile_with_rustc`) writes generated Rust into a **sharded workspace** at `target/native-check-ws/` with a shared `CARGO_TARGET_DIR` at `target/native-check-target/`. These directories are **stable across runs** for incremental-build speed, but old shard contents can linger after structural changes.
-
-**If you see unexpected E0425 or other rustc errors after modifying the test infrastructure**, clean the fixture dirs first:
-
-```sh
-rm -rf target/native-check-ws target/native-check-target
-```
-
-Then re-run the test. The `write_if_changed` helper only rewrites files whose content differs, so stale shard crates from a previous layout are never removed automatically.
+The `aivi build` command defaults to the **Cranelift AOT pipeline**: it compiles all AIVI code to a native object file (`.o`), generates a thin Rust harness, and links them via `cargo build`. The object file is written to `target/aivi-gen/aivi_program.o`. The AOT entry point (`__aivi_main`) registers all compiled functions in the runtime before executing `main`.
 
 ## 8. Safety Checklist
 

@@ -98,8 +98,6 @@ jobs:
         run: cargo bolero test -p aivi-fuzz lsp_pipeline::lsp_pipeline --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
       - name: Fuzz type inference (short)
         run: cargo bolero test -p aivi-fuzz type_inference::type_inference --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
-      - name: Fuzz native codegen (short)
-        run: cargo bolero test -p aivi-fuzz native_codegen::native_codegen --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
 
   docs:
     name: Docs (build)

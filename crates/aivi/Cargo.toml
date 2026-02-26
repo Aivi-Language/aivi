@@ -58,6 +58,5 @@ insta = []
 gtk4-libadwaita = []
 
 [dev-dependencies]
-aivi_native_runtime = { path = "../aivi_native_runtime" }
 tempfile = "3.26.0"
 walkdir = "2.5.0"

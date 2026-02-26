@@ -123,12 +123,9 @@ When `aivi.toml` sets `[build].native_ui_target = "gnome-gtk4-libadwaita"`, proj
 **Direct mode** (a path/glob is given as the first argument):
 
 ```bash
-aivi build <path|dir/...> [--debug-trace] [--target rust|rust-native] [--out <dir|path>]
+aivi build <path|dir/...> [--debug-trace] [--out <dir|path>]
 ```
 
-- `--target`: Backend to use.
-  - `rust` (default): Generates a Rust library project in `--out`.
-  - `rust-native`: Generates a Rust binary project in `--out`.
 - `--out`: Output directory (default: `target/aivi-gen`).
 - `--debug-trace`: Enables verbose compiler tracing via `AIVI_DEBUG_TRACE=1`.
 

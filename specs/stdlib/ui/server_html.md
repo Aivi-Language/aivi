@@ -132,7 +132,6 @@ node ./scripts/sync-to-rust.mjs
 
 The sync copies the bundle to:
 - `crates/aivi/src/runtime/builtins/ui/server_html_client.js`
-- `crates/aivi_native_runtime/src/builtins/ui/server_html_client.js`
 
 ## v0.1 limits
 
