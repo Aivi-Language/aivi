@@ -77,6 +77,45 @@ management strategy. There is no tracing garbage collector.
 - **No user-visible lifetimes**: AIVI does not expose Rust-like lifetime
   annotations in source code.
 
+### Perceus-style RC reuse analysis
+
+The Cranelift backend implements a **Perceus-inspired reuse analysis** that
+recycles heap allocations instead of freeing and re-allocating them. This is
+especially effective for functional match-and-reconstruct patterns that dominate
+AIVI code.
+
+**Key insight.** All `Value` enum variants occupy the same heap size (Rust enum =
+max variant size). Any reuse token from any dropped `Value` can be recycled for
+any new `Value` — no shape matching is needed at the box level. This is simpler
+than Koka's Perceus (which requires per-constructor sizing).
+
+The optimisation has four components:
+
+1. **Variable use analysis** (`use_analysis.rs`). A pre-lowering pass walks the
+   monomorphised RustIR body and computes, for each local variable reference,
+   whether it is the *last* use of that variable. The analysis is conservative
+   for branches: a variable used in multiple match arms or both if-branches is
+   not marked as last-use inside those branches.
+
+2. **Reuse token extraction.** When `lower_match` detects that the scrutinee is
+   a last-use local, it calls `rt_try_reuse(scrutinee)` after pattern
+   destructuring. This drops the inner `Value` data (decrements `Arc`s, frees
+   strings) but preserves the `Box<Value>` allocation, returning it as a
+   *reuse token*.
+
+3. **Reuse-aware allocation.** The first allocation in the match arm body
+   (constructor, list, tuple, or record) consumes the reuse token via
+   `rt_reuse_*` helpers. If a token is available, the new `Value` is written
+   directly into the existing allocation via `ptr::write`; otherwise a fresh
+   `Box::new` is used. Tokens are block-local and cleared after each arm to
+   prevent cross-branch leaks.
+
+4. **In-place record patching.** When `{ rec | field = newVal }` targets a
+   last-use local, the lowering calls `rt_patch_record_inplace` instead of the
+   regular `rt_patch_record`. If the inner `Arc<HashMap>` has a strong count of
+   1 the HashMap is mutated in place and the box is reused; otherwise it falls
+   back to clone-and-patch.
+
 ### Layout optimisations
 
 - **Record shapes**: record values use interned field layouts so that repeated
@@ -165,6 +204,7 @@ can call into the runtime:
 | --- | --- |
 | Boxing / unboxing | `rt_box_int`, `rt_unbox_float`, `rt_clone_value`, `rt_drop_value` |
 | Allocation | `rt_alloc_unit`, `rt_alloc_string`, `rt_alloc_list`, `rt_alloc_record`, `rt_alloc_constructor` |
+| Reuse (Perceus) | `rt_try_reuse`, `rt_reuse_constructor`, `rt_reuse_record`, `rt_reuse_list`, `rt_reuse_tuple`, `rt_patch_record_inplace` |
 | Access | `rt_record_field`, `rt_list_index`, `rt_tuple_item`, `rt_constructor_arg` |
 | Pattern matching | `rt_constructor_name_eq`, `rt_value_equals`, `rt_list_tail`, `rt_list_len` |
 | Control | `rt_apply`, `rt_force_thunk`, `rt_run_effect`, `rt_bind_effect`, `rt_check_call_depth` |
@@ -179,5 +219,4 @@ All helpers receive `JitRuntimeCtx*` as first parameter. Errors are stored in
 
 - Stable binary ABI across compiler versions
 - Zero-copy projections for all aggregate types
-- Perceus-style RC reuse analysis
 - Advanced optimisation passes (LICM, inlining, loop transforms)
