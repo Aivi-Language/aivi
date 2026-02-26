@@ -149,11 +149,12 @@ aivi run [--release] [-- <cargo args...>]
 **Direct mode** (a path/glob is given as the first argument):
 
 ```bash
-aivi run <path|dir/...> [--debug-trace] [--target native]
+aivi run <path|dir/...> [--debug-trace] [--target native] [--watch|-w]
 ```
 
 - `--target native` (default): Executes the program via the Cranelift JIT compiler.
 - `--debug-trace`: Enables verbose compiler tracing.
+- `--watch` / `-w`: Enables **watch mode**. The program is compiled and executed, then automatically re-compiled and re-run whenever a `.aivi` file in the source directory changes. File changes are debounced (300 ms). Press Ctrl-C to exit the watch loop.
 
 ### Development Tools
 
@@ -225,6 +226,10 @@ Shows the Rust Intermediate Representation (Rust IR) of a module.
 ```bash
 aivi rust-ir [--debug-trace] <path|dir/...>
 ```
+
+### Diagnostics Output
+
+CLI diagnostics (errors and warnings) are rendered with **ANSI colors** when stderr is connected to a terminal (TTY). When piped or redirected, colors are automatically disabled for clean machine-readable output.
 
 ### Services
 
