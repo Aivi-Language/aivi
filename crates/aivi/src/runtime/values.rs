@@ -94,6 +94,7 @@ pub(crate) enum Value {
     Source(Arc<SourceValue>),
     #[allow(dead_code)]
     Resource(Arc<ResourceValue>),
+    #[allow(dead_code)]
     Thunk(Arc<ThunkValue>),
     MultiClause(Vec<Value>),
     ChannelSend(Arc<ChannelSend>),
