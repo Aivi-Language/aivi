@@ -41,11 +41,12 @@ pub struct FileDiagnostic {
 }
 
 // ANSI color codes
-const BOLD: &str = "\x1b[1m";
 const RED: &str = "\x1b[1;31m";
 const YELLOW: &str = "\x1b[1;33m";
-const BLUE: &str = "\x1b[1;34m";
 const CYAN: &str = "\x1b[1;36m";
+const DARK_GRAY: &str = "\x1b[90m";
+const WHITE: &str = "\x1b[97m";
+const ORANGE: &str = "\x1b[38;5;208m";
 const RESET: &str = "\x1b[0m";
 
 pub fn file_diagnostics_have_errors(diagnostics: &[FileDiagnostic]) -> bool {
@@ -71,9 +72,16 @@ pub fn render_diagnostics(path: &str, diagnostics: &[Diagnostic], use_color: boo
     output
 }
 
-fn severity_color(severity: DiagnosticSeverity) -> &'static str {
+fn caret_color(severity: DiagnosticSeverity) -> &'static str {
     match severity {
         DiagnosticSeverity::Error => RED,
+        DiagnosticSeverity::Warning => YELLOW,
+    }
+}
+
+fn caret_message_color(severity: DiagnosticSeverity) -> &'static str {
+    match severity {
+        DiagnosticSeverity::Error => ORANGE,
         DiagnosticSeverity::Warning => YELLOW,
     }
 }
@@ -91,14 +99,13 @@ fn render_diagnostic_with_source(
         DiagnosticSeverity::Warning => "warning",
     };
     if use_color {
-        let sc = severity_color(diagnostic.severity);
         output.push_str(&format!(
-            "{sc}{severity_label}[{}]{RESET} {BOLD}{}:{}:{}{RESET} {BOLD}{}{RESET}\n",
+            "{YELLOW}{severity_label}[{}]{RESET} {DARK_GRAY}{}:{}:{}{RESET}\n  {WHITE}{}{RESET}\n",
             diagnostic.code, path, start.line, start.column, diagnostic.message
         ));
     } else {
         output.push_str(&format!(
-            "{severity_label}[{}] {}:{}:{} {}\n",
+            "{severity_label}[{}] {}:{}:{}\n  {}\n",
             diagnostic.code, path, start.line, start.column, diagnostic.message
         ));
     }
@@ -117,7 +124,7 @@ fn render_diagnostic_with_source(
         let pos = &label.span.start;
         if use_color {
             output.push_str(&format!(
-                "{CYAN}note{RESET}: {BOLD}{}{RESET} at {BOLD}{}:{}:{}{RESET}\n",
+                "{CYAN}note{RESET}: {WHITE}{}{RESET} at {DARK_GRAY}{}:{}:{}{RESET}\n",
                 label.message, path, pos.line, pos.column
             ));
         } else {
@@ -155,8 +162,8 @@ fn render_source_frame(
 
     let mut output = String::new();
     if use_color {
-        output.push_str(&format!("{BLUE}{:>width$} |{RESET}\n", ""));
-        output.push_str(&format!("{BLUE}{line_no:>width$} |{RESET} {line}\n"));
+        output.push_str(&format!("{DARK_GRAY}{:>width$} |{RESET}\n", ""));
+        output.push_str(&format!("{DARK_GRAY}{line_no:>width$} |{RESET} {line}\n"));
     } else {
         output.push_str("  |\n");
         output.push_str(&format!("{line_no:>width$} | {line}\n"));
@@ -187,13 +194,15 @@ fn render_source_frame(
     let padding = " ".repeat(start_col.saturating_sub(1));
     let carets = "^".repeat(caret_len);
     if use_color {
-        let sc = severity_color(severity);
-        let mut caret_line = format!("{BLUE}{:>width$} |{RESET} {padding}{sc}{carets}", "");
+        let cc = caret_color(severity);
+        let mc = caret_message_color(severity);
+        let mut caret_line = format!("{DARK_GRAY}{:>width$} |{RESET} {padding}{cc}{carets}{RESET}", "");
         if let Some(message) = message {
             caret_line.push(' ');
+            caret_line.push_str(mc);
             caret_line.push_str(message);
+            caret_line.push_str(RESET);
         }
-        caret_line.push_str(RESET);
         caret_line.push('\n');
         output.push_str(&caret_line);
     } else {
