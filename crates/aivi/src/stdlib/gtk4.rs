@@ -43,6 +43,7 @@ export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
 export gtkElement, gtkTextNode, gtkAttr
 export buildFromNode
 export signalPoll, signalEmit
+export widgetById, widgetSetBoolProperty, signalBindBoolProperty
 
 use aivi
 
@@ -99,6 +100,15 @@ signalPoll = gtk4.signalPoll
 
 signalEmit : WidgetId -> Text -> Text -> Text -> Effect GtkError Unit
 signalEmit = gtk4.signalEmit
+
+widgetById : Text -> Effect GtkError WidgetId
+widgetById = gtk4.widgetById
+
+widgetSetBoolProperty : WidgetId -> Text -> Bool -> Effect GtkError Unit
+widgetSetBoolProperty = gtk4.widgetSetBoolProperty
+
+signalBindBoolProperty : Text -> WidgetId -> Text -> Bool -> Effect GtkError Unit
+signalBindBoolProperty = gtk4.signalBindBoolProperty
 
 init : Unit -> Effect GtkError Unit
 init = gtk4.init

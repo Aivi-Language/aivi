@@ -1107,7 +1107,43 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         Box::new(Type::Record {
                             fields: vec![].into_iter().collect(),
                         }),
-                        Box::new(effect_text_unit),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
+                "widgetById".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(effect_text_int.clone()),
+                ),
+            ),
+            (
+                "widgetSetBoolProperty".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(text_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(Type::con("Bool")),
+                            Box::new(effect_text_unit.clone()),
+                        )),
+                    )),
+                ),
+            ),
+            (
+                "signalBindBoolProperty".to_string(),
+                Type::Func(
+                    Box::new(text_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(Type::Func(
+                            Box::new(text_ty.clone()),
+                            Box::new(Type::Func(
+                                Box::new(Type::con("Bool")),
+                                Box::new(effect_text_unit),
+                            )),
+                        )),
                     )),
                 ),
             ),
