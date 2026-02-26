@@ -96,12 +96,6 @@ mod linux {
         fn gtk_overlay_new() -> *mut c_void;
         fn gtk_overlay_set_child(overlay: *mut c_void, child: *mut c_void);
         fn gtk_overlay_add_overlay(overlay: *mut c_void, widget: *mut c_void);
-        fn gtk_buildable_add_child(
-            buildable: *mut c_void,
-            builder: *mut c_void,
-            child: *mut c_void,
-            type_: *const c_char,
-        );
 
         fn gtk_css_provider_new() -> *mut c_void;
         fn gtk_css_provider_load_from_string(provider: *mut c_void, css: *const c_char);
@@ -480,30 +474,6 @@ mod linux {
                 "gtk4.buildFromNode unsupported class {class_name}"
             )))),
         }
-    }
-
-    fn buildable_add_child(
-        parent: *mut c_void,
-        child: *mut c_void,
-        child_type: Option<&str>,
-    ) -> Result<(), RuntimeError> {
-        let child_type_c = if let Some(kind) = child_type {
-            Some(c_text(kind, "gtk4.buildFromNode invalid child type")?)
-        } else {
-            None
-        };
-        unsafe {
-            gtk_buildable_add_child(
-                parent,
-                null_mut(),
-                child,
-                child_type_c
-                    .as_ref()
-                    .map(|v| v.as_ptr())
-                    .unwrap_or(std::ptr::null()),
-            )
-        };
-        Ok(())
     }
 
     fn widget_ptr(state: &RealGtkState, id: i64, ctx: &str) -> Result<*mut c_void, RuntimeError> {
@@ -1354,9 +1324,7 @@ mod linux {
                     }
                 }
                 CreatedWidgetKind::ListBox => unsafe { gtk_list_box_append(raw, child_raw) },
-                CreatedWidgetKind::Other => {
-                    buildable_add_child(raw, child_raw, child.child_type.as_deref())?;
-                }
+                CreatedWidgetKind::Other => {}
             }
         }
 

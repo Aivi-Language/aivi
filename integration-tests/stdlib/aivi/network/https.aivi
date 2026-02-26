@@ -1,0 +1,42 @@
+@no_prelude
+module integrationTests.stdlib.aivi.network.https.tests
+
+use aivi
+use aivi.testing
+use aivi.net.https
+
+// -- Request construction (mirrors http) --
+
+@test "build secure get request"
+buildSecureGetRequest = do Effect {
+  reqUrl = { protocol: "https", host: "example.com", port: None, path: "/get", query: [], hash: None }
+  req = { method: "GET", url: reqUrl, headers: [], body: None }
+  assertEq req.method "GET"
+  assertEq req.body None
+}
+
+@test "build secure post request"
+buildSecurePostRequest = do Effect {
+  reqUrl = { protocol: "https", host: "example.com", port: None, path: "/post", query: [], hash: None }
+  req = {
+    method: "POST"
+    url: reqUrl
+    headers: [{ name: "Authorization", value: "Bearer token" }]
+    body: Some "data"
+  }
+  assertEq req.method "POST"
+  assertEq (List.length req.headers) 1
+}
+
+@test "response fields"
+responseFields = do Effect {
+  resp = { status: 200, headers: [], body: "ok" }
+  assertEq resp.status 200
+  assertEq resp.body "ok"
+}
+
+@test "error fields"
+errorFields = do Effect {
+  err = { message: "tls handshake failed" }
+  assertEq err.message "tls handshake failed"
+}

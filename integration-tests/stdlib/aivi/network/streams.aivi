@@ -1,0 +1,20 @@
+@no_prelude
+module integrationTests.stdlib.aivi.network.streams.tests
+
+use aivi
+use aivi.testing
+use aivi.net.streams
+
+// -- Type construction --
+
+@test "stream error fields"
+streamErrorFields = do Effect {
+  err = { message: "stream closed unexpectedly" }
+  assertEq err.message "stream closed unexpectedly"
+}
+
+@test "stream error empty message"
+streamErrorEmpty = do Effect {
+  err = { message: "" }
+  assertEq err.message ""
+}

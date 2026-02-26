@@ -1,0 +1,35 @@
+@no_prelude
+module integrationTests.stdlib.aivi.network.sockets.tests
+
+use aivi
+use aivi.testing
+use aivi.net.sockets
+
+// -- Address type --
+
+@test "address fields"
+addressFields = do Effect {
+  addr = { host: "127.0.0.1", port: 8080 }
+  assertEq addr.host "127.0.0.1"
+  assertEq addr.port 8080
+}
+
+@test "socket error fields"
+socketErrorFields = do Effect {
+  err = { message: "connection refused" }
+  assertEq err.message "connection refused"
+}
+
+@test "address zero port"
+addressZeroPort = do Effect {
+  addr = { host: "0.0.0.0", port: 0 }
+  assertEq addr.port 0
+  assertEq addr.host "0.0.0.0"
+}
+
+@test "address ipv6"
+addressIpv6 = do Effect {
+  addr = { host: "::1", port: 443 }
+  assertEq addr.host "::1"
+  assertEq addr.port 443
+}

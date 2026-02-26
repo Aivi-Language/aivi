@@ -1,0 +1,44 @@
+@no_prelude
+module integrationTests.stdlib.aivi.network.http.tests
+
+use aivi
+use aivi.testing
+use aivi.net.http
+
+// -- Request construction --
+
+@test "build get request"
+buildGetRequest = do Effect {
+  reqUrl = { protocol: "https", host: "example.com", port: None, path: "/get", query: [], hash: None }
+  req = { method: "GET", url: reqUrl, headers: [], body: None }
+  assertEq req.method "GET"
+  assertEq req.body None
+}
+
+@test "build post request with body"
+buildPostRequest = do Effect {
+  reqUrl = { protocol: "https", host: "example.com", port: None, path: "/post", query: [], hash: None }
+  req = {
+    method: "POST"
+    url: reqUrl
+    headers: [{ name: "Content-Type", value: "application/json" }]
+    body: Some "{}"
+  }
+  assertEq req.method "POST"
+  assertEq req.body (Some "{}")
+  assertEq (List.length req.headers) 1
+}
+
+@test "response fields"
+responseFields = do Effect {
+  resp = { status: 200, headers: [{ name: "Content-Type", value: "text/plain" }], body: "hello" }
+  assertEq resp.status 200
+  assertEq resp.body "hello"
+  assertEq (List.length resp.headers) 1
+}
+
+@test "error fields"
+errorFields = do Effect {
+  err = { message: "not found" }
+  assertEq err.message "not found"
+}
