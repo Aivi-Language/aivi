@@ -71,6 +71,25 @@ mod linux {
         fn gtk_editable_set_text(editable: *mut c_void, text: *const c_char);
         fn gtk_editable_get_text(editable: *mut c_void) -> *const c_char;
 
+        fn gtk_text_view_new() -> *mut c_void;
+        fn gtk_text_view_set_wrap_mode(text_view: *mut c_void, wrap_mode: c_int);
+        fn gtk_text_view_set_top_margin(text_view: *mut c_void, top_margin: c_int);
+        fn gtk_text_view_set_bottom_margin(text_view: *mut c_void, bottom_margin: c_int);
+        fn gtk_text_view_set_left_margin(text_view: *mut c_void, left_margin: c_int);
+        fn gtk_text_view_set_right_margin(text_view: *mut c_void, right_margin: c_int);
+        fn gtk_text_view_set_editable(text_view: *mut c_void, setting: c_int);
+        fn gtk_text_view_set_cursor_visible(text_view: *mut c_void, setting: c_int);
+        fn gtk_text_view_get_buffer(text_view: *mut c_void) -> *mut c_void;
+        fn gtk_text_buffer_set_text(buffer: *mut c_void, text: *const c_char, len: c_int);
+        fn gtk_text_buffer_get_text(
+            buffer: *mut c_void,
+            start: *const c_void,
+            end: *const c_void,
+            include_hidden_chars: c_int,
+        ) -> *mut c_char;
+        fn gtk_text_buffer_get_start_iter(buffer: *mut c_void, iter: *mut c_void);
+        fn gtk_text_buffer_get_end_iter(buffer: *mut c_void, iter: *mut c_void);
+
         fn gtk_image_new_from_file(filename: *const c_char) -> *mut c_void;
         fn gtk_image_set_from_file(image: *mut c_void, filename: *const c_char);
         fn gtk_image_new_from_resource(resource_path: *const c_char) -> *mut c_void;
@@ -633,6 +652,16 @@ mod linux {
         }
     }
 
+    fn parse_wrap_mode_text(text: &str) -> Option<c_int> {
+        match text.trim().to_ascii_lowercase().replace('-', "_").as_str() {
+            "none" => Some(0),
+            "char" => Some(1),
+            "word" => Some(2),
+            "word_char" | "word-char" => Some(3),
+            other => other.parse::<c_int>().ok(),
+        }
+    }
+
     fn node_attr<'a>(attrs: &'a [(String, String)], name: &str) -> Option<&'a str> {
         attrs
             .iter()
@@ -972,6 +1001,29 @@ mod linux {
                     unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
                 }
             }
+            "GtkTextView" => {
+                if let Some(value) = props.get("wrap-mode").and_then(|v| parse_wrap_mode_text(v)) {
+                    unsafe { gtk_text_view_set_wrap_mode(widget, value) };
+                }
+                if let Some(value) = props.get("top-margin").and_then(|v| parse_i32_text(v)) {
+                    unsafe { gtk_text_view_set_top_margin(widget, value) };
+                }
+                if let Some(value) = props.get("bottom-margin").and_then(|v| parse_i32_text(v)) {
+                    unsafe { gtk_text_view_set_bottom_margin(widget, value) };
+                }
+                if let Some(value) = props.get("left-margin").and_then(|v| parse_i32_text(v)) {
+                    unsafe { gtk_text_view_set_left_margin(widget, value) };
+                }
+                if let Some(value) = props.get("right-margin").and_then(|v| parse_i32_text(v)) {
+                    unsafe { gtk_text_view_set_right_margin(widget, value) };
+                }
+                if let Some(value) = props.get("editable").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_text_view_set_editable(widget, if value { 1 } else { 0 }) };
+                }
+                if let Some(value) = props.get("cursor-visible").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_text_view_set_cursor_visible(widget, if value { 1 } else { 0 }) };
+                }
+            }
             "GtkImage" => {
                 if let Some(value) = props.get("resource") {
                     let resource_c = c_text(value, "gtk4.buildFromNode invalid GtkImage resource")?;
@@ -1147,6 +1199,7 @@ mod linux {
                 }
             }
             "GtkEntry" => (unsafe { gtk_entry_new() }, CreatedWidgetKind::Other),
+            "GtkTextView" => (unsafe { gtk_text_view_new() }, CreatedWidgetKind::Other),
             "GtkDrawingArea" => (unsafe { gtk_drawing_area_new() }, CreatedWidgetKind::Other),
             "GtkGestureClick" => (unsafe { gtk_gesture_click_new() }, CreatedWidgetKind::Other),
             "GtkScrolledWindow" => (
