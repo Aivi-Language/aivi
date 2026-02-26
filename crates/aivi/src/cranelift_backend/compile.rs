@@ -466,6 +466,8 @@ pub fn compile_to_object(
     let mut compiled_func_entries: Vec<AotFuncEntry> = Vec::new();
     let mut str_counter: usize = 0;
 
+    let mut all_lambdas: Vec<CompiledLambdaInfo> = Vec::new();
+
     for dd in &declared_defs {
         match compile_definition_body(
             &mut module,
@@ -482,9 +484,8 @@ pub fn compile_to_object(
             &spec_map,
             &mut str_counter,
         ) {
-            Ok(_lambdas) => {
-                // AOT: lambdas are already compiled as functions in the module.
-                // No need to finalize them separately — they'll be in the object file.
+            Ok(lambdas) => {
+                all_lambdas.extend(lambdas);
                 compiled_func_entries.push(AotFuncEntry {
                     short_name: dd.def.name.clone(),
                     qualified_name: dd.qualified.clone(),
@@ -503,7 +504,7 @@ pub fn compile_to_object(
     }
 
     // 7. Generate the entry point wrapper: __aivi_main()
-    generate_aot_entry(&mut module, &helpers, &compiled_func_entries)
+    generate_aot_entry(&mut module, &helpers, &compiled_func_entries, &all_lambdas)
         .map_err(|e| AiviError::Runtime(format!("aot entry point: {e}")))?;
 
     // 8. Emit the object file
@@ -532,6 +533,7 @@ fn generate_aot_entry<M: Module>(
     module: &mut M,
     helpers: &DeclaredHelpers,
     compiled_funcs: &[AotFuncEntry],
+    compiled_lambdas: &[CompiledLambdaInfo],
 ) -> Result<(), String> {
     use cranelift_module::DataDescription;
 
@@ -600,6 +602,36 @@ fn generate_aot_entry<M: Module>(
         });
     }
 
+    // Prepare lambda registrations
+    struct LambdaReg {
+        func_ref: cranelift_codegen::ir::FuncRef,
+        name_gv: cranelift_codegen::ir::GlobalValue,
+        name_len: usize,
+        arity: usize,
+    }
+    let mut lambda_regs = Vec::new();
+
+    for (i, lam) in compiled_lambdas.iter().enumerate() {
+        let func_ref = module.declare_func_in_func(lam.func_id, &mut function);
+
+        let data_id = module
+            .declare_data(&format!("__nm_lam_{i}"), Linkage::Local, false, false)
+            .map_err(|e| format!("declare lambda name data: {e}"))?;
+        let mut dd = DataDescription::new();
+        dd.define(lam.global_name.as_bytes().to_vec().into_boxed_slice());
+        module
+            .define_data(data_id, &dd)
+            .map_err(|e| format!("define lambda name data: {e}"))?;
+        let name_gv = module.declare_data_in_func(data_id, &mut function);
+
+        lambda_regs.push(LambdaReg {
+            func_ref,
+            name_gv,
+            name_len: lam.global_name.len(),
+            arity: lam.total_arity,
+        });
+    }
+
     // Embed "main" string for the final lookup
     let main_data_id = module
         .declare_data("__nm_main", Linkage::Local, false, false)
@@ -656,6 +688,20 @@ fn generate_aot_entry<M: Module>(
                     arity_val,
                     is_effect_val,
                 ],
+            );
+        }
+
+        // Register each compiled lambda
+        for lreg in &lambda_regs {
+            let func_ptr = builder.ins().func_addr(PTR, lreg.func_ref);
+            let arity_val = builder.ins().iconst(PTR, lreg.arity as i64);
+            let is_effect_val = builder.ins().iconst(PTR, 0i64);
+
+            let name_ptr = builder.ins().global_value(PTR, lreg.name_gv);
+            let name_len = builder.ins().iconst(PTR, lreg.name_len as i64);
+            builder.ins().call(
+                helper_refs.rt_register_jit_fn,
+                &[ctx_param, name_ptr, name_len, func_ptr, arity_val, is_effect_val],
             );
         }
 
