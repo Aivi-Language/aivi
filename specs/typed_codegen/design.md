@@ -175,11 +175,9 @@ can call into the runtime:
 All helpers receive `JitRuntimeCtx*` as first parameter. Errors are stored in
 `runtime.jit_pending_error` (first-error-wins semantics to preserve root cause).
 
-## Non-goals (v0.1)
+## Maybe later
 
 - Stable binary ABI across compiler versions
 - Zero-copy projections for all aggregate types
-- Cross-process / shared-memory value transport
-- Tracing garbage collector
 - Perceus-style RC reuse analysis
 - Advanced optimisation passes (LICM, inlining, loop transforms)

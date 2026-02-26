@@ -331,6 +331,142 @@ pub extern "C" fn rt_drop_value(_ctx: *mut JitRuntimeCtx, ptr: *mut Value) {
     }
 }
 
+/// Perceus reuse: consume a boxed `Value` and return the raw allocation for
+/// reuse. The inner data is dropped (Arcs decremented, Strings freed, etc.)
+/// but the `Box<Value>`-sized heap allocation is preserved.
+///
+/// Returns the pointer (usable as a reuse token) on success, or null if `ptr`
+/// is null. The caller must either write a new `Value` into the returned
+/// pointer via `rt_reuse_as_*` or free it with `rt_drop_value`.
+///
+/// # Safety
+/// `ptr` must be a valid `*mut Value` from `rt_alloc_*` / `rt_box_*`, and
+/// must not be used after this call (its contents are destroyed).
+#[no_mangle]
+pub extern "C" fn rt_try_reuse(_ctx: *mut JitRuntimeCtx, ptr: *mut Value) -> *mut Value {
+    if ptr.is_null() {
+        return std::ptr::null_mut();
+    }
+    unsafe {
+        // Drop the inner Value data without deallocating the box.
+        // We overwrite the contents with Unit (cheapest variant) to drop
+        // whatever was there (Arcs get decremented, Strings freed, etc.).
+        std::ptr::drop_in_place(ptr);
+        // Write a placeholder so the allocation is in a valid state.
+        std::ptr::write(ptr, Value::Unit);
+    }
+    ptr
+}
+
+/// Write a `Constructor` into a reuse token. If `token` is null, allocates fresh.
+///
+/// # Safety
+/// Same as `rt_alloc_constructor`, plus `token` must be either null or a valid
+/// reuse token from `rt_try_reuse`.
+#[no_mangle]
+pub extern "C" fn rt_reuse_constructor(
+    _ctx: *mut JitRuntimeCtx,
+    token: *mut Value,
+    name_ptr: *const u8,
+    name_len: usize,
+    args: *const *const Value,
+    args_len: usize,
+) -> *mut Value {
+    let name = unsafe {
+        std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)).to_string()
+    };
+    let arg_values: Vec<Value> = (0..args_len)
+        .map(|i| unsafe { (*args.add(i)).as_ref().unwrap().clone() })
+        .collect();
+    let new_value = Value::Constructor {
+        name,
+        args: arg_values,
+    };
+    if token.is_null() {
+        abi::box_value(new_value)
+    } else {
+        unsafe {
+            std::ptr::write(token, new_value);
+        }
+        token
+    }
+}
+
+/// Write a `Record` into a reuse token. If `token` is null, allocates fresh.
+#[no_mangle]
+pub extern "C" fn rt_reuse_record(
+    _ctx: *mut JitRuntimeCtx,
+    token: *mut Value,
+    names: *const *const u8,
+    name_lens: *const usize,
+    values: *const *const Value,
+    len: usize,
+) -> *mut Value {
+    let mut map = HashMap::with_capacity(len);
+    for i in 0..len {
+        let name = unsafe {
+            let ptr = *names.add(i);
+            let l = *name_lens.add(i);
+            std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, l)).to_string()
+        };
+        let val = unsafe { (*values.add(i)).as_ref().unwrap().clone() };
+        map.insert(name, val);
+    }
+    let new_value = Value::Record(Arc::new(map));
+    if token.is_null() {
+        abi::box_value(new_value)
+    } else {
+        unsafe {
+            std::ptr::write(token, new_value);
+        }
+        token
+    }
+}
+
+/// Write a `List` into a reuse token. If `token` is null, allocates fresh.
+#[no_mangle]
+pub extern "C" fn rt_reuse_list(
+    _ctx: *mut JitRuntimeCtx,
+    token: *mut Value,
+    items: *const *const Value,
+    len: usize,
+) -> *mut Value {
+    let values: Vec<Value> = (0..len)
+        .map(|i| unsafe { (*items.add(i)).as_ref().unwrap().clone() })
+        .collect();
+    let new_value = Value::List(Arc::new(values));
+    if token.is_null() {
+        abi::box_value(new_value)
+    } else {
+        unsafe {
+            std::ptr::write(token, new_value);
+        }
+        token
+    }
+}
+
+/// Write a `Tuple` into a reuse token. If `token` is null, allocates fresh.
+#[no_mangle]
+pub extern "C" fn rt_reuse_tuple(
+    _ctx: *mut JitRuntimeCtx,
+    token: *mut Value,
+    items: *const *const Value,
+    len: usize,
+) -> *mut Value {
+    let values: Vec<Value> = (0..len)
+        .map(|i| unsafe { (*items.add(i)).as_ref().unwrap().clone() })
+        .collect();
+    let new_value = Value::Tuple(values);
+    if token.is_null() {
+        abi::box_value(new_value)
+    } else {
+        unsafe {
+            std::ptr::write(token, new_value);
+        }
+        token
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Runtime interaction helpers
 // ---------------------------------------------------------------------------
@@ -721,6 +857,59 @@ pub extern "C" fn rt_patch_record(
     abi::box_value(Value::Record(Arc::new(map)))
 }
 
+/// Perceus in-place record patching. If the base record's `Arc<HashMap>` has a
+/// strong count of 1, we mutate it in-place and reuse the box allocation.
+/// Otherwise falls back to clone-and-patch like `rt_patch_record`.
+///
+/// `base_ptr` is consumed (caller must not use it again).
+#[no_mangle]
+pub extern "C" fn rt_patch_record_inplace(
+    _ctx: *mut JitRuntimeCtx,
+    base_ptr: *mut Value,
+    names: *const *const u8,
+    name_lens: *const usize,
+    values: *const *const Value,
+    len: usize,
+) -> *mut Value {
+    let base = unsafe { &mut *base_ptr };
+    let can_reuse = matches!(base, Value::Record(ref arc) if Arc::strong_count(arc) == 1);
+
+    if can_reuse {
+        // Safe: we have the only reference, so Arc::get_mut will succeed.
+        if let Value::Record(ref mut arc) = base {
+            let map = Arc::get_mut(arc).unwrap();
+            for i in 0..len {
+                let name = unsafe {
+                    let ptr = *names.add(i);
+                    let l = *name_lens.add(i);
+                    std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, l)).to_string()
+                };
+                let val = unsafe { (*values.add(i)).as_ref().unwrap().clone() };
+                map.insert(name, val);
+            }
+            return base_ptr;
+        }
+    }
+
+    // Fall back: clone the HashMap, patch, allocate a new box.
+    let mut map = match base {
+        Value::Record(rec) => (**rec).clone(),
+        _ => HashMap::new(),
+    };
+    for i in 0..len {
+        let name = unsafe {
+            let ptr = *names.add(i);
+            let l = *name_lens.add(i);
+            std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, l)).to_string()
+        };
+        let val = unsafe { (*values.add(i)).as_ref().unwrap().clone() };
+        map.insert(name, val);
+    }
+    // Drop old box and allocate new one
+    unsafe { drop(Box::from_raw(base_ptr)) };
+    abi::box_value(Value::Record(Arc::new(map)))
+}
+
 // ---------------------------------------------------------------------------
 // Closure creation helper
 // ---------------------------------------------------------------------------
@@ -1103,6 +1292,15 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_list_index", rt_list_index as *const u8),
         ("rt_clone_value", rt_clone_value as *const u8),
         ("rt_drop_value", rt_drop_value as *const u8),
+        // Perceus reuse helpers
+        ("rt_try_reuse", rt_try_reuse as *const u8),
+        (
+            "rt_reuse_constructor",
+            rt_reuse_constructor as *const u8,
+        ),
+        ("rt_reuse_record", rt_reuse_record as *const u8),
+        ("rt_reuse_list", rt_reuse_list as *const u8),
+        ("rt_reuse_tuple", rt_reuse_tuple as *const u8),
         ("rt_get_global", rt_get_global as *const u8),
         ("rt_apply", rt_apply as *const u8),
         ("rt_force_thunk", rt_force_thunk as *const u8),
@@ -1125,6 +1323,10 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_value_equals", rt_value_equals as *const u8),
         // Record patching
         ("rt_patch_record", rt_patch_record as *const u8),
+        (
+            "rt_patch_record_inplace",
+            rt_patch_record_inplace as *const u8,
+        ),
         // Closure creation
         ("rt_make_closure", rt_make_closure as *const u8),
         // Native generate helpers

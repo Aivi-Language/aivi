@@ -100,6 +100,12 @@ pub(crate) struct LowerCtx<'a, M: Module> {
     str_counter: &'a mut usize,
     /// Per-function cache of already-embedded strings → GlobalValue.
     str_cache: HashMap<Vec<u8>, cranelift_codegen::ir::GlobalValue>,
+    /// Perceus use analysis: tracks last-use of each variable.
+    use_map: Option<super::use_analysis::UseMap>,
+    /// Perceus reuse token: a `*mut Value`-sized allocation that can be
+    /// recycled by the next constructor/record/list allocation.
+    /// Set by `lower_match` when the scrutinee is consumed.
+    reuse_token: Option<Value>,
 }
 
 /// Metadata about a JIT-compiled function, used for direct calls.
@@ -199,6 +205,7 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_value_equals: FuncRef,
     // Record patching
     pub(crate) rt_patch_record: FuncRef,
+    pub(crate) rt_patch_record_inplace: FuncRef,
     // Closure creation
     pub(crate) rt_make_closure: FuncRef,
     // Native generate helpers
@@ -212,6 +219,13 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_alloc_datetime: FuncRef,
     // Sigil evaluation
     pub(crate) rt_eval_sigil: FuncRef,
+    // Perceus reuse: (ctx, ptr) -> ptr (returns reuse token or null)
+    pub(crate) rt_try_reuse: FuncRef,
+    // Perceus reuse-aware allocation
+    pub(crate) rt_reuse_constructor: FuncRef,
+    pub(crate) rt_reuse_record: FuncRef,
+    pub(crate) rt_reuse_list: FuncRef,
+    pub(crate) rt_reuse_tuple: FuncRef,
 }
 
 /// Declare all runtime helper signatures in the module and return FuncRefs
@@ -296,6 +310,12 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_value_equals: decl!("rt_value_equals", [PTR, PTR, PTR], [PTR]),
         // (ctx, base, names, name_lens, values, len) -> ptr
         rt_patch_record: decl!("rt_patch_record", [PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
+        // Perceus in-place record patch: same signature as rt_patch_record
+        rt_patch_record_inplace: decl!(
+            "rt_patch_record_inplace",
+            [PTR, PTR, PTR, PTR, PTR, PTR],
+            [PTR]
+        ),
         // (ctx, func_ptr, captured, count) -> ptr
         rt_make_closure: decl!("rt_make_closure", [PTR, PTR, PTR, PTR], [PTR]),
         // Native generate helpers
@@ -314,6 +334,17 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_alloc_datetime: decl!("rt_alloc_datetime", [PTR, PTR, PTR], [PTR]),
         // (ctx, tag_ptr, tag_len, body_ptr, body_len, flags_ptr, flags_len) -> ptr
         rt_eval_sigil: decl!("rt_eval_sigil", [PTR, PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
+        // Perceus: (ctx, ptr) -> ptr (reuse token or null)
+        rt_try_reuse: decl!("rt_try_reuse", [PTR, PTR], [PTR]),
+        // Perceus reuse-aware allocation
+        // (ctx, token, name_ptr, name_len, args_ptr, args_len) -> ptr
+        rt_reuse_constructor: decl!("rt_reuse_constructor", [PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
+        // (ctx, token, names_ptr, name_lens_ptr, values_ptr, len) -> ptr
+        rt_reuse_record: decl!("rt_reuse_record", [PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
+        // (ctx, token, items_ptr, len) -> ptr
+        rt_reuse_list: decl!("rt_reuse_list", [PTR, PTR, PTR, PTR], [PTR]),
+        // (ctx, token, items_ptr, len) -> ptr
+        rt_reuse_tuple: decl!("rt_reuse_tuple", [PTR, PTR, PTR, PTR], [PTR]),
     })
 }
 
@@ -358,6 +389,7 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_list_concat: cranelift_module::FuncId,
     pub(crate) rt_value_equals: cranelift_module::FuncId,
     pub(crate) rt_patch_record: cranelift_module::FuncId,
+    pub(crate) rt_patch_record_inplace: cranelift_module::FuncId,
     pub(crate) rt_make_closure: cranelift_module::FuncId,
     // Native generate helpers
     pub(crate) rt_generator_to_list: cranelift_module::FuncId,
@@ -370,6 +402,12 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_alloc_datetime: cranelift_module::FuncId,
     // Sigil evaluation
     pub(crate) rt_eval_sigil: cranelift_module::FuncId,
+    // Perceus reuse
+    pub(crate) rt_try_reuse: cranelift_module::FuncId,
+    pub(crate) rt_reuse_constructor: cranelift_module::FuncId,
+    pub(crate) rt_reuse_record: cranelift_module::FuncId,
+    pub(crate) rt_reuse_list: cranelift_module::FuncId,
+    pub(crate) rt_reuse_tuple: cranelift_module::FuncId,
 }
 
 impl DeclaredHelpers {
@@ -417,6 +455,7 @@ impl DeclaredHelpers {
             rt_list_concat: imp!(rt_list_concat),
             rt_value_equals: imp!(rt_value_equals),
             rt_patch_record: imp!(rt_patch_record),
+            rt_patch_record_inplace: imp!(rt_patch_record_inplace),
             rt_make_closure: imp!(rt_make_closure),
             rt_generator_to_list: imp!(rt_generator_to_list),
             rt_gen_vec_new: imp!(rt_gen_vec_new),
@@ -425,6 +464,11 @@ impl DeclaredHelpers {
             rt_register_jit_fn: imp!(rt_register_jit_fn),
             rt_alloc_datetime: imp!(rt_alloc_datetime),
             rt_eval_sigil: imp!(rt_eval_sigil),
+            rt_try_reuse: imp!(rt_try_reuse),
+            rt_reuse_constructor: imp!(rt_reuse_constructor),
+            rt_reuse_record: imp!(rt_reuse_record),
+            rt_reuse_list: imp!(rt_reuse_list),
+            rt_reuse_tuple: imp!(rt_reuse_tuple),
         }
     }
 }
@@ -449,7 +493,20 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             module,
             str_counter,
             str_cache: HashMap::new(),
+            use_map: None,
+            reuse_token: None,
         }
+    }
+
+    /// Attach a Perceus use-analysis map to this lowering context.
+    pub(crate) fn set_use_map(&mut self, map: super::use_analysis::UseMap) {
+        self.use_map = Some(map);
+    }
+
+    /// Take the current reuse token (if any), clearing it so it can only be
+    /// consumed once.
+    fn take_reuse_token(&mut self) -> Option<Value> {
+        self.reuse_token.take()
     }
 
     /// Insert function params into `locals`, eagerly unboxing scalars when
@@ -772,6 +829,14 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         let (name_ptr, name_len) = self.embed_str(builder, name.as_bytes());
         let null = builder.ins().iconst(PTR, 0);
         let zero = builder.ins().iconst(PTR, 0);
+        // Perceus: use reuse token if available
+        if let Some(token) = self.take_reuse_token() {
+            let call = builder.ins().call(
+                self.helpers.rt_reuse_constructor,
+                &[self.ctx_param, token, name_ptr, name_len, null, zero],
+            );
+            return TypedValue::boxed(builder.inst_results(call)[0]);
+        }
         let call = builder.ins().call(
             self.helpers.rt_alloc_constructor,
             &[self.ctx_param, name_ptr, name_len, null, zero],
@@ -1013,6 +1078,14 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             }
             let arr_ptr = builder.ins().stack_addr(PTR, slot, 0);
             let len = builder.ins().iconst(PTR, count as i64);
+            // Perceus: use reuse token if available
+            if let Some(token) = self.take_reuse_token() {
+                let call = builder.ins().call(
+                    self.helpers.rt_reuse_list,
+                    &[self.ctx_param, token, arr_ptr, len],
+                );
+                return TypedValue::boxed(builder.inst_results(call)[0]);
+            }
             let call = builder
                 .ins()
                 .call(self.helpers.rt_alloc_list, &[self.ctx_param, arr_ptr, len]);
@@ -1114,6 +1187,14 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         }
         let arr_ptr = builder.ins().stack_addr(PTR, slot, 0);
         let len = builder.ins().iconst(PTR, count as i64);
+        // Perceus: use reuse token if available
+        if let Some(token) = self.take_reuse_token() {
+            let call = builder.ins().call(
+                self.helpers.rt_reuse_tuple,
+                &[self.ctx_param, token, arr_ptr, len],
+            );
+            return TypedValue::boxed(builder.inst_results(call)[0]);
+        }
         let call = builder
             .ins()
             .call(self.helpers.rt_alloc_tuple, &[self.ctx_param, arr_ptr, len]);
@@ -1179,6 +1260,14 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         let lens_ptr = builder.ins().stack_addr(PTR, lens_slot, 0);
         let vals_ptr = builder.ins().stack_addr(PTR, vals_slot, 0);
         let len = builder.ins().iconst(PTR, count as i64);
+        // Perceus: use reuse token if available
+        if let Some(token) = self.take_reuse_token() {
+            let call = builder.ins().call(
+                self.helpers.rt_reuse_record,
+                &[self.ctx_param, token, names_ptr, lens_ptr, vals_ptr, len],
+            );
+            return TypedValue::boxed(builder.inst_results(call)[0]);
+        }
         let call = builder.ins().call(
             self.helpers.rt_alloc_record,
             &[self.ctx_param, names_ptr, lens_ptr, vals_ptr, len],
@@ -1192,6 +1281,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         target: &RustIrExpr,
         fields: &[RustIrRecordField],
     ) -> TypedValue {
+        // Perceus: check if target is a last-use local before lowering it
+        let target_is_last_use = self.is_last_use_local(target);
+
         let base_tv = self.lower_expr(builder, target);
         let base = self.ensure_boxed(builder, base_tv);
         let count = fields.len();
@@ -1242,10 +1334,15 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         let lens_ptr = builder.ins().stack_addr(PTR, lens_slot, 0);
         let vals_ptr = builder.ins().stack_addr(PTR, vals_slot, 0);
         let len = builder.ins().iconst(PTR, count as i64);
-        let call = builder.ins().call(
-            self.helpers.rt_patch_record,
-            &[self.ctx_param, base, names_ptr, lens_ptr, vals_ptr, len],
-        );
+        // Perceus: use in-place patching when target is consumed
+        let helper = if target_is_last_use {
+            self.helpers.rt_patch_record_inplace
+        } else {
+            self.helpers.rt_patch_record
+        };
+        let call = builder
+            .ins()
+            .call(helper, &[self.ctx_param, base, names_ptr, lens_ptr, vals_ptr, len]);
         TypedValue::boxed(builder.inst_results(call)[0])
     }
 
@@ -1360,6 +1457,10 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         scrutinee: &RustIrExpr,
         arms: &[RustIrMatchArm],
     ) -> TypedValue {
+        // Perceus: check if the scrutinee is a last-used local variable.
+        // If so, we can reuse its box allocation for the arm body's result.
+        let scrut_is_last_use = self.is_last_use_local(scrutinee);
+
         let scrut_tv = self.lower_expr(builder, scrutinee);
         let scrut_val = self.ensure_boxed(builder, scrut_tv);
 
@@ -1404,6 +1505,16 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             // Bind pattern variables
             self.bind_pattern(builder, &arm.pattern, scrut_val);
 
+            // Perceus: if the scrutinee is consumed, generate a reuse token.
+            // The pattern has already extracted all needed fields, so the
+            // scrutinee's box can be recycled for the next allocation.
+            if scrut_is_last_use {
+                let call = builder
+                    .ins()
+                    .call(self.helpers.rt_try_reuse, &[self.ctx_param, scrut_val]);
+                self.reuse_token = Some(builder.inst_results(call)[0]);
+            }
+
             // Guard check (if present)
             if let Some(guard) = &arm.guard {
                 let guard_tv = self.lower_expr(builder, guard);
@@ -1431,6 +1542,8 @@ impl<'a, M: Module> LowerCtx<'a, M> {
 
             let body_tv = self.lower_expr(builder, &arm.body);
             let body_boxed = self.ensure_boxed(builder, body_tv);
+            // Clear any unconsumed reuse token (it won't survive the branch)
+            self.reuse_token = None;
             builder.def_var(result_var, body_boxed);
             builder.ins().jump(merge_block, &[]);
 
@@ -1445,6 +1558,16 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder.switch_to_block(merge_block);
         builder.seal_block(merge_block);
         TypedValue::boxed(builder.use_var(result_var))
+    }
+
+    /// Check if a RustIrExpr is a Local variable reference at its last use.
+    fn is_last_use_local(&self, expr: &RustIrExpr) -> bool {
+        if let RustIrExpr::Local { id, name, .. } = expr {
+            if let Some(ref use_map) = self.use_map {
+                return use_map.is_last_use(*id, name);
+            }
+        }
+        false
     }
 
     /// Emit a pattern test that returns i64: 1 if matched, 0 if not.
