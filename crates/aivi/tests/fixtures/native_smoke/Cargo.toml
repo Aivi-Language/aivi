@@ -1,9 +1,0 @@
-[package]
-name = "aivi-native-smoke"
-version = "0.1.0"
-edition = "2021"
-
-[workspace]
-
-[dependencies]
-aivi_native_runtime = { path = "../../../../aivi_native_runtime" }

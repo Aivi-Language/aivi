@@ -542,7 +542,7 @@ fn cargo_feature_for_native_ui_target(
             if cargo_feature_declared(&cargo_toml, "runtime-gnome")? {
                 Ok(Some("runtime-gnome"))
             } else {
-                Ok(Some("aivi_native_runtime/gtk4-libadwaita"))
+                Ok(Some("aivi/gtk4-libadwaita"))
             }
         }
     }
@@ -617,6 +617,6 @@ mod tests {
             &aivi::NativeUiTarget::GnomeGtk4Libadwaita,
         )
         .expect("feature resolution");
-        assert_eq!(feature, Some("aivi_native_runtime/gtk4-libadwaita"));
+        assert_eq!(feature, Some("aivi/gtk4-libadwaita"));
     }
 }

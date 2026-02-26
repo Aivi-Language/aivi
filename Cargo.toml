@@ -5,12 +5,8 @@ members = [
     "crates/aivi_driver",
     "crates/aivi_http_server",
     "crates/aivi_lsp",
-    "crates/aivi_native_runtime",
     "crates/doc_index_gen",
     "fuzz",
-]
-exclude = [
-    "crates/aivi/tests/fixtures/native_smoke",
 ]
 resolver = "2"
 

@@ -30,7 +30,7 @@ pub fn write_scaffold(
     let src_dir = dir.join("src");
     std::fs::create_dir_all(&src_dir)?;
 
-    let aivi_deps = aivi_native_runtime_path_dependency();
+    let aivi_deps = aivi_path_dependency();
 
     let (entry_file, cargo_toml, aivi_toml, aivi_source) = match kind {
         ProjectKind::Bin => {
@@ -39,7 +39,7 @@ pub fn write_scaffold(
                 "[project]\nkind = \"bin\"\nentry = \"{entry_file}\"\nlanguage_version = \"{language_version}\"\n\n[build]\ngen_dir = \"target/aivi-gen\"\nrust_edition = \"{edition}\"\ncargo_profile = \"dev\"\nnative_ui_target = \"portable\"\n"
             );
             let cargo_toml = format!(
-                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"{edition}\"\n\n[package.metadata.aivi]\nlanguage_version = \"{language_version}\"\nkind = \"bin\"\nentry = \"src/{entry_file}\"\n\n[features]\ndefault = []\nruntime-gnome = [\"aivi_native_runtime/gtk4-libadwaita\"]\n\n[[bin]]\nname = \"{name}\"\npath = \"target/aivi-gen/src/main.rs\"\n\n[dependencies]\n{}\n",
+                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"{edition}\"\n\n[package.metadata.aivi]\nlanguage_version = \"{language_version}\"\nkind = \"bin\"\nentry = \"src/{entry_file}\"\n\n[[bin]]\nname = \"{name}\"\npath = \"target/aivi-gen/src/main.rs\"\n\n[dependencies]\n{}\n",
                 aivi_deps
             );
             let aivi_source = starter_bin_source();
@@ -51,7 +51,7 @@ pub fn write_scaffold(
                 "[project]\nkind = \"lib\"\nentry = \"{entry_file}\"\nlanguage_version = \"{language_version}\"\n\n[build]\ngen_dir = \"target/aivi-gen\"\nrust_edition = \"{edition}\"\ncargo_profile = \"dev\"\nnative_ui_target = \"portable\"\n"
             );
             let cargo_toml = format!(
-                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"{edition}\"\n\n[package.metadata.aivi]\nlanguage_version = \"{language_version}\"\nkind = \"lib\"\nentry = \"src/{entry_file}\"\n\n[features]\ndefault = []\nruntime-gnome = [\"aivi_native_runtime/gtk4-libadwaita\"]\n\n[lib]\npath = \"target/aivi-gen/src/lib.rs\"\n\n[dependencies]\n{}\n",
+                "[package]\nname = \"{name}\"\nversion = \"0.1.0\"\nedition = \"{edition}\"\n\n[package.metadata.aivi]\nlanguage_version = \"{language_version}\"\nkind = \"lib\"\nentry = \"src/{entry_file}\"\n\n[lib]\npath = \"target/aivi-gen/src/lib.rs\"\n\n[dependencies]\n{}\n",
                 aivi_deps
             );
             let aivi_source = starter_lib_source();
@@ -67,13 +67,10 @@ pub fn write_scaffold(
     Ok(())
 }
 
-fn aivi_native_runtime_path_dependency() -> String {
+fn aivi_path_dependency() -> String {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let rt_dir = manifest_dir.join("../aivi_native_runtime");
-    format!(
-        "aivi_native_runtime = {{ path = {:?} }}",
-        rt_dir.display().to_string()
-    )
+    let aivi_dir = manifest_dir.join(".");
+    format!("aivi = {{ path = {:?} }}", aivi_dir.display().to_string())
 }
 
 fn starter_bin_source() -> &'static str {

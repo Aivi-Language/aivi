@@ -12,8 +12,7 @@ if (!fs.existsSync(dist)) {
 const out = fs.readFileSync(dist, "utf8");
 
 const targets = [
-  path.join(repoRoot, "crates", "aivi", "src", "runtime", "builtins", "ui", "server_html_client.js"),
-  path.join(repoRoot, "crates", "aivi_native_runtime", "src", "builtins", "ui", "server_html_client.js")
+  path.join(repoRoot, "crates", "aivi", "src", "runtime", "builtins", "ui", "server_html_client.js")
 ];
 
 for (const t of targets) {

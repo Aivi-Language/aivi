@@ -26,8 +26,6 @@ Cranelift IR  →  native machine code
 - **`aivi build`** — Cranelift **AOT**: compiles to a relocatable object file
   (`.o`), generates a thin Rust harness, and links via `cargo build` to produce
   a standalone executable.
-- **`aivi build --native-rust`** — Legacy path: emits Rust source into
-  `target/aivi-gen/` and compiles with `rustc`. Retained for bootstrapping only.
 
 ## Value Representation
 
@@ -176,13 +174,6 @@ can call into the runtime:
 
 All helpers receive `JitRuntimeCtx*` as first parameter. Errors are stored in
 `runtime.jit_pending_error` (first-error-wins semantics to preserve root cause).
-
-## Legacy: Native Rust Backend
-
-The original backend emitted Rust source code into `target/aivi-gen/` and
-compiled it with `rustc`. It is still available via `aivi build --native-rust`
-but is no longer the default pipeline. The native Rust backend is retained for
-bootstrapping and as a reference implementation.
 
 ## Non-goals (v0.1)
 

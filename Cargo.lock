@@ -35,7 +35,6 @@ dependencies = [
  "aivi_core",
  "aivi_driver",
  "aivi_http_server",
- "aivi_native_runtime",
  "chrono",
  "chrono-tz",
  "cranelift-codegen",
@@ -148,40 +147,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "tokio-tungstenite",
-]
-
-[[package]]
-name = "aivi_native_runtime"
-version = "0.1.0"
-dependencies = [
- "aivi_http_server",
- "chrono",
- "csv",
- "getrandom 0.4.1",
- "im",
- "image",
- "imap",
- "mailparse",
- "mysql",
- "num-bigint",
- "num-rational",
- "num-traits",
- "ordered-float",
- "palette",
- "postgres",
- "regex",
- "rusqlite",
- "rust_decimal",
- "rustfft",
- "serde_json",
- "sha2",
- "thiserror",
- "tokio",
- "unicode-normalization",
- "unicode-segmentation",
- "ureq",
- "url",
- "uuid",
 ]
 
 [[package]]

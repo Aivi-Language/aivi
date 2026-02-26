@@ -656,7 +656,7 @@ fn is_constructor_name(name: &str) -> bool {
 }
 
 fn resolve_builtin(name: &str) -> Option<BuiltinName> {
-    // Keep this list in sync with `aivi_native_runtime::builtins`.
+    // Keep this list in sync with the runtime builtins.
     let ok = matches!(
         name,
         "Unit"
