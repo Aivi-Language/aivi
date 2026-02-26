@@ -1294,10 +1294,7 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_drop_value", rt_drop_value as *const u8),
         // Perceus reuse helpers
         ("rt_try_reuse", rt_try_reuse as *const u8),
-        (
-            "rt_reuse_constructor",
-            rt_reuse_constructor as *const u8,
-        ),
+        ("rt_reuse_constructor", rt_reuse_constructor as *const u8),
         ("rt_reuse_record", rt_reuse_record as *const u8),
         ("rt_reuse_list", rt_reuse_list as *const u8),
         ("rt_reuse_tuple", rt_reuse_tuple as *const u8),

@@ -134,13 +134,9 @@ fn render_diagnostic_with_source(
             ));
         }
         if let Some(source) = source {
-            if let Some(frame) = render_source_frame(
-                source,
-                &label.span,
-                None,
-                use_color,
-                diagnostic.severity,
-            ) {
+            if let Some(frame) =
+                render_source_frame(source, &label.span, None, use_color, diagnostic.severity)
+            {
                 output.push_str(&frame);
             }
         }
@@ -196,7 +192,10 @@ fn render_source_frame(
     if use_color {
         let cc = caret_color(severity);
         let mc = caret_message_color(severity);
-        let mut caret_line = format!("{DARK_GRAY}{:>width$} |{RESET} {padding}{cc}{carets}{RESET}", "");
+        let mut caret_line = format!(
+            "{DARK_GRAY}{:>width$} |{RESET} {padding}{cc}{carets}{RESET}",
+            ""
+        );
         if let Some(message) = message {
             caret_line.push(' ');
             caret_line.push_str(mc);

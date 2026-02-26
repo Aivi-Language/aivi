@@ -921,7 +921,9 @@ impl Backend {
                 });
             }
             // Fallback: look up the smallest span containing the cursor position.
-            if let Some(contents) = Self::hover_from_span_types(&ident, position, &span_types, &module.name.name) {
+            if let Some(contents) =
+                Self::hover_from_span_types(&ident, position, &span_types, &module.name.name)
+            {
                 return Some(Hover {
                     contents: HoverContents::Markup(MarkupContent {
                         kind: MarkupKind::Markdown,
@@ -1261,7 +1263,9 @@ impl Backend {
             });
         }
         // Fallback: look up the smallest span containing the cursor position.
-        if let Some(contents) = Self::hover_from_span_types(&ident, position, &span_types, &current_module.name.name) {
+        if let Some(contents) =
+            Self::hover_from_span_types(&ident, position, &span_types, &current_module.name.name)
+        {
             return Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
                     kind: MarkupKind::Markdown,

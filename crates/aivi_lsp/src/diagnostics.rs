@@ -9,7 +9,7 @@ use tower_lsp::lsp_types::{
 
 use crate::backend::Backend;
 use crate::state::IndexedModule;
-use crate::strict::{StrictConfig, build_strict_diagnostics};
+use crate::strict::{build_strict_diagnostics, StrictConfig};
 
 impl Backend {
     fn collect_transitive_modules_for_diagnostics(

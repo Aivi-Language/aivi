@@ -338,7 +338,11 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_try_reuse: decl!("rt_try_reuse", [PTR, PTR], [PTR]),
         // Perceus reuse-aware allocation
         // (ctx, token, name_ptr, name_len, args_ptr, args_len) -> ptr
-        rt_reuse_constructor: decl!("rt_reuse_constructor", [PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
+        rt_reuse_constructor: decl!(
+            "rt_reuse_constructor",
+            [PTR, PTR, PTR, PTR, PTR, PTR],
+            [PTR]
+        ),
         // (ctx, token, names_ptr, name_lens_ptr, values_ptr, len) -> ptr
         rt_reuse_record: decl!("rt_reuse_record", [PTR, PTR, PTR, PTR, PTR, PTR], [PTR]),
         // (ctx, token, items_ptr, len) -> ptr
@@ -1340,9 +1344,10 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         } else {
             self.helpers.rt_patch_record
         };
-        let call = builder
-            .ins()
-            .call(helper, &[self.ctx_param, base, names_ptr, lens_ptr, vals_ptr, len]);
+        let call = builder.ins().call(
+            helper,
+            &[self.ctx_param, base, names_ptr, lens_ptr, vals_ptr, len],
+        );
         TypedValue::boxed(builder.inst_results(call)[0])
     }
 
