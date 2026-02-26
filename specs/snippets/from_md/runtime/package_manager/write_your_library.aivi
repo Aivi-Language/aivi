@@ -3,4 +3,4 @@ module my.aivi.lib
 export greet
 
 greet : Text -> Text
-greet = name => "Hello, " ++ name ++ "!"
+greet = name => "Hello, {name}!"

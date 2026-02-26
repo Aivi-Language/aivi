@@ -193,6 +193,7 @@ pub fn run_cranelift_jit(
     let mut pending: Vec<PendingDef> = Vec::new();
     let mut lambda_counter: usize = 0;
     let mut compiled_decls: HashMap<String, JitFuncDecl> = HashMap::new();
+    let mut str_counter: usize = 0;
 
     for dd in &declared_defs {
         match compile_definition_body(
@@ -208,6 +209,7 @@ pub fn run_cranelift_jit(
             &compiled_decls,
             &mut lambda_counter,
             &spec_map,
+            &mut str_counter,
         ) {
             Ok(lambdas) => {
                 // JIT-specific: finalize and install lambdas immediately
@@ -462,6 +464,7 @@ pub fn compile_to_object(
     // Pass 2: Compile function bodies
     let mut lambda_counter: usize = 0;
     let mut compiled_func_entries: Vec<AotFuncEntry> = Vec::new();
+    let mut str_counter: usize = 0;
 
     for dd in &declared_defs {
         match compile_definition_body(
@@ -477,6 +480,7 @@ pub fn compile_to_object(
             &compiled_decls,
             &mut lambda_counter,
             &spec_map,
+            &mut str_counter,
         ) {
             Ok(_lambdas) => {
                 // AOT: lambdas are already compiled as functions in the module.
@@ -707,6 +711,7 @@ fn compile_definition_body<M: Module>(
     compiled_decls: &HashMap<String, JitFuncDecl>,
     lambda_counter: &mut usize,
     spec_map: &HashMap<String, Vec<String>>,
+    str_counter: &mut usize,
 ) -> Result<Vec<CompiledLambdaInfo>, String> {
     let (params, body) = peel_params(&def.expr);
 
@@ -792,6 +797,8 @@ fn compile_definition_body<M: Module>(
                 &compiled_lambdas,
                 &empty_jit_funcs,
                 &empty_spec_map,
+                module,
+                str_counter,
             );
 
             // Bind captured vars as leading params (boxed — received as *mut Value)
@@ -913,6 +920,8 @@ fn compile_definition_body<M: Module>(
             &compiled_lambdas,
             &local_jit_funcs,
             &local_spec_map,
+            module,
+            str_counter,
         );
 
         // Bind params with typed unboxing when types are known

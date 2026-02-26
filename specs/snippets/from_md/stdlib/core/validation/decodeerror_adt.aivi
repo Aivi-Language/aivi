@@ -7,4 +7,4 @@ DecodeError = {
 // Convert a DecodeError into a human-readable string for excellent DX
 formatDecodeError : DecodeError -> Text
 formatDecodeError = err =>
-  "Expected at $." ++ (err.path |> join ".") ++ ": " ++ err.message
+  "Expected at $.{err.path |> join "."}: {err.message}"

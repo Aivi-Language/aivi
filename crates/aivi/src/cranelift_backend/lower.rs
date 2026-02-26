@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use cranelift_codegen::ir::FuncRef;
 use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder, Value};
 use cranelift_frontend::{FunctionBuilder, Variable};
-use cranelift_module::{Linkage, Module};
+use cranelift_module::{DataDescription, Linkage, Module};
 
 use crate::cg_type::CgType;
 use crate::rust_ir::{
@@ -74,7 +74,11 @@ pub(crate) struct CompiledLambda {
 }
 
 /// Context for lowering a single function body.
-pub(crate) struct LowerCtx<'a> {
+///
+/// Generic over `M: Module` so that string constants can be embedded as
+/// relocatable data sections — required for AOT where compile-time `&str`
+/// pointers are invalid in the final binary.
+pub(crate) struct LowerCtx<'a, M: Module> {
     /// Maps local variable names to typed Cranelift SSA values.
     pub(crate) locals: HashMap<String, TypedValue>,
     /// The `ctx` (JitRuntimeCtx) parameter — first arg of every function.
@@ -90,6 +94,12 @@ pub(crate) struct LowerCtx<'a> {
     /// Maps original short name → list of specialization short names.
     /// Used for call-site routing to monomorphized versions.
     spec_map: &'a HashMap<String, Vec<String>>,
+    /// Module handle for embedding string data sections.
+    module: &'a mut M,
+    /// Monotonic counter for unique data section names (shared across functions).
+    str_counter: &'a mut usize,
+    /// Per-function cache of already-embedded strings → GlobalValue.
+    str_cache: HashMap<Vec<u8>, cranelift_codegen::ir::GlobalValue>,
 }
 
 /// Metadata about a JIT-compiled function, used for direct calls.
@@ -398,13 +408,15 @@ impl DeclaredHelpers {
     }
 }
 
-impl<'a> LowerCtx<'a> {
+impl<'a, M: Module> LowerCtx<'a, M> {
     pub(crate) fn new(
         ctx_param: Value,
         helpers: &'a HelperRefs,
         compiled_lambdas: &'a HashMap<usize, CompiledLambda>,
         jit_funcs: &'a HashMap<String, JitFuncInfo>,
         spec_map: &'a HashMap<String, Vec<String>>,
+        module: &'a mut M,
+        str_counter: &'a mut usize,
     ) -> Self {
         Self {
             locals: HashMap::new(),
@@ -413,6 +425,9 @@ impl<'a> LowerCtx<'a> {
             compiled_lambdas,
             jit_funcs,
             spec_map,
+            module,
+            str_counter,
+            str_cache: HashMap::new(),
         }
     }
 
@@ -435,6 +450,37 @@ impl<'a> LowerCtx<'a> {
             };
             self.locals.insert(name.clone(), tv);
         }
+    }
+
+    // -------------------------------------------------------------------
+    // String embedding
+    // -------------------------------------------------------------------
+
+    /// Embed a string as a data section and return `(ptr_val, len_val)`.
+    /// Within a single function, identical strings are deduplicated.
+    fn embed_str(&mut self, builder: &mut FunctionBuilder<'_>, s: &[u8]) -> (Value, Value) {
+        let len = s.len();
+        if let Some(&gv) = self.str_cache.get(s) {
+            let ptr = builder.ins().global_value(PTR, gv);
+            let len_val = builder.ins().iconst(PTR, len as i64);
+            return (ptr, len_val);
+        }
+        let name = format!("__str_{}", *self.str_counter);
+        *self.str_counter += 1;
+        let data_id = self
+            .module
+            .declare_data(&name, Linkage::Local, false, false)
+            .expect("declare string data");
+        let mut dd = DataDescription::new();
+        dd.define(s.to_vec().into_boxed_slice());
+        self.module
+            .define_data(data_id, &dd)
+            .expect("define string data");
+        let gv = self.module.declare_data_in_func(data_id, builder.func);
+        self.str_cache.insert(s.to_vec(), gv);
+        let ptr = builder.ins().global_value(PTR, gv);
+        let len_val = builder.ins().iconst(PTR, len as i64);
+        (ptr, len_val)
     }
 
     // -------------------------------------------------------------------
@@ -526,9 +572,7 @@ impl<'a> LowerCtx<'a> {
             RustIrExpr::LitString { text, .. } => self.lower_lit_string(builder, text),
             RustIrExpr::LitBool { value, .. } => self.lower_lit_bool(builder, *value),
             RustIrExpr::LitDateTime { text, .. } => {
-                let bytes = text.as_bytes();
-                let str_ptr = builder.ins().iconst(PTR, bytes.as_ptr() as i64);
-                let str_len = builder.ins().iconst(PTR, bytes.len() as i64);
+                let (str_ptr, str_len) = self.embed_str(builder, text.as_bytes());
                 let inst = builder.ins().call(
                     self.helpers.rt_alloc_datetime,
                     &[self.ctx_param, str_ptr, str_len],
@@ -538,15 +582,9 @@ impl<'a> LowerCtx<'a> {
             RustIrExpr::LitSigil {
                 tag, body, flags, ..
             } => {
-                let tag_bytes = tag.as_bytes();
-                let body_bytes = body.as_bytes();
-                let flags_bytes = flags.as_bytes();
-                let tag_ptr = builder.ins().iconst(PTR, tag_bytes.as_ptr() as i64);
-                let tag_len = builder.ins().iconst(PTR, tag_bytes.len() as i64);
-                let body_ptr = builder.ins().iconst(PTR, body_bytes.as_ptr() as i64);
-                let body_len = builder.ins().iconst(PTR, body_bytes.len() as i64);
-                let flags_ptr = builder.ins().iconst(PTR, flags_bytes.as_ptr() as i64);
-                let flags_len = builder.ins().iconst(PTR, flags_bytes.len() as i64);
+                let (tag_ptr, tag_len) = self.embed_str(builder, tag.as_bytes());
+                let (body_ptr, body_len) = self.embed_str(builder, body.as_bytes());
+                let (flags_ptr, flags_len) = self.embed_str(builder, flags.as_bytes());
                 let inst = builder.ins().call(
                     self.helpers.rt_eval_sigil,
                     &[
@@ -635,10 +673,7 @@ impl<'a> LowerCtx<'a> {
     }
 
     fn lower_lit_string(&mut self, builder: &mut FunctionBuilder<'_>, text: &str) -> TypedValue {
-        let ptr = text.as_ptr() as i64;
-        let len = text.len() as i64;
-        let ptr_val = builder.ins().iconst(PTR, ptr);
-        let len_val = builder.ins().iconst(PTR, len);
+        let (ptr_val, len_val) = self.embed_str(builder, text.as_bytes());
         let call = builder.ins().call(
             self.helpers.rt_alloc_string,
             &[self.ctx_param, ptr_val, len_val],
@@ -665,9 +700,7 @@ impl<'a> LowerCtx<'a> {
             RustIrTextPart::Text { text } => self.lower_lit_string(builder, text),
             RustIrTextPart::Expr { expr } => self.lower_expr(builder, expr),
         };
-        let op = "++";
-        let op_ptr = builder.ins().iconst(PTR, op.as_ptr() as i64);
-        let op_len = builder.ins().iconst(PTR, op.len() as i64);
+        let (op_ptr, op_len) = self.embed_str(builder, b"++");
         for part in &parts[1..] {
             let part_tv = match part {
                 RustIrTextPart::Text { text } => self.lower_lit_string(builder, text),
@@ -688,7 +721,7 @@ impl<'a> LowerCtx<'a> {
     // Variable lowering
     // -----------------------------------------------------------------------
 
-    fn lower_local(&self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
+    fn lower_local(&mut self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
         if let Some(tv) = self.locals.get(name) {
             tv.clone()
         } else {
@@ -697,9 +730,8 @@ impl<'a> LowerCtx<'a> {
         }
     }
 
-    fn lower_global(&self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
-        let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
-        let name_len = builder.ins().iconst(PTR, name.len() as i64);
+    fn lower_global(&mut self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
+        let (name_ptr, name_len) = self.embed_str(builder, name.as_bytes());
         let call = builder.ins().call(
             self.helpers.rt_get_global,
             &[self.ctx_param, name_ptr, name_len],
@@ -711,9 +743,8 @@ impl<'a> LowerCtx<'a> {
     /// allocating a zero-arg `Value::Constructor` directly instead of looking
     /// it up in the globals map.  When applied to arguments later, `apply()`
     /// accumulates them naturally.
-    fn lower_constructor_value(&self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
-        let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
-        let name_len = builder.ins().iconst(PTR, name.len() as i64);
+    fn lower_constructor_value(&mut self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
+        let (name_ptr, name_len) = self.embed_str(builder, name.as_bytes());
         let null = builder.ins().iconst(PTR, 0);
         let zero = builder.ins().iconst(PTR, 0);
         let call = builder.ins().call(
@@ -1107,8 +1138,7 @@ impl<'a> LowerCtx<'a> {
                     _ => "_",
                 })
                 .unwrap_or("_");
-            let name_ptr = builder.ins().iconst(PTR, field_name.as_ptr() as i64);
-            let name_len = builder.ins().iconst(PTR, field_name.len() as i64);
+            let (name_ptr, name_len) = self.embed_str(builder, field_name.as_bytes());
             builder
                 .ins()
                 .stack_store(name_ptr, names_slot, (i * 8) as i32);
@@ -1171,8 +1201,7 @@ impl<'a> LowerCtx<'a> {
                     _ => "_",
                 })
                 .unwrap_or("_");
-            let name_ptr = builder.ins().iconst(PTR, field_name.as_ptr() as i64);
-            let name_len = builder.ins().iconst(PTR, field_name.len() as i64);
+            let (name_ptr, name_len) = self.embed_str(builder, field_name.as_bytes());
             builder
                 .ins()
                 .stack_store(name_ptr, names_slot, (i * 8) as i32);
@@ -1207,8 +1236,7 @@ impl<'a> LowerCtx<'a> {
     ) -> TypedValue {
         let base_tv = self.lower_expr(builder, base);
         let base_val = self.ensure_boxed(builder, base_tv);
-        let name_ptr = builder.ins().iconst(PTR, field.as_ptr() as i64);
-        let name_len = builder.ins().iconst(PTR, field.len() as i64);
+        let (name_ptr, name_len) = self.embed_str(builder, field.as_bytes());
         let call = builder.ins().call(
             self.helpers.rt_record_field,
             &[self.ctx_param, base_val, name_ptr, name_len],
@@ -1411,8 +1439,7 @@ impl<'a> LowerCtx<'a> {
             }
             RustIrPattern::Constructor { name, args, .. } => {
                 // Check name matches
-                let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
-                let name_len = builder.ins().iconst(PTR, name.len() as i64);
+                let (name_ptr, name_len) = self.embed_str(builder, name.as_bytes());
                 let name_match = {
                     let call = builder.ins().call(
                         self.helpers.rt_constructor_name_eq,
@@ -1548,8 +1575,7 @@ impl<'a> LowerCtx<'a> {
                     // Navigate the path to get the nested value
                     let mut current = value;
                     for seg in &field.path {
-                        let name_ptr = builder.ins().iconst(PTR, seg.as_ptr() as i64);
-                        let name_len = builder.ins().iconst(PTR, seg.len() as i64);
+                        let (name_ptr, name_len) = self.embed_str(builder, seg.as_bytes());
                         let call = builder.ins().call(
                             self.helpers.rt_record_field,
                             &[self.ctx_param, current, name_ptr, name_len],
@@ -1697,8 +1723,7 @@ impl<'a> LowerCtx<'a> {
                 for field in fields {
                     let mut current = value;
                     for seg in &field.path {
-                        let name_ptr = builder.ins().iconst(PTR, seg.as_ptr() as i64);
-                        let name_len = builder.ins().iconst(PTR, seg.len() as i64);
+                        let (name_ptr, name_len) = self.embed_str(builder, seg.as_bytes());
                         let call = builder.ins().call(
                             self.helpers.rt_record_field,
                             &[self.ctx_param, current, name_ptr, name_len],
@@ -1752,8 +1777,7 @@ impl<'a> LowerCtx<'a> {
         // Fallback: box both and call rt_binary_op
         let lhs_boxed = self.ensure_boxed(builder, lhs);
         let rhs_boxed = self.ensure_boxed(builder, rhs);
-        let op_ptr = builder.ins().iconst(PTR, op.as_ptr() as i64);
-        let op_len = builder.ins().iconst(PTR, op.len() as i64);
+        let (op_ptr, op_len) = self.embed_str(builder, op.as_bytes());
         let call = builder.ins().call(
             self.helpers.rt_binary_op,
             &[self.ctx_param, op_ptr, op_len, lhs_boxed, rhs_boxed],
