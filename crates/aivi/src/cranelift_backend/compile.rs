@@ -1038,6 +1038,10 @@ fn compile_definition_body<M: Module>(
                 str_counter,
             );
 
+            // Perceus: run use analysis on the lambda body
+            let use_map = super::use_analysis::analyze_uses(body);
+            lower_ctx.set_use_map(use_map);
+
             // Bind captured vars as leading params (boxed — received as *mut Value)
             for (i, var_name) in captured_vars.iter().enumerate() {
                 lower_ctx.locals.insert(
@@ -1191,6 +1195,10 @@ fn compile_definition_body<M: Module>(
             module,
             str_counter,
         );
+
+        // Perceus: run use analysis on the function body
+        let use_map = super::use_analysis::analyze_uses(body);
+        lower_ctx.set_use_map(use_map);
 
         // Bind params with typed unboxing when types are known
         let param_names: Vec<String> = params.iter().map(|s| s.to_string()).collect();
