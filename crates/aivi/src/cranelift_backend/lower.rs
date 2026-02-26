@@ -383,6 +383,7 @@ impl DeclaredHelpers {
         HelperRefs {
             rt_check_call_depth: imp!(rt_check_call_depth),
             rt_dec_call_depth: imp!(rt_dec_call_depth),
+            rt_signal_match_fail: imp!(rt_signal_match_fail),
             rt_box_int: imp!(rt_box_int),
             rt_box_float: imp!(rt_box_float),
             rt_box_bool: imp!(rt_box_bool),

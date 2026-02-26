@@ -344,8 +344,8 @@ impl Backend {
             let end_ok = s.end.line > line || (s.end.line == line && s.end.column >= col);
             if start_ok && end_ok {
                 if let Some(prev) = best {
-                    let prev_size = span_size(&prev.0);
-                    let cur_size = span_size(s);
+                    let prev_size = Self::span_size(&prev.0);
+                    let cur_size = Self::span_size(s);
                     if cur_size < prev_size {
                         best = Some(entry);
                     }
@@ -359,6 +359,15 @@ impl Backend {
             "value",
             format!("`{ident}` : `{ty_str}`"),
         ))
+    }
+
+    fn span_size(s: &Span) -> usize {
+        let lines = s.end.line.saturating_sub(s.start.line);
+        if lines == 0 {
+            s.end.column.saturating_sub(s.start.column) + 1
+        } else {
+            lines * 1000 + s.end.column
+        }
     }
 
     fn format_quick_info(
