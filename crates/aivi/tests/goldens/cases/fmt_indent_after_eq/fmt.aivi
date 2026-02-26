@@ -12,7 +12,7 @@ class Apply (F *) =
 
 users = [
   { name: "Alice", active: True }
-  { name: "Bob", active: False }
+  { name: "Bob",   active: False }
 ]
 
 activeNames = users

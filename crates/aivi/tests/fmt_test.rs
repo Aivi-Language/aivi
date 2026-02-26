@@ -92,9 +92,14 @@ fn test_fmt_pipe_blocks_indent_after_equals_and_question() {
 
 #[test]
 fn test_fmt_no_space_before_index_bracket() {
-    let input = "userTable = (database.table \"users\") [a]";
+    // Adjacent `)[` (no space in source) → index access: space stays stripped.
+    let input = "userTable = (database.table \"users\")[a]";
     let expected = "userTable = (database.table \"users\")[a]\n";
     assert_eq!(format_text(input), expected);
+    // Non-adjacent `) [` (space in source) → function application: space preserved.
+    let input2 = "userTable = (database.table \"users\") [a]";
+    let expected2 = "userTable = (database.table \"users\") [a]\n";
+    assert_eq!(format_text(input2), expected2);
 }
 
 #[test]
