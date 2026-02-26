@@ -324,12 +324,15 @@ fn jit_compile_into_runtime(
                     }),
                 },
             ));
+            // Use insert_or_merge for short name (multi-clause merging),
+            // but plain insert for qualified name (avoids spurious MultiClause
+            // from kernel's short+qualified aliasing).
             insert_or_merge(&mut compiled_globals, pd.name.clone(), effect.clone());
-            insert_or_merge(&mut compiled_globals, pd.qualified.clone(), effect);
+            compiled_globals.insert(pd.qualified.clone(), effect);
         } else {
             let jit_value = make_jit_builtin(&pd.qualified, pd.arity, ptr as usize);
             insert_or_merge(&mut compiled_globals, pd.name.clone(), jit_value.clone());
-            insert_or_merge(&mut compiled_globals, pd.qualified.clone(), jit_value);
+            compiled_globals.insert(pd.qualified.clone(), jit_value);
         }
     }
 
