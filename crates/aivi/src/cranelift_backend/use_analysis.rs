@@ -43,9 +43,7 @@ impl UseMap {
     /// Returns the total number of uses for a variable, or 0 if unknown.
     #[allow(dead_code)]
     pub(crate) fn use_count(&self, var_name: &str) -> u32 {
-        self.var_info
-            .get(var_name)
-            .map_or(0, |info| info.use_count)
+        self.var_info.get(var_name).map_or(0, |info| info.use_count)
     }
 }
 
@@ -64,12 +62,7 @@ pub(crate) fn analyze_uses(expr: &RustIrExpr) -> UseMap {
 
     for (name, ids) in &counts {
         let total = ids.len() as u32;
-        var_info.insert(
-            name.clone(),
-            UseInfo {
-                use_count: total,
-            },
-        );
+        var_info.insert(name.clone(), UseInfo { use_count: total });
         if total == 1 {
             last_uses.insert((ids[0], name.clone()));
         }
@@ -200,10 +193,7 @@ fn collect_uses(expr: &RustIrExpr, out: &mut HashMap<String, Vec<u32>>) {
     }
 }
 
-fn collect_uses_in_block_item(
-    item: &RustIrBlockItem,
-    out: &mut HashMap<String, Vec<u32>>,
-) {
+fn collect_uses_in_block_item(item: &RustIrBlockItem, out: &mut HashMap<String, Vec<u32>>) {
     match item {
         RustIrBlockItem::Bind { expr, .. } => collect_uses(expr, out),
         RustIrBlockItem::Expr { expr }
@@ -390,9 +380,7 @@ fn mark_last_uses_reverse(
             for (i, arm) in arms.iter().enumerate() {
                 let mut arm_marked = marked.clone();
                 for (name, _) in &arm_vars[i] {
-                    if arm_counts.get(name).copied().unwrap_or(0) == 1
-                        && !marked.contains(name)
-                    {
+                    if arm_counts.get(name).copied().unwrap_or(0) == 1 && !marked.contains(name) {
                         // This var only appears in this arm — safe to mark
                         if let Some(guard) = &arm.guard {
                             mark_last_uses_reverse(guard, last_uses, &mut arm_marked, counts);

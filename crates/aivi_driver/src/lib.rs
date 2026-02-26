@@ -39,8 +39,11 @@ pub enum AiviError {
 fn emit_diagnostics(diagnostics: &[FileDiagnostic]) {
     let use_color = std::io::stderr().is_terminal();
     for diag in diagnostics {
-        let rendered =
-            render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic), use_color);
+        let rendered = render_diagnostics(
+            &diag.path,
+            std::slice::from_ref(&diag.diagnostic),
+            use_color,
+        );
         if !rendered.is_empty() {
             eprintln!("{rendered}");
         }

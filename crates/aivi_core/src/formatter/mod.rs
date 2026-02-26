@@ -332,12 +332,16 @@ mod align_tests {
         let out = format_text(input);
         // label should align (same column) across rows
         let lines: Vec<&str> = out.lines().collect();
-        let label_cols: Vec<usize> = lines.iter()
+        let label_cols: Vec<usize> = lines
+            .iter()
             .filter(|l| l.contains("label:"))
             .map(|l| l.find("label:").unwrap())
             .collect();
         assert!(label_cols.len() >= 2, "at least 2 label fields");
-        assert_eq!(label_cols[0], label_cols[1], "label fields should be aligned");
+        assert_eq!(
+            label_cols[0], label_cols[1],
+            "label fields should be aligned"
+        );
         // Verify idempotency
         let out2 = format_text(&out);
         assert_eq!(out, out2, "alignment should be idempotent");

@@ -1113,10 +1113,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             ),
             (
                 "widgetById".to_string(),
-                Type::Func(
-                    Box::new(text_ty.clone()),
-                    Box::new(effect_text_int.clone()),
-                ),
+                Type::Func(Box::new(text_ty.clone()), Box::new(effect_text_int.clone())),
             ),
             (
                 "widgetSetBoolProperty".to_string(),
