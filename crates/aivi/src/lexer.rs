@@ -337,12 +337,14 @@ fn lex_angle_sigil(
     }
     index += 1; // consume `>`
     let close_marker: Vec<char> = format!("</{tag}>").chars().collect();
+    let open_marker: Vec<char> = format!("~<{tag}>").chars().collect();
 
     let mut line = start_line;
     let mut col = start_col + (index - start);
     let mut in_quote: Option<char> = None;
     let mut escaped = false;
     let mut closed = false;
+    let mut nesting_depth: usize = 0;
 
     while index < chars.len() {
         let ch = chars[index];
@@ -379,11 +381,47 @@ fn lex_angle_sigil(
             continue;
         }
 
+        // Track nested `~<tag>` openers so inner `</tag>` doesn't close the outer sigil.
+        if ch == '~'
+            && index + open_marker.len() <= chars.len()
+            && chars[index..index + open_marker.len()] == open_marker[..]
+        {
+            nesting_depth += 1;
+            // Advance past the `~<tag>` opener but let the main loop continue from `>`.
+            let advance = open_marker.len() - 1;
+            for c in &chars[index + 1..index + advance] {
+                if *c == '\n' {
+                    line += 1;
+                    col = 1;
+                } else {
+                    col += 1;
+                }
+            }
+            index += advance;
+            // The loop will `index += 1` for the `>` at the end.
+            index += 1;
+            continue;
+        }
+
         // Scan for closing delimiter `</{tag}>`.
         if ch == '<'
             && index + close_marker.len() <= chars.len()
             && chars[index..index + close_marker.len()] == close_marker[..]
         {
+            if nesting_depth > 0 {
+                nesting_depth -= 1;
+                let advance = close_marker.len();
+                for c in &chars[index + 1..index + advance] {
+                    if *c == '\n' {
+                        line += 1;
+                        col = 1;
+                    } else {
+                        col += 1;
+                    }
+                }
+                index += advance;
+                continue;
+            }
             closed = true;
             index += close_marker.len(); // consume `</{tag}>`
             col += close_marker.len().saturating_sub(1); // advance to the last char of delimiter

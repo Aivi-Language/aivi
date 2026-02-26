@@ -87,3 +87,15 @@ signalSugarNode =
       </signal>
     </object>
   </gtk>
+
+// Regression: nested `~<gtk>` inside a splice must not
+// cause the lexer to close the outer sigil prematurely.
+nestedSigilInSplice : GtkNode
+nestedSigilInSplice =
+  ~<gtk>
+    <object class="GtkBox">
+      <child>
+        { ~<gtk><object class="GtkLabel" /></gtk> }
+      </child>
+    </object>
+  </gtk>
