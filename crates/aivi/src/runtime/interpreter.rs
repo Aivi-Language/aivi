@@ -74,6 +74,10 @@ pub(crate) struct Runtime {
     rng_state: u64,
     /// Counter used to amortize cancel-token checks (checked every 64 evals).
     check_counter: u32,
+    /// JIT call-depth counter — prevents stack overflow from infinite JIT recursion.
+    pub(crate) jit_call_depth: u32,
+    /// Maximum JIT call depth before bailing out.
+    pub(crate) jit_max_call_depth: u32,
 }
 
 #[derive(Clone)]

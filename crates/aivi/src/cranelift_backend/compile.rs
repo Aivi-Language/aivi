@@ -30,23 +30,24 @@ use super::lower::{
 /// Pointer type used throughout.
 const PTR: cranelift_codegen::ir::Type = types::I64;
 
-/// Compile and execute an AIVI program entirely via Cranelift JIT.
+/// JIT-compile all definitions in a program and register them into the runtime.
 ///
-/// This replaces `run_native_jit`: every definition is compiled to native
-/// machine code, then `main` is executed.
-pub fn run_cranelift_jit(
+/// This is the shared compilation pipeline used by both `run_cranelift_jit` and
+/// `run_test_suite_jit`. The caller is responsible for running main or tests
+/// after this returns.
+///
+/// Returns the JIT module (must be kept alive while JIT code is running).
+fn jit_compile_into_runtime(
     program: HirProgram,
     cg_types: HashMap<String, HashMap<String, CgType>>,
-    _monomorph_plan: HashMap<String, Vec<CgType>>,
-) -> Result<(), AiviError> {
-    // 1. Build the runtime context for globals/builtins/effects.
-    let mut runtime = build_runtime_from_program(&program)?;
-
-    // 2. Lower HIR → Kernel → RustIR
+    monomorph_plan: HashMap<String, Vec<CgType>>,
+    runtime: &mut Runtime,
+) -> Result<cranelift_jit::JITModule, AiviError> {
+    // Lower HIR → Kernel → RustIR
     let kernel_program = kernel::lower_hir(program);
     let mut rust_program = rust_ir::lower_kernel(kernel_program)?;
 
-    // 3. Annotate each def with its CgType
+    // Annotate each def with its CgType
     for module in &mut rust_program.modules {
         if let Some(module_types) = cg_types.get(&module.name) {
             for def in &mut module.defs {
@@ -63,21 +64,18 @@ pub fn run_cranelift_jit(
         }
     }
 
-    // 3b. Monomorphize: create specialized copies of polymorphic defs
-    //     based on the call-site type recordings from Phase 6.
-    //     Single-instantiation defs get their cg_type set directly.
-    //     Multi-instantiation defs get cloned with specialized names.
-    let spec_map = monomorphize_program(&mut rust_program.modules, &_monomorph_plan);
+    // Monomorphize
+    let spec_map = monomorphize_program(&mut rust_program.modules, &monomorph_plan);
 
-    // 4. Create JIT module with runtime helpers registered
+    // Create JIT module with runtime helpers registered
     let mut module =
         create_jit_module().map_err(|e| AiviError::Runtime(format!("cranelift jit init: {e}")))?;
 
-    // 5. Declare runtime helper imports in the module
+    // Declare runtime helper imports in the module
     let helpers = declare_helpers(&mut module)
         .map_err(|e| AiviError::Runtime(format!("cranelift declare helpers: {e}")))?;
 
-    // 6. Two-pass compilation for direct calls between JIT functions.
+    // Two-pass compilation for direct calls between JIT functions.
     //    Pass 1: Declare all function signatures and build a registry.
     //    Pass 2: Compile function bodies with the registry for direct calls.
 
@@ -251,7 +249,7 @@ pub fn run_cranelift_jit(
         }
     }
 
-    // 7. Finalize all definitions at once, then extract pointers
+    // Finalize all definitions at once, then extract pointers
     module
         .finalize_definitions()
         .map_err(|e| AiviError::Runtime(format!("cranelift finalize: {e}")))?;
@@ -298,10 +296,7 @@ pub fn run_cranelift_jit(
         }
     }
 
-    // 8. Install compiled globals into the runtime (overriding interpreter thunks).
-    //    For unqualified (short) names, only set if not yet present — this mirrors
-    //    `build_runtime_from_program` which keeps the first definition and lets
-    //    module order determine priority.
+    // Install compiled globals into the runtime.
     for (name, value) in compiled_globals {
         // Source defs cannot shadow builtins.
         if let Some(Value::Builtin(_)) = runtime.ctx.globals.get(&name) {
@@ -310,8 +305,108 @@ pub fn run_cranelift_jit(
         runtime.ctx.globals.set(name, value);
     }
 
-    // 9. Run main
+    Ok(module)
+}
+
+/// Compile and execute an AIVI program entirely via Cranelift JIT.
+///
+/// This replaces `run_native_jit`: every definition is compiled to native
+/// machine code, then `main` is executed.
+pub fn run_cranelift_jit(
+    program: HirProgram,
+    cg_types: HashMap<String, HashMap<String, CgType>>,
+    monomorph_plan: HashMap<String, Vec<CgType>>,
+) -> Result<(), AiviError> {
+    let mut runtime = build_runtime_from_program(&program)?;
+    let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, &mut runtime)?;
     run_main_effect(&mut runtime)
+}
+
+/// JIT-compile an AIVI program and run its test suite.
+///
+/// Like `run_cranelift_jit` but executes the named test entries instead of `main`.
+pub fn run_test_suite_jit(
+    program: HirProgram,
+    test_entries: &[(String, String)],
+    surface_modules: &[crate::surface::Module],
+) -> Result<crate::runtime::TestReport, AiviError> {
+    use crate::runtime::{TestFailure, TestReport, TestSuccess, format_runtime_error, format_value};
+
+    let infer_result = aivi_core::infer_value_types_full(surface_modules);
+    let mut runtime = build_runtime_from_program(&program)?;
+    let _module = jit_compile_into_runtime(
+        program,
+        infer_result.cg_types,
+        infer_result.monomorph_plan,
+        &mut runtime,
+    )?;
+
+    const TEST_FUEL_BUDGET: u64 = 500_000;
+    let mut report = TestReport {
+        passed: 0,
+        failed: 0,
+        failures: Vec::new(),
+        successes: Vec::new(),
+    };
+
+    for (name, description) in test_entries {
+        runtime.fuel = Some(TEST_FUEL_BUDGET);
+        let Some(value) = runtime.ctx.globals.get(name) else {
+            report.failed += 1;
+            report.failures.push(TestFailure {
+                name: name.clone(),
+                description: description.clone(),
+                message: "missing definition".to_string(),
+            });
+            continue;
+        };
+
+        let value = match runtime.force_value(value) {
+            Ok(value) => value,
+            Err(err) => {
+                report.failed += 1;
+                report.failures.push(TestFailure {
+                    name: name.clone(),
+                    description: description.clone(),
+                    message: format_runtime_error(err),
+                });
+                continue;
+            }
+        };
+
+        let effect = match value {
+            Value::Effect(effect) => Value::Effect(effect),
+            other => {
+                report.failed += 1;
+                report.failures.push(TestFailure {
+                    name: name.clone(),
+                    description: description.clone(),
+                    message: format!("test must be an Effect value, got {}", format_value(&other)),
+                });
+                continue;
+            }
+        };
+
+        match runtime.run_effect_value(effect) {
+            Ok(_) => {
+                report.passed += 1;
+                report.successes.push(TestSuccess {
+                    name: name.clone(),
+                    description: description.clone(),
+                });
+            }
+            Err(err) => {
+                report.failed += 1;
+                report.failures.push(TestFailure {
+                    name: name.clone(),
+                    description: description.clone(),
+                    message: format_runtime_error(err),
+                });
+            }
+        }
+    }
+
+    Ok(report)
 }
 
 /// Compile an AIVI program to a native object file via Cranelift AOT.
@@ -835,6 +930,26 @@ fn compile_definition_body<M: Module>(
             let block_params = builder.block_params(entry).to_vec();
             let ctx_param = block_params[0];
 
+            // --- Call-depth guard: bail with Unit if recursion too deep ---
+            let depth_exceeded = builder.ins().call(helper_refs.rt_check_call_depth, &[ctx_param]);
+            let depth_flag = builder.inst_results(depth_exceeded)[0];
+            let zero = builder.ins().iconst(types::I64, 0);
+            let is_exceeded = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::NotEqual, depth_flag, zero);
+            let body_block = builder.create_block();
+            let bail_block = builder.create_block();
+            builder.ins().brif(is_exceeded, bail_block, &[], body_block, &[]);
+
+            // Bail block: return Unit without lowering the body
+            builder.switch_to_block(bail_block);
+            builder.seal_block(bail_block);
+            let unit_val = builder.ins().call(helper_refs.rt_alloc_unit, &[ctx_param]);
+            let unit_ptr = builder.inst_results(unit_val)[0];
+            builder.ins().return_(&[unit_ptr]);
+
+            // Body block: normal execution
+            builder.switch_to_block(body_block);
+            builder.seal_block(body_block);
+
             let empty_jit_funcs: HashMap<String, JitFuncInfo> = HashMap::new();
             let empty_spec_map: HashMap<String, Vec<String>> = HashMap::new();
             let mut lower_ctx = LowerCtx::new(
@@ -862,6 +977,7 @@ fn compile_definition_body<M: Module>(
 
             let result = lower_ctx.lower_expr(&mut builder, body);
             let result_boxed = lower_ctx.ensure_boxed(&mut builder, result);
+            builder.ins().call(helper_refs.rt_dec_call_depth, &[ctx_param]);
             builder.ins().return_(&[result_boxed]);
             builder.finalize();
         }
@@ -960,6 +1076,26 @@ fn compile_definition_body<M: Module>(
         let block_params = builder.block_params(entry).to_vec();
         let ctx_param = block_params[0];
 
+        // --- Call-depth guard: bail with Unit if recursion too deep ---
+        let depth_exceeded = builder.ins().call(helper_refs.rt_check_call_depth, &[ctx_param]);
+        let depth_flag = builder.inst_results(depth_exceeded)[0];
+        let zero = builder.ins().iconst(types::I64, 0);
+        let is_exceeded = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::NotEqual, depth_flag, zero);
+        let body_block = builder.create_block();
+        let bail_block = builder.create_block();
+        builder.ins().brif(is_exceeded, bail_block, &[], body_block, &[]);
+
+        // Bail block: return Unit without lowering the body
+        builder.switch_to_block(bail_block);
+        builder.seal_block(bail_block);
+        let unit_val = builder.ins().call(helper_refs.rt_alloc_unit, &[ctx_param]);
+        let unit_ptr = builder.inst_results(unit_val)[0];
+        builder.ins().return_(&[unit_ptr]);
+
+        // Body block: normal execution
+        builder.switch_to_block(body_block);
+        builder.seal_block(body_block);
+
         let mut lower_ctx = LowerCtx::new(
             ctx_param,
             &helper_refs,
@@ -976,6 +1112,7 @@ fn compile_definition_body<M: Module>(
 
         let result = lower_ctx.lower_expr(&mut builder, body);
         let result_boxed = lower_ctx.ensure_boxed(&mut builder, result);
+        builder.ins().call(helper_refs.rt_dec_call_depth, &[ctx_param]);
         builder.ins().return_(&[result_boxed]);
         builder.finalize();
     }

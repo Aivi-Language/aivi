@@ -232,6 +232,29 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                 for arg in args {
                     collect_expr(arg, out);
                 }
+                // GTK signal handlers are stringified during sigil lowering,
+                // so their identifier references are lost.  Recover them from
+                // the pattern  gtkAttr("signal:…", "<handler-text>").
+                if let Expr::Ident(fname) = func.as_ref() {
+                    if fname.name == "gtkAttr" && args.len() == 2 {
+                        if let Expr::Literal(Literal::String { text: key, .. }) = &args[0] {
+                            if key.starts_with("signal:") {
+                                if let Expr::Literal(Literal::String {
+                                    text: handler, ..
+                                }) = &args[1]
+                                {
+                                    for tok in handler
+                                        .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+                                    {
+                                        if !tok.is_empty() {
+                                            out.insert(tok.to_string());
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Expr::Lambda { params, body, .. } => {
                 for param in params {
