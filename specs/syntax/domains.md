@@ -68,7 +68,7 @@ Rules:
 
 1. Domain declarations remain `domain D over Carrier`   exactly **one** carrier type per declaration.
 2. Multiple operator entries with the **same token** are allowed as long as their full `LHS -> RHS -> Result` types are pairwise distinct.
-3. Resolution requires that exactly **one** overload matches the inferred `(LHS, RHS)` pair (see [Desugaring: Domains and Operators](../desugaring/domains.md#92-rhs-typed-overload-selection)).
+3. Resolution requires that exactly **one** overload matches the inferred `(LHS, RHS)` pair.
 
 ## Supported operator hooks (v0.1)
 

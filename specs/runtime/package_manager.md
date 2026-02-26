@@ -1,7 +1,46 @@
-# Package Manager (Cargo-backed)
+# Package Manager & Packaging
 
-The AIVI CLI uses Cargo as the dependency resolver and build tool. AIVI sources
-live in `src/`, and generated Rust is written to `target/aivi-gen/`.
+AIVI piggybacks on Rust's `cargo` ecosystem for packaging, dependency management,
+and publishing. An AIVI project is essentially a Rust project with additional
+metadata and build steps. AIVI sources live in `src/`, and compiled artefacts
+are written to `target/`.
+
+## Project Structure
+
+A typical AIVI project looks like this:
+
+```text
+my-project/
+├── aivi.toml        # AIVI-specific configuration
+├── Cargo.toml       # Rust/Cargo configuration
+├── src/
+│   ├── main.aivi    # Entry point (for binaries)
+│   └── lib.aivi     # Entry point (for libraries)
+├── .gitignore
+└── target/          # Build artifacts
+```
+
+### `aivi.toml`
+
+The `aivi.toml` file configures the AIVI compiler settings for the project.
+
+```toml
+[project]
+kind = "bin"              # "bin" or "lib"
+entry = "main.aivi"       # Entry source file
+language_version = "0.1"  # Targeted AIVI version
+
+[build]
+gen_dir = "target/aivi-gen" # Where generated Rust code is placed
+rust_edition = "2024"       # Rust edition for generated code
+cargo_profile = "dev"       # Default cargo profile
+native_ui_target = "portable" # "portable" (default) or "gnome-gtk4-libadwaita"
+```
+
+### `Cargo.toml` Integration
+
+AIVI projects are valid Cargo packages. The `Cargo.toml` file contains standard
+Rust package metadata and dependencies.
 
 ## Package Discovery
 

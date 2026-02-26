@@ -1,2 +1,0 @@
-1 + 2 * 3 // Parsed as: 1 + (2 * 3)
-date + 1m // Parsed as: (date + 1m)

@@ -101,7 +101,7 @@ desugars to `of Unit` (using `of : A -> M A` from `Applicative M`).
 
 - `chain` for `Effect E` is `bind : Effect E A -> (A -> Effect E B) -> Effect E B`
 - `of` for `Effect E` is `pure : A -> Effect E A`
-- The additional statements (`or`, `when`, `given`, `on`, `loop`, resource `<-`) are desugared as specified in [Effects § 9](effects.md) and [Desugaring § 7](../desugaring/effects.md).
+- The additional statements (`or`, `when`, `given`, `on`, `loop`, resource `<-`) are desugared as specified in [Effects § 9](effects.md).
 
 The compiler detects `do Effect` specifically (by name) to enable the extended statement set. All other `do M` blocks get the generic subset only.
 
@@ -134,5 +134,3 @@ When no suitable instance is found, compilation fails with an instance-resolutio
 - Generators: [§ 7](generators.md)
 - Type classes: [§ 3.5](types/classes_and_hkts.md)
 - Monad hierarchy: [aivi.logic](../stdlib/core/logic.md)
-- Desugaring   effects: [§ 7](../desugaring/effects.md)
-- Desugaring   classes: [§ 8](../desugaring/classes.md)

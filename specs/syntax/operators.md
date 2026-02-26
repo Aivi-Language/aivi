@@ -73,11 +73,11 @@ Some operators are **domain-resolved** when operand types are not plain `Int`. I
 
 > **Note (v0.1):** `++` is supported for `List` concatenation, `Map` merge, and `Set` union. It is **not** supported for `Text` concatenation — use text interpolation (`"Hello, {name}!"`) instead.
 
-Domain operator resolution is a static rewrite to an in-scope function named like `(+)` or `(<)` (see [Desugaring: Domains and Operators](../desugaring/domains.md)).
+Domain operator resolution is a static rewrite to an in-scope function named like `(+)` or `(<)` (see [Domains, Units, and Deltas](domains.md)).
 
 ### Within-domain overloads (RHS-typed)
 
-A single domain body may define **multiple entries** for the same operator token, differentiated by their full `LHS -> RHS -> Result` types. The compiler selects among them based on the inferred RHS type after the LHS carrier is resolved (see [Desugaring §9.2](../desugaring/domains.md#92-rhs-typed-overload-selection)).
+A single domain body may define **multiple entries** for the same operator token, differentiated by their full `LHS -> RHS -> Result` types. The compiler selects among them based on the inferred RHS type after the LHS carrier is resolved (see [Domains §4.2](domains.md#within-domain-overloads-rhs-typed)).
 
 **Convention**: `×` is reserved for structural products (matrix-matrix, matrix-vector), while `*` is used for scalar scaling:
 

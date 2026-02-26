@@ -1,235 +1,194 @@
-# Typed Codegen Design
+# Compiler & Backend Design
 
-## Problem Statement
+This document describes AIVI's compilation pipeline, value representation, memory
+management, and the Cranelift-based code generation backend.
 
-The current native Rust backend wraps **every** value in a `Value` enum at runtime:
+## Compilation Pipeline
 
-- Integers: `Value::Int(i64)` — requires tagging + heap for closures
-- Records: `Value::Record(Arc<HashMap<String, Value>>)` — string key lookup every field access
-- ADTs: `Value::Constructor { name: String, args: Vec<Value> }` — string tag dispatch, boxed args
-- Function calls: `rt.apply(Value, Value)` — dynamic dispatch on `Value::Closure`/`Value::Builtin`/`Value::MultiClause`
+```text
+Source (.aivi)
+  │  parse
+  ▼
+Surface AST
+  │  desugar
+  ▼
+Kernel IR (HIR)
+  │  type-check  →  CgType map
+  ▼
+RustIR (monomorphised intermediate form)
+  │  lower
+  ▼
+Cranelift IR  →  native machine code
+```
 
-This means even a simple `a + b` where the type checker **knows** both are `Int` generates a runtime match on `(Value::Int, ...)` branches.
+- **`aivi run`** — Cranelift **JIT**: compiles to native code in-memory and
+  executes immediately.
+- **`aivi build`** — Cranelift **AOT**: compiles to a relocatable object file
+  (`.o`), generates a thin Rust harness, and links via `cargo build` to produce
+  a standalone executable.
+- **`aivi build --native-rust`** — Legacy path: emits Rust source into
+  `target/aivi-gen/` and compiles with `rustc`. Retained for bootstrapping only.
 
-## Solution: Typed Codegen Path
+## Value Representation
 
-Add a parallel codegen path for **closed types** — types whose runtime representation is fully known at compile time. Fall back to the existing `Value`-boxed path only when the program actually needs open-world dynamism.
+All runtime values share a single tagged enum (`Value`). Composite values are
+reference-counted via `Arc`:
 
-### What is a "closed type"?
+| Category | Representation |
+| --- | --- |
+| Scalars | `Value::Int(i64)`, `Value::Float(f64)`, `Value::Bool(bool)` — inlined, no heap |
+| Text | `Value::Text(Arc<String>)` |
+| Lists | `Value::List(Arc<Vec<Value>>)` |
+| Records | `Value::Record(Arc<HashMap<InternedString, Value>>)` |
+| Constructors | `Value::Constructor { name, args: Arc<Vec<Value>> }` |
+| Closures | `Value::Closure { .. }`, `Value::Builtin(..)` |
+| Effects | `Value::Effect(..)` — suspended computations |
 
-A type is **closed** (a.k.a. *monomorphic* / *ground*) when it contains no unresolved type variables and its runtime layout can be statically determined:
+### Boxed-pointer ABI
 
-| Category                  | Examples                               | Rust emission                            |
-| ------------------------- | -------------------------------------- | ---------------------------------------- |
-| Primitives                | `Int`, `Float`, `Bool`, `Text`, `Unit` | `i64`, `f64`, `bool`, `String`, `()`     |
-| Closed records            | `{ x: Int, y: Float }`                 | Named struct with typed fields           |
-| ADTs (known constructors) | `Option Int`, `Result Text Int`        | Rust `enum` with typed payloads          |
-| Concrete functions        | `Int -> Bool`                          | `fn(i64) -> bool` (or `Fn(i64) -> bool`) |
-| Tuples                    | `(Int, Text)`                          | `(i64, String)`                          |
-| Lists of known elem type  | `List Int`                             | `Vec<i64>`                               |
+At the Cranelift boundary every value is passed as a `*mut Value` (a boxed
+pointer). The runtime helpers `box_value()` and `unbox_value()` convert between
+heap-allocated pointers and owned `Value` instances.
 
-### What requires `Value` fallback?
+When `CgType` information is available, **scalar values stay in CPU registers**
+without heap allocation:
 
-| Situation                   | Reason                                     |
-| --------------------------- | ------------------------------------------ |
-| Polymorphic function body   | Type variable `'a` — concrete type unknown |
-| Open record                 | `{ x: Int                                  |
-| Higher-kinded types         | `f a` where `f` is a type variable         |
-| Dynamic dispatch (builtins) | Builtins operate on `Value`                |
-| Interop boundaries          | Calling between typed and untyped code     |
+- `Int` → `i64`
+- `Float` → `f64`
+- `Bool` → `i64` (0 / 1)
 
-## Architecture
+Boxing/unboxing helpers (`rt_box_int`, `rt_unbox_int`, etc.) bridge the two
+representations at function boundaries.
 
-### Phase 1: `DefType` — lightweight type annotation for definitions
+### Runtime context
 
-Add a `DefType` enum that describes the *resolved* type of each definition in a compact, codegen-friendly form. This is NOT the full `Type` enum from the type checker — it's a stripped-down representation.
+Every JIT/AOT function receives `*mut JitRuntimeCtx` as its first parameter.
+This context holds a pointer to the full `Runtime` and is threaded through all
+calls so that runtime helpers can access globals, builtins, and diagnostics.
+
+## Memory Management
+
+AIVI uses **reference counting** (via Rust's `Arc`) as its sole memory
+management strategy. There is no tracing garbage collector.
+
+- **Immutable values**: `List`, `Record`, `Text`, `BigInt`, etc. are immutable
+  and shared via `Arc`. Cloning a value increments the reference count — no deep
+  copy.
+- **Deterministic cleanup**: resources (file handles, sockets) are freed as soon
+  as the last reference is dropped, tied to the `resource { .. }` scope.
+- **No user-visible lifetimes**: AIVI does not expose Rust-like lifetime
+  annotations in source code.
+
+### Layout optimisations
+
+- **Record shapes**: record values use interned field layouts so that repeated
+  field lookups resolve to stable offsets after one shape resolution.
+- **Closed record types**: type-level records are closed by default, enabling
+  backends to lower known shapes to fixed-layout representations.
+- **Tagged scalar encoding**: scalar runtime values expose a compact tagged
+  representation to reduce transient allocation pressure.
+
+### Cycle handling
+
+Strict immutability prevents data-structure cycles. The only source of cycles is
+**recursive closures** (a function referring to itself). The runtime breaks these
+via weak back-references or scope-based cycle breaking — transparent to the
+programmer.
+
+## CgType — Typed Code Generation
+
+`CgType` is a compile-time type annotation that tells the backend whether a
+definition's runtime layout is fully known ("closed") or requires the generic
+`Value` fallback ("open / dynamic").
 
 ```rust
-/// Codegen-friendly type representation.
-/// Closed = fully known at compile time. Open = needs Value boxing.
 pub enum CgType {
-    /// Unresolved / polymorphic — needs Value boxing
-    Dynamic,
-    /// Primitive types
-    Int,
-    Float,
-    Bool,
-    Text,
-    Unit,
-    DateTime,
-    /// Function from A to B
+    Dynamic,              // needs Value boxing
+    Int, Float, Bool,     // scalar — stays in registers
+    Text, Unit, DateTime,
     Func(Box<CgType>, Box<CgType>),
-    /// Homogeneous list
     ListOf(Box<CgType>),
-    /// Tuple with known element types
     Tuple(Vec<CgType>),
-    /// Closed record with known field names and types, sorted by name
     Record(Vec<(String, CgType)>),
-    /// ADT with known constructors and their payload types
-    Adt {
-        name: String,
-        constructors: Vec<(String, Vec<CgType>)>,
-    },
-    /// Boxed Value — explicitly marked for interop
-    Value,
+    Adt { name: String, constructors: Vec<(String, Vec<CgType>)> },
+    Value,                // explicitly boxed for interop
 }
 ```
 
-### Phase 2: Type map from inference to codegen
+The type checker's internal `Type` is lowered to `CgType` via substitution.
+Monomorphic definitions get concrete `CgType`s; polymorphic definitions get
+`CgType::Dynamic`.
 
-Since the type checker operates on Surface AST and codegen operates on Rust IR, we need a bridge. The simplest approach: produce a **definition-level** type map.
+### How CgType drives optimisation
 
-```
-infer_value_types() currently returns:
-  HashMap<String, HashMap<String, String>>  // module → def → type STRING
+1. **Parameter binding**: `decompose_func_type()` breaks a nested
+   `Func(A, Func(B, ...))` into per-parameter `Option<CgType>`. Parameters with
+   a known scalar type are **unboxed on entry** — no heap allocation.
+2. **Call dispatch**: direct JIT-to-JIT calls pass unboxed scalars natively;
+   runtime helpers receive boxed pointers.
+3. **Return path**: if the return type is a known scalar, the value stays
+   unboxed in Cranelift IR until a boundary where it must be boxed.
+4. **Fallback**: unknown types or compound values default to boxed `*mut Value`.
 
-New: also return structured types:
-  HashMap<String, HashMap<String, CgType>>  // module → def → CgType
-```
+## JIT Compilation (`aivi run`)
 
-This doesn't require per-expression type annotation — we propagate from def types. Within a definition body, we use **local type propagation**: if `f : Int -> Bool` and we see `f x`, we know the result is `Bool` without a per-node type map.
+1. Lower HIR → Kernel → RustIR with monomorphisation.
+2. Annotate each definition with its `CgType` from type inference.
+3. **Pass 1 — declare**: register all function signatures in Cranelift so that
+   bodies can emit direct `call` instructions to other JIT functions.
+4. **Pass 2 — compile**: lower each `RustIrExpr` to Cranelift IR using the
+   `TypedValue` wrapper (tracks both the SSA value and its `CgType`).
+5. **Finalise**: extract native function pointers, wrap as `Value::Builtin`,
+   register into `runtime.ctx.globals`.
+6. **Execute**: look up `"main"`, run its effect via the runtime.
 
-### Phase 3: Typed expression emission
+Multi-clause domain operators are merged into `Value::MultiClause` for ordered
+clause traversal.
 
-The codegen gets a `CgType` for each definition and propagates types through expressions:
+## AOT Compilation (`aivi build`)
 
-| Expression                               | Typed emission (when possible)                     |
-| ---------------------------------------- | -------------------------------------------------- |
-| `LitNumber "42"` with CgType::Int        | `42_i64`                                           |
-| `LitNumber "3.14"` with CgType::Float    | `3.f64`                                            |
-| `Binary "+" (Int, Int)`                  | `a + b` (direct i64 add)                           |
-| `Lambda { param, body }` with Func(A, B) | `\|param: A\| -> B { body }`                       |
-| `Record { x: 1, y: 2.0 }` with Record    | struct init                                        |
-| `FieldAccess { base, "x" }` with Record  | `base.x` (direct field)                            |
-| `Match` with known ADT                   | `match scrut { Ctor1(a, b) => ..., Ctor2 => ... }` |
-| `App(f, arg)` with Func(A, B)            | `f(arg)` (direct call, no rt.apply)                |
+1. Same front-end pipeline as JIT (steps 1–4).
+2. Emit a relocatable object file via `cranelift-object`.
+3. Generate `__aivi_main()` which:
+   - registers all compiled function pointers (short + qualified names) via
+     `rt_register_jit_fn`
+   - registers captured-variable info for inner lambdas
+   - looks up `"main"` and runs it as an effect
+4. String constants are embedded as relocatable data sections (unlike JIT which
+   uses process-memory addresses).
+5. A thin Rust harness calls `__aivi_main()` and is linked via `cargo build`.
 
-When a typed expression needs to cross into `Value` territory (e.g., passed to a builtin), we generate a **boxing** conversion: `Value::Int(x)`. When receiving from `Value` territory, we generate **unboxing**: `match v { Value::Int(x) => x, ... }`.
+## Runtime Helper Bridge
 
-### Phase 4: Gradual adoption
+50+ `extern "C"` functions are registered as JIT symbols so that Cranelift code
+can call into the runtime:
 
-The typed path is **opt-in per definition**. If a definition's type resolves to `CgType::Dynamic`, the existing `emit_expr` path is used unchanged. The two can coexist in the same generated file.
+| Category | Examples |
+| --- | --- |
+| Boxing / unboxing | `rt_box_int`, `rt_unbox_float`, `rt_clone_value`, `rt_drop_value` |
+| Allocation | `rt_alloc_unit`, `rt_alloc_string`, `rt_alloc_list`, `rt_alloc_record`, `rt_alloc_constructor` |
+| Access | `rt_record_field`, `rt_list_index`, `rt_tuple_item`, `rt_constructor_arg` |
+| Pattern matching | `rt_constructor_name_eq`, `rt_value_equals`, `rt_list_tail`, `rt_list_len` |
+| Control | `rt_apply`, `rt_force_thunk`, `rt_run_effect`, `rt_bind_effect`, `rt_check_call_depth` |
+| Generators | `rt_gen_vec_new`, `rt_gen_vec_push`, `rt_gen_vec_into_generator` |
+| Sigils | `rt_eval_sigil` |
+| AOT | `rt_register_jit_fn` |
 
-### Phase 5: Typed MIR pre-pass
+All helpers receive `JitRuntimeCtx*` as first parameter. Errors are stored in
+`runtime.jit_pending_error` (first-error-wins semantics to preserve root cause).
 
-Before emitting Rust source for closed scalar definitions, the backend now lowers eligible expressions into a compact typed MIR (basic blocks + explicit branch terminators). This creates a stable optimization boundary for future passes (constant folding, CSE, and branch simplification) while preserving the current fallback strategy.
+## Legacy: Native Rust Backend
 
-Current MIR coverage is intentionally narrow and safe:
+The original backend emitted Rust source code into `target/aivi-gen/` and
+compiled it with `rustc`. It is still available via `aivi build --native-rust`
+but is no longer the default pipeline. The native Rust backend is retained for
+bootstrapping and as a reference implementation.
 
-- Scalars (`Int`, `Float`, `Bool`) and their literals/locals/globals
-- Scalar binary expressions
-- Single-level `if` branching via CFG blocks
-- Automatic fallback to direct typed emission when MIR lowering does not apply
+## Non-goals (v0.1)
 
-### Boundary protocol
-
-```
-typed_world ──box──> Value_world
-Value_world ──unbox──> typed_world
-```
-
-Boxing/unboxing functions for each CgType:
-
-- `fn cg_box_int(v: i64) -> Value { Value::Int(v) }`
-- `fn cg_unbox_int(v: Value) -> Result<i64, RuntimeError> { ... }`
-- etc.
-
-## Implementation Status
-
-### Completed
-
-1. **`CgType` enum** — `crates/aivi_core/src/cg_type.rs`
-   
-   - Variants: `Dynamic`, `Int`, `Float`, `Bool`, `Text`, `Unit`, `DateTime`, `Func`, `ListOf`, `Tuple`, `Record`, `Adt`
-   - Methods: `is_closed()`, `rust_type()` (Rust type string), `emit_box()` (typed→Value), `emit_unbox()` (Value→typed)
-
-2. **Type → CgType lowering** — `crates/aivi/src/typecheck/checker/cg_type_lowering.rs`
-   
-   - Converts the type checker's internal `Type` to `CgType` via substitution
-   - Monomorphic defs get concrete CgTypes; polymorphic defs get `CgType::Dynamic`
-
-3. **InferResult with CgTypes** — `crates/aivi/src/typecheck/infer.rs`
-   
-   - `infer_value_types_full()` returns `InferResult { diagnostics, type_strings, cg_types }`
-   - CgType map: `HashMap<String, HashMap<String, CgType>>` (module → def → type)
-
-4. **Typed expression emitter** — `crates/aivi/src/native_rust_backend/typed_expr.rs`
-   
-   - `emit_typed_expr()` produces unboxed Rust code for closed types
-   - Supports: literals, variables, binary ops, if/else, lambda, app, tuple, record, field access, match, block, list
-   - Falls back to `None` (Value path) for unsupported expressions
-
-5. **Pipeline wiring** — `crates/aivi/src/rust_codegen.rs`
-   
-   - `compile_rust_native_typed()` injects CgType into RustIrDef before emission
-   - `emit_module()` emits both Value-returning and `_typed` variants for closed-type defs
-
-6. **Driver integration** — `crates/aivi_driver/src/lib.rs`
-   
-   - `desugar_target_with_cg_types()` returns `(HirProgram, CgType map)` for the build pipeline
-   - CLI `compile` and `build` commands use the typed pipeline
-
-7. **Tests** — `crates/aivi/tests/typed_codegen.rs`
-   
-   - CgType collection verification
-   - `_typed` function emission for closed types
-   - No `_typed` for polymorphic definitions
-   - End-to-end compilation and execution
-   - MIR pre-pass marker coverage for scalar closed definitions
-
-### Not Yet Implemented
-
-- **Advanced optimization passes** — LICM/inlining/loop transforms are not implemented yet
-- **Cranelift AOT object backend** — `aivi build` currently still emits Rust source; a future phase will emit object files directly via `cranelift-object`
-
-### Current Architecture (Cranelift JIT)
-
-- The `aivi run` command now uses a full Cranelift JIT backend (`crates/aivi/src/cranelift_backend/`).
-- All `RustIrExpr` variants are lowered to Cranelift IR via `lower.rs`.
-- Runtime helpers (`runtime_helpers.rs`) provide `extern "C"` functions for boxing/unboxing, allocation, and runtime interaction.
-- Effect blocks (`do Effect { ... }`) are handled by the interpreter runtime; pure function definitions are JIT-compiled.
-- Cranelift compilation failures are surfaced as runtime/compile errors; they no longer silently fall back.
-- The old Rust source emission path (`native_rust_backend/`) and `rustc` invocation are retained for `aivi build` only.
-
-### Cranelift migration checklist (interpreter fallback inventory)
-
-This checklist tracks every remaining interpreter-linked surface in the Cranelift path.
-
-| Area | Source location(s) | Current status | Migration target |
-| --- | --- | --- | --- |
-| Generate block fallback for `Bind` | `crates/aivi/src/cranelift_backend/lower.rs` (`lower_generate_items`) | ✅ **Done** — native lowering with nested loops for Bind items | — |
-| Resource block construction | `crates/aivi/src/cranelift_backend/lower.rs` (`lower_resource_block`) | ✅ **Done** — pre-converts RustIR→HIR at compile time | — |
-| Delegation helper ABI imports | `crates/aivi/src/cranelift_backend/lower.rs` | ✅ **Done** — `rt_env_new`, `rt_env_set`, `rt_eval_generate`, `rt_make_resource` removed | — |
-| Delegation helper runtime symbols | `crates/aivi/src/cranelift_backend/runtime_helpers.rs` | ✅ **Done** — symbols and helper implementations removed | — |
-| JIT runtime bootstrap coupling | `crates/aivi/src/cranelift_backend/compile.rs` (`run_cranelift_jit`) | ✅ **Done** — borrows `&HirProgram`; no interpreter `eval` in JIT path | — |
-| AOT entry point | `crates/aivi/src/cranelift_backend/compile.rs` (`generate_aot_entry`) | ✅ **Done** — registers AOT functions via `rt_register_jit_fn`; embeds name data in object sections | — |
-| CLI run/build routing | `crates/aivi/src/main/commands.rs` | ✅ **Done** — `aivi build` defaults to Cranelift AOT; `--native-rust` opts into legacy | — |
-| Legacy Rust backend in pipeline | `crates/aivi/src/native_rust_backend/*` | ✅ **Done** — retired from default pipeline; available via `--native-rust` flag | — |
-
-Baseline regression command matrix for this migration:
-
-- `cargo test --workspace`
-- `cargo test -p aivi --test cranelift_jit`
-
-### Recently Implemented
-
-- **Full Cranelift JIT backend** — replaces the hybrid interpreter+Cranelift path for `aivi run`
-- **Uniform Value* ABI** — all JIT functions use `(ctx: i64, ...args: i64) -> i64` with boxed `Value` pointers
-- **Runtime helper bridge** — `extern "C"` functions registered as JIT symbols for boxing, allocation, and runtime interaction
-- **Native generate/resource lowering** — `Bind` items use nested Cranelift basic-block loops; resource blocks pre-convert at compile time
-- **AOT function registration** — `__aivi_main` embeds name strings in object data sections and registers AOT functions via `rt_register_jit_fn`
-- **Minimal AOT runtime** — `init_aot_runtime_base()` creates runtime with builtins only; no source re-parsing needed
-- **Cranelift AOT as default build** — `aivi build` uses Cranelift AOT pipeline; `--native-rust` opts into legacy Rust codegen
-- **Typed call chain emission** — multi-arg calls to known typed globals now chain: `fn_typed(rt)?(arg1)?(arg2)?`
-- **Boxing/unboxing at boundaries** — typed subexpressions that can't be emitted in typed mode fall back to `emit_expr` + `emit_unbox()`, allowing typed code to cross into Value territory
-- **Typed `main` rewrite** — `main` gets a `_typed` variant when its CgType is closed; the entry point calls the typed version and boxes the result
-- **Typed MIR optimization pre-pass** — conservative constant folding + expression-local CSE with fallback-safe semantics
-
-## Performance Impact
-
-For a tight loop like `fib 40`:
-
-- Current: ~40M `rt.apply()` calls, each matching `Value::Closure`, boxing/unboxing i64
-- Typed: ~40M direct `fn(i64) -> i64` calls, zero heap allocation for ints
-
-Expected speedup for numeric/algorithmic code: **5-20x**.
+- Stable binary ABI across compiler versions
+- Zero-copy projections for all aggregate types
+- Cross-process / shared-memory value transport
+- Tracing garbage collector
+- Perceus-style RC reuse analysis
+- Advanced optimisation passes (LICM, inlining, loop transforms)

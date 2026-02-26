@@ -1,4 +1,0 @@
-generate {
-  x <- g
-  body
-}

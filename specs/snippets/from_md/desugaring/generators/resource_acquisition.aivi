@@ -1,5 +1,0 @@
-resource {
-  setup
-  yield r
-  cleanup
-}

@@ -107,47 +107,19 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Color](stdlib/ui/color.md)
 - [ServerHtml](stdlib/ui/server_html.md)
 
-### Semantics
-#### Kernel (Core Calculus)
-- [Core Terms](kernel/core_terms.md)
-- [Types](kernel/types.md)
-- [Records](kernel/records.md)
-- [Patterns](kernel/patterns.md)
-- [Predicates](kernel/predicates.md)
-- [Traversals](kernel/traversals.md)
-- [Generators](kernel/generators.md)
-- [Effects](kernel/effects.md)
-- [Classes](kernel/classes.md)
-- [Domains](kernel/domains.md)
-- [Patching](kernel/patching.md)
-- [Minimality Proof](kernel/minimality.md)
-#### Desugaring (Surface -> Kernel)
-- [Bindings](desugaring/bindings.md)
-- [Functions](desugaring/functions.md)
-- [Records](desugaring/records.md)
-- [Patterns](desugaring/patterns.md)
-- [Predicates](desugaring/predicates.md)
-- [Generators](desugaring/generators.md)
-- [Effects](desugaring/effects.md)
-- [Classes](desugaring/classes.md)
-- [Domains and Operators](desugaring/domains.md)
-- [Patching](desugaring/patching.md)
-- [Resources](desugaring/resources.md)
-
 ### Runtime
 - [Concurrency](runtime/concurrency.md)
-- [Memory Management](runtime/memory_management.md)
-- [Package Manager (Cargo-backed)](runtime/package_manager.md)
+- [Package Manager & Packaging](runtime/package_manager.md)
 
 ### Tooling
 - [CLI](tools/cli.md)
 - [LSP Server](tools/lsp_server.md)
 - [VSCode Extension](tools/vscode_extension.md)
-- [Packaging](tools/packaging.md)
 - [Spec Doc Markers](doc-markers-spec.md)
 
 ### Compiler & Backend
-- [Typed Codegen Design](typed_codegen/design.md)
+- [Compiler & Backend Design](typed_codegen/design.md)
+- [Minimality Proof](typed_codegen/minimality.md)
 
 <!-- toc:end -->
 
