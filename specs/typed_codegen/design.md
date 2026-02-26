@@ -16,6 +16,7 @@ Kernel IR (HIR)
   │  type-check  →  CgType map
   ▼
 RustIR (monomorphised intermediate form)
+  │  inline small / @inline functions
   │  lower
   ▼
 Cranelift IR  →  native machine code
@@ -171,20 +172,22 @@ Monomorphic definitions get concrete `CgType`s; polymorphic definitions get
 
 1. Lower HIR → Kernel → RustIR with monomorphisation.
 2. Annotate each definition with its `CgType` from type inference.
-3. **Pass 1 — declare**: register all function signatures in Cranelift so that
+3. **Inline**: rewrite call sites of small or `@inline`-decorated functions
+   with the callee's body (see [Function Inlining](#function-inlining) below).
+4. **Pass 1 — declare**: register all function signatures in Cranelift so that
    bodies can emit direct `call` instructions to other JIT functions.
-4. **Pass 2 — compile**: lower each `RustIrExpr` to Cranelift IR using the
+5. **Pass 2 — compile**: lower each `RustIrExpr` to Cranelift IR using the
    `TypedValue` wrapper (tracks both the SSA value and its `CgType`).
-5. **Finalise**: extract native function pointers, wrap as `Value::Builtin`,
+6. **Finalise**: extract native function pointers, wrap as `Value::Builtin`,
    register into `runtime.ctx.globals`.
-6. **Execute**: look up `"main"`, run its effect via the runtime.
+7. **Execute**: look up `"main"`, run its effect via the runtime.
 
 Multi-clause domain operators are merged into `Value::MultiClause` for ordered
 clause traversal.
 
 ## AOT Compilation (`aivi build`)
 
-1. Same front-end pipeline as JIT (steps 1–4).
+1. Same front-end pipeline as JIT (steps 1–5).
 2. Emit a relocatable object file via `cranelift-object`.
 3. Generate `__aivi_main()` which:
    - registers all compiled function pointers (short + qualified names) via
@@ -215,8 +218,49 @@ can call into the runtime:
 All helpers receive `JitRuntimeCtx*` as first parameter. Errors are stored in
 `runtime.jit_pending_error` (first-error-wins semantics to preserve root cause).
 
+## Function Inlining
+
+A RustIR → RustIR rewrite pass (`inline.rs`) runs after monomorphization and
+before Cranelift lowering. It replaces call sites of small, non-recursive
+functions with the callee's body, eliminating call overhead and exposing more
+code to Cranelift's register allocator and peephole optimisations.
+
+### Eligibility
+
+A function is an inline candidate if:
+
+- It is annotated with `@inline` (always inline regardless of size), **or**
+- Its body (after peeling lambda wrappers) has an AST-node cost ≤ 12 **and** it
+  is not self-recursive (no `Global` reference to its own name in the body).
+
+### Mechanics
+
+1. **Candidate collection.** Walk all `RustIrDef`s and index eligible functions
+   by both qualified (`Module.name`) and short name.
+2. **Bottom-up rewriting.** For each function body, recursively process children
+   first, then check if the current node is an `App(Global(name), arg)`,
+   `Call(Global(name), args)`, or `Pipe(Global(name), arg)` targeting a
+   candidate. If so, clone the candidate body, substitute parameters with
+   arguments, freshen all expression ids, and replace the call node.
+3. **Depth limiting.** Inlining is capped at depth 4 to prevent runaway
+   expansion from chains or mutual recursion.
+4. **Shadowing.** The substitution pass correctly handles variable shadowing in
+   lambda parameters, match arm bindings, and block `let` bindings.
+5. **Id freshening.** Every inlined sub-tree gets new unique expression ids so
+   that the downstream Perceus use-analysis (which keys on `(expr_id, var_name)`
+   tuples) produces correct last-use information.
+
+### Interaction with other passes
+
+- **Monomorphization** runs first, so inlined bodies are already ground-typed.
+- **Perceus reuse analysis** runs after inlining, on the expanded bodies. More
+  code is visible per function → more reuse opportunities.
+- **CgType propagation** benefits from inlining: if a caller already has an
+  unboxed scalar and the inlined body expects it, the box/unbox round-trip is
+  eliminated entirely.
+
 ## Maybe later
 
 - Stable binary ABI across compiler versions
 - Zero-copy projections for all aggregate types
-- Advanced optimisation passes (LICM, inlining, loop transforms)
+- Advanced optimisation passes (LICM, loop transforms)
