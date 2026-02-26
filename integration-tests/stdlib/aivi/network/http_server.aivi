@@ -1,0 +1,87 @@
+@no_prelude
+module integrationTests.stdlib.aivi.network.http_server.tests
+
+use aivi
+use aivi.testing
+use aivi.net.httpServer
+
+// -- Type construction --
+
+@test "server config"
+serverConfig = do Effect {
+  cfg = { address: "127.0.0.1:0" }
+  assertEq cfg.address "127.0.0.1:0"
+}
+
+@test "request fields"
+requestFields = do Effect {
+  req = {
+    method: "GET"
+    path: "/health"
+    headers: []
+    body: []
+    remoteAddr: Some "127.0.0.1"
+  }
+  assertEq req.method "GET"
+  assertEq req.path "/health"
+  assertEq req.remoteAddr (Some "127.0.0.1")
+}
+
+@test "response construction"
+responseConstruction = do Effect {
+  responseBody = [72, 101, 108, 108, 111]
+  resp = {
+    status: 200
+    headers: [{ name: "Content-Type", value: "text/plain" }]
+    body: responseBody
+  }
+  assertEq resp.status 200
+  assertEq (List.length resp.body) 5
+}
+
+@test "ws message text variant"
+wsMsgText = do Effect {
+  msg = TextMsg "hello ws"
+  msg match
+    | TextMsg t => assertEq t "hello ws"
+    | _         => assert False
+}
+
+@test "ws message binary variant"
+wsMsgBinary = do Effect {
+  msg = BinaryMsg [1, 2, 3]
+  msg match
+    | BinaryMsg b => assertEq (List.length b) 3
+    | _           => assert False
+}
+
+@test "ws message ping pong close"
+wsMsgPingPong = do Effect {
+  ping = Ping
+  pong = Pong
+  closeMsg = Close
+  assertEq ping Ping
+  assertEq pong Pong
+  assertEq closeMsg Close
+}
+
+@test "server reply http variant"
+serverReplyHttp = do Effect {
+  resp = { status: 404, headers: [], body: [] }
+  reply = Http resp
+  reply match
+    | Http r => assertEq r.status 404
+    | _      => assert False
+}
+
+@test "http error fields"
+httpErrorFields = do Effect {
+  err = { message: "internal server error" }
+  assertEq err.message "internal server error"
+}
+
+@test "ws error fields"
+wsErrorFields = do Effect {
+  err = { message: "connection closed" }
+  assertEq err.message "connection closed"
+}

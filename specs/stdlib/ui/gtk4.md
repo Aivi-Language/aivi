@@ -115,7 +115,6 @@ For `<interface>`/`<template>`, the first nested `<object>` becomes the instanti
 Object references via `ref`/`idref` are resolved against `id` attributes.
 `<child type="overlay">` and `<child type="controller">` are supported for overlay/controller wiring.
 Header-bar child placement is supported via `<child type="title">` and `<child type="end">` (`start` is the default).
-For classes handled through `GtkBuildable` (including dynamically-created `Adw*` classes), `<child type="...">` is forwarded to the native builder.
 Signal sugar is supported and lowered to typed signal attrs:
 
 - `<object ... onClick={ Msg.Save } />` -> `signal:clicked`

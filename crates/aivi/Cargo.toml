@@ -49,6 +49,7 @@ target-lexicon = "0.13.5"
 zbus = "5.14.0"
 
 [features]
+default = ["gtk4-libadwaita"]
 proptest = []
 insta = []
 gtk4-libadwaita = []
