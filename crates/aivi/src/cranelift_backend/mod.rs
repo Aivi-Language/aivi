@@ -7,7 +7,7 @@ mod runtime_helpers;
 
 pub use compile::compile_to_object;
 pub use compile::run_cranelift_jit;
-pub use compile::run_cranelift_jit_cancellable;
+pub(crate) use compile::run_cranelift_jit_cancellable;
 pub use compile::run_test_suite_jit;
 
 pub fn init_aot_runtime(program: crate::hir::HirProgram) -> usize {

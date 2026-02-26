@@ -124,8 +124,9 @@ pub use aivi_core::{CstBundle, CstFile, CstToken};
 pub use aivi_core::{HirModule, HirProgram};
 pub use cranelift_backend::{
     compile_to_object, destroy_aot_runtime, init_aot_runtime, init_aot_runtime_base,
-    run_cranelift_jit, run_cranelift_jit_cancellable, run_test_suite_jit,
+    run_cranelift_jit, run_test_suite_jit,
 };
+use cranelift_backend::run_cranelift_jit_cancellable;
 pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
 };

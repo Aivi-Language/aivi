@@ -370,7 +370,7 @@ pub fn run_cranelift_jit(
 
 /// Like [`run_cranelift_jit`] but accepts an external cancel token so the
 /// caller can cancel execution from another thread (used by `--watch`).
-pub fn run_cranelift_jit_cancellable(
+pub(crate) fn run_cranelift_jit_cancellable(
     program: HirProgram,
     cg_types: HashMap<String, HashMap<String, CgType>>,
     monomorph_plan: HashMap<String, Vec<CgType>>,

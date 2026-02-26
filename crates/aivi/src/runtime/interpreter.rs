@@ -137,6 +137,7 @@ pub(crate) fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
     }
 }
 
+#[allow(dead_code)]
 pub fn run_test_suite(
     program: HirProgram,
     test_entries: &[(String, String)],
@@ -290,6 +291,7 @@ pub(crate) fn build_runtime_base() -> Runtime {
     Runtime::new(ctx, cancel)
 }
 
+#[allow(dead_code)]
 fn build_runtime_from_program_scoped(
     program: HirProgram,
     surface_modules: &[crate::surface::Module],
@@ -585,6 +587,7 @@ fn runtime_builtin(
     })
 }
 
+#[allow(dead_code)]
 fn machine_transition_builtin_name(machine_name: &str, event: &str) -> String {
     format!("__machine_transition|{machine_name}|{event}")
 }
@@ -635,6 +638,7 @@ fn make_machine_on_builtin() -> Value {
     })
 }
 
+#[allow(dead_code)]
 fn make_machine_transition_builtin(machine_name: String, event_name: String) -> Value {
     let builtin_name = machine_transition_builtin_name(&machine_name, &event_name);
     runtime_builtin(&builtin_name, 1, move |mut args, _| {
@@ -657,6 +661,7 @@ fn make_machine_transition_builtin(machine_name: String, event_name: String) -> 
     })
 }
 
+#[allow(dead_code)]
 fn make_machine_current_state_builtin(machine_name: String) -> Value {
     runtime_builtin(
         &format!("__machine_current_state|{machine_name}"),
@@ -676,6 +681,7 @@ fn make_machine_current_state_builtin(machine_name: String) -> Value {
     )
 }
 
+#[allow(dead_code)]
 fn make_machine_can_builtin(machine_name: String, event_name: String) -> Value {
     runtime_builtin(
         &format!("__machine_can|{machine_name}|{event_name}"),
@@ -691,6 +697,7 @@ fn make_machine_can_builtin(machine_name: String, event_name: String) -> Value {
     )
 }
 
+#[allow(dead_code)]
 fn bind_module_machine_values(
     surface_module: &crate::surface::Module,
     module_name: &str,
@@ -832,6 +839,7 @@ fn core_constructor_ordinals() -> HashMap<String, Option<usize>> {
     ordinals
 }
 
+#[allow(dead_code)]
 fn collect_surface_constructor_ordinals(
     surface_modules: &[crate::surface::Module],
 ) -> HashMap<String, Option<usize>> {
