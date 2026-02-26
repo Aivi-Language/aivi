@@ -2737,6 +2737,48 @@ fn build_gtk4_record_mock() -> Value {
     );
 
     fields.insert(
+        "widgetById".to_string(),
+        builtin("gtk4.widgetById", 1, |mut args, _| {
+            let _name = match args.remove(0) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.widgetById expects Text widget id name")),
+            };
+            Ok(effect(move |_| {
+                Ok(Value::Int(0)) // mock: return dummy id
+            }))
+        }),
+    );
+
+    fields.insert(
+        "signalBindBoolProperty".to_string(),
+        builtin("gtk4.signalBindBoolProperty", 4, |mut args, _| {
+            let _value = match args.remove(3) {
+                Value::Bool(v) => v,
+                _ => return Err(invalid("gtk4.signalBindBoolProperty expects Bool value")),
+            };
+            let _prop_name = match args.remove(2) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.signalBindBoolProperty expects Text property name")),
+            };
+            let target_widget_id = match args.remove(1) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.signalBindBoolProperty expects Int target widget id")),
+            };
+            let _handler_name = match args.remove(0) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.signalBindBoolProperty expects Text handler name")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let state = state.borrow();
+                    state.ensure_widget(target_widget_id, "signalBindBoolProperty")?;
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
         "osOpenUri".to_string(),
         builtin("gtk4.osOpenUri", 2, |mut args, _| {
             let uri = match args.remove(1) {

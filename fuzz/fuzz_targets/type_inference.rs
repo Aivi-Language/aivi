@@ -25,7 +25,7 @@ fn type_inference() {
         }
 
         // Exercise all type inference entry points — must not panic.
-        let (_diags, _type_strings) = aivi::infer_value_types(&modules);
+        let (_diags, _type_strings, _span_types) = aivi::infer_value_types(&modules);
         let _full = aivi::infer_value_types_full(&modules);
 
         // elaborate_expected_coercions takes &mut — clone first.

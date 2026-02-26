@@ -46,7 +46,7 @@ fn lsp_pipeline() {
             .chain(type_diags)
             .collect();
         let rendered_diags: Vec<_> = all_diags.iter().map(|d| d.diagnostic.clone()).collect();
-        let _ = aivi::render_diagnostics("fuzz.aivi", &rendered_diags);
+        let _ = aivi::render_diagnostics("fuzz.aivi", &rendered_diags, false);
         if !aivi::file_diagnostics_have_errors(&all_diags) {
             let hir = aivi::desugar_modules(&modules);
             let _kernel = aivi::lower_kernel(hir);
