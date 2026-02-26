@@ -1007,6 +1007,32 @@ fn build_gtk4_record_mock() -> Value {
     );
 
     fields.insert(
+        "widgetSetBoolProperty".to_string(),
+        builtin("gtk4.widgetSetBoolProperty", 3, |mut args, _| {
+            let value = match args.remove(2) {
+                Value::Bool(v) => v,
+                _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Bool value")),
+            };
+            let prop_name = match args.remove(1) {
+                Value::Text(v) => v,
+                _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Text property name")),
+            };
+            let widget_id = match args.remove(0) {
+                Value::Int(v) => v,
+                _ => return Err(invalid("gtk4.widgetSetBoolProperty expects Int widget id")),
+            };
+            Ok(effect(move |_| {
+                GTK4_STATE.with(|state| {
+                    let state = state.borrow();
+                    state.ensure_widget(widget_id, "widgetSetBoolProperty")?;
+                    let _ = (&prop_name, value); // mock: no-op
+                    Ok(Value::Unit)
+                })
+            }))
+        }),
+    );
+
+    fields.insert(
         "boxNew".to_string(),
         builtin("gtk4.boxNew", 2, |mut args, _| {
             let spacing = match args.remove(1) {

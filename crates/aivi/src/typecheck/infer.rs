@@ -25,6 +25,8 @@ pub struct InferResult {
     /// Qualified callee name → list of concrete CgType instantiations observed at call sites.
     /// Used by the monomorphization pass to specialize polymorphic definitions.
     pub monomorph_plan: HashMap<String, Vec<CgType>>,
+    /// Module → list of (span, rendered type) for LSP hover / quick info.
+    pub span_types: HashMap<String, Vec<(Span, String)>>,
 }
 
 pub fn infer_value_types(
@@ -32,9 +34,10 @@ pub fn infer_value_types(
 ) -> (
     Vec<FileDiagnostic>,
     HashMap<String, HashMap<String, String>>,
+    HashMap<String, Vec<(Span, String)>>,
 ) {
     let result = infer_value_types_full(modules);
-    (result.diagnostics, result.type_strings)
+    (result.diagnostics, result.type_strings, result.span_types)
 }
 
 pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
