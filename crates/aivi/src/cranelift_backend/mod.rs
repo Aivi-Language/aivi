@@ -1,5 +1,6 @@
 mod abi;
 mod compile;
+mod inline;
 mod jit_module;
 pub(crate) mod lower;
 mod object_module;

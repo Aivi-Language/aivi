@@ -71,6 +71,9 @@ fn jit_compile_into_runtime(
     // Monomorphize
     let spec_map = monomorphize_program(&mut rust_program.modules, &monomorph_plan);
 
+    // Inline small / @inline-decorated functions
+    super::inline::inline_program(&mut rust_program.modules);
+
     // Create JIT module with runtime helpers registered
     let mut module =
         create_jit_module().map_err(|e| AiviError::Runtime(format!("cranelift jit init: {e}")))?;
@@ -504,6 +507,9 @@ pub fn compile_to_object(
 
     // 3. Monomorphize
     let spec_map = monomorphize_program(&mut rust_program.modules, &monomorph_plan);
+
+    // 3b. Inline small / @inline-decorated functions
+    super::inline::inline_program(&mut rust_program.modules);
 
     // 4. Create ObjectModule targeting the host platform
     let mut module = create_object_module("aivi_program")
