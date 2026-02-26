@@ -12,6 +12,30 @@ use crate::runtime::values::Value;
 use super::abi::{self, JitRuntimeCtx};
 
 // ---------------------------------------------------------------------------
+// Call-depth guard helpers — prevent stack overflow from infinite JIT recursion
+// ---------------------------------------------------------------------------
+
+/// Increment the call depth counter and return 1 if the limit has been
+/// exceeded, 0 otherwise.
+#[no_mangle]
+pub extern "C" fn rt_check_call_depth(ctx: *mut JitRuntimeCtx) -> i64 {
+    let runtime = unsafe { (*ctx).runtime_mut() };
+    runtime.jit_call_depth += 1;
+    if runtime.jit_call_depth > runtime.jit_max_call_depth {
+        1
+    } else {
+        0
+    }
+}
+
+/// Decrement the call depth counter (called before each function return).
+#[no_mangle]
+pub extern "C" fn rt_dec_call_depth(ctx: *mut JitRuntimeCtx) {
+    let runtime = unsafe { (*ctx).runtime_mut() };
+    runtime.jit_call_depth = runtime.jit_call_depth.saturating_sub(1);
+}
+
+// ---------------------------------------------------------------------------
 // Boxing / unboxing helpers
 // ---------------------------------------------------------------------------
 
@@ -330,6 +354,14 @@ pub extern "C" fn rt_apply(
     func_ptr: *const Value,
     arg_ptr: *const Value,
 ) -> *mut Value {
+    // Check fuel/cancel to break infinite JIT loops
+    {
+        let runtime = unsafe { (*ctx).runtime_mut() };
+        if let Err(_) = runtime.check_cancelled() {
+            return abi::box_value(Value::Unit);
+        }
+    }
+
     let func = unsafe { &*func_ptr };
     let arg = unsafe { &*arg_ptr };
 
@@ -1020,6 +1052,9 @@ pub extern "C" fn rt_eval_sigil(
 /// Returns pairs of `(name, fn_pointer_as_usize)`.
 pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
     vec![
+        // Call-depth guard
+        ("rt_check_call_depth", rt_check_call_depth as *const u8),
+        ("rt_dec_call_depth", rt_dec_call_depth as *const u8),
         ("rt_box_int", rt_box_int as *const u8),
         ("rt_box_float", rt_box_float as *const u8),
         ("rt_box_bool", rt_box_bool as *const u8),

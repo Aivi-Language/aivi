@@ -11,10 +11,12 @@ impl Runtime {
             fuel: None,
             rng_state: seed ^ 0x9E37_79B9_7F4A_7C15,
             check_counter: 0,
+            jit_call_depth: 0,
+            jit_max_call_depth: 1_000,
         }
     }
 
-    fn check_cancelled(&mut self) -> Result<(), RuntimeError> {
+    pub(crate) fn check_cancelled(&mut self) -> Result<(), RuntimeError> {
         if self.cancel_mask > 0 {
             return Ok(());
         }

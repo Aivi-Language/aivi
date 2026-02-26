@@ -124,7 +124,7 @@ pub use aivi_core::{CstBundle, CstFile, CstToken};
 pub use aivi_core::{HirModule, HirProgram};
 pub use cranelift_backend::{
     compile_to_object, destroy_aot_runtime, init_aot_runtime, init_aot_runtime_base,
-    run_cranelift_jit,
+    run_cranelift_jit, run_test_suite_jit,
 };
 pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
@@ -139,7 +139,16 @@ pub use pm::{
     AiviCargoMetadata, AiviToml, AiviTomlBuild, AiviTomlProject, CargoDepSpec,
     CargoDepSpecParseError, CargoManifestEdits, NativeUiTarget, ProjectKind,
 };
-pub use runtime::{run_test_suite, TestFailure, TestReport, TestSuccess};
+pub use runtime::{TestFailure, TestReport, TestSuccess};
+
+/// Run the AIVI test suite via JIT compilation.
+pub fn run_test_suite(
+    program: HirProgram,
+    test_entries: &[(String, String)],
+    surface_modules: &[aivi_core::Module],
+) -> Result<TestReport, AiviError> {
+    run_test_suite_jit(program, test_entries, surface_modules)
+}
 pub use rust_ir::cg_type::CgType;
 pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
 

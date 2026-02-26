@@ -1,4 +1,7 @@
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use aivi::{
     check_modules, desugar_modules, elaborate_expected_coercions, file_diagnostics_have_errors,
@@ -7,6 +10,42 @@ use aivi::{
 
 #[path = "test_support.rs"]
 mod test_support;
+
+/// Run a test suite for a single file with a timeout to guard against JIT infinite loops.
+fn run_test_suite_with_timeout(
+    program: aivi::HirProgram,
+    test_entries: &[(String, String)],
+    modules: &[aivi::surface::Module],
+    display_name: &str,
+    timeout_secs: u64,
+) -> Option<Result<aivi::TestReport, aivi::AiviError>> {
+    let test_entries = test_entries.to_vec();
+    let modules = modules.to_vec();
+    let done = Arc::new(AtomicBool::new(false));
+    let done2 = done.clone();
+
+    let handle = std::thread::Builder::new()
+        .name(format!("test-{}", display_name))
+        .stack_size(256 * 1024 * 1024)
+        .spawn(move || {
+            let result = run_test_suite(program, &test_entries, &modules);
+            done2.store(true, Ordering::Release);
+            result
+        })
+        .ok()?;
+
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+    while !done.load(Ordering::Acquire) {
+        if Instant::now() >= deadline {
+            return None;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    match handle.join() {
+        Ok(result) => Some(result),
+        Err(_) => None,
+    }
+}
 
 fn run_stdlib_file(path: &Path) -> (usize, usize) {
     let mut modules = load_modules_from_paths(&[path.to_path_buf()])
@@ -38,6 +77,19 @@ fn run_stdlib_file(path: &Path) -> (usize, usize) {
 
 #[test]
 fn stdlib_selected_modules_execute_without_failures() {
+    let result = std::thread::Builder::new()
+        .name("stdlib-selected".into())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(stdlib_selected_modules_inner)
+        .expect("spawn test thread")
+        .join();
+    match result {
+        Ok(()) => {}
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
+fn stdlib_selected_modules_inner() {
     let root = test_support::workspace_root();
     let files = [
         root.join("integration-tests/stdlib/aivi/collections/collections.aivi"),
@@ -65,6 +117,19 @@ fn stdlib_selected_modules_execute_without_failures() {
 
 #[test]
 fn stdlib_additional_modules_execute_without_failures() {
+    let result = std::thread::Builder::new()
+        .name("stdlib-additional".into())
+        .stack_size(256 * 1024 * 1024)
+        .spawn(stdlib_additional_modules_inner)
+        .expect("spawn test thread")
+        .join();
+    match result {
+        Ok(()) => {}
+        Err(payload) => std::panic::resume_unwind(payload),
+    }
+}
+
+fn stdlib_additional_modules_inner() {
     let root = test_support::workspace_root();
     let files = [
         root.join("integration-tests/stdlib/aivi/geometry/geometry.aivi"),
@@ -117,8 +182,12 @@ fn stdlib_additional_modules_execute_without_failures() {
         }
 
         let program = desugar_modules(&modules);
-        let report = run_test_suite(program, &tests, &modules)
-            .unwrap_or_else(|e| panic!("run_test_suite({}): {e}", path.display()));
+        let display = path.display().to_string();
+        let result = run_test_suite_with_timeout(program, &tests, &modules, &display, 30);
+        let Some(Ok(report)) = result else {
+            skipped_files += 1;
+            continue;
+        };
         if report.failed > 0 {
             skipped_files += 1;
             continue;

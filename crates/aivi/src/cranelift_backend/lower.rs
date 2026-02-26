@@ -158,6 +158,10 @@ fn scalar_type(ty: &CgType) -> Option<CgType> {
 /// Pre-declared `FuncRef`s for all runtime helpers in a JIT module.
 #[allow(dead_code)]
 pub(crate) struct HelperRefs {
+    // Call-depth guard
+    pub(crate) rt_check_call_depth: FuncRef,
+    pub(crate) rt_dec_call_depth: FuncRef,
+    // Boxing/unboxing
     pub(crate) rt_box_int: FuncRef,
     pub(crate) rt_box_float: FuncRef,
     pub(crate) rt_box_bool: FuncRef,
@@ -224,6 +228,10 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
     }
 
     Ok(DeclaredHelpers {
+        // (ctx) -> i64  (0 = ok, 1 = depth exceeded)
+        rt_check_call_depth: decl!("rt_check_call_depth", [PTR], [PTR]),
+        // (ctx) -> void
+        rt_dec_call_depth: decl!("rt_dec_call_depth", [PTR], []),
         // (ctx, i64) -> ptr
         rt_box_int: decl!("rt_box_int", [PTR, PTR], [PTR]),
         rt_box_float: decl!("rt_box_float", [PTR, PTR], [PTR]),
@@ -307,6 +315,10 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
 
 /// Module-level function IDs for all runtime helpers.
 pub(crate) struct DeclaredHelpers {
+    // Call-depth guard
+    pub(crate) rt_check_call_depth: cranelift_module::FuncId,
+    pub(crate) rt_dec_call_depth: cranelift_module::FuncId,
+    // Boxing/unboxing
     pub(crate) rt_box_int: cranelift_module::FuncId,
     pub(crate) rt_box_float: cranelift_module::FuncId,
     pub(crate) rt_box_bool: cranelift_module::FuncId,
@@ -363,6 +375,8 @@ impl DeclaredHelpers {
             };
         }
         HelperRefs {
+            rt_check_call_depth: imp!(rt_check_call_depth),
+            rt_dec_call_depth: imp!(rt_dec_call_depth),
             rt_box_int: imp!(rt_box_int),
             rt_box_float: imp!(rt_box_float),
             rt_box_bool: imp!(rt_box_bool),
