@@ -176,54 +176,11 @@ export const sidebar = [
     ]
   },
   {
-    text: 'Semantics',
-    collapsed: true,
-    items: [
-      {
-        text: 'Kernel (Core Calculus)',
-        collapsed: true,
-        items: [
-          { text: 'Core Terms', link: '/kernel/core_terms' },
-          { text: 'Types', link: '/kernel/types' },
-          { text: 'Records', link: '/kernel/records' },
-          { text: 'Patterns', link: '/kernel/patterns' },
-          { text: 'Predicates', link: '/kernel/predicates' },
-          { text: 'Traversals', link: '/kernel/traversals' },
-          { text: 'Generators', link: '/kernel/generators' },
-          { text: 'Effects', link: '/kernel/effects' },
-          { text: 'Classes', link: '/kernel/classes' },
-          { text: 'Domains', link: '/kernel/domains' },
-          { text: 'Patching', link: '/kernel/patching' },
-          { text: 'Minimality Proof', link: '/kernel/minimality' }
-        ]
-      },
-      {
-        text: 'Desugaring (Surface -> Kernel)',
-        collapsed: true,
-        items: [
-          { text: 'Bindings', link: '/desugaring/bindings' },
-          { text: 'Functions', link: '/desugaring/functions' },
-          { text: 'Records', link: '/desugaring/records' },
-          { text: 'Patterns', link: '/desugaring/patterns' },
-          { text: 'Predicates', link: '/desugaring/predicates' },
-          { text: 'Generators', link: '/desugaring/generators' },
-          { text: 'Effects', link: '/desugaring/effects' },
-          { text: 'Classes', link: '/desugaring/classes' },
-          { text: 'Domains and Operators', link: '/desugaring/domains' },
-          { text: 'Patching', link: '/desugaring/patching' },
-          { text: 'Resources', link: '/desugaring/resources' }
-        ]
-      }
-    ]
-  },
-  {
     text: 'Runtime',
     collapsed: true,
     items: [
       { text: 'Concurrency', link: '/runtime/concurrency' },
-      { text: 'Memory Management', link: '/runtime/memory_management' },
-      { text: 'Value ABI Contract', link: '/runtime/value_abi' },
-      { text: 'Package Manager (Cargo-backed)', link: '/runtime/package_manager' }
+      { text: 'Package Manager & Packaging', link: '/runtime/package_manager' }
     ]
   },
   {
@@ -233,7 +190,6 @@ export const sidebar = [
       { text: 'CLI', link: '/tools/cli' },
       { text: 'LSP Server', link: '/tools/lsp_server' },
       { text: 'VSCode Extension', link: '/tools/vscode_extension' },
-      { text: 'Packaging', link: '/tools/packaging' },
       { text: 'Spec Doc Markers', link: '/doc-markers-spec' }
     ]
   },
@@ -241,7 +197,8 @@ export const sidebar = [
     text: 'Compiler & Backend',
     collapsed: true,
     items: [
-      { text: 'Typed Codegen Design', link: '/typed_codegen/design' }
+      { text: 'Compiler & Backend Design', link: '/typed_codegen/design' },
+      { text: 'Minimality Proof', link: '/typed_codegen/minimality' }
     ]
   }
 ]

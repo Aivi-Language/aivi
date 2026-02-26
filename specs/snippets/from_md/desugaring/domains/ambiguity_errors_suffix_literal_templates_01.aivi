@@ -1,6 +1,0 @@
-use aivi.chronos.calendar
-
-date = ~d[2026-02-15]
-date + 1m
-// Error: unknown numeric literal '1m' (suffix literals require an in-scope `1m` template;
-// import the domain with `use aivi.chronos.calendar (domain Calendar)`).

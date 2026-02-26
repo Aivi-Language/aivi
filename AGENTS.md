@@ -49,7 +49,7 @@ Always verify against `specs/` before writing AIVI code or compiler logic. If a 
 
 1. **Analyze**: Read the relevant `specs/` files first.
     * *Syntax*: [`specs/syntax/`](file:///home/mendrik/desk/mendrik/aivi/specs/syntax/)
-    * *Semantics*: [`specs/kernel/`](file:///home/mendrik/desk/mendrik/aivi/specs/kernel/) & [`specs/desugaring/`](file:///home/mendrik/desk/mendrik/aivi/specs/desugaring/)
+    * *Compiler & Backend*: [`specs/typed_codegen/`](file:///home/mendrik/desk/mendrik/aivi/specs/typed_codegen/)
     * *Stdlib*: [`specs/stdlib/`](file:///home/mendrik/desk/mendrik/aivi/specs/stdlib/)
 2. **Locate**: Identify the corresponding Rust crates in `crates/`.
     * *Parsing*: `crates/aivi/src/parser` (or similar)

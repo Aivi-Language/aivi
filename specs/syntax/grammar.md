@@ -296,7 +296,7 @@ Literal        := "True"
   - If the first non-newline token begins a record entry (`...` spread, or a field name followed by `:`), parse as `RecordLit`.
   - Otherwise parse as `Block`.
 - `.field` is shorthand for `x => x.field` (a unary accessor function).
-- `_` is *not* a value. It only appears in expressions as part of the placeholder-lambda sugar (see [Desugaring: Functions](../desugaring/functions.md)).
+- `_` is *not* a value. It only appears in expressions as part of the placeholder-lambda sugar (see [Functions and Pipes](functions.md)).
 - `RawSigilLit` content (`SigilText` / `SigilRegexText`) is lexed as raw text until the matching delimiter; `~map{}` and `~set[]` are parsed as structured literals (`MapLit` / `SetLit`).
 - `RecordSpread` (`...expr`) merges fields left-to-right; later fields override earlier ones.
 
@@ -328,7 +328,7 @@ ValueBinding   := lowerIdent "=" FunArms Sep
 FunArms        := "|" Arm { Sep "|" Arm }
 ```
 
-This form desugars to a single-argument function that performs pattern matching (`match`) on its input (see [Desugaring: Patterns](../desugaring/patterns.md)).
+This form desugars to a single-argument function that performs pattern matching (`match`) on its input (see [Pattern Matching](pattern_matching.md)).
 In v0.1, multi-clause function definitions require an explicit type signature for the function name.
 
 If you want multi-argument matching, match on a tuple:

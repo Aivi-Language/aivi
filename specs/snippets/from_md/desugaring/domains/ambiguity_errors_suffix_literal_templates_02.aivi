@@ -1,6 +1,0 @@
-use my.calendar (domain Calendar)
-use my.physics (domain Physics)
-
-// If both imported domains define a `1m` template, the name collides.
-// In v0.1 this is a hazard: one import will shadow the other.
-value = 1m

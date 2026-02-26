@@ -113,46 +113,18 @@ A high-integrity purely functional language with a Rust-first compilation pipeli
 - [Color](stdlib/ui/color)
 - [ServerHtml](stdlib/ui/server_html)
 
-### Semantics
-#### Kernel (Core Calculus)
-- [Core Terms](kernel/core_terms)
-- [Types](kernel/types)
-- [Records](kernel/records)
-- [Patterns](kernel/patterns)
-- [Predicates](kernel/predicates)
-- [Traversals](kernel/traversals)
-- [Generators](kernel/generators)
-- [Effects](kernel/effects)
-- [Classes](kernel/classes)
-- [Domains](kernel/domains)
-- [Patching](kernel/patching)
-- [Minimality Proof](kernel/minimality)
-#### Desugaring (Surface -> Kernel)
-- [Bindings](desugaring/bindings)
-- [Functions](desugaring/functions)
-- [Records](desugaring/records)
-- [Patterns](desugaring/patterns)
-- [Predicates](desugaring/predicates)
-- [Generators](desugaring/generators)
-- [Effects](desugaring/effects)
-- [Classes](desugaring/classes)
-- [Domains and Operators](desugaring/domains)
-- [Patching](desugaring/patching)
-- [Resources](desugaring/resources)
-
 ### Runtime
 - [Concurrency](runtime/concurrency)
-- [Memory Management](runtime/memory_management)
-- [Package Manager (Cargo-backed)](runtime/package_manager)
+- [Package Manager & Packaging](runtime/package_manager)
 
 ### Tooling
 - [CLI](tools/cli)
 - [LSP Server](tools/lsp_server)
 - [VSCode Extension](tools/vscode_extension)
-- [Packaging](tools/packaging)
 - [Spec Doc Markers](doc-markers-spec)
 
 ### Compiler & Backend
-- [Typed Codegen Design](typed_codegen/design)
+- [Compiler & Backend Design](typed_codegen/design)
+- [Minimality Proof](typed_codegen/minimality)
 
 <!-- toc:end -->

@@ -1,3 +1,0 @@
-class Collection (C *) = given (A: Eq) {
-  unique: C A -> C A
-}
