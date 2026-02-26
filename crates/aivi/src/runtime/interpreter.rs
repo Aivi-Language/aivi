@@ -81,6 +81,10 @@ pub(crate) struct Runtime {
     /// Flag set by JIT match fallthrough to signal "non-exhaustive match" to
     /// `make_jit_builtin`, enabling `apply_multi_clause` to try the next clause.
     pub(crate) jit_match_failed: bool,
+    /// Pending error from JIT-compiled code. Set by `rt_apply` / `rt_run_effect`
+    /// when a builtin or effect fails inside JIT code, so that the enclosing
+    /// closure wrapper can propagate it as `Err` instead of swallowing it.
+    pub(crate) jit_pending_error: Option<RuntimeError>,
 }
 
 #[derive(Clone)]

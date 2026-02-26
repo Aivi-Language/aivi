@@ -144,13 +144,8 @@ fn run_aivi_sources_inner() {
 
         // Desugar and run with a per-file timeout to guard against JIT infinite loops
         let program = desugar_modules(&modules);
-        let file_result = run_test_suite_with_timeout(
-            program,
-            &test_entries,
-            &modules,
-            &rel_str,
-            30,
-        );
+        let file_result =
+            run_test_suite_with_timeout(program, &test_entries, &modules, &rel_str, 30);
         let Some(file_result) = file_result else {
             eprintln!("SKIP (timeout/panic): {}", rel_str);
             skipped_files += 1;

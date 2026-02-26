@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use aivi::{AiviError, CancelHandle};
 use notify::RecursiveMode;
@@ -31,6 +31,7 @@ pub(crate) fn run_watch(target: &str, watch_dir: &Path) -> Result<(), AiviError>
     );
 
     loop {
+        let since = SystemTime::now();
         let cancel = CancelHandle::new();
         let target_owned = target.to_string();
         let cancel_for_thread = cancel.clone();
@@ -60,7 +61,7 @@ pub(crate) fn run_watch(target: &str, watch_dir: &Path) -> Result<(), AiviError>
             }
 
             match rx.recv_timeout(Duration::from_millis(100)) {
-                Ok(Ok(events)) if has_aivi_change(&events) => break true,
+                Ok(Ok(events)) if has_aivi_change(&events, since) => break true,
                 Ok(Ok(_)) => {}
                 Ok(Err(e)) => {
                     eprintln!("\x1b[1;33m[watch]\x1b[0m watcher error: {e:?}");
@@ -89,28 +90,25 @@ pub(crate) fn run_watch(target: &str, watch_dir: &Path) -> Result<(), AiviError>
                     eprintln!("\x1b[1;32m[watch]\x1b[0m program exited successfully.");
                 }
                 Ok(Err(AiviError::Diagnostics)) => {
-                    eprintln!(
-                        "\x1b[1;31m[watch]\x1b[0m compile errors — waiting for changes…"
-                    );
+                    eprintln!("\x1b[1;31m[watch]\x1b[0m compile errors — waiting for changes…");
                 }
                 Ok(Err(err)) => {
                     eprintln!("\x1b[1;31m[watch]\x1b[0m error: {err}");
                 }
                 Err(_panic) => {
-                    eprintln!(
-                        "\x1b[1;31m[watch]\x1b[0m program panicked — waiting for changes…"
-                    );
+                    eprintln!("\x1b[1;31m[watch]\x1b[0m program panicked — waiting for changes…");
                 }
             }
 
             // Wait for next .aivi file change
+            let wait_since = SystemTime::now();
             loop {
                 if ctrl_c.load(Ordering::Relaxed) {
                     eprintln!("\n\x1b[1;36m[watch]\x1b[0m interrupted — exiting.");
                     return Ok(());
                 }
                 match rx.recv_timeout(Duration::from_millis(200)) {
-                    Ok(Ok(events)) if has_aivi_change(&events) => {
+                    Ok(Ok(events)) if has_aivi_change(&events, wait_since) => {
                         eprintln!(
                             "\n\x1b[1;36m[watch]\x1b[0m file changed — restarting…\n\
                              ─────────────────────────────────────────────"
@@ -133,11 +131,26 @@ pub(crate) fn run_watch(target: &str, watch_dir: &Path) -> Result<(), AiviError>
     }
 }
 
-fn has_aivi_change(events: &[notify_debouncer_mini::DebouncedEvent]) -> bool {
+/// Check whether any debounced event represents a real `.aivi` file modification.
+///
+/// The `notify` crate on Linux watches for `IN_OPEN` inotify events, so simply
+/// reading a file during compilation produces debounced events indistinguishable
+/// from writes. We verify each candidate path's mtime to filter out read-only
+/// access events and avoid an infinite restart loop.
+fn has_aivi_change(events: &[notify_debouncer_mini::DebouncedEvent], since: SystemTime) -> bool {
     events.iter().any(|ev| {
         ev.kind == DebouncedEventKind::Any
             && ev.path.extension().is_some_and(|ext| ext == "aivi")
+            && was_modified_since(&ev.path, since)
     })
+}
+
+fn was_modified_since(path: &Path, since: SystemTime) -> bool {
+    match path.metadata().and_then(|m| m.modified()) {
+        Ok(mtime) => mtime > since,
+        // File removed or inaccessible — treat as a real change.
+        Err(_) => true,
+    }
 }
 
 /// Install a SIGINT handler that sets an atomic flag instead of terminating.
