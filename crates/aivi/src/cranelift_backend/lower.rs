@@ -764,7 +764,11 @@ impl<'a, M: Module> LowerCtx<'a, M> {
     /// allocating a zero-arg `Value::Constructor` directly instead of looking
     /// it up in the globals map.  When applied to arguments later, `apply()`
     /// accumulates them naturally.
-    fn lower_constructor_value(&mut self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
+    fn lower_constructor_value(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        name: &str,
+    ) -> TypedValue {
         let (name_ptr, name_len) = self.embed_str(builder, name.as_bytes());
         let null = builder.ins().iconst(PTR, 0);
         let zero = builder.ins().iconst(PTR, 0);

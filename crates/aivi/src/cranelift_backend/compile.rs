@@ -389,7 +389,9 @@ pub fn run_test_suite_jit(
     test_entries: &[(String, String)],
     surface_modules: &[crate::surface::Module],
 ) -> Result<crate::runtime::TestReport, AiviError> {
-    use crate::runtime::{TestFailure, TestReport, TestSuccess, format_runtime_error, format_value};
+    use crate::runtime::{
+        format_runtime_error, format_value, TestFailure, TestReport, TestSuccess,
+    };
 
     let infer_result = aivi_core::infer_value_types_full(surface_modules);
     let mut runtime = build_runtime_from_program(&program)?;
@@ -855,7 +857,14 @@ fn generate_aot_entry<M: Module>(
             let name_len = builder.ins().iconst(PTR, lreg.name_len as i64);
             builder.ins().call(
                 helper_refs.rt_register_jit_fn,
-                &[ctx_param, name_ptr, name_len, func_ptr, arity_val, is_effect_val],
+                &[
+                    ctx_param,
+                    name_ptr,
+                    name_len,
+                    func_ptr,
+                    arity_val,
+                    is_effect_val,
+                ],
             );
         }
 
@@ -990,13 +999,21 @@ fn compile_definition_body<M: Module>(
             let ctx_param = block_params[0];
 
             // --- Call-depth guard: bail with Unit if recursion too deep ---
-            let depth_exceeded = builder.ins().call(helper_refs.rt_check_call_depth, &[ctx_param]);
+            let depth_exceeded = builder
+                .ins()
+                .call(helper_refs.rt_check_call_depth, &[ctx_param]);
             let depth_flag = builder.inst_results(depth_exceeded)[0];
             let zero = builder.ins().iconst(types::I64, 0);
-            let is_exceeded = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::NotEqual, depth_flag, zero);
+            let is_exceeded = builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+                depth_flag,
+                zero,
+            );
             let body_block = builder.create_block();
             let bail_block = builder.create_block();
-            builder.ins().brif(is_exceeded, bail_block, &[], body_block, &[]);
+            builder
+                .ins()
+                .brif(is_exceeded, bail_block, &[], body_block, &[]);
 
             // Bail block: return Unit without lowering the body
             builder.switch_to_block(bail_block);
@@ -1036,7 +1053,9 @@ fn compile_definition_body<M: Module>(
 
             let result = lower_ctx.lower_expr(&mut builder, body);
             let result_boxed = lower_ctx.ensure_boxed(&mut builder, result);
-            builder.ins().call(helper_refs.rt_dec_call_depth, &[ctx_param]);
+            builder
+                .ins()
+                .call(helper_refs.rt_dec_call_depth, &[ctx_param]);
             builder.ins().return_(&[result_boxed]);
             builder.finalize();
         }
@@ -1136,13 +1155,21 @@ fn compile_definition_body<M: Module>(
         let ctx_param = block_params[0];
 
         // --- Call-depth guard: bail with Unit if recursion too deep ---
-        let depth_exceeded = builder.ins().call(helper_refs.rt_check_call_depth, &[ctx_param]);
+        let depth_exceeded = builder
+            .ins()
+            .call(helper_refs.rt_check_call_depth, &[ctx_param]);
         let depth_flag = builder.inst_results(depth_exceeded)[0];
         let zero = builder.ins().iconst(types::I64, 0);
-        let is_exceeded = builder.ins().icmp(cranelift_codegen::ir::condcodes::IntCC::NotEqual, depth_flag, zero);
+        let is_exceeded = builder.ins().icmp(
+            cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+            depth_flag,
+            zero,
+        );
         let body_block = builder.create_block();
         let bail_block = builder.create_block();
-        builder.ins().brif(is_exceeded, bail_block, &[], body_block, &[]);
+        builder
+            .ins()
+            .brif(is_exceeded, bail_block, &[], body_block, &[]);
 
         // Bail block: return Unit without lowering the body
         builder.switch_to_block(bail_block);
@@ -1171,7 +1198,9 @@ fn compile_definition_body<M: Module>(
 
         let result = lower_ctx.lower_expr(&mut builder, body);
         let result_boxed = lower_ctx.ensure_boxed(&mut builder, result);
-        builder.ins().call(helper_refs.rt_dec_call_depth, &[ctx_param]);
+        builder
+            .ins()
+            .call(helper_refs.rt_dec_call_depth, &[ctx_param]);
         builder.ins().return_(&[result_boxed]);
         builder.finalize();
     }
@@ -1556,6 +1585,9 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
             name: format!("__jit|cranelift|{}", def_name),
             arity,
             func: Arc::new(move |args: Vec<Value>, runtime: &mut Runtime| {
+                // Clear any stale pending error before entering JIT code
+                runtime.jit_pending_error = None;
+
                 // Construct JitRuntimeCtx and call the compiled function
                 let ctx = unsafe { JitRuntimeCtx::from_runtime(runtime) };
                 let ctx_ptr = &ctx as *const JitRuntimeCtx as usize;
@@ -1578,22 +1610,19 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                 // This lets apply_multi_clause try the next clause.
                 if runtime.jit_match_failed {
                     runtime.jit_match_failed = false;
+                    runtime.jit_pending_error = None;
                     // Clean up boxed arguments
                     for arg_ptr in boxed_args {
                         unsafe {
                             drop(Box::from_raw(arg_ptr));
                         }
                     }
-                    if result_ptr != 0
-                        && !call_args[1..].iter().any(|a| *a == result_ptr)
-                    {
+                    if result_ptr != 0 && !call_args[1..].iter().any(|a| *a == result_ptr) {
                         unsafe {
                             drop(Box::from_raw(result_ptr as *mut Value));
                         }
                     }
-                    return Err(RuntimeError::Message(
-                        "non-exhaustive match".to_string(),
-                    ));
+                    return Err(RuntimeError::Message("non-exhaustive match".to_string()));
                 }
 
                 // Clone the result from the pointer (don't take ownership — the
@@ -1619,6 +1648,11 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                     unsafe {
                         drop(Box::from_raw(result_ptr as *mut Value));
                     }
+                }
+
+                // Propagate any error that occurred inside JIT code
+                if let Some(err) = runtime.jit_pending_error.take() {
+                    return Err(err);
                 }
 
                 Ok(result)

@@ -6,10 +6,19 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::runtime::format_runtime_error;
 use crate::runtime::values::Value;
+use crate::runtime::RuntimeError;
 
 use super::abi::{self, JitRuntimeCtx};
+
+/// Store a pending error on the runtime context, preserving the first error
+/// (root cause) when multiple cascading failures occur within a single JIT call.
+unsafe fn set_pending_error(ctx: *mut JitRuntimeCtx, e: RuntimeError) {
+    let runtime = (*ctx).runtime_mut();
+    if runtime.jit_pending_error.is_none() {
+        runtime.jit_pending_error = Some(e);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Call-depth guard helpers — prevent stack overflow from infinite JIT recursion
@@ -349,7 +358,7 @@ pub extern "C" fn rt_get_global(
     match runtime.force_value(val) {
         Ok(forced) => abi::box_value(forced),
         Err(e) => {
-            eprintln!("aivi: force global '{name}': {}", format_runtime_error(e));
+            unsafe { set_pending_error(ctx, e) };
             abi::box_value(Value::Unit)
         }
     }
@@ -386,11 +395,7 @@ pub extern "C" fn rt_apply(
             match (b.imp.func)(all_args, runtime) {
                 Ok(val) => return abi::box_value(val),
                 Err(e) => {
-                    eprintln!(
-                        "aivi: error in builtin '{}': {}",
-                        b.imp.name,
-                        format_runtime_error(e)
-                    );
+                    unsafe { set_pending_error(ctx, e) };
                     return abi::box_value(Value::Unit);
                 }
             }
@@ -428,7 +433,7 @@ pub extern "C" fn rt_apply(
     match runtime.apply(func.clone(), arg.clone()) {
         Ok(val) => abi::box_value(val),
         Err(e) => {
-            eprintln!("aivi: apply error: {}", format_runtime_error(e));
+            unsafe { set_pending_error(ctx, e) };
             abi::box_value(Value::Unit)
         }
     }
@@ -445,7 +450,7 @@ pub extern "C" fn rt_force_thunk(ctx: *mut JitRuntimeCtx, ptr: *const Value) -> 
     match runtime.force_value(value) {
         Ok(val) => abi::box_value(val),
         Err(e) => {
-            eprintln!("aivi: force_thunk error: {}", format_runtime_error(e));
+            unsafe { set_pending_error(ctx, e) };
             abi::box_value(Value::Unit)
         }
     }
@@ -462,7 +467,7 @@ pub extern "C" fn rt_run_effect(ctx: *mut JitRuntimeCtx, ptr: *const Value) -> *
     match runtime.run_effect_value(value) {
         Ok(val) => abi::box_value(val),
         Err(e) => {
-            eprintln!("aivi: effect error: {}", format_runtime_error(e));
+            unsafe { set_pending_error(ctx, e) };
             abi::box_value(Value::Unit)
         }
     }
@@ -487,12 +492,12 @@ pub extern "C" fn rt_bind_effect(
         Ok(result) => match runtime.apply(cont, result) {
             Ok(val) => abi::box_value(val),
             Err(e) => {
-                eprintln!("aivi: bind continuation error: {}", format_runtime_error(e));
+                unsafe { set_pending_error(ctx, e) };
                 abi::box_value(Value::Unit)
             }
         },
         Err(e) => {
-            eprintln!("aivi: bind effect error: {}", format_runtime_error(e));
+            unsafe { set_pending_error(ctx, e) };
             abi::box_value(Value::Unit)
         }
     }
@@ -750,6 +755,8 @@ pub extern "C" fn rt_make_closure(
             arity: 1,
             func: Arc::new(move |args: Vec<Value>, runtime: &mut Runtime| {
                 let arg = args.into_iter().next().unwrap_or(Value::Unit);
+                // Clear any stale pending error before entering JIT code
+                runtime.jit_pending_error = None;
                 let ctx = unsafe { JitRuntimeCtx::from_runtime(runtime) };
                 let ctx_ptr = &ctx as *const JitRuntimeCtx as usize;
 
@@ -800,6 +807,11 @@ pub extern "C" fn rt_make_closure(
                     unsafe {
                         drop(Box::from_raw(result_ptr as *mut Value));
                     }
+                }
+
+                // Propagate any error that occurred inside JIT code
+                if let Some(err) = runtime.jit_pending_error.take() {
+                    return Err(err);
                 }
 
                 Ok(result)
@@ -1004,16 +1016,21 @@ pub extern "C" fn rt_register_jit_fn(
         let effect = Value::Effect(std::sync::Arc::new(
             crate::runtime::values::EffectValue::Thunk {
                 func: std::sync::Arc::new(move |rt: &mut crate::runtime::Runtime| {
+                    rt.jit_pending_error = None;
                     let ctx = unsafe { JitRuntimeCtx::from_runtime(rt) };
                     let ctx_ptr = &ctx as *const JitRuntimeCtx as usize;
                     let call_args = [ctx_ptr as i64];
                     let result_ptr = unsafe { super::compile::call_jit_function(fp, &call_args) };
-                    if result_ptr == 0 {
+                    let result = if result_ptr == 0 {
                         eprintln!("aivi: AOT effect '{}' returned null pointer", def_name);
-                        Ok(Value::Unit)
+                        Value::Unit
                     } else {
-                        Ok(unsafe { abi::unbox_value(result_ptr as *mut Value) })
+                        unsafe { abi::unbox_value(result_ptr as *mut Value) }
+                    };
+                    if let Some(err) = rt.jit_pending_error.take() {
+                        return Err(err);
                     }
+                    Ok(result)
                 }),
             },
         ));
@@ -1028,7 +1045,7 @@ pub extern "C" fn rt_register_jit_fn(
 /// Dispatches to the shared `eval_sigil_literal` function from the runtime.
 #[no_mangle]
 pub extern "C" fn rt_eval_sigil(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     tag_ptr: *const u8,
     tag_len: i64,
     body_ptr: *const u8,
@@ -1048,7 +1065,7 @@ pub extern "C" fn rt_eval_sigil(
     match crate::runtime::eval_sigil_literal(tag, body, flags) {
         Ok(val) => abi::box_value(val),
         Err(e) => {
-            eprintln!("aivi: sigil error: {}", format_runtime_error(e));
+            unsafe { set_pending_error(ctx, e) };
             abi::box_value(Value::Unit)
         }
     }

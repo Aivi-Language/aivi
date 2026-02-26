@@ -14,6 +14,7 @@ impl Runtime {
             jit_call_depth: 0,
             jit_max_call_depth: 1_000,
             jit_match_failed: false,
+            jit_pending_error: None,
         }
     }
 

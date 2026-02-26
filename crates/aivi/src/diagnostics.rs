@@ -100,13 +100,13 @@ fn render_diagnostic_with_source(
     };
     if use_color {
         output.push_str(&format!(
-            "{YELLOW}{severity_label}[{}]{RESET} {DARK_GRAY}{}:{}:{}{RESET}\n  {WHITE}{}{RESET}\n",
-            diagnostic.code, path, start.line, start.column, diagnostic.message
+            "{YELLOW}{severity_label}[{}]{RESET} {DARK_GRAY}{}:{}:{}{RESET}\n",
+            diagnostic.code, path, start.line, start.column
         ));
     } else {
         output.push_str(&format!(
-            "{severity_label}[{}] {}:{}:{}\n  {}\n",
-            diagnostic.code, path, start.line, start.column, diagnostic.message
+            "{severity_label}[{}] {}:{}:{}\n",
+            diagnostic.code, path, start.line, start.column
         ));
     }
     if let Some(source) = source {
