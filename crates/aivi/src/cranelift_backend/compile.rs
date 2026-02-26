@@ -292,11 +292,14 @@ fn jit_compile_into_runtime(
         }
     }
 
+    // Pass A: register values by qualified name, merging multi-clause defs.
+    // The kernel emits both a short def (name="(+)") and a qualified def
+    // (name="aivi.duration.(+)") for each source def. Their pd.qualified values
+    // are distinct, so insert_or_merge groups clauses correctly without
+    // cross-contamination.
     for pd in &pending {
         let ptr = module.get_finalized_function(pd.func_id);
         if pd.is_effect_block {
-            // Zero-arity effect blocks: wrap in EffectValue::Thunk to defer execution.
-            // The thunk calls the JIT function only when the effect is run.
             let def_name = pd.qualified.clone();
             let func_ptr = ptr as usize;
             let effect = Value::Effect(std::sync::Arc::new(
@@ -312,8 +315,6 @@ fn jit_compile_into_runtime(
                         } else {
                             let result =
                                 unsafe { super::abi::unbox_value(result_ptr as *mut Value) };
-                            // The JIT's lower_do_block wraps results via rt_wrap_effect.
-                            // Unwrap the extra Effect layer to avoid double-wrapping.
                             match result {
                                 Value::Effect(_) | Value::Source(_) => {
                                     runtime.run_effect_value(result)
@@ -324,15 +325,20 @@ fn jit_compile_into_runtime(
                     }),
                 },
             ));
-            // Use insert_or_merge for short name (multi-clause merging),
-            // but plain insert for qualified name (avoids spurious MultiClause
-            // from kernel's short+qualified aliasing).
-            insert_or_merge(&mut compiled_globals, pd.name.clone(), effect.clone());
-            compiled_globals.insert(pd.qualified.clone(), effect);
+            insert_or_merge(&mut compiled_globals, pd.qualified.clone(), effect);
         } else {
             let jit_value = make_jit_builtin(&pd.qualified, pd.arity, ptr as usize);
-            insert_or_merge(&mut compiled_globals, pd.name.clone(), jit_value.clone());
-            compiled_globals.insert(pd.qualified.clone(), jit_value);
+            insert_or_merge(&mut compiled_globals, pd.qualified.clone(), jit_value);
+        }
+    }
+
+    // Pass B: register short-name aliases. Each pd.name gets the (possibly
+    // multi-clause) value that was built for its pd.qualified group. Plain
+    // overwrite is correct here: if two modules define the same short name,
+    // the last one wins; there is no spurious MultiClause wrapping.
+    for pd in &pending {
+        if let Some(value) = compiled_globals.get(&pd.qualified).cloned() {
+            compiled_globals.insert(pd.name.clone(), value);
         }
     }
 
