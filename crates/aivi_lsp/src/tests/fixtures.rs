@@ -838,3 +838,31 @@ run = add 1 2"#;
         .flatten()
         .all(|edit| edit.new_text == "sum"));
 }
+
+#[test]
+fn build_hover_span_fallback_for_call_argument_sub_expression() {
+    // Hover over `y` inside a call argument — not a top-level binding, but
+    // the span-type fallback should still provide type information.
+    let text = r#"@no_prelude
+module examples.span_hover
+
+apply = f x => f x
+inc = x => x + 1
+y = 42
+result = apply inc y
+"#;
+    let uri = sample_uri();
+    let doc_index = DocIndex::default();
+    // Hover over `y` in `apply inc y` — it's a call argument
+    let position = position_for(text, "y\n");
+    let hover = Backend::build_hover(text, &uri, position, &doc_index).expect("hover found");
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    // Should show type info for `y`
+    assert!(
+        markup.value.contains("`y`"),
+        "expected `y` in hover, got: {}",
+        markup.value
+    );
+}

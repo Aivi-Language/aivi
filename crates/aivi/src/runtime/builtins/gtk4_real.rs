@@ -176,8 +176,16 @@ mod linux {
         separators: HashMap<i64, *mut c_void>,
         gesture_clicks: HashMap<i64, GestureClickState>,
         signal_events: VecDeque<SignalEventState>,
+        signal_bool_bindings: HashMap<String, Vec<SignalBoolBinding>>,
+        named_widgets: HashMap<String, i64>,
         tray_handles: HashMap<i64, Arc<Mutex<SniTrayState>>>,
         resources_registered: bool,
+    }
+
+    struct SignalBoolBinding {
+        widget_id: i64,
+        property: String,
+        value: bool,
     }
 
     struct SniTrayState {
@@ -1454,6 +1462,23 @@ mod linux {
                 handler: binding.handler.clone(),
                 payload,
             });
+            // Apply any registered property bindings for this handler
+            if let Some(bindings) = state.signal_bool_bindings.get(&binding.handler) {
+                let mutations: Vec<_> = bindings
+                    .iter()
+                    .map(|b| (b.widget_id, b.property.clone(), b.value))
+                    .collect();
+                for (wid, prop, val) in mutations {
+                    if let Some(&widget) = state.widgets.get(&wid) {
+                        let v: c_int = if val { 1 } else { 0 };
+                        if let Ok(prop_c) = CString::new(prop.as_str()) {
+                            unsafe {
+                                g_object_set(widget, prop_c.as_ptr(), v, std::ptr::null::<c_char>());
+                            }
+                        }
+                    }
+                }
+            }
         });
     }
 
@@ -3309,7 +3334,9 @@ mod linux {
                         let mut state = state.borrow_mut();
                         let mut id_map = HashMap::new();
                         let root = first_object_in_interface(&decoded)?;
-                        build_widget_from_node_real(&mut state, root, &mut id_map)
+                        let id = build_widget_from_node_real(&mut state, root, &mut id_map)?;
+                        state.named_widgets.extend(id_map);
+                        Ok(id)
                     })?;
                     Ok(Value::Int(id))
                 }))
@@ -3368,6 +3395,64 @@ mod linux {
                             handler: handler.clone(),
                             payload: payload.clone(),
                         });
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "widgetById".to_string(),
+            builtin("gtk4.widgetById", 1, |mut args, _| {
+                let name = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.widgetById expects Text widget id name")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let id = state.named_widgets.get(&name).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.widgetById unknown named widget '{name}'"
+                            )))
+                        })?;
+                        Ok(Value::Int(id))
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "signalBindBoolProperty".to_string(),
+            builtin("gtk4.signalBindBoolProperty", 4, |mut args, _| {
+                let value = match args.remove(3) {
+                    Value::Bool(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindBoolProperty expects Bool value")),
+                };
+                let prop_name = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindBoolProperty expects Text property name")),
+                };
+                let target_widget_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindBoolProperty expects Int target widget id")),
+                };
+                let handler_name = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindBoolProperty expects Text handler name")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let _ = widget_ptr(&state, target_widget_id, "signalBindBoolProperty")?;
+                        state.signal_bool_bindings
+                            .entry(handler_name.clone())
+                            .or_default()
+                            .push(SignalBoolBinding {
+                                widget_id: target_widget_id,
+                                property: prop_name.clone(),
+                                value,
+                            });
                         Ok(Value::Unit)
                     })
                 }))
