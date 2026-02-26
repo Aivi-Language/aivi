@@ -325,6 +325,42 @@ impl Backend {
         ))
     }
 
+    /// Fallback hover: find the smallest span in `span_types` that contains the
+    /// cursor position and return the recorded type.
+    pub(super) fn hover_from_span_types(
+        ident: &str,
+        position: Position,
+        span_types: &HashMap<String, Vec<(Span, String)>>,
+        module_name: &str,
+    ) -> Option<String> {
+        let entries = span_types.get(module_name)?;
+        // LSP Position is 0-based; our Span uses 1-based lines and 1-based columns.
+        let line = position.line as usize + 1;
+        let col = position.character as usize + 1;
+        let mut best: Option<&(Span, String)> = None;
+        for entry in entries {
+            let s = &entry.0;
+            let start_ok = s.start.line < line || (s.start.line == line && s.start.column <= col);
+            let end_ok = s.end.line > line || (s.end.line == line && s.end.column >= col);
+            if start_ok && end_ok {
+                if let Some(prev) = best {
+                    let prev_size = span_size(&prev.0);
+                    let cur_size = span_size(s);
+                    if cur_size < prev_size {
+                        best = Some(entry);
+                    }
+                } else {
+                    best = Some(entry);
+                }
+            }
+        }
+        let (_, ty_str) = best?;
+        Some(Self::hover_badge_markdown(
+            "value",
+            format!("`{ident}` : `{ty_str}`"),
+        ))
+    }
+
     fn format_quick_info(
         entry: &QuickInfoEntry,
         module: &Module,

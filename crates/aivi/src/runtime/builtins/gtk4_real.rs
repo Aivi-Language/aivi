@@ -135,6 +135,7 @@ mod linux {
     unsafe extern "C" {
         fn g_type_from_name(name: *const c_char) -> usize;
         fn g_object_new(object_type: usize, first_property_name: *const c_char, ...) -> *mut c_void;
+        fn g_object_set(object: *mut c_void, first_property_name: *const c_char, ...);
         fn g_signal_connect_data(
             instance: *mut c_void,
             detailed_signal: *const c_char,
@@ -499,6 +500,7 @@ mod linux {
         ScrolledWindow,
         Overlay,
         ListBox,
+        SplitView,
         Other,
     }
 
@@ -1028,6 +1030,35 @@ mod linux {
                     };
                 }
             }
+            "AdwOverlaySplitView" => {
+                if let Some(value) = props.get("sidebar-position") {
+                    let pos: c_int = if value == "end" { 1 } else { 0 };
+                    let prop_c = CString::new("sidebar-position").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), pos, std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("collapsed").and_then(|v| parse_bool_text(v)) {
+                    let prop_c = CString::new("collapsed").unwrap();
+                    let v: c_int = if value { 1 } else { 0 };
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), v, std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("show-sidebar").and_then(|v| parse_bool_text(v)) {
+                    let prop_c = CString::new("show-sidebar").unwrap();
+                    let v: c_int = if value { 1 } else { 0 };
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), v, std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("max-sidebar-width").and_then(|v| parse_f64_text(v)) {
+                    let prop_c = CString::new("max-sidebar-width").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), value, std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("min-sidebar-width").and_then(|v| parse_f64_text(v)) {
+                    let prop_c = CString::new("min-sidebar-width").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), value, std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("sidebar-width-fraction").and_then(|v| parse_f64_text(v)) {
+                    let prop_c = CString::new("sidebar-width-fraction").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), value, std::ptr::null::<c_char>()) };
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -1148,6 +1179,7 @@ mod linux {
                 }
             }
             "GtkListBox" => (unsafe { gtk_list_box_new() }, CreatedWidgetKind::ListBox),
+            "AdwOverlaySplitView" => (create_adw_widget(class_name)?, CreatedWidgetKind::SplitView),
             "AdwAboutDialog"
             | "AdwAboutWindow"
             | "AdwActionRow"
@@ -1183,7 +1215,6 @@ mod linux {
             | "AdwNavigationPage"
             | "AdwNavigationSplitView"
             | "AdwNavigationView"
-            | "AdwOverlaySplitView"
             | "AdwPasswordEntryRow"
             | "AdwPreferencesDialog"
             | "AdwPreferencesGroup"
@@ -1322,6 +1353,21 @@ mod linux {
                     }
                 }
                 CreatedWidgetKind::ListBox => unsafe { gtk_list_box_append(raw, child_raw) },
+                CreatedWidgetKind::SplitView => {
+                    let prop_name = match child.child_type.as_deref() {
+                        Some("sidebar") => "sidebar",
+                        _ => "content",
+                    };
+                    let prop_c = CString::new(prop_name).unwrap();
+                    unsafe {
+                        g_object_set(
+                            raw,
+                            prop_c.as_ptr(),
+                            child_raw,
+                            std::ptr::null::<c_char>(),
+                        );
+                    }
+                }
                 CreatedWidgetKind::Other => {}
             }
         }

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::cg_type::CgType;
-use crate::diagnostics::FileDiagnostic;
+use crate::diagnostics::{FileDiagnostic, Span};
 use crate::surface::{DomainItem, Module, ModuleItem};
 
 use super::checker::TypeChecker;
@@ -50,6 +50,7 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
     let mut inferred: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut cg_types: HashMap<String, HashMap<String, CgType>> = HashMap::new();
     let mut monomorph_plan: HashMap<String, Vec<CgType>> = HashMap::new();
+    let mut all_span_types: HashMap<String, Vec<(Span, String)>> = HashMap::new();
 
     let (global_type_constructors, global_aliases) =
         collect_global_type_info(&mut checker, modules);
@@ -91,6 +92,12 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
                     entry.push(cg);
                 }
             }
+        }
+
+        // Extract span→type pairs recorded during type checking (for LSP hover).
+        let module_span_types = checker.take_span_types();
+        if !module_span_types.is_empty() {
+            all_span_types.insert(module.name.name.clone(), module_span_types);
         }
 
         let mut local_names = HashSet::new();
@@ -220,5 +227,6 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
         type_strings: inferred,
         cg_types,
         monomorph_plan,
+        span_types: all_span_types,
     }
 }

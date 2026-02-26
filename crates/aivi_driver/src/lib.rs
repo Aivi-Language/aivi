@@ -3,6 +3,7 @@
 mod workspace;
 
 use std::fs;
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 
 use aivi_core::{
@@ -36,8 +37,10 @@ pub enum AiviError {
 
 /// Prints diagnostics to stderr so the user sees errors before a `Diagnostics` exit.
 fn emit_diagnostics(diagnostics: &[FileDiagnostic]) {
+    let use_color = std::io::stderr().is_terminal();
     for diag in diagnostics {
-        let rendered = render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic));
+        let rendered =
+            render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic), use_color);
         if !rendered.is_empty() {
             eprintln!("{rendered}");
         }

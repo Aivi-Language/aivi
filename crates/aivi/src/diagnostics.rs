@@ -7,13 +7,13 @@ pub enum DiagnosticSeverity {
     Warning,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct Position {
     pub line: usize,
     pub column: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct Span {
     pub start: Position,
     pub end: Position,
@@ -40,13 +40,21 @@ pub struct FileDiagnostic {
     pub diagnostic: Diagnostic,
 }
 
+// ANSI color codes
+const BOLD: &str = "\x1b[1m";
+const RED: &str = "\x1b[1;31m";
+const YELLOW: &str = "\x1b[1;33m";
+const BLUE: &str = "\x1b[1;34m";
+const CYAN: &str = "\x1b[1;36m";
+const RESET: &str = "\x1b[0m";
+
 pub fn file_diagnostics_have_errors(diagnostics: &[FileDiagnostic]) -> bool {
     diagnostics
         .iter()
         .any(|diag| diag.diagnostic.severity == DiagnosticSeverity::Error)
 }
 
-pub fn render_diagnostics(path: &str, diagnostics: &[Diagnostic]) -> String {
+pub fn render_diagnostics(path: &str, diagnostics: &[Diagnostic], use_color: bool) -> String {
     let mut output = String::new();
     let source = std::fs::read_to_string(path).ok();
     for (index, diagnostic) in diagnostics.iter().enumerate() {
@@ -57,41 +65,75 @@ pub fn render_diagnostics(path: &str, diagnostics: &[Diagnostic]) -> String {
             path,
             diagnostic,
             source.as_deref(),
+            use_color,
         ));
     }
     output
+}
+
+fn severity_color(severity: DiagnosticSeverity) -> &'static str {
+    match severity {
+        DiagnosticSeverity::Error => RED,
+        DiagnosticSeverity::Warning => YELLOW,
+    }
 }
 
 fn render_diagnostic_with_source(
     path: &str,
     diagnostic: &Diagnostic,
     source: Option<&str>,
+    use_color: bool,
 ) -> String {
     let mut output = String::new();
     let start = &diagnostic.span.start;
-    let severity = match diagnostic.severity {
+    let severity_label = match diagnostic.severity {
         DiagnosticSeverity::Error => "error",
         DiagnosticSeverity::Warning => "warning",
     };
-    output.push_str(&format!(
-        "{severity}[{}] {}:{}:{} {}\n",
-        diagnostic.code, path, start.line, start.column, diagnostic.message
-    ));
+    if use_color {
+        let sc = severity_color(diagnostic.severity);
+        output.push_str(&format!(
+            "{sc}{severity_label}[{}]{RESET} {BOLD}{}:{}:{}{RESET} {BOLD}{}{RESET}\n",
+            diagnostic.code, path, start.line, start.column, diagnostic.message
+        ));
+    } else {
+        output.push_str(&format!(
+            "{severity_label}[{}] {}:{}:{} {}\n",
+            diagnostic.code, path, start.line, start.column, diagnostic.message
+        ));
+    }
     if let Some(source) = source {
-        if let Some(frame) =
-            render_source_frame(source, &diagnostic.span, Some(&diagnostic.message))
-        {
+        if let Some(frame) = render_source_frame(
+            source,
+            &diagnostic.span,
+            Some(&diagnostic.message),
+            use_color,
+            diagnostic.severity,
+        ) {
             output.push_str(&frame);
         }
     }
     for label in &diagnostic.labels {
         let pos = &label.span.start;
-        output.push_str(&format!(
-            "note: {} at {}:{}:{}\n",
-            label.message, path, pos.line, pos.column
-        ));
+        if use_color {
+            output.push_str(&format!(
+                "{CYAN}note{RESET}: {BOLD}{}{RESET} at {BOLD}{}:{}:{}{RESET}\n",
+                label.message, path, pos.line, pos.column
+            ));
+        } else {
+            output.push_str(&format!(
+                "note: {} at {}:{}:{}\n",
+                label.message, path, pos.line, pos.column
+            ));
+        }
         if let Some(source) = source {
-            if let Some(frame) = render_source_frame(source, &label.span, None) {
+            if let Some(frame) = render_source_frame(
+                source,
+                &label.span,
+                None,
+                use_color,
+                diagnostic.severity,
+            ) {
                 output.push_str(&frame);
             }
         }
@@ -99,15 +141,26 @@ fn render_diagnostic_with_source(
     output.trim_end().to_string()
 }
 
-fn render_source_frame(source: &str, span: &Span, message: Option<&str>) -> Option<String> {
+fn render_source_frame(
+    source: &str,
+    span: &Span,
+    message: Option<&str>,
+    use_color: bool,
+    severity: DiagnosticSeverity,
+) -> Option<String> {
     let line_index = span.start.line.checked_sub(1)?;
     let line = source.lines().nth(line_index)?;
     let line_no = span.start.line;
     let width = line_no.to_string().len();
 
     let mut output = String::new();
-    output.push_str("  |\n");
-    output.push_str(&format!("{line_no:>width$} | {line}\n"));
+    if use_color {
+        output.push_str(&format!("{BLUE}{:>width$} |{RESET}\n", ""));
+        output.push_str(&format!("{BLUE}{line_no:>width$} |{RESET} {line}\n"));
+    } else {
+        output.push_str("  |\n");
+        output.push_str(&format!("{line_no:>width$} | {line}\n"));
+    }
 
     let line_chars: Vec<char> = line.chars().collect();
     let line_len = line_chars.len();
@@ -133,12 +186,24 @@ fn render_source_frame(source: &str, span: &Span, message: Option<&str>) -> Opti
 
     let padding = " ".repeat(start_col.saturating_sub(1));
     let carets = "^".repeat(caret_len);
-    let mut caret_line = format!("{:>width$} | {padding}{carets}", "");
-    if let Some(message) = message {
-        caret_line.push(' ');
-        caret_line.push_str(message);
+    if use_color {
+        let sc = severity_color(severity);
+        let mut caret_line = format!("{BLUE}{:>width$} |{RESET} {padding}{sc}{carets}", "");
+        if let Some(message) = message {
+            caret_line.push(' ');
+            caret_line.push_str(message);
+        }
+        caret_line.push_str(RESET);
+        caret_line.push('\n');
+        output.push_str(&caret_line);
+    } else {
+        let mut caret_line = format!("{:>width$} | {padding}{carets}", "");
+        if let Some(message) = message {
+            caret_line.push(' ');
+            caret_line.push_str(message);
+        }
+        caret_line.push('\n');
+        output.push_str(&caret_line);
     }
-    caret_line.push('\n');
-    output.push_str(&caret_line);
     Some(output)
 }

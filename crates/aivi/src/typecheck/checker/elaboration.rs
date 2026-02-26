@@ -1,6 +1,6 @@
 impl TypeChecker {
     fn infer_expr(&mut self, expr: &Expr, env: &mut TypeEnv) -> Result<Type, TypeError> {
-        match expr {
+        let result = match expr {
             Expr::Ident(name) => self.infer_ident(name, env),
             Expr::Literal(literal) => match literal {
                 Literal::Number { text, span } => match number_kind(text) {
@@ -137,7 +137,11 @@ impl TypeChecker {
             } => self.infer_binary(op, left, right, env),
             Expr::Block { kind, items, .. } => self.infer_block(kind, items, env),
             Expr::Raw { .. } => Ok(self.fresh_var()),
+        };
+        if let Ok(ref ty) = result {
+            self.span_types.push((expr_span(expr), ty.clone()));
         }
+        result
     }
 
     pub(super) fn elaborate_def_expr(

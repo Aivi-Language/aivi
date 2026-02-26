@@ -13,6 +13,7 @@ impl Runtime {
             check_counter: 0,
             jit_call_depth: 0,
             jit_max_call_depth: 1_000,
+            jit_match_failed: false,
         }
     }
 
