@@ -5,10 +5,12 @@ fn build_diagnostics_reports_error() {
     let diagnostics = Backend::build_diagnostics(text, &uri);
     assert!(!diagnostics.is_empty());
     assert_eq!(diagnostics[0].severity, Some(DiagnosticSeverity::ERROR));
-    assert!(diagnostics[0]
-        .source
-        .as_deref()
-        .is_some_and(|s| s.starts_with("aivi.")));
+    assert!(
+        diagnostics[0]
+            .source
+            .as_deref()
+            .is_some_and(|s| s.starts_with("aivi."))
+    );
 }
 
 #[test]
@@ -100,7 +102,12 @@ fn code_actions_offer_quick_fix_for_unclosed_delimiter() {
     let text = "module broken = {";
     let uri = sample_uri();
     let diagnostics = Backend::build_diagnostics(text, &uri);
-    let actions = Backend::build_code_actions_with_workspace(text, &uri, &diagnostics, &std::collections::HashMap::new());
+    let actions = Backend::build_code_actions_with_workspace(
+        text,
+        &uri,
+        &diagnostics,
+        &std::collections::HashMap::new(),
+    );
     let expected_pos = Backend::end_position(text);
 
     let mut saw_fix = false;
@@ -148,7 +155,12 @@ fn strict_mode_reports_split_arrow_and_offers_fix() {
     });
     assert!(split_arrow.is_some(), "expected split-arrow diagnostic");
 
-    let actions = Backend::build_code_actions_with_workspace(text, &uri, &diagnostics, &std::collections::HashMap::new());
+    let actions = Backend::build_code_actions_with_workspace(
+        text,
+        &uri,
+        &diagnostics,
+        &std::collections::HashMap::new(),
+    );
     assert!(actions.iter().any(|action| match action {
         CodeActionOrCommand::CodeAction(action) => action.title.contains("Replace with \"=>\""),
         _ => false,
@@ -183,7 +195,8 @@ main = magnitude { x: 3.0, y: 4.0 }
         map
     };
 
-    let actions = Backend::build_code_actions_with_workspace(text, &uri, &diagnostics, &stdlib_workspace);
+    let actions =
+        Backend::build_code_actions_with_workspace(text, &uri, &diagnostics, &stdlib_workspace);
 
     // We should offer a quickfix that inserts `use aivi.vector (magnitude)`.
     let mut saw_import_fix = false;
@@ -203,13 +216,19 @@ main = magnitude { x: 3.0, y: 4.0 }
         let Some(edits) = changes.get(&uri) else {
             continue;
         };
-        if edits.iter().any(|e| e.new_text == "use aivi.vector (magnitude)\n") {
+        if edits
+            .iter()
+            .any(|e| e.new_text == "use aivi.vector (magnitude)\n")
+        {
             saw_import_fix = true;
             break;
         }
     }
 
-    assert!(saw_import_fix, "expected an import quickfix for `magnitude`");
+    assert!(
+        saw_import_fix,
+        "expected an import quickfix for `magnitude`"
+    );
 }
 
 #[test]
@@ -260,6 +279,53 @@ find = pred xs => xs
 }
 
 #[test]
+fn diagnostics_resolve_wildcard_imported_constructors_from_workspace() {
+    let model_text = r#"module mailfox.ui.model
+export NavSection = Inbox | Tasks
+"#;
+    let model_path = PathBuf::from("model.aivi");
+    let (model_modules, _) = parse_modules(&model_path, model_text);
+    let model_module = model_modules
+        .into_iter()
+        .next()
+        .expect("model module should parse");
+
+    let mut workspace = HashMap::new();
+    workspace.insert(
+        "mailfox.ui.model".to_string(),
+        IndexedModule {
+            uri: Url::parse("file:///model.aivi").expect("valid uri"),
+            module: model_module,
+            text: Some(model_text.to_string()),
+        },
+    );
+
+    let nav_text = r#"module mailfox.ui.components.nav_rail
+use mailfox.ui.model
+
+navIcon : NavSection -> Text
+navIcon = section => section match
+  | Inbox => "mailfox-mail-symbolic"
+  | Tasks => "mailfox-check-square-symbolic"
+"#;
+    let uri = Url::parse("file:///nav_rail.aivi").expect("valid uri");
+    let diagnostics = Backend::build_diagnostics_with_workspace(
+        nav_text,
+        &uri,
+        &workspace,
+        false,
+        &crate::strict::StrictConfig::default(),
+    );
+
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diag| diag.message.contains("unknown constructor 'Inbox'")),
+        "workspace wildcard import should resolve exported constructors, got: {diagnostics:?}"
+    );
+}
+
+#[test]
 fn strict_mode_warns_on_unused_match_arm_bindings() {
     let text = r#"module demo
 
@@ -277,7 +343,10 @@ deepName =
     let unused = diagnostics.iter().find(|diag| {
         matches!(diag.code.as_ref(), Some(NumberOrString::String(code)) if code == "AIVI-S301")
     });
-    assert!(unused.is_some(), "expected unused-pattern-binding diagnostic");
+    assert!(
+        unused.is_some(),
+        "expected unused-pattern-binding diagnostic"
+    );
 }
 
 #[test]
@@ -399,8 +468,9 @@ y = ~m"Hello, {name:Text}!"
         "expected `~m\\\"` prefix to be a sigil token, got: {tokens:?}"
     );
     assert!(
-        tokens.iter().any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING
-            && s == "Hello, {name:Text}!"),
+        tokens
+            .iter()
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s == "Hello, {name:Text}!"),
         "expected `~m` body to be a string token, got: {tokens:?}"
     );
 }
