@@ -357,8 +357,8 @@ fn should_use_project_pipeline(args: &[String]) -> bool {
 fn cmd_project_build(args: &[String]) -> Result<(), AiviError> {
     let root = env::current_dir()?;
     let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
-    let (release_flag, _cargo_args) = parse_project_args(args)?;
-    let release = release_flag || cfg.build.cargo_profile == "release";
+    let proj_args = parse_project_args(args)?;
+    let release = proj_args.release || cfg.build.cargo_profile == "release";
 
     cmd_project_build_cranelift(&root, &cfg, release)
 }
@@ -462,13 +462,13 @@ fn main() {{
 fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
     let root = env::current_dir()?;
     let cfg = aivi::read_aivi_toml(&root.join("aivi.toml"))?;
-    let (release_flag, cargo_args) = parse_project_args(args)?;
-    if release_flag || cfg.build.cargo_profile == "release" {
+    let proj_args = parse_project_args(args)?;
+    if proj_args.release || cfg.build.cargo_profile == "release" {
         return Err(AiviError::InvalidCommand(
             "run --release is not supported by the native runtime pipeline".to_string(),
         ));
     }
-    if !cargo_args.is_empty() {
+    if !proj_args.cargo_args.is_empty() {
         return Err(AiviError::InvalidCommand(
             "extra cargo args are not supported by the native runtime pipeline".to_string(),
         ));
@@ -477,11 +477,24 @@ fn cmd_project_run(args: &[String]) -> Result<(), AiviError> {
     let target = source_target
         .to_str()
         .ok_or_else(|| AiviError::InvalidPath(source_target.display().to_string()))?;
+    if proj_args.watch {
+        let watch_dir = source_target
+            .parent()
+            .unwrap_or(&root)
+            .to_path_buf();
+        return watch::run_watch(target, &watch_dir);
+    }
     let (program, cg_types, monomorph_plan) = aivi::desugar_target_with_cg_types(target)?;
     aivi::run_cranelift_jit(program, cg_types, monomorph_plan)
 }
 
-fn parse_project_args(args: &[String]) -> Result<(bool, Vec<String>), AiviError> {
+struct ProjectArgs {
+    release: bool,
+    watch: bool,
+    cargo_args: Vec<String>,
+}
+
+fn parse_project_args(args: &[String]) -> Result<ProjectArgs, AiviError> {
     let mut before = Vec::new();
     let mut after = Vec::new();
     let mut saw_sep = false;
@@ -498,9 +511,11 @@ fn parse_project_args(args: &[String]) -> Result<(bool, Vec<String>), AiviError>
     }
 
     let mut release = false;
+    let mut watch = false;
     for arg in before {
         match arg.as_str() {
             "--release" => release = true,
+            "--watch" | "-w" => watch = true,
             // Ignore positional file paths (e.g. `aivi run src/main.aivi`) —
             // the project pipeline uses aivi.toml's entry instead.
             _ if !arg.starts_with('-') => {}
@@ -508,7 +523,11 @@ fn parse_project_args(args: &[String]) -> Result<(bool, Vec<String>), AiviError>
         }
     }
 
-    Ok((release, after))
+    Ok(ProjectArgs {
+        release,
+        watch,
+        cargo_args: after,
+    })
 }
 
 #[cfg(test)]

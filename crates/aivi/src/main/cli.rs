@@ -442,6 +442,14 @@ fn run() -> Result<(), AiviError> {
                             opts.target
                         )));
                     }
+                    if opts.watch {
+                        let input_path = Path::new(&opts.input);
+                        let watch_dir = input_path
+                            .parent()
+                            .unwrap_or(Path::new("."))
+                            .to_path_buf();
+                        return watch::run_watch(&opts.input, &watch_dir);
+                    }
                     let (program, cg_types, monomorph_plan) = aivi::desugar_target_with_cg_types(&opts.input)?;
                     aivi::run_cranelift_jit(program, cg_types, monomorph_plan)
                 }
@@ -659,6 +667,7 @@ struct BuildArgs {
     output: Option<PathBuf>,
     target: String,
     debug_trace: bool,
+    watch: bool,
 }
 
 fn parse_build_args(
@@ -670,6 +679,7 @@ fn parse_build_args(
     let mut output = None;
     let mut target = default_target.to_string();
     let mut debug_trace = false;
+    let mut watch = false;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -691,6 +701,9 @@ fn parse_build_args(
                     ));
                 };
                 output = Some(PathBuf::from(value));
+            }
+            "--watch" | "-w" => {
+                watch = true;
             }
             _ if arg.starts_with('-') => {
                 return Err(AiviError::InvalidCommand(format!("unknown flag {arg}")));
@@ -715,6 +728,7 @@ fn parse_build_args(
         output,
         target,
         debug_trace,
+        watch,
     }))
 }
 

@@ -28,13 +28,13 @@ use self::values::{
 };
 
 #[derive(Debug)]
-struct CancelToken {
+pub(crate) struct CancelToken {
     local: AtomicBool,
     parent: Option<Arc<CancelToken>>,
 }
 
 impl CancelToken {
-    fn root() -> Arc<Self> {
+    pub(crate) fn root() -> Arc<Self> {
         Arc::new(Self {
             local: AtomicBool::new(false),
             parent: None,
@@ -48,7 +48,7 @@ impl CancelToken {
         })
     }
 
-    fn cancel(&self) {
+    pub(crate) fn cancel(&self) {
         self.local.store(true, Ordering::Release);
     }
 
@@ -238,6 +238,38 @@ pub(crate) fn build_runtime_from_program(program: &HirProgram) -> Result<Runtime
         core_constructor_ordinals(),
     ));
     let cancel = CancelToken::root();
+    Ok(Runtime::new(ctx, cancel))
+}
+
+/// Like [`build_runtime_from_program`] but uses an externally provided cancel
+/// token so the caller can cancel from another thread.
+pub(crate) fn build_runtime_from_program_with_cancel(
+    program: &HirProgram,
+    cancel: Arc<CancelToken>,
+) -> Result<Runtime, AiviError> {
+    if program.modules.is_empty() {
+        return Err(AiviError::Runtime("no modules to run".to_string()));
+    }
+
+    let mut grouped: HashMap<String, usize> = HashMap::new();
+    for module in &program.modules {
+        let module_name = &module.name;
+        for def in &module.defs {
+            *grouped.entry(def.name.clone()).or_default() += 1;
+            *grouped
+                .entry(format!("{module_name}.{}", def.name))
+                .or_default() += 1;
+        }
+    }
+
+    let globals = Env::new(None);
+    register_builtins(&globals);
+    globals.set("__machine_on".to_string(), make_machine_on_builtin());
+
+    let ctx = Arc::new(RuntimeContext::new_with_constructor_ordinals(
+        globals,
+        core_constructor_ordinals(),
+    ));
     Ok(Runtime::new(ctx, cancel))
 }
 
