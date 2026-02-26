@@ -15,6 +15,7 @@ pub fn parse_modules(path: &Path, content: &str) -> (Vec<Module>, Vec<FileDiagno
     let mut modules = parser.parse_modules();
     inject_prelude_imports(&mut modules);
     expand_domain_exports(&mut modules);
+    expand_type_constructor_exports(&mut modules);
     expand_module_aliases(&mut modules);
     let mut decorator_diags = apply_native_decorators(&mut modules);
     decorator_diags.append(&mut apply_static_decorators(&mut modules));
@@ -39,6 +40,7 @@ pub fn parse_modules_from_tokens(
     let mut modules = parser.parse_modules();
     inject_prelude_imports(&mut modules);
     expand_domain_exports(&mut modules);
+    expand_type_constructor_exports(&mut modules);
     (modules, parser.diagnostics)
 }
 
@@ -116,6 +118,39 @@ fn expand_domain_exports(modules: &mut [Module]) {
                 }
             }
         }
+        module.exports.extend(extra_exports);
+    }
+}
+
+fn expand_type_constructor_exports(modules: &mut [Module]) {
+    use std::collections::HashSet;
+
+    for module in modules {
+        let mut exported_values: HashSet<String> = module
+            .exports
+            .iter()
+            .filter(|item| item.kind == crate::surface::ScopeItemKind::Value)
+            .map(|item| item.name.name.clone())
+            .collect();
+        let mut extra_exports = Vec::new();
+
+        for item in &module.items {
+            let ModuleItem::TypeDecl(type_decl) = item else {
+                continue;
+            };
+            if !exported_values.contains(&type_decl.name.name) {
+                continue;
+            }
+            for ctor in &type_decl.constructors {
+                if exported_values.insert(ctor.name.name.clone()) {
+                    extra_exports.push(crate::surface::ExportItem {
+                        kind: crate::surface::ScopeItemKind::Value,
+                        name: ctor.name.clone(),
+                    });
+                }
+            }
+        }
+
         module.exports.extend(extra_exports);
     }
 }

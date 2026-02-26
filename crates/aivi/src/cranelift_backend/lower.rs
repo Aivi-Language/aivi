@@ -711,11 +711,7 @@ impl<'a> LowerCtx<'a> {
     /// allocating a zero-arg `Value::Constructor` directly instead of looking
     /// it up in the globals map.  When applied to arguments later, `apply()`
     /// accumulates them naturally.
-    fn lower_constructor_value(
-        &self,
-        builder: &mut FunctionBuilder<'_>,
-        name: &str,
-    ) -> TypedValue {
+    fn lower_constructor_value(&self, builder: &mut FunctionBuilder<'_>, name: &str) -> TypedValue {
         let name_ptr = builder.ins().iconst(PTR, name.as_ptr() as i64);
         let name_len = builder.ins().iconst(PTR, name.len() as i64);
         let null = builder.ins().iconst(PTR, 0);
@@ -2111,10 +2107,9 @@ impl<'a> LowerCtx<'a> {
 
                     // 3. Get list length
                     let len = {
-                        let call = builder.ins().call(
-                            self.helpers.rt_list_len,
-                            &[self.ctx_param, list],
-                        );
+                        let call = builder
+                            .ins()
+                            .call(self.helpers.rt_list_len, &[self.ctx_param, list]);
                         builder.inst_results(call)[0]
                     };
 
@@ -2139,19 +2134,16 @@ impl<'a> LowerCtx<'a> {
                         counter,
                         len,
                     );
-                    builder
-                        .ins()
-                        .brif(cond, loop_body, &[], loop_exit, &[]);
+                    builder.ins().brif(cond, loop_body, &[], loop_exit, &[]);
 
                     // Loop body: get element, bind pattern
                     builder.switch_to_block(loop_body);
                     builder.seal_block(loop_body);
 
                     let elem = {
-                        let call = builder.ins().call(
-                            self.helpers.rt_list_index,
-                            &[self.ctx_param, list, counter],
-                        );
+                        let call = builder
+                            .ins()
+                            .call(self.helpers.rt_list_index, &[self.ctx_param, list, counter]);
                         builder.inst_results(call)[0]
                     };
                     self.bind_pattern(builder, pattern, elem);

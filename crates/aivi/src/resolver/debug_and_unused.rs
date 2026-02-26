@@ -201,8 +201,10 @@ fn check_expr(
         }
         Expr::Call { func, args, .. } => {
             check_expr(func, scope, diagnostics, module, allow_unknown);
-            for arg in args {
-                check_expr(arg, scope, diagnostics, module, allow_unknown);
+            for (index, arg) in args.iter().enumerate() {
+                let arg_allow_unknown =
+                    allow_unknown || call_arg_allows_predicate_unknown(func, index);
+                check_expr(arg, scope, diagnostics, module, arg_allow_unknown);
             }
         }
         Expr::Lambda { params, body, .. } => {
@@ -265,8 +267,10 @@ fn check_expr(
                         check_expr(expr, &mut block_scope, diagnostics, module, allow_unknown);
                         collect_pattern_binding(pattern, &mut block_scope);
                     }
-                    BlockItem::Filter { expr, .. }
-                    | BlockItem::Yield { expr, .. }
+                    BlockItem::Filter { expr, .. } => {
+                        check_expr(expr, &mut block_scope, diagnostics, module, true);
+                    }
+                    BlockItem::Yield { expr, .. }
                     | BlockItem::Recurse { expr, .. }
                     | BlockItem::Expr { expr, .. } => {
                         check_expr(expr, &mut block_scope, diagnostics, module, allow_unknown);
@@ -328,6 +332,25 @@ fn special_unknown_name_message(name: &str) -> Option<String> {
         )),
         _ => None,
     }
+}
+
+fn call_arg_allows_predicate_unknown(func: &Expr, index: usize) -> bool {
+    if index != 0 {
+        return false;
+    }
+    match func {
+        Expr::Ident(name) => is_predicate_callee_name(&name.name),
+        Expr::FieldAccess { field, .. } => is_predicate_callee_name(&field.name),
+        _ => false,
+    }
+}
+
+fn is_predicate_callee_name(name: &str) -> bool {
+    let base = name.rsplit('.').next().unwrap_or(name);
+    matches!(
+        base,
+        "filter" | "find" | "takeWhile" | "dropWhile" | "upd" | "del" | "ups"
+    )
 }
 
 /// Returns true if the pattern is a compiler-generated binding (name starts with `__`).
@@ -726,6 +749,39 @@ x = 30s
                 .iter()
                 .any(|d| d.path == "test.aivi" && d.diagnostic.code == "W2100"),
             "expected no unused-import warnings for domain import, got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn predicate_call_arguments_allow_bare_field_names() {
+        let source = r#"
+module test.predicate_calls
+use aivi.list
+use aivi.database
+use aivi.database (domain Database)
+
+rows = [{ id: 1 }, { id: 2 }]
+out = filter (id == 1) rows
+
+tableRows = table "rows"[]
+updated = tableRows + upd (id == 1) (row => row)
+"#;
+
+        let path = std::path::Path::new("test.aivi");
+        let (mut modules, diags) = crate::surface::parse_modules(path, source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+
+        let unknown_name_errors: Vec<_> = diags
+            .into_iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(
+            unknown_name_errors.is_empty(),
+            "expected no unknown-name errors for predicate-position bare fields, got {unknown_name_errors:#?}"
         );
     }
 }

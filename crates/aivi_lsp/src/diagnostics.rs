@@ -72,7 +72,11 @@ impl Backend {
             module_map.insert(module.name.name.clone(), module);
         }
         for indexed in workspace_modules.values() {
-            module_map.insert(indexed.module.name.name.clone(), indexed.module.clone());
+            let module_name = indexed.module.name.name.clone();
+            if module_name.starts_with("aivi.") && module_map.contains_key(&module_name) {
+                continue;
+            }
+            module_map.insert(module_name, indexed.module.clone());
         }
         for module in file_modules {
             module_map.insert(module.name.name.clone(), module);

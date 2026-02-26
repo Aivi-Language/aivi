@@ -47,10 +47,7 @@ mod linux {
         fn gtk_header_bar_pack_end(header_bar: *mut c_void, child: *mut c_void);
         fn gtk_header_bar_set_title_widget(header_bar: *mut c_void, title_widget: *mut c_void);
         fn gtk_header_bar_set_show_title_buttons(header_bar: *mut c_void, setting: c_int);
-        fn gtk_header_bar_set_decoration_layout(
-            header_bar: *mut c_void,
-            layout: *const c_char,
-        );
+        fn gtk_header_bar_set_decoration_layout(header_bar: *mut c_void, layout: *const c_char);
         fn gtk_list_box_new() -> *mut c_void;
         fn gtk_list_box_append(list_box: *mut c_void, child: *mut c_void);
 
@@ -134,7 +131,8 @@ mod linux {
     #[link(name = "gobject-2.0")]
     unsafe extern "C" {
         fn g_type_from_name(name: *const c_char) -> usize;
-        fn g_object_new(object_type: usize, first_property_name: *const c_char, ...) -> *mut c_void;
+        fn g_object_new(object_type: usize, first_property_name: *const c_char, ...)
+            -> *mut c_void;
         fn g_signal_connect_data(
             instance: *mut c_void,
             detailed_signal: *const c_char,
@@ -845,8 +843,10 @@ mod linux {
             }
             "GtkHeaderBar" | "AdwHeaderBar" => {
                 if let Some(value) = props.get("decoration-layout") {
-                    let layout_c =
-                        c_text(value, "gtk4.buildFromNode invalid headerbar decoration-layout")?;
+                    let layout_c = c_text(
+                        value,
+                        "gtk4.buildFromNode invalid headerbar decoration-layout",
+                    )?;
                     unsafe { gtk_header_bar_set_decoration_layout(widget, layout_c.as_ptr()) };
                 }
                 if let Some(value) = props
@@ -940,9 +940,10 @@ mod linux {
                     CreatedWidgetKind::Box,
                 )
             }
-            "GtkHeaderBar" | "AdwHeaderBar" => {
-                (unsafe { gtk_header_bar_new() }, CreatedWidgetKind::HeaderBar)
-            }
+            "GtkHeaderBar" | "AdwHeaderBar" => (
+                unsafe { gtk_header_bar_new() },
+                CreatedWidgetKind::HeaderBar,
+            ),
             "GtkLabel" => {
                 let label = props
                     .get("label")

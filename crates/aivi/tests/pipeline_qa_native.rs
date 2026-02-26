@@ -95,9 +95,10 @@ appRun = appId => Unit
         diag_codes(&diags)
     );
     assert!(
-        diags
-            .iter()
-            .any(|d| d.diagnostic.message.contains("requires an explicit type signature")),
+        diags.iter().any(|d| d
+            .diagnostic
+            .message
+            .contains("requires an explicit type signature")),
         "expected 'requires an explicit type signature' message"
     );
 }
@@ -341,9 +342,10 @@ fn = { x } => x
         diag_codes(&diags)
     );
     assert!(
-        diags
-            .iter()
-            .any(|d| d.diagnostic.message.contains("only supports identifier parameters")),
+        diags.iter().any(|d| d
+            .diagnostic
+            .message
+            .contains("only supports identifier parameters")),
         "expected 'only supports identifier parameters' message"
     );
 }

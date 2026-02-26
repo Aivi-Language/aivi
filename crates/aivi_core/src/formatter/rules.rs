@@ -148,9 +148,9 @@
             return false;
         }
 
-        // Keep indexing tight after a closed group, even if the input had whitespace:
-        // `(f x) [i]` should format to `(f x)[i]`, not a list-literal argument.
-        if curr_text == "[" && prev_text == ")" {
+        // Keep indexing tight after a closed group when it was adjacent in source:
+        // `(f x)[i]` stays `(f x)[i]`, but `(f x) [a, b]` (list arg) keeps its space.
+        if curr_text == "[" && prev_text == ")" && adjacent_in_input {
             return false;
         }
 
@@ -2794,6 +2794,152 @@
         .unwrap_or(rendered_lines.len());
     if first_non_blank > 0 {
         rendered_lines.drain(0..first_non_blank);
+    }
+
+    // Align consecutive single-line records with identical field structure inside list literals.
+    // E.g. a list of `{ key: "n", modifiers: "ctrl", action: "compose", label: "New email" }`
+    // lines gets their corresponding field values aligned to the same column.
+    {
+        /// Split `s` by top-level commas (respecting `{}`, `()`, `[]`, and `"…"` strings).
+        fn split_top_level_commas(s: &str) -> Vec<String> {
+            let mut result = Vec::new();
+            let mut depth: i32 = 0;
+            let mut in_string = false;
+            let mut escape = false;
+            let mut start = 0usize;
+            let bytes = s.as_bytes();
+            let mut i = 0usize;
+            while i < bytes.len() {
+                let b = bytes[i];
+                if escape {
+                    escape = false;
+                    i += 1;
+                    continue;
+                }
+                if in_string {
+                    if b == b'\\' {
+                        escape = true;
+                    } else if b == b'"' {
+                        in_string = false;
+                    }
+                    i += 1;
+                    continue;
+                }
+                match b {
+                    b'"' => in_string = true,
+                    b'{' | b'(' | b'[' => depth += 1,
+                    b'}' | b')' | b']' => depth -= 1,
+                    b',' if depth == 0 => {
+                        result.push(s[start..i].trim().to_string());
+                        start = i + 1;
+                    }
+                    _ => {}
+                }
+                i += 1;
+            }
+            let tail = s[start..].trim();
+            if !tail.is_empty() {
+                result.push(tail.to_string());
+            }
+            result
+        }
+
+        /// Parse a rendered line as an inline record: returns `(indent, fields)` where each
+        /// field is the trimmed `key: value` string (without surrounding comma).
+        /// Returns `None` if the line is not a single-line record.
+        fn parse_inline_record(line: &str) -> Option<(String, Vec<String>)> {
+            let trimmed_end = line.trim_end_matches(|c: char| c == ' ' || c == '\t');
+            let indent_len = trimmed_end.len() - trimmed_end.trim_start().len();
+            let indent = trimmed_end[..indent_len].to_string();
+            let inner = trimmed_end.trim_start();
+            // Must look like `{ ... }`; no nested `{` allowed at depth 0 in the content.
+            if !inner.starts_with('{') || !inner.ends_with('}') {
+                return None;
+            }
+            let content = inner[1..inner.len() - 1].trim();
+            if content.is_empty() {
+                return None;
+            }
+            let fields = split_top_level_commas(content);
+            // Every field must look like `ident: value` (at least one `:` after an identifier).
+            for f in &fields {
+                let f = f.trim();
+                let colon = f.find(':')?;
+                let key = f[..colon].trim();
+                if key.is_empty() || key.contains(' ') {
+                    return None;
+                }
+            }
+            if fields.is_empty() {
+                return None;
+            }
+            Some((indent, fields))
+        }
+
+        /// Extract the field key (before the first `:`).
+        fn field_key(field: &str) -> &str {
+            field.split(':').next().map(str::trim).unwrap_or("")
+        }
+
+        let mut i = 0usize;
+        while i < rendered_lines.len() {
+            let Some((indent0, fields0)) = parse_inline_record(&rendered_lines[i]) else {
+                i += 1;
+                continue;
+            };
+            // Collect the run of consecutive same-structure records at the same indent.
+            let mut j = i + 1;
+            while j < rendered_lines.len() {
+                if let Some((ind, flds)) = parse_inline_record(&rendered_lines[j]) {
+                    // Same indent and same field keys in same order.
+                    if ind == indent0
+                        && flds.len() == fields0.len()
+                        && flds
+                            .iter()
+                            .zip(fields0.iter())
+                            .all(|(a, b)| field_key(a) == field_key(b))
+                    {
+                        j += 1;
+                        continue;
+                    }
+                }
+                break;
+            }
+            if j - i >= 2 {
+                // Compute max width per field position (for all but the last field).
+                let n_fields = fields0.len();
+                let mut max_widths = vec![0usize; n_fields.saturating_sub(1)];
+                for line in &rendered_lines[i..j] {
+                    if let Some((_, flds)) = parse_inline_record(line) {
+                        for (k, w) in max_widths.iter_mut().enumerate() {
+                            *w = (*w).max(flds[k].len());
+                        }
+                    }
+                }
+                // Re-render each record with padding.
+                for line in rendered_lines[i..j].iter_mut() {
+                    if let Some((ind, flds)) = parse_inline_record(line) {
+                        let mut s = ind;
+                        s.push('{');
+                        for (k, f) in flds.iter().enumerate() {
+                            if k == 0 {
+                                s.push(' ');
+                            }
+                            s.push_str(f);
+                            if k + 1 < flds.len() {
+                                s.push(',');
+                                // Pad after the comma so the next field starts at a fixed column.
+                                let pad = max_widths[k].saturating_sub(f.len()) + 1;
+                                s.push_str(&" ".repeat(pad));
+                            }
+                        }
+                        s.push_str(" }");
+                        *line = s;
+                    }
+                }
+            }
+            i = j;
+        }
     }
 
     // Final render via the `Doc` renderer. Today we mostly use hardlines, but this keeps the

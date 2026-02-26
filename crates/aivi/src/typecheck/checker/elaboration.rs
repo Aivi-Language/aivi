@@ -544,7 +544,16 @@ impl TypeChecker {
             if env.get(&name.name).is_none() && self.method_to_classes.contains_key(&name.name) {
                 let mut new_args = Vec::new();
                 for arg in args {
-                    let (arg, _ty) = self.elab_expr(arg, None, env)?;
+                    let (arg, _ty) = match self.elab_expr(arg.clone(), None, env) {
+                        Ok(value) => value,
+                        Err(err) if err.message.starts_with("unknown name '") => {
+                            let Some(rewritten) = lift_predicate_expr(&arg, env, "__pred") else {
+                                return Err(err);
+                            };
+                            self.elab_expr(rewritten, None, env)?
+                        }
+                        Err(err) => return Err(err),
+                    };
                     new_args.push(arg);
                 }
                 let result_ty = self.infer_method_call(name, &new_args, expected.clone(), env)?;
@@ -565,7 +574,7 @@ impl TypeChecker {
                 // right overload, then elaborate arguments with the resolved param types.
                 let arg_tys: Vec<Type> = args
                     .iter()
-                    .map(|arg| self.infer_expr(arg, env))
+                    .map(|arg| self.infer_arg_with_predicate_fallback(arg, env))
                     .collect::<Result<_, _>>()?;
 
                 let Some(candidates) = env.get_all(&name.name) else {
@@ -659,7 +668,8 @@ impl TypeChecker {
                     let mut new_args = Vec::new();
                     for (arg, expected_arg_ty) in args.into_iter().zip(param_tys.into_iter()) {
                         let expected_arg_ty = self.apply(expected_arg_ty);
-                        let (elab_arg, _ty) = self.elab_expr(arg, Some(expected_arg_ty), env)?;
+                        let (elab_arg, _ty) =
+                            self.elab_call_arg_with_predicate_fallback(arg, expected_arg_ty, env)?;
                         new_args.push(elab_arg);
                     }
                     let out = Expr::Call {
@@ -698,7 +708,8 @@ impl TypeChecker {
         let mut new_args = Vec::new();
         for (arg, expected_arg_ty) in args.into_iter().zip(param_tys.into_iter()) {
             let expected_arg_ty = self.apply(expected_arg_ty);
-            let (arg, _ty) = self.elab_expr(arg, Some(expected_arg_ty), env)?;
+            let (arg, _ty) =
+                self.elab_call_arg_with_predicate_fallback(arg, expected_arg_ty, env)?;
             new_args.push(arg);
         }
         let out = Expr::Call {
@@ -707,6 +718,46 @@ impl TypeChecker {
             span,
         };
         Ok((out, self.apply(result_ty)))
+    }
+
+    fn elab_call_arg_with_predicate_fallback(
+        &mut self,
+        arg: Expr,
+        expected_arg_ty: Type,
+        env: &mut TypeEnv,
+    ) -> Result<(Expr, Type), TypeError> {
+        let expected_applied_inner = self.apply(expected_arg_ty.clone());
+        let expected_applied = self.expand_alias(expected_applied_inner);
+        let allow_predicate_try = matches!(expected_applied, Type::Func(_, _) | Type::Var(_))
+            || matches!(&expected_applied, Type::Con(name, _) if name == "Pred");
+
+        if allow_predicate_try {
+            if let Some(rewritten) = lift_predicate_expr(&arg, env, "__pred") {
+                let checkpoint = self.subst.clone();
+                if let Ok((elab_arg, elab_ty)) =
+                    self.elab_expr(rewritten, Some(expected_arg_ty.clone()), env)
+                {
+                    let elab_applied_inner = self.apply(elab_ty.clone());
+                    let elab_applied = self.expand_alias(elab_applied_inner);
+                    let is_predicate_fn = if let Type::Func(_, result_ty) = elab_applied {
+                        let result_applied_inner = self.apply(*result_ty);
+                        let result_applied = self.expand_alias(result_applied_inner);
+                        matches!(
+                            result_applied,
+                            Type::Con(ref name, ref args) if name == "Bool" && args.is_empty()
+                        )
+                    } else {
+                        false
+                    };
+                    if is_predicate_fn {
+                        return Ok((elab_arg, elab_ty));
+                    }
+                }
+                self.subst = checkpoint;
+            }
+        }
+
+        self.elab_expr(arg, Some(expected_arg_ty), env)
     }
 
     fn elab_record(
@@ -921,6 +972,45 @@ impl TypeChecker {
                     let inferred =
                         self.infer_method_call(name, args, Some(expected_ty.clone()), env)?;
                     return Ok((expr, inferred));
+                }
+            }
+        }
+
+        if let Some(expected_ty) = expected.clone() {
+            let expected_applied_inner = self.apply(expected_ty.clone());
+            let expected_applied = self.expand_alias(expected_applied_inner);
+            let allow_predicate_try =
+                matches!(expected_applied, Type::Func(_, _) | Type::Var(_));
+            if allow_predicate_try {
+                if let Some(rewritten) = lift_predicate_expr(&expr, env, "__pred") {
+                    let checkpoint = self.subst.clone();
+                    if let Ok(rewritten_ty) = self.infer_expr(&rewritten, env) {
+                        let rewritten_applied_inner = self.apply(rewritten_ty.clone());
+                        let rewritten_applied = self.expand_alias(rewritten_applied_inner);
+                        let rewritten_is_predicate = if let Type::Func(_, result_ty) = rewritten_applied
+                        {
+                            let result_applied_inner = self.apply(*result_ty);
+                            let result_applied = self.expand_alias(result_applied_inner);
+                            matches!(
+                                result_applied,
+                                Type::Con(ref name, ref args) if name == "Bool" && args.is_empty()
+                            )
+                        } else {
+                            false
+                        };
+                        if rewritten_is_predicate
+                            && self
+                                .unify_with_span(
+                                    rewritten_ty,
+                                    expected_ty.clone(),
+                                    expr_span(&rewritten),
+                                )
+                                .is_ok()
+                        {
+                            return Ok((rewritten, self.apply(expected_ty)));
+                        }
+                    }
+                    self.subst = checkpoint;
                 }
             }
         }
