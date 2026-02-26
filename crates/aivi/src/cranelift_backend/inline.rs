@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 
 use crate::rust_ir::{
-    RustIrBlockItem, RustIrDef, RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrModule,
+    RustIrBlockItem, RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrModule,
     RustIrPattern, RustIrRecordField, RustIrTextPart,
 };
 
@@ -1210,6 +1210,7 @@ pub(crate) fn inline_program(modules: &mut [RustIrModule]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::rust_ir::RustIrDef;
 
     fn local(id: u32, name: &str) -> RustIrExpr {
         RustIrExpr::Local {

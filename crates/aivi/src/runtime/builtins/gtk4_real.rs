@@ -79,16 +79,6 @@ mod linux {
         fn gtk_text_view_set_right_margin(text_view: *mut c_void, right_margin: c_int);
         fn gtk_text_view_set_editable(text_view: *mut c_void, setting: c_int);
         fn gtk_text_view_set_cursor_visible(text_view: *mut c_void, setting: c_int);
-        fn gtk_text_view_get_buffer(text_view: *mut c_void) -> *mut c_void;
-        fn gtk_text_buffer_set_text(buffer: *mut c_void, text: *const c_char, len: c_int);
-        fn gtk_text_buffer_get_text(
-            buffer: *mut c_void,
-            start: *const c_void,
-            end: *const c_void,
-            include_hidden_chars: c_int,
-        ) -> *mut c_char;
-        fn gtk_text_buffer_get_start_iter(buffer: *mut c_void, iter: *mut c_void);
-        fn gtk_text_buffer_get_end_iter(buffer: *mut c_void, iter: *mut c_void);
 
         fn gtk_image_new_from_file(filename: *const c_char) -> *mut c_void;
         fn gtk_image_set_from_file(image: *mut c_void, filename: *const c_char);
@@ -523,6 +513,7 @@ mod linux {
     #[derive(Debug, Clone, Copy)]
     enum CreatedWidgetKind {
         Box,
+        Button,
         HeaderBar,
         ScrolledWindow,
         Overlay,
@@ -1187,14 +1178,14 @@ mod linux {
                     let icon_c = c_text(&icon_name, "gtk4.buildFromNode invalid GtkButton icon")?;
                     (
                         unsafe { gtk_button_new_from_icon_name(icon_c.as_ptr()) },
-                        CreatedWidgetKind::Other,
+                        CreatedWidgetKind::Button,
                     )
                 } else {
                     let label = props.get("label").cloned().unwrap_or_default();
                     let label_c = c_text(&label, "gtk4.buildFromNode invalid GtkButton label")?;
                     (
                         unsafe { gtk_button_new_with_label(label_c.as_ptr()) },
-                        CreatedWidgetKind::Other,
+                        CreatedWidgetKind::Button,
                     )
                 }
             }
@@ -1393,6 +1384,7 @@ mod linux {
             }
             match kind {
                 CreatedWidgetKind::Box => unsafe { gtk_box_append(raw, child_raw) },
+                CreatedWidgetKind::Button => unsafe { gtk_button_set_child(raw, child_raw) },
                 CreatedWidgetKind::HeaderBar => match child.child_type.as_deref() {
                     Some("end") => unsafe { gtk_header_bar_pack_end(raw, child_raw) },
                     Some("title") => unsafe { gtk_header_bar_set_title_widget(raw, child_raw) },
