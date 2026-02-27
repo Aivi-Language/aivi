@@ -654,7 +654,12 @@ fn inline_children(
             field,
         },
 
-        RustIrExpr::Index { id, base, index, location } => RustIrExpr::Index {
+        RustIrExpr::Index {
+            id,
+            base,
+            index,
+            location,
+        } => RustIrExpr::Index {
             id,
             base: Box::new(inline_expr(*base, candidates, id_gen, depth)),
             index: Box::new(inline_expr(*index, candidates, id_gen, depth)),
