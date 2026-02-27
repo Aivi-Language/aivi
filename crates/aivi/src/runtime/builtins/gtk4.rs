@@ -135,6 +135,13 @@ fn build_gtk4_stubs() -> Value {
         ("signalBindCssClass", 4),
         ("signalBindToggleBoolProperty", 3),
         ("signalToggleCssClass", 3),
+        ("dialogNew", 1),
+        ("dialogSetTitle", 2),
+        ("dialogSetChild", 2),
+        ("dialogPresent", 1),
+        ("dialogClose", 1),
+        ("signalBindDialogPresent", 3),
+        ("signalBindStackPage", 3),
     ];
 
     let mut fields = HashMap::new();

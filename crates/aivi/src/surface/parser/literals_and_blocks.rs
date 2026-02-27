@@ -988,6 +988,25 @@ impl Parser {
         }
 
         if !self.consume_symbol(":") {
+            // Shorthand `{ name }` desugars to `{ name: name }` — only for a single plain ident.
+            if path.len() == 1 {
+                if let PathSegment::Field(name) = &path[0] {
+                    let is_separator = self.peek_newline()
+                        || self.check_symbol(",")
+                        || self.check_symbol("}")
+                        || self.pos >= self.tokens.len();
+                    if is_separator {
+                        let span = name.span.clone();
+                        let value = Expr::Ident(name.clone());
+                        return Some(RecordField {
+                            spread: false,
+                            path,
+                            value,
+                            span,
+                        });
+                    }
+                }
+            }
             self.pos = start;
             return None;
         }
