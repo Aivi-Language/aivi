@@ -1,0 +1,8 @@
+// Opt out of the implicit prelude import.
+// Useful for low-level modules that define their own primitives.
+@no_prelude module Core.Primitives
+
+// Nothing from the prelude is in scope here.
+// You must import everything explicitly.
+identity : a -> a
+identity = x => x

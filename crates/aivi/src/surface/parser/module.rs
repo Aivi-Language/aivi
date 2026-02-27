@@ -475,6 +475,11 @@ impl Parser {
     fn parse_export_list(&mut self) -> Vec<crate::surface::ExportItem> {
         let mut exports = Vec::new();
         loop {
+            // A blank line (two or more consecutive newlines) ends the export
+            // list. Single newlines are treated as line continuations.
+            if self.at_blank_line() {
+                break;
+            }
             self.consume_newlines();
             // Stop when the next token looks like a definition (ident followed by
             // `=`, `:`, or `(`), a keyword, or end-of-file — not an export name.
@@ -506,19 +511,68 @@ impl Parser {
         exports
     }
 
+    /// Returns `true` when a blank line separates the last consumed token from
+    /// the next one.  The lexer synthesises one `Newline` per line-change, so a
+    /// blank line shows up as a gap of >1 between the previous real token's
+    /// line and the `Newline` token's span (which carries the *next* real
+    /// token's position).
+    fn at_blank_line(&self) -> bool {
+        if !matches!(
+            self.tokens.get(self.pos).map(|t| &t.kind),
+            Some(TokenKind::Newline)
+        ) {
+            return false;
+        }
+        // Find the previous non-newline token's ending line.
+        let prev_line = (0..self.pos)
+            .rev()
+            .find_map(|i| {
+                let t = &self.tokens[i];
+                if t.kind != TokenKind::Newline {
+                    Some(t.span.end.line)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or(0);
+        // The Newline token's span points at the next real token's position.
+        let next_line = self.tokens[self.pos].span.start.line;
+        next_line > prev_line + 1
+    }
+
     /// Returns `true` when the current position looks like the beginning of a
     /// definition or other module-level item rather than an export-list name.
     fn looks_like_definition_start(&self) -> bool {
         let Some(tok) = self.tokens.get(self.pos) else {
             return true;
         };
-        // Keywords that start module items always end the export list.
-        // Note: `domain` is intentionally excluded — `export domain Name`
-        // is valid export-list syntax handled by parse_export_list itself.
         if tok.kind == TokenKind::Ident {
             match tok.text.as_str() {
+                // Keywords that unambiguously start module items.
                 "module" | "export" | "use" | "class" | "instance" | "machine" => {
                     return true;
+                }
+                // `domain Name` is a valid export-list entry, but
+                // `domain Name over ...` / `domain Name =` is a declaration.
+                "domain" => {
+                    // Look past `domain Name` to see if it's a declaration.
+                    if let Some(name_tok) = self.tokens.get(self.pos + 1) {
+                        if name_tok.kind == TokenKind::Ident {
+                            if let Some(after) = self.tokens.get(self.pos + 2) {
+                                if after.kind == TokenKind::Ident
+                                    && after.text.as_str() == "over"
+                                {
+                                    return true;
+                                }
+                                if after.kind == TokenKind::Symbol
+                                    && after.text.as_str() == "="
+                                {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    return false;
                 }
                 _ => {}
             }

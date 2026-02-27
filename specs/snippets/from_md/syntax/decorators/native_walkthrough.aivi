@@ -1,0 +1,19 @@
+// Step 1 – Declare the AIVI type signature.
+//   Every @native binding MUST be top-level and have an explicit type.
+//   The body is a dummy; the compiler rewrites it.
+
+@native "rustfft.fft"
+fft : List Float -> List (Float, Float)
+fft = samples => []
+
+// Step 2 – Use it like any other AIVI function.
+//   The caller never sees the native machinery.
+
+use aivi
+
+spectrum = [1.0, 0.0, 1.0, 0.0] |> fft
+
+main = do Effect {
+  result <- spectrum
+  console.log (text.show result)
+}
