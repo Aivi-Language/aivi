@@ -5,7 +5,7 @@ pub const SOURCE: &str = r#"
 module aivi.ui.gtk4
 export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaId, DrawAreaId, TrayIconId, DragSourceId, DropTargetId, MenuModelId, MenuButtonId, DialogId, FileDialogId, ImageId, ListStoreId, ListViewId, TreeViewId, GestureClickId, ClipboardId, ActionId, ShortcutId, NotificationId, LayoutManagerId, OverlayId, SeparatorId, GtkError
 export GtkNode, GtkAttr, GtkElement, GtkTextNode, GtkAttribute
-export GtkSignalEvent
+export GtkSignalEvent, GtkClicked, GtkInputChanged, GtkActivated, GtkToggled, GtkValueChanged, GtkKeyPressed, GtkFocusIn, GtkFocusOut, GtkUnknownSignal
 export init, appNew, appRun
 export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent, windowClose
 export widgetShow, widgetHide
@@ -42,7 +42,7 @@ export layoutManagerNew, widgetSetLayoutManager
 export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
 export gtkElement, gtkTextNode, gtkAttr
 export buildFromNode
-export signalPoll, signalEmit
+export signalPoll, signalEmit, signalStream
 export widgetById, widgetSetBoolProperty, signalBindBoolProperty, signalBindCssClass, signalBindToggleBoolProperty, signalToggleCssClass
 export signalBindDialogPresent, signalBindStackPage
 
@@ -82,7 +82,16 @@ GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text
 
 GtkAttr = GtkAttribute Text Text
 
-GtkSignalEvent = GtkSignalEvent WidgetId Text Text Text
+GtkSignalEvent =
+  | GtkClicked       WidgetId
+  | GtkInputChanged  WidgetId Text
+  | GtkActivated     WidgetId
+  | GtkToggled       WidgetId Bool
+  | GtkValueChanged  WidgetId Float
+  | GtkKeyPressed    WidgetId Text Text
+  | GtkFocusIn       WidgetId
+  | GtkFocusOut      WidgetId
+  | GtkUnknownSignal WidgetId Text Text Text
 
 gtkElement : Text -> List GtkAttr -> List GtkNode -> GtkNode
 gtkElement = tag attrs children => GtkElement tag attrs children
@@ -98,6 +107,9 @@ buildFromNode = gtk4.buildFromNode
 
 signalPoll : Unit -> Effect GtkError (Option GtkSignalEvent)
 signalPoll = gtk4.signalPoll
+
+signalStream : Unit -> Effect GtkError (Recv GtkSignalEvent)
+signalStream = gtk4.signalStream
 
 signalEmit : WidgetId -> Text -> Text -> Text -> Effect GtkError Unit
 signalEmit = gtk4.signalEmit

@@ -26,6 +26,7 @@ fn build_gtk4_stubs() -> Value {
         ("buildFromNode", 1),
         ("signalPoll", 1),
         ("signalEmit", 4),
+        ("signalStream", 1),
         ("init", 1),
         ("appNew", 1),
         ("appRun", 1),

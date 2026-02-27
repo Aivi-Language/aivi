@@ -1241,12 +1241,17 @@ impl Parser {
                             }
                             continue;
                         }
-                        if attr.name == "onClick" || attr.name == "onInput" {
-                            let signal_name = if attr.name == "onClick" {
-                                "clicked"
-                            } else {
-                                "changed"
-                            };
+                        let signal_name_opt = match attr.name.as_str() {
+                            "onClick" => Some("clicked"),
+                            "onInput" => Some("changed"),
+                            "onActivate" => Some("activate"),
+                            "onToggle" => Some("toggled"),
+                            "onValueChanged" => Some("value-changed"),
+                            "onFocusIn" => Some("focus-enter"),
+                            "onFocusOut" => Some("focus-leave"),
+                            _ => None,
+                        };
+                        if let Some(signal_name) = signal_name_opt {
                             let Some(handler) = attr_handler_text(&attr.name, attr.value) else {
                                 this.emit_diag(
                                     "E1614",

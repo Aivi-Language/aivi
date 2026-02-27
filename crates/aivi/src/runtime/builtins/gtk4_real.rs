@@ -7,9 +7,11 @@ mod linux {
     use std::ffi::{CStr, CString};
     use std::os::raw::{c_char, c_int, c_ulong, c_void};
     use std::ptr::null_mut;
-    use std::sync::{Arc, Mutex};
+    use std::sync::atomic::AtomicBool;
+    use std::sync::{mpsc, Arc, Mutex};
 
     use super::super::util::builtin;
+    use crate::runtime::values::{ChannelInner, ChannelRecv};
     use crate::runtime::{EffectValue, RuntimeError, Value};
 
     #[link(name = "gtk-4")]
@@ -73,6 +75,8 @@ mod linux {
         fn gtk_entry_new() -> *mut c_void;
         fn gtk_editable_set_text(editable: *mut c_void, text: *const c_char);
         fn gtk_editable_get_text(editable: *mut c_void) -> *const c_char;
+        fn gtk_check_button_get_active(check_button: *mut c_void) -> c_int;
+        fn gtk_range_get_value(range: *mut c_void) -> f64;
 
         fn gtk_text_view_new() -> *mut c_void;
         fn gtk_text_view_set_wrap_mode(text_view: *mut c_void, wrap_mode: c_int);
@@ -252,6 +256,7 @@ mod linux {
         separators: HashMap<i64, *mut c_void>,
         gesture_clicks: HashMap<i64, GestureClickState>,
         signal_events: VecDeque<SignalEventState>,
+        signal_senders: Vec<mpsc::SyncSender<Value>>,
         signal_bool_bindings: HashMap<String, Vec<SignalBoolBinding>>,
         signal_css_bindings: HashMap<String, Vec<SignalCssBinding>>,
         signal_toggle_bool_bindings: HashMap<String, Vec<SignalToggleBoolBinding>>,
@@ -455,6 +460,8 @@ mod linux {
     enum SignalPayloadKind {
         None,
         EditableText,
+        ToggleActive,
+        FloatValue,
     }
 
     struct SignalCallbackData {
@@ -862,18 +869,54 @@ mod linux {
     }
 
     fn make_signal_event_value(event: SignalEventState) -> Value {
-        let payload = Value::Constructor {
-            name: "GtkSignalEvent".to_string(),
-            args: vec![
-                Value::Int(event.widget_id),
-                Value::Text(event.signal),
-                Value::Text(event.handler),
-                Value::Text(event.payload),
-            ],
+        let inner = match event.signal.as_str() {
+            "clicked" => Value::Constructor {
+                name: "GtkClicked".to_string(),
+                args: vec![Value::Int(event.widget_id)],
+            },
+            "changed" => Value::Constructor {
+                name: "GtkInputChanged".to_string(),
+                args: vec![Value::Int(event.widget_id), Value::Text(event.payload)],
+            },
+            "activate" => Value::Constructor {
+                name: "GtkActivated".to_string(),
+                args: vec![Value::Int(event.widget_id)],
+            },
+            "toggled" => {
+                let active = event.payload == "true";
+                Value::Constructor {
+                    name: "GtkToggled".to_string(),
+                    args: vec![Value::Int(event.widget_id), Value::Bool(active)],
+                }
+            }
+            "value-changed" => {
+                let val = event.payload.parse::<f64>().unwrap_or(0.0);
+                Value::Constructor {
+                    name: "GtkValueChanged".to_string(),
+                    args: vec![Value::Int(event.widget_id), Value::Float(val)],
+                }
+            }
+            "focus-enter" => Value::Constructor {
+                name: "GtkFocusIn".to_string(),
+                args: vec![Value::Int(event.widget_id)],
+            },
+            "focus-leave" => Value::Constructor {
+                name: "GtkFocusOut".to_string(),
+                args: vec![Value::Int(event.widget_id)],
+            },
+            _ => Value::Constructor {
+                name: "GtkUnknownSignal".to_string(),
+                args: vec![
+                    Value::Int(event.widget_id),
+                    Value::Text(event.signal),
+                    Value::Text(event.handler),
+                    Value::Text(event.payload),
+                ],
+            },
         };
         Value::Constructor {
             name: "Some".to_string(),
-            args: vec![payload],
+            args: vec![inner],
         }
     }
 
@@ -1688,15 +1731,27 @@ mod linux {
                         .into_owned()
                 }
             }
+            SignalPayloadKind::ToggleActive => {
+                let active = unsafe { gtk_check_button_get_active(instance) };
+                if active != 0 { "true" } else { "false" }.to_string()
+            }
+            SignalPayloadKind::FloatValue => {
+                let val = unsafe { gtk_range_get_value(instance) };
+                val.to_string()
+            }
         };
         GTK_STATE.with(|state| {
             let mut state = state.borrow_mut();
-            state.signal_events.push_back(SignalEventState {
+            let event = SignalEventState {
                 widget_id: binding.widget_id,
                 signal: binding.signal_name.clone(),
                 handler: binding.handler.clone(),
                 payload,
-            });
+            };
+            // Broadcast to signalStream receivers (retain only live senders)
+            let typed_value = make_signal_event_value(event.clone());
+            state.signal_senders.retain(|s| s.try_send(typed_value.clone()).is_ok());
+            state.signal_events.push_back(event);
             // Apply any registered property bindings for this handler
             if let Some(bindings) = state.signal_bool_bindings.get(&binding.handler) {
                 let mutations: Vec<_> = bindings
@@ -3697,6 +3752,29 @@ mod linux {
                                 args: Vec::new(),
                             })
                         }
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "signalStream".to_string(),
+            builtin("gtk4.signalStream", 1, |mut args, _| {
+                match args.remove(0) {
+                    Value::Unit => {}
+                    _ => return Err(invalid("gtk4.signalStream expects Unit")),
+                }
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let (sender, receiver) = mpsc::sync_channel(512);
+                        let inner = Arc::new(ChannelInner {
+                            sender: Mutex::new(None),
+                            receiver: Mutex::new(receiver),
+                            closed: AtomicBool::new(false),
+                        });
+                        state.signal_senders.push(sender);
+                        Ok(Value::ChannelRecv(Arc::new(ChannelRecv { inner })))
                     })
                 }))
             }),

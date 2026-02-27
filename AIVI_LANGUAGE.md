@@ -823,6 +823,10 @@ GTK sigils also support signal sugar in v0.1:
 ~<gtk>
   <object class="GtkButton" onClick={ Msg.Save } />
   <object class="GtkEntry" onInput={ Msg.Changed } />
+  <object class="GtkEntry" onActivate={ Msg.Submit } />
+  <object class="GtkCheckButton" onToggle={ Msg.Toggled } />
+  <object class="GtkScale" onValueChanged={ Msg.VolumeChanged } />
+  <object class="GtkEntry" onFocusIn={ Msg.Focused } onFocusOut={ Msg.Blurred } />
   <object class="GtkButton">
     <signal name="clicked" on={ Msg.Save } />
   </object>
@@ -830,7 +834,37 @@ GTK sigils also support signal sugar in v0.1:
 ```
 
 Signal handlers must be compile-time expressions; they lower into typed GTK signal bindings.
-`onClick` maps to `clicked`, `onInput` maps to `changed`, and invalid dynamic handlers produce `E1614`.
+Sugar attrs: `onClick`→`clicked`, `onInput`→`changed`, `onActivate`→`activate`, `onToggle`→`toggled`,
+`onValueChanged`→`value-changed`, `onFocusIn`→`focus-enter`, `onFocusOut`→`focus-leave`.
+Invalid dynamic handlers produce `E1614`.
+
+GTK signals arrive as typed `GtkSignalEvent` constructors:
+
+```aivi
+GtkSignalEvent =
+  | GtkClicked       WidgetId
+  | GtkInputChanged  WidgetId Text
+  | GtkActivated     WidgetId
+  | GtkToggled       WidgetId Bool
+  | GtkValueChanged  WidgetId Float
+  | GtkKeyPressed    WidgetId Text Text
+  | GtkFocusIn       WidgetId
+  | GtkFocusOut      WidgetId
+  | GtkUnknownSignal WidgetId Text Text Text
+```
+
+Consume events via `signalStream` (preferred) or `signalPoll`:
+
+```aivi
+events <- signalStream {}      // Recv GtkSignalEvent — push-based, no polling loop needed
+channel.forEach events (event =>
+  event match
+    | GtkClicked _          => handleSave
+    | GtkInputChanged _ txt => handleInput txt
+    | GtkToggled _ active   => handleToggle active
+    | _                     => yield {}
+)
+```
 
 Dynamic child lists are supported with `<each>`:
 
