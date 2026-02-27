@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::diagnostics::Span;
 use crate::hir::{
     HirBlockItem, HirBlockKind, HirDef, HirExpr, HirListItem, HirLiteral, HirMatchArm, HirModule,
     HirPathSegment, HirPattern, HirProgram, HirRecordField, HirRecordPatternField,
@@ -121,6 +122,8 @@ pub enum KernelExpr {
         id: u32,
         base: Box<KernelExpr>,
         index: Box<KernelExpr>,
+        #[serde(skip)]
+        span: Option<Span>,
     },
     Match {
         id: u32,
@@ -425,10 +428,11 @@ fn lower_expr(expr: HirExpr, id_gen: &mut IdGen) -> KernelExpr {
             base: Box::new(lower_expr(*base, id_gen)),
             field,
         },
-        HirExpr::Index { id, base, index } => KernelExpr::Index {
+        HirExpr::Index { id, base, index, span } => KernelExpr::Index {
             id,
             base: Box::new(lower_expr(*base, id_gen)),
             index: Box::new(lower_expr(*index, id_gen)),
+            span,
         },
         HirExpr::Match {
             id,

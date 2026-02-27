@@ -228,6 +228,8 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_reuse_tuple: FuncRef,
     // Function entry tracking for diagnostics
     pub(crate) rt_enter_fn: FuncRef,
+    // Source location tracking for diagnostics
+    pub(crate) rt_set_location: FuncRef,
 }
 
 /// Declare all runtime helper signatures in the module and return FuncRefs
@@ -353,6 +355,8 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_reuse_tuple: decl!("rt_reuse_tuple", [PTR, PTR, PTR, PTR], [PTR]),
         // (ctx, name_ptr, name_len) -> void
         rt_enter_fn: decl!("rt_enter_fn", [PTR, PTR, PTR], []),
+        // (ctx, loc_ptr, loc_len) -> void
+        rt_set_location: decl!("rt_set_location", [PTR, PTR, PTR], []),
     })
 }
 
@@ -418,6 +422,8 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_reuse_tuple: cranelift_module::FuncId,
     // Function entry tracking for diagnostics
     pub(crate) rt_enter_fn: cranelift_module::FuncId,
+    // Source location tracking for diagnostics
+    pub(crate) rt_set_location: cranelift_module::FuncId,
 }
 
 impl DeclaredHelpers {
@@ -480,6 +486,7 @@ impl DeclaredHelpers {
             rt_reuse_list: imp!(rt_reuse_list),
             rt_reuse_tuple: imp!(rt_reuse_tuple),
             rt_enter_fn: imp!(rt_enter_fn),
+            rt_set_location: imp!(rt_set_location),
         }
     }
 }
@@ -608,6 +615,18 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         }
     }
 
+    /// Emit a call to `rt_set_location` to record the current source location for diagnostics.
+    pub(crate) fn emit_set_location(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        location: &str,
+    ) {
+        let (ptr, len) = self.embed_str(builder, location.as_bytes());
+        builder
+            .ins()
+            .call(self.helpers.rt_set_location, &[self.ctx_param, ptr, len]);
+    }
+
     /// Emit a call to `rt_enter_fn` to record the current function name for diagnostics.
     pub(crate) fn emit_enter_fn(&mut self, builder: &mut FunctionBuilder<'_>, fn_name: &str) {
         let (ptr, len) = self.embed_str(builder, fn_name.as_bytes());
@@ -723,7 +742,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             RustIrExpr::FieldAccess { base, field, .. } => {
                 self.lower_field_access(builder, base, field)
             }
-            RustIrExpr::Index { base, index, .. } => self.lower_index(builder, base, index),
+            RustIrExpr::Index { base, index, span, .. } => {
+                self.lower_index(builder, base, index, span.as_ref())
+            }
 
             // ----- Control flow -----
             RustIrExpr::If {
@@ -1391,7 +1412,12 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder: &mut FunctionBuilder<'_>,
         base: &RustIrExpr,
         index: &RustIrExpr,
+        span: Option<&crate::diagnostics::Span>,
     ) -> TypedValue {
+        if let Some(span) = span {
+            let loc = format!("{}:{}", span.start.line, span.start.column);
+            self.emit_set_location(builder, &loc);
+        }
         let base_tv = self.lower_expr(builder, base);
         let base_val = self.ensure_boxed(builder, base_tv);
         let idx_tv = self.lower_expr(builder, index);

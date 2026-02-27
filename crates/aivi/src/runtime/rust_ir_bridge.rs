@@ -157,10 +157,11 @@ fn lower_runtime_rust_ir_expr(expr: &rust_ir::RustIrExpr) -> Option<HirExpr> {
             base: Box::new(lower_runtime_rust_ir_expr(base)?),
             field: field.clone(),
         },
-        rust_ir::RustIrExpr::Index { id, base, index } => HirExpr::Index {
+        rust_ir::RustIrExpr::Index { id, base, index, span } => HirExpr::Index {
             id: *id,
             base: Box::new(lower_runtime_rust_ir_expr(base)?),
             index: Box::new(lower_runtime_rust_ir_expr(index)?),
+            span: span.clone(),
         },
         rust_ir::RustIrExpr::Match {
             id,

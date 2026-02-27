@@ -313,7 +313,7 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
             }
             find_max_id_expr(base, max);
         }
-        HirExpr::Index { id, base, index } => {
+        HirExpr::Index { id, base, index, .. } => {
             if *id > *max {
                 *max = *id;
             }
