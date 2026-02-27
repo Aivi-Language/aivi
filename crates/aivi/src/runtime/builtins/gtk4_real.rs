@@ -161,6 +161,7 @@ mod linux {
     #[link(name = "glib-2.0")]
     unsafe extern "C" {
         fn g_main_context_default() -> *mut c_void;
+        fn g_main_context_pending(context: *mut c_void) -> c_int;
         fn g_main_context_iteration(context: *mut c_void, may_block: c_int) -> c_int;
     }
 
@@ -254,7 +255,10 @@ mod linux {
             if *active.borrow() {
                 unsafe {
                     let ctx = g_main_context_default();
-                    g_main_context_iteration(ctx, 0);
+                    // Drain all pending events (not just one) to avoid input lag.
+                    while g_main_context_pending(ctx) != 0 {
+                        g_main_context_iteration(ctx, 0);
+                    }
                 }
             }
         });
@@ -2035,6 +2039,7 @@ mod linux {
                         }
                         let id = state.alloc_id();
                         state.windows.insert(id, window);
+                        state.widgets.insert(id, window);
                         Ok(id)
                     })?;
                     Ok(Value::Int(id))
