@@ -247,6 +247,8 @@ fn next_value_flatmap(
                     // inner_opt is overwritten below (either source yields Some and
                     // inner_opt = Some(new_inner), or source yields None and we return).
                     // No explicit inner_opt = None needed here.
+                    inner_opt = None;
+                    continue; // restart loop: inner_opt is now None, proceed to source
                 }
             }
         }
