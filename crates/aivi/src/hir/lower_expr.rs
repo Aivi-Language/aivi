@@ -227,7 +227,9 @@ fn lower_expr_inner_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, 
             id: id_gen.next(),
             base: Box::new(lower_expr_ctx(*base, id_gen, ctx, false)),
             index: Box::new(lower_expr_ctx(*index, id_gen, ctx, false)),
-            span: Some(span),
+            location: ctx.source_path.map(|path| {
+                format!("{}:{}:{}", path, span.start.line, span.start.column)
+            }),
         },
         Expr::Call { func, args, .. } => HirExpr::Call {
             id: id_gen.next(),

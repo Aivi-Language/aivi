@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::diagnostics::Span;
 use crate::surface::{
     BlockItem, BlockKind, Decorator, Def, DomainItem, Expr, Module, ModuleItem, Pattern, TextPart,
 };
@@ -134,7 +133,7 @@ pub enum HirExpr {
         base: Box<HirExpr>,
         index: Box<HirExpr>,
         #[serde(skip)]
-        span: Option<Span>,
+        location: Option<String>,
     },
     Match {
         id: u32,
@@ -400,6 +399,7 @@ fn parse_debug_params(decorators: &[Decorator]) -> Option<DebugParams> {
 
 struct LowerCtx<'a> {
     debug: Option<LowerDebug<'a>>,
+    source_path: Option<&'a str>,
 }
 
 struct LowerDebug<'a> {
@@ -468,6 +468,7 @@ fn lower_def_expr(
             source: module_source,
             next_pipe_id: 1,
         }),
+        source_path: Some(&module.path),
     };
 
     let body_hir = lower_expr_ctx(effective_expr, id_gen, &mut ctx, false);
