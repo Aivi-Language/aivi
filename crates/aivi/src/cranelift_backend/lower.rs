@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 
 use cranelift_codegen::ir::FuncRef;
-use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder, Value};
+use cranelift_codegen::ir::{types, AbiParam, BlockArg, Function, InstBuilder, Value};
 use cranelift_frontend::{FunctionBuilder, Variable};
 use cranelift_module::{DataDescription, Linkage, Module};
 
@@ -742,8 +742,8 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             RustIrExpr::FieldAccess { base, field, .. } => {
                 self.lower_field_access(builder, base, field)
             }
-            RustIrExpr::Index { base, index, span, .. } => {
-                self.lower_index(builder, base, index, span.as_ref())
+            RustIrExpr::Index { base, index, location, .. } => {
+                self.lower_index(builder, base, index, location.as_deref())
             }
 
             // ----- Control flow -----
@@ -1412,11 +1412,10 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder: &mut FunctionBuilder<'_>,
         base: &RustIrExpr,
         index: &RustIrExpr,
-        span: Option<&crate::diagnostics::Span>,
+        location: Option<&str>,
     ) -> TypedValue {
-        if let Some(span) = span {
-            let loc = format!("{}:{}", span.start.line, span.start.column);
-            self.emit_set_location(builder, &loc);
+        if let Some(loc) = location {
+            self.emit_set_location(builder, loc);
         }
         let base_tv = self.lower_expr(builder, base);
         let base_val = self.ensure_boxed(builder, base_tv);
@@ -1664,7 +1663,25 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                 // AND name + arity checks
                 let base_ok = builder.ins().band(name_match, arity_i64);
 
-                // Check each arg pattern
+                // Short-circuit: skip arg extraction if name/arity don't match
+                let args_block = builder.create_block();
+                let pat_merge_block = builder.create_block();
+                builder.append_block_param(pat_merge_block, PTR);
+
+                let base_bool = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+                    base_ok,
+                    0,
+                );
+                let zero = builder.ins().iconst(PTR, 0);
+                builder
+                    .ins()
+                    .brif(base_bool, args_block, &[], pat_merge_block, &[BlockArg::Value(zero)]);
+
+                // Check each arg pattern (only reached when name + arity matched)
+                builder.switch_to_block(args_block);
+                builder.seal_block(args_block);
+
                 let mut result = base_ok;
                 for (i, arg_pat) in args.iter().enumerate() {
                     let idx = builder.ins().iconst(PTR, i as i64);
@@ -1678,7 +1695,11 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                     let arg_ok = self.emit_pattern_test(builder, arg_pat, arg_val);
                     result = builder.ins().band(result, arg_ok);
                 }
-                result
+                builder.ins().jump(pat_merge_block, &[BlockArg::Value(result)]);
+
+                builder.switch_to_block(pat_merge_block);
+                builder.seal_block(pat_merge_block);
+                builder.block_params(pat_merge_block)[0]
             }
             RustIrPattern::Tuple { items, .. } => {
                 // Check length
@@ -1736,6 +1757,33 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                     );
                     builder.ins().uextend(PTR, cmp)
                 };
+
+                if items.is_empty() && rest.is_none() {
+                    return len_ok;
+                }
+
+                // Short-circuit: skip element access if length doesn't match
+                let list_items_block = builder.create_block();
+                let list_merge_block = builder.create_block();
+                builder.append_block_param(list_merge_block, PTR);
+
+                let len_bool = builder.ins().icmp_imm(
+                    cranelift_codegen::ir::condcodes::IntCC::NotEqual,
+                    len_ok,
+                    0,
+                );
+                let zero = builder.ins().iconst(PTR, 0);
+                builder.ins().brif(
+                    len_bool,
+                    list_items_block,
+                    &[],
+                    list_merge_block,
+                    &[BlockArg::Value(zero)],
+                );
+
+                builder.switch_to_block(list_items_block);
+                builder.seal_block(list_items_block);
+
                 let mut result = len_ok;
 
                 for (i, item_pat) in items.iter().enumerate() {
@@ -1761,7 +1809,11 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                     let rest_ok = self.emit_pattern_test(builder, rest_pat, tail_val);
                     result = builder.ins().band(result, rest_ok);
                 }
-                result
+                builder.ins().jump(list_merge_block, &[BlockArg::Value(result)]);
+
+                builder.switch_to_block(list_merge_block);
+                builder.seal_block(list_merge_block);
+                builder.block_params(list_merge_block)[0]
             }
             RustIrPattern::Record { fields, .. } => {
                 let mut result = builder.ins().iconst(PTR, 1);

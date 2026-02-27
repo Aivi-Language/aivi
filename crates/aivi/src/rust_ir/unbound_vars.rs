@@ -333,11 +333,11 @@ fn rewrite_implicit_field_vars(
             base: Box::new(rewrite_implicit_field_vars(*base, implicit_param, unbound)),
             field,
         },
-        KernelExpr::Index { id, base, index, span } => KernelExpr::Index {
+        KernelExpr::Index { id, base, index, location } => KernelExpr::Index {
             id,
             base: Box::new(rewrite_implicit_field_vars(*base, implicit_param, unbound)),
             index: Box::new(rewrite_implicit_field_vars(*index, implicit_param, unbound)),
-            span,
+            location,
         },
         KernelExpr::Match {
             id,
