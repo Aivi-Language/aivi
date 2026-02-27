@@ -7,9 +7,8 @@ impl Runtime {
         let mut results = Vec::new();
         let mut match_failures = 0;
         let mut last_error = None;
-        let n = clauses.len();
-        for (i, clause) in clauses.into_iter().enumerate() {
-            let a = if i + 1 < n { arg.clone() } else { arg.clone() };
+        for clause in clauses.into_iter() {
+            let a = arg.clone();
             match self.apply(clause, a) {
                 Ok(value) => results.push(value),
                 Err(RuntimeError::Message(message)) if is_match_failure_message(&message) => {

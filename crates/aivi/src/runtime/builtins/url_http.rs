@@ -275,6 +275,7 @@ fn ensure_http_scheme(url: &Url, mode: HttpClientMode, ctx: &str) -> Result<(), 
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn http_request(
     method: &str,
     url: &Url,

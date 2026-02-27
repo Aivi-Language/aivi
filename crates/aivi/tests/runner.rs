@@ -43,10 +43,7 @@ fn run_test_suite_with_timeout(
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    match handle.join() {
-        Ok(result) => Some(result),
-        Err(_) => None,
-    }
+    handle.join().ok()
 }
 
 /// Result of processing a single test file.

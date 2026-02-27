@@ -552,22 +552,19 @@ run = MyHeap.push 1 Heap.empty"#;
     for module in &lib_modules {
         eprintln!("module: {}, items: {}", module.name.name, module.items.len());
         for item in module.items.iter() {
-            match item {
-                ModuleItem::DomainDecl(d) => {
-                    eprintln!("  domain: {}, items: {}", d.name.name, d.items.len());
-                    for di in d.items.iter() {
-                        match di {
-                            aivi::DomainItem::TypeSig(sig) => {
-                                eprintln!("    type_sig: {}", sig.name.name);
-                            }
-                            aivi::DomainItem::Def(def) | aivi::DomainItem::LiteralDef(def) => {
-                                eprintln!("    def: {}", def.name.name);
-                            }
-                            _ => {}
+            if let ModuleItem::DomainDecl(d) = item {
+                eprintln!("  domain: {}, items: {}", d.name.name, d.items.len());
+                for di in d.items.iter() {
+                    match di {
+                        aivi::DomainItem::TypeSig(sig) => {
+                            eprintln!("    type_sig: {}", sig.name.name);
                         }
+                        aivi::DomainItem::Def(def) | aivi::DomainItem::LiteralDef(def) => {
+                            eprintln!("    def: {}", def.name.name);
+                        }
+                        _ => {}
                     }
                 }
-                _ => {}
             }
         }
     }
