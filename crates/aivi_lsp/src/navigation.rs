@@ -558,6 +558,7 @@ impl Backend {
             for param in def.params.iter() {
                 Self::collect_pattern_binders(param, &mut scope);
             }
+            #[allow(clippy::collapsible_if)]
             if Self::local_binding_visible_in_expr(&def.expr, ident, position, &mut scope) {
                 if let Some(workspace_modules) = workspace_modules {
                     if let Some((bound_expr, is_bind)) =

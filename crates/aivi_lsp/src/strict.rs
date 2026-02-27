@@ -13,7 +13,9 @@ use crate::backend::Backend;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub(crate) enum StrictLevel {
+    #[default]
     Off = 0,
     LexicalStructural = 1,
     NamesImports = 2,
@@ -35,11 +37,6 @@ impl StrictLevel {
     }
 }
 
-impl Default for StrictLevel {
-    fn default() -> Self {
-        StrictLevel::Off
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -657,8 +654,8 @@ fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                 for item in items {
                     // Strict: `(a b, c)` often means `(a, b, c)`; surface parse sees `a b` as a call.
                     if let aivi::Expr::Call { func, args, span } = item {
-                        if matches!(&**func, aivi::Expr::Ident(_)) && args.len() == 1 {
-                            if matches!(&args[0], aivi::Expr::Ident(_)) {
+                        if matches!(&**func, aivi::Expr::Ident(_)) && args.len() == 1
+                            && matches!(&args[0], aivi::Expr::Ident(_)) {
                                 let func_span = expr_span(func);
                                 let insert_at = aivi::Span {
                                     start: func_span.end.clone(),
@@ -685,7 +682,6 @@ fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                                     }),
                                 ));
                             }
-                        }
                     }
                     walk_expr(item, out);
                 }
@@ -976,12 +972,10 @@ fn strict_record_field_access(file_modules: &[Module], out: &mut Vec<Diagnostic>
                 if let aivi::Expr::Record { fields, .. } = &**base {
                     let mut has = false;
                     for f in fields {
-                        if let Some(seg) = f.path.last() {
-                            if let aivi::PathSegment::Field(name) = seg {
-                                if name.name == field.name {
-                                    has = true;
-                                    break;
-                                }
+                        if let Some(aivi::PathSegment::Field(name)) = f.path.last() {
+                            if name.name == field.name {
+                                has = true;
+                                break;
                             }
                         }
                     }
@@ -1653,40 +1647,37 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
     }
 
     fn walk_expr(expr: &aivi::Expr, out: &mut Vec<Diagnostic>) {
-        match expr {
-            aivi::Expr::Block { kind, items, .. } => {
-                check_block(kind.clone(), items, out);
-                for item in items {
-                    match item {
-                        aivi::BlockItem::Bind { expr, .. }
-                        | aivi::BlockItem::Let { expr, .. }
-                        | aivi::BlockItem::Filter { expr, .. }
-                        | aivi::BlockItem::Yield { expr, .. }
-                        | aivi::BlockItem::Recurse { expr, .. }
-                        | aivi::BlockItem::Expr { expr, .. } => walk_expr(expr, out),
-                        aivi::BlockItem::When { cond, effect, .. }
-                        | aivi::BlockItem::Unless { cond, effect, .. } => {
-                            walk_expr(cond, out);
-                            walk_expr(effect, out);
-                        }
-                        aivi::BlockItem::Given {
-                            cond, fail_expr, ..
-                        } => {
-                            walk_expr(cond, out);
-                            walk_expr(fail_expr, out);
-                        }
-                        aivi::BlockItem::On {
-                            transition,
-                            handler,
-                            ..
-                        } => {
-                            walk_expr(transition, out);
-                            walk_expr(handler, out);
-                        }
+        if let aivi::Expr::Block { kind, items, .. } = expr {
+            check_block(kind.clone(), items, out);
+            for item in items {
+                match item {
+                    aivi::BlockItem::Bind { expr, .. }
+                    | aivi::BlockItem::Let { expr, .. }
+                    | aivi::BlockItem::Filter { expr, .. }
+                    | aivi::BlockItem::Yield { expr, .. }
+                    | aivi::BlockItem::Recurse { expr, .. }
+                    | aivi::BlockItem::Expr { expr, .. } => walk_expr(expr, out),
+                    aivi::BlockItem::When { cond, effect, .. }
+                    | aivi::BlockItem::Unless { cond, effect, .. } => {
+                        walk_expr(cond, out);
+                        walk_expr(effect, out);
+                    }
+                    aivi::BlockItem::Given {
+                        cond, fail_expr, ..
+                    } => {
+                        walk_expr(cond, out);
+                        walk_expr(fail_expr, out);
+                    }
+                    aivi::BlockItem::On {
+                        transition,
+                        handler,
+                        ..
+                    } => {
+                        walk_expr(transition, out);
+                        walk_expr(handler, out);
                     }
                 }
             }
-            _ => {}
         }
         // Keep it small: other passes already walk expressions.
     }

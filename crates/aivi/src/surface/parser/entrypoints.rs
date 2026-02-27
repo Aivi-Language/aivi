@@ -237,7 +237,7 @@ fn expand_module_aliases(modules: &mut [Module]) {
                 if let Expr::Ident(name) = *base.clone() {
                     if let Some(module) = aliases.get(name.name.as_str()) {
                         return Expr::Ident(SpannedName {
-                            name: format!("{module}.{}", field.name).into(),
+                            name: format!("{module}.{}", field.name),
                             span: field.span,
                         });
                     }

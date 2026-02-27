@@ -42,7 +42,7 @@ impl Backend {
             chars[start..end]
                 .iter()
                 .copied()
-                .eq(expected_chars.into_iter())
+                .eq(expected_chars)
         };
 
         let push = |data: &mut Vec<SemanticToken>,

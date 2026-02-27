@@ -211,7 +211,7 @@ impl Parser {
                 break;
             }
         }
-        name.name = text.into();
+        name.name = text;
         Some(name)
     }
 
@@ -234,7 +234,7 @@ impl Parser {
             let end = self.expect_symbol(")", "expected ')' after operator name");
             let span = merge_span(op_token.span.clone(), end.unwrap_or(op_token.span.clone()));
             return Some(SpannedName {
-                name: format!("({})", op_token.text).into(),
+                name: format!("({})", op_token.text),
                 span,
             });
         }

@@ -428,7 +428,7 @@ fn server_html_apply_msg(
 
     let (_html, handlers) = server_html_render_vnode(&new_vdom, "root");
 
-    let (out_msgs, pending) = server_html_prepare_effects(&effects, &mut next_rid).map_err(|e| e)?;
+    let (out_msgs, pending) = server_html_prepare_effects(&effects, &mut next_rid)?;
 
     {
         let mut guard = server_html_views().lock().expect("server html views lock");

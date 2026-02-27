@@ -29,6 +29,7 @@ pub struct InferResult {
     pub span_types: HashMap<String, Vec<(Span, String)>>,
 }
 
+#[allow(clippy::type_complexity)]
 pub fn infer_value_types(
     modules: &[Module],
 ) -> (

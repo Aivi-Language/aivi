@@ -801,10 +801,7 @@ pub extern "C" fn rt_list_concat(
         Value::List(items) => items.as_ref().clone(),
         _ => Vec::new(),
     };
-    match vb {
-        Value::List(items) => result.extend(items.iter().cloned()),
-        _ => {}
-    }
+    if let Value::List(items) = vb { result.extend(items.iter().cloned()) }
     abi::box_value(Value::List(Arc::new(result)))
 }
 
@@ -1149,7 +1146,7 @@ use crate::runtime::build_runtime_from_program;
 pub extern "C" fn aivi_rt_init(program_ptr: *mut HirProgram) -> *mut JitRuntimeCtx {
     let program = unsafe { Box::from_raw(program_ptr) };
     let runtime =
-        build_runtime_from_program(&*program).expect("aivi_rt_init: failed to build runtime");
+        build_runtime_from_program(&program).expect("aivi_rt_init: failed to build runtime");
     let ctx = unsafe { JitRuntimeCtx::from_runtime_owned(runtime) };
     Box::into_raw(Box::new(ctx))
 }

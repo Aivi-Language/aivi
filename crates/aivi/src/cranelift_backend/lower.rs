@@ -862,7 +862,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         let key = expr as *const RustIrExpr as usize;
         if let Some(cl) = self.compiled_lambdas.get(&key) {
             // Look up the pre-compiled function from globals
-            let mut result = self.lower_global(builder, &cl.global_name);
+            let mut result = self.lower_global(builder, cl.global_name);
             // Partially apply captured values one by one via rt_apply
             for var_name in &cl.captured_vars {
                 let tv = if let Some(v) = self.locals.get(var_name) {
@@ -1006,7 +1006,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         args: &[RustIrExpr],
     ) -> TypedValue {
         let mut call_args = vec![self.ctx_param];
-        for (_i, arg_expr) in args.iter().enumerate() {
+        for arg_expr in args.iter() {
             let arg_tv = self.lower_expr(builder, arg_expr);
             // Always box for the all-PTR ABI
             call_args.push(self.ensure_boxed(builder, arg_tv));

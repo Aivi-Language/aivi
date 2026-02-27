@@ -325,7 +325,7 @@ impl<'a> TypePrinter<'a> {
                 return name;
             }
         }
-        let letter = (b'A' + (self.next_id % 26) as u8) as char;
+        let letter = (b'A' + (self.next_id % 26)) as char;
         let suffix = self.next_id / 26;
         self.next_id += 1;
         let name = if suffix == 0 {

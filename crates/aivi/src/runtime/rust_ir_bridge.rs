@@ -292,10 +292,7 @@ fn lower_runtime_rust_ir_pattern(pattern: &rust_ir::RustIrPattern) -> HirPattern
         rust_ir::RustIrPattern::List { id, items, rest } => HirPattern::List {
             id: *id,
             items: items.iter().map(lower_runtime_rust_ir_pattern).collect(),
-            rest: match rest.as_ref() {
-                Some(rest) => Some(Box::new(lower_runtime_rust_ir_pattern(rest.as_ref()))),
-                None => None,
-            },
+            rest: rest.as_ref().map(|rest| Box::new(lower_runtime_rust_ir_pattern(rest.as_ref()))),
         },
         rust_ir::RustIrPattern::Record { id, fields } => HirPattern::Record {
             id: *id,

@@ -123,7 +123,7 @@ impl Backend {
 
         for file_diag in semantic_diags {
             // LSP publishes per-document diagnostics; keep only the ones for this file.
-            if PathBuf::from(&file_diag.path) != path {
+            if file_diag.path != path {
                 continue;
             }
             out.push(Self::file_diag_to_lsp(uri, file_diag));

@@ -26,7 +26,7 @@ impl Parser {
 
         let name_span = merge_span(number.span.clone(), suffix.span.clone());
         let name = SpannedName {
-            name: format!("{}{}", number.text, suffix.name).into(),
+            name: format!("{}{}", number.text, suffix.name),
             span: name_span.clone(),
         };
         let ty = self.parse_type_expr().unwrap_or(TypeExpr::Unknown {
@@ -98,7 +98,7 @@ impl Parser {
         if matches!(expr, Expr::Lambda { .. }) {
             let name_span = merge_span(number.span.clone(), suffix.span.clone());
             let name = SpannedName {
-                name: format!("{}{}", number.text, suffix.name).into(),
+                name: format!("{}{}", number.text, suffix.name),
                 span: name_span.clone(),
             };
             let span = merge_span(name_span, expr_span(&expr));
@@ -299,7 +299,7 @@ impl Parser {
 
         let name_span = merge_span(number.span.clone(), suffix.span.clone());
         let name = SpannedName {
-            name: format!("{}{}", number.text, suffix.name).into(),
+            name: format!("{}{}", number.text, suffix.name),
             span: name_span.clone(),
         };
         let span = merge_span(name_span, expr_span(&expr));
