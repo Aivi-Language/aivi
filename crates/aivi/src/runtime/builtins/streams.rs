@@ -244,7 +244,9 @@ fn next_value_flatmap(
                     if let StreamState::FlatMap { inner, .. } = &mut *guard {
                         *inner = None;
                     }
-                    inner_opt = None;
+                    // inner_opt is overwritten below (either source yields Some and
+                    // inner_opt = Some(new_inner), or source yields None and we return).
+                    // No explicit inner_opt = None needed here.
                 }
             }
         }

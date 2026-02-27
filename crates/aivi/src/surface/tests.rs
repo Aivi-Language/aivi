@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use crate::surface::{lower_modules_to_arena, parse_modules, ArenaExpr, Expr, Literal, ModuleItem, PathSegment};
+use crate::surface::{
+    lower_modules_to_arena, parse_modules, ArenaExpr, Expr, Literal, ModuleItem, PathSegment,
+};
 
 fn diag_codes(diags: &[crate::FileDiagnostic]) -> Vec<String> {
     let mut codes: Vec<String> = diags.iter().map(|d| d.diagnostic.code.clone()).collect();
