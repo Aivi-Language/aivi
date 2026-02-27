@@ -83,6 +83,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.aivi == 'true'
     runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: nightly
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust (nightly)
