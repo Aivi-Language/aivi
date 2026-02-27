@@ -600,7 +600,16 @@ impl LanguageServer for Backend {
         if !from_config {
             options.indent_size = params.options.tab_size as usize;
         }
-        Ok(Some(Backend::build_formatting_edits(&source, options)))
+        let edits = tokio::task::spawn_blocking(move || {
+            Backend::build_formatting_edits(&source, options)
+        })
+        .await
+        .map_err(|e| tower_lsp::jsonrpc::Error {
+            code: tower_lsp::jsonrpc::ErrorCode::InternalError,
+            message: format!("formatting task failed: {e}").into(),
+            data: None,
+        })?;
+        Ok(Some(edits))
     }
 
     async fn range_formatting(
