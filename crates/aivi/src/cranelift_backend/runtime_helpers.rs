@@ -32,9 +32,7 @@ fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
             .map(|s| format!(" {RT_GRAY}in `{s}`{RT_RESET}"))
             .unwrap_or_default()
     };
-    eprintln!(
-        "{RT_YELLOW}warning[RT]{RT_RESET}{fn_ctx} {RT_BOLD}{category}{RT_RESET}: {message}"
-    );
+    eprintln!("{RT_YELLOW}warning[RT]{RT_RESET}{fn_ctx} {RT_BOLD}{category}{RT_RESET}: {message}");
     if !hint.is_empty() {
         eprintln!("  {RT_CYAN}hint{RT_RESET}: {hint}");
     }
@@ -1157,7 +1155,9 @@ pub extern "C" fn rt_binary_op(
     eprintln!(
         "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}operator error{RT_RESET}: binary operator `{op}` could not be applied to the given operand types"
     );
-    eprintln!("  {RT_CYAN}hint{RT_RESET}: check that both operands have compatible types for `{op}`");
+    eprintln!(
+        "  {RT_CYAN}hint{RT_RESET}: check that both operands have compatible types for `{op}`"
+    );
     abi::box_value(Value::Unit)
 }
 
