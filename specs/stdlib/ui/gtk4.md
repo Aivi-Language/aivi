@@ -89,6 +89,7 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 | `widgetSetLayoutManager` | `gtk4.widgetSetLayoutManager` |
 | `buildFromNode` | `gtk4.buildFromNode` |
 | `signalPoll` | `gtk4.signalPoll` |
+| `signalStream` | `gtk4.signalStream` |
 | `signalEmit` | `gtk4.signalEmit` |
 | `osOpenUri` | `gtk4.osOpenUri` |
 | `osShowInFileManager` | `gtk4.osShowInFileManager` |
@@ -106,7 +107,16 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 - `GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text`
 - `GtkAttr = GtkAttribute Text Text`
 - helpers: `gtkElement`, `gtkTextNode`, `gtkAttr`
-- `GtkSignalEvent = GtkSignalEvent WidgetId Text Text Text`
+- `GtkSignalEvent` — typed ADT with variants:
+  - `GtkClicked WidgetId`
+  - `GtkInputChanged WidgetId Text`
+  - `GtkActivated WidgetId`
+  - `GtkToggled WidgetId Bool`
+  - `GtkValueChanged WidgetId Float`
+  - `GtkKeyPressed WidgetId Text Text`
+  - `GtkFocusIn WidgetId`
+  - `GtkFocusOut WidgetId`
+  - `GtkUnknownSignal WidgetId Text Text Text`
 
 The parser lowers `~<gtk>...</gtk>` into those constructors.
 Instantiate the resulting node tree with `buildFromNode`.
@@ -119,6 +129,11 @@ Signal sugar is supported and lowered to typed signal attrs:
 
 - `<object ... onClick={ Msg.Save } />` -> `signal:clicked`
 - `<object ... onInput={ Msg.Changed } />` -> `signal:changed`
+- `<object ... onActivate={ Msg.Submit } />` -> `signal:activate`
+- `<object ... onToggle={ Msg.Toggled } />` -> `signal:toggled`
+- `<object ... onValueChanged={ Msg.VolumeChanged } />` -> `signal:value-changed`
+- `<object ... onFocusIn={ Msg.Focused } />` -> `signal:focus-enter`
+- `<object ... onFocusOut={ Msg.Blurred } />` -> `signal:focus-leave`
 - `<signal name="clicked" on={ Msg.Save } />` -> same binding path
 
 Signal handler values must be compile-time expressions (for example constructor-like tags such as `Msg.Save`), not runtime lambdas.
@@ -154,7 +169,8 @@ Lowercase GTK tags continue to lower to `gtkElement`.
 
 In v0.1, `props` must be a compile-time record literal; dynamic `props={expr}` is a diagnostic.
 
-`signalPoll : Unit -> Effect GtkError (Option GtkSignalEvent)` reads queued runtime signal events.
+`signalPoll : Unit -> Effect GtkError (Option GtkSignalEvent)` reads the next queued signal event (returns `None` when the queue is empty).
+`signalStream : Unit -> Effect GtkError (Recv GtkSignalEvent)` returns a channel receiver that receives typed signal events as they fire — preferred over polling loops.
 `signalEmit` is available for synthetic/manual event injection (useful in tests and mock-driven flows).
 
 ### Example: builder + property sugar
@@ -229,16 +245,48 @@ listNode =
   </gtk>
 ```
 
-### Example: consuming queued signal events
+### Example: consuming queued signal events (poll)
 
 ```aivi
 nextMsg : Effect GtkError (Option Text)
 nextMsg = effect {
   eventOpt <- signalPoll {}
   eventOpt match
-    | None => yield None
-    | Some (GtkSignalEvent _ signal handler payload) =>
-        yield Some "{ signal }|{ handler }|{ payload }"
+    | None                         => yield None
+    | Some (GtkClicked _)          => yield Some "clicked"
+    | Some (GtkInputChanged _ txt) => yield Some txt
+    | Some (GtkActivated _)        => yield Some "activated"
+    | Some (GtkToggled _ active)   => yield Some (active | Bool.toString)
+    | Some (GtkValueChanged _ val) => yield Some (val | Float.toString)
+    | Some (GtkFocusIn _)          => yield Some "focus-in"
+    | Some (GtkFocusOut _)         => yield Some "focus-out"
+    | Some (GtkKeyPressed _ key _) => yield Some key
+    | Some (GtkUnknownSignal _ sig _ _) => yield Some sig
+}
+```
+
+### Example: consuming signal events via `signalStream` (recommended)
+
+```aivi
+Msg = Save | NameChanged Text | Toggled Bool | VolumeChanged Float
+
+toMsg : GtkSignalEvent -> Option Msg
+toMsg = event =>
+  event match
+    | GtkClicked _          => Some Save
+    | GtkInputChanged _ txt => Some (NameChanged txt)
+    | GtkToggled _ active   => Some (Toggled active)
+    | GtkValueChanged _ val => Some (VolumeChanged val)
+    | _                     => None
+
+runLoop : Effect GtkError Unit
+runLoop = effect {
+  events <- signalStream {}
+  channel.forEach events (event =>
+    toMsg event match
+      | None     => yield {}
+      | Some msg => handleMsg msg
+  )
 }
 ```
 
@@ -246,7 +294,7 @@ nextMsg = effect {
 
 - `E1612`: invalid `props` shape (must be compile-time record literal).
 - `E1613`: non-literal `props` field value.
-- `E1614`: invalid signal binding (`onClick`/`onInput`/`<signal ... on={...}>` requires compile-time values).
+- `E1614`: invalid signal binding (`onClick`/`onInput`/`onActivate`/`onToggle`/`onValueChanged`/`onFocusIn`/`onFocusOut`/`<signal ... on={...}>` requires compile-time values).
 - `E1615`: invalid `<each>` usage (requires `items={...}`, `as={...}`, and exactly one child template node).
 
 ## UI update pattern (state machine + events + repaint)

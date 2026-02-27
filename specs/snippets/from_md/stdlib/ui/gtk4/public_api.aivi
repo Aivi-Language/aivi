@@ -27,7 +27,16 @@ LayoutManagerId = Int
 GtkError = Text
 GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text
 GtkAttr = GtkAttribute Text Text
-GtkSignalEvent = GtkSignalEvent WidgetId Text Text Text
+GtkSignalEvent =
+  | GtkClicked       WidgetId
+  | GtkInputChanged  WidgetId Text
+  | GtkActivated     WidgetId
+  | GtkToggled       WidgetId Bool
+  | GtkValueChanged  WidgetId Float
+  | GtkKeyPressed    WidgetId Text Text
+  | GtkFocusIn       WidgetId
+  | GtkFocusOut      WidgetId
+  | GtkUnknownSignal WidgetId Text Text Text
 
 init: Unit -> Effect GtkError Unit
 appNew: Text -> Effect GtkError AppId
@@ -125,6 +134,7 @@ widgetSetLayoutManager: WidgetId -> LayoutManagerId -> Effect GtkError Unit
 
 buildFromNode: GtkNode -> Effect GtkError WidgetId
 signalPoll: Unit -> Effect GtkError (Option GtkSignalEvent)
+signalStream: Unit -> Effect GtkError (Recv GtkSignalEvent)
 signalEmit: WidgetId -> Text -> Text -> Text -> Effect GtkError Unit
 
 osOpenUri: AppId -> Text -> Effect GtkError Unit

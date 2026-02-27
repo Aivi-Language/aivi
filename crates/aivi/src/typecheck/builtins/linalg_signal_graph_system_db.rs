@@ -1041,6 +1041,16 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 ),
             ),
             (
+                "signalStream".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Unit")),
+                    Box::new(Type::con("Effect").app(vec![
+                        text_ty.clone(),
+                        Type::con("Recv").app(vec![Type::con("GtkSignalEvent")]),
+                    ])),
+                ),
+            ),
+            (
                 "signalEmit".to_string(),
                 Type::Func(
                     Box::new(int_ty.clone()),
