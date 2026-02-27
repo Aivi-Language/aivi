@@ -57,7 +57,7 @@ unsafe fn set_pending_error(ctx: *mut JitRuntimeCtx, e: RuntimeError) {
 // ---------------------------------------------------------------------------
 
 thread_local! {
-    static FN_HISTORY: std::cell::RefCell<Vec<String>> = std::cell::RefCell::new(Vec::new());
+    static FN_HISTORY: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// Called at the start of every JIT-compiled function to record its name.
