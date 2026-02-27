@@ -616,11 +616,7 @@ impl<'a, M: Module> LowerCtx<'a, M> {
     }
 
     /// Emit a call to `rt_set_location` to record the current source location for diagnostics.
-    pub(crate) fn emit_set_location(
-        &mut self,
-        builder: &mut FunctionBuilder<'_>,
-        location: &str,
-    ) {
+    pub(crate) fn emit_set_location(&mut self, builder: &mut FunctionBuilder<'_>, location: &str) {
         let (ptr, len) = self.embed_str(builder, location.as_bytes());
         builder
             .ins()
@@ -742,9 +738,12 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             RustIrExpr::FieldAccess { base, field, .. } => {
                 self.lower_field_access(builder, base, field)
             }
-            RustIrExpr::Index { base, index, location, .. } => {
-                self.lower_index(builder, base, index, location.as_deref())
-            }
+            RustIrExpr::Index {
+                base,
+                index,
+                location,
+                ..
+            } => self.lower_index(builder, base, index, location.as_deref()),
 
             // ----- Control flow -----
             RustIrExpr::If {
@@ -1674,9 +1673,13 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                     0,
                 );
                 let zero = builder.ins().iconst(PTR, 0);
-                builder
-                    .ins()
-                    .brif(base_bool, args_block, &[], pat_merge_block, &[BlockArg::Value(zero)]);
+                builder.ins().brif(
+                    base_bool,
+                    args_block,
+                    &[],
+                    pat_merge_block,
+                    &[BlockArg::Value(zero)],
+                );
 
                 // Check each arg pattern (only reached when name + arity matched)
                 builder.switch_to_block(args_block);
@@ -1695,7 +1698,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                     let arg_ok = self.emit_pattern_test(builder, arg_pat, arg_val);
                     result = builder.ins().band(result, arg_ok);
                 }
-                builder.ins().jump(pat_merge_block, &[BlockArg::Value(result)]);
+                builder
+                    .ins()
+                    .jump(pat_merge_block, &[BlockArg::Value(result)]);
 
                 builder.switch_to_block(pat_merge_block);
                 builder.seal_block(pat_merge_block);
@@ -1809,7 +1814,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                     let rest_ok = self.emit_pattern_test(builder, rest_pat, tail_val);
                     result = builder.ins().band(result, rest_ok);
                 }
-                builder.ins().jump(list_merge_block, &[BlockArg::Value(result)]);
+                builder
+                    .ins()
+                    .jump(list_merge_block, &[BlockArg::Value(result)]);
 
                 builder.switch_to_block(list_merge_block);
                 builder.seal_block(list_merge_block);
