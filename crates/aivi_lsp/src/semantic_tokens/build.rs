@@ -44,6 +44,10 @@ impl Backend {
                 continue;
             }
 
+            if Self::emit_paren_sigil_tokens(token, &mut data, &mut last_line, &mut last_start) {
+                continue;
+            }
+
             let token_type = dotted_paths
                 .get(&token_index)
                 .copied()

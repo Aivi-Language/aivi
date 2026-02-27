@@ -15,28 +15,30 @@ serverConfig = do Effect {
 
 @test "request fields"
 requestFields = do Effect {
-  req = {
-    method: "GET"
-    path: "/health"
-    headers: []
-    body: []
-    remoteAddr: Some "127.0.0.1"
-  }
-  assertEq req.method "GET"
-  assertEq req.path "/health"
-  assertEq req.remoteAddr (Some "127.0.0.1")
+  req =
+    {
+      method: "GET"
+      path: "/health"
+      headers: []
+      body: []
+      remoteAddr: Some "127.0.0.1"
+    }
+    assertEq req.method "GET"
+    assertEq req.path "/health"
+    assertEq req.remoteAddr (Some "127.0.0.1")
 }
 
 @test "response construction"
 responseConstruction = do Effect {
   responseBody = [72, 101, 108, 108, 111]
-  resp = {
-    status: 200
-    headers: [{ name: "Content-Type", value: "text/plain" }]
-    body: responseBody
-  }
-  assertEq resp.status 200
-  assertEq (List.length resp.body) 5
+  resp =
+    {
+      status: 200
+      headers: [{ name: "Content-Type", value: "text/plain" }]
+      body: responseBody
+    }
+    assertEq resp.status 200
+    assertEq (List.length resp.body) 5
 }
 
 @test "ws message text variant"

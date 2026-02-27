@@ -28,11 +28,12 @@ relax_skipsWhenLonger = do Effect {
 @test "relax edges counts updates"
 relaxEdges_countsUpdates = do Effect {
   dists = Map.insert 0 0.0 Map.empty
-  edges = [
-    { from: 0, to: 1, weight: 2.0 }
-    { from: 0, to: 2, weight: 5.0 }
-    { from: 0, to: 3, weight: 1.0 }
-  ]
+  edges =
+    [
+      { from: 0, to: 1, weight: 2.0 }
+      { from: 0, to: 2, weight: 5.0 }
+      { from: 0, to: 3, weight: 1.0 }
+    ]
   out = relaxEdges dists 0.0 edges
   assert (out.count == 3)
   d1 = Map.get 1 out.dists

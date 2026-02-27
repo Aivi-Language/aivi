@@ -44,19 +44,20 @@ ServerEffect msg =
 // 2d. ViewState
 // ---------------------------------------------------------------------------
 
-ViewState model msg = {
-  viewId: ViewId
-  model: model
-  lastVdom: VNode msg
-  handlerTable: Map HandlerId (EventPayload -> Option msg)
-  nextHid: HandlerId
-  nextRid: RequestId
-  pendingTable: Map RequestId (PendingEntry msg)
-  intersections: Map SubscriptionId {
-    options: IntersectionOptions
-    targets: List IntersectionTarget
+ViewState model msg =
+  {
+    viewId: ViewId
+    model: model
+    lastVdom: VNode msg
+    handlerTable: Map HandlerId (EventPayload -> Option msg)
+    nextHid: HandlerId
+    nextRid: RequestId
+    pendingTable: Map RequestId (PendingEntry msg)
+    intersections: Map SubscriptionId {
+      options: IntersectionOptions
+      targets: List IntersectionTarget
+    }
   }
-}
 
 // ---------------------------------------------------------------------------
 // 2e. Handler assignment
@@ -106,12 +107,13 @@ assignHandlers
 assignHandlers = node startHid =>
   assignWalk node startHid 0 |> (result => (result.node, result.handlers, result.nextHid))
 
-AssignResult msg = {
-  node: VNode msg
-  handlers: Map HandlerId (EventPayload -> Option msg)
-  nextHid: HandlerId
-  nextIdx: Int
-}
+AssignResult msg =
+  {
+    node: VNode msg
+    handlers: Map HandlerId (EventPayload -> Option msg)
+    nextHid: HandlerId
+    nextIdx: Int
+  }
 
 assignWalk : VNode msg -> HandlerId -> Int -> AssignResult msg
 assignWalk = node hid idx => node match
@@ -138,17 +140,18 @@ assignWalk = node hid idx => node match
   }
     }
 
-AssignChildrenResult msg = {
-  children: List (VNode msg)
-  handlers: Map HandlerId (EventPayload -> Option msg)
-  nextHid: HandlerId
-  nextIdx: Int
-}
+AssignChildrenResult msg =
+  {
+    children: List (VNode msg)
+    handlers: Map HandlerId (EventPayload -> Option msg)
+    nextHid: HandlerId
+    nextIdx: Int
+  }
 
-assignChildrenWalk
-: List (VNode msg) -> HandlerId -> Int -> List (VNode msg)
--> Map HandlerId (EventPayload -> Option msg)
--> AssignChildrenResult msg
+  assignChildrenWalk
+  : List (VNode msg) -> HandlerId -> Int -> List (VNode msg)
+  -> Map HandlerId (EventPayload -> Option msg)
+  -> AssignChildrenResult msg
 assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes match
   | [] => { children: reverseList accChildren, handlers: accHandlers
       nextHid: hid, nextIdx: idx

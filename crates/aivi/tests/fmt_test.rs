@@ -37,7 +37,7 @@ big = {
   b: 2,
 }
 "#;
-    let multiline_expected = "big = {\n  a: 1\n  b: 2\n}\n";
+    let multiline_expected = "big =\n  {\n    a: 1\n    b: 2\n  }\n";
     assert_eq!(format_text(multiline_input), multiline_expected);
 }
 
@@ -54,7 +54,9 @@ buildGraph =
     fromWeightedEdges weighted
   }
 "#;
-    let expected = "buildGraph = {\n  weighted = [\n    (0, 1, 1.0)\n    (0, 2, 4.0)\n  ]\n  fromWeightedEdges weighted\n}\n";
+    // Records and lists whose RHS is a `{` or `[` after a plain `=` are now formatted in
+    // Allman style (opener on its own indented line) instead of being merged back to K&R.
+    let expected = "buildGraph =\n  {\n    weighted =\n    [\n      (0, 1, 1.0)\n      (0, 2, 4.0)\n    ]\n    fromWeightedEdges weighted\n  }\n";
     assert_eq!(format_text(input), expected);
 }
 

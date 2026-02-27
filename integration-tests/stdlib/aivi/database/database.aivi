@@ -66,13 +66,14 @@ dbConfig_construct = do Effect {
 
 @test "column construct"
 column_construct = do Effect {
-  col = {
-    name: "id"
-    type: IntType
-    constraints: [AutoIncrement, NotNull]
-    default: None
-  }
-  assertEq col.name "id"
+  col =
+    {
+      name: "id"
+      type: IntType
+      constraints: [AutoIncrement, NotNull]
+      default: None
+    }
+    assertEq col.name "id"
 }
 
 @test "delta construct"
@@ -116,11 +117,12 @@ migration_sql_helper = do Effect {
 
 @test "delta chunk helper"
 delta_chunk_helper = do Effect {
-  deltas = [
-    ins { id: 1, name: "A" }
-    ins { id: 2, name: "B" }
-    del (u => u.id == 1)
-  ]
+  deltas =
+    [
+      ins { id: 1, name: "A" }
+      ins { id: 2, name: "B" }
+      del (u => u.id == 1)
+    ]
   chunks = chunkDeltas 2 deltas
   assertEq (List.length chunks) 2
 }

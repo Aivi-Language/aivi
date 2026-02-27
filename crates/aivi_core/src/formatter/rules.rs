@@ -1475,6 +1475,57 @@
             tokens_by_line = split_tokens_by_line;
         }
 
+        // For K&R brace style, split plain assignment openers (`name = {` / `name = [`) onto
+        // a separate line so the record/list body is indented under the `=`.  The K&R merge
+        // below no longer re-merges `{`/`[` after plain `=`, so they stay as Allman.
+        // This also applies to `machine Foo = {` definitions.
+        if matches!(options.brace_style, BraceStyle::Kr) {
+            let mut split_raw_lines: Vec<&str> = Vec::with_capacity(raw_lines.len() + 16);
+            let mut split_tokens_by_line: Vec<Vec<&crate::cst::CstToken>> =
+                Vec::with_capacity(tokens_by_line.len() + 16);
+
+            for (line_index, raw) in raw_lines.iter().enumerate() {
+                let mut line_tokens = tokens_by_line[line_index].clone();
+                let has_comment = line_tokens.iter().any(|t| t.kind == "comment");
+                if !has_comment {
+                    let last_is_opener = last_code_token_is(&line_tokens, &["{", "["]);
+                    let second_last_is_eq = {
+                        let mut code_iter = line_tokens
+                            .iter()
+                            .rev()
+                            .filter(|t| t.kind != "whitespace" && t.kind != "comment" && t.text != "\n");
+                        code_iter.next(); // skip the last (opener)
+                        code_iter.next().map_or(false, |t| t.text == "=")
+                    };
+                    // Only split when there is no `do` keyword between `=` and `{`/`[`
+                    // (otherwise it's a `do Effect {` block, which should stay as K&R).
+                    // Also skip `class` and `instance` declarations: the parser requires
+                    // `{` to appear on the same line as `=` for their bodies.
+                    let has_do = line_tokens.iter().any(|t| t.text == "do");
+                    let first_code = line_tokens
+                        .iter()
+                        .find(|t| t.kind != "whitespace" && t.kind != "comment")
+                        .map(|t| t.text.as_str())
+                        .unwrap_or("");
+                    let is_class_or_instance =
+                        first_code == "class" || first_code == "instance";
+                    if last_is_opener && second_last_is_eq && !has_do && !is_class_or_instance {
+                        let opener = line_tokens.pop().expect("opener token");
+                        split_raw_lines.push(*raw);
+                        split_tokens_by_line.push(line_tokens);
+                        split_raw_lines.push("");
+                        split_tokens_by_line.push(vec![opener]);
+                        continue;
+                    }
+                }
+                split_raw_lines.push(*raw);
+                split_tokens_by_line.push(line_tokens);
+            }
+
+            raw_lines = split_raw_lines;
+            tokens_by_line = split_tokens_by_line;
+        }
+
         let mut merged_raw_lines: Vec<&str> = Vec::with_capacity(raw_lines.len());
         let mut merged_tokens_by_line: Vec<Vec<&crate::cst::CstToken>> =
             Vec::with_capacity(tokens_by_line.len());
@@ -1498,10 +1549,19 @@
             if matches!(options.brace_style, BraceStyle::Kr) {
                 if let Some(opener_tok) = opener_tok {
                     if let Some(prev_tokens) = merged_tokens_by_line.last_mut() {
-                        if last_code_token_is(
+                        let merge_for_flow = last_code_token_is(
                             prev_tokens,
-                            &["=", "=>", "<-", "->", "then", "else", "?", "match"],
-                        ) {
+                            &["=>", "<-", "->", "then", "else", "?", "match"],
+                        );
+                        // `class` and `instance` bodies require `{` on the same line as `=`.
+                        let merge_for_class_instance = last_code_token_is(prev_tokens, &["="])
+                            && first_code_index(prev_tokens).is_some_and(|i| {
+                                matches!(
+                                    prev_tokens[i].text.as_str(),
+                                    "class" | "instance"
+                                )
+                            });
+                        if merge_for_flow || merge_for_class_instance {
                             prev_tokens.push(opener_tok);
                             continue;
                         }
@@ -2024,31 +2084,47 @@
         None
     }
 
+    // Precompute per-line `use` metadata so the blank-line handler in the render loop
+    // can look up neighbours in O(1) instead of doing an O(n) scan per blank line.
+    let line_is_use: Vec<bool> = lines
+        .iter()
+        .map(|line| first_code_index(&line.tokens).is_some_and(|i| line.tokens[i].text == "use"))
+        .collect();
+    // First path segment of each `use` line (e.g. "aivi" or "mailfox").  Used to group
+    // consecutive `use` declarations and suppress blank lines within the same group.
+    let line_use_group: Vec<Option<String>> = lines
+        .iter()
+        .map(|line| {
+            let fi = first_code_index(&line.tokens)?;
+            if line.tokens[fi].text != "use" {
+                return None;
+            }
+            line.tokens[fi + 1..]
+                .iter()
+                .find(|t| t.kind != "whitespace" && t.kind != "comment")
+                .map(|t| t.text.to_string())
+        })
+        .collect();
+
     for (line_index, state) in lines.iter().enumerate() {
         if state.tokens.is_empty() {
-            // Keep `use` declarations grouped by removing blank lines between consecutive `use`s.
+            // Suppress blank lines that are sandwiched between two consecutive `use` lines
+            // belonging to the same first-segment group (e.g. both `aivi.*`).  Blank lines
+            // between different groups are preserved so the post-render pass can keep them.
             let between_uses = {
-                fn is_use_line(line: &LineState<'_>) -> bool {
-                    first_code_index(&line.tokens).is_some_and(|i| line.tokens[i].text == "use")
-                }
-
-                let mut prev_use = None;
-                for line in lines[..line_index].iter().rev() {
-                    if line.tokens.is_empty() {
-                        continue;
+                let prev_idx = lines[..line_index]
+                    .iter()
+                    .rposition(|l| !l.tokens.is_empty());
+                let next_idx = lines[line_index + 1..]
+                    .iter()
+                    .position(|l| !l.tokens.is_empty())
+                    .map(|i| line_index + 1 + i);
+                match (prev_idx, next_idx) {
+                    (Some(p), Some(n)) if line_is_use[p] && line_is_use[n] => {
+                        line_use_group[p] == line_use_group[n]
                     }
-                    prev_use = Some(is_use_line(line));
-                    break;
+                    _ => false,
                 }
-                let mut next_use = None;
-                for line in &lines[(line_index + 1)..] {
-                    if line.tokens.is_empty() {
-                        continue;
-                    }
-                    next_use = Some(is_use_line(line));
-                    break;
-                }
-                prev_use == Some(true) && next_use == Some(true)
             };
             if between_uses {
                 continue;
@@ -2792,6 +2868,143 @@
         .unwrap_or(rendered_lines.len());
     if first_non_blank > 0 {
         rendered_lines.drain(0..first_non_blank);
+    }
+
+    // Post-render pass: expand `use path (a, b, c, ...)` lines whose rendered width exceeds
+    // `max_width` or that import ≥ 4 names into a one-import-per-line form:
+    //
+    //   use path (
+    //     name1,
+    //     name2,
+    //   )
+    {
+        fn try_expand_use(line: &str, max_width: usize) -> Option<Vec<String>> {
+            let trimmed = line.trim_start();
+            if !trimmed.starts_with("use ") {
+                return None;
+            }
+            let indent_len = line.len() - trimmed.len();
+            let indent = &line[..indent_len];
+            let rest = &trimmed[4..]; // skip "use "
+            let paren_pos = rest.find('(')?;
+            let path_part = rest[..paren_pos].trim_end();
+            let closing = rest.rfind(')')?;
+            let imports_str = rest[paren_pos + 1..closing].trim();
+            if imports_str.is_empty() {
+                return None;
+            }
+            let imports: Vec<&str> = imports_str
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
+            // Expand when the rendered line is at least `max_width` characters wide.
+            if line.len() < max_width {
+                return None;
+            }
+            if imports.len() < 2 {
+                return None;
+            }
+            let item_indent = format!("{}  ", indent);
+            let mut result = vec![format!("{}use {} (", indent, path_part)];
+            for import in &imports {
+                result.push(format!("{}{},", item_indent, import));
+            }
+            result.push(format!("{})", indent));
+            Some(result)
+        }
+
+        let old_lines = std::mem::take(&mut rendered_lines);
+        rendered_lines.reserve(old_lines.len() + 32);
+        for line in old_lines {
+            match try_expand_use(&line, options.max_width) {
+                Some(expanded) => rendered_lines.extend(expanded),
+                None => rendered_lines.push(line),
+            }
+        }
+    }
+
+    // Post-render pass: manage blank lines between `use` groups.
+    //
+    // After multiline expansion consecutive `use` blocks may share a first-segment group
+    // (e.g. all `mailfox.ui.*`) or belong to different groups (e.g. `aivi.*` vs `mailfox.*`).
+    // Rules:
+    //   • Same first-segment: no blank between them (remove any stray blanks).
+    //   • Different first-segment: exactly one blank between them (add if missing).
+    //
+    // We detect the "current use block" as either a single `use …` line or a multi-line
+    // expansion starting with `use ` and ending with the matching `)`.
+    {
+        /// Extract the first path segment from a rendered `use …` line, e.g. "aivi" or "mailfox".
+        fn use_first_seg(line: &str) -> Option<&str> {
+            let trimmed = line.trim_start();
+            let rest = trimmed.strip_prefix("use ")?;
+            let end = rest
+                .find(|c: char| c == '.' || c == '(' || c == ' ')
+                .unwrap_or(rest.len());
+            if end == 0 {
+                return None;
+            }
+            Some(&rest[..end])
+        }
+
+        // Build a list of (start_idx, end_idx, group_key) for each contiguous use block.
+        // `end_idx` is exclusive (one past the last line of the block).
+        let mut use_blocks: Vec<(usize, usize, String)> = Vec::new();
+        let mut i = 0usize;
+        while i < rendered_lines.len() {
+            let line = &rendered_lines[i];
+            if let Some(seg) = use_first_seg(line) {
+                let group = seg.to_string();
+                // A multi-line expansion ends with a line that is exactly `<indent>)`.
+                let indent_len = line.len() - line.trim_start().len();
+                let close_pat = format!("{})", &line[..indent_len]);
+                let trimmed = line.trim_start();
+                if trimmed.contains('(') && !trimmed.ends_with(')') {
+                    // Multi-line use: scan forward for the closing `)`.
+                    let start = i;
+                    i += 1;
+                    while i < rendered_lines.len() && rendered_lines[i] != close_pat {
+                        i += 1;
+                    }
+                    let end = if i < rendered_lines.len() { i + 1 } else { i };
+                    use_blocks.push((start, end, group));
+                    i = end;
+                } else {
+                    use_blocks.push((i, i + 1, group));
+                    i += 1;
+                }
+            } else {
+                i += 1;
+            }
+        }
+
+        // Walk through consecutive use-block pairs and enforce blank-line policy.
+        // We process in reverse order so index manipulation doesn't invalidate later positions.
+        for pair in use_blocks.windows(2).rev() {
+            let (_, end_a, ref group_a) = pair[0];
+            let (start_b, _, ref group_b) = pair[1];
+            // Lines between the two blocks (end_a..start_b) should contain the blank lines.
+            let between_start = end_a;
+            let between_end = start_b;
+            let between_len = between_end.saturating_sub(between_start);
+            let blanks_present = (between_start..between_end)
+                .all(|k| rendered_lines[k].trim().is_empty());
+
+            if group_a == group_b {
+                // Same group: remove all blank lines between them.
+                if between_len > 0 && blanks_present {
+                    rendered_lines.drain(between_start..between_end);
+                }
+            } else {
+                // Different group: ensure exactly one blank line between them.
+                if between_len == 0 {
+                    rendered_lines.insert(between_start, String::new());
+                } else if between_len > 1 && blanks_present {
+                    rendered_lines.drain(between_start + 1..between_end);
+                }
+            }
+        }
     }
 
     // Align consecutive single-line records with identical field structure inside list literals.

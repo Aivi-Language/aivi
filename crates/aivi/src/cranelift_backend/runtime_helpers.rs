@@ -73,7 +73,9 @@ pub extern "C" fn rt_enter_fn(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usiz
     FN_HISTORY.with(|h| {
         let mut h = h.borrow_mut();
         h.push(name.to_string());
-        if h.len() > 20 { h.remove(0); }
+        if h.len() > 20 {
+            h.remove(0);
+        }
     });
 }
 
@@ -208,7 +210,11 @@ pub extern "C" fn rt_unbox_bool(ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i
             FN_HISTORY.with(|h| {
                 let h = h.borrow();
                 if !h.is_empty() {
-                    eprintln!("  recent fn entries (last {}): {:?}", h.len(), &h[h.len().saturating_sub(10)..]);
+                    eprintln!(
+                        "  recent fn entries (last {}): {:?}",
+                        h.len(),
+                        &h[h.len().saturating_sub(10)..]
+                    );
                 }
             });
             0
@@ -601,9 +607,6 @@ pub extern "C" fn rt_get_global(
 ) -> *mut Value {
     let name =
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
-    if name.contains("find") {
-        eprintln!("[TRACE] rt_get_global: looking up {:?}", name);
-    }
     let runtime = unsafe { (*ctx).runtime_mut() };
     let val = match runtime.ctx.globals.get(name) {
         Some(v) => v,

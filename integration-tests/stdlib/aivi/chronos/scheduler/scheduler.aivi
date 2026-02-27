@@ -32,14 +32,15 @@ trigger_constructors = do Effect {
 idempotent_planning_index = do Effect {
   k = planKey "nightly-report" 2026-01-01T00:00:00Z
 
-  run = {
-    key: k
-    tenantId: "tenant-1"
-    trigger: once 2026-01-01T00:00:00Z
-    scheduledAt: 2026-01-01T00:00:00Z
-    attempt: 0
-    status: Planned
-  }
+  run =
+    {
+      key: k
+      tenantId: "tenant-1"
+      trigger: once 2026-01-01T00:00:00Z
+      scheduledAt: 2026-01-01T00:00:00Z
+      attempt: 0
+      status: Planned
+    }
 
   index0 = Map.empty
   index1 = upsertPlan run index0
@@ -75,57 +76,62 @@ tenant_concurrency_limit = do Effect {
   k2 = planKey "job-b" 2026-01-01T00:01:00Z
   k3 = planKey "job-c" 2026-01-01T00:02:00Z
 
-  leased = {
-    key: k1
-    tenantId: "tenant-1"
-    trigger: once 2026-01-01T00:00:00Z
-    scheduledAt: 2026-01-01T00:00:00Z
-    attempt: 0
-    status: Leased
-  }
+  leased =
+    {
+      key: k1
+      tenantId: "tenant-1"
+      trigger: once 2026-01-01T00:00:00Z
+      scheduledAt: 2026-01-01T00:00:00Z
+      attempt: 0
+      status: Leased
+    }
 
-  running = {
-    key: k2
-    tenantId: "tenant-1"
-    trigger: once 2026-01-01T00:01:00Z
-    scheduledAt: 2026-01-01T00:01:00Z
-    attempt: 0
-    status: Running
-  }
+  running =
+    {
+      key: k2
+      tenantId: "tenant-1"
+      trigger: once 2026-01-01T00:01:00Z
+      scheduledAt: 2026-01-01T00:01:00Z
+      attempt: 0
+      status: Running
+    }
 
-  queued = {
-    key: k3
-    tenantId: "tenant-1"
-    trigger: once 2026-01-01T00:02:00Z
-    scheduledAt: 2026-01-01T00:02:00Z
-    attempt: 0
-    status: Planned
-  }
+  queued =
+    {
+      key: k3
+      tenantId: "tenant-1"
+      trigger: once 2026-01-01T00:02:00Z
+      scheduledAt: 2026-01-01T00:02:00Z
+      attempt: 0
+      status: Planned
+    }
 
-  assertEq (countActiveForTenant "tenant-1" [leased, running, queued]) 2
-  assertEq (canStartForTenant limit [leased, running, queued]) False
+    assertEq (countActiveForTenant "tenant-1" [leased, running, queued]) 2
+    assertEq (canStartForTenant limit [leased, running, queued]) False
 
-  assertEq (isTerminal Succeeded) True
+    assertEq (isTerminal Succeeded) True
 }
 
 @test "worker action helpers"
 worker_action_helpers = do Effect {
   k = planKey "job-a" 2026-01-01T00:00:00Z
-  run = {
-    key: k
-    tenantId: "tenant-1"
-    trigger: once 2026-01-01T00:00:00Z
-    scheduledAt: 2026-01-01T00:00:00Z
-    attempt: 0
-    status: Planned
-  }
+  run =
+    {
+      key: k
+      tenantId: "tenant-1"
+      trigger: once 2026-01-01T00:00:00Z
+      scheduledAt: 2026-01-01T00:00:00Z
+      attempt: 0
+      status: Planned
+    }
 
-  state = {
-    now: 2026-01-01T00:00:01Z
-    lease: None
-    retryPolicy: Fixed { millis: 1000 } NoJitter
-    retryState: { attempts: 0, lastError: None }
-  }
+  state =
+    {
+      now: 2026-01-01T00:00:01Z
+      lease: None
+      retryPolicy: Fixed { millis: 1000 } NoJitter
+      retryState: { attempts: 0, lastError: None }
+    }
 
   action = chooseWorkerAction run state 500
   action match

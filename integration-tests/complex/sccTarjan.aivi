@@ -12,14 +12,15 @@ bigInt : Int
 bigInt = 1000000000
 
 // Tarjan's algorithm state
-TarjanState = {
-  index: Map Int Int
-  lowlink: Map Int Int
-  stack: List Int
-  onStack: Set Int
-  nextIndex: Int
-  components: List (List Int)
-}
+TarjanState =
+  {
+    index: Map Int Int
+    lowlink: Map Int Int
+    stack: List Int
+    onStack: Set Int
+    nextIndex: Int
+    components: List (List Int)
+  }
 
 // Helper to get value or fallback from map
 getOr = map key fallback => Map.get key map match
@@ -81,14 +82,15 @@ visitNode = graph node state => {
 // Find all strongly connected components using Tarjan's algorithm
 strongComponents : Graph -> List (List Int)
 strongComponents = graph => {
-  initial = {
-    index: Map.empty
-    lowlink: Map.empty
-    stack: []
-    onStack: Set.empty
-    nextIndex: 0
-    components: []
-  }
+  initial =
+    {
+      index: Map.empty
+      lowlink: Map.empty
+      stack: []
+      onStack: Set.empty
+      nextIndex: 0
+      components: []
+    }
 
   finalState = List.foldl (s h =>
     if Map.has h s.index then s else visitNode graph h s

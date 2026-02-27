@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Instant;
 
 use serde::Deserialize;
 use tokio::sync::Mutex;
@@ -437,6 +438,8 @@ impl LanguageServer for Backend {
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
+        let debug_hover = std::env::var_os("AIVI_LSP_DEBUG_HOVER").is_some();
+        let started = Instant::now();
         let TextDocumentPositionParams {
             text_document,
             position,
@@ -448,17 +451,55 @@ impl LanguageServer for Backend {
             .await
         {
             Some(text) => {
+                if debug_hover {
+                    self.client
+                        .log_message(
+                            tower_lsp::lsp_types::MessageType::INFO,
+                            format!(
+                                "[hover] request uri={uri} position={}:{}",
+                                position.line, position.character
+                            ),
+                        )
+                        .await;
+                }
                 let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_hover_with_workspace(
+                let hover = Self::build_hover_with_workspace(
                     &text,
                     &uri,
                     position,
                     &workspace,
                     doc_index.as_ref(),
                 )
-                .or_else(|| Self::build_hover(&text, &uri, position, doc_index.as_ref()))
+                .or_else(|| Self::build_hover(&text, &uri, position, doc_index.as_ref()));
+                if debug_hover {
+                    self.client
+                        .log_message(
+                            tower_lsp::lsp_types::MessageType::INFO,
+                            format!(
+                                "[hover] resolved={} workspace_modules={} elapsed={:?}",
+                                hover.is_some(),
+                                workspace.len(),
+                                started.elapsed()
+                            ),
+                        )
+                        .await;
+                }
+                hover
             }
-            None => None,
+            None => {
+                if debug_hover {
+                    self.client
+                        .log_message(
+                            tower_lsp::lsp_types::MessageType::WARNING,
+                            format!(
+                                "[hover] missing open text for uri={uri}; elapsed={:?}",
+                                started.elapsed()
+                            ),
+                        )
+                        .await;
+                }
+                None
+            }
         };
         Ok(hover)
     }

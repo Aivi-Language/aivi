@@ -4,27 +4,30 @@ module integrationTests.syntax.types.machineDeclaration
 use aivi
 use aivi.testing
 
-machine Door = {
-         -> Closed : init {}
-  Closed -> Opened : open {}
-  Opened -> Closed : close {}
-  Opened -> Locked : lock {}
-  Locked -> Closed : unlock {}
-}
+machine Door =
+  {
+           -> Closed : init {}
+    Closed -> Opened : open {}
+    Opened -> Closed : close {}
+    Opened -> Locked : lock {}
+    Locked -> Closed : unlock {}
+  }
 
-machine TrafficLight = {
-         -> Red    : init {}
-  Red    -> Green  : next {}
-  Green  -> Yellow : next {}
-  Yellow -> Red    : next {}
-}
+machine TrafficLight =
+  {
+           -> Red    : init {}
+    Red    -> Green  : next {}
+    Green  -> Yellow : next {}
+    Yellow -> Red    : next {}
+  }
 
-machine OrderFlow = {
-            -> Pending   : init {}
-  Pending   -> Confirmed : confirm { confirmedAt: Int }
-  Confirmed -> Shipped   : ship { trackingId: Int }
-  Shipped   -> Delivered : deliver { deliveredAt: Int }
-}
+machine OrderFlow =
+  {
+              -> Pending   : init {}
+    Pending   -> Confirmed : confirm { confirmedAt: Int }
+    Confirmed -> Shipped   : ship { trackingId: Int }
+    Shipped   -> Delivered : deliver { deliveredAt: Int }
+  }
 
 @test "machine declarations typecheck and execute"
 machineDeclarationsSmoke = do Effect {

@@ -30,11 +30,12 @@ reconstructGo = cameFrom current acc => Map.get current cameFrom match
   | None      => [current, ...acc]
 
 // State record type alias
-AStarState = {
-  queue: Heap (Float, Int, Float)
-  scores: Map Int Float
-  parents: Map Int Int
-}
+AStarState =
+  {
+    queue: Heap (Float, Int, Float)
+    scores: Map Int Float
+    parents: Map Int Int
+  }
 
 // Large constant for infinity
 infinity : Float
