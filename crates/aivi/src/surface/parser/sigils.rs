@@ -1201,33 +1201,20 @@ impl Parser {
                                             );
                                             continue;
                                         }
-                                        // Bare identifiers are runtime variable references,
-                                        // not compile-time constants — reject them even
-                                        // though compile_time_expr_text would accept them
-                                        // (it needs Ident for qualified paths like Enum.Variant).
-                                        if matches!(&field.value, Expr::Ident(_)) {
-                                            this.emit_diag(
-                                                "E1613",
-                                                "props field values must be compile-time literals",
-                                                field.span.clone(),
-                                            );
-                                            continue;
-                                        }
-                                        let Some(prop_value_text) =
-                                            compile_time_expr_text(&field.value)
-                                        else {
-                                            this.emit_diag(
-                                                "E1613",
-                                                "props field values must be compile-time literals",
-                                                field.span.clone(),
-                                            );
-                                            continue;
-                                        };
+                                        // Try compile-time evaluation first; fall back to
+                                        // the expression itself for runtime values (e.g. widget IDs).
                                         let prop_name = normalize_prop_name(&name.name);
+                                        let value_expr =
+                                            if let Some(text) = compile_time_expr_text(&field.value)
+                                            {
+                                                mk_string(&text)
+                                            } else {
+                                                field.value
+                                            };
                                         lowered_attrs.push(call2(
                                             "gtkAttr",
                                             mk_string(&format!("prop:{prop_name}")),
-                                            mk_string(&prop_value_text),
+                                            value_expr,
                                         ));
                                     }
                                 }

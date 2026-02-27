@@ -183,6 +183,8 @@ pub extern "C" fn rt_unbox_bool(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> 
                 "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}type mismatch{RT_RESET}: expected a boolean (`true`/`false`), but got `{other:?}`"
             );
             eprintln!("  {RT_CYAN}hint{RT_RESET}: a condition expression did not produce a Bool — check `if` guards and boolean-typed bindings");
+            let bt = std::backtrace::Backtrace::force_capture();
+            eprintln!("  {RT_CYAN}backtrace{RT_RESET}:\n{bt}");
             0
         }
     }
