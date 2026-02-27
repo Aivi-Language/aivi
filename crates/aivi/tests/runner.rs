@@ -4,8 +4,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use aivi::{
-    check_modules, desugar_modules, elaborate_expected_coercions, file_diagnostics_have_errors,
-    load_modules_from_paths, run_test_suite,
+    check_modules, desugar_modules, elaborate_expected_coercions, embedded_stdlib_modules,
+    file_diagnostics_have_errors, parse_modules, run_test_suite,
 };
 use walkdir::WalkDir;
 
@@ -97,6 +97,9 @@ fn run_aivi_sources_inner() {
 
     println!("Found {} test file(s)", test_paths.len());
 
+    // Parse the stdlib once and reuse for every file to avoid redundant parsing.
+    let stdlib_modules = embedded_stdlib_modules();
+
     let mut total_passed = 0usize;
     let mut total_failed = 0usize;
     let mut skipped_files = 0usize;
@@ -114,15 +117,18 @@ fn run_aivi_sources_inner() {
             continue;
         }
 
-        // Load this file with embedded stdlib
-        let mut modules = match load_modules_from_paths(std::slice::from_ref(path)) {
-            Ok(m) => m,
+        // Load this file with pre-parsed stdlib
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
             Err(e) => {
                 eprintln!("SKIP (load error): {} — {}", rel_str, e);
                 skipped_files += 1;
                 continue;
             }
         };
+        let (file_modules, _) = parse_modules(path.as_path(), &content);
+        let mut modules = stdlib_modules.clone();
+        modules.extend(file_modules);
 
         // Type-check; skip files with pre-existing errors
         let mut diags = check_modules(&modules);
@@ -221,11 +227,17 @@ fn syntax_effects_selected_files_inner() {
         root.join("integration-tests/syntax/effects/unless_conditional.aivi"),
     ];
 
+    // Parse the stdlib once and reuse for every file to avoid redundant parsing.
+    let stdlib_modules = embedded_stdlib_modules();
+
     let mut total_passed = 0usize;
     let mut skipped_files = 0usize;
     for path in files {
-        let mut modules = load_modules_from_paths(std::slice::from_ref(&path))
-            .unwrap_or_else(|e| panic!("load_modules_from_paths({}): {e}", path.display()));
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let (file_modules, _) = parse_modules(path.as_path(), &content);
+        let mut modules = stdlib_modules.clone();
+        modules.extend(file_modules);
 
         let mut diags = check_modules(&modules);
         if !file_diagnostics_have_errors(&diags) {
@@ -302,11 +314,17 @@ fn syntax_remaining_batch_files_inner() {
         root.join("integration-tests/syntax/types/unions_and_aliases.aivi"),
     ];
 
+    // Parse the stdlib once and reuse for every file to avoid redundant parsing.
+    let stdlib_modules = embedded_stdlib_modules();
+
     let mut total_passed = 0usize;
     let mut skipped_files = 0usize;
     for path in files {
-        let mut modules = load_modules_from_paths(std::slice::from_ref(&path))
-            .unwrap_or_else(|e| panic!("load_modules_from_paths({}): {e}", path.display()));
+        let content = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let (file_modules, _) = parse_modules(path.as_path(), &content);
+        let mut modules = stdlib_modules.clone();
+        modules.extend(file_modules);
 
         let mut diags = check_modules(&modules);
         if !file_diagnostics_have_errors(&diags) {
