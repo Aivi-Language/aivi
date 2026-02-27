@@ -206,18 +206,6 @@ x = 1
 }
 
 #[test]
-fn rejects_argument_on_inline() {
-    let src = r#"
-module Example
-
-@inline "nope"
-f x = x
-"#;
-    let (_, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diag_codes(&diags).contains(&"E1513".to_string()));
-}
-
-#[test]
 fn module_decorator_no_prelude_rejects_argument() {
     let src = r#"
 @no_prelude "nope"
@@ -1314,7 +1302,7 @@ fn parses_decorator_on_class_decl() {
     let src = r#"
 module Example
 
-@inline
+@deprecated "use Mappable"
 class Functor (F *) = { map: (A -> B) -> F A -> F B }
 "#;
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
@@ -1337,7 +1325,7 @@ class Functor (F *) = { map: (A -> B) -> F A -> F B }
         .expect("Functor class decl");
 
     assert_eq!(class_decl.decorators.len(), 1);
-    assert_eq!(class_decl.decorators[0].name.name, "inline");
+    assert_eq!(class_decl.decorators[0].name.name, "deprecated");
 }
 
 #[test]
