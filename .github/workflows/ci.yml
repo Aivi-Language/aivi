@@ -40,6 +40,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -61,6 +63,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -87,17 +91,17 @@ jobs:
       - name: Install cargo-bolero
         run: cargo install cargo-bolero --locked
       - name: Fuzz parser (short)
-        run: cargo bolero test -p aivi-fuzz parser::parser --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+        run: cargo bolero test -p aivi-fuzz parser::parser --engine libfuzzer -T 30s -t 10s
       - name: Fuzz frontend (short)
-        run: cargo bolero test -p aivi-fuzz frontend::frontend --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+        run: cargo bolero test -p aivi-fuzz frontend::frontend --engine libfuzzer -T 30s -t 10s
       - name: Fuzz runtime (short)
-        run: cargo bolero test -p aivi-fuzz runtime::runtime --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+        run: cargo bolero test -p aivi-fuzz runtime::runtime --engine libfuzzer -T 30s -t 10s
       - name: Fuzz formatter (short)
-        run: cargo bolero test -p aivi-fuzz formatter::formatter --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+        run: cargo bolero test -p aivi-fuzz formatter::formatter --engine libfuzzer -T 30s -t 10s
       - name: Fuzz LSP pipeline (short)
-        run: cargo bolero test -p aivi-fuzz lsp_pipeline::lsp_pipeline --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+        run: cargo bolero test -p aivi-fuzz lsp_pipeline::lsp_pipeline --engine libfuzzer -T 30s -t 10s
       - name: Fuzz type inference (short)
-        run: cargo bolero test -p aivi-fuzz type_inference::type_inference --engine libfuzzer -- -max_total_time=30 -timeout=10 -rss_limit_mb=2048
+        run: cargo bolero test -p aivi-fuzz type_inference::type_inference --engine libfuzzer -T 30s -t 10s
 
   docs:
     name: Docs (build)
