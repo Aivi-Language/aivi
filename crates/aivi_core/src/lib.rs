@@ -67,8 +67,9 @@ pub use surface::{
     SpannedSymbol, TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig, UseDecl,
 };
 pub use typecheck::{
-    check_types, check_types_including_stdlib, elaborate_expected_coercions, infer_value_types,
-    infer_value_types_full, InferResult,
+    check_types, check_types_including_stdlib, elaborate_expected_coercions,
+    elaborate_stdlib_checkpoint, elaborate_with_checkpoint, ElaborationCheckpoint,
+    infer_value_types, infer_value_types_full, InferResult,
 };
 
 pub fn desugar_modules(modules: &[Module]) -> HirProgram {

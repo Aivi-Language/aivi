@@ -35,6 +35,7 @@ mod linux {
         fn gtk_widget_set_margin_bottom(widget: *mut c_void, margin: c_int);
         fn gtk_widget_add_css_class(widget: *mut c_void, css_class: *const c_char);
         fn gtk_widget_remove_css_class(widget: *mut c_void, css_class: *const c_char);
+        fn gtk_widget_has_css_class(widget: *mut c_void, css_class: *const c_char) -> c_int;
         fn gtk_widget_set_tooltip_text(widget: *mut c_void, text: *const c_char);
         fn gtk_widget_queue_draw(widget: *mut c_void);
         fn gtk_widget_set_opacity(widget: *mut c_void, opacity: f64);
@@ -150,6 +151,7 @@ mod linux {
         fn g_type_from_name(name: *const c_char) -> usize;
         fn g_object_new(object_type: usize, first_property_name: *const c_char, ...) -> *mut c_void;
         fn g_object_set(object: *mut c_void, first_property_name: *const c_char, ...);
+        fn g_object_get(object: *mut c_void, first_property_name: *const c_char, ...);
         fn g_signal_connect_data(
             instance: *mut c_void,
             detailed_signal: *const c_char,
@@ -246,6 +248,8 @@ mod linux {
         signal_events: VecDeque<SignalEventState>,
         signal_bool_bindings: HashMap<String, Vec<SignalBoolBinding>>,
         signal_css_bindings: HashMap<String, Vec<SignalCssBinding>>,
+        signal_toggle_bool_bindings: HashMap<String, Vec<SignalToggleBoolBinding>>,
+        signal_toggle_css_bindings: HashMap<String, Vec<SignalToggleCssBinding>>,
         named_widgets: HashMap<String, i64>,
         tray_handles: HashMap<i64, Arc<Mutex<SniTrayState>>>,
         resources_registered: bool,
@@ -261,6 +265,16 @@ mod linux {
         widget_id: i64,
         class_name: String,
         add: bool,
+    }
+
+    struct SignalToggleBoolBinding {
+        widget_id: i64,
+        property: String,
+    }
+
+    struct SignalToggleCssBinding {
+        widget_id: i64,
+        class_name: String,
     }
 
     struct SniTrayState {
@@ -1647,6 +1661,45 @@ mod linux {
                                     gtk_widget_add_css_class(widget, class_c.as_ptr());
                                 } else {
                                     gtk_widget_remove_css_class(widget, class_c.as_ptr());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Apply any registered toggle bool property bindings for this handler
+            if let Some(bindings) = state.signal_toggle_bool_bindings.get(&binding.handler) {
+                let mutations: Vec<_> = bindings
+                    .iter()
+                    .map(|b| (b.widget_id, b.property.clone()))
+                    .collect();
+                for (wid, prop) in mutations {
+                    if let Some(&widget) = state.widgets.get(&wid) {
+                        if let Ok(prop_c) = CString::new(prop.as_str()) {
+                            unsafe {
+                                let mut current: c_int = 0;
+                                g_object_get(widget, prop_c.as_ptr(), &mut current as *mut c_int, std::ptr::null::<c_char>());
+                                let toggled: c_int = if current != 0 { 0 } else { 1 };
+                                g_object_set(widget, prop_c.as_ptr(), toggled, std::ptr::null::<c_char>());
+                            }
+                        }
+                    }
+                }
+            }
+            // Apply any registered toggle CSS class bindings for this handler
+            if let Some(bindings) = state.signal_toggle_css_bindings.get(&binding.handler) {
+                let mutations: Vec<_> = bindings
+                    .iter()
+                    .map(|b| (b.widget_id, b.class_name.clone()))
+                    .collect();
+                for (wid, class_name) in mutations {
+                    if let Some(&widget) = state.widgets.get(&wid) {
+                        if let Ok(class_c) = CString::new(class_name.as_str()) {
+                            unsafe {
+                                if gtk_widget_has_css_class(widget, class_c.as_ptr()) != 0 {
+                                    gtk_widget_remove_css_class(widget, class_c.as_ptr());
+                                } else {
+                                    gtk_widget_add_css_class(widget, class_c.as_ptr());
                                 }
                             }
                         }
@@ -3663,6 +3716,70 @@ mod linux {
                                 widget_id: target_widget_id,
                                 class_name: class_name.clone(),
                                 add,
+                            });
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "signalBindToggleBoolProperty".to_string(),
+            builtin("gtk4.signalBindToggleBoolProperty", 3, |mut args, _| {
+                let prop_name = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindToggleBoolProperty expects Text property name")),
+                };
+                let target_widget_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindToggleBoolProperty expects Int target widget id")),
+                };
+                let handler_name = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindToggleBoolProperty expects Text handler name")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let _ = widget_ptr(&state, target_widget_id, "signalBindToggleBoolProperty")?;
+                        state.signal_toggle_bool_bindings
+                            .entry(handler_name.clone())
+                            .or_default()
+                            .push(SignalToggleBoolBinding {
+                                widget_id: target_widget_id,
+                                property: prop_name.clone(),
+                            });
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "signalToggleCssClass".to_string(),
+            builtin("gtk4.signalToggleCssClass", 3, |mut args, _| {
+                let class_name = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalToggleCssClass expects Text class name")),
+                };
+                let target_widget_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.signalToggleCssClass expects Int target widget id")),
+                };
+                let handler_name = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalToggleCssClass expects Text handler name")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let _ = widget_ptr(&state, target_widget_id, "signalToggleCssClass")?;
+                        state.signal_toggle_css_bindings
+                            .entry(handler_name.clone())
+                            .or_default()
+                            .push(SignalToggleCssBinding {
+                                widget_id: target_widget_id,
+                                class_name: class_name.clone(),
                             });
                         Ok(Value::Unit)
                     })

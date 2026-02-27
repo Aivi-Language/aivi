@@ -22,7 +22,10 @@ mod class_constraints_tests;
 mod expected_coercions_tests;
 
 pub use check::{check_types, check_types_including_stdlib};
-pub use elaborate::elaborate_expected_coercions;
+pub use elaborate::{
+    elaborate_expected_coercions, elaborate_stdlib_checkpoint, elaborate_with_checkpoint,
+    ElaborationCheckpoint,
+};
 pub use infer::{infer_value_types, infer_value_types_full, InferResult};
 
 use checker::TypeChecker;

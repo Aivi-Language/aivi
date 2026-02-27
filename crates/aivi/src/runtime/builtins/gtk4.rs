@@ -133,6 +133,8 @@ fn build_gtk4_stubs() -> Value {
         ("widgetById", 1),
         ("signalBindBoolProperty", 4),
         ("signalBindCssClass", 4),
+        ("signalBindToggleBoolProperty", 3),
+        ("signalToggleCssClass", 3),
     ];
 
     let mut fields = HashMap::new();

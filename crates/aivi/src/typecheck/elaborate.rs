@@ -8,7 +8,7 @@ use super::types::Scheme;
 
 use super::class_env::{
     collect_exported_class_env, collect_imported_class_env, collect_local_class_env,
-    expand_classes, synthesize_auto_forward_instances, InstanceDeclInfo,
+    expand_classes, synthesize_auto_forward_instances, ClassDeclInfo, InstanceDeclInfo,
 };
 use super::global::collect_global_type_info;
 use super::ordering::ordered_module_indices;
@@ -28,7 +28,114 @@ pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnosti
         collect_global_type_info(&mut checker, modules);
     checker.set_global_type_info(global_type_constructors, global_aliases);
 
+    elaborate_modules(
+        modules,
+        &mut checker,
+        &mut diagnostics,
+        &mut module_exports,
+        &mut module_domain_exports,
+        &mut module_class_exports,
+        &mut module_instance_exports,
+        false,
+    );
+
+    diagnostics
+}
+
+/// Cached stdlib export maps. Avoids re-processing embedded modules during elaboration
+/// when the same stdlib is shared across many user files.
+#[derive(Clone)]
+pub struct ElaborationCheckpoint {
+    module_exports: HashMap<String, HashMap<String, Vec<Scheme>>>,
+    module_domain_exports: HashMap<String, HashMap<String, Vec<String>>>,
+    module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>>,
+    module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>>,
+}
+
+/// Build a checkpoint by elaborating only stdlib (embedded) modules.
+/// The returned checkpoint can be cloned and reused for multiple user files.
+pub fn elaborate_stdlib_checkpoint(stdlib_modules: &mut [Module]) -> ElaborationCheckpoint {
+    let mut checker = TypeChecker::new();
+    let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
+    let mut module_domain_exports: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();
+    let mut module_class_exports: HashMap<String, HashMap<String, ClassDeclInfo>> = HashMap::new();
+    let mut module_instance_exports: HashMap<String, Vec<InstanceDeclInfo>> = HashMap::new();
+
+    let (global_type_constructors, global_aliases) =
+        collect_global_type_info(&mut checker, stdlib_modules);
+    checker.set_global_type_info(global_type_constructors, global_aliases);
+
+    let mut diagnostics = Vec::new();
+    elaborate_modules(
+        stdlib_modules,
+        &mut checker,
+        &mut diagnostics,
+        &mut module_exports,
+        &mut module_domain_exports,
+        &mut module_class_exports,
+        &mut module_instance_exports,
+        false,
+    );
+
+    ElaborationCheckpoint {
+        module_exports,
+        module_domain_exports,
+        module_class_exports,
+        module_instance_exports,
+    }
+}
+
+/// Elaborate user modules using a pre-built stdlib checkpoint.
+/// `modules` must contain all modules (stdlib + user); stdlib modules are skipped during
+/// elaboration and their cached exports are used instead.
+pub fn elaborate_with_checkpoint(
+    modules: &mut [Module],
+    checkpoint: &ElaborationCheckpoint,
+) -> Vec<FileDiagnostic> {
+    let mut checker = TypeChecker::new();
+    let mut diagnostics = Vec::new();
+    let mut module_exports = checkpoint.module_exports.clone();
+    let mut module_domain_exports = checkpoint.module_domain_exports.clone();
+    let mut module_class_exports = checkpoint.module_class_exports.clone();
+    let mut module_instance_exports = checkpoint.module_instance_exports.clone();
+
+    let (global_type_constructors, global_aliases) =
+        collect_global_type_info(&mut checker, modules);
+    checker.set_global_type_info(global_type_constructors, global_aliases);
+
+    elaborate_modules(
+        modules,
+        &mut checker,
+        &mut diagnostics,
+        &mut module_exports,
+        &mut module_domain_exports,
+        &mut module_class_exports,
+        &mut module_instance_exports,
+        true,
+    );
+
+    diagnostics
+}
+
+/// Core elaboration loop shared by both the full and checkpoint paths.
+/// When `skip_embedded` is true, modules whose path starts with `<embedded:` are skipped
+/// (their exports are assumed to already be present in the export maps).
+fn elaborate_modules(
+    modules: &mut [Module],
+    checker: &mut TypeChecker,
+    diagnostics: &mut Vec<FileDiagnostic>,
+    module_exports: &mut HashMap<String, HashMap<String, Vec<Scheme>>>,
+    module_domain_exports: &mut HashMap<String, HashMap<String, Vec<String>>>,
+    module_class_exports: &mut HashMap<String, HashMap<String, ClassDeclInfo>>,
+    module_instance_exports: &mut HashMap<String, Vec<InstanceDeclInfo>>,
+    skip_embedded: bool,
+) {
     for idx in ordered_module_indices(modules) {
+        let is_embedded = modules[idx].path.starts_with("<embedded:");
+        if skip_embedded && is_embedded {
+            continue;
+        }
+
         let module = &mut modules[idx];
         checker.reset_module_context(module);
 
@@ -138,6 +245,4 @@ pub fn elaborate_expected_coercions(modules: &mut [Module]) -> Vec<FileDiagnosti
         module_class_exports.insert(module.name.name.clone(), class_exports);
         module_instance_exports.insert(module.name.name.clone(), instance_exports);
     }
-
-    diagnostics
 }

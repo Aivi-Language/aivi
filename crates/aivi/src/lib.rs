@@ -68,8 +68,9 @@ pub mod resolver {
 
 pub mod typecheck {
     pub use aivi_core::{
-        check_types, check_types_including_stdlib, elaborate_expected_coercions, infer_value_types,
-        infer_value_types_full, InferResult,
+        check_types, check_types_including_stdlib, elaborate_expected_coercions,
+        elaborate_stdlib_checkpoint, elaborate_with_checkpoint, ElaborationCheckpoint,
+        infer_value_types, infer_value_types_full, InferResult,
     };
 }
 
@@ -94,8 +95,9 @@ pub use aivi_core::lex_cst;
 
 pub use aivi_core::check_modules;
 pub use aivi_core::{
-    check_types, check_types_including_stdlib, elaborate_expected_coercions, infer_value_types,
-    infer_value_types_full, InferResult,
+    check_types, check_types_including_stdlib, elaborate_expected_coercions,
+    elaborate_stdlib_checkpoint, elaborate_with_checkpoint, ElaborationCheckpoint,
+    infer_value_types, infer_value_types_full, InferResult,
 };
 pub use aivi_core::{
     embedded_stdlib_modules, embedded_stdlib_source, lower_modules_to_arena, parse_modules,
