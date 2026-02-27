@@ -46,8 +46,8 @@ literal_upsert_functional = do Effect {
   rows   <- load users2
   rows match
     | [u] => do Effect {
-      assertEq u.name "C"
-      assertEq u.active True
-    }
+        assertEq u.name "C"
+        assertEq u.active True
+      }
     | _ => assert False
 }

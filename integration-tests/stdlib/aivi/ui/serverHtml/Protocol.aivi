@@ -260,33 +260,33 @@ encodeEventPayload = payload => payload match
 
 decodeEventPayload = kind pJson => kind match
   | "click" => do Result {
-    p <- decodeClickPayload pJson
-    Ok (ClickEvt p)
-  }
+      p <- decodeClickPayload pJson
+      Ok (ClickEvt p)
+    }
   | "input" => do Result {
-    p <- decodeInputPayload pJson
-    Ok (InputEvt p)
-  }
+      p <- decodeInputPayload pJson
+      Ok (InputEvt p)
+    }
   | "keydown" => do Result {
-    p <- decodeKeyPayload pJson
-    Ok (KeyDownEvt p)
-  }
+      p <- decodeKeyPayload pJson
+      Ok (KeyDownEvt p)
+    }
   | "keyup" => do Result {
-    p <- decodeKeyPayload pJson
-    Ok (KeyUpEvt p)
-  }
+      p <- decodeKeyPayload pJson
+      Ok (KeyUpEvt p)
+    }
   | "pointerdown" => do Result {
-    p <- decodePointerPayload pJson
-    Ok (PtrDownEvt p)
-  }
+      p <- decodePointerPayload pJson
+      Ok (PtrDownEvt p)
+    }
   | "pointerup" => do Result {
-    p <- decodePointerPayload pJson
-    Ok (PtrUpEvt p)
-  }
+      p <- decodePointerPayload pJson
+      Ok (PtrUpEvt p)
+    }
   | "pointermove" => do Result {
-    p <- decodePointerPayload pJson
-    Ok (PtrMoveEvt p)
-  }
+      p <- decodePointerPayload pJson
+      Ok (PtrMoveEvt p)
+    }
   | _ => Err { message: "unknown event kind: { kind }" }
 
 // ---------------------------------------------------------------------------
@@ -316,42 +316,42 @@ decodeIntersectionEntry = json => do Result {
 
 decodePlatformEventInner = kind pJson => kind match
   | "popstate" => do Result {
-    url <- decodeUrlInfo pJson
-    Ok (PopState url)
-  }
+      url <- decodeUrlInfo pJson
+      Ok (PopState url)
+    }
   | "hashchange" => do Result {
-    urlRaw    <- decodeField "url" pJson
-    url       <- decodeUrlInfo urlRaw
-    oldURLRaw <- decodeField "oldURL" pJson
-    oldURL    <- decodeText oldURLRaw
-    newURLRaw <- decodeField "newURL" pJson
-    newURL    <- decodeText newURLRaw
-    hashRaw   <- decodeField "hash" pJson
-    hash      <- decodeText hashRaw
-    Ok (HashChange { url: url, oldURL: oldURL, newURL: newURL, hash: hash })
-  }
+      urlRaw    <- decodeField "url" pJson
+      url       <- decodeUrlInfo urlRaw
+      oldURLRaw <- decodeField "oldURL" pJson
+      oldURL    <- decodeText oldURLRaw
+      newURLRaw <- decodeField "newURL" pJson
+      newURL    <- decodeText newURLRaw
+      hashRaw   <- decodeField "hash" pJson
+      hash      <- decodeText hashRaw
+      Ok (HashChange { url: url, oldURL: oldURL, newURL: newURL, hash: hash })
+    }
   | "visibility" => do Result {
-    stateRaw <- decodeField "state" pJson
-    state    <- decodeText stateRaw
-    Ok (Visibility { state: state })
-  }
+      stateRaw <- decodeField "state" pJson
+      state    <- decodeText stateRaw
+      Ok (Visibility { state: state })
+    }
   | "focus" => do Result {
-    focusedRaw <- decodeField "focused" pJson
-    focused    <- decodeBool focusedRaw
-    Ok (WindowFocus { focused: focused })
-  }
+      focusedRaw <- decodeField "focused" pJson
+      focused    <- decodeBool focusedRaw
+      Ok (WindowFocus { focused: focused })
+    }
   | "online" => do Result {
-    onlineRaw <- decodeField "online" pJson
-    online    <- decodeBool onlineRaw
-    Ok (Online { online: online })
-  }
+      onlineRaw <- decodeField "online" pJson
+      online    <- decodeBool onlineRaw
+      Ok (Online { online: online })
+    }
   | "intersection" => do Result {
-    sidRaw     <- decodeField "sid" pJson
-    sid        <- decodeInt sidRaw
-    entriesRaw <- decodeField "entries" pJson
-    entries    <- decodeList decodeIntersectionEntry entriesRaw
-    Ok (Intersection { sid: sid, entries: entries })
-  }
+      sidRaw     <- decodeField "sid" pJson
+      sid        <- decodeInt sidRaw
+      entriesRaw <- decodeField "entries" pJson
+      entries    <- decodeList decodeIntersectionEntry entriesRaw
+      Ok (Intersection { sid: sid, entries: entries })
+    }
   | _ => Err { message: "unknown platform kind: { kind }" }
 
 decodePlatformEvent = kind rawPJson => do Result {
@@ -452,44 +452,44 @@ encodeClientMsg = msg => msg match
 
 decodeClientMsgInner = t json => t match
   | "hello" => do Result {
-    viewIdRaw <- decodeField "viewId" json
-    viewId    <- decodeText viewIdRaw
-    urlRaw    <- decodeField "url" json
-    url       <- decodeText urlRaw
-    onlineRaw <- decodeField "online" json
-    online    <- decodeBool onlineRaw
-    Ok (Hello { viewId: viewId, url: url, online: online })
-  }
+      viewIdRaw <- decodeField "viewId" json
+      viewId    <- decodeText viewIdRaw
+      urlRaw    <- decodeField "url" json
+      url       <- decodeText urlRaw
+      onlineRaw <- decodeField "online" json
+      online    <- decodeBool onlineRaw
+      Ok (Hello { viewId: viewId, url: url, online: online })
+    }
   | "event" => do Result {
-    viewIdRaw <- decodeField "viewId" json
-    viewId    <- decodeText viewIdRaw
-    hidRaw    <- decodeField "hid" json
-    hid       <- decodeInt hidRaw
-    kindRaw   <- decodeField "kind" json
-    kind      <- decodeText kindRaw
-    p         <- decodeField "p" json
-    Ok (Event { viewId: viewId, hid: hid, kind: kind, p: p })
-  }
+      viewIdRaw <- decodeField "viewId" json
+      viewId    <- decodeText viewIdRaw
+      hidRaw    <- decodeField "hid" json
+      hid       <- decodeInt hidRaw
+      kindRaw   <- decodeField "kind" json
+      kind      <- decodeText kindRaw
+      p         <- decodeField "p" json
+      Ok (Event { viewId: viewId, hid: hid, kind: kind, p: p })
+    }
   | "platform" => do Result {
-    viewIdRaw <- decodeField "viewId" json
-    viewId    <- decodeText viewIdRaw
-    kindRaw   <- decodeField "kind" json
-    kind      <- decodeText kindRaw
-    p         <- decodeField "p" json
-    Ok (Platform { viewId: viewId, kind: kind, p: p })
-  }
+      viewIdRaw <- decodeField "viewId" json
+      viewId    <- decodeText viewIdRaw
+      kindRaw   <- decodeField "kind" json
+      kind      <- decodeText kindRaw
+      p         <- decodeField "p" json
+      Ok (Platform { viewId: viewId, kind: kind, p: p })
+    }
   | "effectResult" => do Result {
-    viewIdRaw <- decodeField "viewId" json
-    viewId    <- decodeText viewIdRaw
-    ridRaw    <- decodeField "rid" json
-    rid       <- decodeInt ridRaw
-    kindRaw   <- decodeField "kind" json
-    kind      <- decodeText kindRaw
-    okRaw     <- decodeField "ok" json
-    ok        <- decodeBool okRaw
-    p         <- decodeField "p" json
-    Ok (EffectResult { viewId: viewId, rid: rid, kind: kind, ok: ok, p: p })
-  }
+      viewIdRaw <- decodeField "viewId" json
+      viewId    <- decodeText viewIdRaw
+      ridRaw    <- decodeField "rid" json
+      rid       <- decodeInt ridRaw
+      kindRaw   <- decodeField "kind" json
+      kind      <- decodeText kindRaw
+      okRaw     <- decodeField "ok" json
+      ok        <- decodeBool okRaw
+      p         <- decodeField "p" json
+      Ok (EffectResult { viewId: viewId, rid: rid, kind: kind, ok: ok, p: p })
+    }
   | _ => Err { message: "unknown ClientMsg type: { t }" }
 
 decodeClientMsg = raw => do Result {
@@ -532,41 +532,41 @@ encodeServerMsg = msg => msg match
 
 decodeServerMsgInner = t json => t match
   | "patch" => do Result {
-    opsRaw <- decodeField "ops" json
-    ops    <- decodeText opsRaw
-    Ok (Patch { ops: ops })
-  }
+      opsRaw <- decodeField "ops" json
+      ops    <- decodeText opsRaw
+      Ok (Patch { ops: ops })
+    }
   | "error" => do Result {
-    codeRaw   <- decodeField "code" json
-    code      <- decodeText codeRaw
-    detailRaw <- decodeField "detail" json
-    detail    <- decodeText detailRaw
-    Ok (Error { code: code, detail: detail })
-  }
+      codeRaw   <- decodeField "code" json
+      code      <- decodeText codeRaw
+      detailRaw <- decodeField "detail" json
+      detail    <- decodeText detailRaw
+      Ok (Error { code: code, detail: detail })
+    }
   | "subscribeIntersect" => do Result {
-    sidRaw     <- decodeField "sid" json
-    sid        <- decodeInt sidRaw
-    optionsRaw <- decodeField "options" json
-    targetsRaw <- decodeField "targets" json
-    decodeIntersectionOptions optionsRaw match
-      | Err e      => Err e
-      | Ok options => decodeList decodeIntersectionTarget targetsRaw match
+      sidRaw     <- decodeField "sid" json
+      sid        <- decodeInt sidRaw
+      optionsRaw <- decodeField "options" json
+      targetsRaw <- decodeField "targets" json
+      decodeIntersectionOptions optionsRaw match
         | Err e      => Err e
-        | Ok targets => Ok (SubscribeIntersect { sid: sid, options: options, targets: targets })
-  }
+        | Ok options => decodeList decodeIntersectionTarget targetsRaw match
+          | Err e      => Err e
+          | Ok targets => Ok (SubscribeIntersect { sid: sid, options: options, targets: targets })
+    }
   | "unsubscribeIntersect" => do Result {
-    sidRaw <- decodeField "sid" json
-    sid    <- decodeInt sidRaw
-    Ok (UnsubscribeIntersect { sid: sid })
-  }
+      sidRaw <- decodeField "sid" json
+      sid    <- decodeInt sidRaw
+      Ok (UnsubscribeIntersect { sid: sid })
+    }
   | "effectReq" => do Result {
-    ridRaw <- decodeField "rid" json
-    rid    <- decodeInt ridRaw
-    opRaw  <- decodeField "op" json
-    decodeClipboardOp opRaw match
-      | Err e => Err e
-      | Ok op => Ok (EffectReq { rid: rid, op: op })
-  }
+      ridRaw <- decodeField "rid" json
+      rid    <- decodeInt ridRaw
+      opRaw  <- decodeField "op" json
+      decodeClipboardOp opRaw match
+        | Err e => Err e
+        | Ok op => Ok (EffectReq { rid: rid, op: op })
+    }
   | _ => Err { message: "unknown ServerMsg type: { t }" }
 
 decodeServerMsg = raw => do Result {

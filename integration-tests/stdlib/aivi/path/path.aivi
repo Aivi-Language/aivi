@@ -37,11 +37,11 @@ parent_functional = do Effect {
   p = parse "a/b/c"
   parent p match
     | Some par => do Effect {
-      fn = fileName par
-      fn match
-        | Some name => assertEq name "b"
-        | None      => assert False
-    }
+        fn = fileName par
+        fn match
+          | Some name => assertEq name "b"
+          | None      => assert False
+      }
     | None => assert False
 }
 
