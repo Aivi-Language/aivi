@@ -2,18 +2,20 @@
 //   Every @native binding MUST be top-level and have an explicit type.
 //   The body is a dummy; the compiler rewrites it.
 
-@native "rustfft.fft"
-fft : List Float -> List (Float, Float)
-fft = samples => []
+@native "uuid.v4"
+v4 : Effect Text Text
+v4 = do Effect { pure "" }
+
+@native "uuid.v5"
+v5 : Text -> Text -> Effect Text Text
+v5 = namespace name => do Effect { pure "" }
 
 // Step 2 – Use it like any other AIVI function.
 //   The caller never sees the native machinery.
 
 use aivi
 
-spectrum = [1.0, 0.0, 1.0, 0.0] |> fft
-
 main = do Effect {
-  result <- spectrum
-  console.log (text.show result)
+  id <- uuid.v4
+  console.log ("Generated UUID: " ++ id)
 }
