@@ -787,6 +787,16 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                 Type::Func(Box::new(int_ty.clone()), Box::new(effect_text_unit.clone())),
             ),
             (
+                "adwDialogPresent".to_string(),
+                Type::Func(
+                    Box::new(int_ty.clone()),
+                    Box::new(Type::Func(
+                        Box::new(int_ty.clone()),
+                        Box::new(effect_text_unit.clone()),
+                    )),
+                ),
+            ),
+            (
                 "fileDialogNew".to_string(),
                 Type::Func(
                     Box::new(Type::con("Unit")),

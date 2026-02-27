@@ -11,10 +11,10 @@ mime_parsing_helpers = do Effect {
   partsResult = mimeParts raw
   partsResult match
     | Ok parts => do Effect {
-      assertEq (List.length parts >= 1) True
-      combined = flattenBodies parts
-      assert (text.contains "hello" combined)
-    }
+        assertEq (List.length parts >= 1) True
+        combined = flattenBodies parts
+        assert (text.contains "hello" combined)
+      }
     | Err _ => assert False
 }
 

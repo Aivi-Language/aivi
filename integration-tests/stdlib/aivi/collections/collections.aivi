@@ -17,9 +17,9 @@ deque_functional = do Effect {
   res = Deque.popFront d2
   res match
     | Some (val, d3) => do Effect {
-      assert (val == 0)
-      assert (Deque.peekFront d3 == Some 1)
-    }
+        assert (val == 0)
+        assert (Deque.peekFront d3 == Some 1)
+      }
     | None => assert False
 }
 
@@ -35,9 +35,9 @@ heap_functional = do Effect {
   res = Heap.popMin h3
   res match
     | Some (val, h4) => do Effect {
-      assert (val == 1)
-      assert (Heap.peekMin h4 == Some 2)
-    }
+        assert (val == 1)
+        assert (Heap.peekMin h4 == Some 2)
+      }
     | None => assert False
 }
 
@@ -67,9 +67,9 @@ heapTuplePriority = do Effect {
   res = Heap.popMin h3
   res match
     | Some ((w, n), _rest) => do Effect {
-      assert (w == 1)
-      assert (n == "a")
-    }
+        assert (w == 1)
+        assert (n == "a")
+      }
     | None => assert False
 }
 
@@ -99,9 +99,9 @@ queue_functional = do Effect {
   res = Queue.dequeue q2
   res match
     | Some (val, q3) => do Effect {
-      assert (val == 1)
-      assert (Queue.peek q3 == Some 2)
-    }
+        assert (val == 1)
+        assert (Queue.peek q3 == Some 2)
+      }
     | None => assert False
 }
 

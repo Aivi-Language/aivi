@@ -42,10 +42,10 @@ match_first = do Effect {
   m = match r "abc 123 def 456"
   m match
     | Some first => do Effect {
-      assertEq first.full "123"
-      assertEq first.start 4
-      assertEq first.end 7
-    }
+        assertEq first.full "123"
+        assertEq first.start 4
+        assertEq first.end 7
+      }
     | None => assert False
 }
 

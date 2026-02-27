@@ -91,11 +91,11 @@ partitionAttrsGo = attrs hid accAttrs accMap => attrs match
   | []                   => (reverseList accAttrs, accMap, hid)
   | [a, ...rest]         => extractHandler a match
     | Some (kind, handler) => {
-      hidAttr = Attr ("data-aivi-hid-{ kind }") (toText hid) // -- DOCS: verify Attr constructor
-      partitionAttrsGo rest (hid + 1)
-      [hidAttr, ...accAttrs]
-      (Map.insert hid handler accMap)
-    }
+        hidAttr = Attr ("data-aivi-hid-{ kind }") (toText hid) // -- DOCS: verify Attr constructor
+        partitionAttrsGo rest (hid + 1)
+        [hidAttr, ...accAttrs]
+        (Map.insert hid handler accMap)
+      }
     | None => partitionAttrsGo rest hid [a, ...accAttrs] accMap
 
 // Assign a stable data-aivi-node attribute based on depth-first index.
@@ -119,25 +119,25 @@ assignWalk : VNode msg -> HandlerId -> Int -> AssignResult msg
 assignWalk = node hid idx => node match
   | TextNode t    => { node: TextNode t, handlers: Map.empty, nextHid: hid, nextIdx: idx }
   | Keyed k inner => {
-    result = assignWalk inner hid idx
-    { node: Keyed k result.node
+      result = assignWalk inner hid idx
+      { node: Keyed k result.node
       handlers: result.handlers
       nextHid: result.nextHid
       nextIdx: result.nextIdx
-  }
+    }
   }
   | Element tag attrs children => {
-    nodeId = toText idx
-    (cleanAttrs, attrHandlers, hid2) = partitionAttrs attrs hid
-    nodeAttr = Attr "data-aivi-node" nodeId
-    allAttrs = [nodeAttr, ...cleanAttrs]
-    childResult = assignChildrenWalk children hid2 (idx + 1)[] Map.empty
-    mergedHandlers = mergeMaps attrHandlers childResult.handlers
-    { node: Element tag allAttrs childResult.children
-        handlers: mergedHandlers
-        nextHid: childResult.nextHid
-        nextIdx: childResult.nextIdx
-  }
+      nodeId = toText idx
+      (cleanAttrs, attrHandlers, hid2) = partitionAttrs attrs hid
+      nodeAttr = Attr "data-aivi-node" nodeId
+      allAttrs = [nodeAttr, ...cleanAttrs]
+      childResult = assignChildrenWalk children hid2 (idx + 1)[] Map.empty
+      mergedHandlers = mergeMaps attrHandlers childResult.handlers
+      { node: Element tag allAttrs childResult.children
+      handlers: mergedHandlers
+      nextHid: childResult.nextHid
+      nextIdx: childResult.nextIdx
+    }
     }
 
 AssignChildrenResult msg =
@@ -157,11 +157,11 @@ assignChildrenWalk = nodes hid idx accChildren accHandlers => nodes match
       nextHid: hid, nextIdx: idx
     }
   | [n, ...rest] => {
-    result = assignWalk n hid idx
-    assignChildrenWalk rest result.nextHid result.nextIdx
-    [result.node, ...accChildren]
-    (mergeMaps accHandlers result.handlers)
-  }
+      result = assignWalk n hid idx
+      assignChildrenWalk rest result.nextHid result.nextIdx
+      [result.node, ...accChildren]
+      (mergeMaps accHandlers result.handlers)
+    }
 
 // Merge two maps (second wins on conflict)
 mergeMaps : Map K V -> Map K V -> Map K V
@@ -195,15 +195,15 @@ processEffects
 processEffects = effects ws => effects match
   | []             => pure Unit
   | [eff, ...rest] => do Effect {
-    _ <- eff match
-      | SubscribeIntersectEff sid options targets =>
-    sendServerMsg ws (SubscribeIntersect { sid: sid, options: options, targets: targets })
-      | UnsubscribeIntersectEff sid =>
-    sendServerMsg ws (UnsubscribeIntersect { sid: sid })
-      | RequestClipboard rid op =>
-    sendServerMsg ws (EffectReq { rid: rid, op: op })
-    processEffects rest ws
-  }
+      _ <- eff match
+        | SubscribeIntersectEff sid options targets =>
+      sendServerMsg ws (SubscribeIntersect { sid: sid, options: options, targets: targets })
+        | UnsubscribeIntersectEff sid =>
+      sendServerMsg ws (UnsubscribeIntersect { sid: sid })
+        | RequestClipboard rid op =>
+      sendServerMsg ws (EffectReq { rid: rid, op: op })
+      processEffects rest ws
+    }
 
 // The App record type is imported from ServerHtml; to avoid circular deps
 // we parameterise runUpdate over the needed callbacks.
@@ -285,12 +285,12 @@ assignHandlersClickEmitsHidAttribute = do Effect {
   // The assigned node should contain a data-aivi-hid-click attribute
   assigned match
     | Element _ attrs _ => {
-      hasHid = attrs |> any (a => a match
-        | Attr name _ when text.startsWith "data-aivi-hid-click" name => True
-        | _                                                           => False
-      )
-      assert hasHid
-    }
+        hasHid = attrs |> any (a => a match
+          | Attr name _ when text.startsWith "data-aivi-hid-click" name => True
+          | _                                                           => False
+        )
+        assert hasHid
+      }
     | _ => assert False
 }
 
@@ -316,23 +316,23 @@ assignHandlersAssignsDataAiviNode = do Effect {
   (assigned, _, _) = assignHandlers node 0
   assigned match
     | Element _ attrs children => {
-      hasNode = attrs |> any (a => a match
-        | Attr "data-aivi-node" _ => True
-        | _                       => False
-      )
-      assert hasNode
+        hasNode = attrs |> any (a => a match
+          | Attr "data-aivi-node" _ => True
+          | _                       => False
+        )
+        assert hasNode
     // Each child element should also have data-aivi-node
-      children |> each (child => child match
-        | Element _ cAttrs _ => {
-          childHasNode = cAttrs |> any (a => a match
-            | Attr "data-aivi-node" _ => True
-            | _                       => False
-          )
-          assert childHasNode
-        }
-        | _ => pure Unit
-      )
-    }
+        children |> each (child => child match
+          | Element _ cAttrs _ => {
+              childHasNode = cAttrs |> any (a => a match
+                | Attr "data-aivi-node" _ => True
+                | _                       => False
+              )
+              assert childHasNode
+            }
+          | _ => pure Unit
+        )
+      }
   | _ => assert False
 }
 

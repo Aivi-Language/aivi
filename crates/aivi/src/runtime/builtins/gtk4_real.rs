@@ -657,6 +657,10 @@ mod linux {
         ListBox,
         SplitView,
         Stack,
+        PreferencesDialog,
+        PreferencesPage,
+        PreferencesGroup,
+        ActionRow,
         Other,
     }
 
@@ -1317,6 +1321,82 @@ mod linux {
                     }
                 }
             }
+            "AdwPreferencesDialog" => {
+                if let Some(value) = props.get("title") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwPreferencesDialog title")?;
+                    let prop_c = CString::new("title").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+            }
+            "AdwPreferencesPage" => {
+                if let Some(value) = props.get("title") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwPreferencesPage title")?;
+                    let prop_c = CString::new("title").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("icon-name") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwPreferencesPage icon-name")?;
+                    let prop_c = CString::new("icon-name").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("name") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwPreferencesPage name")?;
+                    let prop_c = CString::new("name").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+            }
+            "AdwPreferencesGroup" => {
+                if let Some(value) = props.get("title") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwPreferencesGroup title")?;
+                    let prop_c = CString::new("title").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("description") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwPreferencesGroup description")?;
+                    let prop_c = CString::new("description").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+            }
+            "AdwActionRow" | "AdwExpanderRow" | "AdwPreferencesRow" | "AdwSpinRow" => {
+                if let Some(value) = props.get("title") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwActionRow title")?;
+                    let prop_c = CString::new("title").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("subtitle") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwActionRow subtitle")?;
+                    let prop_c = CString::new("subtitle").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+            }
+            "AdwEntryRow" | "AdwPasswordEntryRow" => {
+                if let Some(value) = props.get("title") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwEntryRow title")?;
+                    let prop_c = CString::new("title").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("text") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwEntryRow text")?;
+                    unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
+                }
+            }
+            "AdwSwitchRow" => {
+                if let Some(value) = props.get("title") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwSwitchRow title")?;
+                    let prop_c = CString::new("title").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("subtitle") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwSwitchRow subtitle")?;
+                    let prop_c = CString::new("subtitle").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("active").and_then(|v| parse_bool_text(v)) {
+                    let prop_c = CString::new("active").unwrap();
+                    let v: c_int = if value { 1 } else { 0 };
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), v, std::ptr::null::<c_char>()) };
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -1441,9 +1521,13 @@ mod linux {
             "GtkMenuButton" => (unsafe { gtk_menu_button_new() }, CreatedWidgetKind::Other),
             "GtkStack" => (unsafe { gtk_stack_new() }, CreatedWidgetKind::Stack),
             "AdwOverlaySplitView" => (create_adw_widget(class_name)?, CreatedWidgetKind::SplitView),
-            "AdwAboutDialog"
+            "AdwPreferencesDialog" => (create_adw_widget(class_name)?, CreatedWidgetKind::PreferencesDialog),
+            "AdwPreferencesPage" => (create_adw_widget(class_name)?, CreatedWidgetKind::PreferencesPage),
+            "AdwPreferencesGroup" => (create_adw_widget(class_name)?, CreatedWidgetKind::PreferencesGroup),
+            "AdwActionRow" => (create_adw_widget(class_name)?, CreatedWidgetKind::ActionRow),
+            "AdwExpanderRow" => (create_adw_widget(class_name)?, CreatedWidgetKind::ActionRow),
+            | "AdwAboutDialog"
             | "AdwAboutWindow"
-            | "AdwActionRow"
             | "AdwAlertDialog"
             | "AdwApplication"
             | "AdwApplicationWindow"
@@ -1465,7 +1549,6 @@ mod linux {
             | "AdwDialog"
             | "AdwEntryRow"
             | "AdwEnumListModel"
-            | "AdwExpanderRow"
             | "AdwFlap"
             | "AdwInlineViewSwitcher"
             | "AdwLayout"
@@ -1477,9 +1560,6 @@ mod linux {
             | "AdwNavigationSplitView"
             | "AdwNavigationView"
             | "AdwPasswordEntryRow"
-            | "AdwPreferencesDialog"
-            | "AdwPreferencesGroup"
-            | "AdwPreferencesPage"
             | "AdwPreferencesRow"
             | "AdwPreferencesWindow"
             | "AdwPropertyAnimationTarget"
@@ -1667,6 +1747,18 @@ mod linux {
                     }
                 }
                 CreatedWidgetKind::Other => {}
+                CreatedWidgetKind::PreferencesDialog => {
+                    call_adw_fn_pp("adw_preferences_dialog_add", raw, child_raw);
+                }
+                CreatedWidgetKind::PreferencesPage => {
+                    call_adw_fn_pp("adw_preferences_page_add", raw, child_raw);
+                }
+                CreatedWidgetKind::PreferencesGroup => {
+                    call_adw_fn_pp("adw_preferences_group_add", raw, child_raw);
+                }
+                CreatedWidgetKind::ActionRow => {
+                    call_adw_fn_pp("adw_action_row_add_suffix", raw, child_raw);
+                }
             }
         }
 
@@ -4130,6 +4222,29 @@ mod linux {
                         let state = state.borrow();
                         let dialog = widget_ptr(&state, dialog_id, "dialogClose")?;
                         unsafe { gtk_window_close(dialog) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "adwDialogPresent".to_string(),
+            builtin("gtk4.adwDialogPresent", 2, |mut args, _| {
+                let dialog_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.adwDialogPresent expects Int dialog widget id")),
+                };
+                let parent_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.adwDialogPresent expects Int parent window id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let dialog = widget_ptr(&state, dialog_id, "adwDialogPresent")?;
+                        let parent = widget_ptr(&state, parent_id, "adwDialogPresent")?;
+                        call_adw_fn_pp("adw_dialog_present", dialog, parent);
                         Ok(Value::Unit)
                     })
                 }))

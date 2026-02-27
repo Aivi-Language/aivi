@@ -89,9 +89,9 @@ delta_construct = do Effect {
   rows   <- load users3
   rows match
     | [row] => do Effect {
-      assertEq row.id 1
-      assertEq row.name "Alice"
-    }
+        assertEq row.id 1
+        assertEq row.name "Alice"
+      }
     | _ => assert False
 }
 

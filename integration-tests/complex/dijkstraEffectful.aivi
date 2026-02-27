@@ -11,16 +11,16 @@ use aivi.collections
 processEdges = dists d edges pq => edges match
   | []              => pure { dists: dists, pq: pq }
   | [edge, ...rest] => do Effect {
-    currentDist = Map.getOrElse edge.to 999999.0 dists
-    newDist = d + edge.weight
-    nextState = if newDist < currentDist
-    then {
-      dists: Map.insert edge.to newDist dists
-      pq: Heap.push (newDist, edge.to) pq
+      currentDist = Map.getOrElse edge.to 999999.0 dists
+      newDist = d + edge.weight
+      nextState = if newDist < currentDist
+      then {
+        dists: Map.insert edge.to newDist dists
+        pq: Heap.push (newDist, edge.to) pq
+      }
+      else { dists: dists, pq: pq }
+      processEdges nextState.dists d rest nextState.pq
     }
-    else { dists: dists, pq: pq }
-    processEdges nextState.dists d rest nextState.pq
-  }
 
 dijkstraLoop = g state => {
   dists = state.dists
@@ -29,15 +29,15 @@ dijkstraLoop = g state => {
   result match
     | None                     => pure dists
     | Some ((d, node), restPq) => do Effect {
-      currentDist = Map.getOrElse node 999999.0 dists
-      if d > currentDist
-      then dijkstraLoop g { dists: dists, pq: restPq }
-      else do Effect {
-        edges = edgesFrom g node
-        nextState <- processEdges dists d edges restPq
-        dijkstraLoop g nextState
+        currentDist = Map.getOrElse node 999999.0 dists
+        if d > currentDist
+        then dijkstraLoop g { dists: dists, pq: restPq }
+        else do Effect {
+          edges = edgesFrom g node
+          nextState <- processEdges dists d edges restPq
+          dijkstraLoop g nextState
+        }
       }
-    }
 }
 
 @test "Dijkstra with mutable state"
