@@ -37,7 +37,7 @@ fn stdlib_ui_exports_v_element() {
 
     for expected in ["vText", "vKeyed", "vClass", "vId", "vStyle", "vAttr"] {
         assert!(
-            def_names.iter().any(|n| *n == expected),
+            def_names.contains(&expected),
             "expected aivi.ui to define {expected}; defs={def_names:?}"
         );
     }
@@ -45,7 +45,7 @@ fn stdlib_ui_exports_v_element() {
     let export_names: Vec<&str> = ui.exports.iter().map(|e| e.name.name.as_str()).collect();
     for expected in ["vText", "vKeyed", "vClass", "vId", "vStyle", "vAttr"] {
         assert!(
-            export_names.iter().any(|n| *n == expected),
+            export_names.contains(&expected),
             "expected aivi.ui to export {expected}; exports={export_names:?}"
         );
     }

@@ -151,6 +151,7 @@ pub fn desugar_target_lenient(target: &str) -> Result<HirProgram, AiviError> {
 }
 
 /// Builds a test-only program view by finding `@test` definitions and validating their modules.
+#[allow(clippy::type_complexity)]
 pub fn test_target_program_and_names(
     target: &str,
     check_stdlib: bool,
@@ -254,6 +255,7 @@ pub fn desugar_target_typed(target: &str) -> Result<HirProgram, AiviError> {
 
 /// Like `desugar_target_typed` but also runs type inference and returns the `CgType` map
 /// for each module/definition. Used by the typed codegen path.
+#[allow(clippy::type_complexity)]
 pub fn desugar_target_with_cg_types(
     target: &str,
 ) -> Result<

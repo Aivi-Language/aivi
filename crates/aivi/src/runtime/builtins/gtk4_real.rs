@@ -388,6 +388,7 @@ mod linux {
         }
 
         #[zbus(property)]
+        #[allow(clippy::type_complexity)]
         fn tool_tip(&self) -> (String, Vec<(i32, i32, Vec<u8>)>, String, String) {
             let tip = self
                 .state

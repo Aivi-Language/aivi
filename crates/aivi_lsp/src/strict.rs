@@ -37,7 +37,6 @@ impl StrictLevel {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct StrictConfig {
@@ -654,34 +653,36 @@ fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
                 for item in items {
                     // Strict: `(a b, c)` often means `(a, b, c)`; surface parse sees `a b` as a call.
                     if let aivi::Expr::Call { func, args, span } = item {
-                        if matches!(&**func, aivi::Expr::Ident(_)) && args.len() == 1
-                            && matches!(&args[0], aivi::Expr::Ident(_)) {
-                                let func_span = expr_span(func);
-                                let insert_at = aivi::Span {
-                                    start: func_span.end.clone(),
-                                    end: func_span.end.clone(),
-                                };
-                                let edit = TextEdit {
-                                    range: Backend::span_to_range(insert_at.clone()),
-                                    new_text: ",".to_string(),
-                                };
-                                let message = format!(
+                        if matches!(&**func, aivi::Expr::Ident(_))
+                            && args.len() == 1
+                            && matches!(&args[0], aivi::Expr::Ident(_))
+                        {
+                            let func_span = expr_span(func);
+                            let insert_at = aivi::Span {
+                                start: func_span.end.clone(),
+                                end: func_span.end.clone(),
+                            };
+                            let edit = TextEdit {
+                                range: Backend::span_to_range(insert_at.clone()),
+                                new_text: ",".to_string(),
+                            };
+                            let message = format!(
                                     "AIVI-S020 [{}]\nSuspicious tuple element.\nFound: function application inside a tuple element.\nHint: If you meant a 3-tuple, use commas.\nFix: Insert ',' after the first name.",
                                     StrictCategory::Syntax.as_str(),
                                 );
-                                out.push(diag_with_fix(
-                                    "AIVI-S020",
-                                    StrictCategory::Syntax,
-                                    DiagnosticSeverity::WARNING,
-                                    message,
-                                    Backend::span_to_range(span.clone()),
-                                    Some(StrictFix {
-                                        title: "Insert missing comma".to_string(),
-                                        edits: vec![edit],
-                                        is_preferred: false,
-                                    }),
-                                ));
-                            }
+                            out.push(diag_with_fix(
+                                "AIVI-S020",
+                                StrictCategory::Syntax,
+                                DiagnosticSeverity::WARNING,
+                                message,
+                                Backend::span_to_range(span.clone()),
+                                Some(StrictFix {
+                                    title: "Insert missing comma".to_string(),
+                                    edits: vec![edit],
+                                    is_preferred: false,
+                                }),
+                            ));
+                        }
                     }
                     walk_expr(item, out);
                 }

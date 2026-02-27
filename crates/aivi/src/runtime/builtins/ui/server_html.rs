@@ -471,6 +471,7 @@ fn server_html_expect_model_and_effects(value: Value) -> Result<(Value, Arc<Vec<
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn server_html_prepare_effects(
     effects: &Arc<Vec<Value>>,
     next_rid: &mut i64,
@@ -1618,6 +1619,7 @@ impl ValueExt for Value {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod server_html_tests {
     use super::*;
 

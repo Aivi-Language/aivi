@@ -885,6 +885,7 @@ fn source_transport_error(kind: &str, context: &str, message: &str) -> String {
     format!("\x1b[31mtransport error\x1b[0m [{kind}] {context}\n\x1b[2m{message}\x1b[0m")
 }
 
+#[allow(clippy::too_many_arguments)]
 fn source_decode_error(
     kind: &str,
     path: &str,

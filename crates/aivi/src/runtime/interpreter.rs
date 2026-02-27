@@ -701,7 +701,7 @@ fn make_machine_can_builtin(machine_name: String, event_name: String) -> Value {
     )
 }
 
-#[allow(dead_code)]
+#[allow(dead_code, clippy::type_complexity)]
 fn bind_module_machine_values(
     surface_module: &crate::surface::Module,
     module_name: &str,

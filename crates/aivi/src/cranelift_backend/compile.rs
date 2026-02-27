@@ -913,6 +913,7 @@ pub(crate) struct CompiledLambdaInfo {
 /// The function has already been declared via `module.declare_function`; this
 /// fills in the body IR. Returns pending lambda info on success.
 /// Generic over `M: Module` so it works with both JITModule and ObjectModule.
+#[allow(clippy::too_many_arguments)]
 fn compile_definition_body<M: Module>(
     module: &mut M,
     helpers: &DeclaredHelpers,

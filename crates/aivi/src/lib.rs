@@ -151,6 +151,12 @@ pub struct CancelHandle {
     token: std::sync::Arc<runtime::CancelToken>,
 }
 
+impl Default for CancelHandle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CancelHandle {
     /// Create a new cancel handle.
     pub fn new() -> Self {

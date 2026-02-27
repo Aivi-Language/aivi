@@ -514,7 +514,7 @@ pub extern "C" fn rt_apply(
     // Check fuel/cancel to break infinite JIT loops
     {
         let runtime = unsafe { (*ctx).runtime_mut() };
-        if let Err(_) = runtime.check_cancelled() {
+        if runtime.check_cancelled().is_err() {
             return abi::box_value(Value::Unit);
         }
     }
@@ -801,7 +801,9 @@ pub extern "C" fn rt_list_concat(
         Value::List(items) => items.as_ref().clone(),
         _ => Vec::new(),
     };
-    if let Value::List(items) = vb { result.extend(items.iter().cloned()) }
+    if let Value::List(items) = vb {
+        result.extend(items.iter().cloned())
+    }
     abi::box_value(Value::List(Arc::new(result)))
 }
 
