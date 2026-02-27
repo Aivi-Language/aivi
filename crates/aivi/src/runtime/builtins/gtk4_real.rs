@@ -4039,16 +4039,21 @@ mod linux {
 
         fields.insert(
             "dialogPresent".to_string(),
-            builtin("gtk4.dialogPresent", 1, |mut args, _| {
+            builtin("gtk4.dialogPresent", 2, |mut args, _| {
                 let dialog_id = match args.remove(0) {
                     Value::Int(v) => v,
                     _ => return Err(invalid("gtk4.dialogPresent expects Int dialog id")),
+                };
+                let parent_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.dialogPresent expects Int parent window id")),
                 };
                 Ok(effect(move |_| {
                     GTK_STATE.with(|state| {
                         let state = state.borrow();
                         let dialog = widget_ptr(&state, dialog_id, "dialogPresent")?;
-                        call_adw_fn_p("adw_dialog_present", dialog);
+                        let parent = widget_ptr(&state, parent_id, "dialogPresent")?;
+                        call_adw_fn_pp("adw_dialog_present", dialog, parent);
                         Ok(Value::Unit)
                     })
                 }))

@@ -18,3 +18,172 @@ streamErrorEmpty = do Effect {
   err = { message: "" }
   assertEq err.message ""
 }
+
+// -- fromList / fold --
+
+@test "fold sums a list stream"
+foldSum = do Effect {
+  s = streams.fromList [1, 2, 3, 4, 5]
+  total <- streams.fold (acc x => acc + x) 0 s
+  assertEq total 15
+}
+
+@test "fold empty stream returns seed"
+foldEmpty = do Effect {
+  s = streams.fromList []
+  result <- streams.fold (acc x => acc + x) 42 s
+  assertEq result 42
+}
+
+@test "fold collects items into list"
+foldCollect = do Effect {
+  s = streams.fromList [10, 20, 30]
+  result <- streams.fold (acc x => List.append acc [x]) [] s
+  assertEq result [10, 20, 30]
+}
+
+// -- map --
+
+@test "map doubles each element"
+mapDouble = do Effect {
+  s = streams.fromList [1, 2, 3]
+  mapped = streams.map (x => x * 2) s
+  result <- streams.fold (acc x => List.append acc [x]) [] mapped
+  assertEq result [2, 4, 6]
+}
+
+@test "map over empty stream"
+mapEmpty = do Effect {
+  s = streams.fromList []
+  mapped = streams.map (x => x + 1) s
+  result <- streams.fold (acc x => List.append acc [x]) [] mapped
+  assertEq result []
+}
+
+// -- filter --
+
+@test "filter keeps even numbers"
+filterEvens = do Effect {
+  s = streams.fromList [1, 2, 3, 4, 5, 6]
+  filtered = streams.filter (x => x % 2 == 0) s
+  result <- streams.fold (acc x => List.append acc [x]) [] filtered
+  assertEq result [2, 4, 6]
+}
+
+@test "filter removes all"
+filterNone = do Effect {
+  s = streams.fromList [1, 3, 5]
+  filtered = streams.filter (x => x % 2 == 0) s
+  result <- streams.fold (acc x => List.append acc [x]) [] filtered
+  assertEq result []
+}
+
+// -- take --
+
+@test "take first n items"
+takeN = do Effect {
+  s = streams.fromList [10, 20, 30, 40, 50]
+  taken = streams.take 3 s
+  result <- streams.fold (acc x => List.append acc [x]) [] taken
+  assertEq result [10, 20, 30]
+}
+
+@test "take zero yields empty"
+takeZero = do Effect {
+  s = streams.fromList [1, 2, 3]
+  taken = streams.take 0 s
+  result <- streams.fold (acc x => List.append acc [x]) [] taken
+  assertEq result []
+}
+
+@test "take more than length yields all"
+takeAll = do Effect {
+  s = streams.fromList [1, 2]
+  taken = streams.take 100 s
+  result <- streams.fold (acc x => List.append acc [x]) [] taken
+  assertEq result [1, 2]
+}
+
+// -- drop --
+
+@test "drop first n items"
+dropN = do Effect {
+  s = streams.fromList [10, 20, 30, 40, 50]
+  rest = streams.drop 2 s
+  result <- streams.fold (acc x => List.append acc [x]) [] rest
+  assertEq result [30, 40, 50]
+}
+
+@test "drop zero keeps all"
+dropZero = do Effect {
+  s = streams.fromList [1, 2, 3]
+  rest = streams.drop 0 s
+  result <- streams.fold (acc x => List.append acc [x]) [] rest
+  assertEq result [1, 2, 3]
+}
+
+@test "drop more than length yields empty"
+dropAll = do Effect {
+  s = streams.fromList [1, 2]
+  rest = streams.drop 100 s
+  result <- streams.fold (acc x => List.append acc [x]) [] rest
+  assertEq result []
+}
+
+// -- flatMap --
+
+@test "flatMap expands each element"
+flatMapExpand = do Effect {
+  s = streams.fromList [1, 2, 3]
+  expanded = streams.flatMap (x => streams.fromList [x, x * 10]) s
+  result <- streams.fold (acc x => List.append acc [x]) [] expanded
+  assertEq result [1, 10, 2, 20, 3, 30]
+}
+
+@test "flatMap with empty inner streams"
+flatMapEmpty = do Effect {
+  s = streams.fromList [1, 2, 3]
+  expanded = streams.flatMap (_ => streams.fromList []) s
+  result <- streams.fold (acc x => List.append acc [x]) [] expanded
+  assertEq result []
+}
+
+// -- merge --
+
+@test "merge concatenates left then right"
+mergeConcat = do Effect {
+  left = streams.fromList [1, 2, 3]
+  right = streams.fromList [4, 5, 6]
+  merged = streams.merge left right
+  result <- streams.fold (acc x => List.append acc [x]) [] merged
+  assertEq result [1, 2, 3, 4, 5, 6]
+}
+
+@test "merge with empty left"
+mergeEmptyLeft = do Effect {
+  left = streams.fromList []
+  right = streams.fromList [7, 8]
+  merged = streams.merge left right
+  result <- streams.fold (acc x => List.append acc [x]) [] merged
+  assertEq result [7, 8]
+}
+
+// -- combinator composition --
+
+@test "map then filter"
+mapThenFilter = do Effect {
+  s = streams.fromList [1, 2, 3, 4, 5]
+  mapped = streams.map (x => x * 3) s
+  filtered = streams.filter (x => x > 6) mapped
+  result <- streams.fold (acc x => List.append acc [x]) [] filtered
+  assertEq result [9, 12, 15]
+}
+
+@test "take after drop"
+takeAfterDrop = do Effect {
+  s = streams.fromList [1, 2, 3, 4, 5]
+  rest = streams.drop 1 s
+  taken = streams.take 3 rest
+  result <- streams.fold (acc x => List.append acc [x]) [] taken
+  assertEq result [2, 3, 4]
+}

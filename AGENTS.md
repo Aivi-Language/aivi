@@ -4,139 +4,213 @@ apply: always
 
 # AIVI Agent Guide
 
-This document serves as the authoritative guide for AI agents working on the AIVI language project. It establishes the relationships between specifications, implementation crates, integration tests, and tooling, ensuring safe and consistent contributions.
+Authoritative guide for AI agents working on the AIVI language project. Covers the relationship between specifications, implementation crates, integration tests, and editor tooling.
 
 ## 1. Project Structure & Relationships
 
-The AIVI repository is organized into distinct layers. Understanding these relationships is crucial for making correct changes.
-
 ### 1.1 Directory Map
 
-| Directory            | Role                | Relationship                                                                                                                                                                                               |
-|:-------------------- |:------------------- |:---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `specs/`             | **Source of Truth** | All implementation logic MUST derive from here (see [specs/index.md](file:///home/mendrik/desk/mendrik/aivi/specs/index.md)). If code contradicts specs, the code is wrong (or specs need updating first). |
-| `crates/`            | **Implementation**  | The Rust codebase implementing the compiler, LSP, and runtime.                                                                                                                                             |
-| `integration-tests/` | **Validation**      | Canonical AIVI code validating syntax + stdlib. Used for integration testing and documentation.                                                                                                            |
-| `vscode/`            | **Tooling**         | Editor extension. Depends on `crates/aivi_lsp` and `specs/02_syntax` (grammar).                                                                                                                            |
+| Directory                 | Role                 | Notes                                                                                            |
+|:------------------------- |:-------------------- |:------------------------------------------------------------------------------------------------ |
+| `specs/`                  | **Source of Truth**  | All logic derives from here. If Rust code contradicts specs, the code is wrong (see §2.1).       |
+| `crates/aivi_core`        | **Compiler core**    | Parser (CST/surface), HIR, Kernel, typechecker, formatter. Shared via `#[path]` by other crates. |
+| `crates/aivi`             | **Runtime + CLI**    | Cranelift JIT/AOT backend, stdlib implementations, `aivi` binary.                                |
+| `crates/aivi_lsp`         | **LSP server**       | `aivi-lsp` binary. Semantic tokens, hover, completion, formatting, diagnostics.                  |
+| `crates/aivi_driver`      | **Driver lib**       | Shared driver logic consumed by CLI and LSP.                                                     |
+| `crates/aivi_http_server` | **HTTP server**      | Runtime HTTP server support.                                                                     |
+| `crates/doc_index_gen`    | **Doc tooling**      | Generates doc indices for LSP hover and the docs site.                                           |
+| `integration-tests/`      | **Validation**       | Canonical `.aivi` files: `syntax/`, `runtime/`, `stdlib/`, `complex/`, `compile_fail/`.          |
+| `vscode/`                 | **VSCode extension** | TypeScript, pnpm. Grammar auto-generated via `gen_vscode_syntax` binary.                         |
+| `zed/`                    | **Zed extension**    | Tree-sitter grammar (`zed/grammars/aivi/`), language config, dark theme.                         |
+| `specs/`                  | **Docs site**        | VitePress site. `specs/nav.mjs` is the single TOC source of truth.                               |
+| `fuzz/`                   | **Fuzz targets**     | cargo-bolero fuzz targets: parser, frontend, runtime, formatter, LSP pipeline, type inference.   |
 
-### 1.2 Dependency Flow
+### 1.2 Crate Dependency Flow
 
-```mermaid
-graph TD
-    Specs["specs/"] -->|Defines| Crates["crates/"]
-    Specs -->|Defines| Tests["integration-tests/"]
-    Crates -->|Builds| Binary["aivi binary"]
-    Binary -->|Powers| VSCode["vscode/"]
-    Tests -->|Tests| Binary
+```
+specs/  →  crates/aivi_core  →  crates/aivi (runtime/stdlib/CLI)
+                              →  crates/aivi_lsp (LSP server)
+crates/aivi (gen_vscode_syntax bin)  →  vscode/syntaxes/
+crates/aivi_lsp  →  vscode/ (bundled binary)
+zed/grammars/aivi/  (Tree-sitter grammar, independent)
 ```
 
-### 1.3 Running terminal commands
+### 1.3 Key Source Locations
 
-- make sure to filter (ie. grep) output by warnings and errors:
-  warning: *
-  --> crates/aivi/*.rs:*:*
-- Use shorter logs (--quiet, --no-verbose)
-- Avoid massive build outputs
+| Concern             | Path                                                   |
+|:------------------- |:------------------------------------------------------ |
+| Lexer               | `crates/aivi/src/lexer.rs`                             |
+| Parser / CST        | `crates/aivi/src/syntax.rs` + `crates/aivi/src/cst.rs` |
+| Surface AST         | `crates/aivi/src/surface/`                             |
+| HIR                 | `crates/aivi/src/hir/`                                 |
+| Kernel IR           | `crates/aivi/src/kernel/`                              |
+| Typechecker         | `crates/aivi/src/typecheck/`                           |
+| Formatter           | `crates/aivi_core/src/formatter/`                      |
+| Stdlib (Rust)       | `crates/aivi/src/stdlib/`                              |
+| Cranelift JIT/AOT   | `crates/aivi/src/cranelift_backend/`                   |
+| Runtime interpreter | `crates/aivi/src/runtime/`                             |
+| LSP backend         | `crates/aivi_lsp/src/backend/`                         |
+| LSP semantic tokens | `crates/aivi_lsp/src/semantic_tokens/`                 |
+| VSCode grammar gen  | `crates/aivi/src/bin/gen_vscode_syntax` (or similar)   |
+| VSCode syntaxes     | `vscode/syntaxes/` (generated — do not hand-edit)      |
+| Zed grammar         | `zed/grammars/aivi/src/grammar.json`                   |
+| Zed lang config     | `zed/languages/aivi/config.toml`                       |
 
-## 2. Development Workflow
+### 1.4 Terminal Command Tips
 
-### 2.1 The Golden Rule
+- Filter build output: `cargo build --workspace 2>&1 | grep -E "^error|^warning.*-->" | head -40`
+- Prefer `--quiet` / `--message-format=short` to reduce noise.
+- Avoid printing full build logs; only show warnings/errors.
 
-**Never invent syntax or features.**
-Always verify against `specs/` before writing AIVI code or compiler logic. If a feature is missing from specs (e.g., [`specs/syntax/`](file:///home/mendrik/desk/mendrik/aivi/specs/syntax/)), ask for clarification.
+---
 
-### 2.2 Task Execution Protocol
+## 2. The Golden Rules
 
-1. **Analyze**: Read the relevant `specs/` files first.
-    * *Syntax*: [`specs/syntax/`](file:///home/mendrik/desk/mendrik/aivi/specs/syntax/)
-    * *Compiler & Backend*: [`specs/typed_codegen/`](file:///home/mendrik/desk/mendrik/aivi/specs/typed_codegen/)
-    * *Stdlib*: [`specs/stdlib/`](file:///home/mendrik/desk/mendrik/aivi/specs/stdlib/)
-2. **Locate**: Identify the corresponding Rust crates in `crates/`.
-    * *Parsing*: `crates/aivi/src/parser` (or similar)
-    * *Typing*: `crates/aivi/src/ty`
-    * *LSP*: `crates/aivi_lsp`
-3. **Implement**: Make changes in small, testable units.
-4. **Verify**:
-    * Run `cargo test` in `crates/`.
-    * Check if `integration-tests/` still compile/run (if applicable).
-    * Ensure `specs/` are updated if the change involves a design decision.
+### 2.1 Specs Are the Source of Truth
 
-### 2.3 Clean as You Cook
+`specs/` always wins over Rust code.
 
-Maintain hygiene in the codebase and documentation.
+- Before touching any compiler or stdlib code, read the relevant spec file(s).
+- **If Rust code and specs disagree**: the code is wrong. Fix the code to match the spec.
+- **If it is genuinely unclear which is correct** (e.g., the spec is ambiguous, the divergence is intentional, or the feature predates the spec): **stop and ask for clarification before proceeding.** Do not silently pick a side.
+- If the spec has a gap (describes a feature incompletely), document the gap with a `<!-- TODO: spec gap -->` comment and ask before filling it with assumptions.
 
-* **Syntax Correction**: If you see syntax that violates the specs (e.g., `let x =` instead of `x =`, or `def foo()`), fix it immediately to match [`specs/02_syntax`](file:///home/mendrik/desk/mendrik/aivi/specs/syntax/).
-* **Gap Filling**: If you encounter code using features not present in `specs/` or `integration-tests/`, document them or add a test case.
-* **Refactoring**: Keep files small and readable. Propose splitting large files into logical units with good naming and subfolder structure if needed.
-* **Pre-existing issues** when you encounter pre-existing problems, fix them up as part of the current task.
+### 2.2 No Dead Code After Feature Changes
 
-## 3. AIVI Language Best Practices
+When replacing a feature with something new (different syntax, different API, renamed construct, etc.):
 
-When writing or generating AIVI code (e.g., in `integration-tests/` or tests), adhere to these principles derived from the specs.
+- **Delete** all Rust code implementing the old feature.
+- **Delete** all integration test files and AIVI snippets that used the old form.
+- **Delete** the old spec page(s) or sections, not just add a note saying "deprecated".
+- **Remove** any grammar rules or token types from the LSP/VSCode/Zed integration that only served the old feature.
 
-### 3.1 Style & Syntax
+The goal: after the change, `git grep` for the old construct returns zero results (except this AGENTS.md if mentioned for documentation purposes).
 
-* **Identifiers**: `lowerCamelCase` for values/functions, `UpperCamelCase` for types/modules.
-* **Immutability**: Bindings are immutable. Use recursion or generators instead of loops.
-* **Destilled language syntax** at ./AIVI_LANGUAGE.md
-* **When writing AIVI code**: make sure to pick the right tools: sigils, generators, pattern matching, record patching, domain units are all available, stdlib modules and so on.
+### 2.3 New Features Must Fully Propagate
 
-### 3.2 Safety & Robustness
+Adding a new language or stdlib feature is never complete until all layers are updated. Propagation order:
 
-* **No Nulls**: Always use `Option` or `Result`.
-* **Exhaustive Matching**: Ensure `case` or `?` covers all patterns. Use `_` only when necessary.
-* **Typed Errors**: Use `Result E A` with specific error types, not generic strings.
-* **Resources**: Use `resource { ... }` blocks for file/network handles to ensure cleanup (see [specs/syntax/resources.md](file:///home/mendrik/desk/mendrik/aivi/specs/syntax/resources.md)).
+1. **`specs/`** — write or update the spec page first (see §5).
+2. **`crates/aivi_core`** — parser, typechecker, formatter.
+3. **`crates/aivi`** — runtime/stdlib implementation, Cranelift lowering if applicable.
+4. **`crates/aivi_lsp`** — semantic token types, hover docs, completion items, diagnostics.
+5. **`vscode/syntaxes/`** — regenerate via `cargo run -p aivi --bin gen_vscode_syntax -- vscode/syntaxes` (do not hand-edit generated files).
+6. **`zed/grammars/aivi/`** — update the Tree-sitter grammar (`grammar.json` / source) so Zed highlights the new syntax correctly; bump `zed/extension.toml` version if needed.
+7. **`integration-tests/`** — add at least one positive test and, if the feature has failure modes, a `compile_fail/` test.
+8. **`AIVI_LANGUAGE.md`** — update the LLM quick-reference.
 
-### 3.3 Concurrency
+Skipping any layer leaves the tooling in an inconsistent state and will break CI.
 
-* **Structured**: Always spawn tasks within a scope (`concurrent.scope`).
-* **Communication**: Use channels (`Send`/`Recv`) for data exchange, not shared memory (see [specs/runtime/concurrency.md](file:///home/mendrik/desk/mendrik/aivi/specs/runtime/concurrency.md)).
+---
 
-### 3.4 Decorators
+## 3. Development Workflow
 
-This file applies to all of `specs/`.
+### 3.1 Task Execution Protocol
 
-- Decorators are reserved for **compiler/tooling pragmas** only (compile-time metadata).
-- Do **not** add new integration-specific decorators (examples of forbidden patterns: `@sql`, `@schema`, `@table`, `@model`).
-- Prefer **typed values** and **type-driven decoding/validation** at boundaries (e.g. `Source` configuration records, decoders derived from types).
-- Only the decorators enumerated in [`specs/syntax/decorators.md`](file:///home/mendrik/desk/mendrik/aivi/specs/syntax/decorators.md) are allowed in v0.1; unknown decorators should be considered a spec violation.
+1. **Read specs first**: `specs/syntax/`, `specs/stdlib/`, `specs/typed_codegen/`, `specs/runtime/`.
+2. **Locate implementation**: find the Rust source using the table in §1.3.
+3. **Check for discrepancies** between spec and code; apply §2.1.
+4. **Implement** in small, testable units. Follow propagation order from §2.3.
+5. **Verify** (see §6 for commands).
 
-## 4. Rust Implementation Guidelines
+### 3.2 Clean as You Cook
 
-When working on the compiler (`crates/`):
+- Fix syntax violations you encounter in passing (e.g., `let x =` → `x =`).
+- If a file/function is referenced nowhere after your change, delete it.
+- Keep files focused; propose splitting large files when they become unwieldy.
+- Fix pre-existing issues you notice as part of the current task.
 
-* **Parser**: Must be error-tolerant (recover from syntax errors) to support LSP.
-* **CST vs AST**: Preserve full fidelity (whitespace/comments) in CST for formatting/refactoring.
-* **Diagnostics**: Emit rich error messages with spans and help text.
-* **Testing**:
-    * *Unit Tests*: For individual functions.
-    * *Snapshot Tests*: For parser/codegen output (use `insta` or similar if available).
-    * *Integration Tests*: Compile and run files from `integration-tests/`.
+---
 
-### 4.1 Standard Library & Dependencies
+## 4. AIVI Language Best Practices
 
-* **Rely on Battle-Tested Libraries**: When implementing standard library features, always prioritize established Rust crates.
-* **Avoid Reinventing the Wheel**: Do not implement complex algorithms (like FFT, crypto, etc.) from scratch if a robust Rust solution exists.
-    * *Example*: Use `rustfft` instead of implementing your own FFT.
-* Before implementing a new standard library feature, check that it has all the necessary primitives in the documentation. We want to keep it simple but not too limited.
-* Make sure modules and domains interoperate. When I ask to implement a new module it can use other features from AIVI's stdlib to reduce the footprint.
+When writing `.aivi` code in `integration-tests/`, `specs/` snippets, or doc examples:
+
+### 4.1 Style
+
+- `lowerCamelCase` for values/functions; `UpperCamelCase` for types, constructors, domains, classes.
+- Module path segments and file names: `snake_case` (e.g. `aivi.stdlib.core.text` → `text.aivi`).
+- Bindings are immutable; use recursion, folds, or generators instead of loops.
+- See `AIVI_LANGUAGE.md` for a concise syntax reference.
+
+### 4.2 Safety
+
+- No nulls — use `Option A` or `Result E A`.
+- Exhaustive pattern matches; use `_` only when every remaining case is truly identical.
+- Use `resource { ... }` blocks for handles (files, connections) to guarantee cleanup.
+
+### 4.3 Concurrency
+
+- Spawn tasks inside a scope (`concurrent.scope`).
+- Communicate via typed channels (`Send`/`Recv`), not shared mutable state.
+
+### 4.5 GTK4 UI — Signal Streams
+
+When writing GTK4 UI code, **always use `signalStream` for event handling**. The old `on Msg => handler` callback style and the `signalBind*` helper family (`signalBindBoolProperty`, `signalBindCssClass`, `signalBindToggleBoolProperty`, `signalToggleCssClass`, `signalBindDialogPresent`, `signalBindStackPage`) are **deprecated** and must not appear in new code.
+
+**Canonical pattern — recursive event loop:**
+
+```aivi
+// 1. Build UI, get a single push-based receiver
+root    <- buildFromNode myNode
+widgets <- fetchMyWidgets   // { saveBtnId: WidgetId, nameInputId: WidgetId, ... }
+rx      <- signalStream {}
+
+// 2. Tail-recursive dispatch loop
+runLoop = win => state => widgets => rx => do Effect {
+  result <- channel.recv rx
+  result match
+    | Err _ => pure Unit   // channel closed
+    | Ok event =>
+        event match
+          | GtkClicked wid when wid == widgets.saveBtnId => handleSave state
+          | GtkInputChanged wid txt when wid == widgets.nameInputId => do Effect {
+              runLoop win (state <| { name: txt }) widgets rx
+            }
+          | _ => runLoop win state widgets rx
+}
+```
+
+**Rules for agents:**
+
+- Call `signalStream {}` **once** per UI flow; pass the `rx` value down through the loop.
+- Re-fetch widget IDs with `widgetById "id"` after any `windowSetChild`/`dialogSetChild` call, since widget tree rebuilds produce new IDs.
+- Use `attempt (widgetById "id")` when a widget may not exist yet (e.g., dialog content not yet built).
+- For state-driven re-renders (sidebar toggle, tab switch, form validation), update state → `buildFromNode` → `windowSetChild`/`dialogSetChild` → re-fetch IDs → tail-recurse.
+- Prefer typed variants (`GtkClicked`, `GtkInputChanged`, `GtkToggled`, etc.) over `GtkUnknownSignal` wherever possible.
+- `signalPoll` is available for one-shot reads; `signalStream` is preferred for continuous loops.
+
+### 4.4 Decorators
+
+Only decorators listed in `specs/syntax/decorators.md` are valid in v0.1. Decorators are compiler/tooling pragmas only — never domain-specific annotations like `@sql`, `@schema`, `@model`.
+
+---
 
 ## 5. Documentation Maintenance
 
-* **Specs**: Update `specs/` *before* or *alongside* code changes.
-* **Specs TOC**: The Table of Contents is automatically synchronized via a GitHub Action (`sync-specs-toc.yml`). **Always modify `specs/nav.mjs` as the single source of truth.** Do NOT manually edit the TOC in `specs/index.md` or `specs/README.md`.
-* **Specs**: Update indices and make sure links are working.
-* **AIVI Code Blocks**: Format all AIVI snippets in docs to match `aivi fmt` output (use `aivi fmt path` or `cargo run -p aivi -- fmt path`). In particular, keep formatter-style alignment for `<-` inside `effect { ... }` blocks and `=>` in pattern matching arms. Prefer fenced code blocks with the `aivi` language tag.
-* **Quick Info Markers**: For LSP hover/quick-info, wrap existing spec markdown with `<!-- quick-info: {JSON} --> ... <!-- /quick-info -->` (see [specs/doc-markers-spec.md](file:///home/mendrik/desk/mendrik/aivi/specs/doc-markers-spec.md)). Do not duplicate prose just to satisfy tooling.
-* **Guidelines**: Follow `.junie/guidelines.md`.
-* **AGENTS.md**: Update this file if workflows or structures change significantly.
+### 5.1 Specs
 
-### 5.1 External Source Docs Baseline (v0.1)
+- Update `specs/` **before or alongside** code changes, never after the fact.
+- **TOC**: `specs/nav.mjs` is the single source of truth. Do NOT hand-edit `specs/index.md` or `specs/README.md` TOC sections (they are auto-synced by the `sync-specs-toc.yml` GitHub Action).
+- Ensure all internal spec links are valid after changes.
+- When removing a feature: delete the spec page, remove it from `specs/nav.mjs`.
+- When adding a feature: add the spec page, add it to `specs/nav.mjs`.
 
-When touching source-boundary runtime/compiler behavior, keep these docs aligned:
+### 5.2 Code Examples in Specs
 
-- `specs/syntax/external_sources.md` (overview + status)
+- Format all AIVI snippets with `cargo run -p aivi -- fmt <path>` or `aivi fmt <path>`.
+- Use ```` ```aivi ```` fenced blocks.
+- Keep formatter-style alignment: `<-` in `do`/effect blocks, `=>` in match arms.
+
+### 5.3 LSP Hover / Quick-Info Markers
+
+Wrap prose in spec files with `<!-- quick-info: {JSON} --> ... <!-- /quick-info -->` markers (see `specs/doc-markers-spec.md`) so the LSP can surface it on hover. Do not duplicate prose just for tooling.
+
+### 5.4 External Source Docs
+
+When touching source-boundary runtime behavior, keep these aligned:
+
+- `specs/syntax/external_sources.md`
 - `specs/syntax/external_sources/file.md`
 - `specs/syntax/external_sources/rest_http.md`
 - `specs/syntax/external_sources/environment.md`
@@ -144,37 +218,85 @@ When touching source-boundary runtime/compiler behavior, keep these docs aligned
 - `specs/syntax/external_sources/image.md`
 - `specs/syntax/external_sources/compile_time.md`
 
-Source integration docs should always include:
+Each source doc must include: current v0.1 API surface, one realistic example, and failure/diagnostic behavior notes.
 
-1. current v0.1 API surface,
-2. one realistic example,
-3. failure/diagnostic behavior notes.
+---
 
-## 6. Project Validation
+## 6. Rust Implementation Guidelines
 
-To validate the project end-to-end, run these from the repo root:
+- **Parser**: error-tolerant (must recover from syntax errors for LSP use).
+- **CST**: preserve full fidelity (whitespace, comments) for the formatter.
+- **Diagnostics**: rich spans with help text.
+- **`aivi_core`** re-uses source files from `crates/aivi/src/` via `#[path = "..."]` — when physically moving files, update both crates.
+- **Dependencies**: prefer established Rust crates over hand-rolled algorithms (e.g., `rustfft`, not a custom FFT).
 
-1. **All tests** (workspace): `cargo test --workspace`
-2. **Build all crates**: `cargo build --workspace`
-3. **Build VSCode extension**: `cd vscode && pnpm install && pnpm build`
-4. **Build docs site**: `cd specs && pnpm install && pnpm docs:build`
-5. On test failure run `cargo test -vv -- --nocapture --show-output` to see the output.
+### 6.1 Testing
 
-## 7. Stale Build Artefacts
+| Test kind         | Location                        | Command                                              |
+|:----------------- |:------------------------------- |:---------------------------------------------------- |
+| Rust unit tests   | `#[test]` in source or `tests/` | `cargo test --workspace`                             |
+| AIVI integration  | `integration-tests/`            | Exercised by `cargo test --workspace` (runner tests) |
+| LSP tests         | `crates/aivi_lsp/src/tests/`    | `cargo test --workspace`                             |
+| Snapshot tests    | `crates/aivi/tests/` (insta)    | `cargo test --workspace`                             |
+| VSCode unit tests | `vscode/src/test/`              | `cd vscode && pnpm test:unit`                        |
+| Fuzz (CI)         | `fuzz/fuzz_targets/`            | `cargo bolero test ...` (see CI workflow)            |
 
-The `aivi run` command uses a Cranelift JIT backend (`crates/aivi/src/cranelift_backend/`). JIT compilation happens in-memory and does not produce filesystem artefacts.
+---
 
-The `aivi build` command defaults to the **Cranelift AOT pipeline**: it compiles all AIVI code to a native object file (`.o`), generates a thin Rust harness, and links them via `cargo build`. The object file is written to `target/aivi-gen/aivi_program.o`. The AOT entry point (`__aivi_main`) registers all compiled functions in the runtime before executing `main`.
+## 7. Project Validation (must all pass before concluding)
 
-## 8. Safety Checklist
+Run from the repo root in order:
 
-Before submitting changes:
+```bash
+# 1. Rust: format check
+cargo fmt --all -- --check
 
-- [ ] Did I check the specs?
-- [ ] Did I run existing tests?
-- [ ] Did I run `cargo fmt --all -- --check`?
-- [ ] Did I run `aivi fmt` for any AIVI doc snippets I touched?
-- [ ] Did I add a new test case?
-- [ ] Is the code consistent with AIVI style?
-- [ ] Did I avoid hallucinating features? (Always check [`specs/`](file:///home/mendrik/desk/mendrik/aivi/specs/) first)
-- [ ] Did I update AIVI_LANGUAGE.md for LLM use?
+# 2. Rust: lint
+cargo clippy --workspace --all-targets -- -D warnings 2>&1 | grep -E "^error|^warning"
+
+# 3. Rust + AIVI integration tests
+cargo test --workspace 2>&1 | tail -20
+
+# 4. VSCode extension (only needed when vscode/ or aivi_lsp/ changed)
+cd vscode && pnpm install --frozen-lockfile && pnpm compile && cd ..
+
+# 5. Docs site (only needed when specs/ changed)
+cd specs && pnpm install --frozen-lockfile && pnpm docs:build && cd ..
+```
+
+On test failure, get full output with:
+
+```bash
+cargo test --workspace -- --nocapture 2>&1 | grep -A 20 "FAILED\|panicked"
+```
+
+Both Rust tests and AIVI integration tests must be green before any task is considered complete.
+
+---
+
+## 8. Stale Build Artefacts
+
+- `aivi run` → Cranelift JIT (in-memory, no filesystem artefacts).
+- `aivi build` → Cranelift AOT: emits `target/aivi-gen/aivi_program.o` + thin Rust harness → linked by `cargo build`.
+
+---
+
+## 9. Safety Checklist
+
+Before finishing any change:
+
+- [ ] Read the relevant `specs/` file(s) first
+- [ ] No spec ↔ code discrepancy (or asked for clarification)
+- [ ] No dead code left from a replaced feature
+- [ ] New feature propagated to all layers (§2.3)
+- [ ] `specs/nav.mjs` updated (not `index.md` TOC)
+- [ ] `AIVI_LANGUAGE.md` updated
+- [ ] AIVI code snippets formatted with `aivi fmt`
+- [ ] At least one integration test added (positive + `compile_fail/` if applicable)
+- [ ] `cargo fmt --all -- --check` passes
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes
+- [ ] `cargo test --workspace` is fully green (Rust + AIVI tests)
+- [ ] VSCode extension compiles (`pnpm compile` in `vscode/`) if LSP or grammar changed
+- [ ] Zed grammar updated if new syntax was introduced
+- [ ] Aivi builds without warnings.
+ 
