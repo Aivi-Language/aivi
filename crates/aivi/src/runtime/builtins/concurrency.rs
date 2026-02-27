@@ -126,7 +126,13 @@ pub(super) fn build_channel_record() -> Value {
                                 args: vec![value],
                             });
                         }
-                        Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                        Err(mpsc::RecvTimeoutError::Timeout) => {
+                            // Drop the lock before pumping GTK so GTK signal callbacks
+                            // can acquire GTK_STATE without deadlocking.
+                            drop(recv_guard);
+                            super::gtk4_real::pump_gtk_events();
+                            continue;
+                        }
                         Err(mpsc::RecvTimeoutError::Disconnected) => {
                             return Ok(Value::Constructor {
                                 name: "Err".to_string(),
