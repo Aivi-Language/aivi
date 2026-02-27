@@ -525,6 +525,30 @@ mod tests {
             out1, out2
         );
     }
+
+    /// Regression test: `;` between non-operator tokens must not insert a phantom
+    /// space that the second pass then removes (non-idempotency).
+    #[test]
+    fn semicolon_no_phantom_space_idempotent() {
+        // Replacement-char followed by semicolon — was non-idempotent before the fix.
+        let bytes: &[u8] = &[0xda, 0x0a, 0x3f, 0x3f, 0x3f, 0x3b];
+        let input = String::from_utf8_lossy(bytes);
+        let out1 = format_text(&input);
+        let out2 = format_text(&out1);
+        assert_eq!(out1, out2, "not idempotent: pass1={:?} pass2={:?}", out1, out2);
+
+        // Unknown tokens separated by `;` must stay idempotent.
+        let input2 = "\u{FFFD};\u{FFFD}";
+        let out1 = format_text(input2);
+        let out2 = format_text(&out1);
+        assert_eq!(out1, out2, "not idempotent for unknown;unknown");
+
+        // Operators separated by `;` must still get a space (no merging).
+        let input3 = "<;-";
+        let out1 = format_text(input3);
+        assert!(out1.contains("< -") || out1.trim() == "< -",
+            "expected space between < and - but got {:?}", out1);
+    }
 }
 
 #[cfg(test)]

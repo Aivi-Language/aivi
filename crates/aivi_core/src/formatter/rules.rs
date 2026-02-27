@@ -388,6 +388,11 @@
                 continue;
             }
 
+            // Skip stray `;` tokens consistently with the main formatting loop.
+            if t.text == ";" {
+                continue;
+            }
+
             let curr = (t.kind.as_str(), t.text.as_str());
             let adjacent_in_input = prev_token.is_some_and(|p| {
                 p.span.start.line == t.span.start.line
@@ -1236,14 +1241,13 @@
             }
 
             // Skip stray `;` tokens (they're not part of AIVI syntax outside matrix literals).
-            // Must be checked before spacing logic to avoid inserting a phantom space.
-            // Emit a space separator to prevent adjacent tokens from merging into a
-            // different token (e.g. two separate `&` tokens becoming `&&`).
+            // Do NOT emit a space here: `wants_space_between` for the next real token
+            // handles operator separation correctly. Because the skipped `;` leaves the two
+            // neighbours non-adjacent (`adjacent_in_input = false`), the `is_op` / word-kind
+            // checks in `wants_space_between` add a space wherever one is genuinely needed
+            // (e.g. `<;-` → `< -`). Adding a space unconditionally caused non-idempotency:
+            // `unknown;unknown` → `unknown  unknown` on pass 1 but `unknownunknown` on pass 2.
             if t.text == ";" {
-                if !out.is_empty() && !out.ends_with(' ') {
-                    out.push(' ');
-                    current_col += 1;
-                }
                 continue;
             }
 

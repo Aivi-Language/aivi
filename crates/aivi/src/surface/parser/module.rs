@@ -608,6 +608,7 @@ impl Parser {
         let mut wildcard = true;
         if self.consume_symbol("(") {
             wildcard = false;
+            self.consume_newlines();
             while !self.check_symbol(")") && self.pos < self.tokens.len() {
                 if self.match_keyword("domain") {
                     if let Some(name) = self.consume_ident() {
@@ -626,9 +627,11 @@ impl Parser {
                         name,
                     });
                 }
+                self.consume_newlines();
                 if !self.consume_symbol(",") {
                     break;
                 }
+                self.consume_newlines();
             }
             self.expect_symbol(")", "expected ')' to close import list");
         }
