@@ -110,6 +110,7 @@ fn process_test_file(
 }
 
 /// Run files in parallel using scoped threads, returning (total_passed, total_failed, skipped, failures).
+/// Limits concurrency to available CPUs so multiple `#[test]` functions don't oversubscribe the system.
 fn run_files_parallel(
     files: &[PathBuf],
     stdlib_modules: &[aivi::surface::Module],
@@ -119,12 +120,36 @@ fn run_files_parallel(
     let total_failed = AtomicUsize::new(0);
     let skipped = AtomicUsize::new(0);
     let failures = std::sync::Mutex::new(Vec::<(String, String)>::new());
+    let max_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4);
+    let semaphore = Arc::new((std::sync::Mutex::new(0usize), std::sync::Condvar::new()));
 
     std::thread::scope(|s| {
         let handles: Vec<_> = files
             .iter()
             .map(|path| {
-                s.spawn(|| process_test_file(path, stdlib_modules, checkpoint))
+                let sem = semaphore.clone();
+                s.spawn(move || {
+                    // Acquire: wait until running < max_threads
+                    {
+                        let (lock, cvar) = &*sem;
+                        let mut running = lock.lock().expect("lock");
+                        while *running >= max_threads {
+                            running = cvar.wait(running).expect("wait");
+                        }
+                        *running += 1;
+                    }
+                    let result = process_test_file(path, stdlib_modules, checkpoint);
+                    // Release
+                    {
+                        let (lock, cvar) = &*sem;
+                        let mut running = lock.lock().expect("lock");
+                        *running -= 1;
+                        cvar.notify_one();
+                    }
+                    result
+                })
             })
             .collect();
 
