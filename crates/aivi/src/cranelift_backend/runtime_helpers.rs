@@ -56,6 +56,10 @@ unsafe fn set_pending_error(ctx: *mut JitRuntimeCtx, e: RuntimeError) {
 // Function entry tracking — records the current function name for diagnostics
 // ---------------------------------------------------------------------------
 
+thread_local! {
+    static FN_HISTORY: std::cell::RefCell<Vec<String>> = std::cell::RefCell::new(Vec::new());
+}
+
 /// Called at the start of every JIT-compiled function to record its name.
 /// This makes subsequent runtime warnings show which function triggered them.
 #[no_mangle]
@@ -66,6 +70,11 @@ pub extern "C" fn rt_enter_fn(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usiz
     };
     let runtime = unsafe { (*ctx).runtime_mut() };
     runtime.jit_current_fn = Some(name.into());
+    FN_HISTORY.with(|h| {
+        let mut h = h.borrow_mut();
+        h.push(name.to_string());
+        if h.len() > 20 { h.remove(0); }
+    });
 }
 
 /// Called before potentially-failing operations to record the source location.
@@ -174,17 +183,34 @@ pub extern "C" fn rt_unbox_float(_ctx: *mut JitRuntimeCtx, ptr: *const Value) ->
 
 /// Unbox `Value::Bool` → i64 (0 or 1). Returns 0 (false) and logs on type mismatch.
 #[no_mangle]
-pub extern "C" fn rt_unbox_bool(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
+pub extern "C" fn rt_unbox_bool(ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
+    thread_local! {
+        static CALL_COUNT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    }
+    CALL_COUNT.with(|c| c.set(c.get() + 1));
     let value = unsafe { &*ptr };
     match value {
         Value::Bool(v) => i64::from(*v),
         other => {
-            eprintln!(
-                "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}type mismatch{RT_RESET}: expected a boolean (`true`/`false`), but got `{other:?}`"
+            let count = CALL_COUNT.with(|c| c.get());
+            rt_warn(
+                ctx,
+                "type mismatch",
+                &format!("expected a boolean (`true`/`false`), but got `{other:?}` (call #{count})"),
+                "a condition expression did not produce a Bool — check `if` guards and boolean-typed bindings",
             );
-            eprintln!("  {RT_CYAN}hint{RT_RESET}: a condition expression did not produce a Bool — check `if` guards and boolean-typed bindings");
-            let bt = std::backtrace::Backtrace::force_capture();
-            eprintln!("  {RT_CYAN}backtrace{RT_RESET}:\n{bt}");
+            // Print the call stack of recently entered JIT functions
+            let runtime = unsafe { (*ctx).runtime_mut() };
+            if let Some(ref fn_name) = runtime.jit_current_fn {
+                eprintln!("  current fn: {fn_name}");
+            }
+            // Print recent function history
+            FN_HISTORY.with(|h| {
+                let h = h.borrow();
+                if !h.is_empty() {
+                    eprintln!("  recent fn entries (last {}): {:?}", h.len(), &h[h.len().saturating_sub(10)..]);
+                }
+            });
             0
         }
     }
@@ -575,6 +601,9 @@ pub extern "C" fn rt_get_global(
 ) -> *mut Value {
     let name =
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
+    if name.contains("find") {
+        eprintln!("[TRACE] rt_get_global: looking up {:?}", name);
+    }
     let runtime = unsafe { (*ctx).runtime_mut() };
     let val = match runtime.ctx.globals.get(name) {
         Some(v) => v,
