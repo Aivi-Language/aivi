@@ -1,6 +1,10 @@
+Header = { name: Text, value: Text }
+
+Body = Plain Text | Form (List Header)
+
 Request = {
   method: Text
   url: Url
-  headers: List { name: Text, value: Text }
-  body: Option Text
+  headers: List Header
+  body: Option Body
 }
