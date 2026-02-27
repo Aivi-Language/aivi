@@ -7,7 +7,7 @@ export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaI
 export GtkNode, GtkAttr, GtkElement, GtkTextNode, GtkAttribute
 export GtkSignalEvent, GtkClicked, GtkInputChanged, GtkActivated, GtkToggled, GtkValueChanged, GtkKeyPressed, GtkFocusIn, GtkFocusOut, GtkUnknownSignal
 export init, appNew, appRun
-export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent, windowClose
+export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent, windowClose, windowOnClose
 export widgetShow, widgetHide
 export widgetSetSizeRequest, widgetSetHexpand, widgetSetVexpand
 export widgetSetHalign, widgetSetValign
@@ -161,6 +161,9 @@ windowPresent = gtk4.windowPresent
 
 windowClose : WindowId -> Effect GtkError Unit
 windowClose = gtk4.windowClose
+
+windowOnClose : WindowId -> Text -> Effect GtkError Unit
+windowOnClose = gtk4.windowOnClose
 
 appRun : AppId -> Effect GtkError Unit
 appRun = gtk4.appRun
