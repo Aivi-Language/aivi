@@ -60,6 +60,28 @@ main = do Effect {
 }
 
 #[test]
+fn cranelift_jit_stdlib_list_find_calls_builtin() {
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+use aivi.list as List
+
+@test "stdlib list find"
+main : Effect Text Unit
+main = do Effect {
+  result <- pure (List.find (x => x == 2) [1, 2, 3])
+  result match
+    | Some v => assertEq v 2
+    | None   => fail "expected Some"
+}
+"#,
+    );
+}
+
+#[test]
 fn cranelift_jit_if_expression() {
     run_jit(
         r#"@no_prelude
