@@ -15,3 +15,9 @@ lto = "thin"
 codegen-units = 1
 panic = "abort"
 strip = "symbols"
+
+[profile.fuzz]
+inherits = "dev"
+opt-level = 1
+debug = true
+overflow-checks = false

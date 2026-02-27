@@ -353,10 +353,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
             // fromList : List A -> Stream A
             (
                 "fromList".to_string(),
-                Type::Func(
-                    Box::new(list_a_fromlist),
-                    Box::new(stream_a_fromlist),
-                ),
+                Type::Func(Box::new(list_a_fromlist), Box::new(stream_a_fromlist)),
             ),
             // map : (A -> B) -> Stream A -> Stream B
             (
@@ -366,10 +363,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         Box::new(Type::Var(a_map)),
                         Box::new(Type::Var(b_map)),
                     )),
-                    Box::new(Type::Func(
-                        Box::new(stream_a_map),
-                        Box::new(stream_b_map),
-                    )),
+                    Box::new(Type::Func(Box::new(stream_a_map), Box::new(stream_b_map))),
                 ),
             ),
             // filter : (A -> Bool) -> Stream A -> Stream A
@@ -449,8 +443,7 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
                         Box::new(Type::Func(
                             Box::new(stream_a_fold),
                             Box::new(
-                                Type::con("Effect")
-                                    .app(vec![Type::Var(e_fold), Type::Var(b_fold)]),
+                                Type::con("Effect").app(vec![Type::Var(e_fold), Type::Var(b_fold)]),
                             ),
                         )),
                     )),
