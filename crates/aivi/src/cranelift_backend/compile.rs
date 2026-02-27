@@ -1252,7 +1252,7 @@ fn pattern_supported(pattern: &RustIrPattern) -> bool {
         RustIrPattern::Constructor { args, .. } => args.iter().all(pattern_supported),
         RustIrPattern::Tuple { items, .. } => items.iter().all(pattern_supported),
         RustIrPattern::List { items, rest, .. } => {
-            items.iter().all(pattern_supported) && rest.as_deref().map_or(true, pattern_supported)
+            items.iter().all(pattern_supported) && rest.as_deref().is_none_or(pattern_supported)
         }
         RustIrPattern::Record { fields, .. } => {
             fields.iter().all(|f| pattern_supported(&f.pattern))
@@ -1299,7 +1299,7 @@ fn expr_supported(expr: &RustIrExpr) -> bool {
             expr_supported(scrutinee)
                 && arms.iter().all(|arm| {
                     pattern_supported(&arm.pattern)
-                        && arm.guard.as_ref().map_or(true, expr_supported)
+                        && arm.guard.as_ref().is_none_or(expr_supported)
                         && expr_supported(&arm.body)
                 })
         }
@@ -1461,7 +1461,7 @@ fn cg_type_suffix(ty: &CgType) -> String {
         CgType::Func(a, b) => format!("{}_to_{}", cg_type_suffix(a), cg_type_suffix(b)),
         CgType::ListOf(elem) => format!("List_{}", cg_type_suffix(elem)),
         CgType::Tuple(items) => {
-            let parts: Vec<_> = items.iter().map(|t| cg_type_suffix(t)).collect();
+            let parts: Vec<_> = items.iter().map(cg_type_suffix).collect();
             format!("Tup_{}", parts.join("_"))
         }
         _ => {
@@ -1607,7 +1607,7 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
 
                 // Box all arguments
                 let boxed_args: Vec<*mut Value> =
-                    args.into_iter().map(|v| super::abi::box_value(v)).collect();
+                    args.into_iter().map(super::abi::box_value).collect();
 
                 // Build call arguments: [ctx_ptr, arg0, arg1, ...]
                 let mut call_args: Vec<i64> = Vec::with_capacity(1 + arity);
@@ -1630,7 +1630,7 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                             drop(Box::from_raw(arg_ptr));
                         }
                     }
-                    if result_ptr != 0 && !call_args[1..].iter().any(|a| *a == result_ptr) {
+                    if result_ptr != 0 && !call_args[1..].contains(&result_ptr) {
                         unsafe {
                             drop(Box::from_raw(result_ptr as *mut Value));
                         }
@@ -1657,7 +1657,7 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                 }
 
                 // If the result_ptr is distinct from all arg_ptrs, drop it too.
-                if result_ptr != 0 && !call_args[1..].iter().any(|a| *a == result_ptr) {
+                if result_ptr != 0 && !call_args[1..].contains(&result_ptr) {
                     unsafe {
                         drop(Box::from_raw(result_ptr as *mut Value));
                     }

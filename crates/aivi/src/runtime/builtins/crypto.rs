@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use getrandom;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 

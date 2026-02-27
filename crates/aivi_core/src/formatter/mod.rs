@@ -335,7 +335,7 @@ mod align_tests {
         let label_cols: Vec<usize> = lines
             .iter()
             .filter(|l| l.contains("label:"))
-            .map(|l| l.find("label:").unwrap())
+            .map(|l| l.find("label:").expect("label: present"))
             .collect();
         assert!(label_cols.len() >= 2, "at least 2 label fields");
         assert_eq!(

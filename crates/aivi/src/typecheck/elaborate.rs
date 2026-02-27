@@ -120,6 +120,7 @@ pub fn elaborate_with_checkpoint(
 /// Core elaboration loop shared by both the full and checkpoint paths.
 /// When `skip_embedded` is true, modules whose path starts with `<embedded:` are skipped
 /// (their exports are assumed to already be present in the export maps).
+#[allow(clippy::too_many_arguments)]
 fn elaborate_modules(
     modules: &mut [Module],
     checker: &mut TypeChecker,
@@ -144,10 +145,10 @@ fn elaborate_modules(
         diagnostics.extend(checker.collect_type_expr_diags(module));
         let sigs = checker.collect_type_sigs(module);
         checker.register_module_constructors(module, &mut env);
-        checker.register_imports(module, &module_exports, &module_domain_exports, &mut env);
+        checker.register_imports(module, module_exports, module_domain_exports, &mut env);
 
         let (imported_classes, imported_instances) =
-            collect_imported_class_env(module, &module_class_exports, &module_instance_exports);
+            collect_imported_class_env(module, module_class_exports, module_instance_exports);
         let (local_classes, local_instances) = collect_local_class_env(module);
         let local_class_names: HashSet<String> = local_classes.keys().cloned().collect();
         let mut classes = imported_classes;

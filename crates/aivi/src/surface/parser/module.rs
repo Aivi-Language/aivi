@@ -24,10 +24,7 @@ impl Parser {
     fn fresh_internal_name(&mut self, prefix: &str, span: Span) -> SpannedName {
         let name = format!("__{prefix}{}", self.gensym);
         self.gensym = self.gensym.wrapping_add(1);
-        SpannedName {
-            name: name.into(),
-            span,
-        }
+        SpannedName { name, span }
     }
 
     fn build_ctor_pattern(&self, name: &str, args: Vec<Pattern>, span: Span) -> Pattern {

@@ -332,14 +332,14 @@ fn mark_last_uses_reverse(
 
             // Mark in each branch for vars unique to that branch
             let mut then_marked = marked.clone();
-            for (name, _) in &then_vars {
+            for name in then_vars.keys() {
                 if !else_vars.contains_key(name) {
                     mark_last_uses_reverse(then_branch, last_uses, &mut then_marked, counts);
                     break;
                 }
             }
             let mut else_marked = marked.clone();
-            for (name, _) in &else_vars {
+            for name in else_vars.keys() {
                 if !then_vars.contains_key(name) {
                     mark_last_uses_reverse(else_branch, last_uses, &mut else_marked, counts);
                     break;
@@ -379,7 +379,7 @@ fn mark_last_uses_reverse(
             // Mark last uses only in arms where the variable is unique to that arm
             for (i, arm) in arms.iter().enumerate() {
                 let mut arm_marked = marked.clone();
-                for (name, _) in &arm_vars[i] {
+                for name in arm_vars[i].keys() {
                     if arm_counts.get(name).copied().unwrap_or(0) == 1 && !marked.contains(name) {
                         // This var only appears in this arm — safe to mark
                         if let Some(guard) = &arm.guard {

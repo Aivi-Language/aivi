@@ -94,7 +94,7 @@
         else {
             return false;
         };
-        expected.iter().any(|e| *e == last.text.as_str())
+        expected.contains(&last.text.as_str())
     }
 
     fn find_top_level_token(
@@ -1018,10 +1018,10 @@
         let mut out = Vec::with_capacity(rows.len());
         for row in rows {
             let mut line = String::new();
-            for col in 0..max_cols {
+            for (col, width) in widths.iter().enumerate().take(max_cols) {
                 let value = row.get(col).map(String::as_str).unwrap_or("");
                 let value_len = value.chars().count();
-                let pad = widths[col].saturating_sub(value_len);
+                let pad = width.saturating_sub(value_len);
                 if pad > 0 {
                     line.push_str(&" ".repeat(pad));
                 }
@@ -1483,18 +1483,16 @@
             let line_tokens = tokens_by_line[line_index].clone();
             let opener_tok = if line_tokens.iter().any(|t| t.kind == "comment") {
                 None
-            } else {
-                if let Some(first_idx) = first_code_index(&line_tokens) {
-                    if line_tokens.len() == 1
-                        && matches!(line_tokens[first_idx].text.as_str(), "{" | "[")
-                    {
-                        Some(line_tokens[first_idx])
-                    } else {
-                        None
-                    }
+            } else if let Some(first_idx) = first_code_index(&line_tokens) {
+                if line_tokens.len() == 1
+                    && matches!(line_tokens[first_idx].text.as_str(), "{" | "[")
+                {
+                    Some(line_tokens[first_idx])
                 } else {
                     None
                 }
+            } else {
+                None
             };
 
             if matches!(options.brace_style, BraceStyle::Kr) {
@@ -1815,8 +1813,8 @@
             }
 
             // Machine transition alignment groups (inside `machine ... = { ... }`).
-            if lines[i].top_context == Some(ContextKind::Machine) {
-                if find_top_level_token(&lines[i].tokens, "->", first_idx).is_some() {
+            if lines[i].top_context == Some(ContextKind::Machine)
+                && find_top_level_token(&lines[i].tokens, "->", first_idx).is_some() {
                     let mut j = i;
                     let mut max_source = 0usize;
                     let mut max_target = 0usize;
@@ -1868,7 +1866,6 @@
                     i = j;
                     continue;
                 }
-            }
         }
 
         i += 1;
@@ -1943,12 +1940,10 @@
     }
 
     fn matches_hang_close(opener: char, first_token_text: &str) -> bool {
-        match (opener, first_token_text) {
-            ('{', "}") => true,
-            ('[', "]") => true,
-            ('(', ")") => true,
-            _ => false,
-        }
+        matches!(
+            (opener, first_token_text),
+            ('{', "}") | ('[', "]") | ('(', ")")
+        )
     }
 
     fn net_open_depth(tokens: &[&crate::cst::CstToken]) -> isize {
@@ -2038,19 +2033,19 @@
                 }
 
                 let mut prev_use = None;
-                for j in (0..line_index).rev() {
-                    if lines[j].tokens.is_empty() {
+                for line in lines[..line_index].iter().rev() {
+                    if line.tokens.is_empty() {
                         continue;
                     }
-                    prev_use = Some(is_use_line(&lines[j]));
+                    prev_use = Some(is_use_line(line));
                     break;
                 }
                 let mut next_use = None;
-                for j in (line_index + 1)..lines.len() {
-                    if lines[j].tokens.is_empty() {
+                for line in &lines[(line_index + 1)..] {
+                    if line.tokens.is_empty() {
                         continue;
                     }
-                    next_use = Some(is_use_line(&lines[j]));
+                    next_use = Some(is_use_line(line));
                     break;
                 }
                 prev_use == Some(true) && next_use == Some(true)
@@ -2296,7 +2291,7 @@
             // indentation so `=>` stays aligned.
             let has_arrow = find_top_level_token_clamped(&state.tokens, "=>", first_idx).is_some();
             let has_else = find_top_level_token_clamped(&state.tokens, "else", first_idx).is_some();
-            if !(has_arrow && !has_else) {
+            if !has_arrow || has_else {
                 continuation_levels = 0;
             }
         }
@@ -2851,7 +2846,7 @@
         /// field is the trimmed `key: value` string (without surrounding comma).
         /// Returns `None` if the line is not a single-line record.
         fn parse_inline_record(line: &str) -> Option<(String, Vec<String>)> {
-            let trimmed_end = line.trim_end_matches(|c: char| c == ' ' || c == '\t');
+            let trimmed_end = line.trim_end_matches([' ', '\t']);
             let indent_len = trimmed_end.len() - trimmed_end.trim_start().len();
             let indent = trimmed_end[..indent_len].to_string();
             let inner = trimmed_end.trim_start();
@@ -2954,7 +2949,7 @@
         // to avoid removing unknown tokens (e.g. \x0c form-feed) that the lexer
         // emits as content tokens, which would change the token structure between
         // formatting passes.
-        let trimmed = line.trim_end_matches(|c: char| c == ' ' || c == '\t').to_string();
+        let trimmed = line.trim_end_matches([' ', '\t']).to_string();
         doc_items.push(super::doc::Doc::text(trimmed));
         doc_items.push(super::doc::Doc::hardline());
     }

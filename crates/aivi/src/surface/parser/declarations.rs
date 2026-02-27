@@ -15,7 +15,7 @@ impl Parser {
             }
             // Opaque type declarations can be written as a standalone `UpperIdent` on its own
             // line. Treat those as type declarations, not expression statements.
-            let terminator = self.tokens.get(self.pos).map_or(true, |tok| {
+            let terminator = self.tokens.get(self.pos).is_none_or(|tok| {
                 tok.kind == TokenKind::Newline || (tok.kind == TokenKind::Symbol && tok.text == "}")
             });
             if terminator {
