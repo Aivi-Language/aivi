@@ -3768,6 +3768,7 @@ mod linux {
                         let mut id_map = HashMap::new();
                         let root = first_object_in_interface(&decoded)?;
                         let id = build_widget_from_node_real(&mut state, root, &mut id_map)?;
+                        eprintln!("[DEBUG] buildFromNode: built widget id={id}, named_widgets={:?}", id_map.keys().collect::<Vec<_>>());
                         state.named_widgets.extend(id_map);
                         Ok(id)
                     })?;
@@ -4076,9 +4077,12 @@ mod linux {
                 Ok(effect(move |_| {
                     GTK_STATE.with(|state| {
                         let state = state.borrow();
+                        eprintln!("[DEBUG] dialogSetChild: dialog_id={dialog_id}, child_id={child_id}");
                         let dialog = widget_ptr(&state, dialog_id, "dialogSetChild")?;
                         let child = widget_ptr(&state, child_id, "dialogSetChild")?;
+                        eprintln!("[DEBUG] dialogSetChild: dialog_ptr={dialog:?}, child_ptr={child:?}");
                         unsafe { gtk_window_set_child(dialog, child) };
+                        eprintln!("[DEBUG] dialogSetChild: gtk_window_set_child called successfully");
                         Ok(Value::Unit)
                     })
                 }))
@@ -4099,12 +4103,15 @@ mod linux {
                 Ok(effect(move |_| {
                     GTK_STATE.with(|state| {
                         let state = state.borrow();
+                        eprintln!("[DEBUG] dialogPresent: dialog_id={dialog_id}, parent_id={parent_id}");
                         let dialog = widget_ptr(&state, dialog_id, "dialogPresent")?;
                         let parent = widget_ptr(&state, parent_id, "dialogPresent")?;
+                        eprintln!("[DEBUG] dialogPresent: dialog_ptr={dialog:?}, parent_ptr={parent:?}");
                         unsafe {
                             gtk_window_set_transient_for(dialog, parent);
                             gtk_window_present(dialog);
                         }
+                        eprintln!("[DEBUG] dialogPresent: presented successfully");
                         Ok(Value::Unit)
                     })
                 }))
