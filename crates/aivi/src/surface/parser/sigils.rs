@@ -1272,49 +1272,68 @@ impl Parser {
 
                     let mut kept_children = Vec::new();
                     for child in children {
-                        let GtkNode::Element {
-                            tag: child_tag,
-                            attrs: child_attrs,
-                            children: _,
-                        } = &child
-                        else {
-                            kept_children.push(child);
-                            continue;
-                        };
-                        if child_tag != "signal" {
-                            kept_children.push(child);
-                            continue;
-                        }
-                        let mut signal_name: Option<String> = None;
-                        let mut signal_handler: Option<String> = None;
-                        for attr in child_attrs.iter().cloned() {
-                            if attr.name == "name" {
-                                signal_name = attr_handler_text("name", attr.value);
-                            } else if attr.name == "handler" || attr.name == "on" {
-                                signal_handler = attr_handler_text(&attr.name, attr.value);
+                        let (child_tag, child_has_type) = match &child {
+                            GtkNode::Element { tag, attrs, .. } => (
+                                tag.clone(),
+                                attrs.iter().any(|a| a.name == "type"),
+                            ),
+                            _ => {
+                                kept_children.push(child);
+                                continue;
                             }
+                        };
+                        if child_tag == "signal" {
+                            let (mut signal_name, mut signal_handler) =
+                                (None::<String>, None::<String>);
+                            if let GtkNode::Element { attrs, .. } = child {
+                                for attr in attrs {
+                                    if attr.name == "name" {
+                                        signal_name = attr_handler_text("name", attr.value);
+                                    } else if attr.name == "handler" || attr.name == "on" {
+                                        signal_handler =
+                                            attr_handler_text(&attr.name, attr.value);
+                                    }
+                                }
+                            }
+                            let Some(name) = signal_name else {
+                                this.emit_diag(
+                                    "E1614",
+                                    "signal tag requires a compile-time `name` attribute",
+                                    span.clone(),
+                                );
+                                continue;
+                            };
+                            let Some(handler) = signal_handler else {
+                                this.emit_diag(
+                                    "E1614",
+                                    "signal tag requires a compile-time `handler` or `on` attribute",
+                                    span.clone(),
+                                );
+                                continue;
+                            };
+                            lowered_attrs.push(call2(
+                                "gtkAttr",
+                                mk_string(&format!("signal:{name}")),
+                                mk_string(&handler),
+                            ));
+                            continue;
                         }
-                        let Some(name) = signal_name else {
-                            this.emit_diag(
-                                "E1614",
-                                "signal tag requires a compile-time `name` attribute",
-                                span.clone(),
-                            );
+                        if child_tag == "child" {
+                            if child_has_type {
+                                kept_children.push(child);
+                            } else {
+                                this.emit_diag(
+                                    "E1616",
+                                    "bare <child> wrapper is not allowed; nest <object> elements directly inside the parent",
+                                    span.clone(),
+                                );
+                                if let GtkNode::Element { children: inner, .. } = child {
+                                    kept_children.extend(inner);
+                                }
+                            }
                             continue;
-                        };
-                        let Some(handler) = signal_handler else {
-                            this.emit_diag(
-                                "E1614",
-                                "signal tag requires a compile-time `handler` or `on` attribute",
-                                span.clone(),
-                            );
-                            continue;
-                        };
-                        lowered_attrs.push(call2(
-                            "gtkAttr",
-                            mk_string(&format!("signal:{name}")),
-                            mk_string(&handler),
-                        ));
+                        }
+                        kept_children.push(child);
                     }
 
                     let attrs_expr = list(lowered_attrs);

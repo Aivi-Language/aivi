@@ -197,11 +197,9 @@ node : GtkNode
 node =
   ~<gtk>
     <object class="GtkBox" props={ { spacing: 24, marginTop: 12 } }>
-      <child>
-        <object class="GtkLabel">
-          <property name="label">Hello</property>
-        </object>
-      </child>
+      <object class="GtkLabel">
+        <property name="label">Hello</property>
+      </object>
     </object>
   </gtk>"#;
     check_ok_with_embedded(source, &["aivi", "aivi.ui.gtk4"]);
