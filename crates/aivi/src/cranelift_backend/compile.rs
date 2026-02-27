@@ -1050,7 +1050,13 @@ fn compile_definition_body<M: Module>(
             );
 
             // Emit function-entry tracking (lambda — show parent name for context).
-            let lambda_display = format!("{module_name}.{} (lambda)", def.name);
+            // Guard against double-prefixing when `def.name` is already a qualified alias.
+            let def_display = if def.name.starts_with(&format!("{module_name}.")) {
+                def.name.clone()
+            } else {
+                format!("{module_name}.{}", def.name)
+            };
+            let lambda_display = format!("{def_display} (lambda)");
             lower_ctx.emit_enter_fn(&mut builder, &lambda_display);
 
             // Perceus: run use analysis on the lambda body
@@ -1212,7 +1218,13 @@ fn compile_definition_body<M: Module>(
         );
 
         // Emit function-entry tracking so runtime warnings can include the function name.
-        let display_name = format!("{module_name}.{}", def.name);
+        // Qualified alias defs already have `module_name.` baked into `def.name`; avoid
+        // double-prefixing (which would produce e.g. `aivi.list.aivi.list.find`).
+        let display_name = if def.name.starts_with(&format!("{module_name}.")) {
+            def.name.clone()
+        } else {
+            format!("{module_name}.{}", def.name)
+        };
         lower_ctx.emit_enter_fn(&mut builder, &display_name);
 
         // Perceus: run use analysis on the function body
