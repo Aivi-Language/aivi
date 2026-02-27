@@ -125,6 +125,7 @@ For `<interface>`/`<template>`, the first nested `<object>` becomes the instanti
 Object references via `ref`/`idref` are resolved against `id` attributes.
 `<child type="overlay">` and `<child type="controller">` are supported for overlay/controller wiring.
 Header-bar child placement is supported via `<child type="title">` and `<child type="end">` (`start` is the default).
+Bare `<child>` without a `type` attribute is an error (E1616); nest `<object>` elements directly inside the parent instead.
 Signal sugar is supported and lowered to typed signal attrs:
 
 - `<object ... onClick={ Msg.Save } />` -> `signal:clicked`
@@ -180,11 +181,9 @@ uiNode : GtkNode
 uiNode =
   ~<gtk>
     <object class="GtkBox" props={ { orientation: "vertical", spacing: 12, marginTop: 16 } }>
-      <child>
-        <object class="GtkLabel">
-          <property name="label">Settings</property>
-        </object>
-      </child>
+      <object class="GtkLabel">
+        <property name="label">Settings</property>
+      </object>
     </object>
   </gtk>
 ```
@@ -198,14 +197,10 @@ formNode : GtkNode
 formNode =
   ~<gtk>
     <object class="GtkBox" props={ { orientation: "vertical", spacing: 8 } }>
-      <child>
-        <object class="GtkEntry" onInput={ Msg.NameChanged } />
-      </child>
-      <child>
-        <object class="GtkButton" onClick={ Msg.Save }>
-          <property name="label">Save</property>
-        </object>
-      </child>
+      <object class="GtkEntry" onInput={ Msg.NameChanged } />
+      <object class="GtkButton" onClick={ Msg.Save }>
+        <property name="label">Save</property>
+      </object>
     </object>
   </gtk>
 ```
@@ -235,12 +230,10 @@ listNode =
   ~<gtk>
     <object class="GtkBox" props={ { orientation: "vertical", spacing: 4 } }>
       <each items={items} as={item}>
-        <child>
           <object class="GtkLabel">
             <property name="label">{ item }</property>
           </object>
-        </child>
-      </each>
+        </each>
     </object>
   </gtk>
 ```

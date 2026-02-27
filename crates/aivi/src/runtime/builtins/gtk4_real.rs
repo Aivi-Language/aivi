@@ -152,6 +152,7 @@ mod linux {
             argc: c_int,
             argv: *mut *mut c_char,
         ) -> c_int;
+        #[allow(dead_code)]
         fn g_application_activate(application: *mut c_void);
         fn g_resource_load(filename: *const c_char, error: *mut *mut c_void) -> *mut c_void;
         fn g_resources_register(resource: *mut c_void);

@@ -987,11 +987,9 @@ module Example
 x =
   ~<gtk>
     <object class="GtkBox" props={ { marginTop: 24, spacing: 24 } }>
-      <child>
-        <object class="GtkLabel">
-          <property name="label">Hello</property>
-        </object>
-      </child>
+      <object class="GtkLabel">
+        <property name="label">Hello</property>
+      </object>
     </object>
   </gtk>
 "#;
@@ -1026,9 +1024,7 @@ module Example
 x =
   ~<gtk>
     <object class="GtkBox">
-      <child>
-        <Ui.Row id="one" />
-      </child>
+      <Ui.Row id="one" />
     </object>
   </gtk>
 "#;

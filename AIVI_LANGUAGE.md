@@ -872,7 +872,7 @@ Dynamic child lists are supported with `<each>`:
 ~<gtk>
   <object class="GtkBox">
     <each items={items} as={item}>
-      <child><object class="GtkLabel"><property name="label">{ item }</property></object></child>
+      <object class="GtkLabel"><property name="label">{ item }</property></object>
     </each>
   </object>
 </gtk>
