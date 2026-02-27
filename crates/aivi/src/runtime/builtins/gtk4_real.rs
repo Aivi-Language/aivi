@@ -1858,6 +1858,10 @@ mod linux {
             ("GtkEntry", "changed") | ("GtkEntry", "activate") => {
                 Some(SignalPayloadKind::EditableText)
             }
+            ("GtkCheckButton", "toggled") => Some(SignalPayloadKind::ToggleActive),
+            ("GtkRange", "value-changed") | ("GtkScale", "value-changed") => {
+                Some(SignalPayloadKind::FloatValue)
+            }
             _ => None,
         }
     }

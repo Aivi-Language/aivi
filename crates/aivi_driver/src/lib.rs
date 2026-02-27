@@ -13,6 +13,12 @@ use aivi_core::{
     ModuleItem,
 };
 
+type CgTypesMap = std::collections::HashMap<
+    String,
+    std::collections::HashMap<String, aivi_core::cg_type::CgType>,
+>;
+type MonomorphPlan = std::collections::HashMap<String, Vec<aivi_core::cg_type::CgType>>;
+
 #[derive(Debug, thiserror::Error)]
 pub enum AiviError {
     #[error("IO error: {0}")]
@@ -255,20 +261,9 @@ pub fn desugar_target_typed(target: &str) -> Result<HirProgram, AiviError> {
 
 /// Like `desugar_target_typed` but also runs type inference and returns the `CgType` map
 /// for each module/definition. Used by the typed codegen path.
-#[allow(clippy::type_complexity)]
 pub fn desugar_target_with_cg_types(
     target: &str,
-) -> Result<
-    (
-        HirProgram,
-        std::collections::HashMap<
-            String,
-            std::collections::HashMap<String, aivi_core::cg_type::CgType>,
-        >,
-        std::collections::HashMap<String, Vec<aivi_core::cg_type::CgType>>,
-    ),
-    AiviError,
-> {
+) -> Result<(HirProgram, CgTypesMap, MonomorphPlan), AiviError> {
     let diagnostics = load_module_diagnostics(target)?;
     if file_diagnostics_have_errors(&diagnostics) {
         emit_diagnostics(&diagnostics);
@@ -303,18 +298,7 @@ pub fn desugar_target_with_cg_types(
 /// so the caller can process machine declarations, constructor ordinals, etc.
 pub fn desugar_target_with_cg_types_and_surface(
     target: &str,
-) -> Result<
-    (
-        HirProgram,
-        std::collections::HashMap<
-            String,
-            std::collections::HashMap<String, aivi_core::cg_type::CgType>,
-        >,
-        std::collections::HashMap<String, Vec<aivi_core::cg_type::CgType>>,
-        Vec<Module>,
-    ),
-    AiviError,
-> {
+) -> Result<(HirProgram, CgTypesMap, MonomorphPlan, Vec<Module>), AiviError> {
     let diagnostics = load_module_diagnostics(target)?;
     if file_diagnostics_have_errors(&diagnostics) {
         emit_diagnostics(&diagnostics);
