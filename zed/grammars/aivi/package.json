@@ -1,0 +1,15 @@
+{
+  "name": "tree-sitter-aivi",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for the AIVI language",
+  "keywords": [
+    "parser",
+    "tree-sitter",
+    "aivi"
+  ],
+  "license": "MIT",
+  "main": "grammar.js",
+  "devDependencies": {
+    "tree-sitter-cli": "^0.24.7"
+  }
+}
