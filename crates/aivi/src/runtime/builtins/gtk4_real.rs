@@ -1718,24 +1718,6 @@ mod linux {
         }
     }
 
-    fn call_adw_fn_p(fn_name: &str, arg0: *mut c_void) {
-        const RTLD_NOW: c_int = 2;
-        const RTLD_NODELETE: c_int = 0x1000;
-        for lib_name in ["libadwaita-1.so.0", "libadwaita-1.so"] {
-            let Ok(name) = CString::new(lib_name) else { continue; };
-            let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW | RTLD_NODELETE) };
-            if handle.is_null() { continue; }
-            let Ok(sym) = CString::new(fn_name) else { break; };
-            let ptr = unsafe { dlsym(handle, sym.as_ptr()) };
-            if !ptr.is_null() {
-                let f: unsafe extern "C" fn(*mut c_void) = unsafe { std::mem::transmute(ptr) };
-                unsafe { f(arg0) };
-            }
-            let _ = unsafe { dlclose(handle) };
-            break;
-        }
-    }
-
     fn maybe_register_gresource_bundle() -> Result<(), RuntimeError> {
         const GRESOURCE_ENV: &str = "AIVI_GTK4_GRESOURCE_PATH";
         let path = match std::env::var(GRESOURCE_ENV) {
