@@ -152,8 +152,15 @@ mod linux {
             argc: c_int,
             argv: *mut *mut c_char,
         ) -> c_int;
+        fn g_application_activate(application: *mut c_void);
         fn g_resource_load(filename: *const c_char, error: *mut *mut c_void) -> *mut c_void;
         fn g_resources_register(resource: *mut c_void);
+    }
+
+    #[link(name = "glib-2.0")]
+    unsafe extern "C" {
+        fn g_main_context_default() -> *mut c_void;
+        fn g_main_context_iteration(context: *mut c_void, may_block: c_int) -> c_int;
     }
 
     #[link(name = "gobject-2.0")]
@@ -237,6 +244,19 @@ mod linux {
 
     thread_local! {
         static GTK_STATE: RefCell<RealGtkState> = RefCell::new(RealGtkState::default());
+        // Set to true once gtk_init() has been called so channel.recv can pump the GTK event loop.
+        static GTK_PUMP_ACTIVE: RefCell<bool> = const { RefCell::new(false) };
+    }
+
+    pub(super) fn pump_gtk_events() {
+        GTK_PUMP_ACTIVE.with(|active| {
+            if *active.borrow() {
+                unsafe {
+                    let ctx = g_main_context_default();
+                    g_main_context_iteration(ctx, 0);
+                }
+            }
+        });
     }
 
     #[derive(Default)]
@@ -1965,6 +1985,8 @@ mod linux {
                         state.apps.insert(id, raw);
                         id
                     });
+                    // GTK is now initialised; channel.recv can safely pump the event loop.
+                    GTK_PUMP_ACTIVE.with(|active| *active.borrow_mut() = true);
                     Ok(Value::Int(id))
                 }))
             }),
@@ -4148,6 +4170,16 @@ mod linux {
         fields
     }
 }
+
+/// Drives one iteration of the GTK/GLib main context from any call site
+/// (notably `channel.recv`).  No-op on non-GTK platforms.
+#[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
+pub(super) fn pump_gtk_events() {
+    linux::pump_gtk_events();
+}
+
+#[cfg(not(all(feature = "gtk4-libadwaita", target_os = "linux")))]
+pub(super) fn pump_gtk_events() {}
 
 pub(super) fn build_gtk4_record_real(build_mock: fn() -> Value) -> Option<Value> {
     #[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
