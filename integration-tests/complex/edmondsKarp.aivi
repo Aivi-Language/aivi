@@ -65,21 +65,21 @@ walkMin = path caps best => path match
   | []              => best
   | [_]             => best
   | [a, b, ...rest] => {
-    c = getCap a b caps
-    newBest = if best == 0 then c else if c < best then c else best
-    walkMin ([b] ++ rest) caps newBest
-  }
+      c = getCap a b caps
+      newBest = if best == 0 then c else if c < best then c else best
+      walkMin ([b] ++ rest) caps newBest
+    }
 
 // Update capacities along a path (push delta flow)
 updateCaps = path delta caps => path match
   | []              => caps
   | [_]             => caps
   | [a, b, ...rest] => {
-    fwd = getCap a b caps
-    bwd = getCap b a caps
-    caps2 = caps |> setCap a b (fwd - delta) |> setCap b a (bwd + delta)
-    updateCaps ([b] ++ rest) delta caps2
-  }
+      fwd = getCap a b caps
+      bwd = getCap b a caps
+      caps2 = caps |> setCap a b (fwd - delta) |> setCap b a (bwd + delta)
+      updateCaps ([b] ++ rest) delta caps2
+    }
 
 // Edmonds-Karp max flow algorithm
 edmondsKarp = edges source sink => {
@@ -90,14 +90,14 @@ edmondsKarp = edges source sink => {
 ekLoop = residual source sink totalFlow => (bfs residual source sink) match
   | None         => totalFlow
   | Some parents => {
-    path = reconstructPath parents source sink
-    delta = pathCapacity path residual.capacities
-    if delta == 0 then totalFlow
-    else {
-      newCaps = updateCaps path delta residual.capacities
-      ekLoop (residual <| { capacities: newCaps }) source sink (totalFlow + delta)
+      path = reconstructPath parents source sink
+      delta = pathCapacity path residual.capacities
+      if delta == 0 then totalFlow
+      else {
+        newCaps = updateCaps path delta residual.capacities
+        ekLoop (residual <| { capacities: newCaps }) source sink (totalFlow + delta)
+      }
     }
-  }
 
 @test "Edmonds-Karp max-flow"
 flowTest = do Effect {

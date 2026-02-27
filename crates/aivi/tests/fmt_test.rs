@@ -37,7 +37,7 @@ big = {
   b: 2,
 }
 "#;
-    let multiline_expected = "big =\n  {\n    a: 1\n    b: 2\n  }\n";
+    let multiline_expected = "big = {\n  a: 1\n  b: 2\n}\n";
     assert_eq!(format_text(multiline_input), multiline_expected);
 }
 
