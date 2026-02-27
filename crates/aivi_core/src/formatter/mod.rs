@@ -362,13 +362,20 @@ mod bench {
     #[test]
     fn bench_format_large_file() {
         let content = std::fs::read_to_string("/tmp/mailfox_main.aivi").unwrap_or_default();
-        if content.is_empty() { return; }
+        if content.is_empty() {
+            return;
+        }
         let start = std::time::Instant::now();
         let n = 200u32;
         for _ in 0..n {
             let _ = format_text(&content);
         }
         let elapsed = start.elapsed();
-        eprintln!("bench: {} iters in {:?} = {:?}/iter", n, elapsed, elapsed / n);
+        eprintln!(
+            "bench: {} iters in {:?} = {:?}/iter",
+            n,
+            elapsed,
+            elapsed / n
+        );
     }
 }

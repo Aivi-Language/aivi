@@ -1495,7 +1495,7 @@
                             .rev()
                             .filter(|t| t.kind != "whitespace" && t.kind != "comment" && t.text != "\n");
                         code_iter.next(); // skip the last (opener)
-                        code_iter.next().map_or(false, |t| t.text == "=")
+                        code_iter.next().is_some_and(|t| t.text == "=")
                     };
                     // Only split when there is no `do` keyword between `=` and `{`/`[`
                     // (otherwise it's a `do Effect {` block, which should stay as K&R).
@@ -2940,7 +2940,7 @@
             let trimmed = line.trim_start();
             let rest = trimmed.strip_prefix("use ")?;
             let end = rest
-                .find(|c: char| c == '.' || c == '(' || c == ' ')
+                .find(['.', '(', ' '])
                 .unwrap_or(rest.len());
             if end == 0 {
                 return None;
