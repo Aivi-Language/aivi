@@ -245,6 +245,7 @@ fn next_value_flatmap(
                         *inner = None;
                     }
                     inner_opt = None;
+                    continue; // restart loop: inner_opt is now None, proceed to source
                 }
             }
         }

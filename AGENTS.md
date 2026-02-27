@@ -298,5 +298,5 @@ Before finishing any change:
 - [ ] `cargo test --workspace` is fully green (Rust + AIVI tests)
 - [ ] VSCode extension compiles (`pnpm compile` in `vscode/`) if LSP or grammar changed
 - [ ] Zed grammar updated if new syntax was introduced
-- [ ] Aivi builds without warnings.
+- [ ] Aivi builds without warnings (also pre-existing ones).
  

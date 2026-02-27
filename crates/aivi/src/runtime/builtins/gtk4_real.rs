@@ -457,6 +457,7 @@ mod linux {
     }
 
     #[derive(Clone, Copy)]
+    #[allow(dead_code)]
     enum SignalPayloadKind {
         None,
         EditableText,
