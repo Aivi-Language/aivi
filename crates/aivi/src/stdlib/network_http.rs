@@ -3,14 +3,15 @@ pub const MODULE_NAME: &str = "aivi.net.http";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.net.http
-export Header, Request, Response, Error
+export Header, Body, Request, Response, Error
 export get, post, fetch
 
 use aivi
 use aivi.url (Url)
 
 Header = { name: Text, value: Text }
-Request = { method: Text, url: Url, headers: List Header, body: Option Text }
+Body = Plain Text | Form (List Header)
+Request = { method: Text, url: Url, headers: List Header, body: Option Body }
 Response = { status: Int, headers: List Header, body: Text }
 Error = { message: Text }
 
