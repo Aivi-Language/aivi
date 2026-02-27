@@ -472,7 +472,9 @@ main = do Effect {
 }
 
 #[test]
-fn typecheck_effect_block_statement_requires_unit() {
+fn typecheck_effect_block_bare_expr_discards_non_unit() {
+    // A bare expression in a do-block desugars to `chain (λ_. body) expr`, so any
+    // `Effect E A` is valid as a statement — the value is discarded, equivalent to `_ <- expr`.
     let source = r#"
 module test.effect_stmt_unit
 export main, foo
@@ -486,7 +488,7 @@ main = do Effect {
   foo
   pure Unit
 }"#;
-    check_err(source);
+    check_ok(source);
 }
 
 #[test]

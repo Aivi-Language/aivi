@@ -130,15 +130,9 @@ impl TypeChecker {
                             Type::con("Effect").app(vec![err_ty.clone(), result_ty.clone()]);
                         self.push_deferred_constraint(expr_ty, expected, expr_span(expr));
                     } else {
-                        // Expression statements only auto-run effects when they return `Unit`.
-                        // For non-`Unit` results, require an explicit `<-` bind.
-                        let value_ty =
-                            self.require_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
-                        self.push_deferred_constraint(
-                            value_ty,
-                            Type::con("Unit"),
-                            expr_span(expr),
-                        );
+                        // Bare expression desugars to `chain (λ_. body) expr`; the value is
+                        // discarded, so expr need only be `Effect E A` for any A (like `_ <- expr`).
+                        self.require_effect_value(expr_ty, err_ty.clone(), expr_span(expr))?;
                     }
                 }
             }
@@ -151,7 +145,7 @@ impl TypeChecker {
     ///
     /// The block's type is `M result_ty`. Binds (`x <- expr`) unify `expr` with
     /// `M A` and bind `x : A`. Let-bindings (`x = expr`) are pure. Expression
-    /// statements must be `M Unit` (non-final) or `M A` (final).
+    /// statements must be `M A` (non-final, value discarded) or `M A` (final, determines result).
     ///
     /// Effect-specific statements (`when`, `unless`, `given`, `on`, `recurse`)
     /// produce type errors since they are not available in generic monadic blocks.
@@ -205,12 +199,14 @@ impl TypeChecker {
                         };
                         self.push_deferred_constraint(expr_ty, expected, expr_span(expr));
                     } else {
-                        // Non-final expression: must be M Unit
+                        // Non-final expression: desugars to `chain (λ_. body) expr`, so
+                        // expr must be `M A` for any A (the value is discarded, like `_ <- expr`).
+                        let discarded = self.fresh_var();
                         let expected = if monad_con == "Result" {
                             let err_var = self.fresh_var();
-                            Type::con(&monad_con).app(vec![err_var, Type::con("Unit")])
+                            Type::con(&monad_con).app(vec![err_var, discarded])
                         } else {
-                            Type::con(&monad_con).app(vec![Type::con("Unit")])
+                            Type::con(&monad_con).app(vec![discarded])
                         };
                         self.push_deferred_constraint(expr_ty, expected, expr_span(expr));
                     }
