@@ -68,8 +68,8 @@ pub use surface::{
 };
 pub use typecheck::{
     check_types, check_types_including_stdlib, elaborate_expected_coercions,
-    elaborate_stdlib_checkpoint, elaborate_with_checkpoint, ElaborationCheckpoint,
-    infer_value_types, infer_value_types_full, InferResult,
+    elaborate_stdlib_checkpoint, elaborate_with_checkpoint, infer_value_types,
+    infer_value_types_full, ElaborationCheckpoint, InferResult,
 };
 
 pub fn desugar_modules(modules: &[Module]) -> HirProgram {
