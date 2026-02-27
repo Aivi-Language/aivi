@@ -4,6 +4,12 @@
 mod doc;
 mod engine;
 
+use rayon::prelude::*;
+
+/// Minimum number of top-level segments before we bother spawning parallel work.
+/// Below this threshold the overhead of Rayon task scheduling exceeds any gain.
+const MIN_SEGMENTS_FOR_PARALLEL: usize = 4;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BraceStyle {
     /// K&R / TS/Java style: `if cond {` / `x => {` (default).
@@ -43,24 +49,162 @@ pub fn format_text_with_options(content: &str, options: FormatOptions) -> String
     // `~mat[...]` column alignment across passes; skip it entirely for the
     // common case to cut runtime roughly in half.
     if !content.contains("~mat[") {
-        return engine::format_text_with_options(content, options);
+        return format_parallel(content, options);
     }
 
     // Transformations like semicolon removal or comma stripping can change the
     // token stream on re-lexing (e.g. `& ; &` → `& &` → `&&`).  Iterate
     // until a fixed point is reached (typically 1-3 passes).
-    let mut result = engine::format_text_with_options(content, options);
+    let mut result = format_parallel(content, options);
     for _ in 0..4 {
         // Collapse any multi-line `~mat[...]` back to a single line with `;`
         // row separators so the next pass can re-detect and re-align the matrix.
         let collapsed = collapse_multiline_matrix(&result);
-        let next = engine::format_text_with_options(&collapsed, options);
+        let next = format_parallel(&collapsed, options);
         if next == result {
             break;
         }
         result = next;
     }
     result
+}
+
+/// Split the file into independent top-level segments at depth-0 blank lines
+/// and format them in parallel using Rayon.  Falls back to sequential formatting
+/// when the file is too small to benefit.
+fn format_parallel(content: &str, options: FormatOptions) -> String {
+    let segments = split_top_level_segments(content);
+    if segments.len() < MIN_SEGMENTS_FOR_PARALLEL {
+        return engine::format_text_with_options(content, options);
+    }
+
+    let formatted: Vec<String> = segments
+        .par_iter()
+        .map(|seg| {
+            let mut out = engine::format_text_with_options(seg, options);
+            // Each segment is formatted as a standalone file, so it has a trailing
+            // newline.  Strip it — we re-join with blank-line separators below.
+            while out.ends_with('\n') {
+                out.pop();
+            }
+            out
+        })
+        .collect();
+
+    let mut result = formatted.join("\n\n");
+    // Ensure exactly one trailing newline.
+    while result.ends_with('\n') {
+        result.pop();
+    }
+    result.push('\n');
+    result
+}
+
+/// Split source text into top-level segments at blank lines where the delimiter
+/// depth (`{`, `[`, `(`) is zero.  Each segment contains one or more top-level
+/// declarations.  Consecutive blank lines at depth 0 are collapsed into segment
+/// boundaries; the blank lines themselves are not included in any segment.
+fn split_top_level_segments(content: &str) -> Vec<&str> {
+    let lines: Vec<&str> = content.split('\n').collect();
+    let mut depth: i32 = 0;
+    let mut in_string = false;
+    let mut string_delim = '"';
+    let mut escape_next = false;
+
+    // For each line, track the delimiter depth at the END of that line.
+    // A blank line at depth 0 is a valid split point.
+    let mut line_end_depths: Vec<i32> = Vec::with_capacity(lines.len());
+    for line in &lines {
+        for ch in line.chars() {
+            if escape_next {
+                escape_next = false;
+                continue;
+            }
+            if ch == '\\' && in_string {
+                escape_next = true;
+                continue;
+            }
+            if in_string {
+                if ch == string_delim {
+                    in_string = false;
+                }
+                continue;
+            }
+            match ch {
+                '"' | '\'' => {
+                    in_string = true;
+                    string_delim = ch;
+                }
+                '{' | '[' | '(' => depth += 1,
+                '}' | ']' | ')' => depth = (depth - 1).max(0),
+                _ => {}
+            }
+        }
+        line_end_depths.push(depth);
+    }
+
+    // Find split points: blank lines where both the previous non-blank line and
+    // this line are at depth 0.
+    let mut segments: Vec<&str> = Vec::new();
+    // Track byte offsets for zero-copy slicing of `content`.
+    let mut seg_start_byte: usize = 0;
+    let mut last_non_blank_line: Option<usize> = None;
+    let mut i = 0;
+
+    // Precompute byte offset of each line start for O(1) slicing.
+    let mut line_byte_starts: Vec<usize> = Vec::with_capacity(lines.len() + 1);
+    {
+        let mut offset = 0usize;
+        for line in &lines {
+            line_byte_starts.push(offset);
+            offset += line.len() + 1; // +1 for the '\n'
+        }
+        line_byte_starts.push(offset); // sentinel for end
+    }
+
+    while i < lines.len() {
+        if lines[i].trim().is_empty() {
+            // Blank line — check if this is a valid split point.
+            let at_depth_0 = last_non_blank_line
+                .map(|l| line_end_depths[l] == 0)
+                .unwrap_or(true);
+
+            if at_depth_0 && last_non_blank_line.is_some() {
+                // End the current segment at the end of the last non-blank line.
+                let end_line = last_non_blank_line.unwrap();
+                let end_byte = line_byte_starts[end_line] + lines[end_line].len();
+                let seg = &content[seg_start_byte..end_byte.min(content.len())];
+                if !seg.trim().is_empty() {
+                    segments.push(seg);
+                }
+                // Skip all consecutive blank lines.
+                while i < lines.len() && lines[i].trim().is_empty() {
+                    i += 1;
+                }
+                seg_start_byte = if i < lines.len() {
+                    line_byte_starts[i]
+                } else {
+                    content.len()
+                };
+                continue;
+            }
+        } else {
+            last_non_blank_line = Some(i);
+        }
+        i += 1;
+    }
+
+    // Flush the last segment.
+    if seg_start_byte < content.len() {
+        let seg = &content[seg_start_byte..];
+        // Trim trailing newlines from the last segment for consistency.
+        let trimmed = seg.trim_end_matches('\n');
+        if !trimmed.is_empty() {
+            segments.push(trimmed);
+        }
+    }
+
+    segments
 }
 
 /// Collapse multi-line `~mat[row1\n      row2]` back to `~mat[row1;row2]`.

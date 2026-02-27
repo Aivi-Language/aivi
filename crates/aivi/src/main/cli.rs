@@ -128,17 +128,19 @@ fn run() -> Result<(), AiviError> {
                 return Ok(());
             };
             if write {
-                let paths = aivi::resolve_target(target)?;
-                for path in paths {
-                    if path.extension().and_then(|s| s.to_str()) != Some("aivi") {
-                        continue;
-                    }
-                    let content = std::fs::read_to_string(&path)?;
+                use rayon::prelude::*;
+                let paths: Vec<_> = aivi::resolve_target(target)?
+                    .into_iter()
+                    .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("aivi"))
+                    .collect();
+                paths.par_iter().try_for_each(|path| -> Result<(), AiviError> {
+                    let content = std::fs::read_to_string(path)?;
                     let formatted = aivi::format_text(&content);
                     if formatted != content {
-                        std::fs::write(&path, formatted)?;
+                        std::fs::write(path, formatted)?;
                     }
-                }
+                    Ok(())
+                })?;
             } else {
                 let formatted = format_target(target)?;
                 print!("{formatted}");
