@@ -43,7 +43,7 @@ export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
 export gtkElement, gtkTextNode, gtkAttr
 export buildFromNode
 export signalPoll, signalEmit
-export widgetById, widgetSetBoolProperty, signalBindBoolProperty, signalBindCssClass
+export widgetById, widgetSetBoolProperty, signalBindBoolProperty, signalBindCssClass, signalBindToggleBoolProperty, signalToggleCssClass
 
 use aivi
 
@@ -112,6 +112,12 @@ signalBindBoolProperty = gtk4.signalBindBoolProperty
 
 signalBindCssClass : Text -> WidgetId -> Text -> Bool -> Effect GtkError Unit
 signalBindCssClass = gtk4.signalBindCssClass
+
+signalBindToggleBoolProperty : Text -> WidgetId -> Text -> Effect GtkError Unit
+signalBindToggleBoolProperty = gtk4.signalBindToggleBoolProperty
+
+signalToggleCssClass : Text -> WidgetId -> Text -> Effect GtkError Unit
+signalToggleCssClass = gtk4.signalToggleCssClass
 
 init : Unit -> Effect GtkError Unit
 init = gtk4.init
