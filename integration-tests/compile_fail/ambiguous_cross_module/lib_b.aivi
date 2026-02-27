@@ -1,0 +1,4 @@
+module testImports.libB
+
+export process : Int -> Int
+export process = x => x * 2
