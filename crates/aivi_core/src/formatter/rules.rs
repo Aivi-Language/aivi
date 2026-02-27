@@ -1479,57 +1479,6 @@
             tokens_by_line = split_tokens_by_line;
         }
 
-        // For K&R brace style, split plain assignment openers (`name = {` / `name = [`) onto
-        // a separate line so the record/list body is indented under the `=`.  The K&R merge
-        // below no longer re-merges `{`/`[` after plain `=`, so they stay as Allman.
-        // This also applies to `machine Foo = {` definitions.
-        if matches!(options.brace_style, BraceStyle::Kr) {
-            let mut split_raw_lines: Vec<&str> = Vec::with_capacity(raw_lines.len() + 16);
-            let mut split_tokens_by_line: Vec<Vec<&crate::cst::CstToken>> =
-                Vec::with_capacity(tokens_by_line.len() + 16);
-
-            for (line_index, raw) in raw_lines.iter().enumerate() {
-                let mut line_tokens = tokens_by_line[line_index].clone();
-                let has_comment = line_tokens.iter().any(|t| t.kind == "comment");
-                if !has_comment {
-                    let last_is_opener = last_code_token_is(&line_tokens, &["{", "["]);
-                    let second_last_is_eq = {
-                        let mut code_iter = line_tokens
-                            .iter()
-                            .rev()
-                            .filter(|t| t.kind != "whitespace" && t.kind != "comment" && t.text != "\n");
-                        code_iter.next(); // skip the last (opener)
-                        code_iter.next().is_some_and(|t| t.text == "=")
-                    };
-                    // Only split when there is no `do` keyword between `=` and `{`/`[`
-                    // (otherwise it's a `do Effect {` block, which should stay as K&R).
-                    // Also skip `class` and `instance` declarations: the parser requires
-                    // `{` to appear on the same line as `=` for their bodies.
-                    let has_do = line_tokens.iter().any(|t| t.text == "do");
-                    let first_code = line_tokens
-                        .iter()
-                        .find(|t| t.kind != "whitespace" && t.kind != "comment")
-                        .map(|t| t.text.as_str())
-                        .unwrap_or("");
-                    let is_class_or_instance =
-                        first_code == "class" || first_code == "instance";
-                    if last_is_opener && second_last_is_eq && !has_do && !is_class_or_instance {
-                        let opener = line_tokens.pop().expect("opener token");
-                        split_raw_lines.push(*raw);
-                        split_tokens_by_line.push(line_tokens);
-                        split_raw_lines.push("");
-                        split_tokens_by_line.push(vec![opener]);
-                        continue;
-                    }
-                }
-                split_raw_lines.push(*raw);
-                split_tokens_by_line.push(line_tokens);
-            }
-
-            raw_lines = split_raw_lines;
-            tokens_by_line = split_tokens_by_line;
-        }
-
         let mut merged_raw_lines: Vec<&str> = Vec::with_capacity(raw_lines.len());
         let mut merged_tokens_by_line: Vec<Vec<&crate::cst::CstToken>> =
             Vec::with_capacity(tokens_by_line.len());
@@ -2528,7 +2477,16 @@
                     }
                     if let Some(last) = last_code_token(&state.tokens) {
                         if let Some(open) = is_open_sym(&last) {
-                            hang_delim_stack.push((open, prev_effective_indent_len));
+                            // Arm bodies (match arm `|` lines) need the block content indented
+                            // one extra level relative to the arm itself.  Push the hang opener
+                            // at arm_indent + indent_size so the body lands at +2*indent_size
+                            // and the closing `}` aligns at arm_indent + indent_size.
+                            let hang_indent = if open == '{' {
+                                prev_effective_indent_len + indent_size
+                            } else {
+                                prev_effective_indent_len
+                            };
+                            hang_delim_stack.push((open, hang_indent));
                         }
                     }
                     if let Some(else_idx) =
@@ -2538,7 +2496,6 @@
                             let else_inline = state.tokens.iter().skip(else_idx + 1).any(|t| {
                                 t.kind != "comment" && t.text != "\n"
                             });
-                            if_stack[idx].phase = IfPhase::Else;
                             if_stack[idx].active_indent = !else_inline;
                         }
                     }
@@ -2815,7 +2772,14 @@
         }
         if let Some(last) = last_code_token(&state.tokens) {
             if let Some(open) = is_open_sym(&last) {
-                hang_delim_stack.push((open, prev_effective_indent_len));
+                // For match arm lines ending with `{`, indent the hang opener one extra level
+                // so the block body is at arm_indent + 2*indent_size and `}` at arm_indent + indent_size.
+                let hang_indent = if is_arm_line && open == '{' {
+                    prev_effective_indent_len + indent_size
+                } else {
+                    prev_effective_indent_len
+                };
+                hang_delim_stack.push((open, hang_indent));
             }
         }
         if let Some(else_idx) = find_top_level_token_clamped(&state.tokens, "else", first_idx) {

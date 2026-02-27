@@ -38,9 +38,9 @@ bfsLevels = residual source sink => {
 bfsVisit = residual source sink q levels => (Queue.dequeue q) match
   | None               => levels
   | Some (current, q2) => {
-    levelCurrent = Map.getOrElse current (-1) levels
-    neighbors = edgesFrom residual.graph current
-    (q3, levels3) = List.foldl ((q0, lvls) edge => {
+      levelCurrent = Map.getOrElse current (-1) levels
+      neighbors = edgesFrom residual.graph current
+      (q3, levels3) = List.foldl ((q0, lvls) edge => {
         next = edge.to
         cap = getCap current next residual.capacities
         isVisited = next == source || Map.has next lvls
@@ -48,9 +48,9 @@ bfsVisit = residual source sink q levels => (Queue.dequeue q) match
           (Queue.enqueue next q0, Map.insert next (levelCurrent + 1) lvls)
         else
           (q0, lvls)
-    }) (q2, levels) neighbors
+      }) (q2, levels) neighbors
           bfsVisit residual source sink q3 levels3
-  }
+    }
 
 // Push flow along an edge, updating forward and backward caps
 pushFlow = residual from to delta => {
@@ -73,17 +73,17 @@ dfsFlow = residual levels node sink flow =>
 dfsExplore = residual levels node sink flow edges => edges match
   | []              => (0, residual)
   | [edge, ...tail] => {
-    cap = getCap node edge.to residual.capacities
-    levelNode = Map.getOrElse node (-1) levels
-    levelNext = Map.getOrElse edge.to (-1) levels
-    if cap > 0 && levelNext == levelNode + 1 then {
-      available = if flow < cap then flow else cap
-      (pushed, after) = dfsFlow residual levels edge.to sink available
-      if pushed > 0 then (pushed, pushFlow after node edge.to pushed)
-      else dfsExplore after levels node sink flow tail
+      cap = getCap node edge.to residual.capacities
+      levelNode = Map.getOrElse node (-1) levels
+      levelNext = Map.getOrElse edge.to (-1) levels
+      if cap > 0 && levelNext == levelNode + 1 then {
+        available = if flow < cap then flow else cap
+        (pushed, after) = dfsFlow residual levels edge.to sink available
+        if pushed > 0 then (pushed, pushFlow after node edge.to pushed)
+        else dfsExplore after levels node sink flow tail
+      }
+      else dfsExplore residual levels node sink flow tail
     }
-    else dfsExplore residual levels node sink flow tail
-  }
 
 // Find blocking flow using repeated DFS
 blockingFlow = residual source sink levels acc => {

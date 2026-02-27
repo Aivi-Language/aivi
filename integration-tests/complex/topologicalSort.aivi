@@ -40,13 +40,13 @@ cycleNodes = nodes indeg =>
 
 sortLoop = graph indeg q outRev => (Queue.dequeue q) match
   | None => {
-    out = reverseList outRev
-    if List.length out == List.length graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg)
-  }
+      out = reverseList outRev
+      if List.length out == List.length graph.nodes then Ok out else Err (cycleNodes graph.nodes indeg)
+    }
   | Some (node, q2) => {
-    res = relax (neighbors node graph) indeg q2
-    sortLoop graph res.indeg res.q [node, ...outRev]
-  }
+      res = relax (neighbors node graph) indeg q2
+      sortLoop graph res.indeg res.q [node, ...outRev]
+    }
 
 topologicalSort : Graph -> Result (List Int) (List Int)
 topologicalSort = graph => {

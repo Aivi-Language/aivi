@@ -36,37 +36,37 @@ combineMeta = leftMeta rightMeta => (leftMeta, rightMeta) match
   | (Some lm, None)    => Some lm
   | (None, Some rm)    => Some rm
   | (Some lm, Some rm) => Some {
-    sum: lm.sum + rm.sum
-    min: minInt lm.min rm.min
-    max: maxInt lm.max rm.max
-  }
+      sum: lm.sum + rm.sum
+      min: minInt lm.min rm.min
+      max: maxInt lm.max rm.max
+    }
 
 // Rebuild node from children
 nodeFromChildren = start end left right => combineMeta (nodeMeta left) (nodeMeta right) match
   | None   => Empty
   | Some m => Node {
-    start: start
-    end: end
-    sum: m.sum
-    min: m.min
-    max: m.max
-    left: left
-    right: right
-  }
+      start: start
+      end: end
+      sum: m.sum
+      min: m.min
+      max: m.max
+      left: left
+      right: right
+    }
 
 // Build tree from a range of the array
 buildRange = arr start end =>
   if start == end then
     List.at start arr match
       | Some value => Node {
-        start: start
-        end: end
-        sum: value
-        min: value
-        max: value
-        left: Empty
-        right: Empty
-      }
+          start: start
+          end: end
+          sum: value
+          min: value
+          max: value
+          left: Empty
+          right: Empty
+        }
       | None => Empty
   else {
     mid = (start + end) / 2
@@ -96,19 +96,19 @@ updatePoint = tree idx value => tree match
   | Empty                                             => Empty
   | Node { start, end } when idx < start || idx > end => tree
   | Node { start, end } when start == end             => Node {
-    start: start
-    end: end
-    sum: value
-    min: value
-    max: value
-    left: Empty
-    right: Empty
-  }
+      start: start
+      end: end
+      sum: value
+      min: value
+      max: value
+      left: Empty
+      right: Empty
+    }
   | Node { start, end, left, right } => {
-    newLeft = updatePoint left idx value
-    newRight = updatePoint right idx value
-    nodeFromChildren start end newLeft newRight
-  }
+      newLeft = updatePoint left idx value
+      newRight = updatePoint right idx value
+      nodeFromChildren start end newLeft newRight
+    }
 
 @test "Persistent segment tree queries"
 persistency = do Effect {
