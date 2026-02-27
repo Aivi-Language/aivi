@@ -1,0 +1,7 @@
+// EXPECT-WARN: W2102
+@no_prelude
+module integrationTests.compileFail.duplicateSelectiveImport
+
+use aivi.list (filter)
+use aivi.list (filter)
+use aivi

@@ -1,0 +1,7 @@
+// EXPECT-WARN: W2102
+@no_prelude
+module integrationTests.compileFail.redundantSelectiveAfterWildcard
+
+use aivi.list
+use aivi.list (filter)
+use aivi

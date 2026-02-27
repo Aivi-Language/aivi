@@ -1,0 +1,4 @@
+module testImports.libA
+
+export process : Int -> Int
+export process = x => x + 1

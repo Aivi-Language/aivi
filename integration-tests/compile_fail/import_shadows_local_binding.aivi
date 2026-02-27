@@ -1,0 +1,9 @@
+// EXPECT-WARN: W2103
+@no_prelude
+module integrationTests.compileFail.importShadowsLocalBinding
+
+use aivi
+use aivi.list (myMapper)
+
+myMapper : List Int -> List Int
+myMapper = xs => xs

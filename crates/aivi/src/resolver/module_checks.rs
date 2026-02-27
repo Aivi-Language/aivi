@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::diagnostics::{Diagnostic, DiagnosticSeverity, FileDiagnostic};
 use crate::surface::{
-    BlockItem, Decorator, Def, DomainItem, Expr, Literal, Module, ModuleItem, Pattern, TextPart,
-    TypeAlias, TypeDecl, TypeExpr, TypeSig,
+    BlockItem, Decorator, Def, DomainItem, Expr, Literal, Module, ModuleItem, Pattern,
+    ScopeItemKind, TextPart, TypeAlias, TypeDecl, TypeExpr, TypeSig,
 };
 
 pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
@@ -32,6 +32,7 @@ pub fn check_modules(modules: &[Module]) -> Vec<FileDiagnostic> {
         check_uses(module, &module_map, &mut diagnostics);
         check_defs(module, &module_map, &mut diagnostics);
         check_unused_imports_and_bindings(module, &mut diagnostics);
+        check_import_conflicts(module, &mut diagnostics);
     }
 
     let cycle_nodes = detect_cycles(&module_map);
@@ -710,4 +711,123 @@ fn check_def(
         module,
         allow_unknown,
     );
+}
+
+/// Detect import ambiguity and redundancy within a single module:
+///
+/// - **E2005**: same unqualified name selectively imported from two *different* modules
+///   (without renaming) → the reference would be ambiguous at the call site.
+/// - **W2102**: same name imported selectively more than once from the *same* module,
+///   or selectively imported when a wildcard import of the same module already covers it.
+/// - **W2103**: a selective import name clashes with a top-level binding defined in this
+///   module itself — the local definition shadows the imported one.
+fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>) {
+    if module.path.starts_with("<embedded:") {
+        return;
+    }
+
+    // Collect local top-level binding names (values only; constructors are distinct).
+    let local_defs: HashSet<&str> = module
+        .items
+        .iter()
+        .filter_map(|item| {
+            if let ModuleItem::Def(def) = item {
+                Some(def.name.name.as_str())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // First pass: record which modules are wildcard-imported.
+    let mut wildcard_modules: HashSet<&str> = HashSet::new();
+    for use_decl in &module.uses {
+        if use_decl.wildcard {
+            wildcard_modules.insert(use_decl.module.name.as_str());
+        }
+    }
+
+    // Second pass: check each selective import for conflicts.
+    // Maps unqualified imported name → source module name (first occurrence wins).
+    let mut seen: HashMap<&str, &str> = HashMap::new();
+
+    for use_decl in &module.uses {
+        if use_decl.wildcard {
+            continue;
+        }
+        let source = use_decl.module.name.as_str();
+        for item in &use_decl.items {
+            if item.kind == ScopeItemKind::Domain {
+                // Domain imports activate operators; name conflicts don't apply.
+                continue;
+            }
+            let name = item.name.name.as_str();
+
+            // Selective import covered by a wildcard of the same module.
+            if wildcard_modules.contains(source) {
+                diagnostics.push(file_diag(
+                    module,
+                    Diagnostic {
+                        code: "W2102".to_string(),
+                        severity: DiagnosticSeverity::Warning,
+                        message: format!(
+                            "redundant import '{name}': already in scope via wildcard import of '{source}'"
+                        ),
+                        span: item.name.span.clone(),
+                        labels: Vec::new(),
+                    },
+                ));
+                continue;
+            }
+
+            if let Some(&prev_source) = seen.get(name) {
+                if prev_source != source {
+                    // Same name from two different modules → ambiguous.
+                    diagnostics.push(file_diag(
+                        module,
+                        Diagnostic {
+                            code: "E2005".to_string(),
+                            severity: DiagnosticSeverity::Error,
+                            message: format!(
+                                "ambiguous import '{name}': imported from '{prev_source}' and '{source}'"
+                            ),
+                            span: item.name.span.clone(),
+                            labels: Vec::new(),
+                        },
+                    ));
+                } else {
+                    // Same name from the same module twice → redundant.
+                    diagnostics.push(file_diag(
+                        module,
+                        Diagnostic {
+                            code: "W2102".to_string(),
+                            severity: DiagnosticSeverity::Warning,
+                            message: format!(
+                                "redundant import '{name}': already imported from '{source}'"
+                            ),
+                            span: item.name.span.clone(),
+                            labels: Vec::new(),
+                        },
+                    ));
+                }
+            } else {
+                // First occurrence of this name — check for clash with a local binding.
+                if local_defs.contains(name) {
+                    diagnostics.push(file_diag(
+                        module,
+                        Diagnostic {
+                            code: "W2103".to_string(),
+                            severity: DiagnosticSeverity::Warning,
+                            message: format!(
+                                "import '{name}' shadows local definition '{name}' in this module"
+                            ),
+                            span: item.name.span.clone(),
+                            labels: Vec::new(),
+                        },
+                    ));
+                }
+                seen.insert(name, source);
+            }
+        }
+    }
 }
