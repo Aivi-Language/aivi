@@ -14,8 +14,8 @@ use crate::cg_type::CgType;
 use crate::hir::HirProgram;
 use crate::runtime::values::Value;
 use crate::runtime::{
-    build_runtime_from_program, build_runtime_from_program_with_cancel, run_main_effect,
-    register_machines_for_jit, CancelToken, Runtime, RuntimeError,
+    build_runtime_from_program, build_runtime_from_program_with_cancel, register_machines_for_jit,
+    run_main_effect, CancelToken, Runtime, RuntimeError,
 };
 use crate::rust_ir::{
     RustIrBlockItem, RustIrBlockKind, RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment,
