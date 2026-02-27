@@ -129,6 +129,10 @@ mod linux {
         fn gtk_icon_theme_add_search_path(icon_theme: *mut c_void, path: *const c_char);
         fn gtk_button_set_child(button: *mut c_void, child: *mut c_void);
 
+        fn gtk_stack_new() -> *mut c_void;
+        fn gtk_stack_add_named(stack: *mut c_void, child: *mut c_void, name: *const c_char);
+        fn gtk_stack_set_visible_child_name(stack: *mut c_void, name: *const c_char);
+
         fn gdk_display_get_default() -> *mut c_void;
     }
 
@@ -252,6 +256,8 @@ mod linux {
         signal_css_bindings: HashMap<String, Vec<SignalCssBinding>>,
         signal_toggle_bool_bindings: HashMap<String, Vec<SignalToggleBoolBinding>>,
         signal_toggle_css_bindings: HashMap<String, Vec<SignalToggleCssBinding>>,
+        signal_dialog_bindings: HashMap<String, Vec<SignalDialogBinding>>,
+        signal_stack_page_bindings: HashMap<String, Vec<SignalStackPageBinding>>,
         named_widgets: HashMap<String, i64>,
         tray_handles: HashMap<i64, Arc<Mutex<SniTrayState>>>,
         resources_registered: bool,
@@ -277,6 +283,16 @@ mod linux {
     struct SignalToggleCssBinding {
         widget_id: i64,
         class_name: String,
+    }
+
+    struct SignalDialogBinding {
+        dialog_id: i64,
+        parent_id: i64,
+    }
+
+    struct SignalStackPageBinding {
+        stack_id: i64,
+        page_name: String,
     }
 
     struct SniTrayState {
@@ -602,6 +618,7 @@ mod linux {
         Overlay,
         ListBox,
         SplitView,
+        Stack,
         Other,
     }
 
@@ -1326,6 +1343,7 @@ mod linux {
                 }
             }
             "GtkListBox" => (unsafe { gtk_list_box_new() }, CreatedWidgetKind::ListBox),
+            "GtkStack" => (unsafe { gtk_stack_new() }, CreatedWidgetKind::Stack),
             "AdwOverlaySplitView" => (create_adw_widget(class_name)?, CreatedWidgetKind::SplitView),
             "AdwAboutDialog"
             | "AdwAboutWindow"
@@ -1531,6 +1549,12 @@ mod linux {
                     }
                 }
                 CreatedWidgetKind::ListBox => unsafe { gtk_list_box_append(raw, child_raw) },
+                CreatedWidgetKind::Stack => {
+                    let page_name = child.child_type.as_deref().unwrap_or("page");
+                    if let Ok(name_c) = CString::new(page_name) {
+                        unsafe { gtk_stack_add_named(raw, child_raw, name_c.as_ptr()) };
+                    }
+                }
                 CreatedWidgetKind::SplitView => {
                     let prop_name = match child.child_type.as_deref() {
                         Some("sidebar") => "sidebar",
@@ -1574,6 +1598,42 @@ mod linux {
             if !init_ptr.is_null() {
                 let init: unsafe extern "C" fn() = unsafe { std::mem::transmute(init_ptr) };
                 unsafe { init() };
+            }
+            let _ = unsafe { dlclose(handle) };
+            break;
+        }
+    }
+
+    fn call_adw_fn_pp(fn_name: &str, arg0: *mut c_void, arg1: *mut c_void) {
+        const RTLD_NOW: c_int = 2;
+        const RTLD_NODELETE: c_int = 0x1000;
+        for lib_name in ["libadwaita-1.so.0", "libadwaita-1.so"] {
+            let Ok(name) = CString::new(lib_name) else { continue; };
+            let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW | RTLD_NODELETE) };
+            if handle.is_null() { continue; }
+            let Ok(sym) = CString::new(fn_name) else { break; };
+            let ptr = unsafe { dlsym(handle, sym.as_ptr()) };
+            if !ptr.is_null() {
+                let f: unsafe extern "C" fn(*mut c_void, *mut c_void) = unsafe { std::mem::transmute(ptr) };
+                unsafe { f(arg0, arg1) };
+            }
+            let _ = unsafe { dlclose(handle) };
+            break;
+        }
+    }
+
+    fn call_adw_fn_p(fn_name: &str, arg0: *mut c_void) {
+        const RTLD_NOW: c_int = 2;
+        const RTLD_NODELETE: c_int = 0x1000;
+        for lib_name in ["libadwaita-1.so.0", "libadwaita-1.so"] {
+            let Ok(name) = CString::new(lib_name) else { continue; };
+            let handle = unsafe { dlopen(name.as_ptr(), RTLD_NOW | RTLD_NODELETE) };
+            if handle.is_null() { continue; }
+            let Ok(sym) = CString::new(fn_name) else { break; };
+            let ptr = unsafe { dlsym(handle, sym.as_ptr()) };
+            if !ptr.is_null() {
+                let f: unsafe extern "C" fn(*mut c_void) = unsafe { std::mem::transmute(ptr) };
+                unsafe { f(arg0) };
             }
             let _ = unsafe { dlclose(handle) };
             break;
@@ -1709,6 +1769,26 @@ mod linux {
                                     gtk_widget_add_css_class(widget, class_c.as_ptr());
                                 }
                             }
+                        }
+                    }
+                }
+            }
+            // Apply any registered dialog present bindings
+            if let Some(bindings) = state.signal_dialog_bindings.get(&binding.handler) {
+                let mutations: Vec<_> = bindings.iter().map(|b| (b.dialog_id, b.parent_id)).collect();
+                for (dialog_id, parent_id) in mutations {
+                    if let (Some(&dialog), Some(&parent)) = (state.widgets.get(&dialog_id), state.widgets.get(&parent_id)) {
+                        call_adw_fn_pp("adw_dialog_present", dialog, parent);
+                    }
+                }
+            }
+            // Apply any registered stack page bindings
+            if let Some(bindings) = state.signal_stack_page_bindings.get(&binding.handler) {
+                let mutations: Vec<_> = bindings.iter().map(|b| (b.stack_id, b.page_name.clone())).collect();
+                for (stack_id, page_name) in mutations {
+                    if let Some(&stack) = state.widgets.get(&stack_id) {
+                        if let Ok(page_c) = CString::new(page_name.as_str()) {
+                            unsafe { gtk_stack_set_visible_child_name(stack, page_c.as_ptr()) };
                         }
                     }
                 }
@@ -3809,6 +3889,167 @@ mod linux {
                             .push(SignalToggleCssBinding {
                                 widget_id: target_widget_id,
                                 class_name: class_name.clone(),
+                            });
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "dialogNew".to_string(),
+            builtin("gtk4.dialogNew", 1, |mut args, _| {
+                let _app_id = args.remove(0);
+                Ok(effect(move |_| {
+                    try_adw_init();
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let raw = create_adw_widget_type("AdwDialog")?;
+                        let id = state.alloc_id();
+                        state.widgets.insert(id, raw);
+                        Ok(Value::Int(id))
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "dialogSetTitle".to_string(),
+            builtin("gtk4.dialogSetTitle", 2, |mut args, _| {
+                let title = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.dialogSetTitle expects Text title")),
+                };
+                let dialog_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.dialogSetTitle expects Int dialog id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let dialog = widget_ptr(&state, dialog_id, "dialogSetTitle")?;
+                        let title_c = c_text(&title, "gtk4.dialogSetTitle invalid title")?;
+                        unsafe { g_object_set(dialog, c"title".as_ptr(), title_c.as_ptr(), std::ptr::null::<c_char>()) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "dialogSetChild".to_string(),
+            builtin("gtk4.dialogSetChild", 2, |mut args, _| {
+                let child_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.dialogSetChild expects Int child widget id")),
+                };
+                let dialog_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.dialogSetChild expects Int dialog id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let dialog = widget_ptr(&state, dialog_id, "dialogSetChild")?;
+                        let child = widget_ptr(&state, child_id, "dialogSetChild")?;
+                        unsafe { g_object_set(dialog, c"child".as_ptr(), child, std::ptr::null::<c_char>()) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "dialogPresent".to_string(),
+            builtin("gtk4.dialogPresent", 1, |mut args, _| {
+                let dialog_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.dialogPresent expects Int dialog id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let dialog = widget_ptr(&state, dialog_id, "dialogPresent")?;
+                        call_adw_fn_p("adw_dialog_present", dialog);
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "dialogClose".to_string(),
+            builtin("gtk4.dialogClose", 1, |mut args, _| {
+                let dialog_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.dialogClose expects Int dialog id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let dialog = widget_ptr(&state, dialog_id, "dialogClose")?;
+                        call_adw_fn_p("adw_dialog_close", dialog);
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "signalBindDialogPresent".to_string(),
+            builtin("gtk4.signalBindDialogPresent", 3, |mut args, _| {
+                let parent_id = match args.remove(2) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindDialogPresent expects Int parent window id")),
+                };
+                let dialog_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindDialogPresent expects Int dialog id")),
+                };
+                let handler_name = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindDialogPresent expects Text handler name")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let _ = widget_ptr(&state, dialog_id, "signalBindDialogPresent")?;
+                        let _ = widget_ptr(&state, parent_id, "signalBindDialogPresent")?;
+                        state.signal_dialog_bindings
+                            .entry(handler_name.clone())
+                            .or_default()
+                            .push(SignalDialogBinding { dialog_id, parent_id });
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "signalBindStackPage".to_string(),
+            builtin("gtk4.signalBindStackPage", 3, |mut args, _| {
+                let page_name = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindStackPage expects Text page name")),
+                };
+                let stack_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindStackPage expects Int stack id")),
+                };
+                let handler_name = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindStackPage expects Text handler name")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let _ = widget_ptr(&state, stack_id, "signalBindStackPage")?;
+                        state.signal_stack_page_bindings
+                            .entry(handler_name.clone())
+                            .or_default()
+                            .push(SignalStackPageBinding {
+                                stack_id,
+                                page_name: page_name.clone(),
                             });
                         Ok(Value::Unit)
                     })

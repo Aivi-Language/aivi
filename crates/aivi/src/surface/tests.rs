@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::surface::{lower_modules_to_arena, parse_modules, ArenaExpr, Expr, Literal, ModuleItem};
+use crate::surface::{lower_modules_to_arena, parse_modules, ArenaExpr, Expr, Literal, ModuleItem, PathSegment};
 
 fn diag_codes(diags: &[crate::FileDiagnostic]) -> Vec<String> {
     let mut codes: Vec<String> = diags.iter().map(|d| d.diagnostic.code.clone()).collect();
@@ -1488,4 +1488,39 @@ x = do Effect { _ <- assert True }
         "expected E1510 for @test with non-string argument, got: {:?}",
         diag_codes(&diags)
     );
+}
+
+#[test]
+fn record_expr_shorthand_field() {
+    let src = r#"
+module Example
+
+x = { name, age: 42 }
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "unexpected diagnostics: {:?}", diags);
+    let module = modules.first().expect("module");
+    let def = module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            ModuleItem::Def(def) if def.name.name == "x" => Some(def),
+            _ => None,
+        })
+        .expect("x def");
+
+    let Expr::Record { fields, .. } = &def.expr else {
+        panic!("expected record literal");
+    };
+    assert_eq!(fields.len(), 2);
+
+    // shorthand field: { name } → path = [name], value = Ident("name")
+    assert!(matches!(&fields[0].path[..], [PathSegment::Field(n)] if n.name == "name"));
+    assert!(
+        matches!(&fields[0].value, Expr::Ident(n) if n.name == "name"),
+        "expected shorthand field `name` to produce Ident(name)"
+    );
+
+    // explicit field: { age: 42 }
+    assert!(matches!(&fields[1].path[..], [PathSegment::Field(n)] if n.name == "age"));
 }

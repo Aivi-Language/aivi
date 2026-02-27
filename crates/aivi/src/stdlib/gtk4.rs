@@ -44,6 +44,7 @@ export gtkElement, gtkTextNode, gtkAttr
 export buildFromNode
 export signalPoll, signalEmit
 export widgetById, widgetSetBoolProperty, signalBindBoolProperty, signalBindCssClass, signalBindToggleBoolProperty, signalToggleCssClass
+export signalBindDialogPresent, signalBindStackPage
 
 use aivi
 
@@ -118,6 +119,12 @@ signalBindToggleBoolProperty = gtk4.signalBindToggleBoolProperty
 
 signalToggleCssClass : Text -> WidgetId -> Text -> Effect GtkError Unit
 signalToggleCssClass = gtk4.signalToggleCssClass
+
+signalBindDialogPresent : Text -> DialogId -> WindowId -> Effect GtkError Unit
+signalBindDialogPresent = gtk4.signalBindDialogPresent
+
+signalBindStackPage : Text -> WidgetId -> Text -> Effect GtkError Unit
+signalBindStackPage = gtk4.signalBindStackPage
 
 init : Unit -> Effect GtkError Unit
 init = gtk4.init
