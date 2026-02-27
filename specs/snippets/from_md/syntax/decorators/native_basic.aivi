@@ -1,0 +1,14 @@
+// Single-parameter binding: maps to gtk4.windowPresent at runtime
+@native "gtk4.windowPresent"
+windowPresent : WindowId -> Effect GtkError Unit
+windowPresent = windowId => Unit
+
+// Multi-parameter binding: all arguments are forwarded
+@native "gtk4.windowSetTitle"
+windowSetTitle : WindowId -> Text -> Effect GtkError Unit
+windowSetTitle = winId title => Unit
+
+// Zero-parameter binding: bare field access (no call)
+@native "config.defaultTimeout"
+defaultTimeout : Int
+defaultTimeout = 0
