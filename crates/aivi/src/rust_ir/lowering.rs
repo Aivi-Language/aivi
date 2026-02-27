@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::diagnostics::Span;
 use crate::rust_ir::cg_type::CgType;
 
 use crate::kernel::{
@@ -147,6 +148,8 @@ pub enum RustIrExpr {
         id: u32,
         base: Box<RustIrExpr>,
         index: Box<RustIrExpr>,
+        #[serde(skip)]
+        span: Option<Span>,
     },
     Match {
         id: u32,
@@ -483,10 +486,11 @@ fn lower_expr(
             base: Box::new(lower_expr(*base, globals, locals)?),
             field,
         },
-        KernelExpr::Index { id, base, index } => RustIrExpr::Index {
+        KernelExpr::Index { id, base, index, span } => RustIrExpr::Index {
             id,
             base: Box::new(lower_expr(*base, globals, locals)?),
             index: Box::new(lower_expr(*index, globals, locals)?),
+            span,
         },
         KernelExpr::Match {
             id,

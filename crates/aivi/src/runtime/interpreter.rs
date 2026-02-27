@@ -88,6 +88,9 @@ pub(crate) struct Runtime {
     /// Name of the currently executing JIT-compiled function, set by
     /// `rt_enter_fn` at the start of each compiled function body.
     pub(crate) jit_current_fn: Option<Box<str>>,
+    /// Source location of the most recently instrumented expression, set by
+    /// `rt_set_location` before potentially-failing operations.
+    pub(crate) jit_current_loc: Option<Box<str>>,
 }
 
 #[derive(Clone)]

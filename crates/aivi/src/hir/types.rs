@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::diagnostics::Span;
 use crate::surface::{
     BlockItem, BlockKind, Decorator, Def, DomainItem, Expr, Module, ModuleItem, Pattern, TextPart,
 };
@@ -132,6 +133,8 @@ pub enum HirExpr {
         id: u32,
         base: Box<HirExpr>,
         index: Box<HirExpr>,
+        #[serde(skip)]
+        span: Option<Span>,
     },
     Match {
         id: u32,

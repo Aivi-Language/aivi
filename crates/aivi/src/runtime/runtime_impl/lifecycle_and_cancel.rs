@@ -16,6 +16,7 @@ impl Runtime {
             jit_match_failed: false,
             jit_pending_error: None,
             jit_current_fn: None,
+            jit_current_loc: None,
         }
     }
 

@@ -23,15 +23,21 @@ const RT_BOLD: &str = "\x1b[1m";
 
 /// Print a formatted runtime warning to stderr.
 fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
-    let fn_ctx = unsafe {
-        (*ctx)
-            .runtime_mut()
+    let (fn_ctx, loc_ctx) = unsafe {
+        let runtime = (*ctx).runtime_mut();
+        let fn_part = runtime
             .jit_current_fn
             .as_deref()
             .map(|s| format!(" {RT_GRAY}in `{s}`{RT_RESET}"))
-            .unwrap_or_default()
+            .unwrap_or_default();
+        let loc_part = runtime
+            .jit_current_loc
+            .as_deref()
+            .map(|s| format!(" {RT_GRAY}at {s}{RT_RESET}"))
+            .unwrap_or_default();
+        (fn_part, loc_part)
     };
-    eprintln!("{RT_YELLOW}warning[RT]{RT_RESET}{fn_ctx} {RT_BOLD}{category}{RT_RESET}: {message}");
+    eprintln!("{RT_YELLOW}warning[RT]{RT_RESET}{fn_ctx}{loc_ctx} {RT_BOLD}{category}{RT_RESET}: {message}");
     if !hint.is_empty() {
         eprintln!("  {RT_CYAN}hint{RT_RESET}: {hint}");
     }
@@ -60,6 +66,18 @@ pub extern "C" fn rt_enter_fn(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usiz
     };
     let runtime = unsafe { (*ctx).runtime_mut() };
     runtime.jit_current_fn = Some(name.into());
+}
+
+/// Called before potentially-failing operations to record the source location.
+/// This makes subsequent runtime warnings show the source location (line:col).
+#[no_mangle]
+pub extern "C" fn rt_set_location(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usize) {
+    let loc = unsafe {
+        let bytes = std::slice::from_raw_parts(ptr, len);
+        std::str::from_utf8_unchecked(bytes)
+    };
+    let runtime = unsafe { (*ctx).runtime_mut() };
+    runtime.jit_current_loc = Some(loc.into());
 }
 
 // ---------------------------------------------------------------------------
