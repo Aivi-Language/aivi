@@ -38,6 +38,7 @@ mod linux {
         fn gtk_widget_remove_css_class(widget: *mut c_void, css_class: *const c_char);
         fn gtk_widget_has_css_class(widget: *mut c_void, css_class: *const c_char) -> c_int;
         fn gtk_widget_set_tooltip_text(widget: *mut c_void, text: *const c_char);
+        fn gtk_widget_set_name(widget: *mut c_void, name: *const c_char);
         fn gtk_widget_queue_draw(widget: *mut c_void);
         fn gtk_widget_set_opacity(widget: *mut c_void, opacity: f64);
 
@@ -1415,6 +1416,10 @@ mod linux {
         let id = state.alloc_id();
         if let Some(object_id) = node_attr(attrs, "id") {
             id_map.insert(object_id.to_string(), id);
+            // Set the GTK widget name so AT-SPI can discover it
+            if let Ok(name_c) = CString::new(object_id.as_bytes()) {
+                unsafe { gtk_widget_set_name(raw, name_c.as_ptr()) };
+            }
         }
         state.widgets.insert(id, raw);
         match class_name {
