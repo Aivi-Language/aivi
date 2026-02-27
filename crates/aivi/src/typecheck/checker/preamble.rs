@@ -14,6 +14,7 @@ use super::types::{
 use super::{constraints::ConstraintState, query_engine::TypeQueryCache};
 use super::{ClassDeclInfo, InstanceDeclInfo};
 
+#[derive(Clone)]
 pub(super) struct TypeChecker {
     next_var: u32,
     subst: HashMap<TypeVarId, Type>,
