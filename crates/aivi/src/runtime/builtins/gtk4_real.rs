@@ -245,6 +245,7 @@ mod linux {
         gesture_clicks: HashMap<i64, GestureClickState>,
         signal_events: VecDeque<SignalEventState>,
         signal_bool_bindings: HashMap<String, Vec<SignalBoolBinding>>,
+        signal_css_bindings: HashMap<String, Vec<SignalCssBinding>>,
         named_widgets: HashMap<String, i64>,
         tray_handles: HashMap<i64, Arc<Mutex<SniTrayState>>>,
         resources_registered: bool,
@@ -254,6 +255,12 @@ mod linux {
         widget_id: i64,
         property: String,
         value: bool,
+    }
+
+    struct SignalCssBinding {
+        widget_id: i64,
+        class_name: String,
+        add: bool,
     }
 
     struct SniTrayState {
@@ -1621,6 +1628,26 @@ mod linux {
                         if let Ok(prop_c) = CString::new(prop.as_str()) {
                             unsafe {
                                 g_object_set(widget, prop_c.as_ptr(), v, std::ptr::null::<c_char>());
+                            }
+                        }
+                    }
+                }
+            }
+            // Apply any registered CSS class bindings for this handler
+            if let Some(bindings) = state.signal_css_bindings.get(&binding.handler) {
+                let mutations: Vec<_> = bindings
+                    .iter()
+                    .map(|b| (b.widget_id, b.class_name.clone(), b.add))
+                    .collect();
+                for (wid, class_name, add) in mutations {
+                    if let Some(&widget) = state.widgets.get(&wid) {
+                        if let Ok(class_c) = CString::new(class_name.as_str()) {
+                            unsafe {
+                                if add {
+                                    gtk_widget_add_css_class(widget, class_c.as_ptr());
+                                } else {
+                                    gtk_widget_remove_css_class(widget, class_c.as_ptr());
+                                }
                             }
                         }
                     }
@@ -3599,6 +3626,43 @@ mod linux {
                                 widget_id: target_widget_id,
                                 property: prop_name.clone(),
                                 value,
+                            });
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "signalBindCssClass".to_string(),
+            builtin("gtk4.signalBindCssClass", 4, |mut args, _| {
+                let add = match args.remove(3) {
+                    Value::Bool(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindCssClass expects Bool add")),
+                };
+                let class_name = match args.remove(2) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindCssClass expects Text class name")),
+                };
+                let target_widget_id = match args.remove(1) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindCssClass expects Int target widget id")),
+                };
+                let handler_name = match args.remove(0) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.signalBindCssClass expects Text handler name")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let _ = widget_ptr(&state, target_widget_id, "signalBindCssClass")?;
+                        state.signal_css_bindings
+                            .entry(handler_name.clone())
+                            .or_default()
+                            .push(SignalCssBinding {
+                                widget_id: target_widget_id,
+                                class_name: class_name.clone(),
+                                add,
                             });
                         Ok(Value::Unit)
                     })
