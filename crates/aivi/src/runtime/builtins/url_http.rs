@@ -224,7 +224,7 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                         None => Vec::new(),
                     };
                     let body = match record.get("body") {
-                        Some(value) => text_option_from_value(value.clone(), "http.fetch")?,
+                        Some(value) => body_option_from_value(value.clone(), "http.fetch")?,
                         None => None,
                     };
                     let timeout_ms = optional_int_field(&record, "timeoutMs")?;
@@ -467,13 +467,25 @@ fn headers_to_value(entries: Vec<(String, String)>) -> Value {
     Value::List(Arc::new(list))
 }
 
-fn text_option_from_value(value: Value, ctx: &str) -> Result<Option<String>, RuntimeError> {
+fn body_option_from_value(value: Value, ctx: &str) -> Result<Option<String>, RuntimeError> {
     match value {
         Value::Constructor { name, args } if name == "Some" && args.len() == 1 => {
-            Ok(Some(expect_text(args[0].clone(), ctx)?))
+            match &args[0] {
+                Value::Constructor { name, args } if name == "Plain" && args.len() == 1 => {
+                    Ok(Some(expect_text(args[0].clone(), ctx)?))
+                }
+                Value::Constructor { name, args } if name == "Form" && args.len() == 1 => {
+                    let pairs = headers_from_value(&args[0], ctx)?;
+                    let encoded = url::form_urlencoded::Serializer::new(String::new())
+                        .extend_pairs(pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+                        .finish();
+                    Ok(Some(encoded))
+                }
+                _ => Err(RuntimeError::Message(format!("{ctx} expects body Option Body (Plain Text or Form)"))),
+            }
         }
         Value::Constructor { name, args } if name == "None" && args.is_empty() => Ok(None),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Option Text"))),
+        _ => Err(RuntimeError::Message(format!("{ctx} expects body Option Body"))),
     }
 }
 

@@ -105,17 +105,50 @@ fn format_parallel(content: &str, options: FormatOptions) -> String {
 /// declarations.  Consecutive blank lines at depth 0 are collapsed into segment
 /// boundaries; the blank lines themselves are not included in any segment.
 fn split_top_level_segments(content: &str) -> Vec<&str> {
+    /// Return the portion of `line` before any `//` line comment, respecting strings.
+    fn strip_line_comment(line: &str, already_in_string: bool) -> &str {
+        let mut in_str = already_in_string;
+        let mut escape = false;
+        let bytes = line.as_bytes();
+        for i in 0..bytes.len() {
+            let ch = bytes[i];
+            if escape {
+                escape = false;
+                continue;
+            }
+            if ch == b'\\' && in_str {
+                escape = true;
+                continue;
+            }
+            if in_str {
+                if ch == b'"' {
+                    in_str = false;
+                }
+                continue;
+            }
+            if ch == b'"' {
+                in_str = true;
+                continue;
+            }
+            if ch == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
+                return &line[..i];
+            }
+        }
+        line
+    }
+
     let lines: Vec<&str> = content.split('\n').collect();
     let mut depth: i32 = 0;
     let mut in_string = false;
-    let mut string_delim = '"';
     let mut escape_next = false;
 
     // For each line, track the delimiter depth at the END of that line.
     // A blank line at depth 0 is a valid split point.
     let mut line_end_depths: Vec<i32> = Vec::with_capacity(lines.len());
     for line in &lines {
-        for ch in line.chars() {
+        // Strip line comments before scanning delimiters.
+        let effective = strip_line_comment(line, in_string);
+        for ch in effective.chars() {
             if escape_next {
                 escape_next = false;
                 continue;
@@ -125,15 +158,14 @@ fn split_top_level_segments(content: &str) -> Vec<&str> {
                 continue;
             }
             if in_string {
-                if ch == string_delim {
+                if ch == '"' {
                     in_string = false;
                 }
                 continue;
             }
             match ch {
-                '"' | '\'' => {
+                '"' => {
                     in_string = true;
-                    string_delim = ch;
                 }
                 '{' | '[' | '(' => depth += 1,
                 '}' | ']' | ')' => depth = (depth - 1).max(0),
@@ -169,24 +201,44 @@ fn split_top_level_segments(content: &str) -> Vec<&str> {
                 .map(|l| line_end_depths[l] == 0)
                 .unwrap_or(true);
 
-            if at_depth_0 && last_non_blank_line.is_some() {
-                // End the current segment at the end of the last non-blank line.
-                let end_line = last_non_blank_line.unwrap();
-                let end_byte = line_byte_starts[end_line] + lines[end_line].len();
-                let seg = &content[seg_start_byte..end_byte.min(content.len())];
-                if !seg.trim().is_empty() {
-                    segments.push(seg);
+            if at_depth_0 {
+                if let Some(prev_line) = last_non_blank_line {
+                    // Don't split between consecutive `use` groups — the post-render
+                    // pass needs to see them together to manage inter-group blank lines.
+                    let prev_is_use = lines[prev_line].trim_start().starts_with("use ");
+                    let next_non_blank = lines[i + 1..].iter().find(|l| !l.trim().is_empty());
+                    let next_is_use = next_non_blank
+                        .map(|l| l.trim_start().starts_with("use "))
+                        .unwrap_or(false);
+                    let between_uses = prev_is_use && next_is_use;
+
+                    // Only split when the previous non-blank line starts at column 0
+                    // (no leading whitespace).  Indented lines may be continuations of
+                    // the preceding definition whose formatting depends on state from
+                    // earlier lines (e.g. `rhs_block_base_indent` after `=`).
+                    let prev_trimmed = lines[prev_line].trim_start();
+                    let prev_at_col0 =
+                        !prev_trimmed.is_empty() && prev_trimmed.len() == lines[prev_line].len();
+
+                    if !between_uses && prev_at_col0 {
+                        // End the current segment at the end of the last non-blank line.
+                        let end_byte = line_byte_starts[prev_line] + lines[prev_line].len();
+                        let seg = &content[seg_start_byte..end_byte.min(content.len())];
+                        if !seg.trim().is_empty() {
+                            segments.push(seg);
+                        }
+                        // Skip all consecutive blank lines.
+                        while i < lines.len() && lines[i].trim().is_empty() {
+                            i += 1;
+                        }
+                        seg_start_byte = if i < lines.len() {
+                            line_byte_starts[i]
+                        } else {
+                            content.len()
+                        };
+                        continue;
+                    }
                 }
-                // Skip all consecutive blank lines.
-                while i < lines.len() && lines[i].trim().is_empty() {
-                    i += 1;
-                }
-                seg_start_byte = if i < lines.len() {
-                    line_byte_starts[i]
-                } else {
-                    content.len()
-                };
-                continue;
             }
         } else {
             last_non_blank_line = Some(i);
