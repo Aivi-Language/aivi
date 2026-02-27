@@ -15,7 +15,6 @@ use super::abi::{self, JitRuntimeCtx};
 // ANSI color helpers for runtime error reporting
 // ---------------------------------------------------------------------------
 
-const RT_RED: &str = "\x1b[1;31m";
 const RT_YELLOW: &str = "\x1b[1;33m";
 const RT_CYAN: &str = "\x1b[1;36m";
 const RT_GRAY: &str = "\x1b[90m";
