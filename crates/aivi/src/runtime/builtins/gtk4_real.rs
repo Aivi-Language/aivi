@@ -4058,7 +4058,7 @@ mod linux {
                         let state = state.borrow();
                         let dialog = widget_ptr(&state, dialog_id, "dialogSetChild")?;
                         let child = widget_ptr(&state, child_id, "dialogSetChild")?;
-                        unsafe { g_object_set(dialog, c"child".as_ptr(), child, std::ptr::null::<c_char>()) };
+                        call_adw_fn_pp("adw_dialog_set_child", dialog, child);
                         Ok(Value::Unit)
                     })
                 }))
