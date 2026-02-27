@@ -130,6 +130,9 @@ fn build_gtk4_stubs() -> Value {
         ("osShowInFileManager", 1),
         ("osSetBadgeCount", 2),
         ("osThemePreference", 1),
+        ("widgetById", 1),
+        ("signalBindBoolProperty", 4),
+        ("signalBindCssClass", 4),
     ];
 
     let mut fields = HashMap::new();
