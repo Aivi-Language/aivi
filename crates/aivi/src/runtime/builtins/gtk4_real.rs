@@ -22,7 +22,10 @@ mod linux {
         fn gtk_window_set_title(window: *mut c_void, title: *const c_char);
         fn gtk_window_set_default_size(window: *mut c_void, width: c_int, height: c_int);
         fn gtk_window_set_titlebar(window: *mut c_void, titlebar: *mut c_void);
+        fn gtk_window_new() -> *mut c_void;
         fn gtk_window_set_child(window: *mut c_void, child: *mut c_void);
+        fn gtk_window_set_modal(window: *mut c_void, modal: c_int);
+        fn gtk_window_set_transient_for(window: *mut c_void, parent: *mut c_void);
         fn gtk_window_present(window: *mut c_void);
         fn gtk_window_close(window: *mut c_void);
 
@@ -4036,12 +4039,18 @@ mod linux {
             builtin("gtk4.dialogNew", 1, |mut args, _| {
                 let _app_id = args.remove(0);
                 Ok(effect(move |_| {
-                    try_adw_init();
                     GTK_STATE.with(|state| {
                         let mut state = state.borrow_mut();
-                        let raw = create_adw_widget_type("AdwDialog")?;
+                        let window = unsafe { gtk_window_new() };
+                        if window.is_null() {
+                            return Err(RuntimeError::Error(Value::Text(
+                                "gtk4.dialogNew failed to create window".to_string(),
+                            )));
+                        }
+                        unsafe { gtk_window_set_modal(window, 1) };
                         let id = state.alloc_id();
-                        state.widgets.insert(id, raw);
+                        state.windows.insert(id, window);
+                        state.widgets.insert(id, window);
                         Ok(Value::Int(id))
                     })
                 }))
@@ -4064,7 +4073,7 @@ mod linux {
                         let state = state.borrow();
                         let dialog = widget_ptr(&state, dialog_id, "dialogSetTitle")?;
                         let title_c = c_text(&title, "gtk4.dialogSetTitle invalid title")?;
-                        unsafe { g_object_set(dialog, c"title".as_ptr(), title_c.as_ptr(), std::ptr::null::<c_char>()) };
+                        unsafe { gtk_window_set_title(dialog, title_c.as_ptr()) };
                         Ok(Value::Unit)
                     })
                 }))
@@ -4087,7 +4096,7 @@ mod linux {
                         let state = state.borrow();
                         let dialog = widget_ptr(&state, dialog_id, "dialogSetChild")?;
                         let child = widget_ptr(&state, child_id, "dialogSetChild")?;
-                        call_adw_fn_pp("adw_dialog_set_child", dialog, child);
+                        unsafe { gtk_window_set_child(dialog, child) };
                         Ok(Value::Unit)
                     })
                 }))
@@ -4110,7 +4119,10 @@ mod linux {
                         let state = state.borrow();
                         let dialog = widget_ptr(&state, dialog_id, "dialogPresent")?;
                         let parent = widget_ptr(&state, parent_id, "dialogPresent")?;
-                        call_adw_fn_pp("adw_dialog_present", dialog, parent);
+                        unsafe {
+                            gtk_window_set_transient_for(dialog, parent);
+                            gtk_window_present(dialog);
+                        }
                         Ok(Value::Unit)
                     })
                 }))
@@ -4128,7 +4140,70 @@ mod linux {
                     GTK_STATE.with(|state| {
                         let state = state.borrow();
                         let dialog = widget_ptr(&state, dialog_id, "dialogClose")?;
-                        call_adw_fn_p("adw_dialog_close", dialog);
+                        unsafe { gtk_window_close(dialog) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "windowOnClose".to_string(),
+            builtin("gtk4.windowOnClose", 2, |mut args, _| {
+                let signal_name = match args.remove(1) {
+                    Value::Text(v) => v,
+                    _ => return Err(invalid("gtk4.windowOnClose expects Text signal name")),
+                };
+                let window_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowOnClose expects Int window id")),
+                };
+
+                unsafe extern "C" fn on_window_destroy(
+                    _instance: *mut c_void,
+                    data: *mut c_void,
+                ) {
+                    if data.is_null() {
+                        return;
+                    }
+                    let signal_name = unsafe { &*(data as *const String) };
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        let event = Value::Constructor {
+                            name: "Some".to_string(),
+                            args: vec![Value::Constructor {
+                                name: "GtkUnknownSignal".to_string(),
+                                args: vec![
+                                    Value::Int(0),
+                                    Value::Text(signal_name.clone()),
+                                    Value::Text(String::new()),
+                                    Value::Text(String::new()),
+                                ],
+                            }],
+                        };
+                        state.signal_senders.retain(|s| s.try_send(event.clone()).is_ok());
+                    });
+                }
+
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let window = widget_ptr(&state, window_id, "windowOnClose")?;
+                        let name_box = Box::new(signal_name.clone());
+                        let data_ptr = Box::into_raw(name_box) as *mut c_void;
+                        let sig = CString::new("destroy").map_err(|_| {
+                            invalid("gtk4.windowOnClose: invalid signal name")
+                        })?;
+                        unsafe {
+                            g_signal_connect_data(
+                                window,
+                                sig.as_ptr(),
+                                on_window_destroy as *const c_void,
+                                data_ptr,
+                                std::ptr::null_mut(),
+                                0,
+                            );
+                        }
                         Ok(Value::Unit)
                     })
                 }))
