@@ -23,7 +23,7 @@ Based on codebase analysis, the following syntax and semantics are confirmed:
 - Pipes:               `x |> f` = `f x`
 - Resources:           `resource { handle <- acquire; yield handle; cleanup }`
 - Decorators:          `@test "desc"`, `@static`, `@native "mod.fn"`,
-                       `@inline`, `@deprecated`, `@debug`, `@no_prelude`
+                       `@deprecated`, `@debug`, `@no_prelude`
 - Domains:             `domain Name over Carrier = { ... }`
 - Patching:            `record <| { field: newVal }`
 - Branded types:       `Email = Text!`

@@ -25,7 +25,6 @@ Decorators appear before the binding they annotate.
 |:------------- |:------------------------------------------------ |:--------------------------------------------------------------------- |
 | `@static`     | `@static x = file.read "..."`                    | Embed at compile time                                                 |
 | `@native`     | `@native "gtk4.appRun"`                          | Bind definition to a runtime/native function path                     |
-| `@inline`     | `@inline f = ...`                                | Always inline function (overrides size heuristic)                     |
 | `@deprecated` | `@deprecated msg`                                | Emit warning on use                                                   |
 | `@debug`      | `@debug()` / `@debug(pipes, args, return, time)` | Emit structured debug trace events when compiled with `--debug-trace` |
 

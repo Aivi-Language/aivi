@@ -402,6 +402,14 @@ impl TypeChecker {
                 self.check_or_coerce(out, expected, env)
             }
             Expr::Block { kind, items, span } => {
+                // For generic do-monad blocks (do Result, do Option, etc.), skip
+                // item-by-item elaboration and defer to infer_generic_do_block
+                // via check_or_coerce. The elaboration's bind processing uses
+                // shared substitution state that conflicts with the inference pass.
+                if matches!(&kind, BlockKind::Do { monad } if monad.name != "Effect") {
+                    let out = Expr::Block { kind, items, span };
+                    return self.check_or_coerce(out, expected, env);
+                }
                 let mut local_env = env.clone();
                 let mut new_items = Vec::new();
                 for item in items {

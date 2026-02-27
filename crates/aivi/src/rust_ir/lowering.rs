@@ -24,8 +24,6 @@ pub struct RustIrModule {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RustIrDef {
     pub name: String,
-    #[serde(default)]
-    pub inline: bool,
     pub expr: RustIrExpr,
     /// Codegen-friendly type annotation. `Some(ty)` when the type checker was able to
     /// resolve this definition to a concrete ground type; `None` when the definition is
@@ -330,7 +328,6 @@ fn lower_def(def: KernelDef, globals: &[String]) -> Result<RustIrDef, AiviError>
     let expr = lower_expr(def.expr, globals, &mut locals)?;
     Ok(RustIrDef {
         name: def.name,
-        inline: def.inline,
         expr,
         cg_type: None,
     })

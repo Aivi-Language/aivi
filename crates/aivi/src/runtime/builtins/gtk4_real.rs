@@ -99,6 +99,11 @@ mod linux {
             propagate: c_int,
         );
         fn gtk_scrolled_window_set_propagate_natural_width(scrolled: *mut c_void, propagate: c_int);
+        fn gtk_scrolled_window_get_vadjustment(scrolled: *mut c_void) -> *mut c_void;
+
+        fn gtk_adjustment_get_value(adjustment: *mut c_void) -> f64;
+        fn gtk_adjustment_get_upper(adjustment: *mut c_void) -> f64;
+        fn gtk_adjustment_get_page_size(adjustment: *mut c_void) -> f64;
 
         fn gtk_separator_new(orientation: c_int) -> *mut c_void;
 
@@ -156,6 +161,60 @@ mod linux {
     }
 
     unsafe extern "C" fn activate_noop(_app: *mut c_void, _data: *mut c_void) {}
+
+    struct ScrollFadeData {
+        scrolled: *mut c_void,
+        top_fade: *mut c_void,
+        bottom_fade: *mut c_void,
+    }
+    unsafe impl Send for ScrollFadeData {}
+    unsafe impl Sync for ScrollFadeData {}
+
+    unsafe extern "C" fn scroll_fade_cb(_adj: *mut c_void, data: *mut c_void) {
+        let d = &*(data as *const ScrollFadeData);
+        let adj = gtk_scrolled_window_get_vadjustment(d.scrolled);
+        if adj.is_null() { return; }
+        let value     = gtk_adjustment_get_value(adj);
+        let upper     = gtk_adjustment_get_upper(adj);
+        let page_size = gtk_adjustment_get_page_size(adj);
+        let fade_px   = 50.0_f64;
+        if !d.top_fade.is_null() {
+            let opacity = (value / fade_px).clamp(0.0, 1.0);
+            gtk_widget_set_opacity(d.top_fade, opacity);
+        }
+        if !d.bottom_fade.is_null() {
+            let bottom_dist = (upper - page_size - value).max(0.0);
+            let opacity = (bottom_dist / fade_px).clamp(0.0, 1.0);
+            gtk_widget_set_opacity(d.bottom_fade, opacity);
+        }
+    }
+
+    unsafe extern "C" fn scroll_fade_destroy(data: *mut c_void, _: *mut c_void) {
+        drop(Box::from_raw(data as *mut ScrollFadeData));
+    }
+
+    fn wire_scroll_fades(
+        scrolled: *mut c_void,
+        top_fade: *mut c_void,
+        bottom_fade: *mut c_void,
+    ) {
+        let data = Box::into_raw(Box::new(ScrollFadeData { scrolled, top_fade, bottom_fade }));
+        unsafe {
+            let adj = gtk_scrolled_window_get_vadjustment(scrolled);
+            if adj.is_null() { return; }
+            let sig = std::ffi::CString::new("value-changed").unwrap();
+            g_signal_connect_data(
+                adj,
+                sig.as_ptr(),
+                scroll_fade_cb as *const c_void,
+                data as *mut c_void,
+                scroll_fade_destroy as *mut c_void,
+                0,
+            );
+            // set initial opacities
+            scroll_fade_cb(adj, data as *mut c_void);
+        }
+    }
 
     #[link(name = "dl")]
     unsafe extern "C" {
@@ -1110,6 +1169,18 @@ mod linux {
                     unsafe { g_object_set(widget, prop_c.as_ptr(), value, std::ptr::null::<c_char>()) };
                 }
             }
+            "AdwButtonContent" => {
+                if let Some(value) = props.get("label") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwButtonContent label")?;
+                    let prop_c = CString::new("label").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("icon-name") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid AdwButtonContent icon-name")?;
+                    let prop_c = CString::new("icon-name").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -1372,9 +1443,35 @@ mod linux {
         let mut child_objects = collect_child_objects(children);
         child_objects.sort_by_key(|child| child.position.unwrap_or(usize::MAX));
         let mut overlay_root_set = false;
+        // For auto-wiring scroll fades inside GtkOverlay
+        let mut scroll_fade_scrolled: *mut c_void = std::ptr::null_mut();
+        let mut scroll_fade_top: *mut c_void = std::ptr::null_mut();
+        let mut scroll_fade_bottom: *mut c_void = std::ptr::null_mut();
         for child in child_objects {
+            // Track child CSS class for scroll-fade auto-wiring
+            let child_css = if matches!(kind, CreatedWidgetKind::Overlay) {
+                if let GtkBuilderNode::Element { attrs, children: cc, .. } = child.node {
+                    let p = collect_object_properties(attrs, cc);
+                    p.get("css-class").cloned().unwrap_or_default()
+                } else { String::new() }
+            } else { String::new() };
+            let child_class_name = if matches!(kind, CreatedWidgetKind::Overlay) {
+                if let GtkBuilderNode::Element { attrs, .. } = child.node {
+                    node_attr(attrs, "class").unwrap_or("").to_string()
+                } else { String::new() }
+            } else { String::new() };
+
             let child_id = build_widget_from_node_real(state, child.node, id_map)?;
             let child_raw = widget_ptr(state, child_id, "buildFromNode")?;
+
+            // Track for scroll-fade auto-wiring
+            if matches!(kind, CreatedWidgetKind::Overlay) {
+                if child_class_name == "GtkScrolledWindow" && child_css.contains("fading-scroll") {
+                    scroll_fade_scrolled = child_raw;
+                }
+                if child_css.contains("fade-top") { scroll_fade_top = child_raw; }
+                if child_css.contains("fade-bottom") { scroll_fade_bottom = child_raw; }
+            }
             if child.child_type.as_deref() == Some("controller") {
                 unsafe { gtk_widget_add_controller(raw, child_raw) };
                 if let Some(gesture) = state.gesture_clicks.get_mut(&child_id) {
@@ -1423,6 +1520,11 @@ mod linux {
                 }
                 CreatedWidgetKind::Other => {}
             }
+        }
+
+        // Auto-wire scroll fades for GtkOverlay containing a fading-scroll scrolled window.
+        if !scroll_fade_scrolled.is_null() && (!scroll_fade_top.is_null() || !scroll_fade_bottom.is_null()) {
+            wire_scroll_fades(scroll_fade_scrolled, scroll_fade_top, scroll_fade_bottom);
         }
 
         Ok(id)

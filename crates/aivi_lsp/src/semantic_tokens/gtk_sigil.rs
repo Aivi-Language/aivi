@@ -34,6 +34,17 @@ impl Backend {
         }
         pos.push((line, col));
 
+        let slice_eq = |start: usize, end: usize, expected: &str| -> bool {
+            let expected_chars: Vec<char> = expected.chars().collect();
+            if end.saturating_sub(start) != expected_chars.len() || end > chars.len() {
+                return false;
+            }
+            chars[start..end]
+                .iter()
+                .copied()
+                .eq(expected_chars.into_iter())
+        };
+
         let push = |data: &mut Vec<SemanticToken>,
                     last_line: &mut u32,
                     last_start: &mut u32,
@@ -280,6 +291,8 @@ impl Backend {
                 j += 1;
             }
             let tag_end = j;
+            let tag_is_class_container =
+                slice_eq(tag_start, tag_end, "object") || slice_eq(tag_start, tag_end, "template");
             push(
                 data,
                 last_line,
@@ -323,6 +336,7 @@ impl Backend {
                     j += 1;
                 }
                 let attr_end = j;
+                let attr_is_class = slice_eq(attr_start, attr_end, "class");
                 push(
                     data,
                     last_line,
@@ -358,6 +372,10 @@ impl Backend {
                             j += 1;
                         }
                         let value_end = j.min(end_limit);
+                        let class_name_is_type = tag_is_class_container
+                            && attr_is_class
+                            && value_end > value_start.saturating_add(2)
+                            && chars[value_start.saturating_add(1)].is_ascii_uppercase();
                         push(
                             data,
                             last_line,
@@ -365,7 +383,11 @@ impl Backend {
                             &pos,
                             value_start,
                             value_end,
-                            Self::SEM_TOKEN_STRING,
+                            if class_name_is_type {
+                                Self::SEM_TOKEN_TYPE
+                            } else {
+                                Self::SEM_TOKEN_STRING
+                            },
                             0,
                         );
                     } else if j < end_limit && chars[j] == '{' {
@@ -377,6 +399,10 @@ impl Backend {
                         while j < end_limit && !chars[j].is_whitespace() && chars[j] != '>' {
                             j += 1;
                         }
+                        let class_name_is_type = tag_is_class_container
+                            && attr_is_class
+                            && j > value_start
+                            && chars[value_start].is_ascii_uppercase();
                         push(
                             data,
                             last_line,
@@ -384,7 +410,11 @@ impl Backend {
                             &pos,
                             value_start,
                             j,
-                            Self::SEM_TOKEN_STRING,
+                            if class_name_is_type {
+                                Self::SEM_TOKEN_TYPE
+                            } else {
+                                Self::SEM_TOKEN_STRING
+                            },
                             0,
                         );
                     }
