@@ -137,6 +137,8 @@ mod linux {
         fn gtk_stack_add_named(stack: *mut c_void, child: *mut c_void, name: *const c_char);
         fn gtk_stack_set_visible_child_name(stack: *mut c_void, name: *const c_char);
 
+        fn gtk_menu_button_new() -> *mut c_void;
+
         fn gdk_display_get_default() -> *mut c_void;
     }
 
@@ -1082,6 +1084,7 @@ mod linux {
         widget: *mut c_void,
         class_name: &str,
         props: &HashMap<String, String>,
+        state: &RealGtkState,
     ) -> Result<(), RuntimeError> {
         if let Some(value) = props.get("margin-start").and_then(|v| parse_i32_text(v)) {
             unsafe { gtk_widget_set_margin_start(widget, value) };
@@ -1291,6 +1294,26 @@ mod linux {
                     unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
                 }
             }
+            "GtkMenuButton" => {
+                if let Some(value) = props.get("label") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid GtkMenuButton label")?;
+                    let prop_c = CString::new("label").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+                if let Some(value) = props.get("icon-name") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid GtkMenuButton icon-name")?;
+                    let prop_c = CString::new("icon-name").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+                if let Some(id_str) = props.get("menu-model") {
+                    if let Ok(id) = id_str.parse::<i64>() {
+                        if let Some(&menu_raw) = state.widgets.get(&id) {
+                            let prop_c = CString::new("menu-model").unwrap();
+                            unsafe { g_object_set(widget, prop_c.as_ptr(), menu_raw, std::ptr::null::<c_char>()) };
+                        }
+                    }
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -1412,6 +1435,7 @@ mod linux {
                 }
             }
             "GtkListBox" => (unsafe { gtk_list_box_new() }, CreatedWidgetKind::ListBox),
+            "GtkMenuButton" => (unsafe { gtk_menu_button_new() }, CreatedWidgetKind::Other),
             "GtkStack" => (unsafe { gtk_stack_new() }, CreatedWidgetKind::Stack),
             "AdwOverlaySplitView" => (create_adw_widget(class_name)?, CreatedWidgetKind::SplitView),
             "AdwAboutDialog"
@@ -1550,7 +1574,7 @@ mod linux {
             _ => {}
         }
 
-        apply_widget_properties(raw, class_name, &props)?;
+        apply_widget_properties(raw, class_name, &props, state)?;
         for binding in signal_bindings {
             connect_widget_signal(raw, id, class_name, &binding)?;
         }
