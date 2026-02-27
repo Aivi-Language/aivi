@@ -102,22 +102,23 @@ ekLoop = residual source sink totalFlow => (bfs residual source sink) match
 @test "Edmonds-Karp max-flow"
 flowTest = do Effect {
   // CLRS max-flow example (6 nodes, expected max flow = 23)
-  edges = [
-    { from: 0, to: 1, cap: 16 }
-    { from: 0, to: 2, cap: 13 }
-    { from: 1, to: 2, cap: 10 }
-    { from: 2, to: 1, cap: 4 }
-    { from: 1, to: 3, cap: 12 }
-    { from: 3, to: 2, cap: 9 }
-    { from: 2, to: 4, cap: 14 }
-    { from: 4, to: 3, cap: 7 }
-    { from: 3, to: 5, cap: 20 }
-    { from: 4, to: 5, cap: 4 }
-  ]
+  edges =
+    [
+      { from: 0, to: 1, cap: 16 }
+      { from: 0, to: 2, cap: 13 }
+      { from: 1, to: 2, cap: 10 }
+      { from: 2, to: 1, cap: 4 }
+      { from: 1, to: 3, cap: 12 }
+      { from: 3, to: 2, cap: 9 }
+      { from: 2, to: 4, cap: 14 }
+      { from: 4, to: 3, cap: 7 }
+      { from: 3, to: 5, cap: 20 }
+      { from: 4, to: 5, cap: 4 }
+    ]
 
-  result <- pure (edmondsKarp edges 0 5)
-  assert (result == 23)
+    result <- pure (edmondsKarp edges 0 5)
+    assert (result == 23)
 
-  zero <- pure (edmondsKarp [] 0 1)
-  assert (zero == 0)
+    zero <- pure (edmondsKarp [] 0 1)
+    assert (zero == 0)
 }

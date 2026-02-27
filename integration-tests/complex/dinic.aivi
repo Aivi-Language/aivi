@@ -109,20 +109,21 @@ maxFlowGo = state source sink total => {
 
 @test "Dinic's max-flow algorithm"
 flowTest = do Effect {
-  edges = [
-    { from: 0, to: 1, cap: 10 }
-    { from: 0, to: 2, cap: 5 }
-    { from: 1, to: 2, cap: 15 }
-    { from: 1, to: 3, cap: 10 }
-    { from: 2, to: 4, cap: 10 }
-    { from: 3, to: 4, cap: 10 }
-    { from: 3, to: 5, cap: 10 }
-    { from: 4, to: 5, cap: 10 }
-  ]
+  edges =
+    [
+      { from: 0, to: 1, cap: 10 }
+      { from: 0, to: 2, cap: 5 }
+      { from: 1, to: 2, cap: 15 }
+      { from: 1, to: 3, cap: 10 }
+      { from: 2, to: 4, cap: 10 }
+      { from: 3, to: 4, cap: 10 }
+      { from: 3, to: 5, cap: 10 }
+      { from: 4, to: 5, cap: 10 }
+    ]
 
-  (result, _) <- pure (maxFlow edges 0 5)
-  assert (result == 15)
+    (result, _) <- pure (maxFlow edges 0 5)
+    assert (result == 15)
 
-  (zero, _) <- pure (maxFlow [] 0 1)
-  assert (zero == 0)
+    (zero, _) <- pure (maxFlow [] 0 1)
+    assert (zero == 0)
 }

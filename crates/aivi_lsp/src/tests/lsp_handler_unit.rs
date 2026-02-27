@@ -95,6 +95,20 @@ fn hover_handler_returns_none_for_empty_document() {
 }
 
 #[test]
+fn hover_handler_returns_generic_fallback_for_unresolved_identifier() {
+    let text = "module examples.app\nrun = mysteryName\n";
+    let uri = sample_uri();
+    let position = position_for(text, "mysteryName");
+    let hover = Backend::build_hover(text, &uri, position, &DocIndex::default())
+        .expect("fallback hover should exist");
+    let HoverContents::Markup(markup) = hover.contents else {
+        panic!("expected markup hover");
+    };
+    assert!(markup.value.contains("`mysteryName`"));
+    assert!(markup.value.contains("_unresolved_"));
+}
+
+#[test]
 fn completion_handler_handles_position_at_eof() {
     let text = "module examples.app\nadd = a b => a + b\nrun = add 1 2\n";
     let uri = sample_uri();

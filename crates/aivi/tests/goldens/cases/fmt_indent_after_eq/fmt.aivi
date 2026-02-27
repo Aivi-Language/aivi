@@ -10,10 +10,11 @@ class Apply (F *) =
     ap: F A -> F (A -> B) -> F B
   }
 
-users = [
-  { name: "Alice", active: True }
-  { name: "Bob",   active: False }
-]
+users =
+  [
+    { name: "Alice", active: True }
+    { name: "Bob",   active: False }
+  ]
 
 activeNames = users
   |> filter active

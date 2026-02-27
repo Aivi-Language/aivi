@@ -448,6 +448,26 @@ impl Parser {
             }));
         }
 
+        // `recurse expr` can appear as a match arm body (expression position) rather than only
+        // as a block statement.  Wrap it in a plain block with a Recurse item so that
+        // replace_recurse_in_expr can replace it with the enclosing loop's recursive call.
+        if self.match_keyword("recurse") {
+            let recurse_kw = self.previous_span();
+            let expr = self.parse_expr().unwrap_or(Expr::Raw {
+                text: String::new(),
+                span: recurse_kw.clone(),
+            });
+            let span = merge_span(recurse_kw.clone(), expr_span(&expr));
+            return Some(Expr::Block {
+                kind: BlockKind::Plain,
+                items: vec![BlockItem::Recurse {
+                    expr,
+                    span: span.clone(),
+                }],
+                span,
+            });
+        }
+
         if let Some(ident) = self.consume_ident() {
             if ident.name == "True" || ident.name == "False" {
                 let value = ident.name == "True";

@@ -4,12 +4,13 @@ module integrationTests.syntax.effects.machineRuntime
 use aivi
 use aivi.testing
 
-machine AccountSyncMachine = {
-           -> Idle     : boot {}
-  Idle     -> Acquired : lease {}
-  Acquired -> Syncing  : run { batchId: Int }
-  Syncing  -> Idle     : done {}
-}
+machine AccountSyncMachine =
+  {
+             -> Idle     : boot {}
+    Idle     -> Acquired : lease {}
+    Acquired -> Syncing  : run { batchId: Int }
+    Syncing  -> Idle     : done {}
+  }
 
 @test "machine runtime record api, current state, can checks, and on ordering"
 machineRuntimeFlow = do Effect {

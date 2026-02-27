@@ -18,14 +18,15 @@ buildSecureGetRequest = do Effect {
 @test "build secure post request"
 buildSecurePostRequest = do Effect {
   reqUrl = { protocol: "https", host: "example.com", port: None, path: "/post", query: [], hash: None }
-  req = {
-    method: "POST"
-    url: reqUrl
-    headers: [{ name: "Authorization", value: "Bearer token" }]
-    body: Some "data"
-  }
-  assertEq req.method "POST"
-  assertEq (List.length req.headers) 1
+  req =
+    {
+      method: "POST"
+      url: reqUrl
+      headers: [{ name: "Authorization", value: "Bearer token" }]
+      body: Some "data"
+    }
+    assertEq req.method "POST"
+    assertEq (List.length req.headers) 1
 }
 
 @test "response fields"

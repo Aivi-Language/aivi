@@ -18,15 +18,16 @@ buildGetRequest = do Effect {
 @test "build post request with body"
 buildPostRequest = do Effect {
   reqUrl = { protocol: "https", host: "example.com", port: None, path: "/post", query: [], hash: None }
-  req = {
-    method: "POST"
-    url: reqUrl
-    headers: [{ name: "Content-Type", value: "application/json" }]
-    body: Some "{}"
-  }
-  assertEq req.method "POST"
-  assertEq req.body (Some "{}")
-  assertEq (List.length req.headers) 1
+  req =
+    {
+      method: "POST"
+      url: reqUrl
+      headers: [{ name: "Content-Type", value: "application/json" }]
+      body: Some "{}"
+    }
+    assertEq req.method "POST"
+    assertEq req.body (Some "{}")
+    assertEq (List.length req.headers) 1
 }
 
 @test "response fields"

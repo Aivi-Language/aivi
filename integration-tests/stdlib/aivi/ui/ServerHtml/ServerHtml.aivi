@@ -28,28 +28,30 @@ AppEffect model msg =
   | SubIntersect SubscriptionId IntersectionOptions (List IntersectionTarget)
   | UnsubIntersect SubscriptionId
 
-App model msg = {
-  init: InitContext -> model
-  update: msg -> model -> (model, List (AppEffect model msg))
-  view: model -> VNode msg
-  onPlatform: PlatformEvent -> Option msg
-}
+App model msg =
+  {
+    init: InitContext -> model
+    update: msg -> model -> (model, List (AppEffect model msg))
+    view: model -> VNode msg
+    onPlatform: PlatformEvent -> Option msg
+  }
 
 // ---------------------------------------------------------------------------
 // Internal: convert AppEffects to ServerEffects + pending entries
 // ---------------------------------------------------------------------------
 
-ConvertedEffects msg = {
-  serverEffects: List (ServerEffect msg)
-  nextRid: RequestId
-  pendingTable: Map RequestId (PendingEntry msg)
-}
+ConvertedEffects msg =
+  {
+    serverEffects: List (ServerEffect msg)
+    nextRid: RequestId
+    pendingTable: Map RequestId (PendingEntry msg)
+  }
 
-convertAppEffects
-: List (AppEffect model msg)
--> RequestId
--> Map RequestId (PendingEntry msg)
--> ConvertedEffects msg
+  convertAppEffects
+  : List (AppEffect model msg)
+  -> RequestId
+  -> Map RequestId (PendingEntry msg)
+  -> ConvertedEffects msg
 convertAppEffects = effects rid pending => effects match
   | []                 => { serverEffects: [], nextRid: rid, pendingTable: pending }
   | [eff, ...rest]     => eff match
@@ -151,10 +153,11 @@ serveHttp = app req => do Effect {
   vdom0 = app.view model
   (vdom, _, _) = assignHandlers vdom0 0
   html = renderHtml vdom
-  bootData = [
-    ("viewId", encodeText viewId)
-    ("wsUrl", encodeText "/aivi/live")
-  ]
+  bootData =
+    [
+      ("viewId", encodeText viewId)
+      ("wsUrl", encodeText "/aivi/live")
+    ]
   bootJson = jsonToText (encodeObject bootData)
   fullHtml = "<!doctype html><html><head><meta charset=\"utf-8\"><script type=\"application/json\" id=\"aivi-server-html-boot\">{ bootJson }</script></head><body>{ html }<script>{ clientJs }</script></body></html>"
   pure { status: 200
@@ -193,7 +196,8 @@ serveWs = app ws => do Effect {
           emptyVdom = Element "div" [] []
           initialOps = diff emptyVdom vdom
           _ <- wsSend ws (TextMsg (encodeServerMsg (Patch { ops: patchToJson initialOps })))
-          initialState = {
+          initialState =
+          {
             viewId: viewId
             model: model
             lastVdom: vdom
@@ -206,8 +210,8 @@ serveWs = app ws => do Effect {
           recvLoop app ws initialState
         }
   | _ => do Effect {
-    _ <- wsSend ws (TextMsg (encodeServerMsg (Error { code: "PROTO", detail: "first message must be hello" })))
-    wsClose ws
+      _ <- wsSend ws (TextMsg (encodeServerMsg (Error { code: "PROTO", detail: "first message must be hello" })))
+      wsClose ws
   }
 }
 

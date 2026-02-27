@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use aivi::{infer_value_types, parse_modules, Module, ModuleItem};
 use tower_lsp::lsp_types::{
@@ -13,6 +14,38 @@ use crate::doc_index::DocIndex;
 use crate::state::IndexedModule;
 
 impl Backend {
+    fn hover_debug_enabled() -> bool {
+        std::env::var_os("AIVI_LSP_DEBUG_HOVER").is_some()
+    }
+
+    fn hover_debug(message: impl std::fmt::Display) {
+        if Self::hover_debug_enabled() {
+            eprintln!("[aivi-lsp:hover] {message}");
+        }
+    }
+
+    fn hover_markdown(value: String) -> Hover {
+        Hover {
+            contents: HoverContents::Markup(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value,
+            }),
+            range: None,
+        }
+    }
+
+    fn hover_fallback_for_unresolved_ident(ident: &str) -> String {
+        let is_operator = !ident.is_empty()
+            && ident
+                .chars()
+                .any(|ch| !ch.is_alphanumeric() && ch != '_' && ch != '.');
+        let kind = if is_operator { "operator" } else { "value" };
+        let base = format!(
+            "`{ident}` : `_unresolved_`\n\nNo type signature was resolved in the current module/import scope."
+        );
+        Self::hover_badge_markdown(kind, base)
+    }
+
     fn expr_contains_position_for_hover(expr: &aivi::Expr, position: Position) -> bool {
         let range = Self::span_to_range(Self::expr_span(expr).clone());
         Self::range_contains_position(&range, position)
@@ -886,9 +919,23 @@ impl Backend {
         position: Position,
         doc_index: &DocIndex,
     ) -> Option<Hover> {
-        let ident = Self::extract_identifier(text, position)?;
+        let started = Instant::now();
+        let ident = match Self::extract_identifier(text, position) {
+            Some(ident) => ident,
+            None => {
+                Self::hover_debug(format!(
+                    "build_hover: no token at {}:{}",
+                    position.line, position.character
+                ));
+                return None;
+            }
+        };
         let path = PathBuf::from(Self::path_from_uri(uri));
         let (modules, _) = parse_modules(&path, text);
+        Self::hover_debug(format!(
+            "build_hover: token={ident:?}, modules={}",
+            modules.len()
+        ));
         let (_, inferred, span_types) = infer_value_types(&modules);
         for module in modules.iter() {
             let doc = Self::doc_for_ident(text, module, &ident);
@@ -896,13 +943,12 @@ impl Backend {
             if let Some(contents) =
                 Self::hover_contents_for_module(module, &ident, inferred, doc.as_deref(), doc_index)
             {
-                return Some(Hover {
-                    contents: HoverContents::Markup(MarkupContent {
-                        kind: MarkupKind::Markdown,
-                        value: contents,
-                    }),
-                    range: None,
-                });
+                Self::hover_debug(format!(
+                    "build_hover: resolved in module {} after {:?}",
+                    module.name.name,
+                    started.elapsed()
+                ));
+                return Some(Self::hover_markdown(contents));
             }
         }
         if let Some(module) = Self::module_at_position(&modules, position) {
@@ -913,35 +959,39 @@ impl Backend {
                 inferred.get(&module.name.name),
                 None,
             ) {
-                return Some(Hover {
-                    contents: HoverContents::Markup(MarkupContent {
-                        kind: MarkupKind::Markdown,
-                        value: contents,
-                    }),
-                    range: None,
-                });
+                Self::hover_debug(format!(
+                    "build_hover: resolved as local binding in {} after {:?}",
+                    module.name.name,
+                    started.elapsed()
+                ));
+                return Some(Self::hover_markdown(contents));
             }
             // Fallback: look up the smallest span containing the cursor position.
             if let Some(contents) =
                 Self::hover_from_span_types(&ident, position, &span_types, &module.name.name)
             {
-                return Some(Hover {
-                    contents: HoverContents::Markup(MarkupContent {
-                        kind: MarkupKind::Markdown,
-                        value: contents,
-                    }),
-                    range: None,
-                });
+                Self::hover_debug(format!(
+                    "build_hover: resolved from span types in {} after {:?}",
+                    module.name.name,
+                    started.elapsed()
+                ));
+                return Some(Self::hover_markdown(contents));
             }
         }
-        let contents = Self::hover_contents_for_primitive_value(&ident)?;
-        Some(Hover {
-            contents: HoverContents::Markup(MarkupContent {
-                kind: MarkupKind::Markdown,
-                value: contents,
-            }),
-            range: None,
-        })
+        if let Some(contents) = Self::hover_contents_for_primitive_value(&ident) {
+            Self::hover_debug(format!(
+                "build_hover: resolved primitive token {ident:?} after {:?}",
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
+        }
+        Self::hover_debug(format!(
+            "build_hover: unresolved token {ident:?}; returning generic fallback after {:?}",
+            started.elapsed()
+        ));
+        Some(Self::hover_markdown(
+            Self::hover_fallback_for_unresolved_ident(&ident),
+        ))
     }
 
     /// Collect only the modules relevant for type inference: the current file's
@@ -997,11 +1047,10 @@ impl Backend {
         let modules_to_search =
             Self::find_modules_exporting(prefix, current_module, workspace_modules);
 
-        #[cfg(test)]
-        eprintln!(
+        Self::hover_debug(format!(
             "hover_for_dotted_member: prefix={prefix:?}, member={member:?}, modules_found={}",
             modules_to_search.len()
-        );
+        ));
 
         for indexed in &modules_to_search {
             let inf = inferred.get(&indexed.module.name.name);
@@ -1014,12 +1063,11 @@ impl Backend {
                 .as_deref()
                 .and_then(|text| Self::doc_for_ident(text, &indexed.module, member));
 
-            #[cfg(test)]
-            eprintln!(
-                "  checking module={}, has_inferred={}",
+            Self::hover_debug(format!(
+                "hover_for_dotted_member: checking module={} has_inferred={}",
                 indexed.module.name.name,
                 inf.is_some()
-            );
+            ));
 
             // Check domain members with the member name.
             if let Some(contents) = Self::hover_contents_for_module(
@@ -1128,29 +1176,39 @@ impl Backend {
         workspace_modules: &HashMap<String, IndexedModule>,
         doc_index: &DocIndex,
     ) -> Option<Hover> {
-        let ident = Self::extract_identifier(text, position);
-        #[cfg(test)]
-        eprintln!("build_hover_ws: ident={ident:?}");
-        let ident = ident?;
+        let started = Instant::now();
+        let ident = match Self::extract_identifier(text, position) {
+            Some(ident) => ident,
+            None => {
+                Self::hover_debug(format!(
+                    "build_hover_ws: no token at {}:{}",
+                    position.line, position.character
+                ));
+                return None;
+            }
+        };
         let path = PathBuf::from(Self::path_from_uri(uri));
         let (modules, _) = parse_modules(&path, text);
-        #[cfg(test)]
-        eprintln!("build_hover_ws: modules={}", modules.len());
+        Self::hover_debug(format!(
+            "build_hover_ws: token={ident:?}, file_modules={}, workspace_modules={}",
+            modules.len(),
+            workspace_modules.len()
+        ));
         let current_module = Self::module_at_position(&modules, position);
-        #[cfg(test)]
-        eprintln!(
-            "build_hover_ws: current_module={}",
-            current_module
-                .map(|m| m.name.name.as_str())
-                .unwrap_or("None")
-        );
-        let current_module = current_module?;
+        let Some(current_module) = current_module else {
+            Self::hover_debug("build_hover_ws: no module at cursor; skipping workspace hover");
+            return None;
+        };
 
         // Only infer types for the current file's modules + direct imports (not the
         // entire workspace) to keep hover responsive in large projects.
         let relevant_modules =
             Self::collect_relevant_modules(&modules, current_module, workspace_modules);
         let (_, inferred, span_types) = infer_value_types(&relevant_modules);
+        Self::hover_debug(format!(
+            "build_hover_ws: inferred over {} relevant modules",
+            relevant_modules.len()
+        ));
 
         // Handle dotted identifiers: first check if it's a full module name (e.g.
         // "aivi.collections"), then check Domain.method / Type.constructor patterns.
@@ -1173,13 +1231,12 @@ impl Backend {
                     doc.as_deref(),
                     doc_index,
                 ) {
-                    return Some(Hover {
-                        contents: HoverContents::Markup(MarkupContent {
-                            kind: MarkupKind::Markdown,
-                            value: contents,
-                        }),
-                        range: None,
-                    });
+                    Self::hover_debug(format!(
+                        "build_hover_ws: resolved dotted module {} after {:?}",
+                        ident,
+                        started.elapsed()
+                    ));
+                    return Some(Self::hover_markdown(contents));
                 }
             }
 
@@ -1191,6 +1248,11 @@ impl Backend {
                 &inferred,
                 doc_index,
             ) {
+                Self::hover_debug(format!(
+                    "build_hover_ws: resolved dotted member {} after {:?}",
+                    ident,
+                    started.elapsed()
+                ));
                 return Some(hover);
             }
         }
@@ -1204,13 +1266,12 @@ impl Backend {
             doc.as_deref(),
             doc_index,
         ) {
-            return Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: contents,
-                }),
-                range: None,
-            });
+            Self::hover_debug(format!(
+                "build_hover_ws: resolved in current module {} after {:?}",
+                current_module.name.name,
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
         }
 
         for use_decl in current_module.uses.iter() {
@@ -1238,13 +1299,12 @@ impl Backend {
                 doc.as_deref(),
                 doc_index,
             ) {
-                return Some(Hover {
-                    contents: HoverContents::Markup(MarkupContent {
-                        kind: MarkupKind::Markdown,
-                        value: contents,
-                    }),
-                    range: None,
-                });
+                Self::hover_debug(format!(
+                    "build_hover_ws: resolved via import {} after {:?}",
+                    use_decl.module.name,
+                    started.elapsed()
+                ));
+                return Some(Self::hover_markdown(contents));
             }
         }
 
@@ -1255,34 +1315,38 @@ impl Backend {
             inferred_current,
             Some(workspace_modules),
         ) {
-            return Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: contents,
-                }),
-                range: None,
-            });
+            Self::hover_debug(format!(
+                "build_hover_ws: resolved local binding in {} after {:?}",
+                current_module.name.name,
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
         }
         // Fallback: look up the smallest span containing the cursor position.
         if let Some(contents) =
             Self::hover_from_span_types(&ident, position, &span_types, &current_module.name.name)
         {
-            return Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: contents,
-                }),
-                range: None,
-            });
+            Self::hover_debug(format!(
+                "build_hover_ws: resolved from span types in {} after {:?}",
+                current_module.name.name,
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
         }
-        let contents = Self::hover_contents_for_primitive_value(&ident)?;
-        Some(Hover {
-            contents: HoverContents::Markup(MarkupContent {
-                kind: MarkupKind::Markdown,
-                value: contents,
-            }),
-            range: None,
-        })
+        if let Some(contents) = Self::hover_contents_for_primitive_value(&ident) {
+            Self::hover_debug(format!(
+                "build_hover_ws: resolved primitive token {ident:?} after {:?}",
+                started.elapsed()
+            ));
+            return Some(Self::hover_markdown(contents));
+        }
+        Self::hover_debug(format!(
+            "build_hover_ws: unresolved token {ident:?}; returning generic fallback after {:?}",
+            started.elapsed()
+        ));
+        Some(Self::hover_markdown(
+            Self::hover_fallback_for_unresolved_ident(&ident),
+        ))
     }
 
     pub(super) fn build_references(
