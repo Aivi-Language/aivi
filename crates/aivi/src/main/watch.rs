@@ -37,13 +37,14 @@ pub(crate) fn run_watch(target: &str, watch_dir: &Path) -> Result<(), AiviError>
         let cancel_for_thread = cancel.clone();
 
         let runner = thread::spawn(move || -> Result<(), AiviError> {
-            let (program, cg_types, monomorph_plan) =
-                aivi::desugar_target_with_cg_types(&target_owned)?;
+            let (program, cg_types, monomorph_plan, surface_modules) =
+                aivi::desugar_target_with_cg_types_and_surface(&target_owned)?;
             aivi::run_cranelift_jit_with_handle(
                 program,
                 cg_types,
                 monomorph_plan,
                 &cancel_for_thread,
+                &surface_modules,
             )
         });
 

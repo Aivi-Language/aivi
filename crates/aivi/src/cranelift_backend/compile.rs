@@ -15,7 +15,7 @@ use crate::hir::HirProgram;
 use crate::runtime::values::Value;
 use crate::runtime::{
     build_runtime_from_program, build_runtime_from_program_with_cancel, run_main_effect,
-    CancelToken, Runtime, RuntimeError,
+    register_machines_for_jit, CancelToken, Runtime, RuntimeError,
 };
 use crate::rust_ir::{
     RustIrBlockItem, RustIrBlockKind, RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment,
@@ -365,9 +365,11 @@ pub fn run_cranelift_jit(
     program: HirProgram,
     cg_types: HashMap<String, HashMap<String, CgType>>,
     monomorph_plan: HashMap<String, Vec<CgType>>,
+    surface_modules: &[crate::surface::Module],
 ) -> Result<(), AiviError> {
     let mut runtime = build_runtime_from_program(&program)?;
     let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, &mut runtime)?;
+    register_machines_for_jit(&runtime, surface_modules);
     run_main_effect(&mut runtime)
 }
 
@@ -378,9 +380,11 @@ pub(crate) fn run_cranelift_jit_cancellable(
     cg_types: HashMap<String, HashMap<String, CgType>>,
     monomorph_plan: HashMap<String, Vec<CgType>>,
     cancel: Arc<CancelToken>,
+    surface_modules: &[crate::surface::Module],
 ) -> Result<(), AiviError> {
     let mut runtime = build_runtime_from_program_with_cancel(&program, cancel)?;
     let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, &mut runtime)?;
+    register_machines_for_jit(&runtime, surface_modules);
     run_main_effect(&mut runtime)
 }
 
@@ -1045,6 +1049,10 @@ fn compile_definition_body<M: Module>(
                 str_counter,
             );
 
+            // Emit function-entry tracking (lambda — show parent name for context).
+            let lambda_display = format!("{module_name}.{} (lambda)", def.name);
+            lower_ctx.emit_enter_fn(&mut builder, &lambda_display);
+
             // Perceus: run use analysis on the lambda body
             let use_map = super::use_analysis::analyze_uses(body);
             lower_ctx.set_use_map(use_map);
@@ -1202,6 +1210,10 @@ fn compile_definition_body<M: Module>(
             module,
             str_counter,
         );
+
+        // Emit function-entry tracking so runtime warnings can include the function name.
+        let display_name = format!("{module_name}.{}", def.name);
+        lower_ctx.emit_enter_fn(&mut builder, &display_name);
 
         // Perceus: run use analysis on the function body
         let use_map = super::use_analysis::analyze_uses(body);
