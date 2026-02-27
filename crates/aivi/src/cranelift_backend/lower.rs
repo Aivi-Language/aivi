@@ -226,6 +226,8 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_reuse_record: FuncRef,
     pub(crate) rt_reuse_list: FuncRef,
     pub(crate) rt_reuse_tuple: FuncRef,
+    // Function entry tracking for diagnostics
+    pub(crate) rt_enter_fn: FuncRef,
 }
 
 /// Declare all runtime helper signatures in the module and return FuncRefs
@@ -349,6 +351,8 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_reuse_list: decl!("rt_reuse_list", [PTR, PTR, PTR, PTR], [PTR]),
         // (ctx, token, items_ptr, len) -> ptr
         rt_reuse_tuple: decl!("rt_reuse_tuple", [PTR, PTR, PTR, PTR], [PTR]),
+        // (ctx, name_ptr, name_len) -> void
+        rt_enter_fn: decl!("rt_enter_fn", [PTR, PTR, PTR], []),
     })
 }
 
@@ -412,6 +416,8 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_reuse_record: cranelift_module::FuncId,
     pub(crate) rt_reuse_list: cranelift_module::FuncId,
     pub(crate) rt_reuse_tuple: cranelift_module::FuncId,
+    // Function entry tracking for diagnostics
+    pub(crate) rt_enter_fn: cranelift_module::FuncId,
 }
 
 impl DeclaredHelpers {
@@ -473,6 +479,7 @@ impl DeclaredHelpers {
             rt_reuse_record: imp!(rt_reuse_record),
             rt_reuse_list: imp!(rt_reuse_list),
             rt_reuse_tuple: imp!(rt_reuse_tuple),
+            rt_enter_fn: imp!(rt_enter_fn),
         }
     }
 }
@@ -599,6 +606,14 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             }
             _ => tv.val, // already boxed
         }
+    }
+
+    /// Emit a call to `rt_enter_fn` to record the current function name for diagnostics.
+    pub(crate) fn emit_enter_fn(&mut self, builder: &mut FunctionBuilder<'_>, fn_name: &str) {
+        let (ptr, len) = self.embed_str(builder, fn_name.as_bytes());
+        builder
+            .ins()
+            .call(self.helpers.rt_enter_fn, &[self.ctx_param, ptr, len]);
     }
 
     /// Try to unbox a boxed `*mut Value` to an unboxed scalar if the target

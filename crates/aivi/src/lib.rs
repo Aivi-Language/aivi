@@ -177,8 +177,9 @@ pub fn run_cranelift_jit_with_handle(
     cg_types: std::collections::HashMap<String, std::collections::HashMap<String, CgType>>,
     monomorph_plan: std::collections::HashMap<String, Vec<CgType>>,
     handle: &CancelHandle,
+    surface_modules: &[aivi_core::Module],
 ) -> Result<(), AiviError> {
-    run_cranelift_jit_cancellable(program, cg_types, monomorph_plan, handle.token.clone())
+    run_cranelift_jit_cancellable(program, cg_types, monomorph_plan, handle.token.clone(), surface_modules)
 }
 
 /// Run the AIVI test suite via JIT compilation.
@@ -194,6 +195,7 @@ pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
 
 pub use aivi_driver::{
     desugar_target, desugar_target_lenient, desugar_target_typed, desugar_target_with_cg_types,
+    desugar_target_with_cg_types_and_surface,
     format_target, kernel_target, load_module_diagnostics, load_modules, load_modules_from_paths,
     parse_file, parse_target, resolve_target, test_target_program_and_names, AiviError,
 };

@@ -11,6 +11,35 @@ use crate::runtime::RuntimeError;
 
 use super::abi::{self, JitRuntimeCtx};
 
+// ---------------------------------------------------------------------------
+// ANSI color helpers for runtime error reporting
+// ---------------------------------------------------------------------------
+
+const RT_RED: &str = "\x1b[1;31m";
+const RT_YELLOW: &str = "\x1b[1;33m";
+const RT_CYAN: &str = "\x1b[1;36m";
+const RT_GRAY: &str = "\x1b[90m";
+const RT_RESET: &str = "\x1b[0m";
+const RT_BOLD: &str = "\x1b[1m";
+
+/// Print a formatted runtime warning to stderr.
+fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
+    let fn_ctx = unsafe {
+        (*ctx)
+            .runtime_mut()
+            .jit_current_fn
+            .as_deref()
+            .map(|s| format!(" {RT_GRAY}in `{s}`{RT_RESET}"))
+            .unwrap_or_default()
+    };
+    eprintln!(
+        "{RT_YELLOW}warning[RT]{RT_RESET}{fn_ctx} {RT_BOLD}{category}{RT_RESET}: {message}"
+    );
+    if !hint.is_empty() {
+        eprintln!("  {RT_CYAN}hint{RT_RESET}: {hint}");
+    }
+}
+
 /// Store a pending error on the runtime context, preserving the first error
 /// (root cause) when multiple cascading failures occur within a single JIT call.
 unsafe fn set_pending_error(ctx: *mut JitRuntimeCtx, e: RuntimeError) {
@@ -18,6 +47,22 @@ unsafe fn set_pending_error(ctx: *mut JitRuntimeCtx, e: RuntimeError) {
     if runtime.jit_pending_error.is_none() {
         runtime.jit_pending_error = Some(e);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Function entry tracking — records the current function name for diagnostics
+// ---------------------------------------------------------------------------
+
+/// Called at the start of every JIT-compiled function to record its name.
+/// This makes subsequent runtime warnings show which function triggered them.
+#[no_mangle]
+pub extern "C" fn rt_enter_fn(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usize) {
+    let name = unsafe {
+        let bytes = std::slice::from_raw_parts(ptr, len);
+        std::str::from_utf8_unchecked(bytes)
+    };
+    let runtime = unsafe { (*ctx).runtime_mut() };
+    runtime.jit_current_fn = Some(name.into());
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +132,10 @@ pub extern "C" fn rt_unbox_int(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i
     match value {
         Value::Int(v) => *v,
         other => {
-            eprintln!("aivi: rt_unbox_int: expected Int, got {other:?}");
+            eprintln!(
+                "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}type mismatch{RT_RESET}: expected an integer value, but got `{other:?}`"
+            );
+            eprintln!("  {RT_CYAN}hint{RT_RESET}: a numeric expression evaluated to the wrong type — check that the value is declared as `Int`");
             0
         }
     }
@@ -100,7 +148,10 @@ pub extern "C" fn rt_unbox_float(_ctx: *mut JitRuntimeCtx, ptr: *const Value) ->
     match value {
         Value::Float(v) => v.to_bits() as i64,
         other => {
-            eprintln!("aivi: rt_unbox_float: expected Float, got {other:?}");
+            eprintln!(
+                "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}type mismatch{RT_RESET}: expected a float value, but got `{other:?}`"
+            );
+            eprintln!("  {RT_CYAN}hint{RT_RESET}: a floating-point expression evaluated to the wrong type — check that the value is declared as `Float`");
             0f64.to_bits() as i64
         }
     }
@@ -113,7 +164,10 @@ pub extern "C" fn rt_unbox_bool(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> 
     match value {
         Value::Bool(v) => i64::from(*v),
         other => {
-            eprintln!("aivi: rt_unbox_bool: expected Bool, got {other:?}");
+            eprintln!(
+                "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}type mismatch{RT_RESET}: expected a boolean (`true`/`false`), but got `{other:?}`"
+            );
+            eprintln!("  {RT_CYAN}hint{RT_RESET}: a condition expression did not produce a Bool — check `if` guards and boolean-typed bindings");
             0
         }
     }
@@ -247,7 +301,7 @@ pub extern "C" fn rt_alloc_constructor(
 /// `value_ptr` must be a valid `Value::Record`.
 #[no_mangle]
 pub extern "C" fn rt_record_field(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     value_ptr: *const Value,
     name_ptr: *const u8,
     name_len: usize,
@@ -259,12 +313,22 @@ pub extern "C" fn rt_record_field(
         Value::Record(rec) => match rec.get(name) {
             Some(v) => abi::box_value(v.clone()),
             None => {
-                eprintln!("aivi: record field '{name}' not found");
+                rt_warn(
+                    ctx,
+                    "missing record field",
+                    &format!("field `{name}` does not exist on this record"),
+                    &format!("check that the record type includes a `{name}` field and that it was correctly constructed"),
+                );
                 abi::box_value(Value::Unit)
             }
         },
         other => {
-            eprintln!("aivi: rt_record_field: expected Record, got {other:?}");
+            rt_warn(
+                ctx,
+                "type mismatch",
+                &format!("tried to access field `{name}` on a non-record value: `{other:?}`"),
+                "this value should be a record — check that the expression producing it returns the correct type",
+            );
             abi::box_value(Value::Unit)
         }
     }
@@ -276,7 +340,7 @@ pub extern "C" fn rt_record_field(
 /// `value_ptr` must be a valid `Value::List`.
 #[no_mangle]
 pub extern "C" fn rt_list_index(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     value_ptr: *const Value,
     index: i64,
 ) -> *mut Value {
@@ -291,16 +355,27 @@ pub extern "C" fn rt_list_index(
             match list.get(idx) {
                 Some(v) => abi::box_value(v.clone()),
                 None => {
-                    eprintln!(
-                        "aivi: list index {index} out of bounds (len {})",
-                        list.len()
+                    rt_warn(
+                        ctx,
+                        "index out of bounds",
+                        &format!(
+                            "list index {index} is out of range (list has {} element{})",
+                            list.len(),
+                            if list.len() == 1 { "" } else { "s" }
+                        ),
+                        "ensure the index is within [0, len-1]; use `List.get` for a safe `Option`-returning lookup",
                     );
                     abi::box_value(Value::Unit)
                 }
             }
         }
         other => {
-            eprintln!("aivi: rt_list_index: expected List, got {other:?}");
+            rt_warn(
+                ctx,
+                "type mismatch",
+                &format!("tried to index into a non-list value: `{other:?}`"),
+                "this value should be a list — check that the expression producing it returns `List _`",
+            );
             abi::box_value(Value::Unit)
         }
     }
@@ -487,7 +562,12 @@ pub extern "C" fn rt_get_global(
     let val = match runtime.ctx.globals.get(name) {
         Some(v) => v,
         None => {
-            eprintln!("aivi: global '{name}' not found");
+            rt_warn(
+                ctx,
+                "undefined global",
+                &format!("global definition `{name}` was not found"),
+                "this may indicate a missing import or a definition that failed to compile",
+            );
             return abi::box_value(Value::Unit);
         }
     };
@@ -697,7 +777,7 @@ pub extern "C" fn rt_constructor_arity(_ctx: *mut JitRuntimeCtx, ptr: *const Val
 /// Get a Constructor argument by index.
 #[no_mangle]
 pub extern "C" fn rt_constructor_arg(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     ptr: *const Value,
     index: i64,
 ) -> *mut Value {
@@ -706,15 +786,26 @@ pub extern "C" fn rt_constructor_arg(
         Value::Constructor { args, name } => match args.get(index as usize) {
             Some(v) => abi::box_value(v.clone()),
             None => {
-                eprintln!(
-                    "aivi: constructor '{name}' arg index {index} out of bounds (has {})",
-                    args.len()
+                rt_warn(
+                    ctx,
+                    "constructor argument out of bounds",
+                    &format!(
+                        "tried to access argument {index} of constructor `{name}`, but it only has {} argument{}",
+                        args.len(),
+                        if args.len() == 1 { "" } else { "s" }
+                    ),
+                    &format!("pattern matching on `{name}` accessed more fields than the constructor carries — check the variant definition"),
                 );
                 abi::box_value(Value::Unit)
             }
         },
         other => {
-            eprintln!("aivi: rt_constructor_arg: expected Constructor, got {other:?}");
+            rt_warn(
+                ctx,
+                "type mismatch",
+                &format!("tried to extract a constructor argument, but the value is `{other:?}`"),
+                "a pattern match or destructuring expected a constructor (variant) value here — check that the matched expression returns the right type",
+            );
             abi::box_value(Value::Unit)
         }
     }
@@ -733,7 +824,7 @@ pub extern "C" fn rt_tuple_len(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i
 /// Get a Tuple element by index.
 #[no_mangle]
 pub extern "C" fn rt_tuple_item(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     ptr: *const Value,
     index: i64,
 ) -> *mut Value {
@@ -742,15 +833,26 @@ pub extern "C" fn rt_tuple_item(
         Value::Tuple(items) => match items.get(index as usize) {
             Some(v) => abi::box_value(v.clone()),
             None => {
-                eprintln!(
-                    "aivi: tuple index {index} out of bounds (len {})",
-                    items.len()
+                rt_warn(
+                    ctx,
+                    "tuple index out of bounds",
+                    &format!(
+                        "tuple index {index} is out of range (tuple has {} element{})",
+                        items.len(),
+                        if items.len() == 1 { "" } else { "s" }
+                    ),
+                    "ensure the tuple destructuring matches the actual tuple size",
                 );
                 abi::box_value(Value::Unit)
             }
         },
         other => {
-            eprintln!("aivi: rt_tuple_item: expected Tuple, got {other:?}");
+            rt_warn(
+                ctx,
+                "type mismatch",
+                &format!("tried to index a tuple, but the value is `{other:?}`"),
+                "a tuple destructuring pattern expected a tuple value here",
+            );
             abi::box_value(Value::Unit)
         }
     }
@@ -969,7 +1071,9 @@ pub extern "C" fn rt_make_closure(
                 let result_ptr = f(ctx_ptr as i64, env_ptr as i64, arg_ptr as i64);
 
                 let result = if result_ptr == 0 {
-                    eprintln!("aivi: closure returned null pointer");
+                    eprintln!(
+                        "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}null return{RT_RESET}: a JIT closure returned a null pointer (treated as unit)"
+                    );
                     Value::Unit
                 } else {
                     let rp = result_ptr as *const Value;
@@ -1050,7 +1154,10 @@ pub extern "C" fn rt_binary_op(
             }
         }
     }
-    eprintln!("aivi: binary op '{op}' failed for operand types");
+    eprintln!(
+        "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}operator error{RT_RESET}: binary operator `{op}` could not be applied to the given operand types"
+    );
+    eprintln!("  {RT_CYAN}hint{RT_RESET}: check that both operands have compatible types for `{op}`");
     abi::box_value(Value::Unit)
 }
 
@@ -1210,7 +1317,10 @@ pub extern "C" fn rt_register_jit_fn(
                     let call_args = [ctx_ptr as i64];
                     let result_ptr = unsafe { super::compile::call_jit_function(fp, &call_args) };
                     let result = if result_ptr == 0 {
-                        eprintln!("aivi: AOT effect '{}' returned null pointer", def_name);
+                        eprintln!(
+                            "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}null return{RT_RESET}: AOT effect `{}` returned a null pointer (treated as unit)",
+                            def_name
+                        );
                         Value::Unit
                     } else {
                         unsafe { abi::unbox_value(result_ptr as *mut Value) }
@@ -1337,6 +1447,8 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_register_jit_fn", rt_register_jit_fn as *const u8),
         // Sigil evaluation
         ("rt_eval_sigil", rt_eval_sigil as *const u8),
+        // Function entry tracking for diagnostics
+        ("rt_enter_fn", rt_enter_fn as *const u8),
     ]
 }
 

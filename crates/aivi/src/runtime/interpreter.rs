@@ -85,6 +85,9 @@ pub(crate) struct Runtime {
     /// when a builtin or effect fails inside JIT code, so that the enclosing
     /// closure wrapper can propagate it as `Err` instead of swallowing it.
     pub(crate) jit_pending_error: Option<RuntimeError>,
+    /// Name of the currently executing JIT-compiled function, set by
+    /// `rt_enter_fn` at the start of each compiled function body.
+    pub(crate) jit_current_fn: Option<Box<str>>,
 }
 
 #[derive(Clone)]
@@ -804,6 +807,125 @@ fn bind_module_machine_values(
         }
 
         machine_specs.push((runtime_machine_name, initial_state, transitions));
+    }
+}
+
+/// Register machine transition builtins into the runtime globals.
+/// Used by the Cranelift JIT path which doesn't have per-module environments.
+/// The JIT codegen emits `rt_get_global("eventName")` with short names, so we
+/// must register both short and qualified names in globals.
+pub(crate) fn register_machines_for_jit(
+    runtime: &Runtime,
+    surface_modules: &[crate::surface::Module],
+) {
+    let globals = &runtime.ctx.globals;
+    for module in surface_modules {
+        let module_name = &module.name.name;
+        for item in &module.items {
+            let crate::surface::ModuleItem::MachineDecl(machine_decl) = item else {
+                continue;
+            };
+
+            let runtime_machine_name = format!("{module_name}.{}", machine_decl.name.name);
+            let mut transitions: HashMap<String, Vec<MachineEdge>> = HashMap::new();
+            let mut initial_state = machine_decl
+                .transitions
+                .iter()
+                .find(|t| t.source.name.is_empty())
+                .map(|t| t.target.name.clone())
+                .or_else(|| {
+                    machine_decl
+                        .transitions
+                        .first()
+                        .map(|t| t.target.name.clone())
+                })
+                .or_else(|| {
+                    machine_decl
+                        .states
+                        .first()
+                        .map(|s| s.name.name.clone())
+                })
+                .unwrap_or_else(|| "Closed".to_string());
+
+            for transition in &machine_decl.transitions {
+                let source = if transition.source.name.is_empty() {
+                    None
+                } else {
+                    Some(transition.source.name.clone())
+                };
+                if source.is_none() {
+                    initial_state = transition.target.name.clone();
+                }
+                transitions
+                    .entry(transition.name.name.clone())
+                    .or_default()
+                    .push(MachineEdge {
+                        source,
+                        target: transition.target.name.clone(),
+                    });
+            }
+
+            // Register state constructors (both short and qualified)
+            let mut state_names = machine_decl
+                .states
+                .iter()
+                .map(|s| s.name.name.clone())
+                .collect::<Vec<_>>();
+            state_names.sort();
+            state_names.dedup();
+            for state_name in &state_names {
+                let state_ctor = Value::Constructor {
+                    name: state_name.clone(),
+                    args: Vec::new(),
+                };
+                globals.set(state_name.clone(), state_ctor.clone());
+                let qualified = format!("{module_name}.{state_name}");
+                if globals.get(&qualified).is_none() {
+                    globals.set(qualified, state_ctor);
+                }
+            }
+
+            // Register transition builtins (both short and qualified)
+            let mut machine_fields: HashMap<String, Value> = HashMap::new();
+            let mut can_fields: HashMap<String, Value> = HashMap::new();
+            let mut event_names = transitions.keys().cloned().collect::<Vec<_>>();
+            event_names.sort();
+            for event_name in event_names {
+                let transition_value = make_machine_transition_builtin(
+                    runtime_machine_name.clone(),
+                    event_name.clone(),
+                );
+                machine_fields.insert(event_name.clone(), transition_value.clone());
+                // Short name in globals (JIT uses rt_get_global with short names)
+                globals.set(event_name.clone(), transition_value.clone());
+                let qualified_transition = format!("{module_name}.{event_name}");
+                if globals.get(&qualified_transition).is_none() {
+                    globals.set(qualified_transition, transition_value);
+                }
+                can_fields.insert(
+                    event_name.clone(),
+                    make_machine_can_builtin(runtime_machine_name.clone(), event_name),
+                );
+            }
+
+            // Register machine record (both short and qualified)
+            machine_fields.insert(
+                "currentState".to_string(),
+                make_machine_current_state_builtin(runtime_machine_name.clone()),
+            );
+            machine_fields.insert("can".to_string(), Value::Record(Arc::new(can_fields)));
+            let machine_value = Value::Record(Arc::new(machine_fields));
+            globals.set(machine_decl.name.name.clone(), machine_value.clone());
+            let qualified_machine = format!("{module_name}.{}", machine_decl.name.name);
+            if globals.get(&qualified_machine).is_none() {
+                globals.set(qualified_machine, machine_value);
+            }
+
+            // Register machine spec with RuntimeContext
+            runtime
+                .ctx
+                .register_machine(runtime_machine_name, initial_state, transitions);
+        }
     }
 }
 
