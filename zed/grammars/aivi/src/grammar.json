@@ -2307,10 +2307,6 @@
     [
       "lambda",
       "_atom"
-    ],
-    [
-      "_definition",
-      "binding"
     ]
   ],
   "precedences": [],

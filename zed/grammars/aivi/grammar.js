@@ -21,8 +21,6 @@ module.exports = grammar({
     [$.type_constructor, $._simple_type],
     // lambda params (wildcards) vs wildcard atoms
     [$.lambda, $._atom],
-    // standalone decorator (_definition) vs decorator before a binding
-    [$._definition, $.binding],
   ],
 
   rules: {
