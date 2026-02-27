@@ -336,7 +336,7 @@ dialogSetTitle = gtk4.dialogSetTitle
 dialogSetChild : DialogId -> WidgetId -> Effect GtkError Unit
 dialogSetChild = gtk4.dialogSetChild
 
-dialogPresent : DialogId -> Effect GtkError Unit
+dialogPresent : DialogId -> WindowId -> Effect GtkError Unit
 dialogPresent = gtk4.dialogPresent
 
 dialogClose : DialogId -> Effect GtkError Unit

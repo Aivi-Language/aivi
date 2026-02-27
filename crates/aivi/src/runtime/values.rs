@@ -217,6 +217,34 @@ pub(crate) enum StreamState {
         size: usize,
         buffer: Vec<u8>,
     },
+    Map {
+        source: Arc<StreamHandle>,
+        func: Value,
+    },
+    Filter {
+        source: Arc<StreamHandle>,
+        pred: Value,
+    },
+    Take {
+        source: Arc<StreamHandle>,
+        remaining: usize,
+    },
+    Drop {
+        source: Arc<StreamHandle>,
+        to_skip: usize,
+    },
+    FlatMap {
+        source: Arc<StreamHandle>,
+        func: Value,
+        inner: Option<Arc<StreamHandle>>,
+    },
+    Merge {
+        left: Arc<StreamHandle>,
+        right: Arc<StreamHandle>,
+    },
+    Values {
+        items: std::collections::VecDeque<Value>,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]

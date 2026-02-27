@@ -1,7 +1,7 @@
 use super::TypeChecker;
 use crate::typecheck::types::{Scheme, Type, TypeEnv};
 
-pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
+pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     let int_ty = Type::con("Int");
     let float_ty = Type::con("Float");
     let text_ty = Type::con("Text");
@@ -157,7 +157,7 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
     };
     env.insert("https".to_string(), Scheme::mono(https_record));
 
-    let rest_a = _checker.fresh_var_id();
+    let rest_a = checker.fresh_var_id();
     let rest_source_ty = Type::con("Source").app(vec![Type::con("RestApi"), Type::Var(rest_a)]);
     let rest_record = Type::Record {
         fields: vec![
@@ -291,6 +291,33 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
     };
     let stream_bytes_ty =
         Type::con("Stream").app(vec![Type::con("List").app(vec![Type::con("Int")])]);
+
+    // Type vars for polymorphic combinators
+    let a_map = checker.fresh_var_id();
+    let b_map = checker.fresh_var_id();
+    let a_filter = checker.fresh_var_id();
+    let a_take = checker.fresh_var_id();
+    let a_drop = checker.fresh_var_id();
+    let a_flatmap = checker.fresh_var_id();
+    let b_flatmap = checker.fresh_var_id();
+    let a_merge = checker.fresh_var_id();
+    let a_fold = checker.fresh_var_id();
+    let b_fold = checker.fresh_var_id();
+    let e_fold = checker.fresh_var_id(); // polymorphic error type
+    let a_fromlist = checker.fresh_var_id();
+
+    let stream_a_map = Type::con("Stream").app(vec![Type::Var(a_map)]);
+    let stream_b_map = Type::con("Stream").app(vec![Type::Var(b_map)]);
+    let stream_a_filter = Type::con("Stream").app(vec![Type::Var(a_filter)]);
+    let stream_a_take = Type::con("Stream").app(vec![Type::Var(a_take)]);
+    let stream_a_drop = Type::con("Stream").app(vec![Type::Var(a_drop)]);
+    let stream_a_flatmap = Type::con("Stream").app(vec![Type::Var(a_flatmap)]);
+    let stream_b_flatmap = Type::con("Stream").app(vec![Type::Var(b_flatmap)]);
+    let stream_a_merge = Type::con("Stream").app(vec![Type::Var(a_merge)]);
+    let stream_a_fold = Type::con("Stream").app(vec![Type::Var(a_fold)]);
+    let stream_a_fromlist = Type::con("Stream").app(vec![Type::Var(a_fromlist)]);
+    let list_a_fromlist = Type::con("List").app(vec![Type::Var(a_fromlist)]);
+
     let streams_record = Type::Record {
         fields: vec![
             (
@@ -323,9 +350,125 @@ pub(super) fn register(_checker: &mut TypeChecker, env: &mut TypeEnv) {
                     )),
                 ),
             ),
+            // fromList : List A -> Stream A
+            (
+                "fromList".to_string(),
+                Type::Func(
+                    Box::new(list_a_fromlist),
+                    Box::new(stream_a_fromlist),
+                ),
+            ),
+            // map : (A -> B) -> Stream A -> Stream B
+            (
+                "map".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(a_map)),
+                        Box::new(Type::Var(b_map)),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(stream_a_map),
+                        Box::new(stream_b_map),
+                    )),
+                ),
+            ),
+            // filter : (A -> Bool) -> Stream A -> Stream A
+            (
+                "filter".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(a_filter)),
+                        Box::new(Type::con("Bool")),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(stream_a_filter.clone()),
+                        Box::new(stream_a_filter),
+                    )),
+                ),
+            ),
+            // take : Int -> Stream A -> Stream A
+            (
+                "take".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Int")),
+                    Box::new(Type::Func(
+                        Box::new(stream_a_take.clone()),
+                        Box::new(stream_a_take),
+                    )),
+                ),
+            ),
+            // drop : Int -> Stream A -> Stream A
+            (
+                "drop".to_string(),
+                Type::Func(
+                    Box::new(Type::con("Int")),
+                    Box::new(Type::Func(
+                        Box::new(stream_a_drop.clone()),
+                        Box::new(stream_a_drop),
+                    )),
+                ),
+            ),
+            // flatMap : (A -> Stream B) -> Stream A -> Stream B
+            (
+                "flatMap".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(a_flatmap)),
+                        Box::new(stream_b_flatmap.clone()),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(stream_a_flatmap),
+                        Box::new(stream_b_flatmap),
+                    )),
+                ),
+            ),
+            // merge : Stream A -> Stream A -> Stream A
+            (
+                "merge".to_string(),
+                Type::Func(
+                    Box::new(stream_a_merge.clone()),
+                    Box::new(Type::Func(
+                        Box::new(stream_a_merge.clone()),
+                        Box::new(stream_a_merge),
+                    )),
+                ),
+            ),
+            // fold : (B -> A -> B) -> B -> Stream A -> Effect e B
+            (
+                "fold".to_string(),
+                Type::Func(
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(b_fold)),
+                        Box::new(Type::Func(
+                            Box::new(Type::Var(a_fold)),
+                            Box::new(Type::Var(b_fold)),
+                        )),
+                    )),
+                    Box::new(Type::Func(
+                        Box::new(Type::Var(b_fold)),
+                        Box::new(Type::Func(
+                            Box::new(stream_a_fold),
+                            Box::new(
+                                Type::con("Effect")
+                                    .app(vec![Type::Var(e_fold), Type::Var(b_fold)]),
+                            ),
+                        )),
+                    )),
+                ),
+            ),
         ]
         .into_iter()
         .collect(),
     };
-    env.insert("streams".to_string(), Scheme::mono(streams_record));
+    env.insert(
+        "streams".to_string(),
+        Scheme {
+            vars: vec![
+                a_map, b_map, a_filter, a_take, a_drop, a_flatmap, b_flatmap, a_merge, a_fold,
+                b_fold, e_fold, a_fromlist,
+            ],
+            ty: streams_record,
+            origin: None,
+        },
+    );
 }
