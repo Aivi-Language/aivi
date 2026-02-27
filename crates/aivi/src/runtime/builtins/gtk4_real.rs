@@ -22,6 +22,7 @@ mod linux {
         fn gtk_window_set_titlebar(window: *mut c_void, titlebar: *mut c_void);
         fn gtk_window_set_child(window: *mut c_void, child: *mut c_void);
         fn gtk_window_present(window: *mut c_void);
+        fn gtk_window_close(window: *mut c_void);
 
         fn gtk_widget_set_visible(widget: *mut c_void, visible: c_int);
         fn gtk_widget_set_size_request(widget: *mut c_void, width: c_int, height: c_int);
@@ -1969,6 +1970,28 @@ mod linux {
                             )))
                         })?;
                         unsafe { gtk_window_present(window) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "windowClose".to_string(),
+            builtin("gtk4.windowClose", 1, |mut args, _| {
+                let window_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowClose expects Int window id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let window = state.windows.get(&window_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.windowClose unknown window id {window_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_window_close(window) };
                         Ok(Value::Unit)
                     })
                 }))

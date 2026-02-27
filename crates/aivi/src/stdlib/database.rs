@@ -12,7 +12,7 @@ export Driver, DbConfig, configure
 export Sqlite, Postgresql, Mysql
 export SqliteTuning, MigrationStep, SavepointName, TxAction
 export FtsDoc, FtsQuery
-export table, load, applyDelta, applyDeltas, runMigrations, runMigrationSql
+export table, load, query, applyDelta, applyDeltas, runMigrations, runMigrationSql
 export configureSqlite
 export beginTx, commitTx, rollbackTx, inTransaction
 export savepoint, releaseSavepoint, rollbackToSavepoint
@@ -80,6 +80,12 @@ table = name columns => database.table name columns
 
 load : Table A -> Effect DbError (List A)
 load = value => database.load value
+
+query : Table A -> (A -> Bool) -> Effect DbError (List A)
+query = tbl pred => do Effect {
+  rows <- load tbl
+  pure (List.filter pred rows)
+}
 
 applyDelta : Table A -> Delta A -> Effect DbError (Table A)
 applyDelta = table delta => database.applyDelta table delta
