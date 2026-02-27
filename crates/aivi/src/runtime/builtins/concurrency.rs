@@ -114,12 +114,16 @@ pub(super) fn build_channel_record() -> Value {
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |runtime| loop {
                     runtime.check_cancelled()?;
+                    // Pump GTK events first on every iteration so input events
+                    // (clicks, motion, key presses) are processed immediately
+                    // rather than waiting up to 25ms for the next timeout.
+                    super::gtk4_real::pump_gtk_events();
                     let recv_guard = receiver
                         .inner
                         .receiver
                         .lock()
                         .map_err(|_| RuntimeError::Message("channel poisoned".to_string()))?;
-                    match recv_guard.recv_timeout(Duration::from_millis(25)) {
+                    match recv_guard.recv_timeout(Duration::from_millis(1)) {
                         Ok(value) => {
                             return Ok(Value::Constructor {
                                 name: "Ok".to_string(),
@@ -127,10 +131,7 @@ pub(super) fn build_channel_record() -> Value {
                             });
                         }
                         Err(mpsc::RecvTimeoutError::Timeout) => {
-                            // Drop the lock before pumping GTK so GTK signal callbacks
-                            // can acquire GTK_STATE without deadlocking.
                             drop(recv_guard);
-                            super::gtk4_real::pump_gtk_events();
                             continue;
                         }
                         Err(mpsc::RecvTimeoutError::Disconnected) => {
