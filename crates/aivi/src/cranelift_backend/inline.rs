@@ -4,17 +4,16 @@
 //! sites of small, non-recursive functions with the callee's body, eliminating
 //! call overhead and exposing more code to Cranelift's local optimisations.
 //!
-//! Respects the `@inline` decorator (always inline) and auto-inlines functions
-//! whose body cost is below `INLINE_THRESHOLD`.
+//! Auto-inlines functions whose body cost is below `INLINE_THRESHOLD`.
 
 use std::collections::HashMap;
 
 use crate::rust_ir::{
-    RustIrBlockItem, RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrModule,
-    RustIrPattern, RustIrRecordField, RustIrTextPart,
+    RustIrBlockItem, RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrModule, RustIrPattern,
+    RustIrRecordField, RustIrTextPart,
 };
 
-/// Maximum AST-node cost for automatic inlining (without `@inline`).
+/// Maximum AST-node cost for automatic inlining.
 const INLINE_THRESHOLD: u32 = 12;
 
 /// Maximum inlining depth to prevent runaway expansion from mutual inlining.
@@ -181,7 +180,7 @@ fn collect_candidates(modules: &[RustIrModule]) -> HashMap<String, InlineCandida
             }
 
             let cost = expr_cost(body);
-            let eligible = def.inline || cost <= INLINE_THRESHOLD;
+            let eligible = cost <= INLINE_THRESHOLD;
 
             if eligible {
                 candidates.insert(
@@ -1324,10 +1323,9 @@ mod tests {
         }
     }
 
-    fn make_def(name: &str, inline: bool, expr: RustIrExpr) -> RustIrDef {
+    fn make_def(name: &str, expr: RustIrExpr) -> RustIrDef {
         RustIrDef {
             name: name.to_string(),
-            inline,
             expr,
             cg_type: None,
         }
@@ -1336,7 +1334,7 @@ mod tests {
     #[test]
     fn candidate_small_function() {
         // f x = x  (identity, cost = 1, well under threshold)
-        let def = make_def("f", false, lambda(1, "x", local(2, "x")));
+        let def = make_def("f", lambda(1, "x", local(2, "x")));
         let modules = vec![make_module("Main", vec![def])];
         let candidates = collect_candidates(&modules);
         assert!(candidates.contains_key("Main.f"));
@@ -1344,34 +1342,9 @@ mod tests {
     }
 
     #[test]
-    fn candidate_inline_decorator_overrides_size() {
-        // Build a body that exceeds threshold but has @inline
-        let big_body = if_expr(
-            10,
-            binary(11, ">", local(12, "x"), lit_int(13)),
-            if_expr(
-                14,
-                binary(15, "<", local(16, "x"), lit_int(17)),
-                binary(18, "+", local(19, "x"), lit_int(20)),
-                binary(21, "*", local(22, "x"), lit_int(23)),
-            ),
-            binary(24, "-", local(25, "x"), lit_int(26)),
-        );
-        assert!(expr_cost(&big_body) > INLINE_THRESHOLD);
-        let def = make_def("g", true, lambda(1, "x", big_body));
-        let modules = vec![make_module("Main", vec![def])];
-        let candidates = collect_candidates(&modules);
-        assert!(candidates.contains_key("Main.g"));
-    }
-
-    #[test]
     fn candidate_recursive_excluded() {
         // f x = f x  (self-recursive)
-        let def = make_def(
-            "f",
-            false,
-            lambda(1, "x", app(2, global(3, "f"), local(4, "x"))),
-        );
+        let def = make_def("f", lambda(1, "x", app(2, global(3, "f"), local(4, "x"))));
         let modules = vec![make_module("Main", vec![def])];
         let candidates = collect_candidates(&modules);
         assert!(!candidates.contains_key("Main.f"));
@@ -1380,7 +1353,7 @@ mod tests {
     #[test]
     fn candidate_not_a_function() {
         // x = 42  (not a function — no lambda)
-        let def = make_def("x", false, lit_int(1));
+        let def = make_def("x", lit_int(1));
         let modules = vec![make_module("Main", vec![def])];
         let candidates = collect_candidates(&modules);
         assert!(candidates.is_empty());
@@ -1427,8 +1400,8 @@ mod tests {
     fn inline_simple_identity() {
         // f x = x
         // main = f 42
-        let f_def = make_def("f", false, lambda(1, "x", local(2, "x")));
-        let main_def = make_def("main", false, app(10, global(11, "f"), lit_int(12)));
+        let f_def = make_def("f", lambda(1, "x", local(2, "x")));
+        let main_def = make_def("main", app(10, global(11, "f"), lit_int(12)));
         let mut modules = vec![make_module("Main", vec![f_def, main_def])];
         inline_program(&mut modules);
 
@@ -1447,7 +1420,6 @@ mod tests {
         // main = add 1 2 (as Call)
         let add_def = make_def(
             "add",
-            false,
             lambda(
                 1,
                 "x",
@@ -1457,7 +1429,6 @@ mod tests {
         // Call with 2 args
         let main_def = make_def(
             "main",
-            false,
             RustIrExpr::Call {
                 id: 10,
                 func: Box::new(global(11, "add")),
@@ -1480,17 +1451,9 @@ mod tests {
     fn inline_depth_limit() {
         // a x = b x; b x = a x  (mutual recursion via non-self references)
         // These are NOT detected as self-recursive but the depth limit prevents infinite expansion
-        let a_def = make_def(
-            "a",
-            false,
-            lambda(1, "x", app(2, global(3, "b"), local(4, "x"))),
-        );
-        let b_def = make_def(
-            "b",
-            false,
-            lambda(5, "x", app(6, global(7, "a"), local(8, "x"))),
-        );
-        let main_def = make_def("main", false, app(10, global(11, "a"), lit_int(12)));
+        let a_def = make_def("a", lambda(1, "x", app(2, global(3, "b"), local(4, "x"))));
+        let b_def = make_def("b", lambda(5, "x", app(6, global(7, "a"), local(8, "x"))));
+        let main_def = make_def("main", app(10, global(11, "a"), lit_int(12)));
         let mut modules = vec![make_module("Main", vec![a_def, b_def, main_def])];
         // This should terminate thanks to MAX_INLINE_DEPTH
         inline_program(&mut modules);

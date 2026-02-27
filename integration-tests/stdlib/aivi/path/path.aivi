@@ -46,8 +46,8 @@ parent_functional = do Effect {
 }
 
 @test "to string roundtrip"
-  toString_roundtrip = do Effect {
-    p = parse "a/b/c"
-    s = toString p
-    assert (text.length s > 0)
-  }
+toString_roundtrip = do Effect {
+  p = parse "a/b/c"
+  s = toString p
+  assert (text.length s > 0)
+}

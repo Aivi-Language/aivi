@@ -526,8 +526,8 @@ x = ~<gtk><object class="GtkBox" props={ { spacing: 1 } } /></gtk>
     assert!(
         tokens
             .iter()
-            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_STRING && s == "\"GtkBox\""),
-        "expected attribute value to be highlighted as a string token, got: {tokens:?}"
+            .any(|(ty, s)| *ty == Backend::SEM_TOKEN_TYPE && s == "\"GtkBox\""),
+        "expected GTK class attribute value to be highlighted as a type token, got: {tokens:?}"
     );
     assert!(
         tokens

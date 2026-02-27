@@ -475,6 +475,12 @@ impl Parser {
     fn parse_export_list(&mut self) -> Vec<crate::surface::ExportItem> {
         let mut exports = Vec::new();
         loop {
+            self.consume_newlines();
+            // Stop when the next token looks like a definition (ident followed by
+            // `=`, `:`, or `(`), a keyword, or end-of-file — not an export name.
+            if self.looks_like_definition_start() {
+                break;
+            }
             if self.match_keyword("domain") {
                 if let Some(name) = self.consume_ident() {
                     exports.push(crate::surface::ExportItem {
@@ -494,11 +500,42 @@ impl Parser {
             } else {
                 break;
             }
-            if !self.consume_symbol(",") {
-                break;
-            }
+            // Commas and newlines both separate export items.
+            self.consume_symbol(",");
         }
         exports
+    }
+
+    /// Returns `true` when the current position looks like the beginning of a
+    /// definition or other module-level item rather than an export-list name.
+    fn looks_like_definition_start(&self) -> bool {
+        let Some(tok) = self.tokens.get(self.pos) else {
+            return true;
+        };
+        // Keywords that start module items always end the export list.
+        // Note: `domain` is intentionally excluded — `export domain Name`
+        // is valid export-list syntax handled by parse_export_list itself.
+        if tok.kind == TokenKind::Ident {
+            match tok.text.as_str() {
+                "module" | "export" | "use" | "class" | "instance" | "machine" => {
+                    return true;
+                }
+                _ => {}
+            }
+            // An identifier followed by `=`, `:`, or `(` is a definition, not an export name.
+            if let Some(next) = self.tokens.get(self.pos + 1) {
+                if next.kind == TokenKind::Symbol
+                    && matches!(next.text.as_str(), "=" | ":" | "(")
+                {
+                    return true;
+                }
+            }
+        }
+        // Decorators (`@...`) start a new item.
+        if tok.kind == TokenKind::Symbol && tok.text == "@" {
+            return true;
+        }
+        false
     }
 
     fn parse_use_decl(&mut self) -> Option<UseDecl> {
@@ -589,7 +626,7 @@ impl Parser {
             let name = decorator.name.name.as_str();
             if !matches!(
                 name,
-                "static" | "inline" | "deprecated" | "test" | "debug" | "native"
+                "static" | "deprecated" | "test" | "debug" | "native"
             ) {
                 self.emit_diag(
                     "E1506",

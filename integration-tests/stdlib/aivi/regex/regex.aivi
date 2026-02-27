@@ -50,29 +50,29 @@ match_first = do Effect {
 }
 
 @test "matches all"
-  matches_all = do Effect {
-    r = compile "\\d+" or (fail "compile failed")
-    ms = matches r "a1b2c3"
-    assert (List.length ms == 3)
-  }
+matches_all = do Effect {
+  r = compile "\\d+" or (fail "compile failed")
+  ms = matches r "a1b2c3"
+  assert (List.length ms == 3)
+}
 
 @test "split"
-  split_functional = do Effect {
-    r = compile "[,;]" or (fail "compile failed")
-    parts = split r "a,b;c,d"
-    assert (List.length parts == 4)
-  }
+split_functional = do Effect {
+  r = compile "[,;]" or (fail "compile failed")
+  parts = split r "a,b;c,d"
+  assert (List.length parts == 4)
+}
 
 @test "replace"
-  replace_functional = do Effect {
-    r = compile "\\d+" or (fail "compile failed")
-    result = replace r "abc123def456" "NUM"
-    assert (result == "abcNUMdef456")
-  }
+replace_functional = do Effect {
+  r = compile "\\d+" or (fail "compile failed")
+  result = replace r "abc123def456" "NUM"
+  assert (result == "abcNUMdef456")
+}
 
 @test "replace all"
-  replaceAll_functional = do Effect {
-    r = compile "\\d+" or (fail "compile failed")
-    result = replaceAll r "abc123def456" "NUM"
-    assert (result == "abcNUMdefNUM")
-  }
+replaceAll_functional = do Effect {
+  r = compile "\\d+" or (fail "compile failed")
+  result = replaceAll r "abc123def456" "NUM"
+  assert (result == "abcNUMdefNUM")
+}

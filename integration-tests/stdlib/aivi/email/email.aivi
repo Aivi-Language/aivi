@@ -19,15 +19,15 @@ mime_parsing_helpers = do Effect {
 }
 
 @test "smtp surface"
-  smtp_surface = do Effect {
-    smtpSend {
-      host: "smtp.example.com"
-      user: "u"
-      password: "p"
-      from: "from@example.com"
-      to: "to@example.com"
-      subject: "hello"
-      body: "world"
-    }
-    assert True
+smtp_surface = do Effect {
+  smtpSend {
+    host: "smtp.example.com"
+    user: "u"
+    password: "p"
+    from: "from@example.com"
+    to: "to@example.com"
+    subject: "hello"
+    body: "world"
   }
+  assert True
+}

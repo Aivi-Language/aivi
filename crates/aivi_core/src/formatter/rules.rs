@@ -2195,6 +2195,9 @@
         {
             pipe_block_stack.pop();
         }
+        if pipe_block_stack.is_empty() {
+            arm_rhs_active = false;
+        }
 
         // For `|`/`|>` lines, anchor indentation to the subject line's indent (not just delimiter nesting).
         let mut base_indent_len_for_line = line_indent_len;

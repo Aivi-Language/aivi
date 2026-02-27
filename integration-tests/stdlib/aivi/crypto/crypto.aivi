@@ -2,6 +2,7 @@
 module integrationTests.stdlib.aivi.crypto.tests
 
 use aivi
+use aivi.prelude
 use aivi.testing
 use aivi.crypto
 use aivi.text
@@ -36,33 +37,39 @@ sha256_empty = do Effect {
 
 @test "hmac sha256"
 hmacSha256_functional = do Effect {
-  key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
-  ? { Err _ => panic "bad hex" }
-  msg = fromHex "4869205468657265"
-  ? { Err _ => panic "bad hex" }
-  tag = hmacSha256 key msg
-  assert (length tag > 0)
+  key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b" match
+    | Ok b  => b
+    | Err _ => panic "bad hex"
+    msg = fromHex "4869205468657265" match
+      | Ok b  => b
+      | Err _ => panic "bad hex"
+    tag = hmacSha256 key msg
+    assert (length tag > 0)
 }
 
 @test "hmac sha512"
 hmacSha512_functional = do Effect {
-  key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
-  ? { Err _ => panic "bad hex" }
-  msg = fromHex "4869205468657265"
-  ? { Err _ => panic "bad hex" }
-  tag = hmacSha512 key msg
-  assert (length tag > 0)
+  key = fromHex "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b" match
+    | Ok b  => b
+    | Err _ => panic "bad hex"
+    msg = fromHex "4869205468657265" match
+      | Ok b  => b
+      | Err _ => panic "bad hex"
+    tag = hmacSha512 key msg
+    assert (length tag > 0)
 }
 
 @test "hmac verify roundtrip"
 hmacVerify_roundtrip = do Effect {
-  key = fromHex "aabbccdd"
-  ? { Err _ => panic "bad hex" }
-  msg = fromHex "deadbeef"
-  ? { Err _ => panic "bad hex" }
-  tag = hmacSha256 key msg
-  valid = hmacVerify key msg tag
-  assert valid
+  key = fromHex "aabbccdd" match
+    | Ok b  => b
+    | Err _ => panic "bad hex"
+    msg = fromHex "deadbeef" match
+      | Ok b  => b
+      | Err _ => panic "bad hex"
+    tag = hmacSha256 key msg
+    valid = hmacVerify key msg tag
+    assert valid
 }
 
 // -- Password Hashing --
@@ -91,7 +98,7 @@ randomBytes_length = do Effect {
 
 @test "random uuid format"
 randomUuid_format = do Effect {
-  u <- randomUuid ()
+  u <- randomUuid
   assert (length u == 36)
 }
 
@@ -101,9 +108,10 @@ randomUuid_format = do Effect {
 toHex_fromHex_roundtrip = do Effect {
   original <- randomBytes 16
   hex = toHex original
-  decoded = fromHex hex
-  ? { Err _ => panic "fromHex failed" }
-  assert (secureEquals original decoded)
+  decoded = fromHex hex match
+    | Ok b  => b
+    | Err _ => panic "fromHex failed"
+    assert (secureEquals original decoded)
 }
 
 @test "secure equals same"

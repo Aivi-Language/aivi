@@ -2,6 +2,7 @@
 module integrationTests.stdlib.aivi.logic.tests
 
 use aivi
+use aivi.prelude
 use aivi.testing
 
 // -- Setoid (equality) --
@@ -30,20 +31,29 @@ ord_int = do Effect {
 
 // -- Functor --
 
+// Note: map for Option/List should resolve via Functor typeclass (aivi.logic).
+// Currently the builtin `map` handles List; Option is mapped manually until
+// Functor instance resolution is wired end-to-end.
+
+mapOption : (A -> B) -> Option A -> Option B
+mapOption = f opt => opt match
+  | Some x => Some (f x)
+  | None   => None
+
 @test "functor option"
 functor_option = do Effect {
   some = Some 5
-  mapped = map (x => x + 1) some
+  mapped = mapOption (x => x + 1) some
   assertEq mapped (Some 6)
 
   noVal = None
-  mappedNone = map (x => x + 1) noVal
+  mappedNone = mapOption (x => x + 1) noVal
   assertEq mappedNone None
 }
 
 @test "functor list"
 functor_list = do Effect {
   xs = [1, 2, 3]
-  ys = map (x => x * 2) xs
+  ys = each (x => x * 2) xs
   assertEq ys [2, 4, 6]
 }

@@ -76,39 +76,39 @@ buildRange = arr start end =>
   }
 
 // Create tree from list
-  fromList : List Int -> SegmentTree
-  fromList = arr =>
-    if List.isEmpty arr then Empty
-    else buildRange arr 0 (List.length arr - 1)
+fromList : List Int -> SegmentTree
+fromList = arr =>
+  if List.isEmpty arr then Empty
+  else buildRange arr 0 (List.length arr - 1)
 
 // Query range [l..r] for metadata
-  queryRange : SegmentTree -> Int -> Int -> Option SegmentMeta
-  queryRange = tree l r => tree match
-    | Empty                                           => None
-    | Node { start, end, sum, min, max, left, right } =>
-      if r < start || end < l then None
-      else if l <= start && end <= r then Some { sum: sum, min: min, max: max }
-      else combineMeta (queryRange left l r) (queryRange right l r)
+queryRange : SegmentTree -> Int -> Int -> Option SegmentMeta
+queryRange = tree l r => tree match
+  | Empty                                           => None
+  | Node { start, end, sum, min, max, left, right } =>
+    if r < start || end < l then None
+    else if l <= start && end <= r then Some { sum: sum, min: min, max: max }
+    else combineMeta (queryRange left l r) (queryRange right l r)
 
 // Point update at index (returns new tree, old is unchanged)
-  updatePoint : SegmentTree -> Int -> Int -> SegmentTree
-  updatePoint = tree idx value => tree match
-    | Empty                                             => Empty
-    | Node { start, end } when idx < start || idx > end => tree
-    | Node { start, end } when start == end             => Node {
-      start: start
-      end: end
-      sum: value
-      min: value
-      max: value
-      left: Empty
-      right: Empty
-    }
-    | Node { start, end, left, right } => {
-      newLeft = updatePoint left idx value
-      newRight = updatePoint right idx value
-      nodeFromChildren start end newLeft newRight
-    }
+updatePoint : SegmentTree -> Int -> Int -> SegmentTree
+updatePoint = tree idx value => tree match
+  | Empty                                             => Empty
+  | Node { start, end } when idx < start || idx > end => tree
+  | Node { start, end } when start == end             => Node {
+    start: start
+    end: end
+    sum: value
+    min: value
+    max: value
+    left: Empty
+    right: Empty
+  }
+  | Node { start, end, left, right } => {
+    newLeft = updatePoint left idx value
+    newRight = updatePoint right idx value
+    nodeFromChildren start end newLeft newRight
+  }
 
 @test "Persistent segment tree queries"
 persistency = do Effect {

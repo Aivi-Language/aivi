@@ -288,6 +288,15 @@
       }
     },
     {
+      "name": "GTK Widget Classes",
+      "scope": [
+        "support.class.gtk.aivi"
+      ],
+      "settings": {
+        "foreground": "#2c6bb9"
+      }
+    },
+    {
       "name": "AIVI Decorators",
       "scope": [
         "meta.annotation.decorator.aivi"

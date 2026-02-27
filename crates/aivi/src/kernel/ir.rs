@@ -19,8 +19,6 @@ pub struct KernelModule {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KernelDef {
     pub name: String,
-    #[serde(default)]
-    pub inline: bool,
     pub expr: KernelExpr,
 }
 
@@ -313,7 +311,6 @@ fn lower_module(module: HirModule, id_gen: &mut IdGen) -> KernelModule {
 fn lower_def(def: HirDef, id_gen: &mut IdGen) -> KernelDef {
     KernelDef {
         name: def.name,
-        inline: def.inline,
         expr: lower_expr(def.expr, id_gen),
     }
 }

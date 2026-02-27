@@ -16,7 +16,7 @@ Kernel IR (HIR)
   │  type-check  →  CgType map
   ▼
 RustIR (monomorphised intermediate form)
-  │  inline small / @inline functions
+  │  inline small functions
   │  lower
   ▼
 Cranelift IR  →  native machine code
@@ -172,7 +172,7 @@ Monomorphic definitions get concrete `CgType`s; polymorphic definitions get
 
 1. Lower HIR → Kernel → RustIR with monomorphisation.
 2. Annotate each definition with its `CgType` from type inference.
-3. **Inline**: rewrite call sites of small or `@inline`-decorated functions
+3. **Inline**: rewrite call sites of small functions
    with the callee's body (see [Function Inlining](#function-inlining) below).
 4. **Pass 1 — declare**: register all function signatures in Cranelift so that
    bodies can emit direct `call` instructions to other JIT functions.
@@ -227,11 +227,9 @@ code to Cranelift's register allocator and peephole optimisations.
 
 ### Eligibility
 
-A function is an inline candidate if:
-
-- It is annotated with `@inline` (always inline regardless of size), **or**
-- Its body (after peeling lambda wrappers) has an AST-node cost ≤ 12 **and** it
-  is not self-recursive (no `Global` reference to its own name in the body).
+A function is an inline candidate if its body (after peeling lambda wrappers)
+has an AST-node cost ≤ 12 **and** it is not self-recursive (no `Global`
+reference to its own name in the body).
 
 ### Mechanics
 

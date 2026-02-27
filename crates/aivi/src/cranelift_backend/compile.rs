@@ -71,7 +71,7 @@ fn jit_compile_into_runtime(
     // Monomorphize
     let spec_map = monomorphize_program(&mut rust_program.modules, &monomorph_plan);
 
-    // Inline small / @inline-decorated functions
+    // Inline small functions
     super::inline::inline_program(&mut rust_program.modules);
 
     // Create JIT module with runtime helpers registered
@@ -508,7 +508,7 @@ pub fn compile_to_object(
     // 3. Monomorphize
     let spec_map = monomorphize_program(&mut rust_program.modules, &monomorph_plan);
 
-    // 3b. Inline small / @inline-decorated functions
+    // 3b. Inline small functions
     super::inline::inline_program(&mut rust_program.modules);
 
     // 4. Create ObjectModule targeting the host platform
@@ -1511,7 +1511,6 @@ fn monomorphize_program(
                 let spec_name = format!("{}$mono_{}", def.name, suffix);
                 new_defs.push(RustIrDef {
                     name: spec_name.clone(),
-                    inline: def.inline,
                     expr: def.expr.clone(),
                     cg_type: Some(concrete_type.clone()),
                 });

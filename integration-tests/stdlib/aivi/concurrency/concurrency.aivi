@@ -55,60 +55,60 @@ par_functional = do Effect {
 }
 
 @test "makeBounded"
-  make_bounded_functional = do Effect {
-    (tx, rx) <- makeBounded 1
-    send tx 7
-    first <- recv rx
-    first match
-      | Ok value => assertEq value 7
-      | Err _    => assert False
+make_bounded_functional = do Effect {
+  (tx, rx) <- makeBounded 1
+  send tx 7
+  first <- recv rx
+  first match
+    | Ok value => assertEq value 7
+    | Err _    => assert False
     close tx
-  }
+}
 
 @test "timeoutWith"
-  timeout_with_functional = do Effect {
-    result <- attempt (timeoutWith 10 "timeout" (do Effect {
-          sleep 50
-          pure 1
-    }
-      )
-    )
-    result match
-      | Ok _      => assert False
-      | Err value => assertEq value "timeout"
+timeout_with_functional = do Effect {
+  result <- attempt (timeoutWith 10 "timeout" (do Effect {
+        sleep 50
+        pure 1
   }
+    )
+  )
+  result match
+    | Ok _      => assert False
+    | Err value => assertEq value "timeout"
+}
 
 @test "retry helper"
-  retry_helper = do Effect {
-    value <- retry 3 (pure 11)
-    assertEq value 11
-  }
+retry_helper = do Effect {
+  value <- retry 3 (pure 11)
+  assertEq value 11
+}
 
 @test "recv"
-  recv_functional = do Effect {
-    (tx, rx) <- make Unit
-    send tx Unit
-    res <- recv rx
-    res match
-      | Ok payload => assertEq payload Unit
-      | Err _      => assert False
+recv_functional = do Effect {
+  (tx, rx) <- make Unit
+  send tx Unit
+  res <- recv rx
+  res match
+    | Ok payload => assertEq payload Unit
+    | Err _      => assert False
     close tx
-  }
+}
 
 @test "scope 2"
-  scope_functional_2 = do Effect {
+scope_functional_2 = do Effect {
   // Scope should run the callback and return its result.
-    x <- scope (_ => pure 123)
-    assert (x == 123)
-  }
+  x <- scope (_ => pure 123)
+  assert (x == 123)
+}
 
 @test "send"
-  send_functional = do Effect {
-    (tx, rx) <- make Unit
-    send tx Unit
-    res <- recv rx
-    res match
-      | Ok payload => assertEq payload Unit
-      | Err _      => assert False
+send_functional = do Effect {
+  (tx, rx) <- make Unit
+  send tx Unit
+  res <- recv rx
+  res match
+    | Ok payload => assertEq payload Unit
+    | Err _      => assert False
     close tx
-  }
+}

@@ -30,8 +30,6 @@ pub struct HirModule {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HirDef {
     pub name: String,
-    #[serde(default)]
-    pub inline: bool,
     pub expr: HirExpr,
 }
 
@@ -303,7 +301,6 @@ pub fn desugar_modules(modules: &[Module]) -> HirProgram {
             .into_iter()
             .map(|def| {
                 let name = def.name.name.clone();
-                let inline = has_decorator(&def.decorators, "inline");
                 let debug_params = if debug_trace {
                     parse_debug_params(&def.decorators)
                 } else {
@@ -314,7 +311,6 @@ pub fn desugar_modules(modules: &[Module]) -> HirProgram {
                 }
                 HirDef {
                     name,
-                    inline,
                     expr: lower_def_expr(
                         module,
                         def,
@@ -333,12 +329,6 @@ pub fn desugar_modules(modules: &[Module]) -> HirProgram {
     HirProgram {
         modules: hir_modules,
     }
-}
-
-fn has_decorator(decorators: &[Decorator], name: &str) -> bool {
-    decorators
-        .iter()
-        .any(|decorator| decorator.name.name == name)
 }
 
 fn collect_surface_defs(module: &Module) -> Vec<Def> {
