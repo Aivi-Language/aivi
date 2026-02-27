@@ -1,0 +1,6 @@
+@deprecated "use `windowSetTitle` instead"
+setTitle : WindowId -> Text -> Effect GtkError Unit
+setTitle = windowSetTitle
+
+// Calling setTitle anywhere now emits:
+//   warning: `setTitle` is deprecated – use `windowSetTitle` instead

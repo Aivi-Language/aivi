@@ -206,15 +206,15 @@ x = 1
 }
 
 #[test]
-fn rejects_unknown_decorator_inline() {
+fn rejects_argument_on_inline() {
     let src = r#"
 module Example
 
-@inline
+@inline "nope"
 f x = x
 "#;
     let (_, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diag_codes(&diags).contains(&"E1506".to_string()));
+    assert!(diag_codes(&diags).contains(&"E1513".to_string()));
 }
 
 #[test]
