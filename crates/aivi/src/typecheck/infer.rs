@@ -115,16 +115,27 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
             checker.builtins.clone()
         };
         timed!(t_reg_types, checker.register_module_types(module));
-        timed!(t_type_expr_diags, diagnostics.extend(checker.collect_type_expr_diags(module)));
+        timed!(
+            t_type_expr_diags,
+            diagnostics.extend(checker.collect_type_expr_diags(module))
+        );
         let sigs = timed!(t_collect_sigs, checker.collect_type_sigs(module));
-        timed!(t_reg_ctors, checker.register_module_constructors(module, &mut env));
-        timed!(t_reg_imports, checker.register_imports(module, &module_exports, &module_domain_exports, &mut env));
+        timed!(
+            t_reg_ctors,
+            checker.register_module_constructors(module, &mut env)
+        );
+        timed!(
+            t_reg_imports,
+            checker.register_imports(module, &module_exports, &module_domain_exports, &mut env)
+        );
 
-        let (imported_classes, imported_instances) = timed!(t_class_env,
+        let (imported_classes, imported_instances) = timed!(
+            t_class_env,
             collect_imported_class_env(module, &module_class_exports, &module_instance_exports)
         );
         let (local_classes, local_instances) = timed!(t_class_env, collect_local_class_env(module));
-        let local_class_names: HashSet<String> = timed!(t_class_env, local_classes.keys().cloned().collect());
+        let local_class_names: HashSet<String> =
+            timed!(t_class_env, local_classes.keys().cloned().collect());
         let mut classes = imported_classes;
         classes.extend(local_classes);
         let classes = timed!(t_class_env, expand_classes(classes));
@@ -133,18 +144,34 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
             .filter(|instance| !local_class_names.contains(&instance.class_name))
             .collect();
         instances.extend(local_instances);
-        timed!(t_class_env, instances.extend(synthesize_auto_forward_instances(module, &instances)));
+        timed!(
+            t_class_env,
+            instances.extend(synthesize_auto_forward_instances(module, &instances))
+        );
         timed!(t_class_env, checker.set_class_env(classes, instances));
-        timed!(t_reg_defs, checker.register_module_defs(module, &sigs, &mut env));
+        timed!(
+            t_reg_defs,
+            checker.register_module_defs(module, &sigs, &mut env)
+        );
 
         if !(skip_stdlib_body_check && is_embedded) {
             // Full type-checking: infer def bodies and collect diagnostics.
-            let t_module_check = if trace { Some(std::time::Instant::now()) } else { None };
-            let mut module_diags = timed!(t_check_defs, checker.check_module_defs(module, &sigs, &mut env));
+            let t_module_check = if trace {
+                Some(std::time::Instant::now())
+            } else {
+                None
+            };
+            let mut module_diags = timed!(
+                t_check_defs,
+                checker.check_module_defs(module, &sigs, &mut env)
+            );
             if let Some(t0) = t_module_check {
                 let elapsed = t0.elapsed().as_millis();
                 if elapsed > 50 {
-                    eprintln!("[AIVI_TIMING_MODULE] {:<60} {:>6}ms", module.name.name, elapsed);
+                    eprintln!(
+                        "[AIVI_TIMING_MODULE] {:<60} {:>6}ms",
+                        module.name.name, elapsed
+                    );
                 }
             }
             diagnostics.append(&mut module_diags);
@@ -292,16 +319,46 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
     }
 
     if trace {
-        eprintln!("[AIVI_TIMING_INFER] reset+clone_builtins       {:>8.1}ms", t_reset as f64 / 1_000_000.0);
-        eprintln!("[AIVI_TIMING_INFER] register_module_types       {:>8.1}ms", t_reg_types as f64 / 1_000_000.0);
-        eprintln!("[AIVI_TIMING_INFER] collect_type_expr_diags     {:>8.1}ms", t_type_expr_diags as f64 / 1_000_000.0);
-        eprintln!("[AIVI_TIMING_INFER] collect_type_sigs           {:>8.1}ms", t_collect_sigs as f64 / 1_000_000.0);
-        eprintln!("[AIVI_TIMING_INFER] register_module_constructors{:>8.1}ms", t_reg_ctors as f64 / 1_000_000.0);
-        eprintln!("[AIVI_TIMING_INFER] register_imports            {:>8.1}ms", t_reg_imports as f64 / 1_000_000.0);
-        eprintln!("[AIVI_TIMING_INFER] class_env (all steps)       {:>8.1}ms", t_class_env as f64 / 1_000_000.0);
-        eprintln!("[AIVI_TIMING_INFER] register_module_defs        {:>8.1}ms", t_reg_defs as f64 / 1_000_000.0);
-        eprintln!("[AIVI_TIMING_INFER] check_module_defs           {:>8.1}ms", t_check_defs as f64 / 1_000_000.0);
-        eprintln!("[AIVI_TIMING_INFER] export_collect              {:>8.1}ms", t_export_collect as f64 / 1_000_000.0);
+        eprintln!(
+            "[AIVI_TIMING_INFER] reset+clone_builtins       {:>8.1}ms",
+            t_reset as f64 / 1_000_000.0
+        );
+        eprintln!(
+            "[AIVI_TIMING_INFER] register_module_types       {:>8.1}ms",
+            t_reg_types as f64 / 1_000_000.0
+        );
+        eprintln!(
+            "[AIVI_TIMING_INFER] collect_type_expr_diags     {:>8.1}ms",
+            t_type_expr_diags as f64 / 1_000_000.0
+        );
+        eprintln!(
+            "[AIVI_TIMING_INFER] collect_type_sigs           {:>8.1}ms",
+            t_collect_sigs as f64 / 1_000_000.0
+        );
+        eprintln!(
+            "[AIVI_TIMING_INFER] register_module_constructors{:>8.1}ms",
+            t_reg_ctors as f64 / 1_000_000.0
+        );
+        eprintln!(
+            "[AIVI_TIMING_INFER] register_imports            {:>8.1}ms",
+            t_reg_imports as f64 / 1_000_000.0
+        );
+        eprintln!(
+            "[AIVI_TIMING_INFER] class_env (all steps)       {:>8.1}ms",
+            t_class_env as f64 / 1_000_000.0
+        );
+        eprintln!(
+            "[AIVI_TIMING_INFER] register_module_defs        {:>8.1}ms",
+            t_reg_defs as f64 / 1_000_000.0
+        );
+        eprintln!(
+            "[AIVI_TIMING_INFER] check_module_defs           {:>8.1}ms",
+            t_check_defs as f64 / 1_000_000.0
+        );
+        eprintln!(
+            "[AIVI_TIMING_INFER] export_collect              {:>8.1}ms",
+            t_export_collect as f64 / 1_000_000.0
+        );
     }
 
     InferResult {

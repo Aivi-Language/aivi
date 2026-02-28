@@ -657,6 +657,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "mock_expression"
+        },
+        {
+          "type": "SYMBOL",
           "name": "do_block"
         },
         {
@@ -670,6 +674,10 @@
         {
           "type": "SYMBOL",
           "name": "resource_block"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "mock_expression"
         },
         {
           "type": "SYMBOL",
@@ -764,6 +772,47 @@
                 "type": "BLANK"
               }
             ]
+          }
+        ]
+      }
+    },
+    "mock_expression": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "REPEAT1",
+            "content": {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "mock"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "module_path"
+                },
+                {
+                  "type": "STRING",
+                  "value": "="
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "_expression"
+                }
+              ]
+            }
+          },
+          {
+            "type": "STRING",
+            "value": "in"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_expression"
           }
         ]
       }
@@ -924,6 +973,72 @@
           "name": "_expression"
         }
       ]
+    },
+    "mock_expression": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "REPEAT1",
+            "content": {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "mock"
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "STRING",
+                      "value": "snapshot"
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "module_path"
+                },
+                {
+                  "type": "CHOICE",
+                  "members": [
+                    {
+                      "type": "SEQ",
+                      "members": [
+                        {
+                          "type": "STRING",
+                          "value": "="
+                        },
+                        {
+                          "type": "SYMBOL",
+                          "name": "_expression"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "BLANK"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "type": "STRING",
+            "value": "in"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "_expression"
+          }
+        ]
+      }
     },
     "effect_block": {
       "type": "SEQ",

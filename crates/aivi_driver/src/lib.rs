@@ -29,7 +29,11 @@ macro_rules! timing_step {
         let _t0 = if $trace { Some(Instant::now()) } else { None };
         let result = $block;
         if let Some(t0) = _t0 {
-            eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms", $label, t0.elapsed().as_secs_f64() * 1000.0);
+            eprintln!(
+                "[AIVI_TIMING] {:40} {:>8.1}ms",
+                $label,
+                t0.elapsed().as_secs_f64() * 1000.0
+            );
         }
         result
     }};
@@ -340,13 +344,29 @@ pub fn desugar_target_with_cg_types_and_surface(
         return Err(AiviError::Diagnostics);
     }
 
-    let mut stdlib_modules = timing_step!(trace, "parse stdlib (embedded_stdlib_modules)", embedded_stdlib_modules());
+    let mut stdlib_modules = timing_step!(
+        trace,
+        "parse stdlib (embedded_stdlib_modules)",
+        embedded_stdlib_modules()
+    );
     stdlib_modules.append(&mut modules);
-    timing_step!(trace, "resolve_import_names", resolve_import_names(&mut stdlib_modules));
+    timing_step!(
+        trace,
+        "resolve_import_names",
+        resolve_import_names(&mut stdlib_modules)
+    );
 
-    let mut diagnostics = timing_step!(trace, "check_modules (name resolution)", check_modules(&stdlib_modules));
+    let mut diagnostics = timing_step!(
+        trace,
+        "check_modules (name resolution)",
+        check_modules(&stdlib_modules)
+    );
     if diagnostics.is_empty() {
-        diagnostics.extend(timing_step!(trace, "elaborate_expected_coercions", elaborate_expected_coercions(&mut stdlib_modules)));
+        diagnostics.extend(timing_step!(
+            trace,
+            "elaborate_expected_coercions",
+            elaborate_expected_coercions(&mut stdlib_modules)
+        ));
     }
     if file_diagnostics_have_errors(&diagnostics) {
         emit_diagnostics(&diagnostics);
@@ -355,11 +375,23 @@ pub fn desugar_target_with_cg_types_and_surface(
 
     // Use the fast path: skip body-checking embedded stdlib modules. They are pre-verified at
     // compiler build time and have explicit type signatures, so full re-inference is wasteful.
-    let infer_result = timing_step!(trace, "infer_value_types_fast", aivi_core::infer_value_types_fast(&stdlib_modules));
-    let program = timing_step!(trace, "desugar_modules (HIR)", aivi_core::desugar_modules(&stdlib_modules));
+    let infer_result = timing_step!(
+        trace,
+        "infer_value_types_fast",
+        aivi_core::infer_value_types_fast(&stdlib_modules)
+    );
+    let program = timing_step!(
+        trace,
+        "desugar_modules (HIR)",
+        aivi_core::desugar_modules(&stdlib_modules)
+    );
 
     if let Some(t0) = t_total {
-        eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms  ← TOTAL frontend", "frontend pipeline", t0.elapsed().as_secs_f64() * 1000.0);
+        eprintln!(
+            "[AIVI_TIMING] {:40} {:>8.1}ms  ← TOTAL frontend",
+            "frontend pipeline",
+            t0.elapsed().as_secs_f64() * 1000.0
+        );
     }
 
     Ok((

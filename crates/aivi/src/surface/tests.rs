@@ -615,11 +615,16 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
             } => expr_contains_ident(transition, target) || expr_contains_ident(handler, target),
         }),
         Expr::Raw { .. } => false,
-        Expr::Mock { substitutions, body, .. } => {
-            substitutions
-                .iter()
-                .any(|sub| sub.value.as_ref().is_some_and(|v| expr_contains_ident(v, target)))
-                || expr_contains_ident(body, target)
+        Expr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            substitutions.iter().any(|sub| {
+                sub.value
+                    .as_ref()
+                    .is_some_and(|v| expr_contains_ident(v, target))
+            }) || expr_contains_ident(body, target)
         }
     }
 }
@@ -697,11 +702,16 @@ fn expr_contains_string(expr: &Expr, target: &str) -> bool {
                 ..
             } => expr_contains_string(transition, target) || expr_contains_string(handler, target),
         }),
-        Expr::Mock { substitutions, body, .. } => {
-            substitutions
-                .iter()
-                .any(|sub| sub.value.as_ref().is_some_and(|v| expr_contains_string(v, target)))
-                || expr_contains_string(body, target)
+        Expr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            substitutions.iter().any(|sub| {
+                sub.value
+                    .as_ref()
+                    .is_some_and(|v| expr_contains_string(v, target))
+            }) || expr_contains_string(body, target)
         }
     }
 }

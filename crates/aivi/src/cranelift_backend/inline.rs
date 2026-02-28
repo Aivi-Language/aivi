@@ -763,9 +763,7 @@ fn inline_children(
                 .map(|sub| RustIrMockSubstitution {
                     path: sub.path,
                     snapshot: sub.snapshot,
-                    value: sub
-                        .value
-                        .map(|v| inline_expr(v, candidates, id_gen, depth)),
+                    value: sub.value.map(|v| inline_expr(v, candidates, id_gen, depth)),
                 })
                 .collect(),
             body: Box::new(inline_expr(*body, candidates, id_gen, depth)),
