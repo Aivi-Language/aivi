@@ -957,8 +957,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                         let arg_tv = self.lower_expr(builder, arg);
                         let arg_tvs = [arg_tv];
                         if let Some(spec_name) = self.find_matching_spec(&spec_names, &arg_tvs) {
-                            let si = self.jit_funcs.get(spec_name.as_str()).unwrap().clone();
-                            return self.emit_direct_call_typed(builder, &si, &arg_tvs);
+                            if let Some(si) = self.jit_funcs.get(spec_name.as_str()).cloned() {
+                                return self.emit_direct_call_typed(builder, &si, &arg_tvs);
+                            }
                         }
                         return self.emit_direct_call_typed(builder, &info, &arg_tvs);
                     }
@@ -997,8 +998,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                         let arg_tvs: Vec<TypedValue> =
                             args.iter().map(|a| self.lower_expr(builder, a)).collect();
                         if let Some(spec_name) = self.find_matching_spec(&spec_names, &arg_tvs) {
-                            let si = self.jit_funcs.get(spec_name.as_str()).unwrap().clone();
-                            return self.emit_direct_call_typed(builder, &si, &arg_tvs);
+                            if let Some(si) = self.jit_funcs.get(spec_name.as_str()).cloned() {
+                                return self.emit_direct_call_typed(builder, &si, &arg_tvs);
+                            }
                         }
                         // No matching specialization; use the args we already lowered
                         return self.emit_direct_call_typed(builder, &info, &arg_tvs);

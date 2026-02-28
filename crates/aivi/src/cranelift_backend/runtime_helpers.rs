@@ -167,15 +167,17 @@ thread_local! {
 /// This makes subsequent runtime warnings show which function triggered them.
 #[no_mangle]
 pub extern "C" fn rt_enter_fn(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usize) {
-    let name = unsafe {
-        let bytes = std::slice::from_raw_parts(ptr, len);
-        std::str::from_utf8_unchecked(bytes)
+    if ctx.is_null() {
+        return;
+    }
+    let Some(name) = decode_utf8_owned(ctx, ptr, len, "rt_enter_fn") else {
+        return;
     };
     let runtime = unsafe { (*ctx).runtime_mut() };
-    runtime.jit_current_fn = Some(name.into());
+    runtime.jit_current_fn = Some(name.clone().into_boxed_str());
     FN_HISTORY.with(|h| {
         let mut h = h.borrow_mut();
-        h.push(name.to_string());
+        h.push(name);
         if h.len() > 20 {
             h.remove(0);
         }
@@ -186,12 +188,14 @@ pub extern "C" fn rt_enter_fn(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usiz
 /// This makes subsequent runtime warnings show the source location (line:col).
 #[no_mangle]
 pub extern "C" fn rt_set_location(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usize) {
-    let loc = unsafe {
-        let bytes = std::slice::from_raw_parts(ptr, len);
-        std::str::from_utf8_unchecked(bytes)
+    if ctx.is_null() {
+        return;
+    }
+    let Some(loc) = decode_utf8_owned(ctx, ptr, len, "rt_set_location") else {
+        return;
     };
     let runtime = unsafe { (*ctx).runtime_mut() };
-    runtime.jit_current_loc = Some(loc.into());
+    runtime.jit_current_loc = Some(loc.into_boxed_str());
 }
 
 // ---------------------------------------------------------------------------
