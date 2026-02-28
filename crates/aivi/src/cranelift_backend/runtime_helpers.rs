@@ -1741,6 +1741,263 @@ pub extern "C" fn rt_register_machines_from_data(
 }
 
 // ---------------------------------------------------------------------------
+// Snapshot mock helpers
+// ---------------------------------------------------------------------------
+
+/// Install a snapshot mock for a global binding.
+///
+/// - **Recording mode** (`--update-snapshots`): wraps the real function in a
+///   proxy that records every Effect result to `runtime.snapshot_recordings`.
+/// - **Replay mode** (default): loads recorded values from the snapshot file
+///   on disk and installs a function that returns them in order.
+///
+/// Returns a pointer to the **old** global value (for later restoration).
+///
+/// # Safety
+/// `ctx` must be a valid `JitRuntimeCtx` pointer.
+#[no_mangle]
+pub extern "C" fn rt_snapshot_mock_install(
+    ctx: *mut JitRuntimeCtx,
+    path_ptr: *const u8,
+    path_len: usize,
+) -> *mut Value {
+    use crate::runtime::snapshot;
+    use crate::runtime::values::{BuiltinImpl, BuiltinValue, EffectValue};
+
+    let path =
+        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(path_ptr, path_len)) };
+    let runtime = unsafe { (*ctx).runtime_mut() };
+
+    // Save old value
+    let old_val = match runtime.ctx.globals.get(path) {
+        Some(v) => match runtime.force_value(v) {
+            Ok(forced) => forced,
+            Err(e) => {
+                unsafe { set_pending_error(ctx, e) };
+                return abi::box_value(Value::Unit);
+            }
+        },
+        None => Value::Unit,
+    };
+
+    let path_owned = path.to_string();
+
+    if runtime.update_snapshots {
+        // --- Recording mode ---
+        runtime
+            .snapshot_recordings
+            .entry(path_owned.clone())
+            .or_default();
+
+        let original = old_val.clone();
+        let rec_path = path_owned.clone();
+        let wrapper = Value::Builtin(BuiltinValue {
+            imp: Arc::new(BuiltinImpl {
+                name: format!("__snapshot_record_{rec_path}"),
+                arity: 1,
+                func: Arc::new(move |args, rt| {
+                    let result = rt.apply(original.clone(), args[0].clone())?;
+                    match result {
+                        Value::Effect(eff) => {
+                            let rp = rec_path.clone();
+                            Ok(Value::Effect(Arc::new(EffectValue::Thunk {
+                                func: Arc::new(move |rt2| {
+                                    let val = match eff.as_ref() {
+                                        EffectValue::Thunk { func } => func(rt2)?,
+                                    };
+                                    let json = snapshot::value_to_snapshot_json(&val)?;
+                                    rt2.snapshot_recordings
+                                        .entry(rp.clone())
+                                        .or_default()
+                                        .push(json.to_string());
+                                    Ok(val)
+                                }),
+                            })))
+                        }
+                        other => {
+                            let json = snapshot::value_to_snapshot_json(&other)?;
+                            rt.snapshot_recordings
+                                .entry(rec_path.clone())
+                                .or_default()
+                                .push(json.to_string());
+                            Ok(other)
+                        }
+                    }
+                }),
+            }),
+            args: vec![],
+            tagged_args: None,
+        });
+
+        runtime.ctx.globals.set(path_owned, wrapper);
+    } else {
+        // --- Replay mode ---
+        let test_name = runtime.current_test_name.clone().unwrap_or_default();
+        let project_root = runtime.project_root.clone();
+
+        let Some(root) = project_root else {
+            unsafe {
+                set_pending_error(
+                    ctx,
+                    RuntimeError::Message("snapshot: project root not set".to_string()),
+                )
+            };
+            return abi::box_value(old_val);
+        };
+
+        let snap_dir = snapshot::snapshot_dir(&root, &test_name);
+        let snap_path = snap_dir.join(format!("{}.snap", path_owned.replace('.', "_")));
+
+        if !snap_path.exists() {
+            unsafe {
+                set_pending_error(
+                    ctx,
+                    RuntimeError::Message(format!(
+                        "snapshot file not found: {} — run with --update-snapshots to create it",
+                        snap_path.display()
+                    )),
+                )
+            };
+            return abi::box_value(old_val);
+        }
+
+        let contents = match std::fs::read_to_string(&snap_path) {
+            Ok(c) => c,
+            Err(e) => {
+                unsafe {
+                    set_pending_error(
+                        ctx,
+                        RuntimeError::Message(format!(
+                            "snapshot: failed to read {}: {e}",
+                            snap_path.display()
+                        )),
+                    )
+                };
+                return abi::box_value(old_val);
+            }
+        };
+
+        let entries: Vec<serde_json::Value> = match serde_json::from_str(&contents) {
+            Ok(v) => v,
+            Err(e) => {
+                unsafe {
+                    set_pending_error(
+                        ctx,
+                        RuntimeError::Message(format!(
+                            "snapshot: failed to parse {}: {e}",
+                            snap_path.display()
+                        )),
+                    )
+                };
+                return abi::box_value(old_val);
+            }
+        };
+
+        let values: Result<Vec<Value>, _> =
+            entries.iter().map(snapshot::snapshot_json_to_value).collect();
+        let values = match values {
+            Ok(v) => v,
+            Err(e) => {
+                unsafe { set_pending_error(ctx, e) };
+                return abi::box_value(old_val);
+            }
+        };
+
+        let replay_values = Arc::new(std::sync::Mutex::new(values));
+        let rp = path_owned.clone();
+        let wrapper = Value::Builtin(BuiltinValue {
+            imp: Arc::new(BuiltinImpl {
+                name: format!("__snapshot_replay_{rp}"),
+                arity: 1,
+                func: Arc::new(move |_args, _rt| {
+                    let mut vals = replay_values.lock().unwrap();
+                    if vals.is_empty() {
+                        return Err(RuntimeError::Message(format!(
+                            "snapshot replay exhausted for `{rp}` — run with --update-snapshots to re-record"
+                        )));
+                    }
+                    let val = vals.remove(0);
+                    Ok(Value::Effect(Arc::new(EffectValue::Thunk {
+                        func: Arc::new(move |_| Ok(val.clone())),
+                    })))
+                }),
+            }),
+            args: vec![],
+            tagged_args: None,
+        });
+
+        runtime.ctx.globals.set(path_owned, wrapper);
+    }
+
+    abi::box_value(old_val)
+}
+
+/// Flush snapshot recordings to disk for a mock binding.
+/// Only writes in recording mode; no-op in replay mode.
+///
+/// # Safety
+/// `ctx` must be a valid `JitRuntimeCtx` pointer.
+#[no_mangle]
+pub extern "C" fn rt_snapshot_mock_flush(
+    ctx: *mut JitRuntimeCtx,
+    path_ptr: *const u8,
+    path_len: usize,
+) {
+    use crate::runtime::snapshot;
+
+    let path =
+        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(path_ptr, path_len)) };
+    let runtime = unsafe { (*ctx).runtime_mut() };
+
+    if !runtime.update_snapshots {
+        return;
+    }
+
+    let test_name = runtime.current_test_name.clone().unwrap_or_default();
+    let project_root = runtime.project_root.clone();
+
+    let Some(root) = project_root else {
+        return;
+    };
+
+    if let Some(recordings) = runtime.snapshot_recordings.remove(path) {
+        let snap_dir = snapshot::snapshot_dir(&root, &test_name);
+        let snap_path = snap_dir.join(format!("{}.snap", path.replace('.', "_")));
+
+        if let Err(e) = std::fs::create_dir_all(&snap_dir) {
+            unsafe {
+                set_pending_error(
+                    ctx,
+                    RuntimeError::Message(format!(
+                        "snapshot: failed to create directory {}: {e}",
+                        snap_dir.display()
+                    )),
+                )
+            };
+            return;
+        }
+
+        let json_entries: Vec<serde_json::Value> = recordings
+            .iter()
+            .filter_map(|s| serde_json::from_str(s).ok())
+            .collect();
+        let json_str = serde_json::to_string_pretty(&json_entries).unwrap_or_default();
+
+        if let Err(e) = std::fs::write(&snap_path, json_str) {
+            unsafe {
+                set_pending_error(
+                    ctx,
+                    RuntimeError::Message(format!(
+                        "snapshot: failed to write {}: {e}",
+                        snap_path.display()
+                    )),
+                )
+            };
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Symbol table for JITBuilder registration
 // ---------------------------------------------------------------------------
 
@@ -1826,6 +2083,9 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_eval_sigil", rt_eval_sigil as *const u8),
         // Function entry tracking for diagnostics
         ("rt_enter_fn", rt_enter_fn as *const u8),
+        // Snapshot mock helpers
+        ("rt_snapshot_mock_install", rt_snapshot_mock_install as *const u8),
+        ("rt_snapshot_mock_flush", rt_snapshot_mock_flush as *const u8),
     ]
 }
 

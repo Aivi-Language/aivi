@@ -466,6 +466,8 @@ pub fn run_test_suite_jit(
     program: HirProgram,
     test_entries: &[(String, String)],
     surface_modules: &[crate::surface::Module],
+    update_snapshots: bool,
+    project_root: Option<std::path::PathBuf>,
 ) -> Result<crate::runtime::TestReport, AiviError> {
     use crate::runtime::{
         format_runtime_error, format_value, TestFailure, TestReport, TestSuccess,
@@ -473,6 +475,8 @@ pub fn run_test_suite_jit(
 
     let infer_result = aivi_core::infer_value_types_full(surface_modules);
     let mut runtime = build_runtime_from_program(&program)?;
+    runtime.update_snapshots = update_snapshots;
+    runtime.project_root = project_root;
     let _module = jit_compile_into_runtime(
         program,
         infer_result.cg_types,
@@ -490,6 +494,9 @@ pub fn run_test_suite_jit(
 
     for (name, description) in test_entries {
         runtime.fuel = Some(TEST_FUEL_BUDGET);
+        runtime.current_test_name = Some(name.clone());
+        runtime.snapshot_recordings.clear();
+        runtime.snapshot_replay_cursors.clear();
         let Some(value) = runtime.ctx.globals.get(name) else {
             report.failed += 1;
             report.failures.push(TestFailure {

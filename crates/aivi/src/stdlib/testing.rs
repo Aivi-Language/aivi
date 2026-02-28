@@ -3,7 +3,7 @@ pub const MODULE_NAME: &str = "aivi.testing";
 pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.testing
-export assert, assert_eq, assertEq
+export assert, assert_eq, assertEq, assertSnapshot
 
 use aivi
 
@@ -15,4 +15,7 @@ assert_eq = a b => if a == b then pure Unit else fail "assert_eq failed"
 
 assertEq : A -> A -> Effect Text Unit
 assertEq = a b => assert_eq a b
+
+assertSnapshot : Text -> A -> Effect Text Unit
+assertSnapshot = name value => __assertSnapshot name value
 "#;

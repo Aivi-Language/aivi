@@ -229,10 +229,13 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_reuse_record: FuncRef,
     pub(crate) rt_reuse_list: FuncRef,
     pub(crate) rt_reuse_tuple: FuncRef,
-    // Function entry tracking for diagnostics
+    // Source location tracking for diagnostics
     pub(crate) rt_enter_fn: FuncRef,
     // Source location tracking for diagnostics
     pub(crate) rt_set_location: FuncRef,
+    // Snapshot mock helpers
+    pub(crate) rt_snapshot_mock_install: FuncRef,
+    pub(crate) rt_snapshot_mock_flush: FuncRef,
 }
 
 /// Declare all runtime helper signatures in the module and return FuncRefs
@@ -368,6 +371,10 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_enter_fn: decl!("rt_enter_fn", [PTR, PTR, PTR], []),
         // (ctx, loc_ptr, loc_len) -> void
         rt_set_location: decl!("rt_set_location", [PTR, PTR, PTR], []),
+        // (ctx, path_ptr, path_len) -> ptr (old global value)
+        rt_snapshot_mock_install: decl!("rt_snapshot_mock_install", [PTR, PTR, PTR], [PTR]),
+        // (ctx, path_ptr, path_len) -> void
+        rt_snapshot_mock_flush: decl!("rt_snapshot_mock_flush", [PTR, PTR, PTR], []),
     })
 }
 
@@ -438,6 +445,9 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_enter_fn: cranelift_module::FuncId,
     // Source location tracking for diagnostics
     pub(crate) rt_set_location: cranelift_module::FuncId,
+    // Snapshot mock helpers
+    pub(crate) rt_snapshot_mock_install: cranelift_module::FuncId,
+    pub(crate) rt_snapshot_mock_flush: cranelift_module::FuncId,
 }
 
 impl DeclaredHelpers {
@@ -503,6 +513,8 @@ impl DeclaredHelpers {
             rt_reuse_tuple: imp!(rt_reuse_tuple),
             rt_enter_fn: imp!(rt_enter_fn),
             rt_set_location: imp!(rt_set_location),
+            rt_snapshot_mock_install: imp!(rt_snapshot_mock_install),
+            rt_snapshot_mock_flush: imp!(rt_snapshot_mock_flush),
         }
     }
 }
@@ -899,28 +911,46 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         substitutions: &[RustIrMockSubstitution],
         body: &RustIrExpr,
     ) -> TypedValue {
-        // 1. Save old values for each substitution.
-        let mut saved: Vec<(&str, TypedValue)> = Vec::new();
-        for sub in substitutions {
-            let old_val = self.lower_global(builder, &sub.path);
-            saved.push((&sub.path, old_val));
-        }
+        // Track which substitutions are snapshot mocks (they save via the helper).
+        let mut saved: Vec<(&str, Option<TypedValue>)> = Vec::new();
 
-        // 2. Install mock values.
         for sub in substitutions {
-            if let Some(ref value_expr) = sub.value {
-                let mock_val = self.lower_expr(builder, value_expr);
-                self.emit_set_global(builder, &sub.path, mock_val.val);
+            if sub.snapshot {
+                // Snapshot mock: rt_snapshot_mock_install saves old and installs wrapper.
+                let (path_ptr, path_len) = self.embed_str(builder, sub.path.as_bytes());
+                let call = builder.ins().call(
+                    self.helpers.rt_snapshot_mock_install,
+                    &[self.ctx_param, path_ptr, path_len],
+                );
+                let old_val = TypedValue::boxed(builder.inst_results(call)[0]);
+                saved.push((&sub.path, Some(old_val)));
+            } else {
+                // Regular mock: save old, install new.
+                let old_val = self.lower_global(builder, &sub.path);
+                saved.push((&sub.path, Some(old_val)));
+                if let Some(ref value_expr) = sub.value {
+                    let mock_val = self.lower_expr(builder, value_expr);
+                    self.emit_set_global(builder, &sub.path, mock_val.val);
+                }
             }
-            // snapshot mocks: TODO — call the real function and record, or replay from snapshot.
         }
 
-        // 3. Evaluate body.
+        // Evaluate body.
         let result = self.lower_expr(builder, body);
 
-        // 4. Restore original values (reverse order for nested correctness).
+        // Restore original values (reverse order for nested correctness).
         for (path, old_val) in saved.into_iter().rev() {
-            self.emit_set_global(builder, path, old_val.val);
+            // For snapshot mocks, flush recordings before restore.
+            if substitutions.iter().any(|s| s.path == path && s.snapshot) {
+                let (path_ptr, path_len) = self.embed_str(builder, path.as_bytes());
+                builder.ins().call(
+                    self.helpers.rt_snapshot_mock_flush,
+                    &[self.ctx_param, path_ptr, path_len],
+                );
+            }
+            if let Some(old) = old_val {
+                self.emit_set_global(builder, path, old.val);
+            }
         }
 
         result

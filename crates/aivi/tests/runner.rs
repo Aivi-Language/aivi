@@ -37,7 +37,7 @@ fn run_test_suite_with_timeout(
         .name(format!("test-{}", display_name))
         .stack_size(256 * 1024 * 1024)
         .spawn(move || {
-            let result = run_test_suite(program, &test_entries, &modules);
+            let result = run_test_suite(program, &test_entries, &modules, false, None);
             done2.store(true, Ordering::Release);
             result
         })

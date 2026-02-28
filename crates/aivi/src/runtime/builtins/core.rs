@@ -399,4 +399,88 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("gtk4".to_string(), build_gtk4_record());
     env.set("secrets".to_string(), build_secrets_record());
     env.set("i18n".to_string(), build_i18n_record());
+
+    // assertSnapshot : Text -> A -> Effect Text Unit
+    env.set(
+        "__assertSnapshot".to_string(),
+        builtin("__assertSnapshot", 2, |mut args, _runtime| {
+            let value = args.pop().unwrap();
+            let name_val = args.pop().unwrap();
+            let name = match &name_val {
+                Value::Text(t) => t.clone(),
+                other => {
+                    return Err(RuntimeError::Message(format!(
+                        "assertSnapshot: name must be Text, got {}",
+                        format_value(other)
+                    )))
+                }
+            };
+
+            let effect = EffectValue::Thunk {
+                func: std::sync::Arc::new(move |runtime| {
+                    use crate::runtime::snapshot::{
+                        snapshot_file, value_to_snapshot_json,
+                    };
+
+                    let test_name = runtime
+                        .current_test_name
+                        .as_deref()
+                        .ok_or_else(|| {
+                            RuntimeError::Message(
+                                "assertSnapshot: not inside a @test".to_string(),
+                            )
+                        })?;
+                    let root = runtime
+                        .project_root
+                        .as_deref()
+                        .ok_or_else(|| {
+                            RuntimeError::Message(
+                                "assertSnapshot: no project root configured".to_string(),
+                            )
+                        })?;
+
+                    let json = value_to_snapshot_json(&value)?;
+                    let pretty =
+                        serde_json::to_string_pretty(&json).map_err(|e| {
+                            RuntimeError::Message(format!(
+                                "assertSnapshot: JSON serialization failed: {e}"
+                            ))
+                        })?;
+
+                    let path = snapshot_file(root, test_name, &name);
+
+                    if runtime.update_snapshots {
+                        if let Some(parent) = path.parent() {
+                            std::fs::create_dir_all(parent).map_err(|e| {
+                                RuntimeError::Message(format!(
+                                    "assertSnapshot: cannot create directory: {e}"
+                                ))
+                            })?;
+                        }
+                        std::fs::write(&path, &pretty).map_err(|e| {
+                            RuntimeError::Message(format!(
+                                "assertSnapshot: cannot write snapshot: {e}"
+                            ))
+                        })?;
+                        Ok(Value::Unit)
+                    } else {
+                        let existing = std::fs::read_to_string(&path).map_err(|_| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "snapshot file not found: {}; run with --update-snapshots",
+                                path.display()
+                            )))
+                        })?;
+                        if existing.trim() == pretty.trim() {
+                            Ok(Value::Unit)
+                        } else {
+                            Err(RuntimeError::Error(Value::Text(format!(
+                                "snapshot mismatch for \"{name}\":\n--- expected (snapshot)\n{existing}\n--- actual\n{pretty}"
+                            ))))
+                        }
+                    }
+                }),
+            };
+            Ok(Value::Effect(std::sync::Arc::new(effect)))
+        }),
+    );
 }
