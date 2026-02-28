@@ -18,6 +18,7 @@ use crate::AiviError;
 mod builtins;
 pub(crate) mod environment;
 mod http;
+pub(crate) mod snapshot;
 pub(crate) mod values;
 
 use self::builtins::register_builtins;
@@ -91,6 +92,18 @@ pub(crate) struct Runtime {
     /// Source location of the most recently instrumented expression, set by
     /// `rt_set_location` before potentially-failing operations.
     pub(crate) jit_current_loc: Option<Box<str>>,
+    /// Whether `--update-snapshots` was passed. When true, `assertSnapshot`
+    /// writes new snapshots and `mock snapshot` records real calls.
+    pub(crate) update_snapshots: bool,
+    /// Qualified name of the currently running `@test` (e.g. `"mod.testFn"`).
+    pub(crate) current_test_name: Option<String>,
+    /// Project root directory for resolving `__snapshots__/` paths.
+    pub(crate) project_root: Option<std::path::PathBuf>,
+    /// Recorded snapshot mock call results, keyed by binding path.
+    /// Populated during `--update-snapshots`; flushed to disk after the test.
+    pub(crate) snapshot_recordings: HashMap<String, Vec<String>>,
+    /// Replay cursors for snapshot mock playback, keyed by binding path.
+    pub(crate) snapshot_replay_cursors: HashMap<String, usize>,
 }
 
 #[derive(Clone)]

@@ -172,6 +172,7 @@ fn run() -> Result<(), AiviError> {
         "test" => {
             let (check_stdlib, rest) = consume_check_stdlib_flag(&rest);
             let (only_tests, rest) = consume_multi_value_flag("--only", &rest)?;
+            let (update_snapshots, rest) = consume_flag("--update-snapshots", &rest);
             let Some(target) = rest.first() else {
                 print_help();
                 return Ok(());
@@ -299,7 +300,23 @@ fn run() -> Result<(), AiviError> {
             }
 
             let program = aivi::desugar_modules(&modules);
-            let report = aivi::run_test_suite(program, &test_entries, &modules)?;
+            let project_root = std::path::Path::new(target)
+                .canonicalize()
+                .ok()
+                .and_then(|p| {
+                    if p.is_file() {
+                        p.parent().map(|p| p.to_path_buf())
+                    } else {
+                        Some(p)
+                    }
+                });
+            let report = aivi::run_test_suite(
+                program,
+                &test_entries,
+                &modules,
+                update_snapshots,
+                project_root,
+            )?;
 
             // Write out deterministic report files for CI and tooling:
             // - passed files: all tests in file passed

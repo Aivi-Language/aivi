@@ -17,6 +17,11 @@ impl Runtime {
             jit_pending_error: None,
             jit_current_fn: None,
             jit_current_loc: None,
+            update_snapshots: false,
+            current_test_name: None,
+            project_root: None,
+            snapshot_recordings: HashMap::new(),
+            snapshot_replay_cursors: HashMap::new(),
         }
     }
 

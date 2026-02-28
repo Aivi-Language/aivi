@@ -28,7 +28,7 @@ fn run_test_suite_with_timeout(
         .name(format!("test-{}", display_name))
         .stack_size(256 * 1024 * 1024)
         .spawn(move || {
-            let result = run_test_suite(program, &test_entries, &modules);
+            let result = run_test_suite(program, &test_entries, &modules, false, None);
             done2.store(true, Ordering::Release);
             result
         })
@@ -67,7 +67,7 @@ fn run_stdlib_file(path: &Path) -> (usize, usize) {
     );
 
     let program = desugar_modules(&modules);
-    let report = run_test_suite(program, &tests, &modules)
+    let report = run_test_suite(program, &tests, &modules, false, None)
         .unwrap_or_else(|e| panic!("run_test_suite({}): {e}", path.display()));
     (report.passed, report.failed)
 }

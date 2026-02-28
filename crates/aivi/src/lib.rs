@@ -194,8 +194,16 @@ pub fn run_test_suite(
     program: HirProgram,
     test_entries: &[(String, String)],
     surface_modules: &[aivi_core::Module],
+    update_snapshots: bool,
+    project_root: Option<std::path::PathBuf>,
 ) -> Result<TestReport, AiviError> {
-    run_test_suite_jit(program, test_entries, surface_modules)
+    run_test_suite_jit(
+        program,
+        test_entries,
+        surface_modules,
+        update_snapshots,
+        project_root,
+    )
 }
 pub use rust_ir::cg_type::CgType;
 pub use rust_ir::{lower_kernel as lower_rust_ir, RustIrProgram};
