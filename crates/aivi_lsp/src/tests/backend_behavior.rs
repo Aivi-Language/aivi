@@ -409,6 +409,13 @@ fn semantic_tokens_highlight_keywords_types_and_literals() {
 }
 
 fn collect_semantic_token_texts(text: &str) -> Vec<(u32, String)> {
+    collect_semantic_token_details(text)
+        .into_iter()
+        .map(|(ty, text, _)| (ty, text))
+        .collect()
+}
+
+fn collect_semantic_token_details(text: &str) -> Vec<(u32, String, u32)> {
     let tokens = Backend::build_semantic_tokens(text);
     let lines: Vec<&str> = text.lines().collect();
 
@@ -429,7 +436,7 @@ fn collect_semantic_token_texts(text: &str) -> Vec<(u32, String)> {
             .skip(abs_start as usize)
             .take(token.length as usize)
             .collect();
-        out.push((token.token_type, text));
+        out.push((token.token_type, text, token.token_modifiers_bitset));
     }
 
     out
@@ -780,4 +787,63 @@ user1 = { name: "Alice", age: 3 }
     let expected_position = position_for(text, "name: String");
     assert_eq!(location.uri, uri);
     assert_eq!(location.range.start, expected_position);
+}
+
+#[test]
+fn debug_record_body_semantic_tokens() {
+    let text = r#"module test
+
+export extractionRunPlan = emailId => schemaVer => promptVer => modelId => existingStatus => ({
+    extractionDecision: CachePolicy.decide emailId schemaVer promptVer modelId existingStatus
+    projections: extractionProjectionPlan emailId "extraction:{emailId}" "v1"
+}
+)
+"#;
+    let details = collect_semantic_token_details(text);
+    let token_name = |ty: u32| -> &str {
+        match ty {
+            Backend::SEM_TOKEN_KEYWORD => "keyword",
+            Backend::SEM_TOKEN_TYPE => "type",
+            Backend::SEM_TOKEN_FUNCTION => "function",
+            Backend::SEM_TOKEN_VARIABLE => "variable",
+            Backend::SEM_TOKEN_NUMBER => "number",
+            Backend::SEM_TOKEN_STRING => "string",
+            Backend::SEM_TOKEN_COMMENT => "comment",
+            Backend::SEM_TOKEN_OPERATOR => "operator",
+            Backend::SEM_TOKEN_DECORATOR => "decorator",
+            Backend::SEM_TOKEN_ARROW => "arrow",
+            Backend::SEM_TOKEN_PIPE => "pipe",
+            Backend::SEM_TOKEN_BRACKET => "bracket",
+            Backend::SEM_TOKEN_UNIT => "unit",
+            Backend::SEM_TOKEN_SIGIL => "sigil",
+            Backend::SEM_TOKEN_PROPERTY => "property",
+            Backend::SEM_TOKEN_DOT => "dot",
+            Backend::SEM_TOKEN_PATH_HEAD => "path_head",
+            Backend::SEM_TOKEN_PATH_MID => "path_mid",
+            Backend::SEM_TOKEN_PATH_TAIL => "path_tail",
+            Backend::SEM_TOKEN_TYPE_PARAMETER => "type_param",
+            _ => "unknown",
+        }
+    };
+    for (ty, text, mods) in &details {
+        let sig = if *mods & (1 << Backend::SEM_MOD_SIGNATURE) != 0 {
+            " [SIG]"
+        } else {
+            ""
+        };
+        eprintln!("{:20} -> {}{}", format!("{:?}", text), token_name(*ty), sig);
+    }
+    // Check CachePolicy is type (not signature-modified)
+    let cp = details.iter().find(|(_, t, _)| t == "CachePolicy");
+    assert!(cp.is_some(), "CachePolicy token should exist");
+    let (ty, _, mods) = cp.unwrap();
+    assert_eq!(*ty, Backend::SEM_TOKEN_TYPE, "CachePolicy should be TYPE");
+    assert_eq!(*mods, 0, "CachePolicy should NOT have signature modifier");
+
+    // Check strings are not signature-modified
+    let v1 = details.iter().find(|(_, t, _)| t.contains("v1"));
+    assert!(v1.is_some(), "v1 string should exist");
+    let (ty, _, mods) = v1.unwrap();
+    assert_eq!(*ty, Backend::SEM_TOKEN_STRING, "v1 should be STRING");
+    assert_eq!(*mods, 0, "v1 should NOT have signature modifier");
 }

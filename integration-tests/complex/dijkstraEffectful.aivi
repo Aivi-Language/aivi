@@ -15,11 +15,11 @@ processEdges = dists d edges pq => edges match
       currentDist = Map.getOrElse edge.to 999999.0 dists
       newDist = d + edge.weight
       nextDists = if newDist < currentDist
-        then Map.insert edge.to newDist dists
-        else dists
+      then Map.insert edge.to newDist dists
+      else dists
       nextPq = if newDist < currentDist
-        then Heap.push (newDist, edge.to) pq
-        else pq
+      then Heap.push (newDist, edge.to) pq
+      else pq
       processEdges nextDists d rest nextPq
     }
 

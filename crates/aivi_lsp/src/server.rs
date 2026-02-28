@@ -369,10 +369,17 @@ impl LanguageServer for Backend {
         params: DocumentSymbolParams,
     ) -> Result<Option<DocumentSymbolResponse>> {
         let uri = params.text_document.uri;
-        let symbols = self
-            .with_document_text(&uri, |content| Self::build_document_symbols(content, &uri))
+        let Some(text) = self
+            .with_document_text(&uri, |content| content.to_string())
             .await
-            .unwrap_or_default();
+        else {
+            return Ok(Some(Vec::new()).map(DocumentSymbolResponse::Nested));
+        };
+        let uri2 = uri.clone();
+        let symbols =
+            tokio::task::spawn_blocking(move || Self::build_document_symbols(&text, &uri2))
+                .await
+                .unwrap_or_default();
         Ok(Some(DocumentSymbolResponse::Nested(symbols)))
     }
 
@@ -385,16 +392,19 @@ impl LanguageServer for Backend {
             position,
         } = params.text_document_position_params;
         let uri = text_document.uri;
-        let location = match self
+        let Some(text) = self
             .with_document_text(&uri, |content| content.to_string())
             .await
-        {
-            Some(text) => {
-                let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_definition_with_workspace(&text, &uri, position, &workspace)
-            }
-            None => None,
+        else {
+            return Ok(None);
         };
+        let workspace = self.workspace_modules_for(&uri).await;
+        let uri2 = uri.clone();
+        let location = tokio::task::spawn_blocking(move || {
+            Self::build_definition_with_workspace(&text, &uri2, position, &workspace)
+        })
+        .await
+        .unwrap_or(None);
         Ok(location.map(|loc| GotoDefinitionResponse::Array(vec![loc])))
     }
 
@@ -407,16 +417,19 @@ impl LanguageServer for Backend {
             position,
         } = params.text_document_position_params;
         let uri = text_document.uri;
-        let location = match self
+        let Some(text) = self
             .with_document_text(&uri, |content| content.to_string())
             .await
-        {
-            Some(text) => {
-                let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_definition_with_workspace(&text, &uri, position, &workspace)
-            }
-            None => None,
+        else {
+            return Ok(None);
         };
+        let workspace = self.workspace_modules_for(&uri).await;
+        let uri2 = uri.clone();
+        let location = tokio::task::spawn_blocking(move || {
+            Self::build_definition_with_workspace(&text, &uri2, position, &workspace)
+        })
+        .await
+        .unwrap_or(None);
         Ok(location.map(|loc| GotoDeclarationResponse::Array(vec![loc])))
     }
 
@@ -429,16 +442,19 @@ impl LanguageServer for Backend {
             position,
         } = params.text_document_position_params;
         let uri = text_document.uri;
-        let location = match self
+        let Some(text) = self
             .with_document_text(&uri, |content| content.to_string())
             .await
-        {
-            Some(text) => {
-                let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_definition_with_workspace(&text, &uri, position, &workspace)
-            }
-            None => None,
+        else {
+            return Ok(None);
         };
+        let workspace = self.workspace_modules_for(&uri).await;
+        let uri2 = uri.clone();
+        let location = tokio::task::spawn_blocking(move || {
+            Self::build_definition_with_workspace(&text, &uri2, position, &workspace)
+        })
+        .await
+        .unwrap_or(None);
         Ok(location.map(|loc| GotoImplementationResponse::Array(vec![loc])))
     }
 
@@ -451,61 +467,55 @@ impl LanguageServer for Backend {
         } = params.text_document_position_params;
         let uri = text_document.uri;
         let doc_index = { Arc::clone(&self.state.lock().await.doc_index) };
-        let hover = match self
+        let Some(text) = self
             .with_document_text(&uri, |content| content.to_string())
             .await
-        {
-            Some(text) => {
-                if debug_hover {
-                    self.client
-                        .log_message(
-                            tower_lsp::lsp_types::MessageType::INFO,
-                            format!(
-                                "[hover] request uri={uri} position={}:{}",
-                                position.line, position.character
-                            ),
-                        )
-                        .await;
-                }
-                let workspace = self.workspace_modules_for(&uri).await;
-                let hover = Self::build_hover_with_workspace(
-                    &text,
-                    &uri,
-                    position,
-                    &workspace,
-                    doc_index.as_ref(),
-                )
-                .or_else(|| Self::build_hover(&text, &uri, position, doc_index.as_ref()));
-                if debug_hover {
-                    self.client
-                        .log_message(
-                            tower_lsp::lsp_types::MessageType::INFO,
-                            format!(
-                                "[hover] resolved={} workspace_modules={} elapsed={:?}",
-                                hover.is_some(),
-                                workspace.len(),
-                                started.elapsed()
-                            ),
-                        )
-                        .await;
-                }
-                hover
+        else {
+            if debug_hover {
+                self.client
+                    .log_message(
+                        tower_lsp::lsp_types::MessageType::WARNING,
+                        format!(
+                            "[hover] missing open text for uri={uri}; elapsed={:?}",
+                            started.elapsed()
+                        ),
+                    )
+                    .await;
             }
-            None => {
-                if debug_hover {
-                    self.client
-                        .log_message(
-                            tower_lsp::lsp_types::MessageType::WARNING,
-                            format!(
-                                "[hover] missing open text for uri={uri}; elapsed={:?}",
-                                started.elapsed()
-                            ),
-                        )
-                        .await;
-                }
-                None
-            }
+            return Ok(None);
         };
+        if debug_hover {
+            self.client
+                .log_message(
+                    tower_lsp::lsp_types::MessageType::INFO,
+                    format!(
+                        "[hover] request uri={uri} position={}:{}",
+                        position.line, position.character
+                    ),
+                )
+                .await;
+        }
+        let workspace = self.workspace_modules_for(&uri).await;
+        let workspace_len = workspace.len();
+        let uri2 = uri.clone();
+        let hover = tokio::task::spawn_blocking(move || {
+            Self::build_hover_with_workspace(&text, &uri2, position, &workspace, doc_index.as_ref())
+                .or_else(|| Self::build_hover(&text, &uri2, position, doc_index.as_ref()))
+        })
+        .await
+        .unwrap_or(None);
+        if debug_hover {
+            self.client
+                .log_message(
+                    tower_lsp::lsp_types::MessageType::INFO,
+                    format!(
+                        "[hover] resolved={} workspace_modules={workspace_len} elapsed={:?}",
+                        hover.is_some(),
+                        started.elapsed()
+                    ),
+                )
+                .await;
+        }
         Ok(hover)
     }
 
@@ -515,16 +525,19 @@ impl LanguageServer for Backend {
             position,
         } = params.text_document_position_params;
         let uri = text_document.uri;
-        let help = match self
+        let Some(text) = self
             .with_document_text(&uri, |content| content.to_string())
             .await
-        {
-            Some(text) => {
-                let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_signature_help_with_workspace(&text, &uri, position, &workspace)
-            }
-            None => None,
+        else {
+            return Ok(None);
         };
+        let workspace = self.workspace_modules_for(&uri).await;
+        let uri2 = uri.clone();
+        let help = tokio::task::spawn_blocking(move || {
+            Self::build_signature_help_with_workspace(&text, &uri2, position, &workspace)
+        })
+        .await
+        .unwrap_or(None);
         Ok(help)
     }
 
@@ -535,22 +548,25 @@ impl LanguageServer for Backend {
         } = params.text_document_position;
         let uri = text_document.uri;
         let include_declaration = params.context.include_declaration;
-        let locations = match self
+        let Some(text) = self
             .with_document_text(&uri, |content| content.to_string())
             .await
-        {
-            Some(text) => {
-                let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_references_with_workspace(
-                    &text,
-                    &uri,
-                    position,
-                    include_declaration,
-                    &workspace,
-                )
-            }
-            None => Vec::new(),
+        else {
+            return Ok(Some(Vec::new()));
         };
+        let workspace = self.workspace_modules_for(&uri).await;
+        let uri2 = uri.clone();
+        let locations = tokio::task::spawn_blocking(move || {
+            Self::build_references_with_workspace(
+                &text,
+                &uri2,
+                position,
+                include_declaration,
+                &workspace,
+            )
+        })
+        .await
+        .unwrap_or_default();
         Ok(Some(locations))
     }
 
@@ -558,16 +574,19 @@ impl LanguageServer for Backend {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
         let new_name = params.new_name;
-        let edit = match self
+        let Some(text) = self
             .with_document_text(&uri, |content| content.to_string())
             .await
-        {
-            Some(text) => {
-                let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_rename_with_workspace(&text, &uri, position, &new_name, &workspace)
-            }
-            None => None,
+        else {
+            return Ok(None);
         };
+        let workspace = self.workspace_modules_for(&uri).await;
+        let uri2 = uri.clone();
+        let edit = tokio::task::spawn_blocking(move || {
+            Self::build_rename_with_workspace(&text, &uri2, position, &new_name, &workspace)
+        })
+        .await
+        .unwrap_or(None);
         Ok(edit)
     }
 
@@ -578,22 +597,25 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         let diagnostics = params.context.diagnostics;
         let cursor_range = params.range;
-        let actions = match self
+        let Some(text) = self
             .with_document_text(&uri, |content| content.to_string())
             .await
-        {
-            Some(text) => {
-                let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_code_actions_with_workspace(
-                    &text,
-                    &uri,
-                    &diagnostics,
-                    &workspace,
-                    cursor_range,
-                )
-            }
-            None => Vec::new(),
+        else {
+            return Ok(Some(Vec::new()));
         };
+        let workspace = self.workspace_modules_for(&uri).await;
+        let uri2 = uri.clone();
+        let actions = tokio::task::spawn_blocking(move || {
+            Self::build_code_actions_with_workspace(
+                &text,
+                &uri2,
+                &diagnostics,
+                &workspace,
+                cursor_range,
+            )
+        })
+        .await
+        .unwrap_or_default();
         Ok(Some(actions))
     }
 
@@ -639,25 +661,34 @@ impl LanguageServer for Backend {
         params: SemanticTokensParams,
     ) -> Result<Option<SemanticTokensResult>> {
         let uri = params.text_document.uri;
-        let tokens = self
-            .with_document_text(&uri, Self::build_semantic_tokens)
-            .await;
+        let Some(text) = self
+            .with_document_text(&uri, |content| content.to_string())
+            .await
+        else {
+            return Ok(None);
+        };
+        let tokens = tokio::task::spawn_blocking(move || Self::build_semantic_tokens(&text))
+            .await
+            .ok();
         Ok(tokens.map(SemanticTokensResult::Tokens))
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
-        let items = match self
+        let Some(text) = self
             .with_document_text(&uri, |content| content.to_string())
             .await
-        {
-            Some(text) => {
-                let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_completion_items(&text, &uri, position, &workspace)
-            }
-            None => Vec::new(),
+        else {
+            return Ok(Some(CompletionResponse::Array(Vec::new())));
         };
+        let workspace = self.workspace_modules_for(&uri).await;
+        let uri2 = uri.clone();
+        let items = tokio::task::spawn_blocking(move || {
+            Self::build_completion_items(&text, &uri2, position, &workspace)
+        })
+        .await
+        .unwrap_or_default();
         Ok(Some(CompletionResponse::Array(items)))
     }
 }

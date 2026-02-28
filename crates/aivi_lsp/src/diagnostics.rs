@@ -340,15 +340,24 @@ impl Backend {
         workspace_modules: &HashMap<String, IndexedModule>,
         cursor_range: Range,
     ) -> Vec<CodeActionOrCommand> {
+        // Parse once up front — avoids re-parsing per diagnostic or per helper call.
+        let path = PathBuf::from(Self::path_from_uri(uri));
+        let (file_modules, _) = parse_modules(&path, text);
+        let module = file_modules.first();
+
         let mut out = Vec::new();
 
         // Position-based refactoring actions (not diagnostic-driven).
-        out.extend(Self::add_type_annotation_actions(
-            text,
-            uri,
-            cursor_range,
-            workspace_modules,
-        ));
+        if let Some(module) = module {
+            out.extend(Self::add_type_annotation_actions(
+                text,
+                uri,
+                cursor_range,
+                workspace_modules,
+                &file_modules,
+                module,
+            ));
+        }
 
         // Batch source action: remove every unused import in the file.
         let unused_import_diags: Vec<&Diagnostic> = diagnostics
@@ -361,8 +370,12 @@ impl Backend {
             })
             .collect();
         if unused_import_diags.len() > 1 {
-            if let Some(batch) = Self::remove_all_unused_imports(text, uri, &unused_import_diags) {
-                out.push(batch);
+            if let Some(module) = module {
+                if let Some(batch) =
+                    Self::remove_all_unused_imports(text, uri, &unused_import_diags, module)
+                {
+                    out.push(batch);
+                }
             }
         }
 
@@ -389,9 +402,12 @@ impl Backend {
                     ));
                 }
                 "W2100" => {
-                    if let Some(action) = Self::remove_unused_import_quickfix(text, uri, diagnostic)
-                    {
-                        out.push(action);
+                    if let Some(module) = module {
+                        if let Some(action) =
+                            Self::remove_unused_import_quickfix(text, uri, diagnostic, module)
+                        {
+                            out.push(action);
+                        }
                     }
                 }
                 "E1004" => {
@@ -477,17 +493,13 @@ impl Backend {
     /// Refactoring action: offer to insert an inferred type annotation above a top-level
     /// `Def` that currently lacks one, when the cursor is on (or near) the definition.
     fn add_type_annotation_actions(
-        text: &str,
+        _text: &str,
         uri: &Url,
         cursor_range: Range,
         workspace_modules: &HashMap<String, IndexedModule>,
+        file_modules: &[aivi::Module],
+        module: &aivi::Module,
     ) -> Vec<CodeActionOrCommand> {
-        let path = PathBuf::from(Self::path_from_uri(uri));
-        let (file_modules, _) = parse_modules(&path, text);
-        let Some(module) = file_modules.first() else {
-            return Vec::new();
-        };
-
         // Names that already have an explicit type signature in this module.
         let has_type_sig: HashSet<&str> = module
             .items
@@ -530,7 +542,8 @@ impl Backend {
             return Vec::new();
         };
 
-        // Run type inference with workspace context to get the inferred type string.
+        // Build a module map limited to transitively reachable modules (mirrors the diagnostics
+        // path) so type inference is scoped rather than running over the whole workspace.
         let mut module_map: HashMap<String, aivi::Module> = HashMap::new();
         for stdlib_mod in embedded_stdlib_modules() {
             module_map.insert(stdlib_mod.name.name.clone(), stdlib_mod);
@@ -545,7 +558,10 @@ impl Backend {
         for m in file_modules.iter() {
             module_map.insert(m.name.name.clone(), m.clone());
         }
-        let modules_for_infer: Vec<aivi::Module> = module_map.into_values().collect();
+        // Use transitive collection so inference runs only over needed modules.
+        let modules_for_infer =
+            Self::collect_transitive_modules_for_diagnostics(file_modules, &module_map);
+
         let (_, type_strings, _) =
             std::panic::catch_unwind(|| infer_value_types(&modules_for_infer)).unwrap_or_default();
 
@@ -600,11 +616,8 @@ impl Backend {
         text: &str,
         uri: &Url,
         diagnostic: &Diagnostic,
+        module: &aivi::Module,
     ) -> Option<CodeActionOrCommand> {
-        let path = PathBuf::from(Self::path_from_uri(uri));
-        let (file_modules, _) = parse_modules(&path, text);
-        let module = file_modules.first()?;
-
         let diag_start = diagnostic.range.start;
 
         // Find the use_decl that contains the unused import item at the diagnostic position.
@@ -690,11 +703,8 @@ impl Backend {
         text: &str,
         uri: &Url,
         unused_diags: &[&Diagnostic],
+        module: &aivi::Module,
     ) -> Option<CodeActionOrCommand> {
-        let path = PathBuf::from(Self::path_from_uri(uri));
-        let (file_modules, _) = parse_modules(&path, text);
-        let module = file_modules.first()?;
-
         // Collect all unused import names from diagnostics.
         let unused_names: HashSet<String> = unused_diags
             .iter()
