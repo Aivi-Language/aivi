@@ -174,6 +174,13 @@ export const sidebar = [
           { text: 'Color', link: '/stdlib/ui/color' },
           { text: 'ServerHtml', link: '/stdlib/ui/server_html' }
         ]
+      },
+      {
+        text: 'API Clients',
+        collapsed: true,
+        items: [
+          { text: 'OpenAI', link: '/stdlib/api/openAI' }
+        ]
       }
     ]
   },
