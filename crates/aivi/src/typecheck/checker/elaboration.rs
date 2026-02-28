@@ -375,6 +375,24 @@ impl TypeChecker {
                     self.fresh_var()
                 };
 
+                // For multi-clause function sugar (no scrutinee), the `expected` type is the full
+                // function type `A -> B`. Each arm body should be checked against the RETURN type
+                // `B`, not the full function type. Passing the full function type to arm bodies
+                // causes spurious type errors (e.g. "expected A -> B, found B").
+                let arm_body_expected = if scrutinee.is_none() {
+                    expected.as_ref().and_then(|ty| {
+                        let applied = self.apply(ty.clone());
+                        let expanded = self.expand_alias(applied);
+                        if let Type::Func(_, ret) = expanded {
+                            Some(*ret)
+                        } else {
+                            None
+                        }
+                    })
+                } else {
+                    expected.clone()
+                };
+
                 let mut new_arms = Vec::new();
                 for arm in arms {
                     let mut arm_env = env.clone();
@@ -386,7 +404,8 @@ impl TypeChecker {
                     } else {
                         None
                     };
-                    let (body, _ty) = self.elab_expr(arm.body, expected.clone(), &mut arm_env)?;
+                    let (body, _ty) =
+                        self.elab_expr(arm.body, arm_body_expected.clone(), &mut arm_env)?;
                     new_arms.push(crate::surface::MatchArm {
                         pattern: arm.pattern,
                         guard,

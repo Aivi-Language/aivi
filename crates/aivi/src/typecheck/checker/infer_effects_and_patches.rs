@@ -67,18 +67,7 @@ impl TypeChecker {
                         }
                     }
 
-                    let mut is_impure = is_effect_like(&expr_ty_applied);
-                    if !is_impure && matches!(expr_ty_applied, Type::Var(_)) {
-                        // If we still don't know the type, fall back to a unification-based check.
-                        // This ensures we reject effectful expressions even when they haven't been
-                        // forced by later constraints yet.
-                        let snapshot = self.subst.clone();
-                        let let_err_ty = self.fresh_var();
-                        is_impure = self
-                            .bind_effect_value(expr_ty.clone(), let_err_ty, expr_span(expr))
-                            .is_ok();
-                        self.subst = snapshot;
-                    }
+                    let is_impure = is_effect_like(&expr_ty_applied);
 
                     if is_impure {
                         let mut message =

@@ -3,8 +3,8 @@ module integrationTests.complex.generatorPipeline
 
 use aivi
 use aivi.testing
-use aivi.generator
 use aivi.collections
+use aivi.generator
 
 // --- Pure helpers ---
 

@@ -6,7 +6,7 @@ use aivi.testing
 
 @test "wildcard import makes all exports available"
 wildcardCoversAll = do Effect {
-  let xs = [1, 2, 3, 4, 5]
+  xs = [1, 2, 3, 4, 5]
   assertEq (filter (x => x > 3) xs) [4, 5]
   assertEq (map (x => x * 2) xs) [2, 4, 6, 8, 10]
   assertEq (length xs) 5
