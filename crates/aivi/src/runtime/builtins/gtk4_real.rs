@@ -76,6 +76,11 @@ mod linux {
         fn gtk_label_set_max_width_chars(label: *mut c_void, n_chars: c_int);
 
         fn gtk_entry_new() -> *mut c_void;
+        fn gtk_password_entry_new() -> *mut c_void;
+        fn gtk_password_entry_set_show_peek_icon(
+            entry: *mut c_void,
+            show_peek_icon: c_int,
+        );
         fn gtk_editable_set_text(editable: *mut c_void, text: *const c_char);
         fn gtk_editable_get_text(editable: *mut c_void) -> *const c_char;
         fn gtk_check_button_get_active(check_button: *mut c_void) -> c_int;
@@ -1165,10 +1170,20 @@ mod linux {
                     unsafe { gtk_button_set_label(widget, text_c.as_ptr()) };
                 }
             }
-            "GtkEntry" => {
+            "GtkEntry" | "GtkPasswordEntry" => {
                 if let Some(value) = props.get("text") {
                     let text_c = c_text(value, "gtk4.buildFromNode invalid GtkEntry text")?;
                     unsafe { gtk_editable_set_text(widget, text_c.as_ptr()) };
+                }
+                if let Some(value) = props.get("placeholder-text") {
+                    let text_c = c_text(value, "gtk4.buildFromNode invalid placeholder-text")?;
+                    let prop_c = CString::new("placeholder-text").unwrap();
+                    unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
+                }
+                if class_name == "GtkPasswordEntry" {
+                    if let Some(value) = props.get("show-peek-icon").and_then(|v| parse_bool_text(v)) {
+                        unsafe { gtk_password_entry_set_show_peek_icon(widget, if value { 1 } else { 0 }) };
+                    }
                 }
             }
             "GtkTextView" => {
@@ -1477,6 +1492,7 @@ mod linux {
                 }
             }
             "GtkEntry" => (unsafe { gtk_entry_new() }, CreatedWidgetKind::Other),
+            "GtkPasswordEntry" => (unsafe { gtk_password_entry_new() }, CreatedWidgetKind::Other),
             "GtkTextView" => (unsafe { gtk_text_view_new() }, CreatedWidgetKind::Other),
             "GtkDrawingArea" => (unsafe { gtk_drawing_area_new() }, CreatedWidgetKind::Other),
             "GtkGestureClick" => (unsafe { gtk_gesture_click_new() }, CreatedWidgetKind::Other),
@@ -1626,7 +1642,7 @@ mod linux {
             "GtkLabel" => {
                 state.labels.insert(id, raw);
             }
-            "GtkEntry" => {
+            "GtkEntry" | "GtkPasswordEntry" => {
                 state.entries.insert(id, raw);
             }
             "GtkImage" => {
@@ -1981,7 +1997,8 @@ mod linux {
     fn signal_payload_kind_for(class_name: &str, signal_name: &str) -> Option<SignalPayloadKind> {
         match (class_name, signal_name) {
             ("GtkButton", "clicked") => Some(SignalPayloadKind::None),
-            ("GtkEntry", "changed") | ("GtkEntry", "activate") => {
+            ("GtkEntry", "changed") | ("GtkEntry", "activate")
+            | ("GtkPasswordEntry", "changed") | ("GtkPasswordEntry", "activate") => {
                 Some(SignalPayloadKind::EditableText)
             }
             ("GtkCheckButton", "toggled") => Some(SignalPayloadKind::ToggleActive),

@@ -227,18 +227,17 @@ impl LanguageServer for Backend {
             (state.diagnostics_in_specs_snippets, state.strict.clone())
         };
         let uri2 = uri.clone();
-        let diagnostics =
-            tokio::task::spawn_blocking(move || {
-                Self::build_diagnostics_with_workspace(
-                    &text,
-                    &uri2,
-                    &workspace,
-                    include_specs_snippets,
-                    &strict,
-                )
-            })
-            .await
-            .unwrap_or_default();
+        let diagnostics = tokio::task::spawn_blocking(move || {
+            Self::build_diagnostics_with_workspace(
+                &text,
+                &uri2,
+                &workspace,
+                include_specs_snippets,
+                &strict,
+            )
+        })
+        .await
+        .unwrap_or_default();
         self.client
             .publish_diagnostics(uri, diagnostics, Some(version))
             .await;
@@ -256,18 +255,17 @@ impl LanguageServer for Backend {
                 (state.diagnostics_in_specs_snippets, state.strict.clone())
             };
             let uri2 = uri.clone();
-            let diagnostics =
-                tokio::task::spawn_blocking(move || {
-                    Self::build_diagnostics_with_workspace(
-                        &text,
-                        &uri2,
-                        &workspace,
-                        include_specs_snippets,
-                        &strict,
-                    )
-                })
-                .await
-                .unwrap_or_default();
+            let diagnostics = tokio::task::spawn_blocking(move || {
+                Self::build_diagnostics_with_workspace(
+                    &text,
+                    &uri2,
+                    &workspace,
+                    include_specs_snippets,
+                    &strict,
+                )
+            })
+            .await
+            .unwrap_or_default();
             self.client
                 .publish_diagnostics(uri, diagnostics, Some(version))
                 .await;
@@ -341,24 +339,25 @@ impl LanguageServer for Backend {
             }
 
             let workspace = self.workspace_modules_for_diagnostics(&uri).await;
-            let Some(text) = self.with_document_text(&uri, |content| content.to_string()).await
+            let Some(text) = self
+                .with_document_text(&uri, |content| content.to_string())
+                .await
             else {
                 continue;
             };
             let uri2 = uri.clone();
             let strict2 = strict.clone();
-            let diagnostics =
-                tokio::task::spawn_blocking(move || {
-                    Self::build_diagnostics_with_workspace(
-                        &text,
-                        &uri2,
-                        &workspace,
-                        include_specs_snippets,
-                        &strict2,
-                    )
-                })
-                .await
-                .unwrap_or_default();
+            let diagnostics = tokio::task::spawn_blocking(move || {
+                Self::build_diagnostics_with_workspace(
+                    &text,
+                    &uri2,
+                    &workspace,
+                    include_specs_snippets,
+                    &strict2,
+                )
+            })
+            .await
+            .unwrap_or_default();
             self.client
                 .publish_diagnostics(uri, diagnostics, None)
                 .await;

@@ -108,7 +108,6 @@ impl Backend {
         format!("type {}{} = {}", alias.name.name, params, aliased)
     }
 
-    #[allow(unused)]
     fn format_class_decl(class_decl: &ClassDecl) -> String {
         let params = class_decl
             .params
