@@ -790,7 +790,7 @@ user1 = { name: "Alice", age: 3 }
 }
 
 #[test]
-fn debug_record_body_semantic_tokens() {
+fn semantic_tokens_record_labels_and_qualified_calls() {
     let text = r#"module test
 
 export extractionRunPlan = emailId => schemaVer => promptVer => modelId => existingStatus => ({
@@ -800,50 +800,53 @@ export extractionRunPlan = emailId => schemaVer => promptVer => modelId => exist
 )
 "#;
     let details = collect_semantic_token_details(text);
-    let token_name = |ty: u32| -> &str {
-        match ty {
-            Backend::SEM_TOKEN_KEYWORD => "keyword",
-            Backend::SEM_TOKEN_TYPE => "type",
-            Backend::SEM_TOKEN_FUNCTION => "function",
-            Backend::SEM_TOKEN_VARIABLE => "variable",
-            Backend::SEM_TOKEN_NUMBER => "number",
-            Backend::SEM_TOKEN_STRING => "string",
-            Backend::SEM_TOKEN_COMMENT => "comment",
-            Backend::SEM_TOKEN_OPERATOR => "operator",
-            Backend::SEM_TOKEN_DECORATOR => "decorator",
-            Backend::SEM_TOKEN_ARROW => "arrow",
-            Backend::SEM_TOKEN_PIPE => "pipe",
-            Backend::SEM_TOKEN_BRACKET => "bracket",
-            Backend::SEM_TOKEN_UNIT => "unit",
-            Backend::SEM_TOKEN_SIGIL => "sigil",
-            Backend::SEM_TOKEN_PROPERTY => "property",
-            Backend::SEM_TOKEN_DOT => "dot",
-            Backend::SEM_TOKEN_PATH_HEAD => "path_head",
-            Backend::SEM_TOKEN_PATH_MID => "path_mid",
-            Backend::SEM_TOKEN_PATH_TAIL => "path_tail",
-            Backend::SEM_TOKEN_TYPE_PARAMETER => "type_param",
-            _ => "unknown",
-        }
-    };
-    for (ty, text, mods) in &details {
-        let sig = if *mods & (1 << Backend::SEM_MOD_SIGNATURE) != 0 {
-            " [SIG]"
-        } else {
-            ""
-        };
-        eprintln!("{:20} -> {}{}", format!("{:?}", text), token_name(*ty), sig);
-    }
-    // Check CachePolicy is type (not signature-modified)
+
+    // Newline-separated record label: projections should be PROPERTY, not FUNCTION.
+    let proj = details.iter().find(|(_, t, _)| t == "projections");
+    assert!(proj.is_some(), "projections token should exist");
+    assert_eq!(
+        proj.unwrap().0,
+        Backend::SEM_TOKEN_PROPERTY,
+        "newline-separated record label 'projections:' should be PROPERTY",
+    );
+
+    // First record label (after `{`): already handled correctly.
+    let ed = details.iter().find(|(_, t, _)| t == "extractionDecision");
+    assert!(ed.is_some(), "extractionDecision token should exist");
+    assert_eq!(
+        ed.unwrap().0,
+        Backend::SEM_TOKEN_PROPERTY,
+        "record label 'extractionDecision:' should be PROPERTY",
+    );
+
+    // Type-qualified function call: CachePolicy.decide should color 'decide' as FUNCTION.
+    let decide = details.iter().find(|(_, t, _)| t == "decide");
+    assert!(decide.is_some(), "decide token should exist");
+    assert_eq!(
+        decide.unwrap().0,
+        Backend::SEM_TOKEN_FUNCTION,
+        "tail of type-qualified call 'CachePolicy.decide arg ...' should be FUNCTION",
+    );
+
+    // CachePolicy should still be TYPE.
     let cp = details.iter().find(|(_, t, _)| t == "CachePolicy");
     assert!(cp.is_some(), "CachePolicy token should exist");
-    let (ty, _, mods) = cp.unwrap();
-    assert_eq!(*ty, Backend::SEM_TOKEN_TYPE, "CachePolicy should be TYPE");
-    assert_eq!(*mods, 0, "CachePolicy should NOT have signature modifier");
+    assert_eq!(cp.unwrap().0, Backend::SEM_TOKEN_TYPE);
 
-    // Check strings are not signature-modified
+    // No signature modifier on record body tokens.
+    for (_, text, mods) in &details {
+        if ["CachePolicy", "projections", "extractionDecision"]
+            .contains(&text.as_str())
+        {
+            assert_eq!(
+                *mods, 0,
+                "token '{text}' should NOT have signature modifier"
+            );
+        }
+    }
+
+    // Strings should be STRING, not affected by record context.
     let v1 = details.iter().find(|(_, t, _)| t.contains("v1"));
     assert!(v1.is_some(), "v1 string should exist");
-    let (ty, _, mods) = v1.unwrap();
-    assert_eq!(*ty, Backend::SEM_TOKEN_STRING, "v1 should be STRING");
-    assert_eq!(*mods, 0, "v1 should NOT have signature modifier");
+    assert_eq!(v1.unwrap().0, Backend::SEM_TOKEN_STRING);
 }

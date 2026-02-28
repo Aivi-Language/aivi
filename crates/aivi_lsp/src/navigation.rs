@@ -1112,11 +1112,26 @@ impl Backend {
         }
 
         // Add directly imported modules (via `use` declarations).
+        let mut direct_imports = Vec::new();
         for use_decl in current_module.uses.iter() {
             let module_name = &use_decl.module.name;
             if seen.insert(module_name.clone()) {
                 if let Some(indexed) = workspace_modules.get(module_name) {
                     result.push(indexed.module.clone());
+                    direct_imports.push(indexed.module.clone());
+                }
+            }
+        }
+
+        // Add 2nd-level imports (imports of directly imported modules) so type
+        // inference can resolve transitive dependencies for hover.
+        for imported_module in &direct_imports {
+            for use_decl in imported_module.uses.iter() {
+                let module_name = &use_decl.module.name;
+                if seen.insert(module_name.clone()) {
+                    if let Some(indexed) = workspace_modules.get(module_name) {
+                        result.push(indexed.module.clone());
+                    }
                 }
             }
         }

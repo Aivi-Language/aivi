@@ -188,6 +188,22 @@ impl Backend {
                         };
                         roles.insert(*idx, role);
                     }
+                } else {
+                    // For type-qualified paths (e.g. CachePolicy.decide), classify
+                    // the lowercase tail as a function when followed by arguments.
+                    let last_idx = *ident_indices.last().unwrap();
+                    let last_token = &tokens[last_idx];
+                    if Self::is_lower_ident(last_token) {
+                        let mut next_sig = last_idx + 1;
+                        while next_sig < tokens.len() && tokens[next_sig].kind == "whitespace" {
+                            next_sig += 1;
+                        }
+                        if next_sig < tokens.len()
+                            && Self::is_expression_start(last_token, &tokens[next_sig])
+                        {
+                            roles.insert(last_idx, Self::SEM_TOKEN_FUNCTION);
+                        }
+                    }
                 }
                 index = ident_indices[ident_indices.len() - 1].saturating_add(1);
             } else {
@@ -326,11 +342,21 @@ impl Backend {
                 if Self::is_record_label(prev, token, next) {
                     return Some(Self::SEM_TOKEN_PROPERTY);
                 }
-                if matches!(
-                    next,
-                    Some(next) if next.kind == "symbol" && (next.text == ":" || next.text == "=")
-                ) {
-                    return Some(Self::SEM_TOKEN_FUNCTION);
+                if let Some(next) = next {
+                    if next.kind == "symbol" {
+                        if next.text == ":" {
+                            // Adjacent colon (no space) → record label,
+                            // non-adjacent colon → type signature name.
+                            return if Self::is_adjacent_span(&token.span, &next.span) {
+                                Some(Self::SEM_TOKEN_PROPERTY)
+                            } else {
+                                Some(Self::SEM_TOKEN_FUNCTION)
+                            };
+                        }
+                        if next.text == "=" {
+                            return Some(Self::SEM_TOKEN_FUNCTION);
+                        }
+                    }
                 }
                 if Self::is_application_head(prev, token, next) {
                     return Some(Self::SEM_TOKEN_FUNCTION);
