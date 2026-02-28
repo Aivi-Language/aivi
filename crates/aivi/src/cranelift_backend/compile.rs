@@ -739,6 +739,89 @@ pub(crate) struct AotFuncEntry {
     pub(crate) is_effect_block: bool,
 }
 
+/// Serialize machine declarations from surface modules into the binary blob
+/// format consumed by `rt_register_machines_from_data` at AOT startup.
+///
+/// Format (all integers as little-endian u32):
+/// ```text
+/// n_machines
+/// per machine:
+///   qual_name_len, qual_name bytes        (e.g. "mailfox.main.ComposeView")
+///   initial_state_len, initial_state bytes
+///   n_states
+///   per state: state_len, state bytes
+///   n_transitions
+///   per transition:
+///     event_len, event bytes
+///     source_len, source bytes  (empty string = init/wildcard transition)
+///     target_len, target bytes
+/// ```
+pub(crate) fn serialize_machine_data(surface_modules: &[crate::surface::Module]) -> Vec<u8> {
+    fn write_u32(buf: &mut Vec<u8>, v: u32) {
+        buf.extend_from_slice(&v.to_le_bytes());
+    }
+    fn write_str(buf: &mut Vec<u8>, s: &str) {
+        let b = s.as_bytes();
+        write_u32(buf, b.len() as u32);
+        buf.extend_from_slice(b);
+    }
+
+    let mut all_machines: Vec<(String, String, Vec<String>, Vec<(String, String, String)>)> =
+        Vec::new();
+    for surf_mod in surface_modules {
+        let module_name = &surf_mod.name.name;
+        for item in &surf_mod.items {
+            let crate::surface::ModuleItem::MachineDecl(md) = item else {
+                continue;
+            };
+            let qual_name = format!("{module_name}.{}", md.name.name);
+            // Determine initial state the same way register_machines_for_jit does
+            let initial_state = md
+                .transitions
+                .iter()
+                .find(|t| t.source.name.is_empty())
+                .map(|t| t.target.name.clone())
+                .or_else(|| md.transitions.first().map(|t| t.target.name.clone()))
+                .or_else(|| md.states.first().map(|s| s.name.name.clone()))
+                .unwrap_or_else(|| "Closed".to_string());
+            let mut state_names: Vec<String> =
+                md.states.iter().map(|s| s.name.name.clone()).collect();
+            state_names.sort();
+            state_names.dedup();
+            let transitions: Vec<(String, String, String)> = md
+                .transitions
+                .iter()
+                .map(|t| {
+                    (
+                        t.name.name.clone(),
+                        t.source.name.clone(),
+                        t.target.name.clone(),
+                    )
+                })
+                .collect();
+            all_machines.push((qual_name, initial_state, state_names, transitions));
+        }
+    }
+
+    let mut buf: Vec<u8> = Vec::new();
+    write_u32(&mut buf, all_machines.len() as u32);
+    for (qual_name, initial_state, states, transitions) in &all_machines {
+        write_str(&mut buf, qual_name);
+        write_str(&mut buf, initial_state);
+        write_u32(&mut buf, states.len() as u32);
+        for s in states {
+            write_str(&mut buf, s);
+        }
+        write_u32(&mut buf, transitions.len() as u32);
+        for (event, source, target) in transitions {
+            write_str(&mut buf, event);
+            write_str(&mut buf, source);
+            write_str(&mut buf, target);
+        }
+    }
+    buf
+}
+
 /// Generate the AOT entry point `__aivi_main` that:
 /// 1. Registers machine declarations via `rt_register_machines_from_data`
 /// 2. Registers all compiled functions as globals via `rt_register_jit_fn`
@@ -771,82 +854,7 @@ fn generate_aot_entry<M: Module>(
     let helper_refs = helpers.import_into(module, &mut function);
 
     // Serialize machine declarations into a binary blob and embed as a data section.
-    // Format (all u32 LE):
-    //   n_machines
-    //   per machine:
-    //     qual_name_len, qual_name bytes
-    //     initial_state_len, initial_state bytes
-    //     n_states
-    //     per state: state_len, state bytes
-    //     n_transitions
-    //     per transition: event_len, event bytes, source_len, source bytes, target_len, target bytes
-    let machines_bytes = {
-        let mut buf: Vec<u8> = Vec::new();
-        let write_u32 = |buf: &mut Vec<u8>, v: u32| buf.extend_from_slice(&v.to_le_bytes());
-        let write_str = |buf: &mut Vec<u8>, s: &str| {
-            let b = s.as_bytes();
-            let mut tmp = Vec::new();
-            tmp.extend_from_slice(&(b.len() as u32).to_le_bytes());
-            tmp.extend_from_slice(b);
-            buf.extend_from_slice(&tmp);
-        };
-
-        let mut all_machines: Vec<(String, String, Vec<String>, Vec<(String, String, String)>)> =
-            Vec::new();
-        for surf_mod in surface_modules {
-            let module_name = &surf_mod.name.name;
-            for item in &surf_mod.items {
-                let crate::surface::ModuleItem::MachineDecl(md) = item else {
-                    continue;
-                };
-                let qual_name = format!("{module_name}.{}", md.name.name);
-                // Determine initial state same as JIT path
-                let initial_state = md
-                    .transitions
-                    .iter()
-                    .find(|t| t.source.name.is_empty())
-                    .map(|t| t.target.name.clone())
-                    .or_else(|| {
-                        md.transitions.first().map(|t| t.target.name.clone())
-                    })
-                    .or_else(|| md.states.first().map(|s| s.name.name.clone()))
-                    .unwrap_or_else(|| "Closed".to_string());
-                let mut state_names: Vec<String> =
-                    md.states.iter().map(|s| s.name.name.clone()).collect();
-                state_names.sort();
-                state_names.dedup();
-                let transitions: Vec<(String, String, String)> = md
-                    .transitions
-                    .iter()
-                    .map(|t| {
-                        (
-                            t.name.name.clone(),
-                            t.source.name.clone(),
-                            t.target.name.clone(),
-                        )
-                    })
-                    .collect();
-                all_machines.push((qual_name, initial_state, state_names, transitions));
-            }
-        }
-
-        write_u32(&mut buf, all_machines.len() as u32);
-        for (qual_name, initial_state, states, transitions) in &all_machines {
-            write_str(&mut buf, qual_name);
-            write_str(&mut buf, initial_state);
-            write_u32(&mut buf, states.len() as u32);
-            for s in states {
-                write_str(&mut buf, s);
-            }
-            write_u32(&mut buf, transitions.len() as u32);
-            for (event, source, target) in transitions {
-                write_str(&mut buf, event);
-                write_str(&mut buf, source);
-                write_str(&mut buf, target);
-            }
-        }
-        buf
-    };
+    let machines_bytes = serialize_machine_data(surface_modules);
 
     // Declare the machine data section
     let machines_data_id = module

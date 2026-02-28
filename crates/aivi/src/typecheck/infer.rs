@@ -58,6 +58,9 @@ pub fn infer_value_types_fast(modules: &[Module]) -> InferResult {
 fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> InferResult {
     let trace = std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1");
     let mut checker = TypeChecker::new();
+    // In fast mode (aivi run), clear the subst map between defs to prevent quadratic blow-up.
+    // This is safe because span_types are not used by the run path.
+    checker.compact_subst_between_defs = skip_stdlib_body_check;
     let mut diagnostics = Vec::new();
     let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
     let mut module_domain_exports: HashMap<String, HashMap<String, Vec<String>>> = HashMap::new();

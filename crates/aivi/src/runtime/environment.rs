@@ -43,6 +43,7 @@ impl Env {
     pub(crate) fn has_local(&self, name: &str) -> bool {
         self.inner.values.read().contains_key(name)
     }
+
 }
 
 pub(crate) struct RuntimeContext {
