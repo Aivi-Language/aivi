@@ -2975,6 +2975,32 @@
         }
     }
 
+    // Post-render pass: align comment-only lines to the indentation of the next code line.
+    // The render pass assigns `state.indent` (delimiter-nesting only) to comment-only lines,
+    // but code lines may receive a larger effective indent from continuation/alignment heuristics.
+    // When the next non-blank non-comment line is more deeply indented, raise the comment to match.
+    {
+        let mut i = 0usize;
+        while i < rendered_lines.len() {
+            let trimmed = rendered_lines[i].trim_start();
+            if trimmed.starts_with("//") {
+                let current_indent = rendered_lines[i].len() - trimmed.len();
+                if let Some(next_indent) = (i + 1..rendered_lines.len())
+                    .find(|&j| {
+                        let t = rendered_lines[j].trim_start();
+                        !t.is_empty() && !t.starts_with("//")
+                    })
+                    .map(|j| rendered_lines[j].len() - rendered_lines[j].trim_start().len())
+                {
+                    if next_indent > current_indent {
+                        rendered_lines[i] = format!("{}{}", " ".repeat(next_indent), trimmed);
+                    }
+                }
+            }
+            i += 1;
+        }
+    }
+
     // Align consecutive single-line records with identical field structure inside list literals.
     // E.g. a list of `{ key: "n", modifiers: "ctrl", action: "compose", label: "New email" }`
     // lines gets their corresponding field values aligned to the same column.

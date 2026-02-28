@@ -184,15 +184,15 @@ serveWs = app ws => do Effect {
         }
       | Ok clientMsg => clientMsg match
         | Hello hello  => do Effect {
-    // v1: always create a new view per connection.
-    // Reconnection policy v1: treat every Hello as a new view.
+            // v1: always create a new view per connection.
+            // Reconnection policy v1: treat every Hello as a new view.
             viewId <- randomUuid
             url = parseUrlInfo hello.url
             initCtx = { viewId: viewId, url: url, online: hello.online }
             model = app.init initCtx
             vdom0 = app.view model
             (vdom, handlers, nextHid) = assignHandlers vdom0 0
-    // Send initial full render as a diff from empty vdom.
+            // Send initial full render as a diff from empty vdom.
             emptyVdom = Element "div" [] []
             initialOps = diff emptyVdom vdom
             _ <- wsSend ws (TextMsg (encodeServerMsg (Patch { ops: patchToJson initialOps })))
