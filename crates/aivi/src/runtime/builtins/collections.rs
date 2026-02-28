@@ -568,8 +568,7 @@ fn expect_map(value: Value, ctx: &str) -> Result<Arc<ImHashMap<KeyValue, Value>>
     match value {
         Value::Map(entries) => Ok(entries),
         _ => Err(RuntimeError::Message(format!(
-            "{ctx} expects Map, got {:?}",
-            std::mem::discriminant(&value)
+            "{ctx} expects Map, got {value:?}",
         ))),
     }
 }
@@ -577,7 +576,7 @@ fn expect_map(value: Value, ctx: &str) -> Result<Arc<ImHashMap<KeyValue, Value>>
 fn expect_set(value: Value, ctx: &str) -> Result<Arc<ImHashSet<KeyValue>>, RuntimeError> {
     match value {
         Value::Set(entries) => Ok(entries),
-        _ => Err(RuntimeError::Message(format!("{ctx} expects Set"))),
+        _ => Err(RuntimeError::Message(format!("{ctx} expects Set, got {value:?}"))),
     }
 }
 
