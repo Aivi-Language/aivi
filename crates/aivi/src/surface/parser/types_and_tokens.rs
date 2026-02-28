@@ -82,6 +82,7 @@ impl Parser {
 
     fn parse_type_atom(&mut self) -> Option<TypeExpr> {
         if self.consume_symbol("(") {
+            let open_span = self.previous_span();
             let mut items = Vec::new();
             if let Some(item) = self.parse_type_expr() {
                 items.push(item);
@@ -91,11 +92,15 @@ impl Parser {
                     }
                 }
             }
-            self.expect_symbol(")", "expected ')' to close type tuple");
+            let close_span = self
+                .expect_symbol(")", "expected ')' to close type tuple")
+                .unwrap_or_else(|| open_span.clone());
             if items.len() == 1 {
                 return Some(items.remove(0));
             }
-            let span = merge_span(type_span(&items[0]), type_span(items.last().expect("infallible")));
+            let start = items.first().map(type_span).unwrap_or_else(|| open_span.clone());
+            let end = items.last().map(type_span).unwrap_or(close_span);
+            let span = merge_span(start, end);
             return Some(TypeExpr::Tuple { items, span });
         }
         if self.consume_symbol("{") {
