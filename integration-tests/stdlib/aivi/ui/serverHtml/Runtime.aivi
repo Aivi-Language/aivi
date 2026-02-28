@@ -321,7 +321,7 @@ assignHandlersAssignsDataAiviNode = do Effect {
           | _                       => False
         )
         assert hasNode
-    // Each child element should also have data-aivi-node
+        // Each child element should also have data-aivi-node
         children |> each (child => child match
           | Element _ cAttrs _ => {
               childHasNode = cAttrs |> any (a => a match

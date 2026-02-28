@@ -108,7 +108,7 @@ resourceLoop = do Effect {
               _   <- managedTempFile path content
               readText path
             }
-        // Each file deleted immediately after inner scope exits
+            // Each file deleted immediately after inner scope exits
             gone <- exists path
             _    <- assertEq gone False
 

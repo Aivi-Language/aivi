@@ -293,6 +293,7 @@ Before finishing any change:
 - [ ] `AIVI_LANGUAGE.md` updated
 - [ ] AIVI code snippets formatted with `aivi fmt`
 - [ ] At least one integration test added (positive + `compile_fail/` if applicable)
+- [ ] Make sure *.aivi files in the codebase have no lsp/formatting issues
 - [ ] `cargo fmt --all -- --check` passes
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes
 - [ ] `cargo test --workspace` is fully green (Rust + AIVI tests)

@@ -44,14 +44,14 @@ appLoopMachine = do Effect {
       state.pending match
         | []             => pure (reverseList state.outputs)
         | [job, ...rest] => do Effect {
-        // Verify Idle state and can-checks before each job
+            // Verify Idle state and can-checks before each job
             _ <- assertEq (constructorName (currentState Unit)) "Idle"
             _ <- assertEq (can.process Unit) True
             _ <- assertEq (can.complete Unit) False
             _ <- assertEq (can.fault Unit) False
             _ <- assertEq (can.recover Unit) False
 
-        // Transition Idle → Busy
+            // Transition Idle → Busy
             _ <- process { jobId: job.jobId }
             _ <- assertEq (constructorName (currentState Unit)) "Busy"
             _ <- assertEq (can.process Unit) False
@@ -59,7 +59,7 @@ appLoopMachine = do Effect {
             _ <- assertEq (can.fault Unit) True
             _ <- assertEq (can.recover Unit) False
 
-        // Invalid transition while Busy: process again must fail
+            // Invalid transition while Busy: process again must fail
             doubleProcess <- attempt (process { jobId: 999 })
             _             <- doubleProcess match
               | Err e => assertEq (constructorName e) "InvalidTransition"
@@ -67,25 +67,25 @@ appLoopMachine = do Effect {
 
             output <- if job.shouldFault
             then do Effect {
-          // Fault path: Busy → Faulted → Idle
+              // Fault path: Busy → Faulted → Idle
               _ <- fault { msg: "job failed" }
               _ <- assertEq (constructorName (currentState Unit)) "Faulted"
               _ <- assertEq (can.complete Unit) False
               _ <- assertEq (can.recover Unit) True
 
-          // Invalid: complete from Faulted must fail
+              // Invalid: complete from Faulted must fail
               badComplete <- attempt (complete { value: 0 })
               _           <- badComplete match
                 | Err e => assertEq (constructorName e) "InvalidTransition"
                 | Ok _  => fail "complete from Faulted must be rejected"
 
-          // Recover: Faulted → Idle
+              // Recover: Faulted → Idle
               _ <- recover {}
               _ <- assertEq (constructorName (currentState Unit)) "Idle"
               pure (0- job.jobId)
             }
             else do Effect {
-          // Happy path: Busy → Idle
+              // Happy path: Busy → Idle
               v = job.jobId * 100
               _ <- complete { value: v }
               _ <- assertEq (constructorName (currentState Unit)) "Idle"
