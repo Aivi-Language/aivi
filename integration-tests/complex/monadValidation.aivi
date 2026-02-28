@@ -4,6 +4,7 @@ module integrationTests.complex.monadValidation
 use aivi
 use aivi.testing
 use aivi.collections
+use aivi.generator
 use aivi.text
 
 // --- Typed validation errors ---
@@ -52,13 +53,14 @@ lookupSetting = section key cfg => do Option {
   Some value
 }
 
-// --- do List: non-deterministic pairing ---
+// --- generator + guard: non-deterministic pairing ---
 
-pairsWithSum = target xs ys => do List {
-  x <- xs
-  y <- ys
-  [x + y] -> _ == target
-  [(x, y)]
+pairsWithSum = target xs ys => generate {
+  x <- fromList xs
+  y <- fromList ys
+  s = x + y
+  s -> _ == target
+  yield (x, y)
 }
 
 // --- Tests ---
@@ -140,11 +142,11 @@ doOption_shortCircuit = do Effect {
   assertEq emptyResult None
 }
 
-@test "do List: pairs summing to target"
+@test "generator: pairs summing to target"
 doList_pairsSum = do Effect {
   xs = [1, 2, 3, 4]
   ys = [6, 7, 8, 9]
-  pairs = pairsWithSum 10 xs ys
+  pairs = toList (pairsWithSum 10 xs ys)
   // 1+9=10, 2+8=10, 3+7=10, 4+6=10
   assertEq pairs [(1, 9), (2, 8), (3, 7), (4, 6)]
 }

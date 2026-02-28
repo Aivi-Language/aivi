@@ -300,7 +300,13 @@ impl Backend {
 
     pub(super) async fn update_document(&self, uri: Url, text: String) {
         let path = PathBuf::from(Self::path_from_uri(&uri));
-        let (modules, _) = parse_modules(&path, &text);
+        let text_clone = text.clone();
+        let modules = tokio::task::spawn_blocking(move || {
+            let (modules, _) = parse_modules(&path, &text_clone);
+            modules
+        })
+        .await
+        .unwrap_or_default();
 
         let mut state = self.state.lock().await;
 
