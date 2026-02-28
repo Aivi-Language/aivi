@@ -68,7 +68,7 @@ appLoopMachine = do Effect {
             output <- if job.shouldFault
             then do Effect {
           // Fault path: Busy → Faulted → Idle
-              _ <- fault { msg: "job { job.jobId } failed" }
+              _ <- fault { msg: "job failed" }
               _ <- assertEq (constructorName (currentState Unit)) "Faulted"
               _ <- assertEq (can.complete Unit) False
               _ <- assertEq (can.recover Unit) True
@@ -82,7 +82,7 @@ appLoopMachine = do Effect {
           // Recover: Faulted → Idle
               _ <- recover {}
               _ <- assertEq (constructorName (currentState Unit)) "Idle"
-              pure (- job.jobId)
+              pure (0- job.jobId)
             }
             else do Effect {
           // Happy path: Busy → Idle
