@@ -561,13 +561,8 @@ pub fn resolve_import_names(modules: &mut [Module]) {
         export_index.insert(module.name.name.clone(), names);
     }
 
-    // 2. For each module, compute which bare names should be qualified.
-    //    An import like `use aivi.database` (wildcard, no alias) brings all exported value
-    //    names into scope as `aivi.database.<name>`.  Selective imports (`use M (a, b)`)
-    //    bring only the listed names.  Aliased imports are already handled by
-    //    `expand_module_aliases`, so we skip them here.
-    //
-    //    Later imports shadow earlier ones (last wins).  Module-local defs shadow everything.
+    // 2. For each module, compute which bare names should be qualified using the
+    //    shared `compute_import_pairs` helper.
     for idx in 0..modules.len() {
         // Collect module-local def names (they shadow imports).
         let local_defs: HashSet<String> = modules[idx]
@@ -579,40 +574,11 @@ pub fn resolve_import_names(modules: &mut [Module]) {
             })
             .collect();
 
-        // Build import resolution map: bare_name → qualified_name.
-        let mut import_map: HashMap<String, String> = HashMap::new();
-        for use_decl in &modules[idx].uses {
-            // Aliased imports are handled by expand_module_aliases — skip.
-            if use_decl.alias.is_some() {
-                continue;
-            }
-            let target_module = &use_decl.module.name;
-            let Some(target_exports) = export_index.get(target_module.as_str()) else {
-                continue;
-            };
-            if use_decl.items.is_empty() {
-                // Wildcard import: bring all exported value names.
-                for name in target_exports {
-                    if !local_defs.contains(name) {
-                        import_map
-                            .insert(name.clone(), format!("{target_module}.{name}"));
-                    }
-                }
-            } else {
-                // Selective import: only bring listed value names.
-                for item in &use_decl.items {
-                    if item.kind == ScopeItemKind::Value
-                        && target_exports.contains(&item.name.name)
-                        && !local_defs.contains(&item.name.name)
-                    {
-                        import_map.insert(
-                            item.name.name.clone(),
-                            format!("{target_module}.{}", item.name.name),
-                        );
-                    }
-                }
-            }
-        }
+        let import_map = super::compute_import_pairs(
+            &modules[idx].uses,
+            &export_index,
+            &local_defs,
+        );
 
         if import_map.is_empty() {
             continue;

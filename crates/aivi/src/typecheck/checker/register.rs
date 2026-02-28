@@ -231,95 +231,84 @@ impl TypeChecker {
         module_domain_exports: &HashMap<String, HashMap<String, Vec<String>>>,
         env: &mut TypeEnv,
     ) {
+        // Build available_names from module_exports for compute_import_pairs.
+        let available_names: HashMap<String, HashSet<String>> = module_exports
+            .iter()
+            .map(|(mod_name, exports)| {
+                (mod_name.clone(), exports.keys().cloned().collect())
+            })
+            .collect();
+        let empty_defs = HashSet::new();
+        let import_pairs = crate::surface::compute_import_pairs(
+            &module.uses,
+            &available_names,
+            &empty_defs,
+        );
+
+        // Register value imports (bare + qualified) with their type schemes.
+        for (bare, qualified) in &import_pairs {
+            let mod_name = qualified.rsplit_once('.').map(|(m, _)| m).unwrap_or("");
+            if let Some(exports) = module_exports.get(mod_name) {
+                if let Some(schemes) = exports.get(bare) {
+                    Self::insert_schemes(env, bare.clone(), schemes);
+                    Self::insert_schemes(env, qualified.clone(), schemes);
+                }
+            }
+        }
+
+        // Handle domain imports and aliased imports (not covered by compute_import_pairs).
         for use_decl in &module.uses {
-            if let Some(exports) = module_exports.get(&use_decl.module.name) {
-                if use_decl.wildcard {
-                    for (name, scheme) in exports {
-                        if scheme.len() == 1 {
-                            env.insert(name.clone(), scheme[0].clone());
-                        } else {
-                            env.insert_overloads(name.clone(), scheme.clone());
-                        }
-                        // Always register qualified form so resolve_import_names
-                        // rewrites can be type-checked.
-                        if scheme.len() == 1 {
-                            env.insert(
-                                format!("{}.{}", use_decl.module.name, name),
-                                scheme[0].clone(),
-                            );
-                        } else {
-                            env.insert_overloads(
-                                format!("{}.{}", use_decl.module.name, name),
-                                scheme.clone(),
-                            );
-                        }
-                    }
-                } else {
-                    for item in &use_decl.items {
-                        match item.kind {
-                            crate::surface::ScopeItemKind::Value => {
-                                if let Some(schemes) = exports.get(&item.name.name) {
-                                    if schemes.len() == 1 {
-                                        env.insert(item.name.name.clone(), schemes[0].clone());
-                                    } else {
-                                        env.insert_overloads(
-                                            item.name.name.clone(),
-                                            schemes.clone(),
-                                        );
-                                    }
-                                    if schemes.len() == 1 {
-                                        env.insert(
-                                            format!(
-                                                "{}.{}",
-                                                use_decl.module.name, item.name.name
-                                            ),
-                                            schemes[0].clone(),
-                                        );
-                                    } else {
-                                        env.insert_overloads(
-                                            format!(
-                                                "{}.{}",
-                                                use_decl.module.name, item.name.name
-                                            ),
-                                            schemes.clone(),
-                                        );
-                                    }
-                                }
-                            }
-                            crate::surface::ScopeItemKind::Domain => {
-                                let Some(domains) =
-                                    module_domain_exports.get(&use_decl.module.name)
-                                else {
-                                    continue;
-                                };
-                                let Some(members) = domains.get(&item.name.name) else {
-                                    continue;
-                                };
-                                for member in members {
-                                    if let Some(schemes) = exports.get(member) {
-                                        if schemes.len() == 1 {
-                                            env.insert(member.clone(), schemes[0].clone());
-                                        } else {
-                                            env.insert_overloads(member.clone(), schemes.clone());
-                                        }
-                                        if schemes.len() == 1 {
-                                            env.insert(
-                                                format!("{}.{}", use_decl.module.name, member),
-                                                schemes[0].clone(),
-                                            );
-                                        } else {
-                                            env.insert_overloads(
-                                                format!("{}.{}", use_decl.module.name, member),
-                                                schemes.clone(),
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                        }
+            let Some(exports) = module_exports.get(&use_decl.module.name) else {
+                continue;
+            };
+
+            // Aliased imports (e.g. `use aivi.list as List`) still need their
+            // individual exports registered under bare + qualified names so
+            // alias-expanded references like `aivi.list.find` can be typed.
+            if use_decl.alias.is_some() {
+                for (name, schemes) in exports {
+                    Self::insert_schemes(env, name.clone(), schemes);
+                    Self::insert_schemes(
+                        env,
+                        format!("{}.{}", use_decl.module.name, name),
+                        schemes,
+                    );
+                }
+                continue;
+            }
+
+            if use_decl.items.is_empty() {
+                continue;
+            }
+            for item in &use_decl.items {
+                if item.kind != crate::surface::ScopeItemKind::Domain {
+                    continue;
+                }
+                let Some(domains) = module_domain_exports.get(&use_decl.module.name) else {
+                    continue;
+                };
+                let Some(members) = domains.get(&item.name.name) else {
+                    continue;
+                };
+                for member in members {
+                    if let Some(schemes) = exports.get(member) {
+                        Self::insert_schemes(env, member.clone(), schemes);
+                        Self::insert_schemes(
+                            env,
+                            format!("{}.{}", use_decl.module.name, member),
+                            schemes,
+                        );
                     }
                 }
             }
+        }
+    }
+
+    fn insert_schemes(env: &mut TypeEnv, name: String, schemes: &[Scheme]) {
+        if schemes.len() == 1 {
+            env.insert(name, schemes[0].clone());
+        } else {
+            env.insert_overloads(name, schemes.to_vec());
         }
     }
 

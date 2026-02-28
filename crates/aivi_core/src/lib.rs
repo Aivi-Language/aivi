@@ -5,6 +5,9 @@
 // For now it reuses the existing module implementation files via `#[path = "..")]` to avoid a
 // huge, noisy move diff. Once the crate boundary is stable, we can physically move files.
 
+#[path = "../../aivi/src/builtin_names.rs"]
+pub mod builtin_names;
+
 pub mod cg_type;
 
 #[path = "../../aivi/src/cst.rs"]
