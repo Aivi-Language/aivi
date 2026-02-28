@@ -442,10 +442,10 @@ fn run() -> Result<(), AiviError> {
                     };
                     maybe_enable_debug_trace(opts.debug_trace);
                     let _modules = load_checked_modules_with_progress(&opts.input, use_color)?;
-                    let (program, cg_types, monomorph_plan) =
-                        aivi::desugar_target_with_cg_types(&opts.input)?;
+                    let (program, cg_types, monomorph_plan, surface_modules) =
+                        aivi::desugar_target_with_cg_types_and_surface(&opts.input)?;
                     let object_bytes =
-                        aivi::compile_to_object(program, cg_types, monomorph_plan)?;
+                        aivi::compile_to_object(program, cg_types, monomorph_plan, &surface_modules)?;
                     let out_dir = opts
                         .output
                         .unwrap_or_else(|| PathBuf::from("target/aivi-gen"));

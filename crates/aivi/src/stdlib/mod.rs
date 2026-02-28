@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use crate::diagnostics::DiagnosticSeverity;
 use crate::surface::{parse_modules, Module};
@@ -322,6 +323,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     },
 ];
 
+/// Cache of parsed embedded stdlib modules. Parsed once per process; subsequent calls clone
+/// from this cache. Avoids re-parsing 63 modules on every LSP operation or `--watch` rerun.
+static STDLIB_MODULES_CACHE: OnceLock<Vec<Module>> = OnceLock::new();
+
 pub fn embedded_stdlib_modules() -> Vec<Module> {
     // The embedded stdlib is allowed to be incomplete / not typecheck-clean in early versions.
     // Tooling (like doc snippet verification) may want to run without it.
@@ -329,22 +334,26 @@ pub fn embedded_stdlib_modules() -> Vec<Module> {
         return Vec::new();
     }
 
-    let trace = std::env::var("AIVI_TRACE_STDLIB").is_ok_and(|v| v == "1");
-    let mut modules = Vec::new();
-    for module in EMBEDDED_MODULES {
-        if trace {
-            eprintln!(
-                "[AIVI_TRACE_STDLIB] parsing {} ({} bytes)",
-                module.name,
-                module.source.len()
-            );
-        }
-        modules.extend(parse_embedded(module.name, module.source));
-        if trace {
-            eprintln!("[AIVI_TRACE_STDLIB] parsed {}", module.name);
-        }
-    }
-    modules
+    STDLIB_MODULES_CACHE
+        .get_or_init(|| {
+            let trace = std::env::var("AIVI_TRACE_STDLIB").is_ok_and(|v| v == "1");
+            let mut modules = Vec::new();
+            for module in EMBEDDED_MODULES {
+                if trace {
+                    eprintln!(
+                        "[AIVI_TRACE_STDLIB] parsing {} ({} bytes)",
+                        module.name,
+                        module.source.len()
+                    );
+                }
+                modules.extend(parse_embedded(module.name, module.source));
+                if trace {
+                    eprintln!("[AIVI_TRACE_STDLIB] parsed {}", module.name);
+                }
+            }
+            modules
+        })
+        .clone()
 }
 
 pub fn embedded_stdlib_source(module_name: &str) -> Option<&'static str> {

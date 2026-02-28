@@ -378,11 +378,12 @@ fn cmd_project_build_cranelift(
         .to_str()
         .ok_or_else(|| AiviError::InvalidPath(source_target.display().to_string()))?;
 
-    let (program, cg_types, monomorph_plan) = aivi::desugar_target_with_cg_types(target_str)?;
+    let (program, cg_types, monomorph_plan, surface_modules) =
+        aivi::desugar_target_with_cg_types_and_surface(target_str)?;
 
     // 1. Compile to object file
     eprintln!("  Compiling AIVI → Cranelift AOT...");
-    let object_bytes = aivi::compile_to_object(program, cg_types, monomorph_plan)?;
+    let object_bytes = aivi::compile_to_object(program, cg_types, monomorph_plan, &surface_modules)?;
 
     // 2. Write the object file
     let gen_dir = root.join(&cfg.build.gen_dir);
