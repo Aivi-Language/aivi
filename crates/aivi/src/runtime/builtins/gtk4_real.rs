@@ -3877,7 +3877,6 @@ mod linux {
                         let mut id_map = HashMap::new();
                         let root = first_object_in_interface(&decoded)?;
                         let id = build_widget_from_node_real(&mut state, root, &mut id_map)?;
-                        eprintln!("[DEBUG] buildFromNode: built widget id={id}, named_widgets={:?}", id_map.keys().collect::<Vec<_>>());
                         state.named_widgets.extend(id_map);
                         Ok(id)
                     })?;
