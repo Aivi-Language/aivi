@@ -5,6 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Instant;
 
 use cranelift_codegen::ir::{types, AbiParam, Function, InstBuilder};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
@@ -47,40 +48,62 @@ fn jit_compile_into_runtime(
     monomorph_plan: HashMap<String, Vec<CgType>>,
     runtime: &mut Runtime,
 ) -> Result<cranelift_jit::JITModule, AiviError> {
+    let trace = std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1");
+    macro_rules! timed {
+        ($label:expr, $block:expr) => {{
+            let _t0 = if trace { Some(Instant::now()) } else { None };
+            let r = $block;
+            if let Some(t0) = _t0 {
+                eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms", $label, t0.elapsed().as_secs_f64() * 1000.0);
+            }
+            r
+        }};
+    }
+
     // Lower HIR → Kernel → RustIR
-    let kernel_program = kernel::lower_hir(program);
-    let mut rust_program = rust_ir::lower_kernel(kernel_program)?;
+    let kernel_program = timed!("lower HIR → Kernel", kernel::lower_hir(program));
+    let mut rust_program = timed!("lower Kernel → RustIR", rust_ir::lower_kernel(kernel_program)?);
 
     // Annotate each def with its CgType
-    for module in &mut rust_program.modules {
-        if let Some(module_types) = cg_types.get(&module.name) {
-            for def in &mut module.defs {
-                let cg_ty = module_types.get(&def.name).or_else(|| {
-                    def.name
-                        .rsplit('.')
-                        .next()
-                        .and_then(|short| module_types.get(short))
-                });
-                if let Some(cg_ty) = cg_ty {
-                    def.cg_type = Some(cg_ty.clone());
+    timed!("annotate CgTypes", {
+        for module in &mut rust_program.modules {
+            if let Some(module_types) = cg_types.get(&module.name) {
+                for def in &mut module.defs {
+                    let cg_ty = module_types.get(&def.name).or_else(|| {
+                        def.name
+                            .rsplit('.')
+                            .next()
+                            .and_then(|short| module_types.get(short))
+                    });
+                    if let Some(cg_ty) = cg_ty {
+                        def.cg_type = Some(cg_ty.clone());
+                    }
                 }
             }
         }
-    }
+    });
 
     // Monomorphize
-    let spec_map = monomorphize_program(&mut rust_program.modules, &monomorph_plan);
+    let spec_map = timed!("monomorphize", monomorphize_program(&mut rust_program.modules, &monomorph_plan));
 
     // Inline small functions
-    super::inline::inline_program(&mut rust_program.modules);
+    timed!("inline_program", super::inline::inline_program(&mut rust_program.modules));
+
+    let total_defs: usize = rust_program.modules.iter().map(|m| m.defs.len()).sum();
+    if trace {
+        eprintln!("[AIVI_TIMING] total defs to JIT-compile: {}", total_defs);
+    }
 
     // Create JIT module with runtime helpers registered
-    let mut module =
-        create_jit_module().map_err(|e| AiviError::Runtime(format!("cranelift jit init: {e}")))?;
+    let mut module = timed!("cranelift jit init",
+        create_jit_module().map_err(|e| AiviError::Runtime(format!("cranelift jit init: {e}")))?
+    );
 
     // Declare runtime helper imports in the module
-    let helpers = declare_helpers(&mut module)
-        .map_err(|e| AiviError::Runtime(format!("cranelift declare helpers: {e}")))?;
+    let helpers = timed!("declare_helpers",
+        declare_helpers(&mut module)
+            .map_err(|e| AiviError::Runtime(format!("cranelift declare helpers: {e}")))?
+    );
 
     // Two-pass compilation for direct calls between JIT functions.
     //    Pass 1: Declare all function signatures and build a registry.
@@ -106,6 +129,7 @@ fn jit_compile_into_runtime(
     let mut clause_counters: HashMap<String, usize> = HashMap::new();
 
     // Pass 1: Declare all eligible functions
+    let _pass1_t0 = if trace { Some(Instant::now()) } else { None };
     for ir_module in &rust_program.modules {
         for def in &ir_module.defs {
             let (params, body) = peel_params(&def.expr);
@@ -195,6 +219,9 @@ fn jit_compile_into_runtime(
             );
         }
     }
+    if let Some(t0) = _pass1_t0 {
+        eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms  ({} fns declared)", "JIT pass 1: declare functions", t0.elapsed().as_secs_f64() * 1000.0, declared_defs.len());
+    }
 
     // Pass 2: Compile function bodies.
     // Track successfully-compiled functions so later functions can direct-call them.
@@ -210,6 +237,7 @@ fn jit_compile_into_runtime(
     let mut compiled_decls: HashMap<String, JitFuncDecl> = HashMap::new();
     let mut str_counter: usize = 0;
 
+    let _pass2_t0 = if trace { Some(Instant::now()) } else { None };
     for dd in &declared_defs {
         match compile_definition_body(
             &mut module,
@@ -265,11 +293,15 @@ fn jit_compile_into_runtime(
             }
         }
     }
+    if let Some(t0) = _pass2_t0 {
+        eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms", "JIT pass 2: compile bodies", t0.elapsed().as_secs_f64() * 1000.0);
+    }
 
     // Finalize all definitions at once, then extract pointers
-    module
+    timed!("finalize_definitions", module
         .finalize_definitions()
-        .map_err(|e| AiviError::Runtime(format!("cranelift finalize: {e}")))?;
+        .map_err(|e| AiviError::Runtime(format!("cranelift finalize: {e}")))?
+    );
 
     let mut compiled_globals: HashMap<String, Value> = HashMap::new();
 
@@ -371,9 +403,14 @@ pub fn run_cranelift_jit(
     monomorph_plan: HashMap<String, Vec<CgType>>,
     surface_modules: &[crate::surface::Module],
 ) -> Result<(), AiviError> {
+    let trace = std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1");
+    let t0 = if trace { Some(Instant::now()) } else { None };
     let mut runtime = build_runtime_from_program(&program)?;
     let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, &mut runtime)?;
     register_machines_for_jit(&runtime, surface_modules);
+    if let Some(t0) = t0 {
+        eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms  ← TOTAL JIT", "JIT pipeline total", t0.elapsed().as_secs_f64() * 1000.0);
+    }
     run_main_effect(&mut runtime)
 }
 
@@ -489,6 +526,7 @@ pub fn compile_to_object(
     program: HirProgram,
     cg_types: HashMap<String, HashMap<String, CgType>>,
     monomorph_plan: HashMap<String, Vec<CgType>>,
+    surface_modules: &[crate::surface::Module],
 ) -> Result<Vec<u8>, AiviError> {
     use super::object_module::create_object_module;
 
@@ -674,8 +712,14 @@ pub fn compile_to_object(
     }
 
     // 7. Generate the entry point wrapper: __aivi_main()
-    generate_aot_entry(&mut module, &helpers, &compiled_func_entries, &all_lambdas)
-        .map_err(|e| AiviError::Runtime(format!("aot entry point: {e}")))?;
+    generate_aot_entry(
+        &mut module,
+        &helpers,
+        &compiled_func_entries,
+        &all_lambdas,
+        surface_modules,
+    )
+    .map_err(|e| AiviError::Runtime(format!("aot entry point: {e}")))?;
 
     // 8. Emit the object file
     let product = module.finish();
@@ -696,14 +740,16 @@ pub(crate) struct AotFuncEntry {
 }
 
 /// Generate the AOT entry point `__aivi_main` that:
-/// 1. Registers all compiled functions as globals via `rt_register_jit_fn`
-/// 2. Looks up and runs the `main` function as an effect
-/// 3. Returns the result
+/// 1. Registers machine declarations via `rt_register_machines_from_data`
+/// 2. Registers all compiled functions as globals via `rt_register_jit_fn`
+/// 3. Looks up and runs the `main` function as an effect
+/// 4. Returns the result
 fn generate_aot_entry<M: Module>(
     module: &mut M,
     helpers: &DeclaredHelpers,
     compiled_funcs: &[AotFuncEntry],
     compiled_lambdas: &[CompiledLambdaInfo],
+    surface_modules: &[crate::surface::Module],
 ) -> Result<(), String> {
     use cranelift_module::DataDescription;
 

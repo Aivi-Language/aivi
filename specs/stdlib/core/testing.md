@@ -36,3 +36,30 @@ aivi test path/to/directory       # run all tests in a directory
 ```
 
 The runner prints a summary of passed / failed tests and returns a non-zero exit code when any test fails.
+
+### Mocking REST/HTTP requests in tests
+
+For request-heavy code, pass the request function as a dependency and use a typed mock in `@test` cases.
+
+```aivi
+use aivi.testing
+use aivi.rest
+
+User = { id: Int, name: Text }
+
+fetchUsers = getUsers => getUsers ~u(https://api.example.com/users)
+
+// Production wiring
+liveFetchUsers = fetchUsers rest.get
+
+@test "fetch users with a mocked request"
+fetch_users_with_mock = do Effect {
+  mockGet = _ => pure [{ id: 1, name: "Ada" }]
+  users <- fetchUsers mockGet
+
+  _ <- assertEq (List.length users) 1
+  users match
+    | [u, ..._] => assertEq u.name "Ada"
+    | []        => fail "expected one mocked user"
+}
+```

@@ -597,8 +597,7 @@ fn runtime_builtin(
     })
 }
 
-#[allow(dead_code)]
-fn machine_transition_builtin_name(machine_name: &str, event: &str) -> String {
+pub(crate) fn machine_transition_builtin_name(machine_name: &str, event: &str) -> String {
     format!("__machine_transition|{machine_name}|{event}")
 }
 
@@ -649,7 +648,7 @@ fn make_machine_on_builtin() -> Value {
 }
 
 #[allow(dead_code)]
-fn make_machine_transition_builtin(machine_name: String, event_name: String) -> Value {
+pub(crate) fn make_machine_transition_builtin(machine_name: String, event_name: String) -> Value {
     let builtin_name = machine_transition_builtin_name(&machine_name, &event_name);
     runtime_builtin(&builtin_name, 1, move |mut args, _| {
         let _payload = args.pop().unwrap_or(Value::Unit);
@@ -671,8 +670,7 @@ fn make_machine_transition_builtin(machine_name: String, event_name: String) -> 
     })
 }
 
-#[allow(dead_code)]
-fn make_machine_current_state_builtin(machine_name: String) -> Value {
+pub(crate) fn make_machine_current_state_builtin(machine_name: String) -> Value {
     runtime_builtin(
         &format!("__machine_current_state|{machine_name}"),
         1,
@@ -691,8 +689,7 @@ fn make_machine_current_state_builtin(machine_name: String) -> Value {
     )
 }
 
-#[allow(dead_code)]
-fn make_machine_can_builtin(machine_name: String, event_name: String) -> Value {
+pub(crate) fn make_machine_can_builtin(machine_name: String, event_name: String) -> Value {
     runtime_builtin(
         &format!("__machine_can|{machine_name}|{event_name}"),
         1,

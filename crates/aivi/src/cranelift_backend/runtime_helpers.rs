@@ -1577,6 +1577,164 @@ pub extern "C" fn rt_eval_sigil(
 }
 
 // ---------------------------------------------------------------------------
+// AOT machine registration
+// ---------------------------------------------------------------------------
+
+/// Register machine declarations from a binary blob into the runtime globals.
+///
+/// Called by the AOT entry point `__aivi_main` to register machine transition
+/// builtins, `can` predicates, `currentState`, and the machine record itself —
+/// exactly as `register_machines_for_jit` does at JIT startup.
+///
+/// Binary format (all lengths as little-endian u32):
+/// ```text
+/// n_machines: u32
+/// for each machine:
+///   qual_name_len: u32  qual_name: [u8]
+///   initial_state_len: u32  initial_state: [u8]
+///   n_states: u32
+///   for each state:  state_len: u32  state: [u8]
+///   n_transitions: u32
+///   for each transition:
+///     event_len: u32  event: [u8]
+///     source_len: u32  source: [u8]  (empty for init transitions)
+///     target_len: u32  target: [u8]
+/// ```
+#[no_mangle]
+pub extern "C" fn rt_register_machines_from_data(
+    ctx: *mut JitRuntimeCtx,
+    data_ptr: *const u8,
+    data_len: usize,
+) {
+    use crate::runtime::environment::MachineEdge;
+    use crate::runtime::interpreter::{
+        make_machine_can_builtin, make_machine_current_state_builtin,
+        make_machine_transition_builtin,
+    };
+    use std::collections::HashMap;
+    use std::sync::Arc;
+
+    let data = unsafe { std::slice::from_raw_parts(data_ptr, data_len) };
+    let mut pos = 0usize;
+
+    macro_rules! read_u32 {
+        () => {{
+            if pos + 4 > data.len() {
+                return;
+            }
+            let v = u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]);
+            pos += 4;
+            v as usize
+        }};
+    }
+
+    macro_rules! read_str {
+        () => {{
+            let len = read_u32!();
+            if pos + len > data.len() {
+                return;
+            }
+            let s = match std::str::from_utf8(&data[pos..pos + len]) {
+                Ok(s) => s.to_string(),
+                Err(_) => return,
+            };
+            pos += len;
+            s
+        }};
+    }
+
+    let n_machines = read_u32!();
+    let runtime = unsafe { (*ctx).runtime_mut() };
+    let globals = &runtime.ctx.globals;
+
+    for _ in 0..n_machines {
+        let qual_name = read_str!();
+        let initial_state = read_str!();
+
+        let n_states = read_u32!();
+        let mut state_names: Vec<String> = Vec::with_capacity(n_states);
+        for _ in 0..n_states {
+            state_names.push(read_str!());
+        }
+
+        let n_transitions = read_u32!();
+        let mut transitions: HashMap<String, Vec<MachineEdge>> = HashMap::new();
+        for _ in 0..n_transitions {
+            let event = read_str!();
+            let source_raw = read_str!();
+            let target = read_str!();
+            let source = if source_raw.is_empty() {
+                None
+            } else {
+                Some(source_raw)
+            };
+            transitions
+                .entry(event)
+                .or_default()
+                .push(MachineEdge { source, target });
+        }
+
+        // Derive short machine name from qualified name (last segment after last '.')
+        let short_machine_name = qual_name
+            .rsplit('.')
+            .next()
+            .unwrap_or(&qual_name)
+            .to_string();
+
+        // Register state constructors
+        for state_name in &state_names {
+            let state_ctor = Value::Constructor {
+                name: state_name.clone(),
+                args: Vec::new(),
+            };
+            globals.set(state_name.clone(), state_ctor.clone());
+            let qualified = format!("{qual_name}.{state_name}");
+            if globals.get(&qualified).is_none() {
+                globals.set(qualified, state_ctor);
+            }
+        }
+
+        // Build machine record fields
+        let mut machine_fields: HashMap<String, Value> = HashMap::new();
+        let mut can_fields: HashMap<String, Value> = HashMap::new();
+        let mut event_names: Vec<String> = transitions.keys().cloned().collect();
+        event_names.sort();
+
+        for event_name in &event_names {
+            let transition_value =
+                make_machine_transition_builtin(qual_name.clone(), event_name.clone());
+            machine_fields.insert(event_name.clone(), transition_value.clone());
+            globals.set(event_name.clone(), transition_value.clone());
+            let qualified_transition = format!("{qual_name}.{event_name}");
+            if globals.get(&qualified_transition).is_none() {
+                globals.set(qualified_transition, transition_value);
+            }
+            can_fields.insert(
+                event_name.clone(),
+                make_machine_can_builtin(qual_name.clone(), event_name.clone()),
+            );
+        }
+
+        machine_fields.insert(
+            "currentState".to_string(),
+            make_machine_current_state_builtin(qual_name.clone()),
+        );
+        machine_fields.insert("can".to_string(), Value::Record(Arc::new(can_fields)));
+        let machine_value = Value::Record(Arc::new(machine_fields));
+        globals.set(short_machine_name.clone(), machine_value.clone());
+        let qualified_machine = qual_name.clone();
+        if globals.get(&qualified_machine).is_none() {
+            globals.set(qualified_machine, machine_value);
+        }
+
+        // Register machine spec in RuntimeContext
+        runtime
+            .ctx
+            .register_machine(qual_name, initial_state, transitions);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Symbol table for JITBuilder registration
 // ---------------------------------------------------------------------------
 
@@ -1653,6 +1811,11 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ),
         // AOT function registration
         ("rt_register_jit_fn", rt_register_jit_fn as *const u8),
+        // AOT machine registration
+        (
+            "rt_register_machines_from_data",
+            rt_register_machines_from_data as *const u8,
+        ),
         // Sigil evaluation
         ("rt_eval_sigil", rt_eval_sigil as *const u8),
         // Function entry tracking for diagnostics
