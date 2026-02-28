@@ -22,6 +22,7 @@ impl Runtime {
             project_root: None,
             snapshot_recordings: HashMap::new(),
             snapshot_replay_cursors: HashMap::new(),
+            snapshot_failure: None,
         }
     }
 
