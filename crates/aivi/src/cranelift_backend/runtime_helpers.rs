@@ -2257,4 +2257,51 @@ main = do Effect { unit }
             "rt_register_machines_from_data must be in the runtime helper symbol table"
         );
     }
+
+    /// Guard that `build_runtime_base()` (used by AOT) registers every global that
+    /// `build_runtime_from_program()` (used by JIT) registers for a minimal program.
+    ///
+    /// If someone adds something to `build_runtime_from_program` that is missing from
+    /// `build_runtime_base`, this test will name the missing globals so they can be
+    /// backfilled into `build_runtime_base` (or its AOT equivalent).
+    #[test]
+    fn aot_base_runtime_globals_subset_of_jit_program_runtime() {
+        use crate::hir::{HirDef, HirExpr, HirModule, HirProgram};
+        use crate::runtime::{build_runtime_base, build_runtime_from_program};
+
+        // Minimal program: one module, one dummy def — just enough to pass the
+        // "no modules" guard inside build_runtime_from_program.
+        let program = HirProgram {
+            modules: vec![HirModule {
+                name: "test".to_string(),
+                defs: vec![HirDef {
+                    name: "main".to_string(),
+                    expr: HirExpr::LitBool { id: 0, value: true },
+                }],
+            }],
+        };
+
+        let jit_runtime = build_runtime_from_program(&program)
+            .expect("build_runtime_from_program failed");
+        let aot_runtime = build_runtime_base();
+
+        let jit_keys: std::collections::HashSet<String> =
+            jit_runtime.ctx.globals.keys().into_iter().collect();
+        let aot_keys: std::collections::HashSet<String> =
+            aot_runtime.ctx.globals.keys().into_iter().collect();
+
+        let missing_from_aot: Vec<&String> = jit_keys
+            .iter()
+            .filter(|k| !aot_keys.contains(*k))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+
+        assert!(
+            missing_from_aot.is_empty(),
+            "build_runtime_base() is missing globals that build_runtime_from_program() registers.\n\
+             These will be absent in AOT binaries: {missing_from_aot:?}\n\
+             Add them to build_runtime_base() or to rt_register_machines_from_data.",
+        );
+    }
 }
