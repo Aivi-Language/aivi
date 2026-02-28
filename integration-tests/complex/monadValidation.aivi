@@ -59,7 +59,7 @@ pairsWithSum = target xs ys => generate {
   x <- xs
   y <- ys
   s = x + y
-  s -> _ == target
+  s -> s == target
   yield (x, y)
 }
 

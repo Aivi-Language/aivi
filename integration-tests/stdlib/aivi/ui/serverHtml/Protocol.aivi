@@ -18,6 +18,7 @@ encodeServerMsg, decodeServerMsg
 decodePlatformEvent, decodeEventPayload
 encodeUrlInfo, decodeUrlInfo
 encodeEventPayload, encodeClipboardOp, decodeClipboardOp
+encodeIntersectionEntry
 
 // ---------------------------------------------------------------------------
 // 1a. Scalar aliases
