@@ -1,14 +1,16 @@
+Header = { name: Text, value: Text }
+
 Request = {
   method: Text
   path: Text
-  headers: List { name: Text, value: Text }
+  headers: List Header
   body: List Int
   remoteAddr: Option Text
 }
 
 Response = {
   status: Int
-  headers: List { name: Text, value: Text }
+  headers: List Header
   body: List Int
 }
 

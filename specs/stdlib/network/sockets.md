@@ -12,6 +12,13 @@ The `Sockets` domain exposes low-level TCP/UDP sockets for custom protocols and 
 
 <<< ../../snippets/from_md/stdlib/network/sockets/types.aivi{aivi}
 
+`Listener` and `Connection` are opaque handle types managed by the runtime:
+
+| Type | Description |
+| --- | --- |
+| `Listener` | A bound TCP listener created by `listen`; passed to `accept` to wait for connections. |
+| `Connection` | An established TCP connection; used with `send`, `recv`, and `close`. |
+
 ## TCP
 
 | Function | Explanation |

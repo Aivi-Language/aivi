@@ -12,6 +12,13 @@ The `HttpServer` domain provides a scalable HTTP/1.1 + HTTP/2 server with option
 
 <<< ../../snippets/from_md/stdlib/network/http_server/types.aivi{aivi}
 
+`Server` and `WebSocket` are opaque handle types returned by the runtime:
+
+| Type | Description |
+| --- | --- |
+| `Server` | An active HTTP server instance, returned by `listen` and consumed by `stop`. |
+| `WebSocket` | An open WebSocket connection, passed to the `Ws` handler inside `ServerReply`. |
+
 ## Functions
 
 | Function | Explanation |
@@ -21,5 +28,3 @@ The `HttpServer` domain provides a scalable HTTP/1.1 + HTTP/2 server with option
 | **wsRecv** socket<br><pre><code>`WebSocket -> Effect WsError WsMessage`</code></pre> | Receives the next WebSocket message. |
 | **wsSend** socket message<br><pre><code>`WebSocket -> WsMessage -> Effect WsError Unit`</code></pre> | Sends a WebSocket message. |
 | **wsClose** socket<br><pre><code>`WebSocket -> Effect WsError Unit`</code></pre> | Closes the WebSocket connection. |
-
-Code reference: `crates/aivi/src/stdlib/network_http_server.rs` — `aivi.net.httpServer` exports `listen`, `stop`, `wsRecv`, `wsSend`, `wsClose`
