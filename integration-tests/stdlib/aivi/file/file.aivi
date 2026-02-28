@@ -8,7 +8,7 @@ use aivi.file
 @test "file stats types"
 fileStats_types = do Effect {
   // Verify FileStats type is well-formed
-  mock =
+  fileStats =
     {
       size: 1024
       created: 1700000000000
@@ -16,9 +16,9 @@ fileStats_types = do Effect {
       isFile: True
       isDirectory: False
     }
-    assertEq mock.size 1024
-    assert mock.isFile
-    assert (mock.isDirectory == False)
+    assertEq fileStats.size 1024
+    assert fileStats.isFile
+    assert (fileStats.isDirectory == False)
 }
 
 @test "exists missing"

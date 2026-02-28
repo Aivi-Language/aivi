@@ -1,0 +1,35 @@
+@no_prelude
+module integrationTests.syntax.mockExpression.basic
+
+use aivi
+use aivi.testing
+
+// A module-level binding that we'll mock.
+greeting = "Hello, World!"
+
+// A function that uses the greeting binding internally.
+makeMessage = name => greeting <> " " <> name
+
+@test "basic mock substitution"
+basicMock =
+  mock greeting = "Mocked!"
+  in do Effect {
+    assertEq greeting "Mocked!"
+  }
+
+@test "deep mock scoping"
+deepMock =
+  mock greeting = "Hi!"
+  in do Effect {
+    result <- pure (makeMessage "Ada")
+    assertEq result "Hi! Ada"
+  }
+
+@test "original restored after mock"
+restoreAfterMock = do Effect {
+  mocked <-
+    mock greeting = "Temp"
+    in pure greeting
+  assertEq mocked "Temp"
+  assertEq greeting "Hello, World!"
+}
