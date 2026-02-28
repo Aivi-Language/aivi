@@ -5,7 +5,6 @@ use aivi
 use aivi.prelude
 use aivi.testing
 use aivi.collections
-use aivi.json (JsonValue, jsonToText)
 use aivi.ui
 use aivi.ui.serverHtml.Protocol
 use aivi.net.httpServer (WsError, WebSocket, wsSend, TextMsg) // -- DOCS: verify names

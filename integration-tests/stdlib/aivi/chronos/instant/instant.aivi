@@ -4,7 +4,6 @@ module integrationTests.stdlib.aivi.chronos.instant.tests
 use aivi
 use aivi.testing
 use aivi.chronos.instant
-use aivi.chronos.duration (Span)
 use aivi.chronos.instant (domain Instant)
 
 @test "compare and diff"

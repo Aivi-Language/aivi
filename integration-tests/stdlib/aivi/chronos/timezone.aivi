@@ -1,12 +1,10 @@
 @test
 module aivi.chronos.timezone.test
 
-use aivi.chronos.calendar (DateTime)
-use aivi.chronos.timezone (TimeZone, ZonedDateTime, getOffset, toInstant, atZone)
-use aivi.chronos.instant (Timestamp)
-use aivi.chronos.duration (Span)
-use aivi.testing (assert, assertEq)
+use aivi.chronos.timezone (getOffset, toInstant, atZone)
+use aivi.testing (assertEq)
 
+@test "timezone functional"
 timezone_functional = do Effect {
   // Test basic timezone creation and offset
   utc = ~tz(UTC)

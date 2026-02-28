@@ -3,6 +3,8 @@ module integrationTests.syntax.sigils.gtkBuilder
 
 use aivi.ui.gtk4
 
+export node, interfaceNode, templateNode, signalSugarNode, nestedSigilInSplice
+
 node : GtkNode
 node =
   ~<gtk>

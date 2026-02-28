@@ -4279,12 +4279,13 @@ mod linux {
                     _ => return Err(invalid("gtk4.windowOnClose expects Int window id")),
                 };
 
-                unsafe extern "C" fn on_window_destroy(
+                // Returns gboolean: 0 = allow close, 1 = inhibit
+                unsafe extern "C" fn on_close_request(
                     _instance: *mut c_void,
                     data: *mut c_void,
-                ) {
+                ) -> c_int {
                     if data.is_null() {
-                        return;
+                        return 0;
                     }
                     let signal_name = unsafe { &*(data as *const String) };
                     GTK_STATE.with(|state| {
@@ -4303,6 +4304,7 @@ mod linux {
                         };
                         state.signal_senders.retain(|s| s.try_send(event.clone()).is_ok());
                     });
+                    0 // allow the close to proceed
                 }
 
                 Ok(effect(move |_| {
@@ -4311,14 +4313,14 @@ mod linux {
                         let window = widget_ptr(&state, window_id, "windowOnClose")?;
                         let name_box = Box::new(signal_name.clone());
                         let data_ptr = Box::into_raw(name_box) as *mut c_void;
-                        let sig = CString::new("destroy").map_err(|_| {
+                        let sig = CString::new("close-request").map_err(|_| {
                             invalid("gtk4.windowOnClose: invalid signal name")
                         })?;
                         unsafe {
                             g_signal_connect_data(
                                 window,
                                 sig.as_ptr(),
-                                on_window_destroy as *const c_void,
+                                on_close_request as *const c_void,
                                 data_ptr,
                                 std::ptr::null_mut(),
                                 0,

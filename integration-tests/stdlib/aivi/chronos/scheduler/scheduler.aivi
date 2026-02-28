@@ -3,7 +3,6 @@ module integrationTests.stdlib.aivi.chronos.scheduler.tests
 
 use aivi
 use aivi.testing
-use aivi.chronos.duration (Span)
 use aivi.chronos.scheduler
 use aivi.chronos.scheduler (domain Scheduler)
 
