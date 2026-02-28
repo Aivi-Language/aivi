@@ -1882,14 +1882,7 @@ main = do Effect { unit }
             .filter(|k: &String| {
                 !matches!(
                     k.as_str(),
-                    "True"
-                        | "False"
-                        | "Some"
-                        | "None"
-                        | "Ok"
-                        | "Err"
-                        | "Closed"
-                        | "__machine_on"
+                    "True" | "False" | "Some" | "None" | "Ok" | "Err" | "Closed" | "__machine_on"
                 ) && !k.starts_with("aivi.")
                     && !k.starts_with("__")
             })
@@ -1963,7 +1956,7 @@ main = do Effect { unit }
             "init",
             "start",
             "stop",
-            "test.mod.init",    // module_name.event
+            "test.mod.init", // module_name.event
             "test.mod.start",
             "test.mod.stop",
             // Machine record (short + qualified)

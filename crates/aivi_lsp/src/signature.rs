@@ -248,7 +248,11 @@ impl Backend {
                 } => Self::find_call_info(transition, position)
                     .or_else(|| Self::find_call_info(handler, position)),
             }),
-            Expr::Mock { substitutions, body, .. } => {
+            Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
                 for sub in substitutions {
                     if let Some(val) = &sub.value {
                         if let Some(inner) = Self::find_call_info(val, position) {

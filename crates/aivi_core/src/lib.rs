@@ -47,8 +47,8 @@ pub use diagnostics::{
 };
 pub use formatter::{format_text, format_text_with_options, BraceStyle, FormatOptions};
 pub use hir::{
-    HirBlockItem, HirBlockKind, HirDef, HirExpr, HirListItem, HirLiteral, HirMatchArm, HirModule,
-    HirMockSubstitution, HirPathSegment, HirPattern, HirProgram, HirRecordField,
+    HirBlockItem, HirBlockKind, HirDef, HirExpr, HirListItem, HirLiteral, HirMatchArm,
+    HirMockSubstitution, HirModule, HirPathSegment, HirPattern, HirProgram, HirRecordField,
     HirRecordPatternField, HirTextPart,
 };
 pub use kernel::{

@@ -54,7 +54,11 @@ fn jit_compile_into_runtime(
             let _t0 = if trace { Some(Instant::now()) } else { None };
             let r = $block;
             if let Some(t0) = _t0 {
-                eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms", $label, t0.elapsed().as_secs_f64() * 1000.0);
+                eprintln!(
+                    "[AIVI_TIMING] {:40} {:>8.1}ms",
+                    $label,
+                    t0.elapsed().as_secs_f64() * 1000.0
+                );
             }
             r
         }};
@@ -62,7 +66,10 @@ fn jit_compile_into_runtime(
 
     // Lower HIR → Kernel → RustIR
     let kernel_program = timed!("lower HIR → Kernel", kernel::lower_hir(program));
-    let mut rust_program = timed!("lower Kernel → RustIR", rust_ir::lower_kernel(kernel_program)?);
+    let mut rust_program = timed!(
+        "lower Kernel → RustIR",
+        rust_ir::lower_kernel(kernel_program)?
+    );
 
     // Annotate each def with its CgType
     timed!("annotate CgTypes", {
@@ -84,10 +91,16 @@ fn jit_compile_into_runtime(
     });
 
     // Monomorphize
-    let spec_map = timed!("monomorphize", monomorphize_program(&mut rust_program.modules, &monomorph_plan));
+    let spec_map = timed!(
+        "monomorphize",
+        monomorphize_program(&mut rust_program.modules, &monomorph_plan)
+    );
 
     // Inline small functions
-    timed!("inline_program", super::inline::inline_program(&mut rust_program.modules));
+    timed!(
+        "inline_program",
+        super::inline::inline_program(&mut rust_program.modules)
+    );
 
     let total_defs: usize = rust_program.modules.iter().map(|m| m.defs.len()).sum();
     if trace {
@@ -95,12 +108,14 @@ fn jit_compile_into_runtime(
     }
 
     // Create JIT module with runtime helpers registered
-    let mut module = timed!("cranelift jit init",
+    let mut module = timed!(
+        "cranelift jit init",
         create_jit_module().map_err(|e| AiviError::Runtime(format!("cranelift jit init: {e}")))?
     );
 
     // Declare runtime helper imports in the module
-    let helpers = timed!("declare_helpers",
+    let helpers = timed!(
+        "declare_helpers",
         declare_helpers(&mut module)
             .map_err(|e| AiviError::Runtime(format!("cranelift declare helpers: {e}")))?
     );
@@ -220,7 +235,12 @@ fn jit_compile_into_runtime(
         }
     }
     if let Some(t0) = _pass1_t0 {
-        eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms  ({} fns declared)", "JIT pass 1: declare functions", t0.elapsed().as_secs_f64() * 1000.0, declared_defs.len());
+        eprintln!(
+            "[AIVI_TIMING] {:40} {:>8.1}ms  ({} fns declared)",
+            "JIT pass 1: declare functions",
+            t0.elapsed().as_secs_f64() * 1000.0,
+            declared_defs.len()
+        );
     }
 
     // Pass 2: Compile function bodies.
@@ -294,13 +314,19 @@ fn jit_compile_into_runtime(
         }
     }
     if let Some(t0) = _pass2_t0 {
-        eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms", "JIT pass 2: compile bodies", t0.elapsed().as_secs_f64() * 1000.0);
+        eprintln!(
+            "[AIVI_TIMING] {:40} {:>8.1}ms",
+            "JIT pass 2: compile bodies",
+            t0.elapsed().as_secs_f64() * 1000.0
+        );
     }
 
     // Finalize all definitions at once, then extract pointers
-    timed!("finalize_definitions", module
-        .finalize_definitions()
-        .map_err(|e| AiviError::Runtime(format!("cranelift finalize: {e}")))?
+    timed!(
+        "finalize_definitions",
+        module
+            .finalize_definitions()
+            .map_err(|e| AiviError::Runtime(format!("cranelift finalize: {e}")))?
     );
 
     let mut compiled_globals: HashMap<String, Value> = HashMap::new();
@@ -409,7 +435,11 @@ pub fn run_cranelift_jit(
     let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, &mut runtime)?;
     register_machines_for_jit(&runtime, surface_modules);
     if let Some(t0) = t0 {
-        eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms  ← TOTAL JIT", "JIT pipeline total", t0.elapsed().as_secs_f64() * 1000.0);
+        eprintln!(
+            "[AIVI_TIMING] {:40} {:>8.1}ms  ← TOTAL JIT",
+            "JIT pipeline total",
+            t0.elapsed().as_secs_f64() * 1000.0
+        );
     }
     run_main_effect(&mut runtime)
 }

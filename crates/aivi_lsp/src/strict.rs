@@ -778,7 +778,11 @@ fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
             | aivi::Expr::Literal(_)
             | aivi::Expr::FieldSection { .. }
             | aivi::Expr::Raw { .. } => {}
-            aivi::Expr::Mock { substitutions, body, .. } => {
+            aivi::Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
                 for sub in substitutions {
                     if let Some(v) = &sub.value {
                         walk_expr(v, out);
@@ -956,7 +960,11 @@ fn strict_pipe_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
             | aivi::Expr::Literal(_)
             | aivi::Expr::FieldSection { .. }
             | aivi::Expr::Raw { .. } => {}
-            aivi::Expr::Mock { substitutions, body, .. } => {
+            aivi::Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
                 for sub in substitutions {
                     if let Some(v) = &sub.value {
                         walk_expr(v, out);
@@ -1118,7 +1126,11 @@ fn strict_record_field_access(file_modules: &[Module], out: &mut Vec<Diagnostic>
             | aivi::Expr::Literal(_)
             | aivi::Expr::FieldSection { .. }
             | aivi::Expr::Raw { .. } => {}
-            aivi::Expr::Mock { substitutions, body, .. } => {
+            aivi::Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
                 for sub in substitutions {
                     if let Some(v) = &sub.value {
                         walk_expr(v, out);
@@ -1313,11 +1325,16 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
             aivi::Expr::Literal(_) | aivi::Expr::FieldSection { .. } | aivi::Expr::Raw { .. } => {
                 false
             }
-            aivi::Expr::Mock { substitutions, body, .. } => {
-                substitutions
-                    .iter()
-                    .any(|sub| sub.value.as_ref().is_some_and(|v| expr_uses_name_free(v, name)))
-                    || expr_uses_name_free(body, name)
+            aivi::Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
+                substitutions.iter().any(|sub| {
+                    sub.value
+                        .as_ref()
+                        .is_some_and(|v| expr_uses_name_free(v, name))
+                }) || expr_uses_name_free(body, name)
             }
         }
     }
@@ -1457,7 +1474,11 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
             | aivi::Expr::Literal(_)
             | aivi::Expr::FieldSection { .. }
             | aivi::Expr::Raw { .. } => {}
-            aivi::Expr::Mock { substitutions, body, .. } => {
+            aivi::Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
                 for sub in substitutions {
                     if let Some(v) = &sub.value {
                         walk_expr(v, out);
@@ -1589,7 +1610,11 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
             aivi::Expr::Literal(_) | aivi::Expr::FieldSection { .. } | aivi::Expr::Raw { .. } => {
                 false
             }
-            aivi::Expr::Mock { substitutions, body, .. } => {
+            aivi::Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
                 substitutions
                     .iter()
                     .any(|sub| sub.value.as_ref().is_some_and(|v| expr_uses_name(v, name)))
@@ -1869,7 +1894,11 @@ fn strict_missing_import_suggestions(
                 }
             }
             aivi::Expr::Literal(_) | aivi::Expr::FieldSection { .. } | aivi::Expr::Raw { .. } => {}
-            aivi::Expr::Mock { substitutions, body, .. } => {
+            aivi::Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
                 for sub in substitutions {
                     if let Some(v) = &sub.value {
                         collect_idents(v, out);
@@ -2120,7 +2149,11 @@ fn strict_expected_type_coercions(
             | aivi::Expr::Literal(_)
             | aivi::Expr::FieldSection { .. }
             | aivi::Expr::Raw { .. } => {}
-            aivi::Expr::Mock { substitutions, body, .. } => {
+            aivi::Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
                 for sub in substitutions {
                     if let Some(v) = &sub.value {
                         collect_calls(v, out);
@@ -2383,7 +2416,11 @@ fn strict_kernel_consistency(
             | KernelExpr::LitBool { .. }
             | KernelExpr::LitDateTime { .. }
             | KernelExpr::Raw { .. } => {}
-            KernelExpr::Mock { substitutions, body, .. } => {
+            KernelExpr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
                 for sub in substitutions {
                     if let Some(v) = &sub.value {
                         walk_expr(v, seen_ids, span_hint, out);

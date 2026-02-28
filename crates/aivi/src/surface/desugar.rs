@@ -307,7 +307,11 @@ fn desugar_expr(expr: Expr) -> Expr {
                 .collect();
             Expr::Block { kind, items, span }
         }
-        Expr::Mock { substitutions, body, span } => {
+        Expr::Mock {
+            substitutions,
+            body,
+            span,
+        } => {
             let substitutions = substitutions
                 .into_iter()
                 .map(|mut sub| {

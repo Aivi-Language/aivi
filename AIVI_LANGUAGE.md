@@ -35,7 +35,7 @@ apply: always
 | Char                                               | `'a'`                                                                                                                                                          |
 | ISO instant                                        | `2024-05-21T12:00:00Z`                                                                                                                                         |
 | Suffixed number                                    | `10px`, `30s`, `100%` (domain-resolved)                                                                                                                        |
-| Keywords                                           | `as class do domain effect else export generate given hiding if instance machine match module on or over patch recurse resource then use when with yield loop` |
+| Keywords                                           | `as class do domain effect else export generate given hiding if in instance machine match mock module on or over patch recurse resource snapshot then use when with yield loop` |
 
 `True`, `False`, `None`, `Some`, `Ok`, `Err` are constructors, not keywords.
 
@@ -916,7 +916,91 @@ Unknown decorators are compile errors.
 
 ---
 
-## 16 Domains, Units, and Operators
+## 16 Mock Expressions (Testing)
+
+`mock ... in` scopes a binding substitution for testing without restructuring production code.
+
+```aivi
+mock <qualified.path> = <expr>
+in <body>
+```
+
+**Deep scoping**: any function called inside `body` that internally uses the mocked binding sees the mock, not the original. This is what makes it useful — no dependency injection needed.
+
+```aivi
+use aivi.rest
+use aivi.testing
+
+fetchUsers = rest.get ~u(https://api.example.com/users)
+
+@test "mock rest.get"
+testFetch =
+  mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
+  in do Effect {
+    users <- fetchUsers   // calls mock transparently
+    assertEq (List.length users) 1
+  }
+```
+
+**Multiple mocks** stack before `in`:
+
+```aivi
+mock rest.get  = _ => pure [{ id: 1, name: "Ada" }]
+mock rest.post = _ _ => pure { success: True }
+in do Effect { ... }
+```
+
+**Nested mocks** re-shadow outer mocks:
+
+```aivi
+mock rest.get = _ => pure []
+in mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
+   in do Effect { ... }   // sees inner mock
+```
+
+| Rule | Detail |
+|:-----|:-------|
+| Only qualified paths | `mock rest.get = ...` ✓ — `mock localFn = ...` ✗ (use `let` for locals) |
+| Type-safe | Mock expression must match the original binding's type |
+| Scoped | Mock is only active inside `in <body>` — originals restored after |
+| Composable | Works in any expression position, not just `@test` |
+
+### Snapshot mocks
+
+`mock snapshot <path>` records real responses on first run and replays from `.snap` files:
+
+```aivi
+@test "fetch users (snapshot)"
+snapshotTest =
+  mock snapshot rest.get
+  in do Effect {
+    users <- fetchUsers
+    assertEq (List.length users) 3
+  }
+```
+
+| CLI command | Behaviour |
+|:------------|:----------|
+| `aivi test` | Replay from `.snap` — fail if missing |
+| `aivi test --update-snapshots` | Re-record from real calls |
+
+### Snapshot assertions
+
+`assertSnapshot` compares a value against a stored `.snap` file:
+
+```aivi
+assertSnapshot : Text -> A -> Effect Text Unit
+
+@test "user table"
+tableTest = do Effect {
+  formatted <- pure (formatUserTable users)
+  assertSnapshot "user_table" formatted
+}
+```
+
+---
+
+## 17 Domains, Units, and Operators
 
 Domains define operator semantics and suffix literals for non-`Int` types.
 
@@ -1003,7 +1087,7 @@ Always built-in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
 
 ---
 
-## 17 Operator Precedence (lowest to highest)
+## 18 Operator Precedence (lowest to highest)
 
 1. `|>` (pipe)
 2. `??` (coalesce Option)
@@ -1022,7 +1106,7 @@ Unary prefix: `!` (not), `-` (negate), `~` (bitwise complement).
 
 ---
 
-## 18 Complete Example
+## 19 Complete Example
 
 ```aivi
 @no_prelude
@@ -1079,7 +1163,7 @@ topoSmoke = do Effect {
 
 ---
 
-## 19 Quick Idiom Reference
+## 20 Quick Idiom Reference
 
 | Task                         | AIVI idiom                                                              |
 |:---------------------------- |:----------------------------------------------------------------------- |
@@ -1102,10 +1186,11 @@ topoSmoke = do Effect {
 | State machine                | `machine Name = { -> Idle : init {}; Idle -> Running : start {}; ... }` |
 | Acquire resource             | `handle <- managedFile "data.txt"` (inside `do Effect`)                 |
 | Write a test                 | `@test "adds correctly" myTest = do Effect { assertEq (f 1) 2 }`        |
+| Mock a dependency in test    | `mock rest.get = _ => pure [...] in do Effect { ... }`                   |
 
 ---
 
-## 20 Anti-Patterns (Do NOT write these)
+## 21 Anti-Patterns (Do NOT write these)
 
 | Wrong                  | Why                              | Correct                                             |
 |:---------------------- |:-------------------------------- |:--------------------------------------------------- |

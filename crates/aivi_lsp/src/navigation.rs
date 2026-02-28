@@ -439,7 +439,11 @@ impl Backend {
                         position,
                     )
             }
-            aivi::Expr::Mock { substitutions, body, .. } => {
+            aivi::Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => {
                 substitutions.iter().any(|sub| {
                     sub.value.as_ref().is_some_and(|v| {
                         Self::local_binding_visible_in_expr(v, ident, position, in_scope)
@@ -776,7 +780,11 @@ impl Backend {
                 None
             }
             Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } => None,
-            Expr::Mock { substitutions, body, .. } => substitutions
+            Expr::Mock {
+                substitutions,
+                body,
+                ..
+            } => substitutions
                 .iter()
                 .find_map(|sub| {
                     sub.value
