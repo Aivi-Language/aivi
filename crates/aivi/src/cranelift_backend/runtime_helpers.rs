@@ -1674,10 +1674,16 @@ pub extern "C" fn rt_register_machines_from_data(
                 .push(MachineEdge { source, target });
         }
 
-        // Derive short machine name from qualified name (last segment after last '.')
+        // Derive short machine name and module name from the qualified name.
+        // e.g. "mailfox.main.ComposeView" -> short = "ComposeView", module = "mailfox.main"
         let short_machine_name = qual_name
             .rsplit('.')
             .next()
+            .unwrap_or(&qual_name)
+            .to_string();
+        let module_name = qual_name
+            .rsplitn(2, '.')
+            .nth(1)
             .unwrap_or(&qual_name)
             .to_string();
 
@@ -1688,7 +1694,7 @@ pub extern "C" fn rt_register_machines_from_data(
                 args: Vec::new(),
             };
             globals.set(state_name.clone(), state_ctor.clone());
-            let qualified = format!("{qual_name}.{state_name}");
+            let qualified = format!("{module_name}.{state_name}");
             if globals.get(&qualified).is_none() {
                 globals.set(qualified, state_ctor);
             }
@@ -1705,7 +1711,7 @@ pub extern "C" fn rt_register_machines_from_data(
                 make_machine_transition_builtin(qual_name.clone(), event_name.clone());
             machine_fields.insert(event_name.clone(), transition_value.clone());
             globals.set(event_name.clone(), transition_value.clone());
-            let qualified_transition = format!("{qual_name}.{event_name}");
+            let qualified_transition = format!("{module_name}.{event_name}");
             if globals.get(&qualified_transition).is_none() {
                 globals.set(qualified_transition, transition_value);
             }
@@ -1844,5 +1850,158 @@ mod tests {
                 "interpreter delegation helper '{name}' should not be in Cranelift symbol table"
             );
         }
+    }
+
+    /// Build surface modules from a minimal AIVI source containing one machine declaration.
+    fn make_test_surface_modules() -> Vec<crate::surface::Module> {
+        use std::path::Path;
+        let source = r#"
+module test.mod
+
+machine Counter = {
+  -> Idle : init {}
+  Idle -> Running : start {}
+  Running -> Idle : stop {}
+}
+
+main = do Effect { unit }
+"#;
+        let (modules, diags) = crate::surface::parse_modules(Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "parse errors: {diags:?}");
+        modules
+    }
+
+    /// Collect the names of machine-related globals registered by the given runtime
+    /// (excludes builtins that exist before machine registration).
+    fn machine_global_names(runtime: &crate::runtime::Runtime) -> Vec<String> {
+        let mut names: Vec<String> = runtime
+            .ctx
+            .globals
+            .keys()
+            .into_iter()
+            .filter(|k: &String| {
+                !matches!(
+                    k.as_str(),
+                    "True"
+                        | "False"
+                        | "Some"
+                        | "None"
+                        | "Ok"
+                        | "Err"
+                        | "Closed"
+                        | "__machine_on"
+                ) && !k.starts_with("aivi.")
+                    && !k.starts_with("__")
+            })
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Verify that `rt_register_machines_from_data` (AOT path) registers exactly
+    /// the same globals as `register_machines_for_jit` (JIT path) for a given
+    /// surface module.
+    #[test]
+    fn aot_machine_globals_parity_with_jit() {
+        use crate::cranelift_backend::compile::serialize_machine_data;
+        use crate::runtime::{build_runtime_base, register_machines_for_jit};
+
+        let surface_modules = make_test_surface_modules();
+
+        // --- JIT path ---
+        let jit_runtime = build_runtime_base();
+        register_machines_for_jit(&jit_runtime, &surface_modules);
+        let jit_globals = machine_global_names(&jit_runtime);
+
+        // --- AOT path: serialize → rt_register_machines_from_data ---
+        let aot_runtime = build_runtime_base();
+        let data = serialize_machine_data(&surface_modules);
+        let mut aot_ctx = unsafe { JitRuntimeCtx::from_runtime_owned(aot_runtime) };
+        rt_register_machines_from_data(&mut aot_ctx as *mut _, data.as_ptr(), data.len());
+        let aot_globals = unsafe {
+            let runtime = (*(&mut aot_ctx as *mut JitRuntimeCtx)).runtime_mut();
+            machine_global_names(runtime)
+        };
+
+        let jit_only: Vec<&String> = jit_globals
+            .iter()
+            .filter(|g| !aot_globals.contains(g))
+            .collect();
+        let aot_only: Vec<&String> = aot_globals
+            .iter()
+            .filter(|g| !jit_globals.contains(g))
+            .collect();
+        assert!(
+            jit_only.is_empty() && aot_only.is_empty(),
+            "JIT and AOT machine registration produced different globals.\n\
+             JIT only: {jit_only:?}\n\
+             AOT only: {aot_only:?}",
+        );
+    }
+
+    /// Verify specific globals are registered by `rt_register_machines_from_data`.
+    #[test]
+    fn aot_machine_registration_expected_globals() {
+        use crate::cranelift_backend::compile::serialize_machine_data;
+        use crate::runtime::build_runtime_base;
+
+        let surface_modules = make_test_surface_modules();
+        let aot_runtime = build_runtime_base();
+        let data = serialize_machine_data(&surface_modules);
+        let mut aot_ctx = unsafe { JitRuntimeCtx::from_runtime_owned(aot_runtime) };
+        rt_register_machines_from_data(&mut aot_ctx as *mut _, data.as_ptr(), data.len());
+
+        let runtime = unsafe { (*(&mut aot_ctx as *mut JitRuntimeCtx)).runtime_mut() };
+
+        // State constructors (short + qualified with module_name, NOT with machine qual_name)
+        let expected = [
+            "Idle",
+            "Running",
+            "test.mod.Idle",    // module_name.state — NOT "test.mod.Counter.Idle"
+            "test.mod.Running", // module_name.state — NOT "test.mod.Counter.Running"
+            // Transition builtins (short + qualified with module_name)
+            "init",
+            "start",
+            "stop",
+            "test.mod.init",    // module_name.event
+            "test.mod.start",
+            "test.mod.stop",
+            // Machine record (short + qualified)
+            "Counter",
+            "test.mod.Counter",
+        ];
+        for name in &expected {
+            assert!(
+                runtime.ctx.globals.get(*name).is_some(),
+                "expected global `{name}` to be registered after rt_register_machines_from_data",
+            );
+        }
+
+        // Must NOT register with full qual_name prefix (the bug we caught)
+        let forbidden = [
+            "test.mod.Counter.Idle",
+            "test.mod.Counter.Running",
+            "test.mod.Counter.init",
+            "test.mod.Counter.start",
+            "test.mod.Counter.stop",
+        ];
+        for name in &forbidden {
+            assert!(
+                runtime.ctx.globals.get(*name).is_none(),
+                "global `{name}` should NOT be registered (wrong qualified prefix)",
+            );
+        }
+    }
+
+    /// Verify `rt_register_machines_from_data` is in the JIT symbol table
+    /// so it can be called from AOT-compiled entry points.
+    #[test]
+    fn rt_register_machines_from_data_in_symbol_table() {
+        let symbols = runtime_helper_symbols();
+        let names: Vec<&str> = symbols.iter().map(|(n, _)| *n).collect();
+        assert!(
+            names.contains(&"rt_register_machines_from_data"),
+            "rt_register_machines_from_data must be in the runtime helper symbol table"
+        );
     }
 }

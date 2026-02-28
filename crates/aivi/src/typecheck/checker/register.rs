@@ -393,6 +393,7 @@ impl TypeChecker {
         env: &mut TypeEnv,
     ) -> Vec<FileDiagnostic> {
         let mut diagnostics = Vec::new();
+        let trace = std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1");
         let mut def_counts: HashMap<String, usize> = HashMap::new();
         for item in &module.items {
             match item {
@@ -416,7 +417,17 @@ impl TypeChecker {
             match item {
                 ModuleItem::Def(def) => {
                     let def_count = def_counts.get(&def.name.name).copied().unwrap_or(1);
+                    let t0 = if trace { Some(std::time::Instant::now()) } else { None };
                     self.check_def(def, sigs, env, module, def_count, &mut diagnostics);
+                    if let Some(t0) = t0 {
+                        let ms = t0.elapsed().as_millis();
+                        if ms > 10 {
+                            eprintln!("[AIVI_TIMING_DEF] {}.{:<40} {:>6}ms  env={}", module.name.name, def.name.name, ms, env.len());
+                        }
+                    }
+                    if self.compact_subst_between_defs {
+                        self.compact_after_def();
+                    }
                 }
                 ModuleItem::InstanceDecl(instance) => {
                     self.check_instance_decl(instance, env, module, &mut diagnostics);
@@ -427,7 +438,17 @@ impl TypeChecker {
                             DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
                                 let def_count =
                                     def_counts.get(&def.name.name).copied().unwrap_or(1);
+                                let t0 = if trace { Some(std::time::Instant::now()) } else { None };
                                 self.check_def(def, sigs, env, module, def_count, &mut diagnostics);
+                                if let Some(t0) = t0 {
+                                    let ms = t0.elapsed().as_millis();
+                                    if ms > 10 {
+                                        eprintln!("[AIVI_TIMING_DEF] {}.{:<40} {:>6}ms  env={}", module.name.name, def.name.name, ms, env.len());
+                                    }
+                                }
+                                if self.compact_subst_between_defs {
+                                    self.compact_after_def();
+                                }
                             }
                             DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                         }

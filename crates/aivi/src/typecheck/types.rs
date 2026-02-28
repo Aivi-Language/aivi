@@ -113,6 +113,10 @@ impl TypeEnv {
     pub(super) fn raw_values(&self) -> &HashMap<String, Vec<Scheme>> {
         &self.values
     }
+
+    pub(super) fn len(&self) -> usize {
+        self.values.len()
+    }
 }
 
 #[derive(Debug)]

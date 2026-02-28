@@ -42,6 +42,10 @@ pub(super) struct TypeChecker {
     /// Records `(span, type)` for every successfully inferred expression.
     /// Used by the LSP to provide hover information at arbitrary positions.
     pub(super) span_types: Vec<(Span, Type)>,
+    /// When true, clear the substitution map between function definitions.
+    /// This prevents quadratic blow-up from accumulating dead type variables across defs.
+    /// Only safe when span_types are not needed (i.e. `aivi run`, not LSP).
+    pub(super) compact_subst_between_defs: bool,
 }
 
 impl TypeChecker {
@@ -70,6 +74,7 @@ impl TypeChecker {
             query_cache: TypeQueryCache::default(),
             poly_instantiations: Vec::new(),
             span_types: Vec::new(),
+            compact_subst_between_defs: false,
         };
         checker.register_builtin_types();
         checker.register_builtin_aliases();
@@ -163,6 +168,19 @@ impl TypeChecker {
                 (span, rendered)
             })
             .collect()
+    }
+
+    /// Clear accumulated type-variable state after checking a single def.
+    ///
+    /// After generalization, all type variables generated for that def are dead: they are either
+    /// bound (quantified) in the resulting scheme or resolved to concrete types. Clearing the
+    /// substitution map here prevents quadratic blow-up in `env.free_vars` / `apply` calls when
+    /// many defs are checked sequentially in a large module.
+    ///
+    /// Only call this when span_types are NOT needed (i.e. the `aivi run` path, not LSP).
+    pub(super) fn compact_after_def(&mut self) {
+        self.subst.clear();
+        self.span_types.clear();
     }
 
     fn emit_extra_diag(
