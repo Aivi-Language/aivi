@@ -451,15 +451,19 @@ fn lower_block_item(
     match item {
         KernelBlockItem::Bind { pattern, expr } => {
             let pat = lower_pattern(pattern)?;
-            // Compiler-generated let bindings (e.g. __loop from loop/recurse
-            // desugaring) may be self-referential: the lambda body references
-            // the binding name recursively. Pre-add such binders to locals so
-            // lower_expr can resolve the recursive reference.
+            // Compiler-generated let bindings (e.g. __or_ok, __do_bind from
+            // desugaring) may be self-referential in exotic cases. Pre-add
+            // such binders so lower_expr can resolve forward references.
+            //
+            // __loop names are intentionally excluded: the loop body must
+            // reference them as globals (via rt_get_global) rather than as
+            // captured locals, so that rt_set_global in lower_do_block can
+            // wire up the correct closure at runtime before the first iteration.
             let mut binders = Vec::new();
             collect_rust_ir_pattern_binders(&pat, &mut binders);
             let pre_added: Vec<String> = binders
                 .iter()
-                .filter(|n| n.starts_with("__"))
+                .filter(|n| n.starts_with("__") && !n.starts_with("__loop"))
                 .cloned()
                 .collect();
             for name in &pre_added {

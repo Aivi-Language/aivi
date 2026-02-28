@@ -2264,6 +2264,14 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                         builder.inst_results(call)[0]
                     };
                     self.bind_pattern(builder, pattern, result);
+                    // For loop bindings (e.g. `__loop1`), register the closure as
+                    // a runtime global so that recursive calls inside the loop body
+                    // can find it via rt_get_global at each iteration.
+                    if let RustIrPattern::Var { name, .. } = pattern {
+                        if name.starts_with("__loop") {
+                            self.emit_set_global(builder, name, result);
+                        }
+                    }
                     current_effect = TypedValue::boxed(result);
                 }
                 RustIrBlockItem::Expr { expr } => {

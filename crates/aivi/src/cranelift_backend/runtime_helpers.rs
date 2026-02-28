@@ -1480,6 +1480,7 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_reuse_record", rt_reuse_record as *const u8),
         ("rt_reuse_list", rt_reuse_list as *const u8),
         ("rt_reuse_tuple", rt_reuse_tuple as *const u8),
+        ("rt_set_global", rt_set_global as *const u8),
         ("rt_get_global", rt_get_global as *const u8),
         ("rt_apply", rt_apply as *const u8),
         ("rt_force_thunk", rt_force_thunk as *const u8),
