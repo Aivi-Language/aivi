@@ -1,0 +1,132 @@
+@no_prelude
+module integrationTests.complex.resourceLifecycle
+
+use aivi
+use aivi.testing
+use aivi.file
+use aivi.collections
+
+// Resource that writes `content` to `path` on acquire and deletes it on release.
+managedTempFile = path content => resource {
+  _ <- writeText path content
+  yield path
+  _ <- delete path
+  pure Unit
+}
+
+@test "resource acquire and release cleans up file"
+resourceAcquireRelease = do Effect {
+  path = "/tmp/aivi_complex_resource_1.txt"
+
+  // Acquire the resource in an inner scope; cleanup runs on exit
+  readResult <- do Effect {
+    _          <- managedTempFile path "hello resource"
+    readText path
+  }
+
+  // File should be gone after the inner scope exits
+  afterExists <- exists path
+  _           <- assertEq afterExists False
+
+  // Content was readable while resource was live
+  readResult match
+    | Ok txt => assertEq txt "hello resource"
+    | Err _  => fail "file read failed while resource was live"
+}
+
+@test "resource cleanup runs even on failure"
+resourceCleanupOnFailure = do Effect {
+  path = "/tmp/aivi_complex_resource_2.txt"
+
+  // Force a failure while holding the resource
+  res <- attempt (do Effect {
+      _   <- managedTempFile path "ephemeral"
+      _   <- fail "intentional error"
+      pure Unit
+  }
+  )
+
+  // Error is captured
+  _ <- res match
+    | Err e => assertEq e "intentional error"
+    | Ok _  => fail "expected failure"
+
+  // File is still cleaned up despite the error
+  afterExists <- exists path
+  assertEq afterExists False
+}
+
+@test "sequential resource scopes are independent"
+resourceSequential = do Effect {
+  path1 = "/tmp/aivi_complex_resource_3a.txt"
+  path2 = "/tmp/aivi_complex_resource_3b.txt"
+
+  // First resource scope
+  r1 <- do Effect {
+    _  <- managedTempFile path1 "first"
+    readText path1
+  }
+
+  // Second resource scope (first is fully released before this runs)
+  r2 <- do Effect {
+    _  <- managedTempFile path2 "second"
+    readText path2
+  }
+
+  // Both files are gone
+  e1 <- exists path1
+  e2 <- exists path2
+  _  <- assertEq e1 False
+  _  <- assertEq e2 False
+
+  // Both reads succeeded
+  _ <- r1 match
+    | Ok txt => assertEq txt "first"
+    | Err _  => fail "first read failed"
+    r2 match
+      | Ok txt => assertEq txt "second"
+      | Err _  => fail "second read failed"
+}
+
+@test "resource loop: acquire use release per iteration"
+resourceLoop = do Effect {
+  paths = [
+    "/tmp/aivi_complex_resource_4a.txt"
+    "/tmp/aivi_complex_resource_4b.txt"
+    "/tmp/aivi_complex_resource_4c.txt"
+  ]
+
+  values = ["alpha", "beta", "gamma"]
+
+  // Write all files via resources in a loop, collecting read results
+  results <- do Effect {
+    loop state = { pairs: List.zip paths values, acc: [] } => {
+      state.pairs match
+        | []                         => pure (reverseList state.acc)
+        | [(path, content), ...rest] => do Effect {
+            txt <- do Effect {
+              _   <- managedTempFile path content
+              readText path
+            }
+        // Each file deleted immediately after inner scope exits
+            gone <- exists path
+            _    <- assertEq gone False
+
+            recurse { pairs: rest, acc: [txt, ...state.acc] }
+          }
+    }
+  }
+
+  // All reads returned Ok with the right content
+  _ <- assertEq results [Ok "alpha", Ok "beta", Ok "gamma"]
+
+  // All temp files are gone
+  still1 <- exists "/tmp/aivi_complex_resource_4a.txt"
+  still2 <- exists "/tmp/aivi_complex_resource_4b.txt"
+  still3 <- exists "/tmp/aivi_complex_resource_4c.txt"
+  _      <- assertEq still1 False
+  _      <- assertEq still2 False
+  assertEq still3 False
+}
+
+reverseList = xs => List.foldl (acc x => [x, ...acc]) [] xs
