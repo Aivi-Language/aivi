@@ -1076,6 +1076,15 @@ fn compile_definition_body<M: Module>(
                 super::lower::TypedValue::boxed(block_params[captured_vars.len() + 1]),
             );
 
+            // When a lambda's parameter is a compiler-generated loop name (e.g.
+            // `__loop1`), the loop body references that name via `rt_get_global`.
+            // Register the parameter value as a runtime global here so that
+            // recursive calls inside the loop body resolve correctly.
+            if param.starts_with("__loop") {
+                let param_val = block_params[captured_vars.len() + 1];
+                lower_ctx.emit_set_global(&mut builder, param, param_val);
+            }
+
             let result = lower_ctx.lower_expr(&mut builder, body);
             let result_boxed = lower_ctx.ensure_boxed(&mut builder, result);
             builder

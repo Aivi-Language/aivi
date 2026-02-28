@@ -1,0 +1,175 @@
+@no_prelude
+module integrationTests.complex.monadValidation
+
+use aivi
+use aivi.testing
+use aivi.collections
+use aivi.text
+
+// --- Typed validation errors ---
+
+ValidationError =
+  | EmptyField
+  | TooShort Int
+  | TooLong Int
+  | OutOfRange Int Int Int
+
+// --- do Result: multi-field validator ---
+
+validateUsername = name => do Result {
+  ok  <- if isEmpty name then Err EmptyField else Ok name
+  ok2 <- if length ok < 3 then Err (TooShort (length ok)) else Ok ok
+  ok3 <- if length ok2 > 20 then Err (TooLong (length ok2)) else Ok ok2
+  Ok ok3
+}
+
+validateAge = n => do Result {
+  ok <- if n < 0 || n > 150 then Err (OutOfRange n 0 150) else Ok n
+  Ok ok
+}
+
+validateScore = n => do Result {
+  ok  <- if n < 0 then Err (OutOfRange n 0 100) else Ok n
+  ok2 <- if ok > 100 then Err (OutOfRange ok 0 100) else Ok ok
+  Ok ok2
+}
+
+// Compose: validate all three fields, fail at first error
+validateUser = name age score => do Result {
+  n <- validateUsername name
+  a <- validateAge age
+  s <- validateScore score
+  Ok { name: n, age: a, score: s }
+}
+
+// --- do Option: safe nested map lookups ---
+
+ConfigMap = Map Text (Map Text Int)
+
+lookupSetting = section key cfg => do Option {
+  section <- Map.get section cfg
+  value   <- Map.get key section
+  Some value
+}
+
+// --- do List: non-deterministic pairing ---
+
+pairsWithSum = target xs ys => do List {
+  x <- xs
+  y <- ys
+  [x + y] -> _ == target
+  [(x, y)]
+}
+
+// --- Tests ---
+
+@test "validateUsername: happy path"
+validateUsername_happy = do Effect {
+  res = validateUsername "alice"
+  assertEq res (Ok "alice")
+}
+
+@test "validateUsername: empty field"
+validateUsername_empty = do Effect {
+  res = validateUsername ""
+  assertEq res (Err EmptyField)
+}
+
+@test "validateUsername: too short"
+validateUsername_tooShort = do Effect {
+  res = validateUsername "ab"
+  assertEq res (Err (TooShort 2))
+}
+
+@test "validateUsername: too long"
+validateUsername_tooLong = do Effect {
+  res = validateUsername "abcdefghijklmnopqrstu"
+  assertEq res (Err (TooLong 21))
+}
+
+@test "validateAge: out of range"
+validateAge_outOfRange = do Effect {
+  resNeg = validateAge (-1)
+  assertEq resNeg (Err (OutOfRange (-1) 0 150))
+
+  resTooBig = validateAge 200
+  assertEq resTooBig (Err (OutOfRange 200 0 150))
+
+  resOk = validateAge 25
+  assertEq resOk (Ok 25)
+}
+
+@test "validateUser: full happy path"
+validateUser_happy = do Effect {
+  res = validateUser "alice" 30 95
+  assertEq res (Ok { name: "alice", age: 30, score: 95 })
+}
+
+@test "validateUser: short-circuits at first error"
+validateUser_shortCircuit = do Effect {
+  // Name fails first; age and score are never checked
+  res = validateUser "" (-1) 999
+  assertEq res (Err EmptyField)
+
+  // Name ok, age fails
+  res2 = validateUser "alice" 200 50
+  assertEq res2 (Err (OutOfRange 200 0 150))
+}
+
+@test "do Option: nested lookup success"
+doOption_nestedLookup = do Effect {
+  inner1 = Map.insert "timeout" 30 Map.empty
+  inner2 = Map.insert "retries" 5 Map.empty
+  cfg = Map.insert "network" inner1 (Map.insert "app" inner2 Map.empty)
+
+  timeout = lookupSetting "network" "timeout" cfg
+  retries = lookupSetting "app" "retries" cfg
+  missing = lookupSetting "network" "missing" cfg
+  absent = lookupSetting "nosection" "key" cfg
+
+  assertEq timeout (Some 30)
+  assertEq retries (Some 5)
+  assertEq missing None
+  assertEq absent None
+}
+
+@test "do Option: short-circuit on missing key"
+doOption_shortCircuit = do Effect {
+  // Empty config: outer key missing, inner never evaluated
+  emptyResult = lookupSetting "any" "key" Map.empty
+  assertEq emptyResult None
+}
+
+@test "do List: pairs summing to target"
+doList_pairsSum = do Effect {
+  xs = [1, 2, 3, 4]
+  ys = [6, 7, 8, 9]
+  pairs = pairsWithSum 10 xs ys
+  // 1+9=10, 2+8=10, 3+7=10, 4+6=10
+  assertEq pairs [(1, 9), (2, 8), (3, 7), (4, 6)]
+}
+
+@test "do Result and do Option interop"
+doResultOptionInterop = do Effect {
+  // Convert Option to Result for uniform error handling
+  cfg = Map.insert "x" 42 Map.empty
+
+  found = Map.get "x" cfg match
+    | Some v => Ok v
+    | None   => Err "missing key"
+
+    notFound = Map.get "z" cfg match
+      | Some v => Ok v
+      | None   => Err "missing key"
+
+    assertEq found (Ok 42)
+    assertEq notFound (Err "missing key")
+
+  // Compose validation on top of lookup
+  combined = do Result {
+    v <- found
+    s <- validateScore v
+    Ok s
+  }
+  assertEq combined (Ok 42)
+}

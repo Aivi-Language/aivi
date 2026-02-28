@@ -226,13 +226,19 @@ impl LanguageServer for Backend {
             let state = self.state.lock().await;
             (state.diagnostics_in_specs_snippets, state.strict.clone())
         };
-        let diagnostics = Self::build_diagnostics_with_workspace(
-            &text,
-            &uri,
-            &workspace,
-            include_specs_snippets,
-            &strict,
-        );
+        let uri2 = uri.clone();
+        let diagnostics =
+            tokio::task::spawn_blocking(move || {
+                Self::build_diagnostics_with_workspace(
+                    &text,
+                    &uri2,
+                    &workspace,
+                    include_specs_snippets,
+                    &strict,
+                )
+            })
+            .await
+            .unwrap_or_default();
         self.client
             .publish_diagnostics(uri, diagnostics, Some(version))
             .await;
@@ -249,13 +255,19 @@ impl LanguageServer for Backend {
                 let state = self.state.lock().await;
                 (state.diagnostics_in_specs_snippets, state.strict.clone())
             };
-            let diagnostics = Self::build_diagnostics_with_workspace(
-                &text,
-                &uri,
-                &workspace,
-                include_specs_snippets,
-                &strict,
-            );
+            let uri2 = uri.clone();
+            let diagnostics =
+                tokio::task::spawn_blocking(move || {
+                    Self::build_diagnostics_with_workspace(
+                        &text,
+                        &uri2,
+                        &workspace,
+                        include_specs_snippets,
+                        &strict,
+                    )
+                })
+                .await
+                .unwrap_or_default();
             self.client
                 .publish_diagnostics(uri, diagnostics, Some(version))
                 .await;
@@ -333,13 +345,20 @@ impl LanguageServer for Backend {
             else {
                 continue;
             };
-            let diagnostics = Self::build_diagnostics_with_workspace(
-                &text,
-                &uri,
-                &workspace,
-                include_specs_snippets,
-                &strict,
-            );
+            let uri2 = uri.clone();
+            let strict2 = strict.clone();
+            let diagnostics =
+                tokio::task::spawn_blocking(move || {
+                    Self::build_diagnostics_with_workspace(
+                        &text,
+                        &uri2,
+                        &workspace,
+                        include_specs_snippets,
+                        &strict2,
+                    )
+                })
+                .await
+                .unwrap_or_default();
             self.client
                 .publish_diagnostics(uri, diagnostics, None)
                 .await;

@@ -187,6 +187,7 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_clone_value: FuncRef,
     pub(crate) rt_drop_value: FuncRef,
     pub(crate) rt_get_global: FuncRef,
+    pub(crate) rt_set_global: FuncRef,
     pub(crate) rt_apply: FuncRef,
     pub(crate) rt_force_thunk: FuncRef,
     pub(crate) rt_run_effect: FuncRef,
@@ -283,6 +284,8 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_drop_value: decl!("rt_drop_value", [PTR, PTR], []),
         // (ctx, name_ptr, name_len) -> ptr
         rt_get_global: decl!("rt_get_global", [PTR, PTR, PTR], [PTR]),
+        // (ctx, name_ptr, name_len, value_ptr) -> void
+        rt_set_global: decl!("rt_set_global", [PTR, PTR, PTR, PTR], []),
         // (ctx, func_ptr, arg_ptr) -> ptr
         rt_apply: decl!("rt_apply", [PTR, PTR, PTR], [PTR]),
         // (ctx, ptr) -> ptr
@@ -385,6 +388,7 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_clone_value: cranelift_module::FuncId,
     pub(crate) rt_drop_value: cranelift_module::FuncId,
     pub(crate) rt_get_global: cranelift_module::FuncId,
+    pub(crate) rt_set_global: cranelift_module::FuncId,
     pub(crate) rt_apply: cranelift_module::FuncId,
     pub(crate) rt_force_thunk: cranelift_module::FuncId,
     pub(crate) rt_run_effect: cranelift_module::FuncId,
@@ -455,6 +459,7 @@ impl DeclaredHelpers {
             rt_clone_value: imp!(rt_clone_value),
             rt_drop_value: imp!(rt_drop_value),
             rt_get_global: imp!(rt_get_global),
+            rt_set_global: imp!(rt_set_global),
             rt_apply: imp!(rt_apply),
             rt_force_thunk: imp!(rt_force_thunk),
             rt_run_effect: imp!(rt_run_effect),
@@ -854,6 +859,19 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             &[self.ctx_param, name_ptr, name_len],
         );
         TypedValue::boxed(builder.inst_results(call)[0])
+    }
+
+    pub(crate) fn emit_set_global(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        name: &str,
+        value: cranelift_codegen::ir::Value,
+    ) {
+        let (name_ptr, name_len) = self.embed_str(builder, name.as_bytes());
+        builder.ins().call(
+            self.helpers.rt_set_global,
+            &[self.ctx_param, name_ptr, name_len, value],
+        );
     }
 
     /// Lower a bare constructor reference (e.g. `Sqlite`, `GtkAttribute`) by

@@ -595,6 +595,28 @@ pub extern "C" fn rt_reuse_tuple(
 // Runtime interaction helpers
 // ---------------------------------------------------------------------------
 
+/// Register a value as a named global.  Used by loop desugaring so that
+/// recursive `rt_get_global` calls inside the loop body can find the
+/// loop closure by its generated name (e.g. `__loop1`).
+///
+/// # Safety
+/// `ctx` must be a valid `JitRuntimeCtx` pointer.  `value_ptr` must be a
+/// valid `Value` pointer.
+#[no_mangle]
+pub extern "C" fn rt_set_global(
+    ctx: *mut JitRuntimeCtx,
+    name_ptr: *const u8,
+    name_len: usize,
+    value_ptr: *const Value,
+) {
+    let name = unsafe {
+        std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len))
+    };
+    let value = unsafe { (*value_ptr).clone() };
+    let runtime = unsafe { (*ctx).runtime_mut() };
+    runtime.ctx.globals.set(name.to_string(), value);
+}
+
 /// Look up a global definition by name, forcing thunks.
 ///
 /// # Safety
