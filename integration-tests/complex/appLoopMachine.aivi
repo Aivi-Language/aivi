@@ -1,0 +1,117 @@
+@no_prelude
+module integrationTests.complex.appLoopMachine
+
+use aivi
+use aivi.testing
+use aivi.collections
+
+// App-level state machine:
+//   happy path:        Idle → Busy → Idle
+//   fault-recovery:    Idle → Busy → Faulted → Idle
+machine AppLoop =
+  {
+            -> Idle    : init {}
+    Idle    -> Busy    : process { jobId: Int }
+    Busy    -> Idle    : complete { value: Int }
+    Busy    -> Faulted : fault { msg: Text }
+    Faulted -> Idle    : recover {}
+  }
+
+Job = { jobId: Int, shouldFault: Bool }
+
+reverseList = xs => List.foldl (acc x => [x, ...acc]) [] xs
+
+@test "app loop drives state machine through transitions and fault recovery"
+appLoopMachine = do Effect {
+  { init, process, complete, fault, recover, currentState, can } = AppLoop
+
+  // Machine starts in Idle; calling init explicitly must fail
+  initAttempt <- attempt (init {})
+  _           <- initAttempt match
+    | Err e => assertEq (constructorName e) "InvalidTransition"
+    | Ok _  => fail "init from Idle must be rejected"
+
+    jobs = [
+      { jobId: 1, shouldFault: False }
+      { jobId: 2, shouldFault: True }
+      { jobId: 3, shouldFault: False }
+      { jobId: 4, shouldFault: True }
+    ]
+
+  // Process all jobs in a tail-recursive effect loop, collecting results
+  results <- do Effect {
+    loop state = { pending: jobs, outputs: [] } => {
+      state.pending match
+        | []             => pure (reverseList state.outputs)
+        | [job, ...rest] => do Effect {
+        // Verify Idle state and can-checks before each job
+            _ <- assertEq (constructorName (currentState Unit)) "Idle"
+            _ <- assertEq (can.process Unit) True
+            _ <- assertEq (can.complete Unit) False
+            _ <- assertEq (can.fault Unit) False
+            _ <- assertEq (can.recover Unit) False
+
+        // Transition Idle → Busy
+            _ <- process { jobId: job.jobId }
+            _ <- assertEq (constructorName (currentState Unit)) "Busy"
+            _ <- assertEq (can.process Unit) False
+            _ <- assertEq (can.complete Unit) True
+            _ <- assertEq (can.fault Unit) True
+            _ <- assertEq (can.recover Unit) False
+
+        // Invalid transition while Busy: process again must fail
+            doubleProcess <- attempt (process { jobId: 999 })
+            _             <- doubleProcess match
+              | Err e => assertEq (constructorName e) "InvalidTransition"
+              | Ok _  => fail "process from Busy must be rejected"
+
+            output <- if job.shouldFault
+            then do Effect {
+          // Fault path: Busy → Faulted → Idle
+              _ <- fault { msg: "job { job.jobId } failed" }
+              _ <- assertEq (constructorName (currentState Unit)) "Faulted"
+              _ <- assertEq (can.complete Unit) False
+              _ <- assertEq (can.recover Unit) True
+
+          // Invalid: complete from Faulted must fail
+              badComplete <- attempt (complete { value: 0 })
+              _           <- badComplete match
+                | Err e => assertEq (constructorName e) "InvalidTransition"
+                | Ok _  => fail "complete from Faulted must be rejected"
+
+          // Recover: Faulted → Idle
+              _ <- recover {}
+              _ <- assertEq (constructorName (currentState Unit)) "Idle"
+              pure (- job.jobId)
+            }
+            else do Effect {
+          // Happy path: Busy → Idle
+              v = job.jobId * 100
+              _ <- complete { value: v }
+              _ <- assertEq (constructorName (currentState Unit)) "Idle"
+              pure v
+            }
+
+            recurse { pending: rest, outputs: [output, ...state.outputs] }
+          }
+    }
+  }
+
+  // Verify collected outputs match expected values in job order
+  _ <- assertEq results [100, -2, 300, -4]
+
+  // Final state is Idle; invalid transitions must all fail
+  _ <- assertEq (constructorName (currentState Unit)) "Idle"
+
+  badComplete <- attempt (complete { value: 0 })
+  _           <- badComplete match
+    | Err e => assertEq (constructorName e) "InvalidTransition"
+    | Ok _  => fail "complete from Idle must be rejected"
+
+    badRecover <- attempt (recover {})
+    _          <- badRecover match
+      | Err e => assertEq (constructorName e) "InvalidTransition"
+      | Ok _  => fail "recover from Idle must be rejected"
+
+    pure Unit
+}
