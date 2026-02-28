@@ -220,56 +220,45 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         let text = params.text_document.text;
         let version = params.text_document.version;
-        self.update_document(uri.clone(), text).await;
+        self.update_document(uri.clone(), text.clone()).await;
         let workspace = self.workspace_modules_for_diagnostics(&uri).await;
         let (include_specs_snippets, strict) = {
             let state = self.state.lock().await;
             (state.diagnostics_in_specs_snippets, state.strict.clone())
         };
-        if let Some(diagnostics) = self
-            .with_document_text(&uri, |content| {
-                Self::build_diagnostics_with_workspace(
-                    content,
-                    &uri,
-                    &workspace,
-                    include_specs_snippets,
-                    &strict,
-                )
-            })
-            .await
-        {
-            self.client
-                .publish_diagnostics(uri, diagnostics, Some(version))
-                .await;
-        }
+        let diagnostics = Self::build_diagnostics_with_workspace(
+            &text,
+            &uri,
+            &workspace,
+            include_specs_snippets,
+            &strict,
+        );
+        self.client
+            .publish_diagnostics(uri, diagnostics, Some(version))
+            .await;
     }
 
     async fn did_change(&self, params: tower_lsp::lsp_types::DidChangeTextDocumentParams) {
         let uri = params.text_document.uri;
         let version = params.text_document.version;
         if let Some(change) = params.content_changes.into_iter().next() {
-            self.update_document(uri.clone(), change.text).await;
+            let text = change.text;
+            self.update_document(uri.clone(), text.clone()).await;
             let workspace = self.workspace_modules_for_diagnostics(&uri).await;
             let (include_specs_snippets, strict) = {
                 let state = self.state.lock().await;
                 (state.diagnostics_in_specs_snippets, state.strict.clone())
             };
-            if let Some(diagnostics) = self
-                .with_document_text(&uri, |content| {
-                    Self::build_diagnostics_with_workspace(
-                        content,
-                        &uri,
-                        &workspace,
-                        include_specs_snippets,
-                        &strict,
-                    )
-                })
-                .await
-            {
-                self.client
-                    .publish_diagnostics(uri, diagnostics, Some(version))
-                    .await;
-            }
+            let diagnostics = Self::build_diagnostics_with_workspace(
+                &text,
+                &uri,
+                &workspace,
+                include_specs_snippets,
+                &strict,
+            );
+            self.client
+                .publish_diagnostics(uri, diagnostics, Some(version))
+                .await;
         }
     }
 
@@ -340,22 +329,20 @@ impl LanguageServer for Backend {
             }
 
             let workspace = self.workspace_modules_for_diagnostics(&uri).await;
-            if let Some(diagnostics) = self
-                .with_document_text(&uri, |content| {
-                    Self::build_diagnostics_with_workspace(
-                        content,
-                        &uri,
-                        &workspace,
-                        include_specs_snippets,
-                        &strict,
-                    )
-                })
-                .await
-            {
-                self.client
-                    .publish_diagnostics(uri, diagnostics, None)
-                    .await;
-            }
+            let Some(text) = self.with_document_text(&uri, |content| content.to_string()).await
+            else {
+                continue;
+            };
+            let diagnostics = Self::build_diagnostics_with_workspace(
+                &text,
+                &uri,
+                &workspace,
+                include_specs_snippets,
+                &strict,
+            );
+            self.client
+                .publish_diagnostics(uri, diagnostics, None)
+                .await;
         }
     }
 
