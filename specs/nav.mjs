@@ -146,6 +146,7 @@ export const sidebar = [
           { text: 'File', link: '/stdlib/system/file' },
           { text: 'Console', link: '/stdlib/system/console' },
           { text: 'Database', link: '/stdlib/system/database' },
+          { text: 'Email', link: '/stdlib/system/email' },
           { text: 'Path', link: '/stdlib/system/path' },
           { text: 'URL', link: '/stdlib/system/url' }
         ]
@@ -157,6 +158,7 @@ export const sidebar = [
           { text: 'HTTP', link: '/stdlib/network/http' },
           { text: 'HTTPS', link: '/stdlib/network/https' },
           { text: 'HTTP Server', link: '/stdlib/network/http_server' },
+          { text: 'REST', link: '/stdlib/network/rest' },
           { text: 'Sockets', link: '/stdlib/network/sockets' },
           { text: 'Streams', link: '/stdlib/network/streams' }
         ]
