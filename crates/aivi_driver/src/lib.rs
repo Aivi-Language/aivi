@@ -353,7 +353,9 @@ pub fn desugar_target_with_cg_types_and_surface(
         return Err(AiviError::Diagnostics);
     }
 
-    let infer_result = timing_step!(trace, "infer_value_types_full", aivi_core::infer_value_types_full(&stdlib_modules));
+    // Use the fast path: skip body-checking embedded stdlib modules. They are pre-verified at
+    // compiler build time and have explicit type signatures, so full re-inference is wasteful.
+    let infer_result = timing_step!(trace, "infer_value_types_fast", aivi_core::infer_value_types_fast(&stdlib_modules));
     let program = timing_step!(trace, "desugar_modules (HIR)", aivi_core::desugar_modules(&stdlib_modules));
 
     if let Some(t0) = t_total {

@@ -42,6 +42,20 @@ pub fn infer_value_types(
 }
 
 pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
+    infer_value_types_impl(modules, false)
+}
+
+/// Like [`infer_value_types_full`] but skips `check_module_defs` for embedded stdlib modules.
+///
+/// Stdlib modules have explicit type signatures for all exported functions, so their bodies
+/// do not need to be re-checked at runtime. This avoids ~8s of redundant work on every
+/// `aivi run` invocation. CgTypes for stdlib definitions are derived from their declared
+/// type signatures instead of from inference.
+pub fn infer_value_types_fast(modules: &[Module]) -> InferResult {
+    infer_value_types_impl(modules, true)
+}
+
+fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> InferResult {
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
     let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
@@ -61,6 +75,7 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
     checker.set_global_type_info(global_type_constructors, global_aliases);
 
     for module in ordered_modules(modules) {
+        let is_embedded = module.path.starts_with("<embedded:");
         checker.reset_module_context(module);
         let mut env = checker.builtins.clone();
         checker.register_module_types(module);
@@ -84,24 +99,27 @@ pub fn infer_value_types_full(modules: &[Module]) -> InferResult {
         checker.set_class_env(classes, instances);
         checker.register_module_defs(module, &sigs, &mut env);
 
-        let mut module_diags = checker.check_module_defs(module, &sigs, &mut env);
-        diagnostics.append(&mut module_diags);
+        if !(skip_stdlib_body_check && is_embedded) {
+            // Full type-checking: infer def bodies and collect diagnostics.
+            let mut module_diags = checker.check_module_defs(module, &sigs, &mut env);
+            diagnostics.append(&mut module_diags);
 
-        // Extract polymorphic call-site instantiations recorded during type checking.
-        for (qname, resolved_type) in checker.take_poly_instantiations() {
-            let cg = checker.type_to_cg_type(&resolved_type, &env);
-            if cg.is_closed() {
-                let entry = monomorph_plan.entry(qname).or_default();
-                if !entry.contains(&cg) {
-                    entry.push(cg);
+            // Extract polymorphic call-site instantiations recorded during type checking.
+            for (qname, resolved_type) in checker.take_poly_instantiations() {
+                let cg = checker.type_to_cg_type(&resolved_type, &env);
+                if cg.is_closed() {
+                    let entry = monomorph_plan.entry(qname).or_default();
+                    if !entry.contains(&cg) {
+                        entry.push(cg);
+                    }
                 }
             }
-        }
 
-        // Extract span→type pairs recorded during type checking (for LSP hover).
-        let module_span_types = checker.take_span_types();
-        if !module_span_types.is_empty() {
-            all_span_types.insert(module.name.name.clone(), module_span_types);
+            // Extract span→type pairs recorded during type checking (for LSP hover).
+            let module_span_types = checker.take_span_types();
+            if !module_span_types.is_empty() {
+                all_span_types.insert(module.name.name.clone(), module_span_types);
+            }
         }
 
         let mut local_names = HashSet::new();

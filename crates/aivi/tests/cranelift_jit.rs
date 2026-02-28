@@ -487,7 +487,7 @@ main = do Effect {
 #[test]
 fn cranelift_aot_compile_to_object() {
     // Verify that compile_to_object produces valid ELF/object bytes.
-    use aivi::{compile_to_object, desugar_target_with_cg_types};
+    use aivi::{compile_to_object, desugar_target_with_cg_types_and_surface};
     use native_fixture::write_aivi_source;
     use tempfile::tempdir;
 
@@ -500,10 +500,10 @@ main = do Effect {
 }
 "#;
     let source_path = write_aivi_source(dir.path(), "main.aivi", source);
-    let (program, cg_types, monomorph_plan) =
-        desugar_target_with_cg_types(&source_path).expect("desugar");
+    let (program, cg_types, monomorph_plan, surface_modules) =
+        desugar_target_with_cg_types_and_surface(&source_path).expect("desugar");
     let object_bytes =
-        compile_to_object(program, cg_types, monomorph_plan).expect("compile_to_object");
+        compile_to_object(program, cg_types, monomorph_plan, &surface_modules).expect("compile_to_object");
 
     // Basic sanity: ELF magic number (Linux) or Mach-O / COFF header
     assert!(

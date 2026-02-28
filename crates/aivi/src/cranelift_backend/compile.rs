@@ -770,6 +770,98 @@ fn generate_aot_entry<M: Module>(
     // Import helpers
     let helper_refs = helpers.import_into(module, &mut function);
 
+    // Serialize machine declarations into a binary blob and embed as a data section.
+    // Format (all u32 LE):
+    //   n_machines
+    //   per machine:
+    //     qual_name_len, qual_name bytes
+    //     initial_state_len, initial_state bytes
+    //     n_states
+    //     per state: state_len, state bytes
+    //     n_transitions
+    //     per transition: event_len, event bytes, source_len, source bytes, target_len, target bytes
+    let machines_bytes = {
+        let mut buf: Vec<u8> = Vec::new();
+        let write_u32 = |buf: &mut Vec<u8>, v: u32| buf.extend_from_slice(&v.to_le_bytes());
+        let write_str = |buf: &mut Vec<u8>, s: &str| {
+            let b = s.as_bytes();
+            let mut tmp = Vec::new();
+            tmp.extend_from_slice(&(b.len() as u32).to_le_bytes());
+            tmp.extend_from_slice(b);
+            buf.extend_from_slice(&tmp);
+        };
+
+        let mut all_machines: Vec<(String, String, Vec<String>, Vec<(String, String, String)>)> =
+            Vec::new();
+        for surf_mod in surface_modules {
+            let module_name = &surf_mod.name.name;
+            for item in &surf_mod.items {
+                let crate::surface::ModuleItem::MachineDecl(md) = item else {
+                    continue;
+                };
+                let qual_name = format!("{module_name}.{}", md.name.name);
+                // Determine initial state same as JIT path
+                let initial_state = md
+                    .transitions
+                    .iter()
+                    .find(|t| t.source.name.is_empty())
+                    .map(|t| t.target.name.clone())
+                    .or_else(|| {
+                        md.transitions.first().map(|t| t.target.name.clone())
+                    })
+                    .or_else(|| md.states.first().map(|s| s.name.name.clone()))
+                    .unwrap_or_else(|| "Closed".to_string());
+                let mut state_names: Vec<String> =
+                    md.states.iter().map(|s| s.name.name.clone()).collect();
+                state_names.sort();
+                state_names.dedup();
+                let transitions: Vec<(String, String, String)> = md
+                    .transitions
+                    .iter()
+                    .map(|t| {
+                        (
+                            t.name.name.clone(),
+                            t.source.name.clone(),
+                            t.target.name.clone(),
+                        )
+                    })
+                    .collect();
+                all_machines.push((qual_name, initial_state, state_names, transitions));
+            }
+        }
+
+        write_u32(&mut buf, all_machines.len() as u32);
+        for (qual_name, initial_state, states, transitions) in &all_machines {
+            write_str(&mut buf, qual_name);
+            write_str(&mut buf, initial_state);
+            write_u32(&mut buf, states.len() as u32);
+            for s in states {
+                write_str(&mut buf, s);
+            }
+            write_u32(&mut buf, transitions.len() as u32);
+            for (event, source, target) in transitions {
+                write_str(&mut buf, event);
+                write_str(&mut buf, source);
+                write_str(&mut buf, target);
+            }
+        }
+        buf
+    };
+
+    // Declare the machine data section
+    let machines_data_id = module
+        .declare_data("__machines_data", Linkage::Local, false, false)
+        .map_err(|e| format!("declare __machines_data: {e}"))?;
+    let machines_data_len = machines_bytes.len();
+    {
+        let mut dd = DataDescription::new();
+        dd.define(machines_bytes.into_boxed_slice());
+        module
+            .define_data(machines_data_id, &dd)
+            .map_err(|e| format!("define __machines_data: {e}"))?;
+    }
+    let machines_data_gv = module.declare_data_in_func(machines_data_id, &mut function);
+
     // Embed function name strings as data sections and declare func refs
     struct FuncReg {
         func_ref: cranelift_codegen::ir::FuncRef,
@@ -869,6 +961,14 @@ fn generate_aot_entry<M: Module>(
         builder.seal_block(entry);
 
         let ctx_param = builder.block_params(entry)[0];
+
+        // Register machine declarations from the serialized blob
+        let machines_ptr = builder.ins().global_value(PTR, machines_data_gv);
+        let machines_len = builder.ins().iconst(PTR, machines_data_len as i64);
+        builder.ins().call(
+            helper_refs.rt_register_machines_from_data,
+            &[ctx_param, machines_ptr, machines_len],
+        );
 
         // Register each compiled function (short + qualified name)
         for reg in &regs {

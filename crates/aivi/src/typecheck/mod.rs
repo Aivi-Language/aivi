@@ -26,7 +26,7 @@ pub use elaborate::{
     elaborate_expected_coercions, elaborate_stdlib_checkpoint, elaborate_with_checkpoint,
     ElaborationCheckpoint,
 };
-pub use infer::{infer_value_types, infer_value_types_full, InferResult};
+pub use infer::{infer_value_types, infer_value_types_fast, infer_value_types_full, InferResult};
 
 use checker::TypeChecker;
 use class_env::{ClassDeclInfo, InstanceDeclInfo};

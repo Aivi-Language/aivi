@@ -1607,7 +1607,7 @@ pub extern "C" fn rt_register_machines_from_data(
     data_len: usize,
 ) {
     use crate::runtime::environment::MachineEdge;
-    use crate::runtime::interpreter::{
+    use crate::runtime::{
         make_machine_can_builtin, make_machine_current_state_builtin,
         make_machine_transition_builtin,
     };
