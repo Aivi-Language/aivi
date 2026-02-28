@@ -373,7 +373,7 @@ impl LanguageServer for Backend {
             .with_document_text(&uri, |content| content.to_string())
             .await
         else {
-            return Ok(Some(Vec::new()).map(DocumentSymbolResponse::Nested));
+            return Ok(Some(DocumentSymbolResponse::Nested(Vec::new())));
         };
         let uri2 = uri.clone();
         let symbols =

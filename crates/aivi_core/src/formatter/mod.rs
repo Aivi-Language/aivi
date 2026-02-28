@@ -535,7 +535,11 @@ mod tests {
         let input = String::from_utf8_lossy(bytes);
         let out1 = format_text(&input);
         let out2 = format_text(&out1);
-        assert_eq!(out1, out2, "not idempotent: pass1={:?} pass2={:?}", out1, out2);
+        assert_eq!(
+            out1, out2,
+            "not idempotent: pass1={:?} pass2={:?}",
+            out1, out2
+        );
 
         // Unknown tokens separated by `;` must stay idempotent.
         let input2 = "\u{FFFD};\u{FFFD}";
@@ -546,8 +550,11 @@ mod tests {
         // Operators separated by `;` must still get a space (no merging).
         let input3 = "<;-";
         let out1 = format_text(input3);
-        assert!(out1.contains("< -") || out1.trim() == "< -",
-            "expected space between < and - but got {:?}", out1);
+        assert!(
+            out1.contains("< -") || out1.trim() == "< -",
+            "expected space between < and - but got {:?}",
+            out1
+        );
     }
 }
 

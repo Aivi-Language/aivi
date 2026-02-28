@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use aivi::{
@@ -12,6 +12,13 @@ use walkdir::WalkDir;
 
 #[path = "test_support.rs"]
 mod test_support;
+
+fn runner_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+        .lock()
+        .expect("runner test lock")
+}
 
 /// Run a test suite for a single file with a timeout to guard against JIT infinite loops.
 fn run_test_suite_with_timeout(
@@ -181,6 +188,7 @@ fn run_files_parallel(
 
 #[test]
 fn run_aivi_sources() {
+    let _guard = runner_test_lock();
     // Spawn on a thread with a large stack so deeply-recursive AIVI programs
     // (which use recursion for all iteration) don't overflow the default 8 MiB
     // test-thread stack.
@@ -262,6 +270,7 @@ fn run_aivi_sources_inner() {
 
 #[test]
 fn syntax_effects_selected_files_execute_without_failures() {
+    let _guard = runner_test_lock();
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
         "integration-tests/syntax/bindings/basic.aivi",
@@ -297,6 +306,7 @@ fn syntax_effects_selected_files_execute_without_failures() {
 
 #[test]
 fn syntax_remaining_batch_files_execute_without_failures() {
+    let _guard = runner_test_lock();
     let root = test_support::workspace_root();
     let files: Vec<PathBuf> = [
         "integration-tests/syntax/effects/when_conditional.aivi",

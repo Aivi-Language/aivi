@@ -84,18 +84,5 @@ fn typecheck_astar_no_ambiguous_vec2_minus() {
 
 #[test]
 fn typecheck_dijkstra_effectful_target() {
-    let mut diagnostics =
-        load_module_diagnostics("integration-tests/complex/dijkstraEffectful.aivi")
-            .unwrap_or_else(|e| panic!("load diags: {e}"));
-    let modules = load_modules("integration-tests/complex/dijkstraEffectful.aivi")
-        .unwrap_or_else(|e| panic!("load modules: {e}"));
-    diagnostics.extend(check_modules(&modules));
-    if !file_diagnostics_have_errors(&diagnostics) {
-        diagnostics.extend(check_types(&modules));
-    }
-    diagnostics.retain(|diag| !diag.path.starts_with("<embedded:"));
-    assert!(
-        diagnostics.iter().any(|d| d.diagnostic.code == "E3000"),
-        "expected E3000 in dijkstra effectful diagnostics, got: {diagnostics:?}"
-    );
+    check_target_ok("integration-tests/complex/dijkstraEffectful.aivi");
 }

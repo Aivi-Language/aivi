@@ -563,9 +563,9 @@ pub fn resolve_import_names(modules: &mut [Module]) {
 
     // 2. For each module, compute which bare names should be qualified using the
     //    shared `compute_import_pairs` helper.
-    for idx in 0..modules.len() {
+    for module in modules.iter_mut() {
         // Collect module-local def names (they shadow imports).
-        let local_defs: HashSet<String> = modules[idx]
+        let local_defs: HashSet<String> = module
             .items
             .iter()
             .filter_map(|item| match item {
@@ -574,18 +574,14 @@ pub fn resolve_import_names(modules: &mut [Module]) {
             })
             .collect();
 
-        let import_map = super::compute_import_pairs(
-            &modules[idx].uses,
-            &export_index,
-            &local_defs,
-        );
+        let import_map = super::compute_import_pairs(&module.uses, &export_index, &local_defs);
 
         if import_map.is_empty() {
             continue;
         }
 
         // 3. Rewrite expressions in this module's items.
-        for item in modules[idx].items.iter_mut() {
+        for item in module.items.iter_mut() {
             match item {
                 ModuleItem::Def(def) => {
                     // Def params introduce local bindings that shadow imports.
@@ -631,7 +627,9 @@ fn collect_pattern_names(pattern: &Pattern, names: &mut std::collections::HashSe
             names.insert(name.name.clone());
         }
         Pattern::At {
-            name, pattern: inner, ..
+            name,
+            pattern: inner,
+            ..
         } => {
             names.insert(name.name.clone());
             collect_pattern_names(inner, names);
@@ -641,13 +639,18 @@ fn collect_pattern_names(pattern: &Pattern, names: &mut std::collections::HashSe
                 collect_pattern_names(arg, names);
             }
         }
-        Pattern::Tuple { items, .. } | Pattern::List { items, rest: None, .. } => {
+        Pattern::Tuple { items, .. }
+        | Pattern::List {
+            items, rest: None, ..
+        } => {
             for item in items {
                 collect_pattern_names(item, names);
             }
         }
         Pattern::List {
-            items, rest: Some(rest), ..
+            items,
+            rest: Some(rest),
+            ..
         } => {
             for item in items {
                 collect_pattern_names(item, names);
