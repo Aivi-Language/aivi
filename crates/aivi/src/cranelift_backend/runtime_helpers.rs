@@ -753,9 +753,11 @@ pub extern "C" fn rt_force_thunk(ctx: *mut JitRuntimeCtx, ptr: *const Value) -> 
 pub extern "C" fn rt_run_effect(ctx: *mut JitRuntimeCtx, ptr: *const Value) -> *mut Value {
     let value = unsafe { (*ptr).clone() };
     let runtime = unsafe { (*ctx).runtime_mut() };
-    match runtime.run_effect_value(value) {
+    match runtime.run_effect_value(value.clone()) {
         Ok(val) => abi::box_value(val),
         Err(e) => {
+            let msg = crate::runtime::format_runtime_error(e.clone());
+            eprintln!("[RT] run_effect FAILED on {:?}: {msg}", std::mem::discriminant(&value));
             unsafe { set_pending_error(ctx, e) };
             abi::box_value(Value::Unit)
         }

@@ -56,8 +56,8 @@ lookupSetting = section key cfg => do Option {
 // --- generator + guard: non-deterministic pairing ---
 
 pairsWithSum = target xs ys => generate {
-  x <- fromList xs
-  y <- fromList ys
+  x <- xs
+  y <- ys
   s = x + y
   s -> _ == target
   yield (x, y)
