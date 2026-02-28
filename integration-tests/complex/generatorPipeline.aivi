@@ -27,11 +27,9 @@ fibListAcc = a b limit acc =>
 fibsUpTo = limit => fromList (fibListAcc 0 1 limit [])
 
 // Running-total scan over a list using List.foldl
-scanTotals = xs =>
-  reverseList
-  (List.foldl (state x => { sum: state.sum + x, acc: [state.sum + x, ...state.acc] })
-    { sum: 0, acc: [] }
-    xs).acc
+scanFolder = s x => { sum: s.sum + x, acc: [s.sum + x, ...s.acc] }
+
+scanTotals = xs => reverseList (List.foldl scanFolder { sum: 0, acc: [] } xs).acc
 
 @test "bounded fibonacci via generator"
 generatorFibs = do Effect {

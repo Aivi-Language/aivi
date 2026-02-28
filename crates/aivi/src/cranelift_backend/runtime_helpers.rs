@@ -46,6 +46,8 @@ fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
 /// Store a pending error on the runtime context, preserving the first error
 /// (root cause) when multiple cascading failures occur within a single JIT call.
 unsafe fn set_pending_error(ctx: *mut JitRuntimeCtx, e: RuntimeError) {
+    let msg = crate::runtime::format_runtime_error(e.clone());
+    eprintln!("[RT] pending error: {msg}");
     let runtime = (*ctx).runtime_mut();
     if runtime.jit_pending_error.is_none() {
         runtime.jit_pending_error = Some(e);

@@ -3,11 +3,12 @@ module integrationTests.complex.dijkstraEffectful
 
 use aivi
 use aivi.testing
-use aivi.graph (fromWeightedEdges, edgesFrom)
+use aivi.graph (fromWeightedEdges, edgesFrom, Edge)
 use aivi.collections
 
 // Process edges from the current node: relax each edge
 // and push updated vertices onto the priority queue.
+processEdges : Map Int Float -> Float -> List Edge -> Heap (Float, Int) -> Effect e { dists: Map Int Float, pq: Heap (Float, Int) }
 processEdges = dists d edges pq => edges match
   | []              => pure { dists: dists, pq: pq }
   | [edge, ...rest] => do Effect {
@@ -37,12 +38,13 @@ dijkstra_shortestPaths = do Effect {
       result match
         | None                     => pure state.dists
         | Some ((d, node), restPq) => do Effect {
+            dF = d + 0.0
             currentDist = Map.getOrElse node 999999.0 state.dists
-            if d > currentDist
+            if dF > currentDist
             then do Effect { recurse { dists: state.dists, pq: restPq } }
             else do Effect {
               edges = edgesFrom g node
-              nextState <- processEdges state.dists d edges restPq
+              nextState <- processEdges state.dists dF edges restPq
               recurse nextState
             }
           }
