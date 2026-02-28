@@ -5,6 +5,37 @@ use aivi
 use aivi.testing
 use aivi.system
 use aivi.text
+use aivi.file as file
+use aivi.net.http as http
+use aivi.net.https as https
+use aivi.rest as rest
+use aivi.email as email
+
+User = { id: Int, name: Text }
+AppConfig = { port: Int, debug: Bool }
+ImageMeta = { width: Int, height: Int, format: Text }
+PixelImage = { width: Int, height: Int, pixels: List Int }
+InboxMessage = { subject: Option Text, body: Text }
+
+readTextSource = reader => reader "/tmp/mock.txt"
+readJsonSource = reader => reader "/tmp/user.json"
+readCsvSource = reader => reader "/tmp/users.csv"
+readImageMetaSource = reader => reader "/tmp/photo.png"
+readImageSource = reader => reader "/tmp/photo.png"
+envGetSource = getter => getter "AIVI_API_KEY"
+envDecodeSource = decoder => decoder "AIVI_APP"
+httpGetSource = getter => getter ~u(https://api.example.com/users)
+httpsGetSource = getter => getter ~u(https://api.example.com/users)
+restGetSource = getter => getter ~u(https://api.example.com/users)
+imapSource = reader => reader {
+  host: "imap.example.com"
+  user: "bot@example.com"
+  password: "secret"
+  mailbox: Some "INBOX"
+  filter: Some "UNSEEN"
+  limit: Some 10
+  port: Some 993
+}
 
 @test "args"
 args_functional = do Effect {
@@ -27,4 +58,94 @@ env_record_shape = do Effect {
   result match
     | Ok _    => assert False
     | Err msg => assert (!(text.isEmpty msg))
+}
+
+@test "live source adapters typecheck"
+live_source_adapters_typecheck = do Effect {
+  _ <- pure (readTextSource file.readText)
+  _ <- pure (readJsonSource file.readJson)
+  _ <- pure (readCsvSource file.readCsv)
+  _ <- pure (readImageMetaSource file.imageMeta)
+  _ <- pure (readImageSource file.image)
+  _ <- pure (envGetSource env.get)
+  _ <- pure (envDecodeSource env.decode)
+  _ <- pure (httpGetSource http.get)
+  _ <- pure (httpsGetSource https.get)
+  _ <- pure (restGetSource rest.get)
+  _ <- pure (imapSource email.imap)
+  assert True
+}
+
+@test "file and image sources can be mocked"
+file_and_image_sources_can_be_mocked = do Effect {
+  mockReadText = _ => pure (Ok "mock text")
+  mockReadJson = _ => pure { id: 1, name: "Ada" }
+  mockReadCsv = _ => pure [{ id: 1, name: "Ada" }, { id: 2, name: "Lin" }]
+  mockImageMeta = _ => pure { width: 64, height: 64, format: "png" }
+  mockImage = _ => pure { width: 2, height: 2, pixels: [0, 1, 2, 3] }
+
+  textRes <- readTextSource mockReadText
+  user    <- readJsonSource mockReadJson
+  users   <- readCsvSource mockReadCsv
+  meta    <- readImageMetaSource mockImageMeta
+  img     <- readImageSource mockImage
+
+  _ <- (textRes match
+    | Ok txt => assertEq txt "mock text"
+    | Err _  => fail "expected mocked file text"
+  )
+  _ <- assertEq user.name "Ada"
+  _ <- assertEq (List.length users) 2
+  _ <- assertEq meta.format "png"
+  assertEq (List.length img.pixels) 4
+}
+
+@test "env sources can be mocked"
+env_sources_can_be_mocked = do Effect {
+  mockEnvGet = _ => pure "token-123"
+  mockEnvDecode = _ => pure { port: 8080, debug: True }
+
+  apiKey <- envGetSource mockEnvGet
+  cfg    <- envDecodeSource mockEnvDecode
+
+  _ <- assertEq apiKey "token-123"
+  _ <- assertEq cfg.port 8080
+  assertEq cfg.debug True
+}
+
+@test "http and https sources can be mocked"
+http_and_https_sources_can_be_mocked = do Effect {
+  mockHttpGet = _ => pure (Ok { status: 200, headers: [], body: "ok-http" })
+  mockHttpsGet = _ => pure (Ok { status: 200, headers: [], body: "ok-https" })
+
+  httpRes  <- httpGetSource mockHttpGet
+  httpsRes <- httpsGetSource mockHttpsGet
+
+  _ <- (httpRes match
+    | Ok resp => assertEq resp.body "ok-http"
+    | Err _   => fail "expected mocked http response"
+  )
+  httpsRes match
+    | Ok resp => assertEq resp.body "ok-https"
+    | Err _   => fail "expected mocked https response"
+}
+
+@test "rest source can be mocked"
+rest_source_can_be_mocked = do Effect {
+  mockRestGet = _ => pure [{ id: 42, name: "Mocked" }]
+  users <- restGetSource mockRestGet
+  _     <- assertEq (List.length users) 1
+  users match
+    | [u, ..._] => assertEq u.id 42
+    | []        => fail "expected mocked rest payload"
+}
+
+@test "imap source can be mocked"
+imap_source_can_be_mocked = do Effect {
+  mockImap = _ => pure [{ subject: Some "hello", body: "world" }]
+  msgs <- imapSource mockImap
+  _    <- assertEq (List.length msgs) 1
+  msgs match
+    | [msg, ..._] => assertEq msg.body "world"
+    | []          => fail "expected mocked imap payload"
 }

@@ -5,6 +5,7 @@ mod workspace;
 use std::fs;
 use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use aivi_core::{
     check_modules, elaborate_expected_coercions, embedded_stdlib_modules,
@@ -18,6 +19,21 @@ type CgTypesMap = std::collections::HashMap<
     std::collections::HashMap<String, aivi_core::cg_type::CgType>,
 >;
 type MonomorphPlan = std::collections::HashMap<String, Vec<aivi_core::cg_type::CgType>>;
+
+fn trace_timing() -> bool {
+    std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1")
+}
+
+macro_rules! timing_step {
+    ($trace:expr, $label:expr, $block:expr) => {{
+        let _t0 = if $trace { Some(Instant::now()) } else { None };
+        let result = $block;
+        if let Some(t0) = _t0 {
+            eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms", $label, t0.elapsed().as_secs_f64() * 1000.0);
+        }
+        result
+    }};
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum AiviError {
@@ -304,34 +320,46 @@ pub fn desugar_target_with_cg_types(
 pub fn desugar_target_with_cg_types_and_surface(
     target: &str,
 ) -> Result<(HirProgram, CgTypesMap, MonomorphPlan, Vec<Module>), AiviError> {
-    let diagnostics = load_module_diagnostics(target)?;
-    if file_diagnostics_have_errors(&diagnostics) {
-        emit_diagnostics(&diagnostics);
-        return Err(AiviError::Diagnostics);
-    }
+    let trace = trace_timing();
+    let t_total = if trace { Some(Instant::now()) } else { None };
 
-    let paths = workspace::expand_target(target)?;
+    // Parse user files and collect diagnostics in one pass (avoid double-parsing).
+    let paths = timing_step!(trace, "expand_target", workspace::expand_target(target)?);
     let mut modules = Vec::new();
-    for path in &paths {
-        let content = fs::read_to_string(path)?;
-        let (mut parsed, _) = parse_modules(path.as_path(), &content);
-        modules.append(&mut parsed);
+    let mut parse_diagnostics = Vec::new();
+    timing_step!(trace, "parse user files", {
+        for path in &paths {
+            let content = fs::read_to_string(path)?;
+            let (mut parsed, mut diags) = parse_modules(path.as_path(), &content);
+            parse_diagnostics.append(&mut diags);
+            modules.append(&mut parsed);
+        }
+    });
+    if file_diagnostics_have_errors(&parse_diagnostics) {
+        emit_diagnostics(&parse_diagnostics);
+        return Err(AiviError::Diagnostics);
     }
-    let mut stdlib_modules = embedded_stdlib_modules();
-    stdlib_modules.append(&mut modules);
-    resolve_import_names(&mut stdlib_modules);
 
-    let mut diagnostics = check_modules(&stdlib_modules);
+    let mut stdlib_modules = timing_step!(trace, "parse stdlib (embedded_stdlib_modules)", embedded_stdlib_modules());
+    stdlib_modules.append(&mut modules);
+    timing_step!(trace, "resolve_import_names", resolve_import_names(&mut stdlib_modules));
+
+    let mut diagnostics = timing_step!(trace, "check_modules (name resolution)", check_modules(&stdlib_modules));
     if diagnostics.is_empty() {
-        diagnostics.extend(elaborate_expected_coercions(&mut stdlib_modules));
+        diagnostics.extend(timing_step!(trace, "elaborate_expected_coercions", elaborate_expected_coercions(&mut stdlib_modules)));
     }
     if file_diagnostics_have_errors(&diagnostics) {
         emit_diagnostics(&diagnostics);
         return Err(AiviError::Diagnostics);
     }
 
-    let infer_result = aivi_core::infer_value_types_full(&stdlib_modules);
-    let program = aivi_core::desugar_modules(&stdlib_modules);
+    let infer_result = timing_step!(trace, "infer_value_types_full", aivi_core::infer_value_types_full(&stdlib_modules));
+    let program = timing_step!(trace, "desugar_modules (HIR)", aivi_core::desugar_modules(&stdlib_modules));
+
+    if let Some(t0) = t_total {
+        eprintln!("[AIVI_TIMING] {:40} {:>8.1}ms  ← TOTAL frontend", "frontend pipeline", t0.elapsed().as_secs_f64() * 1000.0);
+    }
+
     Ok((
         program,
         infer_result.cg_types,

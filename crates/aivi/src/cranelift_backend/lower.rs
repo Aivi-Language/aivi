@@ -216,6 +216,8 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_gen_vec_into_generator: FuncRef,
     // AOT function registration
     pub(crate) rt_register_jit_fn: FuncRef,
+    // AOT machine registration
+    pub(crate) rt_register_machines_from_data: FuncRef,
     // DateTime allocation
     pub(crate) rt_alloc_datetime: FuncRef,
     // Sigil evaluation
@@ -337,6 +339,12 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         // AOT function registration
         // (ctx, name_ptr, name_len, func_ptr, arity)
         rt_register_jit_fn: decl!("rt_register_jit_fn", [PTR, PTR, PTR, PTR, PTR, PTR], []),
+        // AOT machine registration: (ctx, data_ptr, data_len) -> void
+        rt_register_machines_from_data: decl!(
+            "rt_register_machines_from_data",
+            [PTR, PTR, PTR],
+            []
+        ),
         // (ctx, str_ptr, str_len) -> ptr
         rt_alloc_datetime: decl!("rt_alloc_datetime", [PTR, PTR, PTR], [PTR]),
         // (ctx, tag_ptr, tag_len, body_ptr, body_len, flags_ptr, flags_len) -> ptr
@@ -414,6 +422,8 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_gen_vec_into_generator: cranelift_module::FuncId,
     // AOT function registration
     pub(crate) rt_register_jit_fn: cranelift_module::FuncId,
+    // AOT machine registration
+    pub(crate) rt_register_machines_from_data: cranelift_module::FuncId,
     // DateTime allocation
     pub(crate) rt_alloc_datetime: cranelift_module::FuncId,
     // Sigil evaluation
@@ -483,6 +493,7 @@ impl DeclaredHelpers {
             rt_gen_vec_push: imp!(rt_gen_vec_push),
             rt_gen_vec_into_generator: imp!(rt_gen_vec_into_generator),
             rt_register_jit_fn: imp!(rt_register_jit_fn),
+            rt_register_machines_from_data: imp!(rt_register_machines_from_data),
             rt_alloc_datetime: imp!(rt_alloc_datetime),
             rt_eval_sigil: imp!(rt_eval_sigil),
             rt_try_reuse: imp!(rt_try_reuse),
