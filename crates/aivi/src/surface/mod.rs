@@ -1,6 +1,8 @@
 mod arena;
 mod ast;
 mod desugar;
+#[allow(dead_code)]
+pub(crate) mod openapi;
 mod parser;
 
 pub use arena::*;

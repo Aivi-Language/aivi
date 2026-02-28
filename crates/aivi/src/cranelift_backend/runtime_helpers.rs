@@ -1893,8 +1893,10 @@ pub extern "C" fn rt_snapshot_mock_install(
             }
         };
 
-        let values: Result<Vec<Value>, _> =
-            entries.iter().map(snapshot::snapshot_json_to_value).collect();
+        let values: Result<Vec<Value>, _> = entries
+            .iter()
+            .map(snapshot::snapshot_json_to_value)
+            .collect();
         let values = match values {
             Ok(v) => v,
             Err(e) => {
@@ -2084,8 +2086,14 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         // Function entry tracking for diagnostics
         ("rt_enter_fn", rt_enter_fn as *const u8),
         // Snapshot mock helpers
-        ("rt_snapshot_mock_install", rt_snapshot_mock_install as *const u8),
-        ("rt_snapshot_mock_flush", rt_snapshot_mock_flush as *const u8),
+        (
+            "rt_snapshot_mock_install",
+            rt_snapshot_mock_install as *const u8,
+        ),
+        (
+            "rt_snapshot_mock_flush",
+            rt_snapshot_mock_flush as *const u8,
+        ),
     ]
 }
 
@@ -2281,8 +2289,8 @@ main = do Effect { unit }
             }],
         };
 
-        let jit_runtime = build_runtime_from_program(&program)
-            .expect("build_runtime_from_program failed");
+        let jit_runtime =
+            build_runtime_from_program(&program).expect("build_runtime_from_program failed");
         let aot_runtime = build_runtime_base();
 
         let jit_keys: std::collections::HashSet<String> =

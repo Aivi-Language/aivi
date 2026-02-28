@@ -56,6 +56,7 @@ dependencies = [
  "num-bigint",
  "num-rational",
  "num-traits",
+ "openapiv3",
  "ordered-float",
  "palette",
  "parking_lot",
@@ -67,6 +68,7 @@ dependencies = [
  "rustfft",
  "serde",
  "serde_json",
+ "serde_yml",
  "sha2",
  "target-lexicon",
  "tempfile",
@@ -112,6 +114,7 @@ dependencies = [
  "num-bigint",
  "num-rational",
  "num-traits",
+ "openapiv3",
  "ordered-float",
  "palette",
  "parking_lot",
@@ -121,10 +124,12 @@ dependencies = [
  "rustfft",
  "serde",
  "serde_json",
+ "serde_yml",
  "sha2",
  "thiserror",
  "unicode-normalization",
  "unicode-segmentation",
+ "ureq",
  "url",
  "uuid",
 ]
@@ -2202,6 +2207,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "libyml"
+version = "0.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3302702afa434ffa30847a83305f0a69d6abd74293b6554c18ec85c7ef30c980"
+dependencies = [
+ "anyhow",
+ "version_check",
+]
+
+[[package]]
 name = "libz-sys"
 version = "1.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2619,6 +2634,17 @@ name = "once_cell"
 version = "1.21.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "42f5e15c9953c5e4ccceeb2e7382a716482c34515315f7b03532b8b4e8393d2d"
+
+[[package]]
+name = "openapiv3"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c8d427828b22ae1fff2833a03d8486c2c881367f1c336349f307f321e7f4d05"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "openssl"
@@ -3707,6 +3733,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8bbf91e5a4d6315eee45e704372590b30e260ee83af6639d64557f51b067776"
 dependencies = [
  "serde_core",
+]
+
+[[package]]
+name = "serde_yml"
+version = "0.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59e2dd588bf1597a252c3b920e0143eb99b0f76e4e082f4c92ce34fbc9e71ddd"
+dependencies = [
+ "indexmap",
+ "itoa",
+ "libyml",
+ "memchr",
+ "ryu",
+ "serde",
+ "version_check",
 ]
 
 [[package]]

@@ -805,6 +805,15 @@ Available source APIs in v0.1: `file.read/json/csv/imageMeta/image`, `http`/`htt
 
 `@static` embeds sources at compile time: `@static schema = file.json "schema.json"` or `@static envName = env.get "AIVI_BUILD_ENV"`.
 
+`@static` can also generate typed API client modules from OpenAPI specs:
+```aivi
+@static
+petStore = openapi.fromUrl ~url(https://petstore.example.com/v2/swagger.json)
+
+@static
+internalApi = openapi.fromFile "./specs/api.yaml"
+```
+
 ---
 
 ## 14 Sigils
@@ -902,14 +911,16 @@ Component-style tags are also supported in both sigils:
 
 Compile-time metadata only. No user-defined decorators.
 
-| Decorator                                      | Purpose                                   |
-|:---------------------------------------------- |:----------------------------------------- |
-| `@test "desc"`                                 | Mark as test case (mandatory description) |
-| `@static`                                      | Embed at compile time                     |
-| `@native "mod.fn"`                             | Bind typed def to runtime/native path     |
-| `@deprecated`                                  | Emit warning on use                       |
-| `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`)      |
-| `@no_prelude`                                  | Skip implicit `use aivi.prelude`          |
+| Decorator                                      | Purpose                                        |
+|:---------------------------------------------- |:---------------------------------------------- |
+| `@test "desc"`                                 | Mark as test case (mandatory description)      |
+| `@static`                                      | Embed at compile time                          |
+| `@native "mod.fn"`                             | Bind typed def to runtime/native path          |
+| `@deprecated`                                  | Emit warning on use                            |
+| `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`)           |
+| `@no_prelude`                                  | Skip implicit `use aivi.prelude`               |
+
+`@static` supported sources: `file.read/json/csv`, `env.get`, `openapi.fromUrl ~url(...)`, `openapi.fromFile "..."`.
 
 Unknown decorators are compile errors.
 `@native` is only valid on top-level definitions and requires an explicit type signature.

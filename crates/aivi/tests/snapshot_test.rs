@@ -12,6 +12,7 @@ use aivi::{
 };
 
 #[path = "test_support.rs"]
+#[allow(dead_code)]
 mod test_support;
 
 fn stdlib_checkpoint() -> &'static (Vec<aivi::surface::Module>, ElaborationCheckpoint) {
@@ -23,7 +24,11 @@ fn stdlib_checkpoint() -> &'static (Vec<aivi::surface::Module>, ElaborationCheck
     })
 }
 
-fn run_snapshot_test(source: &str, update: bool, project_root: &std::path::Path) -> aivi::TestReport {
+fn run_snapshot_test(
+    source: &str,
+    update: bool,
+    project_root: &std::path::Path,
+) -> aivi::TestReport {
     let (cached_stdlib, checkpoint) = stdlib_checkpoint();
     let path = std::path::Path::new("test.aivi");
     let (file_mods, _) = parse_modules(path, source);
@@ -49,8 +54,14 @@ fn run_snapshot_test(source: &str, update: bool, project_root: &std::path::Path)
     assert!(!tests.is_empty(), "no @test entries found");
 
     let program = desugar_modules(&modules);
-    run_test_suite(program, &tests, &modules, update, Some(project_root.to_path_buf()))
-        .expect("run_test_suite failed")
+    run_test_suite(
+        program,
+        &tests,
+        &modules,
+        update,
+        Some(project_root.to_path_buf()),
+    )
+    .expect("run_test_suite failed")
 }
 
 #[test]
@@ -72,19 +83,33 @@ snap_record = do Effect {
 
     // 1. Record (update mode)
     let report = run_snapshot_test(source, true, dir.path());
-    assert_eq!(report.failures.len(), 0, "update pass should succeed: {:?}", report.failures);
+    assert_eq!(
+        report.failures.len(),
+        0,
+        "update pass should succeed: {:?}",
+        report.failures
+    );
 
     // 2. Verify snapshot file was created
     let snap_file = dir
         .path()
-        .join("__snapshots__/test/snap_record/record_test.snap");
-    assert!(snap_file.exists(), "snapshot file should exist at {}", snap_file.display());
+        .join("__snapshots__/test.snapshot/snap_record/record_test.snap");
+    assert!(
+        snap_file.exists(),
+        "snapshot file should exist at {}",
+        snap_file.display()
+    );
     let contents = std::fs::read_to_string(&snap_file).unwrap();
     assert!(contents.contains("Ada"), "snapshot should contain 'Ada'");
 
     // 3. Replay (verify mode)
     let report = run_snapshot_test(source, false, dir.path());
-    assert_eq!(report.failures.len(), 0, "replay pass should succeed: {:?}", report.failures);
+    assert_eq!(
+        report.failures.len(),
+        0,
+        "replay pass should succeed: {:?}",
+        report.failures
+    );
 }
 
 #[test]
@@ -106,7 +131,7 @@ snap_mismatch = do Effect {
 
     // 1. Record initial snapshot
     let report = run_snapshot_test(source_v1, true, dir.path());
-    assert_eq!(report.failures.len(), 0);
+    assert_eq!(report.failures.len(), 0, "recording should pass");
 
     // 2. Change the value and replay — should fail
     let source_v2 = r#"
@@ -118,10 +143,17 @@ use aivi.testing
 
 @test "snapshot mismatch"
 snap_mismatch = do Effect {
-  data = { value: 999 }
-  assertSnapshot "mismatch_test" data
+  _ <- assertSnapshot "mismatch_test" { value: 999 }
+  pure Unit
 }
 "#;
     let report = run_snapshot_test(source_v2, false, dir.path());
-    assert!(!report.failures.is_empty(), "mismatch should be reported as test failure");
+    assert!(
+        !report.failures.is_empty(),
+        "mismatch should be reported as test failure, report: passed={}, failed={}, successes={:?}, failures={:?}",
+        report.passed,
+        report.failed,
+        report.successes.iter().map(|s| &s.name).collect::<Vec<_>>(),
+        report.failures.iter().map(|f| (&f.name, &f.message)).collect::<Vec<_>>()
+    );
 }
