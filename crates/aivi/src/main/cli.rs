@@ -87,12 +87,34 @@ fn run() -> Result<(), AiviError> {
             let (debug_trace, rest) = consume_debug_trace_flag(&rest);
             let (check_stdlib, rest) = consume_check_stdlib_flag(&rest);
             maybe_enable_debug_trace(debug_trace);
-            let Some(target) = rest.first() else {
-                print_help();
-                return Ok(());
+            // When aivi.toml exists, use the project entry to resolve
+            // sources recursively — same as `aivi run`.
+            let target: String = if let Ok(root) = env::current_dir() {
+                let toml_path = root.join("aivi.toml");
+                if toml_path.exists() {
+                    if let Ok(cfg) = aivi::read_aivi_toml(&toml_path) {
+                        let source_target = resolve_project_source_target(&root, &cfg.project.entry);
+                        source_target.to_string_lossy().into_owned()
+                    } else {
+                        rest.first().cloned().unwrap_or_else(|| { print_help(); String::new() })
+                    }
+                } else {
+                    match rest.first() {
+                        Some(t) => t.clone(),
+                        None => { print_help(); return Ok(()); }
+                    }
+                }
+            } else {
+                match rest.first() {
+                    Some(t) => t.clone(),
+                    None => { print_help(); return Ok(()); }
+                }
             };
-            let mut diagnostics = load_module_diagnostics(target)?;
-            let modules = load_modules(target)?;
+            if target.is_empty() {
+                return Ok(());
+            }
+            let mut diagnostics = load_module_diagnostics(&target)?;
+            let modules = load_modules(&target)?;
             diagnostics.extend(check_modules(&modules));
             if !aivi::file_diagnostics_have_errors(&diagnostics) {
                 if check_stdlib {

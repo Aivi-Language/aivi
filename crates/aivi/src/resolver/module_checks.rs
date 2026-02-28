@@ -456,7 +456,80 @@ fn check_defs(
     for item in module.items.iter() {
         collect_value_defs(item, &mut scope);
     }
+
+    // Build available_names index from module_map for compute_import_pairs.
+    let available_names: HashMap<String, HashSet<String>> = module_map
+        .iter()
+        .map(|(mod_name, target)| {
+            let names: HashSet<String> = if target.exports.is_empty() {
+                target
+                    .items
+                    .iter()
+                    .filter_map(|item| match item {
+                        ModuleItem::Def(def) => Some(def.name.name.clone()),
+                        _ => None,
+                    })
+                    .collect()
+            } else {
+                target
+                    .exports
+                    .iter()
+                    .filter(|e| e.kind == crate::surface::ScopeItemKind::Value)
+                    .map(|e| e.name.name.clone())
+                    .collect()
+            };
+            (mod_name.clone(), names)
+        })
+        .collect();
+
+    let local_defs: HashSet<String> = scope.keys().cloned().collect();
+    let import_pairs = crate::surface::compute_import_pairs(
+        &module.uses,
+        &available_names,
+        &local_defs,
+    );
+
+    // Register imported value names (bare + qualified) into scope with deprecation info.
+    for (bare, qualified) in &import_pairs {
+        let depr = if let Some(mod_name) = qualified.rsplit_once('.').map(|(m, _)| m) {
+            module_map
+                .get(mod_name)
+                .and_then(|target| deprecated_message_for_export(target, bare))
+        } else {
+            None
+        };
+        scope.insert(bare.clone(), depr.clone());
+        scope.insert(qualified.clone(), depr);
+    }
+
+    // Handle class members, domain imports, and aliased imports (not covered by
+    // compute_import_pairs which skips aliased imports).
     for use_decl in &module.uses {
+        // Aliased imports (e.g. `use aivi.list as List`) still need their
+        // individual exports registered so alias-expanded references work.
+        if use_decl.alias.is_some() {
+            if let Some(target) = module_map.get(&use_decl.module.name) {
+                let importable: Vec<String> = if target.exports.is_empty() {
+                    target.items.iter().filter_map(|item| match item {
+                        ModuleItem::Def(def) => Some(def.name.name.clone()),
+                        _ => None,
+                    }).collect()
+                } else {
+                    target.exports.iter().map(|e| e.name.name.clone()).collect()
+                };
+                for name in &importable {
+                    let depr = deprecated_message_for_export(target, name);
+                    scope.insert(name.clone(), depr.clone());
+                    scope.insert(
+                        format!("{}.{}", use_decl.module.name, name),
+                        depr,
+                    );
+                }
+            } else if use_decl.module.name.starts_with("aivi.") {
+                allow_unknown = true;
+            }
+            continue;
+        }
         if use_decl.wildcard {
             if let Some(target) = module_map.get(&use_decl.module.name) {
                 let exported: HashSet<&str> = target
@@ -464,30 +537,6 @@ fn check_defs(
                     .iter()
                     .map(|item| item.name.name.as_str())
                     .collect();
-                // If the target has an explicit export list, use it;
-                // otherwise all defs in the module are public.
-                let importable_names: Vec<String> = if target.exports.is_empty() {
-                    target
-                        .items
-                        .iter()
-                        .filter_map(|item| match item {
-                            ModuleItem::Def(def) => Some(def.name.name.clone()),
-                            _ => None,
-                        })
-                        .collect()
-                } else {
-                    target.exports.iter().map(|e| e.name.name.clone()).collect()
-                };
-                for name in &importable_names {
-                    scope.insert(
-                        name.clone(),
-                        deprecated_message_for_export(target, name),
-                    );
-                    scope.insert(
-                        format!("{}.{}", use_decl.module.name, name),
-                        deprecated_message_for_export(target, name),
-                    );
-                }
                 for item in &target.items {
                     if let ModuleItem::ClassDecl(class_decl) = item {
                         if !exported.contains(class_decl.name.name.as_str()) {
@@ -516,33 +565,20 @@ fn check_defs(
             for item in &use_decl.items {
                 match item.kind {
                     crate::surface::ScopeItemKind::Value => {
-                        if target
-                            .exports
-                            .iter()
-                            .any(|export| export.name.name == item.name.name)
-                        {
-                            scope.insert(
-                                item.name.name.clone(),
-                                deprecated_message_for_export(target, &item.name.name),
-                            );
-                            scope.insert(
-                                format!("{}.{}", use_decl.module.name, item.name.name),
-                                deprecated_message_for_export(target, &item.name.name),
-                            );
-                            if exported.contains(item.name.name.as_str()) {
-                                for module_item in &target.items {
-                                    if let ModuleItem::ClassDecl(class_decl) = module_item {
-                                        if class_decl.name.name == item.name.name {
-                                            for member in &class_decl.members {
-                                                scope.insert(member.name.name.clone(), None);
-                                                scope.insert(
-                                                    format!(
-                                                        "{}.{}",
-                                                        use_decl.module.name, member.name.name
-                                                    ),
-                                                    None,
-                                                );
-                                            }
+                        // Class members for selectively imported classes.
+                        if exported.contains(item.name.name.as_str()) {
+                            for module_item in &target.items {
+                                if let ModuleItem::ClassDecl(class_decl) = module_item {
+                                    if class_decl.name.name == item.name.name {
+                                        for member in &class_decl.members {
+                                            scope.insert(member.name.name.clone(), None);
+                                            scope.insert(
+                                                format!(
+                                                    "{}.{}",
+                                                    use_decl.module.name, member.name.name
+                                                ),
+                                                None,
+                                            );
                                         }
                                     }
                                 }
@@ -550,7 +586,6 @@ fn check_defs(
                         }
                     }
                     crate::surface::ScopeItemKind::Domain => {
-                        // Importing a domain brings its operators and literal templates into scope.
                         let exported_domain = target.exports.iter().any(|export| {
                             export.kind == crate::surface::ScopeItemKind::Domain
                                 && export.name.name == item.name.name

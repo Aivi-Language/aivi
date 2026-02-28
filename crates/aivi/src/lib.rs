@@ -1,3 +1,4 @@
+pub mod builtin_names;
 mod cranelift_backend;
 mod i18n;
 mod i18n_codegen;
