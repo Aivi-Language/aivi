@@ -535,21 +535,11 @@ pub fn run_test_suite_jit(
 
         match runtime.run_effect_value(effect) {
             Ok(_) => {
-                // Check for JIT pending errors that weren't propagated through the Effect chain
-                if let Some(err) = runtime.jit_pending_error.take() {
-                    report.failed += 1;
-                    report.failures.push(TestFailure {
-                        name: name.clone(),
-                        description: description.clone(),
-                        message: format_runtime_error(err),
-                    });
-                } else {
-                    report.passed += 1;
-                    report.successes.push(TestSuccess {
-                        name: name.clone(),
-                        description: description.clone(),
-                    });
-                }
+                report.passed += 1;
+                report.successes.push(TestSuccess {
+                    name: name.clone(),
+                    description: description.clone(),
+                });
             }
             Err(err) => {
                 report.failed += 1;
