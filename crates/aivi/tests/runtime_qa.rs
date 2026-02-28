@@ -33,6 +33,38 @@ fn run_jit(source: &str) {
     }
 }
 
+#[cfg(all(feature = "gtk4-libadwaita", target_os = "linux"))]
+#[test]
+fn rt_gtk_app_customization_before_window_creation() {
+    let has_display =
+        std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some();
+    if !has_display {
+        eprintln!("skipping: no DISPLAY/WAYLAND_DISPLAY");
+        return;
+    }
+
+    run_jit(
+        r#"@no_prelude
+module app.main
+
+use aivi
+use aivi.testing
+use aivi.ui.gtk4
+
+@test "gtk lifecycle ordering"
+main : Effect Text Unit
+main = do Effect {
+  appId <- appNew "com.aivi.regression.lifecycle"
+  _ <- iconThemeAddSearchPath "."
+  _ <- appSetCss appId ""
+  windowId <- windowNew appId "AIVI GTK Regression" 320 180
+  _ <- windowClose windowId
+  pure Unit
+}
+"#,
+    );
+}
+
 // ─── Core semantics: pipes, currying, application ───
 
 #[test]

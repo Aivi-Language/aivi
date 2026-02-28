@@ -37,3 +37,25 @@ stillGood = 42\n";
 
     assert!(recovered, "expected parser to recover and parse later defs");
 }
+
+#[test]
+fn parser_recovers_after_empty_tuple_type_annotation() {
+    let src = "module parse.recovery\n\n\
+bad : ()\n\
+bad = Unit\n\n\
+stillGood = 42\n";
+
+    let (modules, diagnostics) = parse_modules(Path::new("recovery_tuple_type.aivi"), src);
+    let _ = diagnostics;
+
+    let module = modules.first().expect("parsed module");
+    let recovered = module.items.iter().any(|item| match item {
+        ModuleItem::Def(def) => def.name.name == "stillGood",
+        _ => false,
+    });
+
+    assert!(
+        recovered,
+        "expected parser to recover after empty tuple type annotation"
+    );
+}
