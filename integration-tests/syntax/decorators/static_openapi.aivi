@@ -1,0 +1,32 @@
+@no_prelude
+module integrationTests.syntax.decorators.staticOpenapi
+
+use aivi
+use aivi.testing
+
+@static
+petStore = openapi.fromFile "./petstore.json"
+
+@test "openapi static generates base url"
+hasBaseUrl = do Effect {
+  assertEq petStore.__baseUrl "https://petstore.example.com/v1"
+}
+
+@test "openapi static generates listPets endpoint"
+hasListPets = do Effect {
+  assertEq petStore.listPets.__method "GET"
+  assertEq petStore.listPets.__path "/pets"
+}
+
+@test "openapi static generates createPet endpoint"
+hasCreatePet = do Effect {
+  assertEq petStore.createPet.__method "POST"
+  assertEq petStore.createPet.__path "/pets"
+  assertEq petStore.createPet.__requestBody "NewPet"
+}
+
+@test "openapi static generates getPetById endpoint"
+hasGetPetById = do Effect {
+  assertEq petStore.getPetById.__method "GET"
+  assertEq petStore.getPetById.__response "Pet"
+}

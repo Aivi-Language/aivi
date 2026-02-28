@@ -44,8 +44,7 @@ export const sidebar = [
           { text: 'Effects', link: '/syntax/effects' },
           { text: 'Machines', link: '/syntax/machines_runtime' },
           { text: 'Resources', link: '/syntax/resources' },
-          { text: 'Generic `do` Notation', link: '/syntax/do_notation' },
-          { text: 'Mock Expressions', link: '/syntax/mock_expression' }
+          { text: 'Generic `do` Notation', link: '/syntax/do_notation' }
         ]
       },
       {
@@ -74,7 +73,21 @@ export const sidebar = [
         items: [
           { text: 'Operators and Context', link: '/syntax/operators' },
           { text: 'Sigils', link: '/syntax/sigils' },
-          { text: 'Decorators', link: '/syntax/decorators' },
+          {
+            text: 'Decorators',
+            collapsed: true,
+            items: [
+              { text: 'Overview', link: '/syntax/decorators' },
+              { text: '@static', link: '/syntax/decorators/static' },
+              { text: 'OpenAPI Source', link: '/syntax/decorators/static/openapi' },
+              { text: '@native', link: '/syntax/decorators/native' },
+              { text: '@deprecated', link: '/syntax/decorators/deprecated' },
+              { text: '@debug', link: '/syntax/decorators/debug' },
+              { text: '@test', link: '/syntax/decorators/test' },
+              { text: '@no_prelude', link: '/syntax/decorators/no_prelude' },
+              { text: 'Mock Expressions', link: '/syntax/decorators/mock' }
+            ]
+          },
           { text: 'Comments', link: '/syntax/comments' },
           { text: 'Concrete Syntax', link: '/syntax/grammar' }
         ]
@@ -176,13 +189,6 @@ export const sidebar = [
           { text: 'ServerHtml', link: '/stdlib/ui/server_html' }
         ]
       },
-      {
-        text: 'API Clients',
-        collapsed: true,
-        items: [
-          { text: 'OpenAI', link: '/stdlib/api/openAI' }
-        ]
-      }
     ]
   },
   {

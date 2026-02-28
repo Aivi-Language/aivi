@@ -1042,6 +1042,48 @@ fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
                 });
                 return;
             }
+            if base_name == Some("openapi")
+                && matches!(field_name, Some("fromUrl" | "fromFile"))
+            {
+                let is_url = field_name == Some("fromUrl");
+                let source = match args.first() {
+                    Some(Expr::Literal(Literal::Sigil { tag, body, .. }))
+                        if (tag == "u" || tag == "url") && is_url =>
+                    {
+                        body.clone()
+                    }
+                    Some(Expr::Literal(Literal::String { text, .. })) if !is_url => text.clone(),
+                    _ => {
+                        let expected = if is_url {
+                            "a ~url(...) sigil"
+                        } else {
+                            "a string literal file path"
+                        };
+                        emit_diag(
+                            module_path,
+                            out,
+                            "E1518",
+                            format!("`@static openapi.{}` expects {expected} as argument", field_name.unwrap_or("")),
+                            original_span,
+                        );
+                        return;
+                    }
+                };
+                match crate::surface::openapi::openapi_to_expr(&source, is_url, base_dir, &original_span) {
+                    Ok(expr) => def.expr = expr,
+                    Err(err) => {
+                        let code = if err.contains("parse") { "E1519" } else { "E1518" };
+                        emit_diag(
+                            module_path,
+                            out,
+                            code,
+                            format!("`@static openapi.{}`: {err}", field_name.unwrap_or("")),
+                            original_span,
+                        );
+                    }
+                }
+                return;
+            }
             if base_name == Some("file") && matches!(field_name, Some("read" | "json" | "csv")) {
                 let Some(Expr::Literal(Literal::String { text: rel, .. })) = args.first() else {
                     return;
