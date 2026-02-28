@@ -56,6 +56,7 @@ pub fn infer_value_types_fast(modules: &[Module]) -> InferResult {
 }
 
 fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> InferResult {
+    let trace = std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1");
     let mut checker = TypeChecker::new();
     let mut diagnostics = Vec::new();
     let mut module_exports: HashMap<String, HashMap<String, Vec<Scheme>>> = HashMap::new();
@@ -70,38 +71,79 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
     let mut monomorph_plan: HashMap<String, Vec<CgType>> = HashMap::new();
     let mut all_span_types: HashMap<String, Vec<(Span, String)>> = HashMap::new();
 
+    // Per-step cumulative timing (only when tracing).
+    let mut t_reset = 0u128;
+    let mut t_reg_types = 0u128;
+    let mut t_type_expr_diags = 0u128;
+    let mut t_collect_sigs = 0u128;
+    let mut t_reg_ctors = 0u128;
+    let mut t_reg_imports = 0u128;
+    let mut t_class_env = 0u128;
+    let mut t_reg_defs = 0u128;
+    let mut t_check_defs = 0u128;
+    let mut t_export_collect = 0u128;
+
     let (global_type_constructors, global_aliases) =
         collect_global_type_info(&mut checker, modules);
     checker.set_global_type_info(global_type_constructors, global_aliases);
 
     for module in ordered_modules(modules) {
         let is_embedded = module.path.starts_with("<embedded:");
-        checker.reset_module_context(module);
-        let mut env = checker.builtins.clone();
-        checker.register_module_types(module);
-        diagnostics.extend(checker.collect_type_expr_diags(module));
-        let sigs = checker.collect_type_sigs(module);
-        checker.register_module_constructors(module, &mut env);
-        checker.register_imports(module, &module_exports, &module_domain_exports, &mut env);
-        let (imported_classes, imported_instances) =
-            collect_imported_class_env(module, &module_class_exports, &module_instance_exports);
-        let (local_classes, local_instances) = collect_local_class_env(module);
-        let local_class_names: HashSet<String> = local_classes.keys().cloned().collect();
+        macro_rules! timed {
+            ($acc:expr, $block:expr) => {{
+                if trace {
+                    let t0 = std::time::Instant::now();
+                    let r = $block;
+                    $acc += t0.elapsed().as_nanos();
+                    r
+                } else {
+                    $block
+                }
+            }};
+        }
+
+        timed!(t_reset, checker.reset_module_context(module));
+        let mut env = if trace {
+            let t0 = std::time::Instant::now();
+            let r = checker.builtins.clone();
+            t_reset += t0.elapsed().as_nanos();
+            r
+        } else {
+            checker.builtins.clone()
+        };
+        timed!(t_reg_types, checker.register_module_types(module));
+        timed!(t_type_expr_diags, diagnostics.extend(checker.collect_type_expr_diags(module)));
+        let sigs = timed!(t_collect_sigs, checker.collect_type_sigs(module));
+        timed!(t_reg_ctors, checker.register_module_constructors(module, &mut env));
+        timed!(t_reg_imports, checker.register_imports(module, &module_exports, &module_domain_exports, &mut env));
+
+        let (imported_classes, imported_instances) = timed!(t_class_env,
+            collect_imported_class_env(module, &module_class_exports, &module_instance_exports)
+        );
+        let (local_classes, local_instances) = timed!(t_class_env, collect_local_class_env(module));
+        let local_class_names: HashSet<String> = timed!(t_class_env, local_classes.keys().cloned().collect());
         let mut classes = imported_classes;
         classes.extend(local_classes);
-        let classes = expand_classes(classes);
+        let classes = timed!(t_class_env, expand_classes(classes));
         let mut instances: Vec<InstanceDeclInfo> = imported_instances
             .into_iter()
             .filter(|instance| !local_class_names.contains(&instance.class_name))
             .collect();
         instances.extend(local_instances);
-        instances.extend(synthesize_auto_forward_instances(module, &instances));
-        checker.set_class_env(classes, instances);
-        checker.register_module_defs(module, &sigs, &mut env);
+        timed!(t_class_env, instances.extend(synthesize_auto_forward_instances(module, &instances)));
+        timed!(t_class_env, checker.set_class_env(classes, instances));
+        timed!(t_reg_defs, checker.register_module_defs(module, &sigs, &mut env));
 
         if !(skip_stdlib_body_check && is_embedded) {
             // Full type-checking: infer def bodies and collect diagnostics.
-            let mut module_diags = checker.check_module_defs(module, &sigs, &mut env);
+            let t_module_check = if trace { Some(std::time::Instant::now()) } else { None };
+            let mut module_diags = timed!(t_check_defs, checker.check_module_defs(module, &sigs, &mut env));
+            if let Some(t0) = t_module_check {
+                let elapsed = t0.elapsed().as_millis();
+                if elapsed > 50 {
+                    eprintln!("[AIVI_TIMING_MODULE] {:<60} {:>6}ms", module.name.name, elapsed);
+                }
+            }
             diagnostics.append(&mut module_diags);
 
             // Extract polymorphic call-site instantiations recorded during type checking.
@@ -199,49 +241,64 @@ fn infer_value_types_impl(modules: &[Module], skip_stdlib_body_check: bool) -> I
         inferred.insert(module.name.name.clone(), module_types);
         cg_types.insert(module.name.name.clone(), module_cg_types);
 
-        let mut exports = HashMap::new();
-        for export in &module.exports {
-            if export.kind != crate::surface::ScopeItemKind::Value {
-                continue;
-            }
-            if let Some(schemes) = sigs.get(&export.name.name) {
-                exports.insert(export.name.name.clone(), schemes.clone());
-            } else if let Some(schemes) = env.get_all(&export.name.name) {
-                exports.insert(export.name.name.clone(), schemes.to_vec());
-            }
-        }
-        module_exports.insert(module.name.name.clone(), exports);
-
-        let mut domain_exports = HashMap::new();
-        for export in &module.exports {
-            if export.kind != crate::surface::ScopeItemKind::Domain {
-                continue;
-            }
-            let domain_name = export.name.name.as_str();
-            let mut members = Vec::new();
-            for item in &module.items {
-                let ModuleItem::DomainDecl(domain) = item else {
-                    continue;
-                };
-                if domain.name.name != domain_name {
+        timed!(t_export_collect, {
+            let mut exports = HashMap::new();
+            for export in &module.exports {
+                if export.kind != crate::surface::ScopeItemKind::Value {
                     continue;
                 }
-                for domain_item in &domain.items {
-                    match domain_item {
-                        DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                            members.push(def.name.name.clone());
+                if let Some(schemes) = sigs.get(&export.name.name) {
+                    exports.insert(export.name.name.clone(), schemes.clone());
+                } else if let Some(schemes) = env.get_all(&export.name.name) {
+                    exports.insert(export.name.name.clone(), schemes.to_vec());
+                }
+            }
+            module_exports.insert(module.name.name.clone(), exports);
+
+            let mut domain_exports = HashMap::new();
+            for export in &module.exports {
+                if export.kind != crate::surface::ScopeItemKind::Domain {
+                    continue;
+                }
+                let domain_name = export.name.name.as_str();
+                let mut members = Vec::new();
+                for item in &module.items {
+                    let ModuleItem::DomainDecl(domain) = item else {
+                        continue;
+                    };
+                    if domain.name.name != domain_name {
+                        continue;
+                    }
+                    for domain_item in &domain.items {
+                        match domain_item {
+                            DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
+                                members.push(def.name.name.clone());
+                            }
+                            DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                         }
-                        DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                     }
                 }
+                domain_exports.insert(domain_name.to_string(), members);
             }
-            domain_exports.insert(domain_name.to_string(), members);
-        }
-        module_domain_exports.insert(module.name.name.clone(), domain_exports);
-        let (class_exports, instance_exports) =
-            collect_exported_class_env(module, &checker.classes, &checker.instances);
-        module_class_exports.insert(module.name.name.clone(), class_exports);
-        module_instance_exports.insert(module.name.name.clone(), instance_exports);
+            module_domain_exports.insert(module.name.name.clone(), domain_exports);
+            let (class_exports, instance_exports) =
+                collect_exported_class_env(module, &checker.classes, &checker.instances);
+            module_class_exports.insert(module.name.name.clone(), class_exports);
+            module_instance_exports.insert(module.name.name.clone(), instance_exports);
+        });
+    }
+
+    if trace {
+        eprintln!("[AIVI_TIMING_INFER] reset+clone_builtins       {:>8.1}ms", t_reset as f64 / 1_000_000.0);
+        eprintln!("[AIVI_TIMING_INFER] register_module_types       {:>8.1}ms", t_reg_types as f64 / 1_000_000.0);
+        eprintln!("[AIVI_TIMING_INFER] collect_type_expr_diags     {:>8.1}ms", t_type_expr_diags as f64 / 1_000_000.0);
+        eprintln!("[AIVI_TIMING_INFER] collect_type_sigs           {:>8.1}ms", t_collect_sigs as f64 / 1_000_000.0);
+        eprintln!("[AIVI_TIMING_INFER] register_module_constructors{:>8.1}ms", t_reg_ctors as f64 / 1_000_000.0);
+        eprintln!("[AIVI_TIMING_INFER] register_imports            {:>8.1}ms", t_reg_imports as f64 / 1_000_000.0);
+        eprintln!("[AIVI_TIMING_INFER] class_env (all steps)       {:>8.1}ms", t_class_env as f64 / 1_000_000.0);
+        eprintln!("[AIVI_TIMING_INFER] register_module_defs        {:>8.1}ms", t_reg_defs as f64 / 1_000_000.0);
+        eprintln!("[AIVI_TIMING_INFER] check_module_defs           {:>8.1}ms", t_check_defs as f64 / 1_000_000.0);
+        eprintln!("[AIVI_TIMING_INFER] export_collect              {:>8.1}ms", t_export_collect as f64 / 1_000_000.0);
     }
 
     InferResult {
