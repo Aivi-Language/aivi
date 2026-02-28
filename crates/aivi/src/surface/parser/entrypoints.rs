@@ -857,11 +857,13 @@ fn qualify_expr(
                         import_map.get(first_name).cloned().unwrap_or_default();
                     let path = if !qualified_first.is_empty() {
                         // Replace the first segment with its qualified form split by '.'.
+                        // `qualified_first` is only non-empty when path is non-empty.
+                        let first_span = sub.path.first().map(|s| s.span.clone()).expect("non-empty path");
                         let mut parts: Vec<SpannedName> = qualified_first
                             .split('.')
                             .map(|seg| SpannedName {
                                 name: seg.into(),
-                                span: sub.path.first().unwrap().span.clone(),
+                                span: first_span.clone(),
                             })
                             .collect();
                         parts.extend(sub.path.into_iter().skip(1));

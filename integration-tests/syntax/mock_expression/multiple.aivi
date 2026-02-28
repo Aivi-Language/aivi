@@ -1,0 +1,32 @@
+@no_prelude
+module integrationTests.syntax.mockExpression.multiple
+
+use aivi
+use aivi.testing
+
+firstName = "Ada"
+lastName = "Lovelace"
+
+fullName = firstName <> " " <> lastName
+
+@test "multiple mocks"
+multipleMocks =
+  mock firstName = "Alan"
+  mock lastName = "Turing"
+  in do Effect {
+    assertEq fullName "Alan Turing"
+  }
+
+@test "nested mocks override outer"
+nestedMocks =
+  mock firstName = "Grace"
+  in do Effect {
+    name1 <- pure firstName
+    name2 <-
+      mock firstName = "Ada"
+      in pure firstName
+    assertEq name1 "Grace"
+    assertEq name2 "Ada"
+    // After inner mock, outer is active again
+    assertEq firstName "Grace"
+  }

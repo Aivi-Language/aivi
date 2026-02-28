@@ -7,7 +7,7 @@ multiMock =
     url match
       | ~u(https://api.example.com/users) => pure [{ id: 1, name: "Ada" }]
       | ~u(https://api.example.com/posts) => pure [{ id: 10, title: "Hello" }]
-      | other => fail ("unexpected GET: " <> Url.toText other)
+      | other => fail "unexpected GET: { Url.toText other }"
   mock rest.post = _ _ => pure { success: True }
   in do Effect {
     users <- fetchUsers

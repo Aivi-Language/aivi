@@ -43,7 +43,7 @@ mod debug_tests {
             | HirExpr::LitDateTime { .. }
             | HirExpr::Raw { .. } => false,
             HirExpr::Mock { substitutions, body, .. } => {
-                substitutions.iter().any(|s| s.value.as_ref().is_some_and(|v| contains_debug_nodes(v)))
+                substitutions.iter().any(|s| s.value.as_ref().is_some_and(contains_debug_nodes))
                     || contains_debug_nodes(body)
             }
         }

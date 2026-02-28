@@ -194,6 +194,7 @@ fn hir_expr_has_recurse(expr: &HirExpr) -> bool {
         | HirExpr::LitSigil { .. }
         | HirExpr::LitBool { .. }
         | HirExpr::LitDateTime { .. }
+        | HirExpr::Mock { .. }
         | HirExpr::Raw { .. } => false,
     }
 }

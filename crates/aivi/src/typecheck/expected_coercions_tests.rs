@@ -94,7 +94,8 @@ fn hir_contains_var(expr: &HirExpr, name: &str) -> bool {
         | HirExpr::LitString { .. }
         | HirExpr::LitSigil { .. }
         | HirExpr::LitBool { .. }
-        | HirExpr::LitDateTime { .. } => false,
+        | HirExpr::LitDateTime { .. }
+        | HirExpr::Mock { .. } => false,
     }
 }
 
