@@ -1,5 +1,9 @@
-
-fn lower_expr_inner_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, in_pipe_left: bool) -> HirExpr {
+fn lower_expr_inner_ctx(
+    expr: Expr,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+    in_pipe_left: bool,
+) -> HirExpr {
     match expr {
         Expr::Ident(name) => HirExpr::Var {
             id: id_gen.next(),
@@ -227,9 +231,9 @@ fn lower_expr_inner_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, 
             id: id_gen.next(),
             base: Box::new(lower_expr_ctx(*base, id_gen, ctx, false)),
             index: Box::new(lower_expr_ctx(*index, id_gen, ctx, false)),
-            location: ctx.source_path.map(|path| {
-                format!("{}:{}:{}", path, span.start.line, span.start.column)
-            }),
+            location: ctx
+                .source_path
+                .map(|path| format!("{}:{}:{}", path, span.start.line, span.start.column)),
         },
         Expr::Call { func, args, .. } => HirExpr::Call {
             id: id_gen.next(),
@@ -361,7 +365,9 @@ fn lower_expr_inner_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, 
                                             HirPathSegment::Field(name.name)
                                         }
                                         crate::surface::PathSegment::Index(expr, _) => {
-                                            HirPathSegment::Index(lower_expr_ctx(expr, id_gen, ctx, false))
+                                            HirPathSegment::Index(lower_expr_ctx(
+                                                expr, id_gen, ctx, false,
+                                            ))
                                         }
                                         crate::surface::PathSegment::All(_) => HirPathSegment::All,
                                     })
@@ -451,7 +457,11 @@ fn slice_source_by_span(source: &str, span: &crate::diagnostics::Span) -> Option
     }
 
     if start_line == end_line {
-        return Some(slice_line(lines[start_line], span.start.column, span.end.column));
+        return Some(slice_line(
+            lines[start_line],
+            span.start.column,
+            span.end.column,
+        ));
     }
 
     let mut out = String::new();
@@ -486,7 +496,12 @@ fn normalize_debug_label(label: &str) -> String {
     out.trim().to_string()
 }
 
-fn lower_pipe_chain(left: Expr, right: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>) -> HirExpr {
+fn lower_pipe_chain(
+    left: Expr,
+    right: Expr,
+    id_gen: &mut IdGen,
+    ctx: &mut LowerCtx<'_>,
+) -> HirExpr {
     let Some(_) = ctx.debug.as_ref() else {
         let left = lower_expr_ctx(left, id_gen, ctx, true);
         let right = lower_expr_ctx(right, id_gen, ctx, false);
@@ -508,7 +523,12 @@ fn lower_pipe_chain(left: Expr, right: Expr, id_gen: &mut IdGen, ctx: &mut Lower
     } = base
     {
         if op != "|>" {
-            base = Expr::Binary { op, left, right, span };
+            base = Expr::Binary {
+                op,
+                left,
+                right,
+                span,
+            };
             break;
         }
         let step_span = surface_expr_span(&right);
@@ -517,10 +537,19 @@ fn lower_pipe_chain(left: Expr, right: Expr, id_gen: &mut IdGen, ctx: &mut Lower
     }
     steps.reverse();
 
-    let (pipe_id, source, log_time) = {
-        let debug = ctx.debug.as_mut().expect("debug ctx");
-        (debug.alloc_pipe_id(), debug.source, debug.params.time)
+    let Some(debug) = ctx.debug.as_mut() else {
+        let mut acc = lower_expr_ctx(base, id_gen, ctx, false);
+        for (step_expr, _) in steps {
+            let func = lower_expr_ctx(step_expr, id_gen, ctx, false);
+            acc = HirExpr::App {
+                id: id_gen.next(),
+                func: Box::new(func),
+                arg: Box::new(acc),
+            };
+        }
+        return acc;
     };
+    let (pipe_id, source, log_time) = (debug.alloc_pipe_id(), debug.source, debug.params.time);
     let mut acc = lower_expr_ctx(base, id_gen, ctx, false);
     for (idx, (step_expr, step_span)) in steps.into_iter().enumerate() {
         let func = lower_expr_ctx(step_expr, id_gen, ctx, false);
@@ -659,12 +688,7 @@ fn desugar_do_items(
                     }),
                     args: vec![body],
                 };
-                let continuation = make_pattern_lambda(
-                    pattern.clone(),
-                    wrapped,
-                    &param,
-                    id_gen,
-                );
+                let continuation = make_pattern_lambda(pattern.clone(), wrapped, &param, id_gen);
                 // chain continuation rhs
                 HirExpr::Call {
                     id: id_gen.next(),
@@ -677,12 +701,7 @@ fn desugar_do_items(
             } else {
                 let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, id_gen, ctx);
                 let param = format!("__do_bind{}", id_gen.next());
-                let continuation = make_pattern_lambda(
-                    pattern.clone(),
-                    rest,
-                    &param,
-                    id_gen,
-                );
+                let continuation = make_pattern_lambda(pattern.clone(), rest, &param, id_gen);
                 // chain continuation rhs
                 HirExpr::Call {
                     id: id_gen.next(),
@@ -711,12 +730,7 @@ fn desugar_do_items(
             } else {
                 let rest = desugar_do_items(items, index + 1, surface_kind, hir_kind, id_gen, ctx);
                 let param = format!("__do_let{}", id_gen.next());
-                let body = make_pattern_lambda(
-                    pattern.clone(),
-                    rest,
-                    &param,
-                    id_gen,
-                );
+                let body = make_pattern_lambda(pattern.clone(), rest, &param, id_gen);
                 // (λpat. rest) rhs
                 HirExpr::App {
                     id: id_gen.next(),
@@ -815,7 +829,9 @@ fn make_pattern_lambda(
 fn lower_block_kind(kind: &BlockKind) -> HirBlockKind {
     match kind {
         BlockKind::Plain => HirBlockKind::Plain,
-        BlockKind::Do { monad } => HirBlockKind::Do { monad: monad.name.clone() },
+        BlockKind::Do { monad } => HirBlockKind::Do {
+            monad: monad.name.clone(),
+        },
         BlockKind::Generate => HirBlockKind::Generate,
         BlockKind::Resource => HirBlockKind::Resource,
     }

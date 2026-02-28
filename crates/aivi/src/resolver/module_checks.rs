@@ -245,9 +245,8 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                     if fname.name == "gtkAttr" && args.len() == 2 {
                         if let Expr::Literal(Literal::String { text: key, .. }) = &args[0] {
                             if key.starts_with("signal:") {
-                                if let Expr::Literal(Literal::String {
-                                    text: handler, ..
-                                }) = &args[1]
+                                if let Expr::Literal(Literal::String { text: handler, .. }) =
+                                    &args[1]
                                 {
                                     for tok in handler
                                         .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
@@ -313,11 +312,17 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                             collect_expr(cond, out);
                             collect_expr(effect, out);
                         }
-                        BlockItem::Given { cond, fail_expr, .. } => {
+                        BlockItem::Given {
+                            cond, fail_expr, ..
+                        } => {
                             collect_expr(cond, out);
                             collect_expr(fail_expr, out);
                         }
-                        BlockItem::On { transition, handler, .. } => {
+                        BlockItem::On {
+                            transition,
+                            handler,
+                            ..
+                        } => {
                             collect_expr(transition, out);
                             collect_expr(handler, out);
                         }
@@ -419,7 +424,9 @@ fn check_uses(
         if use_decl.wildcard {
             continue;
         }
-        let target = target.expect("infallible");
+        let Some(target) = target else {
+            continue;
+        };
         let exports: HashSet<&str> = target
             .exports
             .iter()
@@ -483,11 +490,8 @@ fn check_defs(
         .collect();
 
     let local_defs: HashSet<String> = scope.keys().cloned().collect();
-    let import_pairs = crate::surface::compute_import_pairs(
-        &module.uses,
-        &available_names,
-        &local_defs,
-    );
+    let import_pairs =
+        crate::surface::compute_import_pairs(&module.uses, &available_names, &local_defs);
 
     // Register imported value names (bare + qualified) into scope with deprecation info.
     for (bare, qualified) in &import_pairs {
@@ -510,20 +514,21 @@ fn check_defs(
         if use_decl.alias.is_some() {
             if let Some(target) = module_map.get(&use_decl.module.name) {
                 let importable: Vec<String> = if target.exports.is_empty() {
-                    target.items.iter().filter_map(|item| match item {
-                        ModuleItem::Def(def) => Some(def.name.name.clone()),
-                        _ => None,
-                    }).collect()
+                    target
+                        .items
+                        .iter()
+                        .filter_map(|item| match item {
+                            ModuleItem::Def(def) => Some(def.name.name.clone()),
+                            _ => None,
+                        })
+                        .collect()
                 } else {
                     target.exports.iter().map(|e| e.name.name.clone()).collect()
                 };
                 for name in &importable {
                     let depr = deprecated_message_for_export(target, name);
                     scope.insert(name.clone(), depr.clone());
-                    scope.insert(
-                        format!("{}.{}", use_decl.module.name, name),
-                        depr,
-                    );
+                    scope.insert(format!("{}.{}", use_decl.module.name, name), depr);
                 }
             } else if use_decl.module.name.starts_with("aivi.") {
                 allow_unknown = true;
