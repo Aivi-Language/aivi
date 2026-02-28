@@ -104,6 +104,10 @@ pub(crate) struct Runtime {
     pub(crate) snapshot_recordings: HashMap<String, Vec<String>>,
     /// Replay cursors for snapshot mock playback, keyed by binding path.
     pub(crate) snapshot_replay_cursors: HashMap<String, usize>,
+    /// Snapshot assertion failure message. Set by `assertSnapshot` in verify
+    /// mode when a mismatch is detected. Checked by the test runner after the
+    /// test Effect completes, since the JIT cannot propagate Effect errors.
+    pub(crate) snapshot_failure: Option<String>,
 }
 
 #[derive(Clone)]

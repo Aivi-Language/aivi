@@ -473,9 +473,14 @@ pub(crate) fn register_builtins(env: &Env) {
                         if existing.trim() == pretty.trim() {
                             Ok(Value::Unit)
                         } else {
-                            Err(RuntimeError::Error(Value::Text(format!(
+                            let msg = format!(
                                 "snapshot mismatch for \"{name}\":\n--- expected (snapshot)\n{existing}\n--- actual\n{pretty}"
-                            ))))
+                            );
+                            // Store the mismatch on the runtime so the JIT test
+                            // runner can detect it even when Effect error
+                            // propagation is not available.
+                            runtime.snapshot_failure = Some(msg.clone());
+                            Err(RuntimeError::Error(Value::Text(msg)))
                         }
                     }
                 }),

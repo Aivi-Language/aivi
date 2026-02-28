@@ -128,7 +128,7 @@ pub(crate) fn snapshot_json_to_value(json: &JsonValue) -> Result<Value, RuntimeE
                 for item in arr {
                     out.push(snapshot_json_to_value(item)?);
                 }
-                Value::Tuple(out.into())
+                Value::Tuple(out)
             } else {
                 let mut fields = HashMap::with_capacity(map.len());
                 for (k, v) in map {

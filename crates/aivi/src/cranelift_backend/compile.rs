@@ -483,6 +483,9 @@ pub fn run_test_suite_jit(
         infer_result.monomorph_plan,
         &mut runtime,
     )?;
+    // Discard any pending errors from the compilation phase so they don't
+    // contaminate the first test.
+    runtime.jit_pending_error = None;
 
     const TEST_FUEL_BUDGET: u64 = 500_000;
     let mut report = TestReport {
@@ -497,6 +500,7 @@ pub fn run_test_suite_jit(
         runtime.current_test_name = Some(name.clone());
         runtime.snapshot_recordings.clear();
         runtime.snapshot_replay_cursors.clear();
+        runtime.snapshot_failure = None;
         let Some(value) = runtime.ctx.globals.get(name) else {
             report.failed += 1;
             report.failures.push(TestFailure {
@@ -506,6 +510,9 @@ pub fn run_test_suite_jit(
             });
             continue;
         };
+
+        // Clear any pending JIT error from a prior test so it doesn't contaminate this one.
+        runtime.jit_pending_error = None;
 
         let value = match runtime.force_value(value) {
             Ok(value) => value,
@@ -533,15 +540,32 @@ pub fn run_test_suite_jit(
             }
         };
 
+        // Clear pending error right before executing the test effect, so only
+        // errors from `run_effect_value` are captured.
+        runtime.jit_pending_error = None;
+
         match runtime.run_effect_value(effect) {
             Ok(_) => {
-                report.passed += 1;
-                report.successes.push(TestSuccess {
-                    name: name.clone(),
-                    description: description.clone(),
-                });
+                // Check for snapshot assertion failures that the JIT couldn't
+                // propagate through the Effect chain.
+                if let Some(msg) = runtime.snapshot_failure.take() {
+                    report.failed += 1;
+                    report.failures.push(TestFailure {
+                        name: name.clone(),
+                        description: description.clone(),
+                        message: msg,
+                    });
+                } else {
+                    report.passed += 1;
+                    report.successes.push(TestSuccess {
+                        name: name.clone(),
+                        description: description.clone(),
+                    });
+                }
             }
             Err(err) => {
+                // Discard any pending error — the propagated Err is the authoritative failure.
+                runtime.jit_pending_error = None;
                 report.failed += 1;
                 report.failures.push(TestFailure {
                     name: name.clone(),
