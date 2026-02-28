@@ -111,5 +111,5 @@ sccSmoke = do Effect {
 
   comps <- pure (strongComponents graph)
   assert (List.length comps == 2)
-  assert (List.find (cmp => List.find (_ == 0) cmp != None) comps != None)
+  assert (List.find (cmp => List.find (x => x == 0) cmp != None) comps != None)
 }

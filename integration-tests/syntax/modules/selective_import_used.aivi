@@ -6,7 +6,7 @@ use aivi.testing
 
 @test "selective imports from single module work correctly"
 selectiveImportUsed = do Effect {
-  let xs = [1, 2, 3, 4, 5]
+  xs = [1, 2, 3, 4, 5]
   assertEq (filter (x => x > 2) xs) [3, 4, 5]
   assertEq (map (x => x + 10) xs) [11, 12, 13, 14, 15]
   assertEq (length xs) 5
