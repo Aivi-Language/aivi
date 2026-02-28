@@ -954,10 +954,7 @@ mod linux {
                 ],
             },
         };
-        Value::Constructor {
-            name: "Some".to_string(),
-            args: vec![inner],
-        }
+        inner
     }
 
     struct ChildSpec<'a> {
@@ -3896,7 +3893,10 @@ mod linux {
                     GTK_STATE.with(|state| {
                         let mut state = state.borrow_mut();
                         if let Some(event) = state.signal_events.pop_front() {
-                            Ok(make_signal_event_value(event))
+                            Ok(Value::Constructor {
+                                name: "Some".to_string(),
+                                args: vec![make_signal_event_value(event)],
+                            })
                         } else {
                             Ok(Value::Constructor {
                                 name: "None".to_string(),
@@ -4291,16 +4291,13 @@ mod linux {
                     GTK_STATE.with(|state| {
                         let mut state = state.borrow_mut();
                         let event = Value::Constructor {
-                            name: "Some".to_string(),
-                            args: vec![Value::Constructor {
-                                name: "GtkUnknownSignal".to_string(),
-                                args: vec![
-                                    Value::Int(0),
-                                    Value::Text(signal_name.clone()),
-                                    Value::Text(String::new()),
-                                    Value::Text(String::new()),
-                                ],
-                            }],
+                            name: "GtkUnknownSignal".to_string(),
+                            args: vec![
+                                Value::Int(0),
+                                Value::Text(signal_name.clone()),
+                                Value::Text(String::new()),
+                                Value::Text(String::new()),
+                            ],
                         };
                         state.signal_senders.retain(|s| s.try_send(event.clone()).is_ok());
                     });

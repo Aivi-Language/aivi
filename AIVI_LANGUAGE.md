@@ -761,19 +761,30 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 
 ### Module path convention
 
-- `aivi.*` - standard library
-- `aivi.chronos.*` - time/date/duration/timezone
-- `aivi.net.*` - networking (http, https, rest, httpServer)
-- `aivi.rest` - REST-oriented source facade
-- `aivi.email` - IMAP email source facade
-- `aivi.list` - List operations (map, filter, fold, ...)
-- `aivi.map` - Map (ordered key-value)
-- `aivi.set` - Set (ordered unique elements)
-- `aivi.queue` - Queue / Deque
-- `aivi.heap` - Min/Max heap
 - `vendor.name.*` - third-party libraries
 - `user.app.*` - application code
 - In application code, module path segments and backing file names should be `snake_case`.
+
+**Core & Utils** (`aivi.*`):
+`prelude` (implicit), `text`, `logic`, `units`, `regex`, `testing`, `collections` (re-exports `list`, `map`, `set`, `queue`, `heap`), `i18n`, `generator`, `validation`, `json`, `defaults`
+
+**Math & Science** (`aivi.*`):
+`math`, `vector`, `matrix`, `number`, `probability`, `signal`, `geometry`, `graph`, `linearAlgebra`, `tree`
+
+**Time** (`aivi.chronos.*`):
+`instant`, `calendar`, `duration`, `timezone`, `scheduler`
+
+**System** (`aivi.*`):
+`system`, `concurrency`, `crypto`, `secrets`, `goa`, `log`
+
+**IO** (`aivi.*`):
+`file`, `console`, `database`, `database.pool`, `email`, `path`, `url`
+
+**Network** (`aivi.net.*`):
+`http`, `https`, `httpServer`, `rest`, `sockets`, `streams`
+
+**UI** (`aivi.ui.*` and `aivi.*`):
+`ui.gtk4`, `ui.layout`, `ui.ServerHtml`, `color`
 
 ---
 
