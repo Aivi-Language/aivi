@@ -407,9 +407,15 @@ impl TypeChecker {
                 }
             }
             if !matched {
-                diagnostics.push(
-                    self.error_to_diag(module, first_error.expect("expected candidate type error")),
-                );
+                let error = first_error.unwrap_or(TypeError {
+                    span: def.span.clone(),
+                    message: format!(
+                        "could not resolve typeclass member '{name}' against any candidate signature"
+                    ),
+                    expected: None,
+                    found: None,
+                });
+                diagnostics.push(self.error_to_diag(module, error));
                 return;
             }
             self.subst = base_subst;

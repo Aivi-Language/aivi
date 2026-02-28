@@ -52,6 +52,109 @@ unsafe fn set_pending_error(ctx: *mut JitRuntimeCtx, e: RuntimeError) {
     }
 }
 
+fn set_pending_error_text(ctx: *mut JitRuntimeCtx, message: impl Into<String>) {
+    let message = message.into();
+    if ctx.is_null() {
+        eprintln!(
+            "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}runtime boundary{RT_RESET}: {message}"
+        );
+        return;
+    }
+    unsafe {
+        set_pending_error(ctx, RuntimeError::Error(Value::Text(message)));
+    }
+}
+
+fn unit_value() -> *mut Value {
+    abi::box_value(Value::Unit)
+}
+
+fn reuse_or_unit(token: *mut Value) -> *mut Value {
+    if token.is_null() {
+        unit_value()
+    } else {
+        token
+    }
+}
+
+fn decode_utf8_owned(
+    ctx: *mut JitRuntimeCtx,
+    ptr: *const u8,
+    len: usize,
+    label: &str,
+) -> Option<String> {
+    if len == 0 {
+        return Some(String::new());
+    }
+    if ptr.is_null() {
+        set_pending_error_text(ctx, format!("{label}: null UTF-8 pointer"));
+        return None;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(ptr, len) };
+    match std::str::from_utf8(bytes) {
+        Ok(text) => Some(text.to_string()),
+        Err(err) => {
+            set_pending_error_text(ctx, format!("{label}: invalid UTF-8 ({err})"));
+            None
+        }
+    }
+}
+
+fn clone_value_array(
+    ctx: *mut JitRuntimeCtx,
+    items: *const *const Value,
+    len: usize,
+    label: &str,
+) -> Option<Vec<Value>> {
+    if len == 0 {
+        return Some(Vec::new());
+    }
+    if items.is_null() {
+        set_pending_error_text(ctx, format!("{label}: null value array"));
+        return None;
+    }
+    let mut values = Vec::with_capacity(len);
+    for i in 0..len {
+        let value_ptr = unsafe { *items.add(i) };
+        let Some(value) = (unsafe { value_ptr.as_ref() }) else {
+            set_pending_error_text(ctx, format!("{label}: null value pointer at index {i}"));
+            return None;
+        };
+        values.push(value.clone());
+    }
+    Some(values)
+}
+
+fn clone_record_fields(
+    ctx: *mut JitRuntimeCtx,
+    names: *const *const u8,
+    name_lens: *const usize,
+    values: *const *const Value,
+    len: usize,
+    label: &str,
+) -> Option<HashMap<String, Value>> {
+    if len == 0 {
+        return Some(HashMap::new());
+    }
+    if names.is_null() || name_lens.is_null() || values.is_null() {
+        set_pending_error_text(ctx, format!("{label}: null record field arrays"));
+        return None;
+    }
+    let mut map = HashMap::with_capacity(len);
+    for i in 0..len {
+        let name_ptr = unsafe { *names.add(i) };
+        let name_len = unsafe { *name_lens.add(i) };
+        let field_name = decode_utf8_owned(ctx, name_ptr, name_len, label)?;
+        let value_ptr = unsafe { *values.add(i) };
+        let Some(value) = (unsafe { value_ptr.as_ref() }) else {
+            set_pending_error_text(ctx, format!("{label}: null value pointer at index {i}"));
+            return None;
+        };
+        map.insert(field_name, value.clone());
+    }
+    Some(map)
+}
+
 // ---------------------------------------------------------------------------
 // Function entry tracking — records the current function name for diagnostics
 // ---------------------------------------------------------------------------
@@ -238,22 +341,26 @@ pub extern "C" fn rt_alloc_unit(_ctx: *mut JitRuntimeCtx) -> *mut Value {
 /// `ptr` must point to valid UTF-8 of `len` bytes.
 #[no_mangle]
 pub extern "C" fn rt_alloc_string(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     ptr: *const u8,
     len: usize,
 ) -> *mut Value {
-    let s = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, len)) };
+    let Some(s) = decode_utf8_owned(ctx, ptr, len, "rt_alloc_string") else {
+        return unit_value();
+    };
     abi::box_value(Value::Text(s.to_string()))
 }
 
 /// Allocate a `Value::DateTime` from a UTF-8 string.
 #[no_mangle]
 pub extern "C" fn rt_alloc_datetime(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     ptr: *const u8,
     len: usize,
 ) -> *mut Value {
-    let s = unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, len)) };
+    let Some(s) = decode_utf8_owned(ctx, ptr, len, "rt_alloc_datetime") else {
+        return unit_value();
+    };
     abi::box_value(Value::DateTime(s.to_string()))
 }
 
@@ -263,13 +370,13 @@ pub extern "C" fn rt_alloc_datetime(
 /// `items` must point to `len` valid `*const Value` pointers.
 #[no_mangle]
 pub extern "C" fn rt_alloc_list(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     items: *const *const Value,
     len: usize,
 ) -> *mut Value {
-    let values: Vec<Value> = (0..len)
-        .map(|i| unsafe { (*items.add(i)).as_ref().unwrap().clone() })
-        .collect();
+    let Some(values) = clone_value_array(ctx, items, len, "rt_alloc_list") else {
+        return unit_value();
+    };
     abi::box_value(Value::List(Arc::new(values)))
 }
 
@@ -279,13 +386,13 @@ pub extern "C" fn rt_alloc_list(
 /// `items` must point to `len` valid `*const Value` pointers.
 #[no_mangle]
 pub extern "C" fn rt_alloc_tuple(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     items: *const *const Value,
     len: usize,
 ) -> *mut Value {
-    let values: Vec<Value> = (0..len)
-        .map(|i| unsafe { (*items.add(i)).as_ref().unwrap().clone() })
-        .collect();
+    let Some(values) = clone_value_array(ctx, items, len, "rt_alloc_tuple") else {
+        return unit_value();
+    };
     abi::box_value(Value::Tuple(values))
 }
 
@@ -296,22 +403,16 @@ pub extern "C" fn rt_alloc_tuple(
 /// Each name entry is a `(*const u8, usize)` pair packed as two consecutive pointer-sized values.
 #[no_mangle]
 pub extern "C" fn rt_alloc_record(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     names: *const *const u8,
     name_lens: *const usize,
     values: *const *const Value,
     len: usize,
 ) -> *mut Value {
-    let mut map = HashMap::with_capacity(len);
-    for i in 0..len {
-        let name = unsafe {
-            let ptr = *names.add(i);
-            let l = *name_lens.add(i);
-            std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, l)).to_string()
-        };
-        let val = unsafe { (*values.add(i)).as_ref().unwrap().clone() };
-        map.insert(name, val);
-    }
+    let Some(map) = clone_record_fields(ctx, names, name_lens, values, len, "rt_alloc_record")
+    else {
+        return unit_value();
+    };
     abi::box_value(Value::Record(Arc::new(map)))
 }
 
@@ -322,18 +423,19 @@ pub extern "C" fn rt_alloc_record(
 /// `args` must point to `args_len` valid `*const Value` pointers.
 #[no_mangle]
 pub extern "C" fn rt_alloc_constructor(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     name_ptr: *const u8,
     name_len: usize,
     args: *const *const Value,
     args_len: usize,
 ) -> *mut Value {
-    let name = unsafe {
-        std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)).to_string()
+    let Some(name) = decode_utf8_owned(ctx, name_ptr, name_len, "rt_alloc_constructor name") else {
+        return unit_value();
     };
-    let arg_values: Vec<Value> = (0..args_len)
-        .map(|i| unsafe { (*args.add(i)).as_ref().unwrap().clone() })
-        .collect();
+    let Some(arg_values) = clone_value_array(ctx, args, args_len, "rt_alloc_constructor args")
+    else {
+        return unit_value();
+    };
     abi::box_value(Value::Constructor {
         name,
         args: arg_values,
@@ -489,19 +591,20 @@ pub extern "C" fn rt_try_reuse(_ctx: *mut JitRuntimeCtx, ptr: *mut Value) -> *mu
 /// reuse token from `rt_try_reuse`.
 #[no_mangle]
 pub extern "C" fn rt_reuse_constructor(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     token: *mut Value,
     name_ptr: *const u8,
     name_len: usize,
     args: *const *const Value,
     args_len: usize,
 ) -> *mut Value {
-    let name = unsafe {
-        std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)).to_string()
+    let Some(name) = decode_utf8_owned(ctx, name_ptr, name_len, "rt_reuse_constructor name") else {
+        return reuse_or_unit(token);
     };
-    let arg_values: Vec<Value> = (0..args_len)
-        .map(|i| unsafe { (*args.add(i)).as_ref().unwrap().clone() })
-        .collect();
+    let Some(arg_values) = clone_value_array(ctx, args, args_len, "rt_reuse_constructor args")
+    else {
+        return reuse_or_unit(token);
+    };
     let new_value = Value::Constructor {
         name,
         args: arg_values,
@@ -519,23 +622,17 @@ pub extern "C" fn rt_reuse_constructor(
 /// Write a `Record` into a reuse token. If `token` is null, allocates fresh.
 #[no_mangle]
 pub extern "C" fn rt_reuse_record(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     token: *mut Value,
     names: *const *const u8,
     name_lens: *const usize,
     values: *const *const Value,
     len: usize,
 ) -> *mut Value {
-    let mut map = HashMap::with_capacity(len);
-    for i in 0..len {
-        let name = unsafe {
-            let ptr = *names.add(i);
-            let l = *name_lens.add(i);
-            std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, l)).to_string()
-        };
-        let val = unsafe { (*values.add(i)).as_ref().unwrap().clone() };
-        map.insert(name, val);
-    }
+    let Some(map) = clone_record_fields(ctx, names, name_lens, values, len, "rt_reuse_record")
+    else {
+        return reuse_or_unit(token);
+    };
     let new_value = Value::Record(Arc::new(map));
     if token.is_null() {
         abi::box_value(new_value)
@@ -550,14 +647,14 @@ pub extern "C" fn rt_reuse_record(
 /// Write a `List` into a reuse token. If `token` is null, allocates fresh.
 #[no_mangle]
 pub extern "C" fn rt_reuse_list(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     token: *mut Value,
     items: *const *const Value,
     len: usize,
 ) -> *mut Value {
-    let values: Vec<Value> = (0..len)
-        .map(|i| unsafe { (*items.add(i)).as_ref().unwrap().clone() })
-        .collect();
+    let Some(values) = clone_value_array(ctx, items, len, "rt_reuse_list") else {
+        return reuse_or_unit(token);
+    };
     let new_value = Value::List(Arc::new(values));
     if token.is_null() {
         abi::box_value(new_value)
@@ -572,14 +669,14 @@ pub extern "C" fn rt_reuse_list(
 /// Write a `Tuple` into a reuse token. If `token` is null, allocates fresh.
 #[no_mangle]
 pub extern "C" fn rt_reuse_tuple(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     token: *mut Value,
     items: *const *const Value,
     len: usize,
 ) -> *mut Value {
-    let values: Vec<Value> = (0..len)
-        .map(|i| unsafe { (*items.add(i)).as_ref().unwrap().clone() })
-        .collect();
+    let Some(values) = clone_value_array(ctx, items, len, "rt_reuse_tuple") else {
+        return reuse_or_unit(token);
+    };
     let new_value = Value::Tuple(values);
     if token.is_null() {
         abi::box_value(new_value)
@@ -609,9 +706,8 @@ pub extern "C" fn rt_set_global(
     name_len: usize,
     value_ptr: *const Value,
 ) {
-    let name = unsafe {
-        std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len))
-    };
+    let name =
+        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(name_ptr, name_len)) };
     let value = unsafe { (*value_ptr).clone() };
     let runtime = unsafe { (*ctx).runtime_mut() };
     runtime.ctx.globals.set(name.to_string(), value);
@@ -1005,27 +1101,28 @@ pub extern "C" fn rt_value_equals(
 /// each have `len` entries.
 #[no_mangle]
 pub extern "C" fn rt_patch_record(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     base_ptr: *const Value,
     names: *const *const u8,
     name_lens: *const usize,
     values: *const *const Value,
     len: usize,
 ) -> *mut Value {
+    if base_ptr.is_null() {
+        set_pending_error_text(ctx, "rt_patch_record: null base value pointer");
+        return unit_value();
+    }
     let base = unsafe { &*base_ptr };
     let mut map = match base {
         Value::Record(rec) => (**rec).clone(),
         _ => HashMap::new(),
     };
-    for i in 0..len {
-        let name = unsafe {
-            let ptr = *names.add(i);
-            let l = *name_lens.add(i);
-            std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, l)).to_string()
-        };
-        let val = unsafe { (*values.add(i)).as_ref().unwrap().clone() };
-        map.insert(name, val);
-    }
+    let Some(patch_fields) =
+        clone_record_fields(ctx, names, name_lens, values, len, "rt_patch_record")
+    else {
+        return unit_value();
+    };
+    map.extend(patch_fields);
     abi::box_value(Value::Record(Arc::new(map)))
 }
 
@@ -1036,30 +1133,37 @@ pub extern "C" fn rt_patch_record(
 /// `base_ptr` is consumed (caller must not use it again).
 #[no_mangle]
 pub extern "C" fn rt_patch_record_inplace(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     base_ptr: *mut Value,
     names: *const *const u8,
     name_lens: *const usize,
     values: *const *const Value,
     len: usize,
 ) -> *mut Value {
+    if base_ptr.is_null() {
+        set_pending_error_text(ctx, "rt_patch_record_inplace: null base value pointer");
+        return unit_value();
+    }
+    let Some(patch_fields) = clone_record_fields(
+        ctx,
+        names,
+        name_lens,
+        values,
+        len,
+        "rt_patch_record_inplace",
+    ) else {
+        return base_ptr;
+    };
     let base = unsafe { &mut *base_ptr };
     let can_reuse = matches!(base, Value::Record(ref arc) if Arc::strong_count(arc) == 1);
 
     if can_reuse {
         // Safe: we have the only reference, so Arc::get_mut will succeed.
         if let Value::Record(ref mut arc) = base {
-            let map = Arc::get_mut(arc).unwrap();
-            for i in 0..len {
-                let name = unsafe {
-                    let ptr = *names.add(i);
-                    let l = *name_lens.add(i);
-                    std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, l)).to_string()
-                };
-                let val = unsafe { (*values.add(i)).as_ref().unwrap().clone() };
-                map.insert(name, val);
+            if let Some(map) = Arc::get_mut(arc) {
+                map.extend(patch_fields);
+                return base_ptr;
             }
-            return base_ptr;
         }
     }
 
@@ -1068,15 +1172,7 @@ pub extern "C" fn rt_patch_record_inplace(
         Value::Record(rec) => (**rec).clone(),
         _ => HashMap::new(),
     };
-    for i in 0..len {
-        let name = unsafe {
-            let ptr = *names.add(i);
-            let l = *name_lens.add(i);
-            std::str::from_utf8_unchecked(std::slice::from_raw_parts(ptr, l)).to_string()
-        };
-        let val = unsafe { (*values.add(i)).as_ref().unwrap().clone() };
-        map.insert(name, val);
-    }
+    map.extend(patch_fields);
     // Drop old box and allocate new one
     unsafe { drop(Box::from_raw(base_ptr)) };
     abi::box_value(Value::Record(Arc::new(map)))
@@ -1096,7 +1192,7 @@ pub extern "C" fn rt_patch_record_inplace(
 /// `captured` must point to `captured_count` valid `*const Value` pointers.
 #[no_mangle]
 pub extern "C" fn rt_make_closure(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     func_ptr: i64,
     captured: *const *const Value,
     captured_count: i64,
@@ -1106,9 +1202,10 @@ pub extern "C" fn rt_make_closure(
     use std::sync::Arc;
 
     let count = captured_count as usize;
-    let captured_values: Vec<Value> = (0..count)
-        .map(|i| unsafe { (*captured.add(i)).as_ref().unwrap().clone() })
-        .collect();
+    let Some(captured_values) = clone_value_array(ctx, captured, count, "rt_make_closure captured")
+    else {
+        return unit_value();
+    };
 
     let builtin = Value::Builtin(BuiltinValue {
         imp: Arc::new(BuiltinImpl {
@@ -1269,19 +1366,39 @@ pub extern "C" fn rt_gen_vec_push(
 /// Ownership of the Vec is taken.
 #[no_mangle]
 pub extern "C" fn rt_gen_vec_into_generator(
-    _ctx: *mut JitRuntimeCtx,
+    ctx: *mut JitRuntimeCtx,
     vec_ptr: *mut Vec<Value>,
 ) -> *mut Value {
     use crate::runtime::values::{BuiltinImpl, BuiltinValue};
 
+    if vec_ptr.is_null() {
+        set_pending_error_text(
+            ctx,
+            "rt_gen_vec_into_generator: null generator buffer pointer",
+        );
+        return unit_value();
+    }
     let values = Arc::new(*unsafe { Box::from_raw(vec_ptr) });
     let builtin = Value::Builtin(BuiltinValue {
         imp: Arc::new(BuiltinImpl {
             name: "<native_generator>".to_string(),
             arity: 2,
             func: Arc::new(move |mut args, runtime| {
-                let z = args.pop().unwrap();
-                let k = args.pop().unwrap();
+                let Some(z) = args.pop() else {
+                    return Err(RuntimeError::Message(
+                        "native generator expected 2 arguments (missing seed)".to_string(),
+                    ));
+                };
+                let Some(k) = args.pop() else {
+                    return Err(RuntimeError::Message(
+                        "native generator expected 2 arguments (missing step function)".to_string(),
+                    ));
+                };
+                if !args.is_empty() {
+                    return Err(RuntimeError::Message(
+                        "native generator expected exactly 2 arguments".to_string(),
+                    ));
+                }
                 let mut acc = z;
                 for val in values.iter() {
                     let partial = runtime.apply(k.clone(), acc)?;
@@ -1326,9 +1443,22 @@ use crate::runtime::build_runtime_from_program;
 /// The caller must ensure `program_ptr` points to a valid `HirProgram`.
 #[no_mangle]
 pub extern "C" fn aivi_rt_init(program_ptr: *mut HirProgram) -> *mut JitRuntimeCtx {
+    if program_ptr.is_null() {
+        eprintln!(
+            "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}runtime init{RT_RESET}: null program pointer"
+        );
+        return std::ptr::null_mut();
+    }
     let program = unsafe { Box::from_raw(program_ptr) };
-    let runtime =
-        build_runtime_from_program(&program).expect("aivi_rt_init: failed to build runtime");
+    let runtime = match build_runtime_from_program(&program) {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            eprintln!(
+                "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}runtime init{RT_RESET}: failed to build runtime: {err}"
+            );
+            return std::ptr::null_mut();
+        }
+    };
     let ctx = unsafe { JitRuntimeCtx::from_runtime_owned(runtime) };
     Box::into_raw(Box::new(ctx))
 }

@@ -379,7 +379,10 @@ impl Parser {
         let mut constraints = Vec::new();
         self.consume_newlines();
         if peek_is_given_constraints(self) {
-            let given_span = self.consume_ident_text("given").expect("infallible").span;
+            let given_span = self
+                .consume_ident_text("given")
+                .map(|token| token.span)
+                .unwrap_or_else(|| self.previous_span());
             self.expect_symbol("(", "expected '(' after 'given' in class constraints");
             self.consume_newlines();
             while self.pos < self.tokens.len() && !self.check_symbol(")") {
@@ -436,8 +439,11 @@ impl Parser {
                     TypeExpr::Name(name) => {
                         let base = TypeExpr::Name(name.clone());
                         let args = params.clone();
-                        let span =
-                            merge_span(name.span, type_span(args.last().expect("non-empty")));
+                        let span = if let Some(last_arg) = args.last() {
+                            merge_span(name.span, type_span(last_arg))
+                        } else {
+                            name.span
+                        };
                         TypeExpr::Apply {
                             base: Box::new(base),
                             args,
