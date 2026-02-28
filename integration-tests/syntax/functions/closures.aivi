@@ -12,6 +12,14 @@ scaledRange = factor => generate {
   yield n * factor
 }
 
+// Closure over `threshold` and `factor` used in a generator with a guard
+filteredScaled : Int -> Int -> Generator Int
+filteredScaled = threshold factor => generate {
+  n <- [1, 2, 3, 4, 5]
+  n -> _ > threshold
+  yield n * factor
+}
+
 // Resource that captures `offset` and yields a closure
 withAdder : Int -> Resource Text (Int -> Int)
 withAdder = offset => resource {
@@ -36,7 +44,7 @@ innerClosureInDoEffect = do Effect {
 @test "closure passed to higher-order functions via pipe"
 closureInHigherOrder = do Effect {
   multiplier = 4
-  result = [1, 2, 3, 4, 5] |> filter (_ > 2) |> map (_ * multiplier)
+  result = [1, 2, 3, 4, 5] |> filter (_ > 2) |> map (n => n * multiplier)
   assertEq result [12, 16, 20]
 }
 
@@ -73,13 +81,6 @@ resourceYieldsClosure = do Effect {
 
 @test "generator with closure-based filter and transform"
 generatorWithClosureFilterTransform = do Effect {
-  threshold = 2
-  factor = 10
-  result = toList (generate {
-      n <- [1, 2, 3, 4, 5]
-      n -> _ > threshold
-      yield n * factor
-  }
-  )
+  result = toList (filteredScaled 2 10)
   assertEq result [30, 40, 50]
 }

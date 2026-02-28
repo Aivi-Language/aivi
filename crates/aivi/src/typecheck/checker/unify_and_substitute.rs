@@ -171,6 +171,11 @@ impl TypeChecker {
             let mut message = "occurs check failed".to_string();
             if std::env::var("AIVI_DEBUG_TRACE").is_ok_and(|v| v == "1") {
                 let ty_str = self.type_to_string(&ty);
+                let var_name = self.var_names.get(&var).cloned().unwrap_or_default();
+                eprintln!("OCCURS_CHECK: var={:?} name={} ty={}", var, var_name, ty_str);
+                // Print a Rust backtrace to show the call stack
+                let bt = std::backtrace::Backtrace::capture();
+                eprintln!("BACKTRACE:\n{}", bt);
                 message = format!("occurs check failed (var={:?}, ty={})", var, ty_str);
             }
             return Err(TypeError {
