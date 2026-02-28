@@ -6,6 +6,24 @@
 
 <div class="import-badge">use aivi.goa</div>
 
+## Types
+
+### `GoaAccount`
+
+A discovered GOA account, identified by its D-Bus object path key.
+
+```aivi
+GoaAccount = { key: Text }
+```
+
+### `GoaToken`
+
+An OAuth access token with expiry information.
+
+```aivi
+GoaToken = { token: Text, expiresUnix: Int }
+```
+
 ## Core API (v0.1)
 
 | Function | Explanation |

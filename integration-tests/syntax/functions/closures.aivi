@@ -1,0 +1,85 @@
+@no_prelude
+module integrationTests.syntax.functions.closures
+
+use aivi
+use aivi.testing
+use aivi.generator
+
+// Closure over `factor` used inside a generator
+scaledRange : Int -> Generator Int
+scaledRange = factor => generate {
+  n <- [1, 2, 3]
+  yield n * factor
+}
+
+// Resource that captures `offset` and yields a closure
+withAdder : Int -> Resource Text (Int -> Int)
+withAdder = offset => resource {
+  adder = n => n + offset
+  yield adder
+}
+
+@test "closure captures variable in generator"
+closureInGenerator = do Effect {
+  result = toList (scaledRange 3)
+  assertEq result [3, 6, 9]
+}
+
+@test "inner closure defined and composed in do Effect"
+innerClosureInDoEffect = do Effect {
+  base = 100
+  clampedAdd = limit n => if n + base > limit then limit else n + base
+  assertEq (clampedAdd 120 10) 110
+  assertEq (clampedAdd 120 25) 120
+}
+
+@test "closure passed to higher-order functions via pipe"
+closureInHigherOrder = do Effect {
+  multiplier = 4
+  result = [1, 2, 3, 4, 5] |> filter (_ > 2) |> map (_ * multiplier)
+  assertEq result [12, 16, 20]
+}
+
+@test "closure used inside do Option"
+closureInDoOption = do Effect {
+  offset = 5
+  addOffset = x => Some (x + offset)
+  result = do Option {
+    a <- Some 10
+    b <- addOffset a
+    Some b
+  }
+  assertEq result (Some 15)
+}
+
+@test "closure used inside do Result"
+closureInDoResult = do Effect {
+  validate = max n => do Result {
+    ok <- if n <= max then Ok n else Err "out of range"
+    Ok (ok * 2)
+  }
+  result1 = validate 100 42
+  result2 = validate 10 42
+  assertEq result1 (Ok 84)
+  assertEq result2 (Err "out of range")
+}
+
+@test "resource acquires and yields a closure"
+resourceYieldsClosure = do Effect {
+  adder <- withAdder 7
+  assertEq (adder 3) 10
+  assertEq (adder 10) 17
+}
+
+@test "generator with closure-based filter and transform"
+generatorWithClosureFilterTransform = do Effect {
+  threshold = 2
+  factor = 10
+  result = toList (generate {
+      n <- [1, 2, 3, 4, 5]
+      n -> _ > threshold
+      yield n * factor
+  }
+  )
+  assertEq result [30, 40, 50]
+}

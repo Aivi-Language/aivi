@@ -295,6 +295,25 @@ impl TypeChecker {
         vars
     }
 
+    fn collect_vars(ty: &Type) -> HashSet<TypeVarId> {
+        match ty {
+            Type::Var(id) => std::iter::once(*id).collect(),
+            Type::Con(_, args) => args.iter().flat_map(Self::collect_vars).collect(),
+            Type::App(base, args) => {
+                let mut vars = Self::collect_vars(base);
+                vars.extend(args.iter().flat_map(Self::collect_vars));
+                vars
+            }
+            Type::Func(a, b) => {
+                let mut vars = Self::collect_vars(a);
+                vars.extend(Self::collect_vars(b));
+                vars
+            }
+            Type::Tuple(items) => items.iter().flat_map(Self::collect_vars).collect(),
+            Type::Record { fields } => fields.values().flat_map(Self::collect_vars).collect(),
+        }
+    }
+
     fn substitute(ty: &Type, mapping: &HashMap<TypeVarId, Type>) -> Type {
         match ty {
             Type::Var(id) => mapping.get(id).cloned().unwrap_or(Type::Var(*id)),
@@ -416,6 +435,22 @@ impl TypeChecker {
                 let mut mapping = HashMap::new();
                 for (param, arg) in alias.params.iter().zip(args.iter()) {
                     mapping.insert(*param, arg.clone());
+                }
+                // Freshen internal (non-param) vars in the alias body so each
+                // expansion is independent. Without this, a shared var like `R` in
+                // `Generator A = (R -> A -> R) -> R -> R` would be reused across
+                // multiple expansions, causing spurious occurs-check failures when
+                // the same `Generator` alias is expanded twice in a single unification.
+                let param_set: HashSet<TypeVarId> = alias.params.iter().cloned().collect();
+                let body_vars = Self::collect_vars(&alias.body);
+                for var in body_vars {
+                    if !param_set.contains(&var) {
+                        let fresh = self.fresh_var_id();
+                        if let Some(orig_name) = self.var_names.get(&var).cloned() {
+                            self.var_names.insert(fresh, orig_name);
+                        }
+                        mapping.insert(var, Type::Var(fresh));
+                    }
                 }
                 let body = Self::substitute(&alias.body, &mapping);
                 let expanded = self.expand_alias_with_visiting(body, visiting);
