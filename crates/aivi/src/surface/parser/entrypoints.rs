@@ -514,6 +514,439 @@ fn expand_module_aliases(modules: &mut [Module]) {
     }
 }
 
+/// Resolve wildcard-imported names to their module-qualified forms.
+///
+/// When a module has `use aivi.database` and references `load`, this pass rewrites the bare
+/// `load` identifier to `aivi.database.load`.  The qualified form later flows through HIR →
+/// Kernel → RustIR without being captured by `resolve_builtin`, which only recognises short
+/// names.
+///
+/// **Must** be called after `expand_domain_exports`, `expand_type_constructor_exports` and
+/// `expand_module_aliases` so that export lists and alias rewrites are already finalised.
+///
+/// **Must** receive *all* modules (stdlib + user) so the export index is complete.
+pub fn resolve_import_names(modules: &mut [Module]) {
+    use std::collections::{HashMap, HashSet};
+
+    // 1. Build an export index: module_name → set of value names that can be imported.
+    //    Only include names that the module actually DEFINES (has a `Def` for).
+    //    Names that are merely re-exported (e.g. builtins from the root `aivi` module)
+    //    are excluded — they are resolved by the runtime's `resolve_builtin` instead.
+    let mut export_index: HashMap<String, HashSet<String>> = HashMap::new();
+    for module in modules.iter() {
+        let defined_names: HashSet<String> = module
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                ModuleItem::Def(def) => Some(def.name.name.clone()),
+                _ => None,
+            })
+            .collect();
+        let exported_values: HashSet<String> = module
+            .exports
+            .iter()
+            .filter(|e| e.kind == ScopeItemKind::Value)
+            .map(|e| e.name.name.clone())
+            .collect();
+        let names = if exported_values.is_empty() {
+            // No export list → all defs are public.
+            defined_names
+        } else {
+            // Intersection: only export names that have actual definitions.
+            exported_values
+                .into_iter()
+                .filter(|name| defined_names.contains(name))
+                .collect()
+        };
+        export_index.insert(module.name.name.clone(), names);
+    }
+
+    // 2. For each module, compute which bare names should be qualified.
+    //    An import like `use aivi.database` (wildcard, no alias) brings all exported value
+    //    names into scope as `aivi.database.<name>`.  Selective imports (`use M (a, b)`)
+    //    bring only the listed names.  Aliased imports are already handled by
+    //    `expand_module_aliases`, so we skip them here.
+    //
+    //    Later imports shadow earlier ones (last wins).  Module-local defs shadow everything.
+    for idx in 0..modules.len() {
+        // Collect module-local def names (they shadow imports).
+        let local_defs: HashSet<String> = modules[idx]
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                ModuleItem::Def(def) => Some(def.name.name.clone()),
+                _ => None,
+            })
+            .collect();
+
+        // Build import resolution map: bare_name → qualified_name.
+        let mut import_map: HashMap<String, String> = HashMap::new();
+        for use_decl in &modules[idx].uses {
+            // Aliased imports are handled by expand_module_aliases — skip.
+            if use_decl.alias.is_some() {
+                continue;
+            }
+            let target_module = &use_decl.module.name;
+            let Some(target_exports) = export_index.get(target_module.as_str()) else {
+                continue;
+            };
+            if use_decl.items.is_empty() {
+                // Wildcard import: bring all exported value names.
+                for name in target_exports {
+                    if !local_defs.contains(name) {
+                        import_map
+                            .insert(name.clone(), format!("{target_module}.{name}"));
+                    }
+                }
+            } else {
+                // Selective import: only bring listed value names.
+                for item in &use_decl.items {
+                    if item.kind == ScopeItemKind::Value
+                        && target_exports.contains(&item.name.name)
+                        && !local_defs.contains(&item.name.name)
+                    {
+                        import_map.insert(
+                            item.name.name.clone(),
+                            format!("{target_module}.{}", item.name.name),
+                        );
+                    }
+                }
+            }
+        }
+
+        if import_map.is_empty() {
+            continue;
+        }
+
+        // 3. Rewrite expressions in this module's items.
+        for item in modules[idx].items.iter_mut() {
+            match item {
+                ModuleItem::Def(def) => {
+                    // Def params introduce local bindings that shadow imports.
+                    let mut scope: HashSet<String> = HashSet::new();
+                    for param in &def.params {
+                        collect_pattern_names(param, &mut scope);
+                    }
+                    def.expr = qualify_expr(def.expr.clone(), &import_map, &scope);
+                }
+                ModuleItem::DomainDecl(domain) => {
+                    for domain_item in domain.items.iter_mut() {
+                        match domain_item {
+                            DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
+                                let mut scope: HashSet<String> = HashSet::new();
+                                for param in &def.params {
+                                    collect_pattern_names(param, &mut scope);
+                                }
+                                def.expr = qualify_expr(def.expr.clone(), &import_map, &scope);
+                            }
+                            DomainItem::TypeSig(_) | DomainItem::TypeAlias(_) => {}
+                        }
+                    }
+                }
+                ModuleItem::InstanceDecl(instance) => {
+                    for def in instance.defs.iter_mut() {
+                        let mut scope: HashSet<String> = HashSet::new();
+                        for param in &def.params {
+                            collect_pattern_names(param, &mut scope);
+                        }
+                        def.expr = qualify_expr(def.expr.clone(), &import_map, &scope);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Collect all names bound by a pattern (for scope tracking).
+fn collect_pattern_names(pattern: &Pattern, names: &mut std::collections::HashSet<String>) {
+    match pattern {
+        Pattern::Ident(name) | Pattern::SubjectIdent(name) => {
+            names.insert(name.name.clone());
+        }
+        Pattern::At {
+            name, pattern: inner, ..
+        } => {
+            names.insert(name.name.clone());
+            collect_pattern_names(inner, names);
+        }
+        Pattern::Constructor { args, .. } => {
+            for arg in args {
+                collect_pattern_names(arg, names);
+            }
+        }
+        Pattern::Tuple { items, .. } | Pattern::List { items, rest: None, .. } => {
+            for item in items {
+                collect_pattern_names(item, names);
+            }
+        }
+        Pattern::List {
+            items, rest: Some(rest), ..
+        } => {
+            for item in items {
+                collect_pattern_names(item, names);
+            }
+            collect_pattern_names(rest, names);
+        }
+        Pattern::Record { fields, .. } => {
+            for field in fields {
+                collect_pattern_names(&field.pattern, names);
+            }
+        }
+        Pattern::Wildcard(_) | Pattern::Literal(_) => {}
+    }
+}
+
+/// Rewrite bare identifiers to their module-qualified forms.
+///
+/// `scope` tracks names currently bound by lambda params, let/bind, or match-arm patterns
+/// that shadow imports.
+fn qualify_expr(
+    expr: Expr,
+    import_map: &std::collections::HashMap<String, String>,
+    scope: &std::collections::HashSet<String>,
+) -> Expr {
+    match expr {
+        Expr::Ident(ref name) => {
+            if !scope.contains(&name.name) {
+                if let Some(qualified) = import_map.get(&name.name) {
+                    return Expr::Ident(SpannedName {
+                        name: qualified.clone(),
+                        span: name.span.clone(),
+                    });
+                }
+            }
+            expr
+        }
+        Expr::Call { func, args, span } => Expr::Call {
+            func: Box::new(qualify_expr(*func, import_map, scope)),
+            args: args
+                .into_iter()
+                .map(|a| qualify_expr(a, import_map, scope))
+                .collect(),
+            span,
+        },
+        Expr::Lambda { params, body, span } => {
+            let mut inner = scope.clone();
+            for param in &params {
+                collect_pattern_names(param, &mut inner);
+            }
+            Expr::Lambda {
+                params,
+                body: Box::new(qualify_expr(*body, import_map, &inner)),
+                span,
+            }
+        }
+        Expr::Match {
+            scrutinee,
+            arms,
+            span,
+        } => Expr::Match {
+            scrutinee: scrutinee.map(|e| Box::new(qualify_expr(*e, import_map, scope))),
+            arms: arms
+                .into_iter()
+                .map(|arm| {
+                    let mut inner = scope.clone();
+                    collect_pattern_names(&arm.pattern, &mut inner);
+                    MatchArm {
+                        pattern: arm.pattern,
+                        guard: arm.guard.map(|g| qualify_expr(g, import_map, &inner)),
+                        body: qualify_expr(arm.body, import_map, &inner),
+                        span: arm.span,
+                    }
+                })
+                .collect(),
+            span,
+        },
+        Expr::Block { kind, items, span } => Expr::Block {
+            kind,
+            items: qualify_block_items(items, import_map, scope),
+            span,
+        },
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+            span,
+        } => Expr::If {
+            cond: Box::new(qualify_expr(*cond, import_map, scope)),
+            then_branch: Box::new(qualify_expr(*then_branch, import_map, scope)),
+            else_branch: Box::new(qualify_expr(*else_branch, import_map, scope)),
+            span,
+        },
+        Expr::Binary {
+            op,
+            left,
+            right,
+            span,
+        } => Expr::Binary {
+            op,
+            left: Box::new(qualify_expr(*left, import_map, scope)),
+            right: Box::new(qualify_expr(*right, import_map, scope)),
+            span,
+        },
+        Expr::FieldAccess { base, field, span } => Expr::FieldAccess {
+            base: Box::new(qualify_expr(*base, import_map, scope)),
+            field,
+            span,
+        },
+        Expr::Index { base, index, span } => Expr::Index {
+            base: Box::new(qualify_expr(*base, import_map, scope)),
+            index: Box::new(qualify_expr(*index, import_map, scope)),
+            span,
+        },
+        Expr::List { items, span } => Expr::List {
+            items: items
+                .into_iter()
+                .map(|item| ListItem {
+                    expr: qualify_expr(item.expr, import_map, scope),
+                    spread: item.spread,
+                    span: item.span,
+                })
+                .collect(),
+            span,
+        },
+        Expr::Tuple { items, span } => Expr::Tuple {
+            items: items
+                .into_iter()
+                .map(|i| qualify_expr(i, import_map, scope))
+                .collect(),
+            span,
+        },
+        Expr::Record { fields, span } => Expr::Record {
+            fields: fields
+                .into_iter()
+                .map(|f| RecordField {
+                    path: f.path,
+                    value: qualify_expr(f.value, import_map, scope),
+                    spread: f.spread,
+                    span: f.span,
+                })
+                .collect(),
+            span,
+        },
+        Expr::PatchLit { fields, span } => Expr::PatchLit {
+            fields: fields
+                .into_iter()
+                .map(|f| RecordField {
+                    path: f.path,
+                    value: qualify_expr(f.value, import_map, scope),
+                    spread: f.spread,
+                    span: f.span,
+                })
+                .collect(),
+            span,
+        },
+        Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
+            base: Box::new(qualify_expr(*base, import_map, scope)),
+            suffix,
+            span,
+        },
+        Expr::UnaryNeg { expr, span } => Expr::UnaryNeg {
+            expr: Box::new(qualify_expr(*expr, import_map, scope)),
+            span,
+        },
+        Expr::TextInterpolate { parts, span } => Expr::TextInterpolate {
+            parts: parts
+                .into_iter()
+                .map(|p| match p {
+                    TextPart::Text { .. } => p,
+                    TextPart::Expr { expr, span } => TextPart::Expr {
+                        expr: Box::new(qualify_expr(*expr, import_map, scope)),
+                        span,
+                    },
+                })
+                .collect(),
+            span,
+        },
+        Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => expr,
+    }
+}
+
+/// Qualify block items, threading scope through let/bind patterns.
+fn qualify_block_items(
+    items: Vec<BlockItem>,
+    import_map: &std::collections::HashMap<String, String>,
+    scope: &std::collections::HashSet<String>,
+) -> Vec<BlockItem> {
+    let mut current_scope = scope.clone();
+    items
+        .into_iter()
+        .map(|item| match item {
+            BlockItem::Bind {
+                pattern,
+                expr,
+                span,
+            } => {
+                let rewritten = qualify_expr(expr, import_map, &current_scope);
+                collect_pattern_names(&pattern, &mut current_scope);
+                BlockItem::Bind {
+                    pattern,
+                    expr: rewritten,
+                    span,
+                }
+            }
+            BlockItem::Let {
+                pattern,
+                expr,
+                span,
+            } => {
+                let rewritten = qualify_expr(expr, import_map, &current_scope);
+                collect_pattern_names(&pattern, &mut current_scope);
+                BlockItem::Let {
+                    pattern,
+                    expr: rewritten,
+                    span,
+                }
+            }
+            BlockItem::Filter { expr, span } => BlockItem::Filter {
+                expr: qualify_expr(expr, import_map, &current_scope),
+                span,
+            },
+            BlockItem::Yield { expr, span } => BlockItem::Yield {
+                expr: qualify_expr(expr, import_map, &current_scope),
+                span,
+            },
+            BlockItem::Recurse { expr, span } => BlockItem::Recurse {
+                expr: qualify_expr(expr, import_map, &current_scope),
+                span,
+            },
+            BlockItem::Expr { expr, span } => BlockItem::Expr {
+                expr: qualify_expr(expr, import_map, &current_scope),
+                span,
+            },
+            BlockItem::When { cond, effect, span } => BlockItem::When {
+                cond: qualify_expr(cond, import_map, &current_scope),
+                effect: qualify_expr(effect, import_map, &current_scope),
+                span,
+            },
+            BlockItem::Unless { cond, effect, span } => BlockItem::Unless {
+                cond: qualify_expr(cond, import_map, &current_scope),
+                effect: qualify_expr(effect, import_map, &current_scope),
+                span,
+            },
+            BlockItem::Given {
+                cond,
+                fail_expr,
+                span,
+            } => BlockItem::Given {
+                cond: qualify_expr(cond, import_map, &current_scope),
+                fail_expr: qualify_expr(fail_expr, import_map, &current_scope),
+                span,
+            },
+            BlockItem::On {
+                transition,
+                handler,
+                span,
+            } => BlockItem::On {
+                transition: qualify_expr(transition, import_map, &current_scope),
+                handler: qualify_expr(handler, import_map, &current_scope),
+                span,
+            },
+        })
+        .collect()
+}
+
 fn apply_static_decorators(modules: &mut [Module]) -> Vec<FileDiagnostic> {
     fn has_decorator(decorators: &[Decorator], name: &str) -> bool {
         decorators

@@ -316,26 +316,12 @@ pub(crate) fn register_builtins(env: &Env) {
 
     env.set(
         "load".to_string(),
-        builtin("load", 1, |mut args, runtime| {
+        builtin("load", 1, |mut args, _runtime| {
             let value = args.remove(0);
             match value {
                 Value::Source(source) => Ok(Value::Effect(source.effect.clone())),
                 // Back-compat: older code treated `load` as an `Effect`-identity.
                 Value::Effect(_) => Ok(value),
-                // Delegate to aivi.database.load for Table records (JIT name
-                // resolution currently picks the core `load` even when
-                // `use aivi.database` is in scope).
-                Value::Record(_) => {
-                    if let Some(db_load) = runtime.ctx.globals.get("aivi.database.load") {
-                        let db_load = runtime.force_value(db_load)?;
-                        runtime.apply(db_load, value)
-                    } else {
-                        Err(RuntimeError::Message(
-                            "load expects a Source or Table (database module not loaded)"
-                                .to_string(),
-                        ))
-                    }
-                }
                 _ => Err(RuntimeError::Message("load expects a Source".to_string())),
             }
         }),

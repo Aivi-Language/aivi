@@ -24,7 +24,8 @@ pub mod formatter {
 
 pub mod surface {
     pub use aivi_core::{
-        lower_modules_to_arena, parse_modules, parse_modules_from_tokens, ArenaBlockItem,
+        lower_modules_to_arena, parse_modules, parse_modules_from_tokens, resolve_import_names,
+        ArenaBlockItem,
         ArenaBlockKind, ArenaClassDecl, ArenaClassMember, ArenaDecorator, ArenaDef,
         ArenaDomainDecl, ArenaDomainItem, ArenaExpr, ArenaInstanceDecl, ArenaListItem,
         ArenaLiteral, ArenaMachineDecl, ArenaMachineState, ArenaMachineTransition, ArenaMatchArm,
@@ -101,7 +102,7 @@ pub use aivi_core::{
 };
 pub use aivi_core::{
     embedded_stdlib_modules, embedded_stdlib_source, lower_modules_to_arena, parse_modules,
-    parse_modules_from_tokens, ArenaBlockItem, ArenaBlockKind, ArenaClassDecl, ArenaClassMember,
+    parse_modules_from_tokens, resolve_import_names, ArenaBlockItem, ArenaBlockKind, ArenaClassDecl, ArenaClassMember,
     ArenaDecorator, ArenaDef, ArenaDomainDecl, ArenaDomainItem, ArenaExpr, ArenaInstanceDecl,
     ArenaListItem, ArenaLiteral, ArenaMachineDecl, ArenaMachineState, ArenaMachineTransition,
     ArenaMatchArm, ArenaModule, ArenaModuleItem, ArenaPathSegment, ArenaPattern, ArenaRecordField,

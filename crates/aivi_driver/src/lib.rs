@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 use aivi_core::{
     check_modules, elaborate_expected_coercions, embedded_stdlib_modules,
     file_diagnostics_have_errors, format_text, parse_modules, parse_modules_from_tokens,
-    render_diagnostics, CstBundle, CstFile, Diagnostic, FileDiagnostic, HirProgram, Module,
-    ModuleItem,
+    render_diagnostics, resolve_import_names, CstBundle, CstFile, Diagnostic, FileDiagnostic,
+    HirProgram, Module, ModuleItem,
 };
 
 type CgTypesMap = std::collections::HashMap<
@@ -105,6 +105,7 @@ pub fn load_modules_from_paths(paths: &[PathBuf]) -> Result<Vec<Module>, AiviErr
     }
     let mut stdlib_modules = embedded_stdlib_modules();
     stdlib_modules.append(&mut modules);
+    resolve_import_names(&mut stdlib_modules);
     Ok(stdlib_modules)
 }
 
@@ -136,6 +137,7 @@ pub fn desugar_target(target: &str) -> Result<HirProgram, AiviError> {
     }
     let mut stdlib_modules = embedded_stdlib_modules();
     stdlib_modules.append(&mut modules);
+    resolve_import_names(&mut stdlib_modules);
     Ok(aivi_core::desugar_modules(&stdlib_modules))
 }
 
@@ -153,6 +155,7 @@ pub fn desugar_target_lenient(target: &str) -> Result<HirProgram, AiviError> {
     }
     let mut stdlib_modules = embedded_stdlib_modules();
     stdlib_modules.append(&mut modules);
+    resolve_import_names(&mut stdlib_modules);
     Ok(aivi_core::desugar_modules(&stdlib_modules))
 }
 
@@ -247,6 +250,7 @@ pub fn desugar_target_typed(target: &str) -> Result<HirProgram, AiviError> {
     }
     let mut stdlib_modules = embedded_stdlib_modules();
     stdlib_modules.append(&mut modules);
+    resolve_import_names(&mut stdlib_modules);
 
     let mut diagnostics = check_modules(&stdlib_modules);
     if diagnostics.is_empty() {
@@ -279,6 +283,7 @@ pub fn desugar_target_with_cg_types(
     }
     let mut stdlib_modules = embedded_stdlib_modules();
     stdlib_modules.append(&mut modules);
+    resolve_import_names(&mut stdlib_modules);
 
     let mut diagnostics = check_modules(&stdlib_modules);
     if diagnostics.is_empty() {
@@ -314,6 +319,7 @@ pub fn desugar_target_with_cg_types_and_surface(
     }
     let mut stdlib_modules = embedded_stdlib_modules();
     stdlib_modules.append(&mut modules);
+    resolve_import_names(&mut stdlib_modules);
 
     let mut diagnostics = check_modules(&stdlib_modules);
     if diagnostics.is_empty() {

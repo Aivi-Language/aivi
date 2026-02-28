@@ -191,6 +191,11 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
         match expr {
             Expr::Ident(name) => {
                 out.insert(name.name.clone());
+                // If resolve_import_names qualified this name (e.g. "aivi.testing.assertEq"),
+                // also record the bare tail so the unused-import checker still sees it.
+                if let Some(pos) = name.name.rfind('.') {
+                    out.insert(name.name[pos + 1..].to_string());
+                }
             }
             Expr::UnaryNeg { expr, .. } => {
                 collect_expr(expr, out);
@@ -459,17 +464,29 @@ fn check_defs(
                     .iter()
                     .map(|item| item.name.name.as_str())
                     .collect();
-                for export in &target.exports {
+                // If the target has an explicit export list, use it;
+                // otherwise all defs in the module are public.
+                let importable_names: Vec<String> = if target.exports.is_empty() {
+                    target
+                        .items
+                        .iter()
+                        .filter_map(|item| match item {
+                            ModuleItem::Def(def) => Some(def.name.name.clone()),
+                            _ => None,
+                        })
+                        .collect()
+                } else {
+                    target.exports.iter().map(|e| e.name.name.clone()).collect()
+                };
+                for name in &importable_names {
                     scope.insert(
-                        export.name.name.clone(),
-                        deprecated_message_for_export(target, &export.name.name),
+                        name.clone(),
+                        deprecated_message_for_export(target, name),
                     );
-                    if use_decl.alias.is_some() {
-                        scope.insert(
-                            format!("{}.{}", use_decl.module.name, export.name.name),
-                            deprecated_message_for_export(target, &export.name.name),
-                        );
-                    }
+                    scope.insert(
+                        format!("{}.{}", use_decl.module.name, name),
+                        deprecated_message_for_export(target, name),
+                    );
                 }
                 for item in &target.items {
                     if let ModuleItem::ClassDecl(class_decl) = item {
@@ -478,12 +495,10 @@ fn check_defs(
                         }
                         for member in &class_decl.members {
                             scope.insert(member.name.name.clone(), None);
-                            if use_decl.alias.is_some() {
-                                scope.insert(
-                                    format!("{}.{}", use_decl.module.name, member.name.name),
-                                    None,
-                                );
-                            }
+                            scope.insert(
+                                format!("{}.{}", use_decl.module.name, member.name.name),
+                                None,
+                            );
                         }
                     }
                 }
@@ -510,27 +525,23 @@ fn check_defs(
                                 item.name.name.clone(),
                                 deprecated_message_for_export(target, &item.name.name),
                             );
-                            if use_decl.alias.is_some() {
-                                scope.insert(
-                                    format!("{}.{}", use_decl.module.name, item.name.name),
-                                    deprecated_message_for_export(target, &item.name.name),
-                                );
-                            }
+                            scope.insert(
+                                format!("{}.{}", use_decl.module.name, item.name.name),
+                                deprecated_message_for_export(target, &item.name.name),
+                            );
                             if exported.contains(item.name.name.as_str()) {
                                 for module_item in &target.items {
                                     if let ModuleItem::ClassDecl(class_decl) = module_item {
                                         if class_decl.name.name == item.name.name {
                                             for member in &class_decl.members {
                                                 scope.insert(member.name.name.clone(), None);
-                                                if use_decl.alias.is_some() {
-                                                    scope.insert(
-                                                        format!(
-                                                            "{}.{}",
-                                                            use_decl.module.name, member.name.name
-                                                        ),
-                                                        None,
-                                                    );
-                                                }
+                                                scope.insert(
+                                                    format!(
+                                                        "{}.{}",
+                                                        use_decl.module.name, member.name.name
+                                                    ),
+                                                    None,
+                                                );
                                             }
                                         }
                                     }
@@ -561,12 +572,10 @@ fn check_defs(
                                             def.name.name.clone(),
                                             deprecated_message_for_export(target, &def.name.name),
                                         );
-                                        if use_decl.alias.is_some() {
-                                            scope.insert(
-                                                format!("{}.{}", use_decl.module.name, def.name.name),
-                                                deprecated_message_for_export(target, &def.name.name),
-                                            );
-                                        }
+                                        scope.insert(
+                                            format!("{}.{}", use_decl.module.name, def.name.name),
+                                            deprecated_message_for_export(target, &def.name.name),
+                                        );
                                     }
                                     DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                                 }

@@ -233,7 +233,6 @@ impl TypeChecker {
     ) {
         for use_decl in &module.uses {
             if let Some(exports) = module_exports.get(&use_decl.module.name) {
-                let qualify = use_decl.alias.is_some();
                 if use_decl.wildcard {
                     for (name, scheme) in exports {
                         if scheme.len() == 1 {
@@ -241,18 +240,18 @@ impl TypeChecker {
                         } else {
                             env.insert_overloads(name.clone(), scheme.clone());
                         }
-                        if qualify {
-                            if scheme.len() == 1 {
-                                env.insert(
-                                    format!("{}.{}", use_decl.module.name, name),
-                                    scheme[0].clone(),
-                                );
-                            } else {
-                                env.insert_overloads(
-                                    format!("{}.{}", use_decl.module.name, name),
-                                    scheme.clone(),
-                                );
-                            }
+                        // Always register qualified form so resolve_import_names
+                        // rewrites can be type-checked.
+                        if scheme.len() == 1 {
+                            env.insert(
+                                format!("{}.{}", use_decl.module.name, name),
+                                scheme[0].clone(),
+                            );
+                        } else {
+                            env.insert_overloads(
+                                format!("{}.{}", use_decl.module.name, name),
+                                scheme.clone(),
+                            );
                         }
                     }
                 } else {
@@ -268,24 +267,22 @@ impl TypeChecker {
                                             schemes.clone(),
                                         );
                                     }
-                                    if qualify {
-                                        if schemes.len() == 1 {
-                                            env.insert(
-                                                format!(
-                                                    "{}.{}",
-                                                    use_decl.module.name, item.name.name
-                                                ),
-                                                schemes[0].clone(),
-                                            );
-                                        } else {
-                                            env.insert_overloads(
-                                                format!(
-                                                    "{}.{}",
-                                                    use_decl.module.name, item.name.name
-                                                ),
-                                                schemes.clone(),
-                                            );
-                                        }
+                                    if schemes.len() == 1 {
+                                        env.insert(
+                                            format!(
+                                                "{}.{}",
+                                                use_decl.module.name, item.name.name
+                                            ),
+                                            schemes[0].clone(),
+                                        );
+                                    } else {
+                                        env.insert_overloads(
+                                            format!(
+                                                "{}.{}",
+                                                use_decl.module.name, item.name.name
+                                            ),
+                                            schemes.clone(),
+                                        );
                                     }
                                 }
                             }
@@ -305,18 +302,16 @@ impl TypeChecker {
                                         } else {
                                             env.insert_overloads(member.clone(), schemes.clone());
                                         }
-                                        if qualify {
-                                            if schemes.len() == 1 {
-                                                env.insert(
-                                                    format!("{}.{}", use_decl.module.name, member),
-                                                    schemes[0].clone(),
-                                                );
-                                            } else {
-                                                env.insert_overloads(
-                                                    format!("{}.{}", use_decl.module.name, member),
-                                                    schemes.clone(),
-                                                );
-                                            }
+                                        if schemes.len() == 1 {
+                                            env.insert(
+                                                format!("{}.{}", use_decl.module.name, member),
+                                                schemes[0].clone(),
+                                            );
+                                        } else {
+                                            env.insert_overloads(
+                                                format!("{}.{}", use_decl.module.name, member),
+                                                schemes.clone(),
+                                            );
                                         }
                                     }
                                 }

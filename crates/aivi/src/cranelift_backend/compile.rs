@@ -347,9 +347,13 @@ fn jit_compile_into_runtime(
 
     // Install compiled globals into the runtime.
     for (name, value) in compiled_globals {
-        // Source defs cannot shadow builtins.
-        if let Some(Value::Builtin(_)) = runtime.ctx.globals.get(&name) {
-            continue;
+        // Short (unqualified) names cannot shadow builtins, but qualified names
+        // (e.g. `aivi.database.load`) coexist — they are looked up explicitly
+        // when import resolution has rewritten a bare name to its qualified form.
+        if !name.contains('.') {
+            if let Some(Value::Builtin(_)) = runtime.ctx.globals.get(&name) {
+                continue;
+            }
         }
         runtime.ctx.globals.set(name, value);
     }
