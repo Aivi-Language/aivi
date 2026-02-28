@@ -550,6 +550,14 @@ impl Backend {
                     Self::collect_block_item_references(item, ident, text, uri, locations);
                 }
             }
+            Expr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(val) = &sub.value {
+                        Self::collect_expr_references(val, ident, text, uri, locations);
+                    }
+                }
+                Self::collect_expr_references(body, ident, text, uri, locations);
+            }
             Expr::Raw { .. } => {}
         }
     }

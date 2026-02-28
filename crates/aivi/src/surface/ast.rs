@@ -345,6 +345,27 @@ pub enum Expr {
         text: String,
         span: Span,
     },
+    /// `mock path = value (mock path = value)* in body` — scoped binding substitution.
+    ///
+    /// Each substitution temporarily overrides a qualified binding within the
+    /// lexical scope of `body`. Deep scoping: transitive calls see the mock.
+    Mock {
+        substitutions: Vec<MockSubstitution>,
+        body: Box<Expr>,
+        span: Span,
+    },
+}
+
+/// A single `mock path = value` binding within a `mock ... in` expression.
+#[derive(Debug, Clone)]
+pub struct MockSubstitution {
+    /// Dotted path to the binding being mocked (e.g. `rest.get`).
+    pub path: Vec<SpannedName>,
+    /// Whether this is a `mock snapshot` (record/replay) substitution.
+    pub snapshot: bool,
+    /// Replacement expression (absent for `mock snapshot` — replayed from file).
+    pub value: Option<Expr>,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]

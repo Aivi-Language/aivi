@@ -39,7 +39,7 @@ The runner prints a summary of passed / failed tests and returns a non-zero exit
 
 ### Mocking REST/HTTP requests in tests
 
-For request-heavy code, pass the request function as a dependency and use a typed mock in `@test` cases.
+For request-heavy code, use [`mock ... in` expressions](../../syntax/mock_expression.md) to replace external dependencies without restructuring your production code:
 
 ```aivi
 use aivi.testing
@@ -47,19 +47,32 @@ use aivi.rest
 
 User = { id: Int, name: Text }
 
-fetchUsers = getUsers => getUsers ~u(https://api.example.com/users)
-
-// Production wiring
-liveFetchUsers = fetchUsers rest.get
+fetchUsers = rest.get ~u(https://api.example.com/users)
 
 @test "fetch users with a mocked request"
-fetch_users_with_mock = do Effect {
-  mockGet = _ => pure [{ id: 1, name: "Ada" }]
-  users <- fetchUsers mockGet
-
-  _ <- assertEq (List.length users) 1
-  users match
-    | [u, ..._] => assertEq u.name "Ada"
-    | []        => fail "expected one mocked user"
-}
+fetchUsersWithMock =
+  mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
+  in do Effect {
+    users <- fetchUsers
+    _ <- assertEq (List.length users) 1
+    users match
+      | [u, ..._] => assertEq u.name "Ada"
+      | []        => fail "expected one mocked user"
+  }
 ```
+
+Mock expressions provide **deep scoping** — any function called within the body that
+internally references the mocked binding will see the mock value. See the
+[Mock Expressions](../../syntax/mock_expression.md) spec for full details including
+snapshot mocks and multiple mock bindings.
+
+### Snapshot assertions
+
+`assertSnapshot` compares a value against a stored `.snap` file:
+
+```aivi
+assertSnapshot : Text -> A -> Effect Text Unit
+```
+
+On first run (or `aivi test --update-snapshots`), the snapshot file is created.
+On subsequent runs, the value is compared against the stored snapshot.

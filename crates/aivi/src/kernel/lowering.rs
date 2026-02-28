@@ -378,6 +378,17 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
                 }
             }
         }
+        HirExpr::Mock { id, substitutions, body } => {
+            if *id > *max {
+                *max = *id;
+            }
+            for sub in substitutions {
+                if let Some(value) = &sub.value {
+                    find_max_id_expr(value, max);
+                }
+            }
+            find_max_id_expr(body, max);
+        }
     }
 }
 

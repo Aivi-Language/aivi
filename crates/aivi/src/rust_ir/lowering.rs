@@ -176,6 +176,23 @@ pub enum RustIrExpr {
         id: u32,
         text: String,
     },
+    /// Scoped binding substitution.
+    Mock {
+        id: u32,
+        substitutions: Vec<RustIrMockSubstitution>,
+        body: Box<RustIrExpr>,
+    },
+}
+
+/// A single mock substitution at the RustIr level.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RustIrMockSubstitution {
+    /// Fully-qualified dotted path (e.g. `"aivi.rest.get"`).
+    pub path: String,
+    /// Whether this is a snapshot mock (record/replay).
+    pub snapshot: bool,
+    /// Replacement expression (`None` for snapshot mocks).
+    pub value: Option<RustIrExpr>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -543,6 +560,30 @@ fn lower_expr(
             },
         },
         KernelExpr::Raw { id, text } => RustIrExpr::Raw { id, text },
+        KernelExpr::Mock {
+            id,
+            substitutions,
+            body,
+        } => {
+            let subs = substitutions
+                .into_iter()
+                .map(|sub| {
+                    Ok(RustIrMockSubstitution {
+                        path: sub.path,
+                        snapshot: sub.snapshot,
+                        value: sub
+                            .value
+                            .map(|v| lower_expr(v, globals, locals))
+                            .transpose()?,
+                    })
+                })
+                .collect::<Result<Vec<_>, AiviError>>()?;
+            RustIrExpr::Mock {
+                id,
+                substitutions: subs,
+                body: Box::new(lower_expr(*body, globals, locals)?),
+            }
+        }
     })
 }
 
@@ -644,6 +685,7 @@ fn rust_ir_expr_id(expr: &RustIrExpr) -> u32 {
         | RustIrExpr::If { id, .. }
         | RustIrExpr::Binary { id, .. }
         | RustIrExpr::Block { id, .. }
-        | RustIrExpr::Raw { id, .. } => *id,
+        | RustIrExpr::Raw { id, .. }
+        | RustIrExpr::Mock { id, .. } => *id,
     }
 }

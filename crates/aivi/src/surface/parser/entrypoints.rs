@@ -434,6 +434,20 @@ fn expand_module_aliases(modules: &mut [Module]) {
             Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => {
                 expr
             }
+            Expr::Mock { substitutions, body, span } => {
+                let substitutions = substitutions
+                    .into_iter()
+                    .map(|mut sub| {
+                        sub.value = sub.value.map(|v| rewrite_expr(v, aliases));
+                        sub
+                    })
+                    .collect();
+                Expr::Mock {
+                    substitutions,
+                    body: Box::new(rewrite_expr(*body, aliases)),
+                    span,
+                }
+            }
         }
     }
 
@@ -829,6 +843,43 @@ fn qualify_expr(
             span,
         },
         Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => expr,
+        Expr::Mock {
+            substitutions,
+            body,
+            span,
+        } => Expr::Mock {
+            substitutions: substitutions
+                .into_iter()
+                .map(|sub| {
+                    // Qualify the mock path segments against imports.
+                    let first_name = sub.path.first().map(|s| s.name.as_str()).unwrap_or("");
+                    let qualified_first =
+                        import_map.get(first_name).cloned().unwrap_or_default();
+                    let path = if !qualified_first.is_empty() {
+                        // Replace the first segment with its qualified form split by '.'.
+                        let mut parts: Vec<SpannedName> = qualified_first
+                            .split('.')
+                            .map(|seg| SpannedName {
+                                name: seg.into(),
+                                span: sub.path.first().unwrap().span.clone(),
+                            })
+                            .collect();
+                        parts.extend(sub.path.into_iter().skip(1));
+                        parts
+                    } else {
+                        sub.path
+                    };
+                    MockSubstitution {
+                        path,
+                        snapshot: sub.snapshot,
+                        value: sub.value.map(|v| qualify_expr(v, import_map, scope)),
+                        span: sub.span,
+                    }
+                })
+                .collect(),
+            body: Box::new(qualify_expr(*body, import_map, scope)),
+            span,
+        },
     }
 }
 

@@ -150,6 +150,23 @@ pub enum KernelExpr {
         id: u32,
         text: String,
     },
+    /// Scoped binding substitution: save → set → eval body → restore.
+    Mock {
+        id: u32,
+        substitutions: Vec<KernelMockSubstitution>,
+        body: Box<KernelExpr>,
+    },
+}
+
+/// A single mock substitution at the Kernel level.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct KernelMockSubstitution {
+    /// Fully-qualified dotted path (e.g. `"aivi.rest.get"`).
+    pub path: String,
+    /// Whether this is a snapshot mock (record/replay).
+    pub snapshot: bool,
+    /// Replacement expression (`None` for snapshot mocks).
+    pub value: Option<KernelExpr>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -483,6 +500,22 @@ fn lower_expr(expr: HirExpr, id_gen: &mut IdGen) -> KernelExpr {
             },
         },
         HirExpr::Raw { id, text } => KernelExpr::Raw { id, text },
+        HirExpr::Mock {
+            id,
+            substitutions,
+            body,
+        } => KernelExpr::Mock {
+            id,
+            substitutions: substitutions
+                .into_iter()
+                .map(|sub| KernelMockSubstitution {
+                    path: sub.path,
+                    snapshot: sub.snapshot,
+                    value: sub.value.map(|v| lower_expr(v, id_gen)),
+                })
+                .collect(),
+            body: Box::new(lower_expr(*body, id_gen)),
+        },
     }
 }
 

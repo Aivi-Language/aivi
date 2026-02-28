@@ -23,7 +23,7 @@ use cranelift_module::{DataDescription, Linkage, Module};
 use crate::cg_type::CgType;
 use crate::rust_ir::{
     RustIrBlockItem, RustIrBlockKind, RustIrExpr, RustIrListItem, RustIrLiteral, RustIrMatchArm,
-    RustIrPattern, RustIrRecordField, RustIrTextPart,
+    RustIrMockSubstitution, RustIrPattern, RustIrRecordField, RustIrTextPart,
 };
 
 /// Pointer-sized integer type used for boxed `*mut Value` pointers.
@@ -784,6 +784,13 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             // ----- Special -----
             RustIrExpr::DebugFn { body, .. } => self.lower_expr(builder, body),
             RustIrExpr::Raw { text, .. } => self.lower_lit_string(builder, text),
+
+            // ----- Mocking -----
+            RustIrExpr::Mock {
+                substitutions,
+                body,
+                ..
+            } => self.lower_mock(builder, substitutions, body),
         }
     }
 
@@ -885,7 +892,39 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         );
     }
 
-    /// Lower a bare constructor reference (e.g. `Sqlite`, `GtkAttribute`) by
+    /// Lower `mock ... in body`: save old globals, install mocks, eval body, restore.
+    fn lower_mock(
+        &mut self,
+        builder: &mut FunctionBuilder<'_>,
+        substitutions: &[RustIrMockSubstitution],
+        body: &RustIrExpr,
+    ) -> TypedValue {
+        // 1. Save old values for each substitution.
+        let mut saved: Vec<(&str, TypedValue)> = Vec::new();
+        for sub in substitutions {
+            let old_val = self.lower_global(builder, &sub.path);
+            saved.push((&sub.path, old_val));
+        }
+
+        // 2. Install mock values.
+        for sub in substitutions {
+            if let Some(ref value_expr) = sub.value {
+                let mock_val = self.lower_expr(builder, value_expr);
+                self.emit_set_global(builder, &sub.path, mock_val.val);
+            }
+            // snapshot mocks: TODO — call the real function and record, or replay from snapshot.
+        }
+
+        // 3. Evaluate body.
+        let result = self.lower_expr(builder, body);
+
+        // 4. Restore original values (reverse order for nested correctness).
+        for (path, old_val) in saved.into_iter().rev() {
+            self.emit_set_global(builder, path, old_val.val);
+        }
+
+        result
+    }
     /// allocating a zero-arg `Value::Constructor` directly instead of looking
     /// it up in the globals map.  When applied to arguments later, `apply()`
     /// accumulates them naturally.

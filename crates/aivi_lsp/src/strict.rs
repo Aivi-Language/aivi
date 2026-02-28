@@ -124,7 +124,8 @@ fn expr_span(expr: &aivi::Expr) -> aivi::Span {
         | aivi::Expr::If { span, .. }
         | aivi::Expr::Binary { span, .. }
         | aivi::Expr::Block { span, .. }
-        | aivi::Expr::Raw { span, .. } => span.clone(),
+        | aivi::Expr::Raw { span, .. }
+        | aivi::Expr::Mock { span, .. } => span.clone(),
     }
 }
 
@@ -777,6 +778,14 @@ fn strict_tuple_intent(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
             | aivi::Expr::Literal(_)
             | aivi::Expr::FieldSection { .. }
             | aivi::Expr::Raw { .. } => {}
+            aivi::Expr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(v) = &sub.value {
+                        walk_expr(v, out);
+                    }
+                }
+                walk_expr(body, out);
+            }
         }
     }
 
@@ -947,6 +956,14 @@ fn strict_pipe_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
             | aivi::Expr::Literal(_)
             | aivi::Expr::FieldSection { .. }
             | aivi::Expr::Raw { .. } => {}
+            aivi::Expr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(v) = &sub.value {
+                        walk_expr(v, out);
+                    }
+                }
+                walk_expr(body, out);
+            }
         }
     }
 
@@ -1101,6 +1118,14 @@ fn strict_record_field_access(file_modules: &[Module], out: &mut Vec<Diagnostic>
             | aivi::Expr::Literal(_)
             | aivi::Expr::FieldSection { .. }
             | aivi::Expr::Raw { .. } => {}
+            aivi::Expr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(v) = &sub.value {
+                        walk_expr(v, out);
+                    }
+                }
+                walk_expr(body, out);
+            }
         }
     }
 
@@ -1288,6 +1313,12 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
             aivi::Expr::Literal(_) | aivi::Expr::FieldSection { .. } | aivi::Expr::Raw { .. } => {
                 false
             }
+            aivi::Expr::Mock { substitutions, body, .. } => {
+                substitutions
+                    .iter()
+                    .any(|sub| sub.value.as_ref().is_some_and(|v| expr_uses_name_free(v, name)))
+                    || expr_uses_name_free(body, name)
+            }
         }
     }
 
@@ -1426,6 +1457,14 @@ fn strict_pattern_discipline(file_modules: &[Module], out: &mut Vec<Diagnostic>)
             | aivi::Expr::Literal(_)
             | aivi::Expr::FieldSection { .. }
             | aivi::Expr::Raw { .. } => {}
+            aivi::Expr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(v) = &sub.value {
+                        walk_expr(v, out);
+                    }
+                }
+                walk_expr(body, out);
+            }
             aivi::Expr::Match { .. } => unreachable!(),
         }
     }
@@ -1549,6 +1588,12 @@ fn strict_block_shape(file_modules: &[Module], out: &mut Vec<Diagnostic>) {
             }),
             aivi::Expr::Literal(_) | aivi::Expr::FieldSection { .. } | aivi::Expr::Raw { .. } => {
                 false
+            }
+            aivi::Expr::Mock { substitutions, body, .. } => {
+                substitutions
+                    .iter()
+                    .any(|sub| sub.value.as_ref().is_some_and(|v| expr_uses_name(v, name)))
+                    || expr_uses_name(body, name)
             }
         }
     }
@@ -1824,6 +1869,14 @@ fn strict_missing_import_suggestions(
                 }
             }
             aivi::Expr::Literal(_) | aivi::Expr::FieldSection { .. } | aivi::Expr::Raw { .. } => {}
+            aivi::Expr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(v) = &sub.value {
+                        collect_idents(v, out);
+                    }
+                }
+                collect_idents(body, out);
+            }
         }
     }
 
@@ -2067,6 +2120,14 @@ fn strict_expected_type_coercions(
             | aivi::Expr::Literal(_)
             | aivi::Expr::FieldSection { .. }
             | aivi::Expr::Raw { .. } => {}
+            aivi::Expr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(v) = &sub.value {
+                        collect_calls(v, out);
+                    }
+                }
+                collect_calls(body, out);
+            }
         }
     }
 
@@ -2196,7 +2257,8 @@ fn strict_kernel_consistency(
             | KernelExpr::If { id, .. }
             | KernelExpr::Binary { id, .. }
             | KernelExpr::Block { id, .. }
-            | KernelExpr::Raw { id, .. } => *id,
+            | KernelExpr::Raw { id, .. }
+            | KernelExpr::Mock { id, .. } => *id,
         };
 
         if !seen_ids.insert(id) {
@@ -2321,6 +2383,14 @@ fn strict_kernel_consistency(
             | KernelExpr::LitBool { .. }
             | KernelExpr::LitDateTime { .. }
             | KernelExpr::Raw { .. } => {}
+            KernelExpr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(v) = &sub.value {
+                        walk_expr(v, seen_ids, span_hint, out);
+                    }
+                }
+                walk_expr(body, seen_ids, span_hint, out);
+            }
         }
     }
 

@@ -25,6 +25,7 @@ fn check_debug_decorators(def: &Def, diagnostics: &mut Vec<FileDiagnostic>, modu
             | Expr::If { span, .. }
             | Expr::Binary { span, .. }
             | Expr::Block { span, .. }
+            | Expr::Mock { span, .. }
             | Expr::Raw { span, .. } => span.clone(),
         }
     }
@@ -316,6 +317,14 @@ fn check_expr(
             }
         }
         Expr::Raw { .. } => {}
+        Expr::Mock { substitutions, body, .. } => {
+            for sub in substitutions {
+                if let Some(value) = &sub.value {
+                    check_expr(value, scope, diagnostics, module, allow_unknown);
+                }
+            }
+            check_expr(body, scope, diagnostics, module, allow_unknown);
+        }
     }
 }
 

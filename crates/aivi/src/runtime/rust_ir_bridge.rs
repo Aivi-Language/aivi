@@ -213,6 +213,23 @@ fn lower_runtime_rust_ir_expr(expr: &rust_ir::RustIrExpr) -> Option<HirExpr> {
             id: *id,
             text: text.clone(),
         },
+        rust_ir::RustIrExpr::Mock {
+            id,
+            substitutions,
+            body,
+            ..
+        } => HirExpr::Mock {
+            id: *id,
+            substitutions: substitutions
+                .iter()
+                .map(|s| crate::hir::HirMockSubstitution {
+                    path: s.path.clone(),
+                    snapshot: s.snapshot,
+                    value: s.value.as_ref().and_then(lower_runtime_rust_ir_expr),
+                })
+                .collect(),
+            body: Box::new(lower_runtime_rust_ir_expr(body)?),
+        },
     })
 }
 

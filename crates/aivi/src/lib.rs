@@ -42,8 +42,8 @@ pub mod surface {
 pub mod hir {
     pub use aivi_core::{
         HirBlockItem, HirBlockKind, HirDef, HirExpr, HirListItem, HirLiteral, HirMatchArm,
-        HirModule, HirPathSegment, HirPattern, HirProgram, HirRecordField, HirRecordPatternField,
-        HirTextPart,
+        HirMockSubstitution, HirModule, HirPathSegment, HirPattern, HirProgram, HirRecordField,
+        HirRecordPatternField, HirTextPart,
     };
 
     pub fn desugar_modules(modules: &[crate::surface::Module]) -> crate::hir::HirProgram {

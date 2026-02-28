@@ -439,6 +439,13 @@ impl Backend {
                         position,
                     )
             }
+            aivi::Expr::Mock { substitutions, body, .. } => {
+                substitutions.iter().any(|sub| {
+                    sub.value.as_ref().is_some_and(|v| {
+                        Self::local_binding_visible_in_expr(v, ident, position, in_scope)
+                    })
+                }) || Self::local_binding_visible_in_expr(body, ident, position, in_scope)
+            }
             aivi::Expr::Literal(_) | aivi::Expr::Raw { .. } => false,
         }
     }
@@ -769,6 +776,14 @@ impl Backend {
                 None
             }
             Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } => None,
+            Expr::Mock { substitutions, body, .. } => substitutions
+                .iter()
+                .find_map(|sub| {
+                    sub.value
+                        .as_ref()
+                        .and_then(|v| Self::find_record_field_name_at_position(v, position))
+                })
+                .or_else(|| Self::find_record_field_name_at_position(body, position)),
             Expr::TextInterpolate { parts, .. } => parts.iter().find_map(|part| match part {
                 aivi::TextPart::Text { .. } => None,
                 aivi::TextPart::Expr { expr, .. } => {

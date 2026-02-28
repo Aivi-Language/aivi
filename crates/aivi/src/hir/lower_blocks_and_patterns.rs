@@ -303,6 +303,7 @@ fn contains_placeholder(expr: &Expr) -> bool {
             }
         }),
         Expr::Raw { .. } => false,
+        Expr::Mock { .. } => false,
     }
 }
 
@@ -321,7 +322,7 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
             }
             Expr::Ident(name)
         }
-        Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => expr,
+        Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } | Expr::Mock { .. } => expr,
         Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
             base: Box::new(desugar_placeholder_lambdas(*base)),
             suffix,
@@ -582,6 +583,7 @@ fn desugar_placeholder_lambdas(expr: Expr) -> Expr {
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
         | Expr::Block { span, .. }
+        | Expr::Mock { span, .. }
         | Expr::Raw { span, .. } => span.clone(),
     };
 
@@ -622,7 +624,7 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                 span: name.span,
             })
         }
-        Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } => expr,
+        Expr::Ident(_) | Expr::Literal(_) | Expr::Raw { .. } | Expr::Mock { .. } => expr,
         Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
             base: Box::new(replace_holes_inner(*base, counter, params)),
             suffix,

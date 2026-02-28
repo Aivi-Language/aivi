@@ -248,6 +248,16 @@ impl Backend {
                 } => Self::find_call_info(transition, position)
                     .or_else(|| Self::find_call_info(handler, position)),
             }),
+            Expr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(val) = &sub.value {
+                        if let Some(inner) = Self::find_call_info(val, position) {
+                            return Some(inner);
+                        }
+                    }
+                }
+                Self::find_call_info(body, position)
+            }
             Expr::Ident(_) | Expr::Literal(_) | Expr::FieldSection { .. } | Expr::Raw { .. } => {
                 None
             }
@@ -309,7 +319,8 @@ impl Backend {
             | Expr::If { span, .. }
             | Expr::Binary { span, .. }
             | Expr::Block { span, .. }
-            | Expr::Raw { span, .. } => span,
+            | Expr::Raw { span, .. }
+            | Expr::Mock { span, .. } => span,
         }
     }
 }

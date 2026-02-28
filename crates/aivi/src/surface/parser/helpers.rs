@@ -214,6 +214,7 @@ fn expr_span(expr: &Expr) -> Span {
         | Expr::Match { span, .. }
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
+        | Expr::Mock { span, .. }
         | Expr::Block { span, .. } => span.clone(),
         Expr::Raw { span, .. } => span.clone(),
     }

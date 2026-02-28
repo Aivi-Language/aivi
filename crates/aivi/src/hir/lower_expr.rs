@@ -408,6 +408,22 @@ fn lower_expr_inner_ctx(
             id: id_gen.next(),
             text,
         },
+        Expr::Mock {
+            substitutions,
+            body,
+            ..
+        } => HirExpr::Mock {
+            id: id_gen.next(),
+            substitutions: substitutions
+                .into_iter()
+                .map(|sub| HirMockSubstitution {
+                    path: sub.path.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join("."),
+                    snapshot: sub.snapshot,
+                    value: sub.value.map(|v| lower_expr_inner_ctx(v, id_gen, ctx, false)),
+                })
+                .collect(),
+            body: Box::new(lower_expr_inner_ctx(*body, id_gen, ctx, false)),
+        },
     }
 }
 
@@ -437,6 +453,7 @@ fn surface_expr_span(expr: &Expr) -> crate::diagnostics::Span {
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
         | Expr::Block { span, .. }
+        | Expr::Mock { span, .. }
         | Expr::Raw { span, .. } => span.clone(),
     }
 }

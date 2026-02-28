@@ -1682,8 +1682,8 @@ pub extern "C" fn rt_register_machines_from_data(
             .unwrap_or(&qual_name)
             .to_string();
         let module_name = qual_name
-            .rsplitn(2, '.')
-            .nth(1)
+            .rsplit_once('.')
+            .map(|x| x.0)
             .unwrap_or(&qual_name)
             .to_string();
 
@@ -1972,7 +1972,7 @@ main = do Effect { unit }
         ];
         for name in &expected {
             assert!(
-                runtime.ctx.globals.get(*name).is_some(),
+                runtime.ctx.globals.get(name).is_some(),
                 "expected global `{name}` to be registered after rt_register_machines_from_data",
             );
         }
@@ -1987,7 +1987,7 @@ main = do Effect { unit }
         ];
         for name in &forbidden {
             assert!(
-                runtime.ctx.globals.get(*name).is_none(),
+                runtime.ctx.globals.get(name).is_none(),
                 "global `{name}` should NOT be registered (wrong qualified prefix)",
             );
         }
