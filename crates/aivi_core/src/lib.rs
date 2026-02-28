@@ -55,7 +55,8 @@ pub use kernel::{
 pub use resolver::check_modules;
 pub use stdlib::{embedded_stdlib_modules, embedded_stdlib_source};
 pub use surface::{
-    lower_modules_to_arena, parse_modules, parse_modules_from_tokens, ArenaBlockItem,
+    lower_modules_to_arena, parse_modules, parse_modules_from_tokens, resolve_import_names,
+    ArenaBlockItem,
     ArenaBlockKind, ArenaClassDecl, ArenaClassMember, ArenaDecorator, ArenaDef, ArenaDomainDecl,
     ArenaDomainItem, ArenaExpr, ArenaInstanceDecl, ArenaListItem, ArenaLiteral, ArenaMachineDecl,
     ArenaMachineState, ArenaMachineTransition, ArenaMatchArm, ArenaModule, ArenaModuleItem,
