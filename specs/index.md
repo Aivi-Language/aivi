@@ -8,7 +8,7 @@ title: AIVI Language Specification
 
 # domain-driven & purely functional
 
-A high-integrity purely functional language with a Rust-first compilation pipeline.
+A high-integrity purely functional language  with on top of the Rust eco system.
 
 ## Table of Contents
 

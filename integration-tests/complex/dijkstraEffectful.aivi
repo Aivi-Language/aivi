@@ -13,32 +13,14 @@ processEdges = dists d edges pq => edges match
   | [edge, ...rest] => do Effect {
       currentDist = Map.getOrElse edge.to 999999.0 dists
       newDist = d + edge.weight
-      nextState = if newDist < currentDist
-      then {
-        dists: Map.insert edge.to newDist dists
-        pq: Heap.push (newDist, edge.to) pq
-      }
-      else { dists: dists, pq: pq }
-      processEdges nextState.dists d rest nextState.pq
+      nextDists = if newDist < currentDist
+        then Map.insert edge.to newDist dists
+        else dists
+      nextPq = if newDist < currentDist
+        then Heap.push (newDist, edge.to) pq
+        else pq
+      processEdges nextDists d rest nextPq
     }
-
-dijkstraLoop = g state => {
-  dists = state.dists
-  pq = state.pq
-  result = Heap.popMin pq
-  result match
-    | None                     => pure dists
-    | Some ((d, node), restPq) => do Effect {
-        currentDist = Map.getOrElse node 999999.0 dists
-        if d > currentDist
-        then dijkstraLoop g { dists: dists, pq: restPq }
-        else do Effect {
-          edges = edgesFrom g node
-          nextState <- processEdges dists d edges restPq
-          dijkstraLoop g nextState
-        }
-      }
-}
 
 @test "Dijkstra with mutable state"
 dijkstra_shortestPaths = do Effect {
@@ -49,7 +31,23 @@ dijkstra_shortestPaths = do Effect {
   dists0 = Map.insert 0 0.0 Map.empty
 
   // Dijkstra main loop with min-heap priority queue.
-  dists <- dijkstraLoop g { dists: dists0, pq: Heap.push (0.0, 0) Heap.empty }
+  dists <- do Effect {
+    loop state = { dists: dists0, pq: Heap.push (0.0, 0) Heap.empty } => {
+      result = Heap.popMin state.pq
+      result match
+        | None                     => pure state.dists
+        | Some ((d, node), restPq) => do Effect {
+            currentDist = Map.getOrElse node 999999.0 state.dists
+            if d > currentDist
+            then do Effect { recurse { dists: state.dists, pq: restPq } }
+            else do Effect {
+              edges = edgesFrom g node
+              nextState <- processEdges state.dists d edges restPq
+              recurse nextState
+            }
+          }
+    }
+  }
 
   // Verify shortest distances from node 0
   d0 = Map.getOrElse 0 999999.0 dists

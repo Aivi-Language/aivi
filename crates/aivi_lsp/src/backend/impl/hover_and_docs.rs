@@ -578,4 +578,77 @@ impl Backend {
         }
         None
     }
+
+    /// Recursively collect non-primitive, non-variable type names from a TypeExpr.
+    pub(super) fn collect_type_names(expr: &TypeExpr) -> Vec<String> {
+        let mut names = Vec::new();
+        Self::collect_type_names_inner(expr, &mut names);
+        names
+    }
+
+    fn collect_type_names_inner(expr: &TypeExpr, names: &mut Vec<String>) {
+        match expr {
+            TypeExpr::Name(name) => {
+                let n = &name.name;
+                if !n.is_empty()
+                    && n.chars().next().is_some_and(|c| c.is_uppercase())
+                    && !Self::is_primitive_ident(n)
+                    && !names.contains(n)
+                {
+                    names.push(n.clone());
+                }
+            }
+            TypeExpr::Apply { base, args, .. } => {
+                Self::collect_type_names_inner(base, names);
+                for arg in args {
+                    Self::collect_type_names_inner(arg, names);
+                }
+            }
+            TypeExpr::Func { params, result, .. } => {
+                for param in params {
+                    Self::collect_type_names_inner(param, names);
+                }
+                Self::collect_type_names_inner(result, names);
+            }
+            TypeExpr::Record { fields, .. } => {
+                for (_, ty) in fields {
+                    Self::collect_type_names_inner(ty, names);
+                }
+            }
+            TypeExpr::Tuple { items, .. } | TypeExpr::And { items, .. } => {
+                for item in items {
+                    Self::collect_type_names_inner(item, names);
+                }
+            }
+            TypeExpr::Star { .. } | TypeExpr::Unknown { .. } => {}
+        }
+    }
+
+    /// Look up a concise type definition for `name` in a single module.
+    pub(super) fn find_type_definition_brief(module: &Module, name: &str) -> Option<String> {
+        for item in module.items.iter() {
+            match item {
+                ModuleItem::TypeDecl(decl) if decl.name.name == name => {
+                    return Some(Self::format_type_decl(decl));
+                }
+                ModuleItem::TypeAlias(alias) if alias.name.name == name => {
+                    return Some(Self::format_type_alias(alias));
+                }
+                ModuleItem::ClassDecl(class_decl) if class_decl.name.name == name => {
+                    return Some(Self::format_class_decl(class_decl));
+                }
+                ModuleItem::DomainDecl(domain_decl) => {
+                    for domain_item in domain_decl.items.iter() {
+                        if let DomainItem::TypeAlias(type_decl) = domain_item {
+                            if type_decl.name.name == name {
+                                return Some(Self::format_type_decl(type_decl));
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
 }

@@ -34,6 +34,105 @@ impl Backend {
         }
     }
 
+    /// Find the TypeExpr from a TypeSig for the given identifier in a module.
+    fn find_type_sig_in_module(module: &Module, ident: &str) -> Option<aivi::TypeExpr> {
+        let paren_ident = format!("({ident})");
+        for item in module.items.iter() {
+            match item {
+                ModuleItem::TypeSig(sig)
+                    if sig.name.name == ident || sig.name.name == paren_ident =>
+                {
+                    return Some(sig.ty.clone());
+                }
+                ModuleItem::ClassDecl(class_decl) => {
+                    for member in class_decl.members.iter() {
+                        if member.name.name == ident || member.name.name == paren_ident {
+                            return Some(member.ty.clone());
+                        }
+                    }
+                }
+                ModuleItem::DomainDecl(domain_decl) => {
+                    for di in domain_decl.items.iter() {
+                        if let aivi::DomainItem::TypeSig(sig) = di {
+                            if sig.name.name == ident || sig.name.name == paren_ident {
+                                return Some(sig.ty.clone());
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+
+    /// Append type definitions for non-primitive types referenced in the ident's signature.
+    fn append_type_definitions(
+        contents: &mut String,
+        ident: &str,
+        resolved_module: &Module,
+        current_module: &Module,
+        workspace_modules: &HashMap<String, IndexedModule>,
+    ) {
+        let Some(type_expr) = Self::find_type_sig_in_module(resolved_module, ident) else {
+            return;
+        };
+        let names = Self::collect_type_names(&type_expr);
+        if names.is_empty() {
+            return;
+        }
+        let mut defs = Vec::new();
+        for name in &names {
+            if let Some(brief) = Self::find_type_definition_brief(current_module, name) {
+                defs.push(brief);
+                continue;
+            }
+            if !std::ptr::eq(resolved_module, current_module) {
+                if let Some(brief) = Self::find_type_definition_brief(resolved_module, name) {
+                    defs.push(brief);
+                    continue;
+                }
+            }
+            let mut found = false;
+            for use_decl in current_module.uses.iter() {
+                let imported = use_decl.wildcard
+                    || use_decl.items.is_empty()
+                    || use_decl.items.iter().any(|item| item.name.name == *name);
+                if !imported {
+                    continue;
+                }
+                if let Some(indexed) = workspace_modules.get(&use_decl.module.name) {
+                    if let Some(brief) = Self::find_type_definition_brief(&indexed.module, name) {
+                        defs.push(brief);
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if !found {
+                // Search all workspace modules as last resort
+                for indexed in workspace_modules.values() {
+                    if let Some(brief) = Self::find_type_definition_brief(&indexed.module, name) {
+                        defs.push(brief);
+                        break;
+                    }
+                }
+            }
+        }
+        if defs.is_empty() {
+            return;
+        }
+        contents.push_str("\n\n---\n\n");
+        for (i, def) in defs.iter().enumerate() {
+            contents.push('`');
+            contents.push_str(def);
+            contents.push('`');
+            if i < defs.len() - 1 {
+                contents.push_str("\n\n");
+            }
+        }
+    }
+
     fn hover_fallback_for_unresolved_ident(ident: &str) -> String {
         let is_operator = !ident.is_empty()
             && ident
@@ -1259,13 +1358,20 @@ impl Backend {
 
         let doc = Self::doc_for_ident(text, current_module, &ident);
         let inferred_current = inferred.get(&current_module.name.name);
-        if let Some(contents) = Self::hover_contents_for_module(
+        if let Some(mut contents) = Self::hover_contents_for_module(
             current_module,
             &ident,
             inferred_current,
             doc.as_deref(),
             doc_index,
         ) {
+            Self::append_type_definitions(
+                &mut contents,
+                &ident,
+                current_module,
+                current_module,
+                workspace_modules,
+            );
             Self::hover_debug(format!(
                 "build_hover_ws: resolved in current module {} after {:?}",
                 current_module.name.name,
@@ -1292,13 +1398,20 @@ impl Backend {
                 .as_deref()
                 .and_then(|text| Self::doc_for_ident(text, &indexed.module, &ident));
             let inferred = inferred.get(&indexed.module.name.name);
-            if let Some(contents) = Self::hover_contents_for_module(
+            if let Some(mut contents) = Self::hover_contents_for_module(
                 &indexed.module,
                 &ident,
                 inferred,
                 doc.as_deref(),
                 doc_index,
             ) {
+                Self::append_type_definitions(
+                    &mut contents,
+                    &ident,
+                    &indexed.module,
+                    current_module,
+                    workspace_modules,
+                );
                 Self::hover_debug(format!(
                     "build_hover_ws: resolved via import {} after {:?}",
                     use_decl.module.name,
