@@ -7,7 +7,7 @@
 ///
 /// - **Type builtins** — type-level names used only by the unused-binding diagnostic
 ///   (`is_builtin_name`) to suppress false warnings on standard type annotations.
-
+///
 /// Value-level builtin names.  Both the JIT compiler (`resolve_builtin`) and the runtime
 /// (`register_builtins`) must stay in sync with this list.
 pub const BUILTIN_VALUE_NAMES: &[&str] = &[

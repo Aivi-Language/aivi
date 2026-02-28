@@ -68,6 +68,7 @@ impl Parser {
             return Some(Pattern::Ident(ident));
         }
         if self.consume_symbol("(") {
+            let open_span = self.previous_span();
             if self.consume_symbol(")") {
                 return Some(Pattern::Tuple {
                     items: Vec::new(),
@@ -92,10 +93,11 @@ impl Parser {
                 }
                 self.consume_newlines();
                 let end = self.expect_symbol(")", "expected ')' to close tuple pattern");
-                let span = merge_span(
-                    pattern_span(&items[0]),
-                    end.unwrap_or(pattern_span(&items[0])),
-                );
+                let start = items
+                    .first()
+                    .map(pattern_span)
+                    .unwrap_or(open_span.clone());
+                let span = merge_span(start.clone(), end.unwrap_or(start));
                 return Some(Pattern::Tuple { items, span });
             }
             let end = self.expect_symbol(")", "expected ')' to close pattern");

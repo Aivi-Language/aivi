@@ -348,7 +348,7 @@ pub extern "C" fn rt_alloc_string(
     let Some(s) = decode_utf8_owned(ctx, ptr, len, "rt_alloc_string") else {
         return unit_value();
     };
-    abi::box_value(Value::Text(s.to_string()))
+    abi::box_value(Value::Text(s))
 }
 
 /// Allocate a `Value::DateTime` from a UTF-8 string.
@@ -361,7 +361,7 @@ pub extern "C" fn rt_alloc_datetime(
     let Some(s) = decode_utf8_owned(ctx, ptr, len, "rt_alloc_datetime") else {
         return unit_value();
     };
-    abi::box_value(Value::DateTime(s.to_string()))
+    abi::box_value(Value::DateTime(s))
 }
 
 /// Allocate a `Value::List` from an array of `*const Value` pointers.

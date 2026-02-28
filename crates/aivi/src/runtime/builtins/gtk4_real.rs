@@ -18,7 +18,6 @@ mod linux {
     unsafe extern "C" {
         fn gtk_init();
         fn gtk_application_new(application_id: *const c_char, flags: c_int) -> *mut c_void;
-        fn gtk_application_window_new(application: *mut c_void) -> *mut c_void;
         fn gtk_window_set_title(window: *mut c_void, title: *const c_char);
         fn gtk_window_set_default_size(window: *mut c_void, width: c_int, height: c_int);
         fn gtk_window_set_titlebar(window: *mut c_void, titlebar: *mut c_void);
@@ -152,18 +151,11 @@ mod linux {
 
     #[link(name = "gio-2.0")]
     unsafe extern "C" {
-        fn g_application_register(
-            application: *mut c_void,
-            cancellable: *mut c_void,
-            error: *mut *mut c_void,
-        ) -> c_int;
         fn g_application_run(
             application: *mut c_void,
             argc: c_int,
             argv: *mut *mut c_char,
         ) -> c_int;
-        #[allow(dead_code)]
-        fn g_application_activate(application: *mut c_void);
         fn g_resource_load(filename: *const c_char, error: *mut *mut c_void) -> *mut c_void;
         fn g_resources_register(resource: *mut c_void);
     }
@@ -179,6 +171,7 @@ mod linux {
     unsafe extern "C" {
         fn g_type_from_name(name: *const c_char) -> usize;
         fn g_object_new(object_type: usize, first_property_name: *const c_char, ...) -> *mut c_void;
+        fn g_object_ref_sink(object: *mut c_void) -> *mut c_void;
         fn g_object_set(object: *mut c_void, first_property_name: *const c_char, ...);
         fn g_object_get(object: *mut c_void, first_property_name: *const c_char, ...);
         fn g_signal_connect_data(
@@ -300,6 +293,8 @@ mod linux {
         signal_stack_page_bindings: HashMap<String, Vec<SignalStackPageBinding>>,
         named_widgets: HashMap<String, i64>,
         tray_handles: HashMap<i64, Arc<Mutex<SniTrayState>>>,
+        pending_icon_search_paths: Vec<String>,
+        pending_css_texts: Vec<String>,
         resources_registered: bool,
     }
 
@@ -531,6 +526,33 @@ mod linux {
 
     fn c_text(text: &str, what: &str) -> Result<CString, RuntimeError> {
         CString::new(text.as_bytes()).map_err(|_| invalid(what))
+    }
+
+    fn apply_pending_display_customizations(state: &mut RealGtkState) -> Result<(), RuntimeError> {
+        let display = unsafe { gdk_display_get_default() };
+        if display.is_null() {
+            return Ok(());
+        }
+
+        if !state.pending_icon_search_paths.is_empty() {
+            let theme = unsafe { gtk_icon_theme_get_for_display(display) };
+            for path in std::mem::take(&mut state.pending_icon_search_paths) {
+                let path_c = c_text(&path, "gtk4.iconThemeAddSearchPath invalid path")?;
+                unsafe { gtk_icon_theme_add_search_path(theme, path_c.as_ptr()) };
+            }
+        }
+
+        for css_text in std::mem::take(&mut state.pending_css_texts) {
+            let css_c = c_text(&css_text, "gtk4.appSetCss invalid css")?;
+            let provider = unsafe { gtk_css_provider_new() };
+            unsafe {
+                gtk_css_provider_load_from_string(provider, css_c.as_ptr());
+                // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION = 600
+                gtk_style_context_add_provider_for_display(display, provider, 600);
+            }
+        }
+
+        Ok(())
     }
 
     fn create_adw_widget_type(type_name: &str) -> Result<*mut c_void, RuntimeError> {
@@ -2081,12 +2103,9 @@ mod linux {
                             "gtk4.appNew failed to create GTK application".to_string(),
                         )));
                     }
-                    let registered = unsafe { g_application_register(raw, null_mut(), null_mut()) };
-                    if registered == 0 {
-                        return Err(RuntimeError::Error(Value::Text(
-                            "gtk4.appNew failed to register GTK application".to_string(),
-                        )));
-                    }
+                    // Keep a strong owned reference while tracked in GTK_STATE so later
+                    // window creation never observes a dropped/invalid application handle.
+                    unsafe { g_object_ref_sink(raw) };
                     // Connect a no-op activate handler so GTK does not warn
                     let sig = CString::new("activate").unwrap();
                     unsafe {
@@ -2137,12 +2156,12 @@ mod linux {
                     let title_c = c_text(&title, "gtk4.windowNew invalid title")?;
                     let id = GTK_STATE.with(|state| -> Result<i64, RuntimeError> {
                         let mut state = state.borrow_mut();
-                        let _app = state.apps.get(&app_id).copied().ok_or_else(|| {
+                        let _ = state.apps.get(&app_id).copied().ok_or_else(|| {
                             RuntimeError::Error(Value::Text(format!(
                                 "gtk4.windowNew unknown app id {app_id}"
                             )))
                         })?;
-                        let window = unsafe { gtk_application_window_new(_app) };
+                        let window = unsafe { gtk_window_new() };
                         if window.is_null() {
                             return Err(RuntimeError::Error(Value::Text(
                                 "gtk4.windowNew failed to create window".to_string(),
@@ -2155,6 +2174,7 @@ mod linux {
                         let id = state.alloc_id();
                         state.windows.insert(id, window);
                         state.widgets.insert(id, window);
+                        apply_pending_display_customizations(&mut state)?;
                         Ok(id)
                     })?;
                     Ok(Value::Int(id))
@@ -3433,18 +3453,14 @@ mod linux {
                     _ => return Err(invalid("gtk4.iconThemeAddSearchPath expects Text path")),
                 };
                 Ok(effect(move |_| {
-                    let path_c = c_text(&path, "gtk4.iconThemeAddSearchPath invalid path")?;
-                    unsafe {
-                        let display = gdk_display_get_default();
-                        if display.is_null() {
-                            return Err(RuntimeError::Error(Value::Text(
-                                "gtk4.iconThemeAddSearchPath no default display".to_string(),
-                            )));
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        state.pending_icon_search_paths.push(path.clone());
+                        if !state.windows.is_empty() {
+                            apply_pending_display_customizations(&mut state)?;
                         }
-                        let theme = gtk_icon_theme_get_for_display(display);
-                        gtk_icon_theme_add_search_path(theme, path_c.as_ptr());
-                    }
-                    Ok(Value::Unit)
+                        Ok(Value::Unit)
+                    })
                 }))
             }),
         );
@@ -3696,18 +3712,14 @@ mod linux {
                     _ => return Err(invalid("gtk4.appSetCss expects Int app id")),
                 };
                 Ok(effect(move |_| {
-                    let css_c = c_text(&css_text, "gtk4.appSetCss invalid css")?;
-                    let display = unsafe { gdk_display_get_default() };
-                    if display.is_null() {
-                        return Err(RuntimeError::Error(Value::Text(
-                            "gtk4.appSetCss no default display".to_string(),
-                        )));
-                    }
-                    let provider = unsafe { gtk_css_provider_new() };
-                    unsafe { gtk_css_provider_load_from_string(provider, css_c.as_ptr()) };
-                    // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION = 600
-                    unsafe { gtk_style_context_add_provider_for_display(display, provider, 600) };
-                    Ok(Value::Unit)
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        state.pending_css_texts.push(css_text.clone());
+                        if !state.windows.is_empty() {
+                            apply_pending_display_customizations(&mut state)?;
+                        }
+                        Ok(Value::Unit)
+                    })
                 }))
             }),
         );
