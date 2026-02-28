@@ -19,7 +19,7 @@ impl Parser {
                     if crate::syntax::KEYWORDS_ALL.contains(&token.text.as_str()) {
                         return matches!(
                             token.text.as_str(),
-                            "if" | "do" | "generate" | "resource" | "patch"
+                            "if" | "do" | "generate" | "resource" | "patch" | "mock"
                         );
                     }
                     return true;
@@ -371,6 +371,9 @@ impl Parser {
             let start = self.previous_span();
             return Some(self.parse_patch_literal(start));
         }
+        if self.match_keyword("mock") {
+            return Some(self.parse_mock_expr());
+        }
 
         if let Some(number) = self.consume_number() {
             if let Some(dt) = self.try_parse_datetime(number.clone()) {
@@ -480,5 +483,86 @@ impl Parser {
         }
 
         None
+    }
+
+    /// Parse `mock path = expr (mock path = expr)* in body`.
+    /// The leading `mock` keyword has already been consumed.
+    fn parse_mock_expr(&mut self) -> Expr {
+        let start = self.previous_span();
+        let mut substitutions = Vec::new();
+        loop {
+            let sub_start = self.previous_span();
+            let snapshot = self.match_keyword("snapshot");
+            // Parse qualified path: ident(.ident)*
+            let mut path = Vec::new();
+            if let Some(first) = self.consume_ident() {
+                path.push(first);
+                while self.consume_symbol(".") {
+                    if let Some(seg) = self.consume_ident() {
+                        path.push(seg);
+                    } else {
+                        let span = self.peek_span().unwrap_or_else(|| self.previous_span());
+                        self.emit_diag("E1540", "expected identifier after '.' in mock path", span);
+                        break;
+                    }
+                }
+            } else {
+                let span = self.peek_span().unwrap_or_else(|| self.previous_span());
+                self.emit_diag(
+                    "E1540",
+                    "expected qualified path after 'mock' (e.g. `mock rest.get = ...`)",
+                    span,
+                );
+            }
+            let value = if snapshot {
+                if self.consume_symbol("=") {
+                    let span = self.previous_span();
+                    self.emit_diag(
+                        "E1543",
+                        "`mock snapshot` records the real call; remove `= expr`",
+                        span,
+                    );
+                    self.parse_expr()
+                } else {
+                    None
+                }
+            } else {
+                self.expect_symbol("=", "expected '=' after mock path");
+                self.parse_expr()
+            };
+            let sub_end = value
+                .as_ref()
+                .map(expr_span)
+                .or_else(|| path.last().map(|p| p.span.clone()))
+                .unwrap_or_else(|| self.previous_span());
+            substitutions.push(MockSubstitution {
+                path,
+                snapshot,
+                value,
+                span: merge_span(sub_start, sub_end),
+            });
+            self.consume_newlines();
+            if !self.match_keyword("mock") {
+                break;
+            }
+        }
+        if !self.match_keyword("in") {
+            let span = self.peek_span().unwrap_or_else(|| self.previous_span());
+            self.emit_diag(
+                "E1544",
+                "expected 'in' keyword after mock binding(s)",
+                span,
+            );
+        }
+        let body = self.parse_expr().unwrap_or(Expr::Raw {
+            text: String::new(),
+            span: self.previous_span(),
+        });
+        let span = merge_span(start, expr_span(&body));
+        Expr::Mock {
+            substitutions,
+            body: Box::new(body),
+            span,
+        }
     }
 }

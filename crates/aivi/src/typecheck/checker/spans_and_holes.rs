@@ -18,6 +18,7 @@ fn expr_span(expr: &Expr) -> Span {
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
         | Expr::Block { span, .. } => span.clone(),
+        Expr::Mock { span, .. } => span.clone(),
         Expr::Raw { span, .. } => span.clone(),
     }
 }
@@ -255,6 +256,7 @@ fn desugar_holes_inner(expr: Expr, is_root: bool) -> Expr {
         Expr::Ident(name) => Expr::Ident(name),
         Expr::Literal(literal) => Expr::Literal(literal),
         Expr::Raw { text, span } => Expr::Raw { text, span },
+        Expr::Mock { .. } => expr,
     };
     if !is_root && matches!(&expr, Expr::Ident(name) if name.name == "_") {
         return expr;
@@ -335,6 +337,7 @@ fn contains_hole(expr: &Expr) -> bool {
             BlockItem::On { transition, handler, .. } => contains_hole(transition) || contains_hole(handler),
         }),
         Expr::Raw { .. } => false,
+        Expr::Mock { .. } => false,
     }
 }
 
@@ -573,5 +576,6 @@ fn replace_holes_inner(expr: Expr, counter: &mut u32, params: &mut Vec<String>) 
                 .collect(),
             span,
         },
+        Expr::Mock { .. } => expr,
     }
 }

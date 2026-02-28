@@ -953,6 +953,10 @@ impl ArenaBuilder {
                 text: Symbol::intern(text),
                 span: span.clone(),
             },
+            Expr::Mock { body, .. } => {
+                // ArenaExpr has no Mock variant; lower the body only.
+                return self.lower_expr(body);
+            }
         };
         self.arena.alloc_expr(lowered)
     }

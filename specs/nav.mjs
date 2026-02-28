@@ -44,7 +44,8 @@ export const sidebar = [
           { text: 'Effects', link: '/syntax/effects' },
           { text: 'Machines', link: '/syntax/machines_runtime' },
           { text: 'Resources', link: '/syntax/resources' },
-          { text: 'Generic `do` Notation', link: '/syntax/do_notation' }
+          { text: 'Generic `do` Notation', link: '/syntax/do_notation' },
+          { text: 'Mock Expressions', link: '/syntax/mock_expression' }
         ]
       },
       {

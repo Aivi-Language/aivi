@@ -1168,6 +1168,20 @@ fn replace_recurse_in_expr(expr: Expr, fn_name: &SpannedName) -> Expr {
         | Expr::Literal(_)
         | Expr::Raw { .. }
         | Expr::FieldSection { .. }) => other,
+        Expr::Mock { substitutions, body, span } => {
+            let substitutions = substitutions
+                .into_iter()
+                .map(|mut sub| {
+                    sub.value = sub.value.map(|v| replace_recurse_in_expr(v, fn_name));
+                    sub
+                })
+                .collect();
+            Expr::Mock {
+                substitutions,
+                body: Box::new(replace_recurse_in_expr(*body, fn_name)),
+                span,
+            }
+        }
     }
 }
 

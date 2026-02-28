@@ -215,7 +215,7 @@ ChatRequest = {
 Effort level hint for reasoning models (`o3`, `o4-mini`, …).
 
 ```aivi
-ReasoningEffort = Low | Medium | High
+ReasoningEffort = EffortLow | EffortMedium | EffortHigh
 ```
 
 #### `ChatResponse`
@@ -351,7 +351,7 @@ EmbeddingInput = SingleText Text | MultiText (List Text)
 #### `EncodingFormat`
 
 ```aivi
-EncodingFormat = Float | Base64
+EncodingFormat = FloatFormat | Base64Format
 ```
 
 #### `EmbeddingRequest`

@@ -161,6 +161,23 @@ pub enum HirExpr {
         id: u32,
         text: String,
     },
+    /// `mock path = value ... in body` — scoped binding substitution.
+    Mock {
+        id: u32,
+        substitutions: Vec<HirMockSubstitution>,
+        body: Box<HirExpr>,
+    },
+}
+
+/// A single mock substitution at the HIR level.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HirMockSubstitution {
+    /// Fully-qualified dotted path (e.g. `"aivi.rest.get"`).
+    pub path: String,
+    /// Whether this is a snapshot mock (record/replay).
+    pub snapshot: bool,
+    /// Replacement expression (`None` for snapshot mocks).
+    pub value: Option<HirExpr>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

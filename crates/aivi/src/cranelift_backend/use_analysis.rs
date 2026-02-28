@@ -190,6 +190,19 @@ fn collect_uses(expr: &RustIrExpr, out: &mut HashMap<String, Vec<u32>>) {
                 collect_uses_in_block_item(item, out);
             }
         }
+
+        RustIrExpr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            for sub in substitutions {
+                if let Some(v) = &sub.value {
+                    collect_uses(v, out);
+                }
+            }
+            collect_uses(body, out);
+        }
     }
 }
 
@@ -408,6 +421,19 @@ fn mark_last_uses_reverse(
                     | RustIrBlockItem::Filter { expr } => {
                         mark_last_uses_reverse(expr, last_uses, marked, counts);
                     }
+                }
+            }
+        }
+
+        RustIrExpr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            mark_last_uses_reverse(body, last_uses, marked, counts);
+            for sub in substitutions.iter().rev() {
+                if let Some(v) = &sub.value {
+                    mark_last_uses_reverse(v, last_uses, marked, counts);
                 }
             }
         }

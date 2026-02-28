@@ -132,6 +132,14 @@ fn collect_unbound_vars_in_kernel_expr(
             }
             bound.truncate(before);
         }
+        KernelExpr::Mock { substitutions, body, .. } => {
+            for sub in substitutions {
+                if let Some(value) = &sub.value {
+                    collect_unbound_vars_in_kernel_expr(value, globals, locals, bound, out);
+                }
+            }
+            collect_unbound_vars_in_kernel_expr(body, globals, locals, bound, out);
+        }
     }
 }
 

@@ -171,6 +171,14 @@ fn collect_unbound_names(expr: &Expr, env: &TypeEnv) -> HashSet<String> {
                 }
                 bound.truncate(before);
             }
+            Expr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(value) = &sub.value {
+                        collect_expr(value, env, bound, out);
+                    }
+                }
+                collect_expr(body, env, bound, out);
+            }
         }
     }
 
@@ -394,6 +402,20 @@ fn rewrite_implicit_field_vars(
                 .collect(),
             span,
         },
+        Expr::Mock { substitutions, body, span } => {
+            let substitutions = substitutions
+                .into_iter()
+                .map(|mut sub| {
+                    sub.value = sub.value.map(|v| rewrite_implicit_field_vars(v, implicit_param, unbound));
+                    sub
+                })
+                .collect();
+            Expr::Mock {
+                substitutions,
+                body: Box::new(rewrite_implicit_field_vars(*body, implicit_param, unbound)),
+                span,
+            }
+        }
     }
 }
 
@@ -488,5 +510,6 @@ fn expr_contains_placeholder(expr: &Expr) -> bool {
                 transition, handler, ..
             } => expr_contains_placeholder(transition) || expr_contains_placeholder(handler),
         }),
+        Expr::Mock { .. } => false,
     }
 }

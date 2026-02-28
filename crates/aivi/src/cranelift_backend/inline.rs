@@ -9,8 +9,8 @@
 use std::collections::HashMap;
 
 use crate::rust_ir::{
-    RustIrBlockItem, RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrModule, RustIrPattern,
-    RustIrRecordField, RustIrTextPart,
+    RustIrBlockItem, RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrMockSubstitution,
+    RustIrModule, RustIrPattern, RustIrRecordField, RustIrTextPart,
 };
 
 /// Maximum AST-node cost for automatic inlining.
@@ -98,6 +98,18 @@ pub(crate) fn expr_cost(expr: &RustIrExpr) -> u32 {
         RustIrExpr::Binary { left, right, .. } => 1 + expr_cost(left) + expr_cost(right),
 
         RustIrExpr::Block { items, .. } => 1 + block_items_cost(items),
+
+        RustIrExpr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            1 + substitutions
+                .iter()
+                .map(|s| s.value.as_ref().map_or(1, expr_cost))
+                .sum::<u32>()
+                + expr_cost(body)
+        }
     }
 }
 
@@ -299,6 +311,17 @@ fn references_name(expr: &RustIrExpr, name: &str) -> bool {
             | RustIrBlockItem::Recurse { expr }
             | RustIrBlockItem::Expr { expr } => references_name(expr, name),
         }),
+
+        RustIrExpr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            substitutions
+                .iter()
+                .any(|s| s.value.as_ref().is_some_and(|v| references_name(v, name)))
+                || references_name(body, name)
+        }
     }
 }
 
@@ -428,6 +451,17 @@ fn max_expr_id_in(expr: &RustIrExpr) -> u32 {
             })
             .max()
             .unwrap_or(0),
+
+        RustIrExpr::Mock {
+            substitutions,
+            body,
+            ..
+        } => substitutions
+            .iter()
+            .filter_map(|s| s.value.as_ref().map(max_expr_id_in))
+            .max()
+            .unwrap_or(0)
+            .max(max_expr_id_in(body)),
     };
     id.max(child_max)
 }
@@ -459,7 +493,8 @@ fn expr_id(expr: &RustIrExpr) -> u32 {
         | RustIrExpr::If { id, .. }
         | RustIrExpr::Binary { id, .. }
         | RustIrExpr::Block { id, .. }
-        | RustIrExpr::Raw { id, .. } => *id,
+        | RustIrExpr::Raw { id, .. }
+        | RustIrExpr::Mock { id, .. } => *id,
     }
 }
 
@@ -716,6 +751,25 @@ fn inline_children(
             block_kind,
             items: inline_block_items(items, candidates, id_gen, depth),
         },
+
+        RustIrExpr::Mock {
+            id,
+            substitutions,
+            body,
+        } => RustIrExpr::Mock {
+            id,
+            substitutions: substitutions
+                .into_iter()
+                .map(|sub| RustIrMockSubstitution {
+                    path: sub.path,
+                    snapshot: sub.snapshot,
+                    value: sub
+                        .value
+                        .map(|v| inline_expr(v, candidates, id_gen, depth)),
+                })
+                .collect(),
+            body: Box::new(inline_expr(*body, candidates, id_gen, depth)),
+        },
     }
 }
 
@@ -902,6 +956,19 @@ fn substitute(expr: &mut RustIrExpr, param: &str, arg: &RustIrExpr) {
         RustIrExpr::Block { items, .. } => {
             substitute_in_block_items(items, param, arg);
         }
+
+        RustIrExpr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            for sub in substitutions {
+                if let Some(v) = &mut sub.value {
+                    substitute(v, param, arg);
+                }
+            }
+            substitute(body, param, arg);
+        }
     }
 }
 
@@ -1085,6 +1152,19 @@ fn freshen_ids(expr: &mut RustIrExpr, id_gen: &mut IdGen) {
                 }
             }
         }
+
+        RustIrExpr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            for sub in substitutions {
+                if let Some(v) = &mut sub.value {
+                    freshen_ids(v, id_gen);
+                }
+            }
+            freshen_ids(body, id_gen);
+        }
     }
 }
 
@@ -1173,7 +1253,8 @@ fn set_expr_id(expr: &mut RustIrExpr, new_id: u32) {
         | RustIrExpr::If { id, .. }
         | RustIrExpr::Binary { id, .. }
         | RustIrExpr::Block { id, .. }
-        | RustIrExpr::Raw { id, .. } => *id = new_id,
+        | RustIrExpr::Raw { id, .. }
+        | RustIrExpr::Mock { id, .. } => *id = new_id,
     }
 }
 

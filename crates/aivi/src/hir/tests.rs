@@ -42,6 +42,10 @@ mod debug_tests {
             | HirExpr::LitBool { .. }
             | HirExpr::LitDateTime { .. }
             | HirExpr::Raw { .. } => false,
+            HirExpr::Mock { substitutions, body, .. } => {
+                substitutions.iter().any(|s| s.value.as_ref().is_some_and(|v| contains_debug_nodes(v)))
+                    || contains_debug_nodes(body)
+            }
         }
     }
 
@@ -131,6 +135,14 @@ mod debug_tests {
             | HirExpr::LitBool { .. }
             | HirExpr::LitDateTime { .. }
             | HirExpr::Raw { .. } => {}
+            HirExpr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(v) = &sub.value {
+                        collect_pipes(v, out);
+                    }
+                }
+                collect_pipes(body, out);
+            }
         }
     }
 

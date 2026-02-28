@@ -30,6 +30,7 @@ fn wrap_in_pure(expr: Expr) -> Expr {
         | Expr::If { span, .. }
         | Expr::Binary { span, .. }
         | Expr::Block { span, .. }
+        | Expr::Mock { span, .. }
         | Expr::Raw { span, .. } => span.clone(),
     };
 
@@ -305,6 +306,20 @@ fn desugar_expr(expr: Expr) -> Expr {
                 })
                 .collect();
             Expr::Block { kind, items, span }
+        }
+        Expr::Mock { substitutions, body, span } => {
+            let substitutions = substitutions
+                .into_iter()
+                .map(|mut sub| {
+                    sub.value = sub.value.map(desugar_expr);
+                    sub
+                })
+                .collect();
+            Expr::Mock {
+                substitutions,
+                body: Box::new(desugar_expr(*body)),
+                span,
+            }
         }
     }
 }

@@ -757,6 +757,7 @@ pub(crate) struct AotFuncEntry {
 ///     target_len, target bytes
 /// ```
 pub(crate) fn serialize_machine_data(surface_modules: &[crate::surface::Module]) -> Vec<u8> {
+    type MachineEntry = (String, String, Vec<String>, Vec<(String, String, String)>);
     fn write_u32(buf: &mut Vec<u8>, v: u32) {
         buf.extend_from_slice(&v.to_le_bytes());
     }
@@ -766,8 +767,7 @@ pub(crate) fn serialize_machine_data(surface_modules: &[crate::surface::Module])
         buf.extend_from_slice(b);
     }
 
-    let mut all_machines: Vec<(String, String, Vec<String>, Vec<(String, String, String)>)> =
-        Vec::new();
+    let mut all_machines: Vec<MachineEntry> = Vec::new();
     for surf_mod in surface_modules {
         let module_name = &surf_mod.name.name;
         for item in &surf_mod.items {
@@ -1474,6 +1474,17 @@ fn expr_supported(expr: &RustIrExpr) -> bool {
         | RustIrExpr::LitBool { .. }
         | RustIrExpr::Raw { .. } => true,
 
+        RustIrExpr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            substitutions
+                .iter()
+                .all(|s| s.value.as_ref().is_none_or(expr_supported))
+                && expr_supported(body)
+        }
+
         RustIrExpr::LitNumber { text, .. } => {
             text.parse::<i64>().is_ok() || text.parse::<f64>().is_ok()
         }
@@ -2173,6 +2184,18 @@ fn collect_inner_lambdas<'a>(
         RustIrExpr::DebugFn { body, .. } => {
             collect_inner_lambdas(body, bound, out);
         }
+        RustIrExpr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            for sub in substitutions {
+                if let Some(v) = &sub.value {
+                    collect_inner_lambdas(v, bound, out);
+                }
+            }
+            collect_inner_lambdas(body, bound, out);
+        }
         // Leaf expressions don't contain lambdas
         RustIrExpr::Local { .. }
         | RustIrExpr::Global { .. }
@@ -2332,6 +2355,18 @@ fn collect_free_locals(expr: &RustIrExpr, bound: &mut Vec<String>, free: &mut Ha
             collect_free_locals(arg, bound, free);
         }
         RustIrExpr::DebugFn { body, .. } => {
+            collect_free_locals(body, bound, free);
+        }
+        RustIrExpr::Mock {
+            substitutions,
+            body,
+            ..
+        } => {
+            for sub in substitutions {
+                if let Some(v) = &sub.value {
+                    collect_free_locals(v, bound, free);
+                }
+            }
             collect_free_locals(body, bound, free);
         }
         // Leaves with no free locals

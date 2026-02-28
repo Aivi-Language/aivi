@@ -330,6 +330,14 @@ fn collect_used_names(module: &Module) -> HashSet<String> {
                 }
             }
             Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => {}
+            Expr::Mock { substitutions, body, .. } => {
+                for sub in substitutions {
+                    if let Some(value) = &sub.value {
+                        collect_expr(value, out);
+                    }
+                }
+                collect_expr(body, out);
+            }
         }
     }
 

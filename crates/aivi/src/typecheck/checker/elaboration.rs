@@ -137,6 +137,7 @@ impl TypeChecker {
             } => self.infer_binary(op, left, right, env),
             Expr::Block { kind, items, .. } => self.infer_block(kind, items, env),
             Expr::Raw { .. } => Ok(self.fresh_var()),
+            Expr::Mock { body, .. } => self.infer_expr(body, env),
         };
         if let Ok(ref ty) = result {
             self.span_types.push((expr_span(expr), ty.clone()));

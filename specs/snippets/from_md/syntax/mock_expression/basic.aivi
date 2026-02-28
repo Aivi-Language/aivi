@@ -1,0 +1,17 @@
+use aivi.testing
+use aivi.rest
+
+User = { id: Int, name: Text }
+
+fetchUsers = rest.get ~u(https://api.example.com/users)
+
+@test "fetch users with a mocked request"
+fetchUsersWithMock =
+  mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
+  in do Effect {
+    users <- fetchUsers
+    _ <- assertEq (List.length users) 1
+    users match
+      | [u, ..._] => assertEq u.name "Ada"
+      | []        => fail "expected one mocked user"
+  }

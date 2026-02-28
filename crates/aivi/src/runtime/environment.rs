@@ -44,6 +44,19 @@ impl Env {
         self.inner.values.read().contains_key(name)
     }
 
+    #[cfg(test)]
+    pub(crate) fn keys(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.inner.values.read().keys().cloned().collect();
+        if let Some(parent) = &self.inner.parent {
+            for k in parent.keys() {
+                if !names.contains(&k) {
+                    names.push(k);
+                }
+            }
+        }
+        names
+    }
+
 }
 
 pub(crate) struct RuntimeContext {
