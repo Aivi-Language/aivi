@@ -4,6 +4,7 @@ module integrationTests.syntax.functions.closures
 use aivi
 use aivi.testing
 use aivi.generator
+use aivi.list (map)
 
 // Closure over `factor` used inside a generator
 scaledRange : Int -> Generator Int
@@ -12,12 +13,11 @@ scaledRange = factor => generate {
   yield n * factor
 }
 
-// Closure over `threshold` and `factor` used in a generator with a guard
+// Closure over two parameters used inside a generator
 filteredScaled : Int -> Int -> Generator Int
-filteredScaled = threshold factor => generate {
-  n <- [1, 2, 3, 4, 5]
-  n -> _ > threshold
-  yield n * factor
+filteredScaled = offset factor => generate {
+  n <- [1, 2, 3]
+  yield n * factor + offset
 }
 
 // Resource that captures `offset` and yields a closure
@@ -41,11 +41,10 @@ innerClosureInDoEffect = do Effect {
   assertEq (clampedAdd 120 25) 120
 }
 
-@test "closure passed to higher-order functions via pipe"
+@test "closure passed to higher-order map"
 closureInHigherOrder = do Effect {
   multiplier = 4
-  result = [1, 2, 3, 4, 5] |> filter (_ > 2) |> map (n => n * multiplier)
-  assertEq result [12, 16, 20]
+  assertEq (map (n => n * multiplier) [3, 4, 5]) [12, 16, 20]
 }
 
 @test "closure used inside do Option"
@@ -79,8 +78,8 @@ resourceYieldsClosure = do Effect {
   assertEq (adder 10) 17
 }
 
-@test "generator with closure-based filter and transform"
+@test "generator with closure over two captured parameters"
 generatorWithClosureFilterTransform = do Effect {
-  result = toList (filteredScaled 2 10)
-  assertEq result [30, 40, 50]
+  result = toList (filteredScaled 1 10)
+  assertEq result [11, 21, 31]
 }

@@ -107,6 +107,7 @@ fn code_actions_offer_quick_fix_for_unclosed_delimiter() {
         &uri,
         &diagnostics,
         &std::collections::HashMap::new(),
+        tower_lsp::lsp_types::Range::default(),
     );
     let expected_pos = Backend::end_position(text);
 
@@ -160,6 +161,7 @@ fn strict_mode_reports_split_arrow_and_offers_fix() {
         &uri,
         &diagnostics,
         &std::collections::HashMap::new(),
+        tower_lsp::lsp_types::Range::default(),
     );
     assert!(actions.iter().any(|action| match action {
         CodeActionOrCommand::CodeAction(action) => action.title.contains("Replace with \"=>\""),
@@ -196,7 +198,7 @@ main = magnitude { x: 3.0, y: 4.0 }
     };
 
     let actions =
-        Backend::build_code_actions_with_workspace(text, &uri, &diagnostics, &stdlib_workspace);
+        Backend::build_code_actions_with_workspace(text, &uri, &diagnostics, &stdlib_workspace, tower_lsp::lsp_types::Range::default());
 
     // We should offer a quickfix that inserts `use aivi.vector (magnitude)`.
     let mut saw_import_fix = false;
@@ -640,6 +642,126 @@ user1 = { name: "Alice", age: 3 }
         user1_token_type,
         Some(Backend::SEM_TOKEN_FUNCTION),
         "expected value signature name to be highlighted like a function signature name",
+    );
+}
+
+#[test]
+fn code_actions_offer_add_type_annotation_for_untyped_def() {
+    let text = r#"@no_prelude
+module examples.types
+add = x y => x + y
+"#;
+    let uri = sample_uri();
+    // Cursor on the "add = ..." line (line index 2, 0-based).
+    let cursor_line = position_for(text, "add = x y");
+    let cursor_range = tower_lsp::lsp_types::Range::new(cursor_line, cursor_line);
+    let actions = Backend::build_code_actions_with_workspace(
+        text,
+        &uri,
+        &[],
+        &std::collections::HashMap::new(),
+        cursor_range,
+    );
+    assert!(
+        actions.iter().any(|action| match action {
+            CodeActionOrCommand::CodeAction(a) => a.title.contains("Add type annotation for 'add'"),
+            _ => false,
+        }),
+        "expected add-type-annotation action, got: {:?}",
+        actions.iter().map(|a| match a { CodeActionOrCommand::CodeAction(c) => c.title.as_str(), _ => "" }).collect::<Vec<_>>(),
+    );
+}
+
+#[test]
+fn code_actions_no_type_annotation_when_sig_exists() {
+    // When the def already has a type signature, we should NOT offer the action.
+    let text = r#"@no_prelude
+module examples.types
+add : Int -> Int -> Int
+add = x y => x + y
+"#;
+    let uri = sample_uri();
+    let cursor_line = position_for(text, "add = x y");
+    let cursor_range = tower_lsp::lsp_types::Range::new(cursor_line, cursor_line);
+    let actions = Backend::build_code_actions_with_workspace(
+        text,
+        &uri,
+        &[],
+        &std::collections::HashMap::new(),
+        cursor_range,
+    );
+    assert!(
+        !actions.iter().any(|action| match action {
+            CodeActionOrCommand::CodeAction(a) =>
+                a.title.contains("Add type annotation for 'add'"),
+            _ => false,
+        }),
+        "should not offer add-type-annotation when signature already exists"
+    );
+}
+
+#[test]
+fn code_actions_remove_single_unused_import() {
+    // `fmt` is imported but never referenced.
+    let text = r#"module examples.unused
+use aivi.text (format)
+
+main = "hello"
+"#;
+    let uri = sample_uri();
+    let diagnostics = Backend::build_diagnostics(text, &uri);
+    // There should be a W2100 diagnostic for the unused import.
+    let has_w2100 = diagnostics.iter().any(|d| {
+        matches!(d.code.as_ref(), Some(NumberOrString::String(c)) if c == "W2100")
+    });
+    assert!(has_w2100, "expected W2100 unused-import diagnostic");
+
+    let actions = Backend::build_code_actions_with_workspace(
+        text,
+        &uri,
+        &diagnostics,
+        &std::collections::HashMap::new(),
+        tower_lsp::lsp_types::Range::default(),
+    );
+    assert!(
+        actions.iter().any(|action| match action {
+            CodeActionOrCommand::CodeAction(a) =>
+                a.title.contains("Remove unused import 'format'"),
+            _ => false,
+        }),
+        "expected remove-unused-import action"
+    );
+}
+
+#[test]
+fn code_actions_remove_all_unused_imports_batch() {
+    // Two unused imports → should offer a "Remove all unused imports" source action.
+    let text = r#"module examples.unused
+use aivi.text (format, length)
+
+main = "hello"
+"#;
+    let uri = sample_uri();
+    let diagnostics = Backend::build_diagnostics(text, &uri);
+    let w2100_count = diagnostics
+        .iter()
+        .filter(|d| matches!(d.code.as_ref(), Some(NumberOrString::String(c)) if c == "W2100"))
+        .count();
+    assert!(w2100_count >= 2, "expected two W2100 diagnostics");
+
+    let actions = Backend::build_code_actions_with_workspace(
+        text,
+        &uri,
+        &diagnostics,
+        &std::collections::HashMap::new(),
+        tower_lsp::lsp_types::Range::default(),
+    );
+    assert!(
+        actions.iter().any(|action| match action {
+            CodeActionOrCommand::CodeAction(a) => a.title == "Remove all unused imports",
+            _ => false,
+        }),
+        "expected batch 'Remove all unused imports' source action"
     );
 }
 

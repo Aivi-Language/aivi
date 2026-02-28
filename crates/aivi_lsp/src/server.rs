@@ -577,13 +577,20 @@ impl LanguageServer for Backend {
     ) -> Result<Option<Vec<CodeActionOrCommand>>> {
         let uri = params.text_document.uri;
         let diagnostics = params.context.diagnostics;
+        let cursor_range = params.range;
         let actions = match self
             .with_document_text(&uri, |content| content.to_string())
             .await
         {
             Some(text) => {
                 let workspace = self.workspace_modules_for(&uri).await;
-                Self::build_code_actions_with_workspace(&text, &uri, &diagnostics, &workspace)
+                Self::build_code_actions_with_workspace(
+                    &text,
+                    &uri,
+                    &diagnostics,
+                    &workspace,
+                    cursor_range,
+                )
             }
             None => Vec::new(),
         };

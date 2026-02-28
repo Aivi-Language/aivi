@@ -1,7 +1,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
-use aivi::{check_modules, check_types, embedded_stdlib_modules, parse_modules};
+use aivi::{
+    check_modules, check_types, embedded_stdlib_modules, infer_value_types, parse_modules,
+    ModuleItem, ScopeItemKind,
+};
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, Diagnostic, DiagnosticRelatedInformation,
     DiagnosticSeverity, Location, NumberOrString, Position, Range, TextEdit, Url, WorkspaceEdit,
@@ -335,8 +338,34 @@ impl Backend {
         uri: &Url,
         diagnostics: &[Diagnostic],
         workspace_modules: &HashMap<String, IndexedModule>,
+        cursor_range: Range,
     ) -> Vec<CodeActionOrCommand> {
         let mut out = Vec::new();
+
+        // Position-based refactoring actions (not diagnostic-driven).
+        out.extend(Self::add_type_annotation_actions(
+            text,
+            uri,
+            cursor_range,
+            workspace_modules,
+        ));
+
+        // Batch source action: remove every unused import in the file.
+        let unused_import_diags: Vec<&Diagnostic> = diagnostics
+            .iter()
+            .filter(|d| {
+                matches!(
+                    &d.code,
+                    Some(NumberOrString::String(c)) if c == "W2100"
+                )
+            })
+            .collect();
+        if unused_import_diags.len() > 1 {
+            if let Some(batch) = Self::remove_all_unused_imports(text, uri, &unused_import_diags) {
+                out.push(batch);
+            }
+        }
+
         for diagnostic in diagnostics {
             // Generic strict-mode (and future) quickfix embedding: Diagnostics may carry a
             // serialized `TextEdit` list in `Diagnostic.data`.
@@ -358,6 +387,12 @@ impl Backend {
                         diagnostic,
                         workspace_modules,
                     ));
+                }
+                "W2100" => {
+                    if let Some(action) = Self::remove_unused_import_quickfix(text, uri, diagnostic)
+                    {
+                        out.push(action);
+                    }
                 }
                 "E1004" => {
                     let Some(open) = Self::unclosed_open_delimiter(&diagnostic.message) else {
@@ -437,6 +472,312 @@ impl Backend {
             }
         }
         out
+    }
+
+    /// Refactoring action: offer to insert an inferred type annotation above a top-level
+    /// `Def` that currently lacks one, when the cursor is on (or near) the definition.
+    fn add_type_annotation_actions(
+        text: &str,
+        uri: &Url,
+        cursor_range: Range,
+        workspace_modules: &HashMap<String, IndexedModule>,
+    ) -> Vec<CodeActionOrCommand> {
+        let path = PathBuf::from(Self::path_from_uri(uri));
+        let (file_modules, _) = parse_modules(&path, text);
+        let Some(module) = file_modules.first() else {
+            return Vec::new();
+        };
+
+        // Names that already have an explicit type signature in this module.
+        let has_type_sig: HashSet<&str> = module
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                ModuleItem::TypeSig(sig) => Some(sig.name.name.as_str()),
+                _ => None,
+            })
+            .collect();
+
+        // Find a Def whose name line matches the cursor line and has no type sig.
+        let cursor_line = cursor_range.start.line; // 0-based LSP line
+        let target_def = module.items.iter().find_map(|item| match item {
+            ModuleItem::Def(def) => {
+                // span lines are 1-based; convert to 0-based for comparison.
+                let def_line = def.name.span.start.line.saturating_sub(1) as u32;
+                let first_line = if def.decorators.is_empty() {
+                    def_line
+                } else {
+                    def.decorators
+                        .iter()
+                        .map(|d| d.span.start.line.saturating_sub(1) as u32)
+                        .min()
+                        .unwrap_or(def_line)
+                };
+                // Accept if cursor is anywhere between first decorator and def name.
+                if cursor_line >= first_line
+                    && cursor_line <= def_line
+                    && !has_type_sig.contains(def.name.name.as_str())
+                {
+                    Some(def)
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        });
+
+        let Some(def) = target_def else {
+            return Vec::new();
+        };
+
+        // Run type inference with workspace context to get the inferred type string.
+        let mut module_map: HashMap<String, aivi::Module> = HashMap::new();
+        for stdlib_mod in embedded_stdlib_modules() {
+            module_map.insert(stdlib_mod.name.name.clone(), stdlib_mod);
+        }
+        for indexed in workspace_modules.values() {
+            let name = indexed.module.name.name.clone();
+            if name.starts_with("aivi.") && module_map.contains_key(&name) {
+                continue;
+            }
+            module_map.insert(name, indexed.module.clone());
+        }
+        for m in file_modules.iter() {
+            module_map.insert(m.name.name.clone(), m.clone());
+        }
+        let modules_for_infer: Vec<aivi::Module> = module_map.into_values().collect();
+        let (_, type_strings, _) =
+            std::panic::catch_unwind(|| infer_value_types(&modules_for_infer)).unwrap_or_default();
+
+        let Some(module_types) = type_strings.get(&module.name.name) else {
+            return Vec::new();
+        };
+        let Some(inferred_type) = module_types.get(&def.name.name) else {
+            return Vec::new();
+        };
+
+        // Insert the type annotation on the line before the first decorator (or before the def).
+        let insert_line = if def.decorators.is_empty() {
+            def.name.span.start.line.saturating_sub(1) as u32
+        } else {
+            def.decorators
+                .iter()
+                .map(|d| d.span.start.line.saturating_sub(1) as u32)
+                .min()
+                .unwrap_or(def.name.span.start.line.saturating_sub(1) as u32)
+        };
+        let insert_pos = Position::new(insert_line, 0);
+        let insert_range = Range::new(insert_pos, insert_pos);
+
+        vec![CodeActionOrCommand::CodeAction(CodeAction {
+            title: format!("Add type annotation for '{}'", def.name.name),
+            kind: Some(CodeActionKind::REFACTOR_REWRITE),
+            diagnostics: None,
+            edit: Some(WorkspaceEdit {
+                changes: Some(HashMap::from([(
+                    uri.clone(),
+                    vec![TextEdit {
+                        range: insert_range,
+                        new_text: format!("{} : {}\n", def.name.name, inferred_type),
+                    }],
+                )])),
+                document_changes: None,
+                change_annotations: None,
+            }),
+            command: None,
+            is_preferred: None,
+            disabled: None,
+            data: None,
+        })]
+    }
+
+    /// QuickFix action: remove a single unused import name from its `use` declaration.
+    ///
+    /// For `W2100` diagnostics. When the import list has a single item, the whole
+    /// `use` line is removed. When there are multiple items, only the unused name is
+    /// stripped and the remaining `use` line is reconstructed.
+    fn remove_unused_import_quickfix(
+        text: &str,
+        uri: &Url,
+        diagnostic: &Diagnostic,
+    ) -> Option<CodeActionOrCommand> {
+        let path = PathBuf::from(Self::path_from_uri(uri));
+        let (file_modules, _) = parse_modules(&path, text);
+        let module = file_modules.first()?;
+
+        let diag_start = diagnostic.range.start;
+
+        // Find the use_decl that contains the unused import item at the diagnostic position.
+        let (use_decl, item_name) = module.uses.iter().find_map(|use_decl| {
+            use_decl.items.iter().find_map(|item| {
+                let item_range = Self::span_to_range(item.name.span.clone());
+                if item_range.start.line == diag_start.line
+                    && item_range.start.character == diag_start.character
+                {
+                    Some((use_decl, item.name.name.clone()))
+                } else {
+                    None
+                }
+            })
+        })?;
+
+        // The use declaration starts on the line of the `use` keyword.
+        // `use_decl.span.start.line` is 1-based; convert to 0-based.
+        let use_line = use_decl.span.start.line.saturating_sub(1) as u32;
+        let lines: Vec<&str> = text.split('\n').collect();
+        let line_len = lines.get(use_line as usize).map_or(0, |l| l.len() as u32);
+
+        let (new_text, replace_range) = if use_decl.items.len() == 1 {
+            // Only one import: remove the entire line (including the newline).
+            let range = Range::new(Position::new(use_line, 0), Position::new(use_line + 1, 0));
+            (String::new(), range)
+        } else {
+            // Multiple imports: reconstruct the use line without the unused name.
+            let remaining: Vec<String> = use_decl
+                .items
+                .iter()
+                .filter(|it| it.name.name != item_name)
+                .map(|it| {
+                    if it.kind == ScopeItemKind::Domain {
+                        format!("domain {}", it.name.name)
+                    } else {
+                        it.name.name.clone()
+                    }
+                })
+                .collect();
+            let alias_part = use_decl
+                .alias
+                .as_ref()
+                .map(|a| format!(" as {}", a.name))
+                .unwrap_or_default();
+            let new_line = format!(
+                "use {} ({}){}",
+                use_decl.module.name,
+                remaining.join(", "),
+                alias_part,
+            );
+            let range = Range::new(
+                Position::new(use_line, 0),
+                Position::new(use_line, line_len),
+            );
+            (new_line, range)
+        };
+
+        Some(CodeActionOrCommand::CodeAction(CodeAction {
+            title: format!("Remove unused import '{item_name}'"),
+            kind: Some(CodeActionKind::QUICKFIX),
+            diagnostics: Some(vec![diagnostic.clone()]),
+            edit: Some(WorkspaceEdit {
+                changes: Some(HashMap::from([(
+                    uri.clone(),
+                    vec![TextEdit {
+                        range: replace_range,
+                        new_text,
+                    }],
+                )])),
+                document_changes: None,
+                change_annotations: None,
+            }),
+            command: None,
+            is_preferred: Some(true),
+            disabled: None,
+            data: None,
+        }))
+    }
+
+    /// Source action: remove all unused imports in the file in a single edit.
+    fn remove_all_unused_imports(
+        text: &str,
+        uri: &Url,
+        unused_diags: &[&Diagnostic],
+    ) -> Option<CodeActionOrCommand> {
+        let path = PathBuf::from(Self::path_from_uri(uri));
+        let (file_modules, _) = parse_modules(&path, text);
+        let module = file_modules.first()?;
+
+        // Collect all unused import names from diagnostics.
+        let unused_names: HashSet<String> = unused_diags
+            .iter()
+            .filter_map(|d| Self::unknown_name_from_message(&d.message))
+            .collect();
+
+        let lines: Vec<&str> = text.split('\n').collect();
+        let mut edits: Vec<TextEdit> = Vec::new();
+
+        for use_decl in &module.uses {
+            if use_decl.wildcard {
+                continue;
+            }
+            let unused_in_decl: Vec<&str> = use_decl
+                .items
+                .iter()
+                .filter(|it| unused_names.contains(&it.name.name))
+                .map(|it| it.name.name.as_str())
+                .collect();
+            if unused_in_decl.is_empty() {
+                continue;
+            }
+            let use_line = use_decl.span.start.line.saturating_sub(1) as u32;
+            let line_len = lines.get(use_line as usize).map_or(0, |l| l.len() as u32);
+
+            let remaining: Vec<String> = use_decl
+                .items
+                .iter()
+                .filter(|it| !unused_names.contains(&it.name.name))
+                .map(|it| {
+                    if it.kind == ScopeItemKind::Domain {
+                        format!("domain {}", it.name.name)
+                    } else {
+                        it.name.name.clone()
+                    }
+                })
+                .collect();
+
+            if remaining.is_empty() {
+                // Remove the whole line.
+                edits.push(TextEdit {
+                    range: Range::new(Position::new(use_line, 0), Position::new(use_line + 1, 0)),
+                    new_text: String::new(),
+                });
+            } else {
+                let alias_part = use_decl
+                    .alias
+                    .as_ref()
+                    .map(|a| format!(" as {}", a.name))
+                    .unwrap_or_default();
+                edits.push(TextEdit {
+                    range: Range::new(
+                        Position::new(use_line, 0),
+                        Position::new(use_line, line_len),
+                    ),
+                    new_text: format!(
+                        "use {} ({}){}",
+                        use_decl.module.name,
+                        remaining.join(", "),
+                        alias_part,
+                    ),
+                });
+            }
+        }
+
+        if edits.is_empty() {
+            return None;
+        }
+
+        Some(CodeActionOrCommand::CodeAction(CodeAction {
+            title: "Remove all unused imports".to_string(),
+            kind: Some(CodeActionKind::SOURCE),
+            diagnostics: None,
+            edit: Some(WorkspaceEdit {
+                changes: Some(HashMap::from([(uri.clone(), edits)])),
+                document_changes: None,
+                change_annotations: None,
+            }),
+            command: None,
+            is_preferred: None,
+            disabled: None,
+            data: None,
+        }))
     }
 }
 
