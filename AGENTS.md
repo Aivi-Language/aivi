@@ -23,6 +23,7 @@ Authoritative guide for AI agents working on the AIVI language project. Covers t
 | `vscode/`                 | **VSCode extension** | TypeScript, pnpm. Grammar auto-generated via `gen_vscode_syntax` binary.                         |
 | `zed/`                    | **Zed extension**    | Tree-sitter grammar (`zed/grammars/aivi/`), language config, dark theme.                         |
 | `specs/`                  | **Docs site**        | VitePress site. `specs/nav.mjs` is the single TOC source of truth.                               |
+| `ui-client/`              | **Browser client**   | Vite micro-client for `aivi.ui.ServerHtml`: DOM patches via WebSocket, event delegation.         |
 | `fuzz/`                   | **Fuzz targets**     | cargo-bolero fuzz targets: parser, frontend, runtime, formatter, LSP pipeline, type inference.   |
 
 ### 1.2 Crate Dependency Flow
@@ -144,7 +145,7 @@ When writing `.aivi` code in `integration-tests/`, `specs/` snippets, or doc exa
 - Spawn tasks inside a scope (`concurrent.scope`).
 - Communicate via typed channels (`Send`/`Recv`), not shared mutable state.
 
-### 4.5 GTK4 UI — Signal Streams
+### 4.4 GTK4 UI — Signal Streams
 
 When writing GTK4 UI code, **always use `signalStream` for event handling**. The old `on Msg => handler` callback style and the `signalBind*` helper family (`signalBindBoolProperty`, `signalBindCssClass`, `signalBindToggleBoolProperty`, `signalToggleCssClass`, `signalBindDialogPresent`, `signalBindStackPage`) are **deprecated** and must not appear in new code.
 
@@ -180,7 +181,7 @@ runLoop = win => state => widgets => rx => do Effect {
 - Prefer typed variants (`GtkClicked`, `GtkInputChanged`, `GtkToggled`, etc.) over `GtkUnknownSignal` wherever possible.
 - `signalPoll` is available for one-shot reads; `signalStream` is preferred for continuous loops.
 
-### 4.4 Decorators
+### 4.5 Decorators
 
 Only decorators listed in `specs/syntax/decorators.md` are valid in v0.1. Decorators are compiler/tooling pragmas only — never domain-specific annotations like `@sql`, `@schema`, `@model`.
 
