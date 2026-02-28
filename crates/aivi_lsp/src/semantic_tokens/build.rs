@@ -13,6 +13,7 @@ impl Backend {
         let mut last_start = 0u32;
         let signature_lines = Self::signature_lines(&tokens);
         let dotted_paths = Self::dotted_path_roles(&tokens);
+        let lambda_heads = Self::lambda_head_positions(&significant, &tokens);
 
         for (position, token_index) in significant.iter().copied().enumerate() {
             let token = &tokens[token_index];
@@ -51,7 +52,12 @@ impl Backend {
             let token_type = dotted_paths
                 .get(&token_index)
                 .copied()
-                .or_else(|| Self::classify_semantic_token(prev, token, next));
+                .or_else(|| {
+                    if lambda_heads.contains(&token_index) {
+                        return Some(Self::SEM_TOKEN_VARIABLE);
+                    }
+                    Self::classify_semantic_token(prev, token, next)
+                });
             let Some(token_type) = token_type else {
                 continue;
             };

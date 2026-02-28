@@ -360,6 +360,47 @@ impl Backend {
         prev.span.end.column.saturating_add(1) == token.span.start.column
     }
 
+    /// Returns raw token indices that are the *first* identifier in a
+    /// multi-parameter lambda shorthand (`a b c => body`).  Only the head
+    /// is misclassified by `is_application_head`; subsequent params are
+    /// already correct because their prev is an expression token.
+    fn lambda_head_positions(significant: &[usize], tokens: &[CstToken]) -> HashSet<usize> {
+        let mut heads = HashSet::new();
+        let len = significant.len();
+        for i in 0..len {
+            let idx = significant[i];
+            let token = &tokens[idx];
+            if !Self::is_lower_ident(token) || Self::KEYWORDS.contains(&token.text.as_str()) {
+                continue;
+            }
+            let line = token.span.start.line;
+            let mut j = i + 1;
+            while j < len {
+                let t = &tokens[significant[j]];
+                if t.span.start.line != line {
+                    break;
+                }
+                if (Self::is_lower_ident(t) && !Self::KEYWORDS.contains(&t.text.as_str()))
+                    || t.text == "_"
+                {
+                    j += 1;
+                } else {
+                    break;
+                }
+            }
+            // Need at least 2 consecutive idents followed by `=>`
+            if j - i >= 2
+                && j < len
+                && tokens[significant[j]].kind == "symbol"
+                && tokens[significant[j]].text == "=>"
+                && tokens[significant[j]].span.start.line == line
+            {
+                heads.insert(idx);
+            }
+        }
+        heads
+    }
+
     fn signature_lines(tokens: &[CstToken]) -> HashSet<u32> {
         let mut lines = HashSet::new();
         let mut index = 0;
