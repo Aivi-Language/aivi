@@ -398,6 +398,9 @@ fn jit_compile_into_runtime(
     // overwrite is correct here: if two modules define the same short name,
     // the last one wins; there is no spurious MultiClause wrapping.
     for pd in &pending {
+        if pd.name == "sum" {
+            eprintln!("[DEBUG Pass B] sum: qualified={} arity={}", pd.qualified, pd.arity);
+        }
         if let Some(value) = compiled_globals.get(&pd.qualified).cloned() {
             compiled_globals.insert(pd.name.clone(), value);
         }
@@ -410,8 +413,17 @@ fn jit_compile_into_runtime(
         // when import resolution has rewritten a bare name to its qualified form.
         if !name.contains('.') {
             if let Some(Value::Builtin(_)) = runtime.ctx.globals.get(&name) {
+                if name == "sum" {
+                    eprintln!("[DEBUG install] SKIPPING sum (already a Builtin)");
+                }
                 continue;
             }
+        }
+        if name == "sum" {
+            eprintln!("[DEBUG install] setting sum to {:?}", match &value {
+                Value::Builtin(b) => format!("Builtin(name={})", b.imp.name),
+                other => format!("{:?}", std::mem::discriminant(other)),
+            });
         }
         runtime.ctx.globals.set(name, value);
     }
@@ -549,11 +561,19 @@ pub fn run_test_suite_jit(
                 // Check for snapshot assertion failures that the JIT couldn't
                 // propagate through the Effect chain.
                 if let Some(msg) = runtime.snapshot_failure.take() {
+                    runtime.jit_pending_error = None;
                     report.failed += 1;
                     report.failures.push(TestFailure {
                         name: name.clone(),
                         description: description.clone(),
                         message: msg,
+                    });
+                } else if let Some(err) = runtime.jit_pending_error.take() {
+                    report.failed += 1;
+                    report.failures.push(TestFailure {
+                        name: name.clone(),
+                        description: description.clone(),
+                        message: format_runtime_error(err),
                     });
                 } else {
                     report.passed += 1;
@@ -1345,6 +1365,10 @@ fn compile_definition_body<M: Module>(
     // Also import specializations (from spec_map) when the original is referenced.
     let mut called_globals = HashSet::new();
     collect_called_globals(body, &mut called_globals);
+    if def.name == "recursionWorks" || def.name == "sum" {
+        eprintln!("[DEBUG collect_globals] qname={} def={} called_globals={:?}", qualified_name, def.name, called_globals);
+        eprintln!("[DEBUG collect_globals] body: {:?}", body);
+    }
 
     let mut local_jit_funcs: HashMap<String, JitFuncInfo> = HashMap::new();
     let mut local_spec_map: HashMap<String, Vec<String>> = HashMap::new();
@@ -1354,6 +1378,9 @@ fn compile_definition_body<M: Module>(
             let qualified = format!("{}.{}", module_name, name);
             compiled_decls.get(&qualified)
         });
+        if name == "sum" {
+            eprintln!("[DEBUG import_xmod] name=sum module_name={} decl_found={}", module_name, decl.is_some());
+        }
         if let Some(decl) = decl {
             let func_ref = module.declare_func_in_func(decl.func_id, &mut function);
             local_jit_funcs.insert(

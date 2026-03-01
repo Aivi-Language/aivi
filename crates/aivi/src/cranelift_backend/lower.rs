@@ -161,6 +161,15 @@ fn scalar_type(ty: &CgType) -> Option<CgType> {
     }
 }
 
+/// Returns `true` when the pattern directly aliases the scrutinee pointer
+/// (i.e., `bind_pattern` stores the scrutinee value itself rather than
+/// extracting fields). In that case the Perceus reuse optimisation must be
+/// skipped, because `rt_try_reuse` would overwrite the memory that the
+/// pattern-bound variable still references.
+fn pattern_aliases_scrutinee(pattern: &RustIrPattern) -> bool {
+    matches!(pattern, RustIrPattern::Var { .. } | RustIrPattern::At { .. })
+}
+
 /// Pre-declared `FuncRef`s for all runtime helpers in a JIT module.
 #[allow(dead_code)]
 pub(crate) struct HelperRefs {
@@ -1652,7 +1661,11 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             // Perceus: if the scrutinee is consumed, generate a reuse token.
             // The pattern has already extracted all needed fields, so the
             // scrutinee's box can be recycled for the next allocation.
-            if scrut_is_last_use {
+            // Skip when the pattern directly aliases the scrutinee (Var/At)
+            // because bind_pattern stores the same pointer — rt_try_reuse
+            // would overwrite the value with Unit while the bound variable
+            // still references it.
+            if scrut_is_last_use && !pattern_aliases_scrutinee(&arm.pattern) {
                 let call = builder
                     .ins()
                     .call(self.helpers.rt_try_reuse, &[self.ctx_param, scrut_val]);

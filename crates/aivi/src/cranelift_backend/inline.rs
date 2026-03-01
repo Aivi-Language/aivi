@@ -174,7 +174,21 @@ struct InlineCandidate {
 /// Build an index of functions eligible for inlining.
 ///
 /// Returns a map from qualified function name → candidate (params + body).
+/// Short (bare) names are only registered when they are unambiguous across all
+/// modules.  This prevents cross-module name collisions where a call to a
+/// local `sum` could be wrongly inlined with the stdlib's `sum`.
 fn collect_candidates(modules: &[RustIrModule]) -> HashMap<String, InlineCandidate> {
+    // Count how many defs share each bare name across all modules.
+    // Names that appear more than once must NOT be registered as short-name
+    // candidates because Global("sum") in module A may mean a different
+    // function than Global("sum") in module B.
+    let mut name_count: HashMap<&str, usize> = HashMap::new();
+    for module in modules {
+        for def in &module.defs {
+            *name_count.entry(&def.name).or_insert(0) += 1;
+        }
+    }
+
     let mut candidates = HashMap::new();
 
     for module in modules {
@@ -202,14 +216,18 @@ fn collect_candidates(modules: &[RustIrModule]) -> HashMap<String, InlineCandida
                         body: body.clone(),
                     },
                 );
-                // Also register under short name for intra-module calls
-                candidates.insert(
-                    def.name.clone(),
-                    InlineCandidate {
-                        params,
-                        body: body.clone(),
-                    },
-                );
+                // Only register under short name when there is exactly one def
+                // with this name across all modules – otherwise the short name
+                // is ambiguous and inlining through it would pick the wrong body.
+                if name_count.get(def.name.as_str()).copied().unwrap_or(0) == 1 {
+                    candidates.insert(
+                        def.name.clone(),
+                        InlineCandidate {
+                            params,
+                            body: body.clone(),
+                        },
+                    );
+                }
             }
         }
     }
