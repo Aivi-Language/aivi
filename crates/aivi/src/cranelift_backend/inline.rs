@@ -9,8 +9,8 @@
 use std::collections::HashMap;
 
 use crate::rust_ir::{
-    RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrMockSubstitution,
-    RustIrModule, RustIrPattern, RustIrRecordField, RustIrTextPart,
+    RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrMockSubstitution, RustIrModule,
+    RustIrPattern, RustIrRecordField, RustIrTextPart,
 };
 
 /// Maximum AST-node cost for automatic inlining.

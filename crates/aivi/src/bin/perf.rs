@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use aivi::{
-    check_modules, check_types, desugar_modules, file_diagnostics_have_errors, lower_kernel,
+    check_modules, check_types, desugar_blocks, desugar_modules, file_diagnostics_have_errors,
 };
 
 #[derive(Debug, Clone)]
@@ -100,7 +100,7 @@ fn measure_fixture(fixture: &Fixture, iters: usize) -> FixtureMetrics {
         }
 
         let hir = desugar_modules(&modules);
-        let _kernel = lower_kernel(hir);
+        let _kernel = desugar_blocks(hir);
         let t4 = Instant::now();
 
         if i == 0 {

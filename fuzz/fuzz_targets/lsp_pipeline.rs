@@ -49,7 +49,7 @@ fn lsp_pipeline() {
         let _ = aivi::render_diagnostics("fuzz.aivi", &rendered_diags, false);
         if !aivi::file_diagnostics_have_errors(&all_diags) {
             let hir = aivi::desugar_modules(&modules);
-            let _kernel = aivi::lower_kernel(hir);
+            let _kernel = aivi::desugar_blocks(hir);
         }
     });
 }

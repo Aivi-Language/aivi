@@ -20,8 +20,8 @@ use crate::runtime::{
     Runtime, RuntimeError,
 };
 use crate::rust_ir::{
-    RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment,
-    RustIrPattern, RustIrRecordField, RustIrTextPart,
+    RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment, RustIrPattern, RustIrRecordField,
+    RustIrTextPart,
 };
 use crate::AiviError;
 use crate::{kernel, rust_ir};
@@ -208,14 +208,7 @@ fn jit_compile_into_runtime(
                 (vec![None; arity], None)
             };
 
-            let is_effect_block = params.is_empty()
-                && matches!(
-                    body,
-                    RustIrExpr::Block {
-                        block_kind: RustIrBlockKind::Do { .. },
-                        ..
-                    }
-                );
+            let is_effect_block = false;
 
             declared_defs.push(DeclaredDef {
                 def,
@@ -751,14 +744,7 @@ pub fn compile_to_object(
                 (vec![None; arity], None)
             };
 
-            let is_effect_block = params.is_empty()
-                && matches!(
-                    body,
-                    RustIrExpr::Block {
-                        block_kind: RustIrBlockKind::Do { .. },
-                        ..
-                    }
-                );
+            let is_effect_block = false;
 
             declared_defs.push(DeclaredDef {
                 def,
@@ -1572,17 +1558,6 @@ fn pattern_supported(pattern: &RustIrPattern) -> bool {
     }
 }
 
-fn block_item_supported(item: &RustIrBlockItem) -> bool {
-    match item {
-        RustIrBlockItem::Bind { pattern, expr } => {
-            pattern_supported(pattern) && expr_supported(expr)
-        }
-        RustIrBlockItem::Expr { expr } => expr_supported(expr),
-        RustIrBlockItem::Yield { expr } => expr_supported(expr),
-        RustIrBlockItem::Filter { .. } | RustIrBlockItem::Recurse { .. } => false,
-    }
-}
-
 fn expr_supported(expr: &RustIrExpr) -> bool {
     match expr {
         RustIrExpr::Local { .. }
@@ -1652,17 +1627,6 @@ fn expr_supported(expr: &RustIrExpr) -> bool {
         } => expr_supported(cond) && expr_supported(then_branch) && expr_supported(else_branch),
 
         RustIrExpr::Binary { left, right, .. } => expr_supported(left) && expr_supported(right),
-
-        RustIrExpr::Block {
-            block_kind, items, ..
-        } => match block_kind {
-            // Plain blocks: all items must be individually supported
-            RustIrBlockKind::Plain => items.iter().all(block_item_supported),
-            // Generate and Resource blocks are compiled natively in Cranelift.
-            RustIrBlockKind::Generate | RustIrBlockKind::Resource => true,
-            // Do blocks: items must be individually supported
-            RustIrBlockKind::Do { .. } => items.iter().all(block_item_supported),
-        },
     }
 }
 
@@ -1723,16 +1687,6 @@ fn collect_called_globals(expr: &RustIrExpr, out: &mut HashSet<String>) {
             }
         }
         RustIrExpr::Lambda { body, .. } => collect_called_globals(body, out),
-        RustIrExpr::Block { items, .. } => {
-            for item in items {
-                match item {
-                    RustIrBlockItem::Bind { expr, .. } | RustIrBlockItem::Expr { expr } => {
-                        collect_called_globals(expr, out);
-                    }
-                    _ => {}
-                }
-            }
-        }
         RustIrExpr::List { items, .. } => {
             for item in items {
                 collect_called_globals(&item.expr, out);
@@ -2229,24 +2183,6 @@ fn collect_inner_lambdas<'a>(
             collect_inner_lambdas(left, bound, out);
             collect_inner_lambdas(right, bound, out);
         }
-        RustIrExpr::Block { items, .. } => {
-            let mark = bound.len();
-            for item in items {
-                match item {
-                    RustIrBlockItem::Bind { pattern, expr } => {
-                        collect_inner_lambdas(expr, bound, out);
-                        collect_pattern_vars(pattern, bound);
-                    }
-                    RustIrBlockItem::Expr { expr }
-                    | RustIrBlockItem::Yield { expr }
-                    | RustIrBlockItem::Recurse { expr }
-                    | RustIrBlockItem::Filter { expr } => {
-                        collect_inner_lambdas(expr, bound, out);
-                    }
-                }
-            }
-            bound.truncate(mark);
-        }
         RustIrExpr::FieldAccess { base, .. } => {
             collect_inner_lambdas(base, bound, out);
         }
@@ -2401,24 +2337,6 @@ fn collect_free_locals(expr: &RustIrExpr, bound: &mut Vec<String>, free: &mut Ha
         RustIrExpr::Binary { left, right, .. } => {
             collect_free_locals(left, bound, free);
             collect_free_locals(right, bound, free);
-        }
-        RustIrExpr::Block { items, .. } => {
-            let mark = bound.len();
-            for item in items {
-                match item {
-                    RustIrBlockItem::Bind { pattern, expr } => {
-                        collect_free_locals(expr, bound, free);
-                        collect_pattern_vars(pattern, bound);
-                    }
-                    RustIrBlockItem::Expr { expr }
-                    | RustIrBlockItem::Yield { expr }
-                    | RustIrBlockItem::Recurse { expr }
-                    | RustIrBlockItem::Filter { expr } => {
-                        collect_free_locals(expr, bound, free);
-                    }
-                }
-            }
-            bound.truncate(mark);
         }
         RustIrExpr::FieldAccess { base, .. } => {
             collect_free_locals(base, bound, free);

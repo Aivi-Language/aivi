@@ -1,7 +1,3 @@
-use crate::hir::{
-    HirBlockItem, HirExpr, HirPathSegment, HirPattern, HirProgram, HirTextPart,
-};
-
 // genBind(g, f)
 // \k -> \z -> g (\acc -> \x -> f(x) k acc) z
 fn gen_bind(g: HirExpr, f: HirExpr, id_gen: &mut IdGen) -> HirExpr {

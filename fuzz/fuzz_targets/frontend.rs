@@ -25,6 +25,6 @@ fn frontend() {
 
         // Exercise lowering stages on well-typed inputs.
         let hir = aivi::desugar_modules(&modules);
-        let _kernel = aivi::lower_kernel(hir);
+        let _kernel = aivi::desugar_blocks(hir);
     });
 }
