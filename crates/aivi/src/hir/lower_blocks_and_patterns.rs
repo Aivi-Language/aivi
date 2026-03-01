@@ -47,9 +47,16 @@ fn lower_block_item_ctx(
         BlockItem::Recurse { expr, .. } => HirBlockItem::Recurse {
             expr: lower_expr_ctx(expr, id_gen, ctx, false),
         },
-        BlockItem::Expr { expr, .. } => HirBlockItem::Expr {
-            expr: lower_expr_ctx(expr, id_gen, ctx, false),
-        },
+        BlockItem::Expr { expr, .. } => {
+            let expr = if matches!(surface_kind, BlockKind::Do { .. }) {
+                desugar_if_unit_branches(expr)
+            } else {
+                expr
+            };
+            HirBlockItem::Expr {
+                expr: lower_expr_ctx(expr, id_gen, ctx, false),
+            }
+        }
         // Desugar `when cond <- eff` → `_ <- if cond then eff else pure Unit`
         BlockItem::When { cond, effect, .. } => {
             let cond_hir = lower_expr_ctx(cond, id_gen, ctx, false);

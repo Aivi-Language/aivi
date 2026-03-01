@@ -27,11 +27,9 @@ pub(crate) struct SourceValue {
 }
 
 /// Transitional compact scalar container for future NaN-tagged values.
-#[allow(dead_code)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TaggedValue(u64);
 
-#[allow(dead_code)]
 impl TaggedValue {
     const TAG_INT: u64 = 0b01;
     const TAG_BOOL_FALSE: u64 = 0b10;
@@ -92,9 +90,7 @@ pub(crate) enum Value {
     Builtin(BuiltinValue),
     Effect(Arc<EffectValue>),
     Source(Arc<SourceValue>),
-    #[allow(dead_code)]
     Resource(Arc<ResourceValue>),
-    #[allow(dead_code)]
     Thunk(Arc<ThunkValue>),
     MultiClause(Vec<Value>),
     ChannelSend(Arc<ChannelSend>),
@@ -178,7 +174,6 @@ pub(crate) struct ResourceValue {
     pub(crate) cleanup: Arc<ThunkFunc>,
 }
 
-#[allow(dead_code)]
 pub(crate) struct ThunkValue {
     pub(crate) expr: Arc<HirExpr>,
     pub(crate) env: Env,

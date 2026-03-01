@@ -125,7 +125,6 @@ impl RuntimeContext {
         }
     }
 
-    #[allow(dead_code)]
     pub(crate) fn register_machine(
         &self,
         machine_name: String,
@@ -143,12 +142,10 @@ impl RuntimeContext {
             .retain(|(name, _), _| name != &machine_name);
     }
 
-    #[allow(dead_code)]
     pub(crate) fn machine_current_state(&self, machine_name: &str) -> Option<String> {
         self.machine_states.read().get(machine_name).cloned()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn machine_can_transition(&self, machine_name: &str, event: &str) -> bool {
         let Some(current) = self.machine_current_state(machine_name) else {
             return false;
@@ -167,7 +164,6 @@ impl RuntimeContext {
             == 1
     }
 
-    #[allow(dead_code)]
     pub(crate) fn apply_machine_transition(
         &self,
         machine_name: &str,
@@ -221,7 +217,6 @@ impl RuntimeContext {
         Ok(next)
     }
 
-    #[allow(dead_code)]
     pub(crate) fn register_machine_handler(&self, machine_name: &str, event: &str, handler: Value) {
         let key = (machine_name.to_string(), event.to_string());
         self.machine_handlers
@@ -231,7 +226,6 @@ impl RuntimeContext {
             .push(handler);
     }
 
-    #[allow(dead_code)]
     pub(crate) fn machine_handlers(&self, machine_name: &str, event: &str) -> Vec<Value> {
         self.machine_handlers
             .read()
