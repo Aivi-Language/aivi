@@ -28,7 +28,9 @@ fn hkt_container(params: &[TypeExpr]) -> Option<&TypeExpr> {
         return None;
     }
     match &params[0] {
-        TypeExpr::Apply { args, .. } if !args.iter().any(|a| matches!(a, TypeExpr::Star { .. })) => {
+        TypeExpr::Apply { args, .. }
+            if !args.iter().any(|a| matches!(a, TypeExpr::Star { .. })) =>
+        {
             Some(&params[0])
         }
         _ => None,
@@ -51,7 +53,11 @@ fn flatten_func(ty: &TypeExpr) -> (Vec<&TypeExpr>, &TypeExpr) {
 /// Insert the container type as the last parameter in a right-associative Func chain.
 fn insert_last_param(ty: &TypeExpr, container: &TypeExpr) -> TypeExpr {
     match ty {
-        TypeExpr::Func { params, result, span } => match result.as_ref() {
+        TypeExpr::Func {
+            params,
+            result,
+            span,
+        } => match result.as_ref() {
             TypeExpr::Func { .. } => TypeExpr::Func {
                 params: params.clone(),
                 result: Box::new(insert_last_param(result, container)),

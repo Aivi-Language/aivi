@@ -1,20 +1,20 @@
 {
   "files": [
     {
-      "byte_count": 324,
+      "byte_count": 341,
       "diagnostics": [],
       "line_count": 23,
       "lines": [
         "module test.fmt_indent_after_eq",
         "export activeNames",
         "",
-        "class Functor (F *) = {",
-        "  map: F A -> (A -> B) -> F B",
+        "class Functor (F A) = given (A: Any) {",
+        "  map: (A -> B) -> F B",
         "}",
         "",
-        "class Apply (F *) =",
+        "class Apply (F A) = given (A: Any),",
         "Functor {",
-        "  ap: F A -> F (A -> B) -> F B",
+        "  ap: F (A -> B) -> F B",
         "}",
         "",
         "users = [",
@@ -242,7 +242,7 @@
           "text": " "
         },
         {
-          "kind": "symbol",
+          "kind": "ident",
           "span": {
             "end": {
               "column": 18,
@@ -253,7 +253,7 @@
               "line": 4
             }
           },
-          "text": "*"
+          "text": "A"
         },
         {
           "kind": "symbol",
@@ -312,14 +312,140 @@
           "text": " "
         },
         {
-          "kind": "symbol",
+          "kind": "ident",
           "span": {
             "end": {
-              "column": 23,
+              "column": 27,
               "line": 4
             },
             "start": {
               "column": 23,
+              "line": 4
+            }
+          },
+          "text": "given"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 28,
+              "line": 4
+            },
+            "start": {
+              "column": 28,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 29,
+              "line": 4
+            },
+            "start": {
+              "column": 29,
+              "line": 4
+            }
+          },
+          "text": "("
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 30,
+              "line": 4
+            },
+            "start": {
+              "column": 30,
+              "line": 4
+            }
+          },
+          "text": "A"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 31,
+              "line": 4
+            },
+            "start": {
+              "column": 31,
+              "line": 4
+            }
+          },
+          "text": ":"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 32,
+              "line": 4
+            },
+            "start": {
+              "column": 32,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 35,
+              "line": 4
+            },
+            "start": {
+              "column": 33,
+              "line": 4
+            }
+          },
+          "text": "Any"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 36,
+              "line": 4
+            },
+            "start": {
+              "column": 36,
+              "line": 4
+            }
+          },
+          "text": ")"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 37,
+              "line": 4
+            },
+            "start": {
+              "column": 37,
+              "line": 4
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 38,
+              "line": 4
+            },
+            "start": {
+              "column": 38,
               "line": 4
             }
           },
@@ -382,7 +508,7 @@
           "text": " "
         },
         {
-          "kind": "ident",
+          "kind": "symbol",
           "span": {
             "end": {
               "column": 8,
@@ -390,90 +516,6 @@
             },
             "start": {
               "column": 8,
-              "line": 5
-            }
-          },
-          "text": "F"
-        },
-        {
-          "kind": "whitespace",
-          "span": {
-            "end": {
-              "column": 9,
-              "line": 5
-            },
-            "start": {
-              "column": 9,
-              "line": 5
-            }
-          },
-          "text": " "
-        },
-        {
-          "kind": "ident",
-          "span": {
-            "end": {
-              "column": 10,
-              "line": 5
-            },
-            "start": {
-              "column": 10,
-              "line": 5
-            }
-          },
-          "text": "A"
-        },
-        {
-          "kind": "whitespace",
-          "span": {
-            "end": {
-              "column": 11,
-              "line": 5
-            },
-            "start": {
-              "column": 11,
-              "line": 5
-            }
-          },
-          "text": " "
-        },
-        {
-          "kind": "symbol",
-          "span": {
-            "end": {
-              "column": 13,
-              "line": 5
-            },
-            "start": {
-              "column": 12,
-              "line": 5
-            }
-          },
-          "text": "->"
-        },
-        {
-          "kind": "whitespace",
-          "span": {
-            "end": {
-              "column": 14,
-              "line": 5
-            },
-            "start": {
-              "column": 14,
-              "line": 5
-            }
-          },
-          "text": " "
-        },
-        {
-          "kind": "symbol",
-          "span": {
-            "end": {
-              "column": 15,
-              "line": 5
-            },
-            "start": {
-              "column": 15,
               "line": 5
             }
           },
@@ -483,11 +525,11 @@
           "kind": "ident",
           "span": {
             "end": {
-              "column": 16,
+              "column": 9,
               "line": 5
             },
             "start": {
-              "column": 16,
+              "column": 9,
               "line": 5
             }
           },
@@ -497,11 +539,11 @@
           "kind": "whitespace",
           "span": {
             "end": {
-              "column": 17,
+              "column": 10,
               "line": 5
             },
             "start": {
-              "column": 17,
+              "column": 10,
               "line": 5
             }
           },
@@ -511,11 +553,11 @@
           "kind": "symbol",
           "span": {
             "end": {
-              "column": 19,
+              "column": 12,
               "line": 5
             },
             "start": {
-              "column": 18,
+              "column": 11,
               "line": 5
             }
           },
@@ -525,11 +567,11 @@
           "kind": "whitespace",
           "span": {
             "end": {
-              "column": 20,
+              "column": 13,
               "line": 5
             },
             "start": {
-              "column": 20,
+              "column": 13,
               "line": 5
             }
           },
@@ -539,11 +581,11 @@
           "kind": "ident",
           "span": {
             "end": {
-              "column": 21,
+              "column": 14,
               "line": 5
             },
             "start": {
-              "column": 21,
+              "column": 14,
               "line": 5
             }
           },
@@ -553,11 +595,11 @@
           "kind": "symbol",
           "span": {
             "end": {
-              "column": 22,
+              "column": 15,
               "line": 5
             },
             "start": {
-              "column": 22,
+              "column": 15,
               "line": 5
             }
           },
@@ -567,11 +609,11 @@
           "kind": "whitespace",
           "span": {
             "end": {
-              "column": 23,
+              "column": 16,
               "line": 5
             },
             "start": {
-              "column": 23,
+              "column": 16,
               "line": 5
             }
           },
@@ -581,11 +623,11 @@
           "kind": "symbol",
           "span": {
             "end": {
-              "column": 25,
+              "column": 18,
               "line": 5
             },
             "start": {
-              "column": 24,
+              "column": 17,
               "line": 5
             }
           },
@@ -595,11 +637,11 @@
           "kind": "whitespace",
           "span": {
             "end": {
-              "column": 26,
+              "column": 19,
               "line": 5
             },
             "start": {
-              "column": 26,
+              "column": 19,
               "line": 5
             }
           },
@@ -609,11 +651,11 @@
           "kind": "ident",
           "span": {
             "end": {
-              "column": 27,
+              "column": 20,
               "line": 5
             },
             "start": {
-              "column": 27,
+              "column": 20,
               "line": 5
             }
           },
@@ -623,11 +665,11 @@
           "kind": "whitespace",
           "span": {
             "end": {
-              "column": 28,
+              "column": 21,
               "line": 5
             },
             "start": {
-              "column": 28,
+              "column": 21,
               "line": 5
             }
           },
@@ -637,11 +679,11 @@
           "kind": "ident",
           "span": {
             "end": {
-              "column": 29,
+              "column": 22,
               "line": 5
             },
             "start": {
-              "column": 29,
+              "column": 22,
               "line": 5
             }
           },
@@ -760,7 +802,7 @@
           "text": " "
         },
         {
-          "kind": "symbol",
+          "kind": "ident",
           "span": {
             "end": {
               "column": 16,
@@ -771,7 +813,7 @@
               "line": 8
             }
           },
-          "text": "*"
+          "text": "A"
         },
         {
           "kind": "symbol",
@@ -814,6 +856,146 @@
             }
           },
           "text": "="
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 20,
+              "line": 8
+            },
+            "start": {
+              "column": 20,
+              "line": 8
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 25,
+              "line": 8
+            },
+            "start": {
+              "column": 21,
+              "line": 8
+            }
+          },
+          "text": "given"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 26,
+              "line": 8
+            },
+            "start": {
+              "column": 26,
+              "line": 8
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 27,
+              "line": 8
+            },
+            "start": {
+              "column": 27,
+              "line": 8
+            }
+          },
+          "text": "("
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 28,
+              "line": 8
+            },
+            "start": {
+              "column": 28,
+              "line": 8
+            }
+          },
+          "text": "A"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 29,
+              "line": 8
+            },
+            "start": {
+              "column": 29,
+              "line": 8
+            }
+          },
+          "text": ":"
+        },
+        {
+          "kind": "whitespace",
+          "span": {
+            "end": {
+              "column": 30,
+              "line": 8
+            },
+            "start": {
+              "column": 30,
+              "line": 8
+            }
+          },
+          "text": " "
+        },
+        {
+          "kind": "ident",
+          "span": {
+            "end": {
+              "column": 33,
+              "line": 8
+            },
+            "start": {
+              "column": 31,
+              "line": 8
+            }
+          },
+          "text": "Any"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 34,
+              "line": 8
+            },
+            "start": {
+              "column": 34,
+              "line": 8
+            }
+          },
+          "text": ")"
+        },
+        {
+          "kind": "symbol",
+          "span": {
+            "end": {
+              "column": 35,
+              "line": 8
+            },
+            "start": {
+              "column": 35,
+              "line": 8
+            }
+          },
+          "text": ","
         },
         {
           "kind": "ident",
@@ -942,7 +1124,7 @@
           "text": " "
         },
         {
-          "kind": "ident",
+          "kind": "symbol",
           "span": {
             "end": {
               "column": 9,
@@ -950,90 +1132,6 @@
             },
             "start": {
               "column": 9,
-              "line": 10
-            }
-          },
-          "text": "A"
-        },
-        {
-          "kind": "whitespace",
-          "span": {
-            "end": {
-              "column": 10,
-              "line": 10
-            },
-            "start": {
-              "column": 10,
-              "line": 10
-            }
-          },
-          "text": " "
-        },
-        {
-          "kind": "symbol",
-          "span": {
-            "end": {
-              "column": 12,
-              "line": 10
-            },
-            "start": {
-              "column": 11,
-              "line": 10
-            }
-          },
-          "text": "->"
-        },
-        {
-          "kind": "whitespace",
-          "span": {
-            "end": {
-              "column": 13,
-              "line": 10
-            },
-            "start": {
-              "column": 13,
-              "line": 10
-            }
-          },
-          "text": " "
-        },
-        {
-          "kind": "ident",
-          "span": {
-            "end": {
-              "column": 14,
-              "line": 10
-            },
-            "start": {
-              "column": 14,
-              "line": 10
-            }
-          },
-          "text": "F"
-        },
-        {
-          "kind": "whitespace",
-          "span": {
-            "end": {
-              "column": 15,
-              "line": 10
-            },
-            "start": {
-              "column": 15,
-              "line": 10
-            }
-          },
-          "text": " "
-        },
-        {
-          "kind": "symbol",
-          "span": {
-            "end": {
-              "column": 16,
-              "line": 10
-            },
-            "start": {
-              "column": 16,
               "line": 10
             }
           },
@@ -1043,11 +1141,11 @@
           "kind": "ident",
           "span": {
             "end": {
-              "column": 17,
+              "column": 10,
               "line": 10
             },
             "start": {
-              "column": 17,
+              "column": 10,
               "line": 10
             }
           },
@@ -1057,11 +1155,11 @@
           "kind": "whitespace",
           "span": {
             "end": {
-              "column": 18,
+              "column": 11,
               "line": 10
             },
             "start": {
-              "column": 18,
+              "column": 11,
               "line": 10
             }
           },
@@ -1071,11 +1169,11 @@
           "kind": "symbol",
           "span": {
             "end": {
-              "column": 20,
+              "column": 13,
               "line": 10
             },
             "start": {
-              "column": 19,
+              "column": 12,
               "line": 10
             }
           },
@@ -1085,11 +1183,11 @@
           "kind": "whitespace",
           "span": {
             "end": {
-              "column": 21,
+              "column": 14,
               "line": 10
             },
             "start": {
-              "column": 21,
+              "column": 14,
               "line": 10
             }
           },
@@ -1099,11 +1197,11 @@
           "kind": "ident",
           "span": {
             "end": {
-              "column": 22,
+              "column": 15,
               "line": 10
             },
             "start": {
-              "column": 22,
+              "column": 15,
               "line": 10
             }
           },
@@ -1113,11 +1211,11 @@
           "kind": "symbol",
           "span": {
             "end": {
-              "column": 23,
+              "column": 16,
               "line": 10
             },
             "start": {
-              "column": 23,
+              "column": 16,
               "line": 10
             }
           },
@@ -1127,11 +1225,11 @@
           "kind": "whitespace",
           "span": {
             "end": {
-              "column": 24,
+              "column": 17,
               "line": 10
             },
             "start": {
-              "column": 24,
+              "column": 17,
               "line": 10
             }
           },
@@ -1141,11 +1239,11 @@
           "kind": "symbol",
           "span": {
             "end": {
-              "column": 26,
+              "column": 19,
               "line": 10
             },
             "start": {
-              "column": 25,
+              "column": 18,
               "line": 10
             }
           },
@@ -1155,11 +1253,11 @@
           "kind": "whitespace",
           "span": {
             "end": {
-              "column": 27,
+              "column": 20,
               "line": 10
             },
             "start": {
-              "column": 27,
+              "column": 20,
               "line": 10
             }
           },
@@ -1169,11 +1267,11 @@
           "kind": "ident",
           "span": {
             "end": {
-              "column": 28,
+              "column": 21,
               "line": 10
             },
             "start": {
-              "column": 28,
+              "column": 21,
               "line": 10
             }
           },
@@ -1183,11 +1281,11 @@
           "kind": "whitespace",
           "span": {
             "end": {
-              "column": 29,
+              "column": 22,
               "line": 10
             },
             "start": {
-              "column": 29,
+              "column": 22,
               "line": 10
             }
           },
@@ -1197,11 +1295,11 @@
           "kind": "ident",
           "span": {
             "end": {
-              "column": 30,
+              "column": 23,
               "line": 10
             },
             "start": {
-              "column": 30,
+              "column": 23,
               "line": 10
             }
           },

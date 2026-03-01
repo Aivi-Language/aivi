@@ -1,5 +1,5 @@
 // Apply instance definition requires E to be a Semigroup to concat errors
-instance Apply (Validation E *) with (E: Semigroup) = {
+instance Apply (Validation E A) = given (A: Any, E: Semigroup) {
   ap = f v => (f, v) match
     | (Valid f', Valid a)      => Valid (f' a)
     | (Invalid e1, Invalid e2) => Invalid (concat e1 e2)
@@ -8,6 +8,6 @@ instance Apply (Validation E *) with (E: Semigroup) = {
 }
 
 // Applicative instance
-instance Applicative (Validation E *) with (E: Semigroup) = {
+instance Applicative (Validation E A) = given (A: Any, E: Semigroup) {
   of = a => Valid a
 }

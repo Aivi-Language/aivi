@@ -1,6 +1,6 @@
 // Functor instance definition
 // Note: Functor only transforms the success value, so no constraints (like Semigroup E) are needed.
-instance Functor (Validation E *) = {
+instance Functor (Validation E A) = given (A: Any) {
   map = f v => v match
     | Valid a   => Valid (f a)
     | Invalid e => Invalid e

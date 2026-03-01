@@ -298,25 +298,27 @@ Type signatures are also required for multi-clause function definitions (`f = | 
 ### Classes and instances (ad-hoc polymorphism, HKTs)
 
 ```aivi
-class Functor (F *) = {
-  map : (A -> B) -> F A -> F B
+class Functor (F A) = given (A: Any) {
+  map : (A -> B) -> F B
 }
 
-class Apply (F *) = Functor {
-  ap : F A -> F (A -> B) -> F B
+class Apply (F A) = given (A: Any), Functor {
+  ap : F (A -> B) -> F B
 }
 
-instance Monad (Option *) = { ... }
-instance Monad (Result E *) = { ... }
+instance Monad (Option A) = given (A: Any) { ... }
+instance Monad (Result E A) = given (A: Any) { ... }
 ```
 
-`*` denotes a higher-kinded type (F takes one type argument).
+`given (A: Any)` declares universally quantified type variables for higher-kinded types.
+HKT class member signatures use **abbreviated form**: the container type is omitted and
+added internally by the compiler as the last argument.
 `A with B` in types is record/type composition (intersection).
 
 ### Type variable constraints
 
 ```aivi
-class Collection (C *) = given (A: Eq) {
+class Collection (C A) = given (A: Eq) {
   elem : A -> C A -> Bool
   unique : C A -> C A
 }

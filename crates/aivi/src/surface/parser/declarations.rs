@@ -339,12 +339,12 @@ impl Parser {
         self.consume_newlines();
 
         // Syntax:
-        //   class Name (Var *) = [Super1, Super2, ...] [given (A: Eq, ...)] { ... }
+        //   class Name (Var Params) = [given (A: Constraint, ...),] [Super1, Super2, ...] { ... }
         //
         // Examples:
-        //   class Functor (F *) = { map: (A -> B) -> F A -> F B }
-        //   class Monad (M *) = Applicative, Chain { bind: M A -> (A -> M B) -> M B }
-        //   class Collection (C *) = given (A: Eq) { elem: A -> C A -> Bool }
+        //   class Functor (F A) = given (A: Any) { map: (A -> B) -> F B }
+        //   class Monad (M A) = given (A: Any), Applicative, Chain {}
+        //   class Collection (C A) = given (A: Eq) { elem: A -> C A -> Bool }
 
         fn peek_is_given_constraints(parser: &Parser) -> bool {
             if !parser.peek_keyword("given") {
