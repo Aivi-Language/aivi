@@ -2289,7 +2289,6 @@ fn strict_kernel_consistency(
             | KernelExpr::Match { id, .. }
             | KernelExpr::If { id, .. }
             | KernelExpr::Binary { id, .. }
-            | KernelExpr::Block { id, .. }
             | KernelExpr::Raw { id, .. }
             | KernelExpr::Mock { id, .. } => *id,
         };
@@ -2395,19 +2394,6 @@ fn strict_kernel_consistency(
             KernelExpr::Binary { left, right, .. } => {
                 walk_expr(left, seen_ids, span_hint, out);
                 walk_expr(right, seen_ids, span_hint, out);
-            }
-            KernelExpr::Block { items, .. } => {
-                for it in items {
-                    match it {
-                        aivi::KernelBlockItem::Bind { expr, .. }
-                        | aivi::KernelBlockItem::Filter { expr }
-                        | aivi::KernelBlockItem::Yield { expr }
-                        | aivi::KernelBlockItem::Recurse { expr }
-                        | aivi::KernelBlockItem::Expr { expr } => {
-                            walk_expr(expr, seen_ids, span_hint, out);
-                        }
-                    }
-                }
             }
             KernelExpr::Var { .. }
             | KernelExpr::LitNumber { .. }

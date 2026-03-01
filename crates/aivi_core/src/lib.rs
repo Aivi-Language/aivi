@@ -52,9 +52,9 @@ pub use hir::{
     HirRecordPatternField, HirTextPart,
 };
 pub use kernel::{
-    lower_hir as lower_kernel, KernelBlockItem, KernelBlockKind, KernelDef, KernelExpr,
-    KernelListItem, KernelLiteral, KernelMatchArm, KernelModule, KernelPathSegment, KernelPattern,
-    KernelProgram, KernelRecordField, KernelRecordPatternField, KernelTextPart,
+    lower_hir as lower_kernel, KernelDef, KernelExpr, KernelListItem, KernelLiteral,
+    KernelMatchArm, KernelModule, KernelPathSegment, KernelPattern, KernelProgram,
+    KernelRecordField, KernelRecordPatternField, KernelTextPart,
 };
 pub use resolver::check_modules;
 pub use stdlib::{embedded_stdlib_modules, embedded_stdlib_source};

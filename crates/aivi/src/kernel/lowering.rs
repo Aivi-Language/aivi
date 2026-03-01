@@ -175,36 +175,6 @@ fn lower_literal(lit: HirLiteral) -> KernelLiteral {
     }
 }
 
-fn lower_block_kind(kind: HirBlockKind) -> KernelBlockKind {
-    match kind {
-        HirBlockKind::Plain => KernelBlockKind::Plain,
-        HirBlockKind::Do { monad } => KernelBlockKind::Do { monad },
-        HirBlockKind::Generate => KernelBlockKind::Generate,
-        HirBlockKind::Resource => KernelBlockKind::Resource,
-    }
-}
-
-fn lower_block_item(item: HirBlockItem, id_gen: &mut IdGen) -> KernelBlockItem {
-    match item {
-        HirBlockItem::Bind { pattern, expr, .. } => KernelBlockItem::Bind {
-            pattern: lower_pattern(pattern, id_gen),
-            expr: lower_expr(expr, id_gen),
-        },
-        HirBlockItem::Filter { expr } => KernelBlockItem::Filter {
-            expr: lower_expr(expr, id_gen),
-        },
-        HirBlockItem::Yield { expr } => KernelBlockItem::Yield {
-            expr: lower_expr(expr, id_gen),
-        },
-        HirBlockItem::Recurse { expr } => KernelBlockItem::Recurse {
-            expr: lower_expr(expr, id_gen),
-        },
-        HirBlockItem::Expr { expr } => KernelBlockItem::Expr {
-            expr: lower_expr(expr, id_gen),
-        },
-    }
-}
-
 fn find_max_id_program(program: &HirProgram) -> u32 {
     let mut max = 0;
     for module in &program.modules {
