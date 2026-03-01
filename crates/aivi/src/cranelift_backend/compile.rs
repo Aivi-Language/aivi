@@ -15,8 +15,9 @@ use crate::cg_type::CgType;
 use crate::hir::HirProgram;
 use crate::runtime::values::Value;
 use crate::runtime::{
-    build_runtime_from_program, build_runtime_from_program_with_cancel, register_machines_for_jit,
-    run_main_effect, CancelToken, Runtime, RuntimeError,
+    build_runtime_from_program, build_runtime_from_program_with_cancel,
+    collect_surface_constructor_ordinals, register_machines_for_jit, run_main_effect, CancelToken,
+    Runtime, RuntimeError,
 };
 use crate::rust_ir::{
     RustIrBlockItem, RustIrBlockKind, RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment,
@@ -456,6 +457,12 @@ pub fn run_cranelift_jit(
     let trace = std::env::var("AIVI_TRACE_TIMING").is_ok_and(|v| v == "1");
     let t0 = if trace { Some(Instant::now()) } else { None };
     let mut runtime = build_runtime_from_program(&program)?;
+    {
+        let surface_ordinals = collect_surface_constructor_ordinals(surface_modules);
+        if let Some(ctx) = Arc::get_mut(&mut runtime.ctx) {
+            ctx.merge_constructor_ordinals(surface_ordinals);
+        }
+    }
     let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, &mut runtime)?;
     register_machines_for_jit(&runtime, surface_modules);
     if let Some(t0) = t0 {
@@ -478,6 +485,12 @@ pub(crate) fn run_cranelift_jit_cancellable(
     surface_modules: &[crate::surface::Module],
 ) -> Result<(), AiviError> {
     let mut runtime = build_runtime_from_program_with_cancel(&program, cancel)?;
+    {
+        let surface_ordinals = collect_surface_constructor_ordinals(surface_modules);
+        if let Some(ctx) = Arc::get_mut(&mut runtime.ctx) {
+            ctx.merge_constructor_ordinals(surface_ordinals);
+        }
+    }
     let _module = jit_compile_into_runtime(program, cg_types, monomorph_plan, &mut runtime)?;
     register_machines_for_jit(&runtime, surface_modules);
     run_main_effect(&mut runtime)
@@ -499,6 +512,14 @@ pub fn run_test_suite_jit(
 
     let infer_result = aivi_core::infer_value_types_full(surface_modules);
     let mut runtime = build_runtime_from_program(&program)?;
+    // Register user-defined constructor ordinals so constructorOrdinal/constructorName
+    // work for ADTs declared in the program (not just core types).
+    {
+        let surface_ordinals = collect_surface_constructor_ordinals(surface_modules);
+        if let Some(ctx) = Arc::get_mut(&mut runtime.ctx) {
+            ctx.merge_constructor_ordinals(surface_ordinals);
+        }
+    }
     runtime.update_snapshots = update_snapshots;
     runtime.project_root = project_root;
     let _module = jit_compile_into_runtime(

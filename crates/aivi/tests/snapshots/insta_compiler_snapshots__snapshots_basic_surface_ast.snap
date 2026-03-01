@@ -1,0 +1,516 @@
+---
+source: crates/aivi/tests/insta_compiler_snapshots.rs
+expression: "format!(\"{:#?}\", modules)"
+---
+[
+    Module {
+        name: SpannedName {
+            name: "snapshots.basic",
+            span: Span {
+                start: Position {
+                    line: 1,
+                    column: 8,
+                },
+                end: Position {
+                    line: 1,
+                    column: 22,
+                },
+            },
+        },
+        exports: [],
+        uses: [
+            UseDecl {
+                module: SpannedName {
+                    name: "aivi.prelude",
+                    span: Span {
+                        start: Position {
+                            line: 1,
+                            column: 8,
+                        },
+                        end: Position {
+                            line: 1,
+                            column: 22,
+                        },
+                    },
+                },
+                items: [],
+                span: Span {
+                    start: Position {
+                        line: 1,
+                        column: 8,
+                    },
+                    end: Position {
+                        line: 1,
+                        column: 22,
+                    },
+                },
+                wildcard: true,
+                alias: None,
+            },
+        ],
+        items: [
+            Def(
+                Def {
+                    decorators: [],
+                    name: SpannedName {
+                        name: "add",
+                        span: Span {
+                            start: Position {
+                                line: 3,
+                                column: 1,
+                            },
+                            end: Position {
+                                line: 3,
+                                column: 3,
+                            },
+                        },
+                    },
+                    params: [],
+                    expr: Lambda {
+                        params: [
+                            Ident(
+                                SpannedName {
+                                    name: "a",
+                                    span: Span {
+                                        start: Position {
+                                            line: 3,
+                                            column: 7,
+                                        },
+                                        end: Position {
+                                            line: 3,
+                                            column: 7,
+                                        },
+                                    },
+                                },
+                            ),
+                            Ident(
+                                SpannedName {
+                                    name: "b",
+                                    span: Span {
+                                        start: Position {
+                                            line: 3,
+                                            column: 9,
+                                        },
+                                        end: Position {
+                                            line: 3,
+                                            column: 9,
+                                        },
+                                    },
+                                },
+                            ),
+                        ],
+                        body: Binary {
+                            op: "+",
+                            left: Ident(
+                                SpannedName {
+                                    name: "a",
+                                    span: Span {
+                                        start: Position {
+                                            line: 3,
+                                            column: 14,
+                                        },
+                                        end: Position {
+                                            line: 3,
+                                            column: 14,
+                                        },
+                                    },
+                                },
+                            ),
+                            right: Ident(
+                                SpannedName {
+                                    name: "b",
+                                    span: Span {
+                                        start: Position {
+                                            line: 3,
+                                            column: 18,
+                                        },
+                                        end: Position {
+                                            line: 3,
+                                            column: 18,
+                                        },
+                                    },
+                                },
+                            ),
+                            span: Span {
+                                start: Position {
+                                    line: 3,
+                                    column: 14,
+                                },
+                                end: Position {
+                                    line: 3,
+                                    column: 18,
+                                },
+                            },
+                        },
+                        span: Span {
+                            start: Position {
+                                line: 3,
+                                column: 7,
+                            },
+                            end: Position {
+                                line: 3,
+                                column: 18,
+                            },
+                        },
+                    },
+                    span: Span {
+                        start: Position {
+                            line: 3,
+                            column: 1,
+                        },
+                        end: Position {
+                            line: 3,
+                            column: 18,
+                        },
+                    },
+                },
+            ),
+            Def(
+                Def {
+                    decorators: [],
+                    name: SpannedName {
+                        name: "inc",
+                        span: Span {
+                            start: Position {
+                                line: 4,
+                                column: 1,
+                            },
+                            end: Position {
+                                line: 4,
+                                column: 3,
+                            },
+                        },
+                    },
+                    params: [],
+                    expr: Call {
+                        func: Ident(
+                            SpannedName {
+                                name: "add",
+                                span: Span {
+                                    start: Position {
+                                        line: 4,
+                                        column: 7,
+                                    },
+                                    end: Position {
+                                        line: 4,
+                                        column: 9,
+                                    },
+                                },
+                            },
+                        ),
+                        args: [
+                            Literal(
+                                Number {
+                                    text: "1",
+                                    span: Span {
+                                        start: Position {
+                                            line: 4,
+                                            column: 11,
+                                        },
+                                        end: Position {
+                                            line: 4,
+                                            column: 11,
+                                        },
+                                    },
+                                },
+                            ),
+                        ],
+                        span: Span {
+                            start: Position {
+                                line: 4,
+                                column: 7,
+                            },
+                            end: Position {
+                                line: 4,
+                                column: 11,
+                            },
+                        },
+                    },
+                    span: Span {
+                        start: Position {
+                            line: 4,
+                            column: 1,
+                        },
+                        end: Position {
+                            line: 4,
+                            column: 11,
+                        },
+                    },
+                },
+            ),
+            Def(
+                Def {
+                    decorators: [],
+                    name: SpannedName {
+                        name: "answer",
+                        span: Span {
+                            start: Position {
+                                line: 5,
+                                column: 1,
+                            },
+                            end: Position {
+                                line: 5,
+                                column: 6,
+                            },
+                        },
+                    },
+                    params: [],
+                    expr: If {
+                        cond: Literal(
+                            Bool {
+                                value: true,
+                                span: Span {
+                                    start: Position {
+                                        line: 5,
+                                        column: 13,
+                                    },
+                                    end: Position {
+                                        line: 5,
+                                        column: 16,
+                                    },
+                                },
+                            },
+                        ),
+                        then_branch: Call {
+                            func: Ident(
+                                SpannedName {
+                                    name: "add",
+                                    span: Span {
+                                        start: Position {
+                                            line: 5,
+                                            column: 23,
+                                        },
+                                        end: Position {
+                                            line: 5,
+                                            column: 25,
+                                        },
+                                    },
+                                },
+                            ),
+                            args: [
+                                Literal(
+                                    Number {
+                                        text: "20",
+                                        span: Span {
+                                            start: Position {
+                                                line: 5,
+                                                column: 27,
+                                            },
+                                            end: Position {
+                                                line: 5,
+                                                column: 28,
+                                            },
+                                        },
+                                    },
+                                ),
+                                Literal(
+                                    Number {
+                                        text: "22",
+                                        span: Span {
+                                            start: Position {
+                                                line: 5,
+                                                column: 30,
+                                            },
+                                            end: Position {
+                                                line: 5,
+                                                column: 31,
+                                            },
+                                        },
+                                    },
+                                ),
+                            ],
+                            span: Span {
+                                start: Position {
+                                    line: 5,
+                                    column: 23,
+                                },
+                                end: Position {
+                                    line: 5,
+                                    column: 31,
+                                },
+                            },
+                        },
+                        else_branch: Literal(
+                            Number {
+                                text: "0",
+                                span: Span {
+                                    start: Position {
+                                        line: 5,
+                                        column: 38,
+                                    },
+                                    end: Position {
+                                        line: 5,
+                                        column: 38,
+                                    },
+                                },
+                            },
+                        ),
+                        span: Span {
+                            start: Position {
+                                line: 5,
+                                column: 13,
+                            },
+                            end: Position {
+                                line: 5,
+                                column: 38,
+                            },
+                        },
+                    },
+                    span: Span {
+                        start: Position {
+                            line: 5,
+                            column: 1,
+                        },
+                        end: Position {
+                            line: 5,
+                            column: 38,
+                        },
+                    },
+                },
+            ),
+            Def(
+                Def {
+                    decorators: [],
+                    name: SpannedName {
+                        name: "tupled",
+                        span: Span {
+                            start: Position {
+                                line: 6,
+                                column: 1,
+                            },
+                            end: Position {
+                                line: 6,
+                                column: 6,
+                            },
+                        },
+                    },
+                    params: [],
+                    expr: Tuple {
+                        items: [
+                            Call {
+                                func: Ident(
+                                    SpannedName {
+                                        name: "inc",
+                                        span: Span {
+                                            start: Position {
+                                                line: 6,
+                                                column: 11,
+                                            },
+                                            end: Position {
+                                                line: 6,
+                                                column: 13,
+                                            },
+                                        },
+                                    },
+                                ),
+                                args: [
+                                    Literal(
+                                        Number {
+                                            text: "1",
+                                            span: Span {
+                                                start: Position {
+                                                    line: 6,
+                                                    column: 15,
+                                                },
+                                                end: Position {
+                                                    line: 6,
+                                                    column: 15,
+                                                },
+                                            },
+                                        },
+                                    ),
+                                ],
+                                span: Span {
+                                    start: Position {
+                                        line: 6,
+                                        column: 11,
+                                    },
+                                    end: Position {
+                                        line: 6,
+                                        column: 15,
+                                    },
+                                },
+                            },
+                            Call {
+                                func: Ident(
+                                    SpannedName {
+                                        name: "inc",
+                                        span: Span {
+                                            start: Position {
+                                                line: 6,
+                                                column: 18,
+                                            },
+                                            end: Position {
+                                                line: 6,
+                                                column: 20,
+                                            },
+                                        },
+                                    },
+                                ),
+                                args: [
+                                    Literal(
+                                        Number {
+                                            text: "2",
+                                            span: Span {
+                                                start: Position {
+                                                    line: 6,
+                                                    column: 22,
+                                                },
+                                                end: Position {
+                                                    line: 6,
+                                                    column: 22,
+                                                },
+                                            },
+                                        },
+                                    ),
+                                ],
+                                span: Span {
+                                    start: Position {
+                                        line: 6,
+                                        column: 18,
+                                    },
+                                    end: Position {
+                                        line: 6,
+                                        column: 22,
+                                    },
+                                },
+                            },
+                        ],
+                        span: Span {
+                            start: Position {
+                                line: 6,
+                                column: 11,
+                            },
+                            end: Position {
+                                line: 6,
+                                column: 23,
+                            },
+                        },
+                    },
+                    span: Span {
+                        start: Position {
+                            line: 6,
+                            column: 1,
+                        },
+                        end: Position {
+                            line: 6,
+                            column: 23,
+                        },
+                    },
+                },
+            ),
+        ],
+        annotations: [],
+        span: Span {
+            start: Position {
+                line: 1,
+                column: 1,
+            },
+            end: Position {
+                line: 6,
+                column: 23,
+            },
+        },
+        path: "snapshots_basic.aivi",
+    },
+]

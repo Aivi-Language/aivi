@@ -1,0 +1,13 @@
+---
+source: crates/aivi/tests/insta_compiler_snapshots.rs
+expression: normalize_newlines(format_text(src))
+---
+module snapshots.matching
+
+describe = value => value match
+  | 0 => "zero"
+  | 1 => "one"
+  | _ => "many"
+
+flip = pair => pair match
+  | (a, b) => (b, a)

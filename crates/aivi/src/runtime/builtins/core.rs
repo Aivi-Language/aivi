@@ -1,5 +1,5 @@
 use std::io::Write;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use super::calendar::build_calendar_record;
 use super::collections::build_collections_record;
@@ -32,7 +32,7 @@ use super::url_http::{
 use super::util::{builtin, builtin_constructor};
 use super::{database::build_database_record, log::build_log_record};
 use crate::runtime::http::build_http_server_record;
-use crate::runtime::{format_value, EffectValue, Env, RuntimeError, Value};
+use crate::runtime::{format_value, BuiltinImpl, BuiltinValue, EffectValue, Env, Runtime, RuntimeError, Value};
 
 pub(crate) fn register_builtins(env: &Env) {
     env.set("Unit".to_string(), Value::Unit);
@@ -515,6 +515,14 @@ pub(crate) fn register_builtins(env: &Env) {
         builtin("__asGenerator", 1, |mut args, _runtime| {
             let val = args.pop().unwrap();
             match val {
+                Value::Unit => {
+                    // Unit → empty generator: \k -> \z -> z
+                    Ok(builtin("__asGenerator.empty", 2, |mut args, _rt| {
+                        let z = args.pop().unwrap();
+                        let _k = args.pop().unwrap();
+                        Ok(z)
+                    }))
+                }
                 Value::List(items) => {
                     // Return a generator: \k -> \z -> foldl k z items
                     let items = Arc::clone(&items);
@@ -579,6 +587,35 @@ pub(crate) fn register_builtins(env: &Env) {
                     }),
                 },
             )))
+        }),
+    );
+
+    // __fix : (A -> A) -> A
+    // Fixpoint combinator for recursive let-bindings (e.g. __loop* in generate blocks).
+    // `__fix f` returns a value `v` such that `v = f v`.
+    env.set(
+        "__fix".to_string(),
+        builtin("__fix", 1, |mut args, runtime| {
+            let f = args.pop().unwrap();
+            let cell: Arc<Mutex<Option<Value>>> = Arc::new(Mutex::new(None));
+            let cell_clone = cell.clone();
+            // Proxy closure that forwards calls to the fixpoint value
+            let proxy = Value::Builtin(BuiltinValue {
+                imp: Arc::new(BuiltinImpl {
+                    name: "__fix.proxy".to_string(),
+                    arity: 1,
+                    func: Arc::new(move |mut args: Vec<Value>, runtime: &mut Runtime| {
+                        let arg = args.pop().unwrap();
+                        let inner = cell_clone.lock().unwrap().clone().unwrap_or(Value::Unit);
+                        runtime.apply(inner, arg)
+                    }),
+                }),
+                args: Vec::new(),
+                tagged_args: Some(Vec::new()),
+            });
+            let result = runtime.apply(f, proxy)?;
+            *cell.lock().unwrap() = Some(result.clone());
+            Ok(result)
         }),
     );
 }

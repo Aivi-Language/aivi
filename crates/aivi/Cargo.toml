@@ -53,11 +53,13 @@ cranelift-object = "0.129.1"
 target-lexicon = "0.13.5"
 zbus = "5.14.0"
 rayon = "1.11.0"
+proptest = { version = "1", optional = true }
+insta = { version = "1", features = ["json"], optional = true }
 
 [features]
 default = ["gtk4-libadwaita"]
-proptest = []
-insta = []
+proptest = ["dep:proptest"]
+insta = ["dep:insta"]
 gtk4-libadwaita = []
 
 [dev-dependencies]
