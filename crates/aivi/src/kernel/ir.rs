@@ -141,11 +141,6 @@ pub enum KernelExpr {
         left: Box<KernelExpr>,
         right: Box<KernelExpr>,
     },
-    Block {
-        id: u32,
-        block_kind: KernelBlockKind,
-        items: Vec<KernelBlockItem>,
-    },
     Raw {
         id: u32,
         text: String,
@@ -251,35 +246,6 @@ pub enum KernelLiteral {
     },
     Bool(bool),
     DateTime(String),
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum KernelBlockKind {
-    Plain,
-    /// `do M { ... }` — monadic block. `monad` is the type constructor name.
-    Do { monad: String },
-    Generate,
-    Resource,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum KernelBlockItem {
-    Bind {
-        pattern: KernelPattern,
-        expr: KernelExpr,
-    },
-    Filter {
-        expr: KernelExpr,
-    },
-    Yield {
-        expr: KernelExpr,
-    },
-    Recurse {
-        expr: KernelExpr,
-    },
-    Expr {
-        expr: KernelExpr,
-    },
 }
 
 struct IdGen {
@@ -490,14 +456,16 @@ fn lower_expr(expr: HirExpr, id_gen: &mut IdGen) -> KernelExpr {
             items,
         } => match block_kind {
             HirBlockKind::Generate => lower_generate_block(items, id_gen),
-            _ => KernelExpr::Block {
-                id,
-                block_kind: lower_block_kind(block_kind),
-                items: items
-                    .into_iter()
-                    .map(|i| lower_block_item(i, id_gen))
-                    .collect(),
-            },
+            HirBlockKind::Do { monad } if monad == "Effect" => {
+                lower_do_effect_block(items, id_gen)
+            }
+            HirBlockKind::Do { .. } => {
+                // Generic `do M` is already desugared at HIR level into chain/lambda calls.
+                // If we still get one here, treat remaining items as a plain block.
+                lower_plain_block(items, id_gen)
+            }
+            HirBlockKind::Resource => lower_resource_block(id, items, id_gen),
+            HirBlockKind::Plain => lower_plain_block(items, id_gen),
         },
         HirExpr::Raw { id, text } => KernelExpr::Raw { id, text },
         HirExpr::Mock {
@@ -768,5 +736,355 @@ fn gen_if(cond: KernelExpr, next: KernelExpr, id_gen: &mut IdGen) -> KernelExpr 
             param: z_name,
             body: Box::new(if_expr),
         }),
+    }
+}
+
+// ── do Effect { ... } desugaring ──────────────────────────────────────────────
+//
+// Transforms:
+//   x <- e1; e2        →  bind e1 (λx → e2)
+//   x = e1; e2         →  (λx → e2) e1      (let-binding, non-monadic)
+//   expr; rest          →  bind expr (λ_ → rest)
+//   yield expr          →  expr               (final expression)
+//   recurse expr        →  expr               (final expression, tail call)
+//
+// Empty block → pure Unit
+
+fn lower_do_effect_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> KernelExpr {
+    if items.is_empty() {
+        return effect_pure_unit(id_gen);
+    }
+    let chain = lower_do_effect_items(&items, 0, id_gen);
+    // Wrap in __withResourceScope so resource cleanups are scoped to this block
+    KernelExpr::Call {
+        id: id_gen.next(),
+        func: Box::new(KernelExpr::Var {
+            id: id_gen.next(),
+            name: "__withResourceScope".to_string(),
+        }),
+        args: vec![chain],
+    }
+}
+
+fn lower_do_effect_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen) -> KernelExpr {
+    if idx >= items.len() {
+        return effect_pure_unit(id_gen);
+    }
+
+    let item = &items[idx];
+    let is_last = idx + 1 >= items.len();
+
+    match item {
+        HirBlockItem::Bind {
+            pattern, expr, ..
+        } => {
+            // Both monadic (`x <- e`) and non-monadic (`x = e`) binds use `bind`.
+            // Non-monadic let-binds are already wrapped in `pure(expr)` by the HIR
+            // lowering (lower_blocks_and_patterns.rs), so they are effectively monadic
+            // by this point.
+            let lowered_expr = lower_expr(expr.clone(), id_gen);
+            let rest = if is_last {
+                // Tail bind: bind e (λx → pure x)
+                let param = format!("_do_{}", id_gen.next());
+                let body = effect_pure(
+                    KernelExpr::Var {
+                        id: id_gen.next(),
+                        name: param.clone(),
+                    },
+                    id_gen,
+                );
+                return effect_bind(
+                    lowered_expr,
+                    KernelExpr::Lambda {
+                        id: id_gen.next(),
+                        param,
+                        body: Box::new(body),
+                    },
+                    id_gen,
+                );
+            } else {
+                lower_do_effect_items(items, idx + 1, id_gen)
+            };
+
+            // x <- e; rest  →  bind e (λx → rest)
+            let param = pattern_to_param(pattern, id_gen);
+            let body = wrap_pattern_match(param.clone(), pattern, rest, id_gen);
+            effect_bind(
+                lowered_expr,
+                KernelExpr::Lambda {
+                    id: id_gen.next(),
+                    param,
+                    body: Box::new(body),
+                },
+                id_gen,
+            )
+        }
+        HirBlockItem::Expr { expr } => {
+            let lowered_expr = lower_expr(expr.clone(), id_gen);
+            if is_last {
+                // Final expression in do block
+                lowered_expr
+            } else {
+                // expr; rest  →  bind expr (λ_ → rest)
+                let rest = lower_do_effect_items(items, idx + 1, id_gen);
+                let param = format!("_do_{}", id_gen.next());
+                effect_bind(
+                    lowered_expr,
+                    KernelExpr::Lambda {
+                        id: id_gen.next(),
+                        param,
+                        body: Box::new(rest),
+                    },
+                    id_gen,
+                )
+            }
+        }
+        HirBlockItem::Yield { expr } => {
+            // yield expr produces a plain value — wrap in `pure` so the bind
+            // chain sees an Effect (bind internally calls run_effect_value on
+            // the continuation's result).
+            let lowered_expr = lower_expr(expr.clone(), id_gen);
+            let wrapped = effect_pure(lowered_expr, id_gen);
+            if is_last {
+                wrapped
+            } else {
+                let rest = lower_do_effect_items(items, idx + 1, id_gen);
+                let param = format!("_do_{}", id_gen.next());
+                effect_bind(
+                    wrapped,
+                    KernelExpr::Lambda {
+                        id: id_gen.next(),
+                        param,
+                        body: Box::new(rest),
+                    },
+                    id_gen,
+                )
+            }
+        }
+        HirBlockItem::Recurse { expr } => {
+            // recurse expr → the expr itself (tail call)
+            lower_expr(expr.clone(), id_gen)
+        }
+        HirBlockItem::Filter { expr } => {
+            // Filters in effect blocks: guard
+            let lowered_expr = lower_expr(expr.clone(), id_gen);
+            let rest = if is_last {
+                effect_pure_unit(id_gen)
+            } else {
+                lower_do_effect_items(items, idx + 1, id_gen)
+            };
+            KernelExpr::If {
+                id: id_gen.next(),
+                cond: Box::new(lowered_expr),
+                then_branch: Box::new(rest),
+                else_branch: Box::new(effect_pure_unit(id_gen)),
+            }
+        }
+    }
+}
+
+/// Extract a simple param name from a pattern; complex patterns use a temp var + match.
+fn pattern_to_param(pattern: &HirPattern, id_gen: &mut IdGen) -> String {
+    match pattern {
+        HirPattern::Var { name, .. } => name.clone(),
+        HirPattern::Wildcard { .. } => format!("_do_{}", id_gen.next()),
+        _ => format!("_do_{}", id_gen.next()),
+    }
+}
+
+/// If the pattern is not a simple var or wildcard, wrap the body in a match.
+fn wrap_pattern_match(
+    param: String,
+    pattern: &HirPattern,
+    body: KernelExpr,
+    id_gen: &mut IdGen,
+) -> KernelExpr {
+    match pattern {
+        HirPattern::Var { name, .. } if *name == param => body,
+        HirPattern::Wildcard { .. } => body,
+        _ => KernelExpr::Match {
+            id: id_gen.next(),
+            scrutinee: Box::new(KernelExpr::Var {
+                id: id_gen.next(),
+                name: param,
+            }),
+            arms: vec![KernelMatchArm {
+                pattern: lower_pattern(pattern.clone(), id_gen),
+                guard: None,
+                body,
+            }],
+        },
+    }
+}
+
+/// `bind e f` → App (App (Var "bind") e) f
+fn effect_bind(expr: KernelExpr, func: KernelExpr, id_gen: &mut IdGen) -> KernelExpr {
+    KernelExpr::App {
+        id: id_gen.next(),
+        func: Box::new(KernelExpr::App {
+            id: id_gen.next(),
+            func: Box::new(KernelExpr::Var {
+                id: id_gen.next(),
+                name: "bind".to_string(),
+            }),
+            arg: Box::new(expr),
+        }),
+        arg: Box::new(func),
+    }
+}
+
+/// `pure e` → App (Var "pure") e
+fn effect_pure(expr: KernelExpr, id_gen: &mut IdGen) -> KernelExpr {
+    KernelExpr::App {
+        id: id_gen.next(),
+        func: Box::new(KernelExpr::Var {
+            id: id_gen.next(),
+            name: "pure".to_string(),
+        }),
+        arg: Box::new(expr),
+    }
+}
+
+/// `pure Unit`
+fn effect_pure_unit(id_gen: &mut IdGen) -> KernelExpr {
+    effect_pure(
+        KernelExpr::Var {
+            id: id_gen.next(),
+            name: "Unit".to_string(),
+        },
+        id_gen,
+    )
+}
+
+// ── resource { ... } desugaring ───────────────────────────────────────────────
+//
+// resource { acquire; yield x; cleanup }
+//   → __makeResource (λ_ → <desugared acquire+yield>) (λ_ → <desugared cleanup>)
+
+fn lower_resource_block(id: u32, items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> KernelExpr {
+    let yield_pos = items
+        .iter()
+        .position(|item| matches!(item, HirBlockItem::Yield { .. }));
+
+    let (acquire_items, cleanup_items) = match yield_pos {
+        Some(pos) => {
+            let (acq, rest) = items.split_at(pos + 1);
+            (acq.to_vec(), rest.to_vec())
+        }
+        None => (items, vec![]),
+    };
+
+    let acquire_body = lower_do_effect_block(acquire_items, id_gen);
+    let acquire_lambda = KernelExpr::Lambda {
+        id: id_gen.next(),
+        param: format!("_res_unused_{}", id_gen.next()),
+        body: Box::new(acquire_body),
+    };
+
+    let cleanup_body = if cleanup_items.is_empty() {
+        effect_pure_unit(id_gen)
+    } else {
+        lower_do_effect_block(cleanup_items, id_gen)
+    };
+    let cleanup_lambda = KernelExpr::Lambda {
+        id: id_gen.next(),
+        param: format!("_res_unused_{}", id_gen.next()),
+        body: Box::new(cleanup_body),
+    };
+
+    KernelExpr::Call {
+        id,
+        func: Box::new(KernelExpr::Var {
+            id: id_gen.next(),
+            name: "__makeResource".to_string(),
+        }),
+        args: vec![acquire_lambda, cleanup_lambda],
+    }
+}
+
+// ── plain { ... } desugaring ──────────────────────────────────────────────────
+//
+// { x = e1; y = e2; body }  →  (λx → (λy → body) e2) e1
+
+fn lower_plain_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> KernelExpr {
+    if items.is_empty() {
+        return KernelExpr::Var {
+            id: id_gen.next(),
+            name: "Unit".to_string(),
+        };
+    }
+    lower_plain_items(&items, 0, id_gen)
+}
+
+fn lower_plain_items(items: &[HirBlockItem], idx: usize, id_gen: &mut IdGen) -> KernelExpr {
+    if idx >= items.len() {
+        return KernelExpr::Var {
+            id: id_gen.next(),
+            name: "Unit".to_string(),
+        };
+    }
+
+    let item = &items[idx];
+    let is_last = idx + 1 >= items.len();
+
+    match item {
+        HirBlockItem::Bind { pattern, expr, .. } => {
+            let lowered_expr = lower_expr(expr.clone(), id_gen);
+            if is_last {
+                lowered_expr
+            } else {
+                let rest = lower_plain_items(items, idx + 1, id_gen);
+                let param = pattern_to_param(pattern, id_gen);
+                let body = wrap_pattern_match(param.clone(), pattern, rest, id_gen);
+                KernelExpr::App {
+                    id: id_gen.next(),
+                    func: Box::new(KernelExpr::Lambda {
+                        id: id_gen.next(),
+                        param,
+                        body: Box::new(body),
+                    }),
+                    arg: Box::new(lowered_expr),
+                }
+            }
+        }
+        HirBlockItem::Expr { expr } | HirBlockItem::Yield { expr } => {
+            let lowered_expr = lower_expr(expr.clone(), id_gen);
+            if is_last {
+                lowered_expr
+            } else {
+                let rest = lower_plain_items(items, idx + 1, id_gen);
+                let param = format!("_plain_{}", id_gen.next());
+                KernelExpr::App {
+                    id: id_gen.next(),
+                    func: Box::new(KernelExpr::Lambda {
+                        id: id_gen.next(),
+                        param,
+                        body: Box::new(rest),
+                    }),
+                    arg: Box::new(lowered_expr),
+                }
+            }
+        }
+        HirBlockItem::Recurse { expr } => lower_expr(expr.clone(), id_gen),
+        HirBlockItem::Filter { expr } => {
+            let lowered_expr = lower_expr(expr.clone(), id_gen);
+            let rest = if is_last {
+                KernelExpr::Var {
+                    id: id_gen.next(),
+                    name: "Unit".to_string(),
+                }
+            } else {
+                lower_plain_items(items, idx + 1, id_gen)
+            };
+            KernelExpr::If {
+                id: id_gen.next(),
+                cond: Box::new(lowered_expr),
+                then_branch: Box::new(rest),
+                else_branch: Box::new(KernelExpr::Var {
+                    id: id_gen.next(),
+                    name: "Unit".to_string(),
+                }),
+            }
+        }
     }
 }

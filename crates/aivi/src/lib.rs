@@ -53,9 +53,9 @@ pub mod hir {
 
 pub mod kernel {
     pub use aivi_core::{
-        KernelBlockItem, KernelBlockKind, KernelDef, KernelExpr, KernelListItem, KernelLiteral,
-        KernelMatchArm, KernelModule, KernelPathSegment, KernelPattern, KernelProgram,
-        KernelRecordField, KernelRecordPatternField, KernelTextPart,
+        KernelDef, KernelExpr, KernelListItem, KernelLiteral, KernelMatchArm, KernelModule,
+        KernelPathSegment, KernelPattern, KernelProgram, KernelRecordField,
+        KernelRecordPatternField, KernelTextPart,
     };
 
     pub fn lower_hir(program: crate::hir::HirProgram) -> crate::kernel::KernelProgram {
@@ -119,9 +119,9 @@ pub use aivi_core::{
 };
 pub use aivi_core::{format_text, format_text_with_options, BraceStyle, FormatOptions};
 pub use aivi_core::{
-    lower_kernel, KernelBlockItem, KernelBlockKind, KernelDef, KernelExpr, KernelListItem,
-    KernelLiteral, KernelMatchArm, KernelModule, KernelPathSegment, KernelPattern, KernelProgram,
-    KernelRecordField, KernelRecordPatternField, KernelTextPart,
+    lower_kernel, KernelDef, KernelExpr, KernelListItem, KernelLiteral, KernelMatchArm,
+    KernelModule, KernelPathSegment, KernelPattern, KernelProgram, KernelRecordField,
+    KernelRecordPatternField, KernelTextPart,
 };
 pub use aivi_core::{CstBundle, CstFile, CstToken};
 pub use aivi_core::{HirModule, HirProgram};

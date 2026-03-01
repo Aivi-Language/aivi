@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use crate::rust_ir::cg_type::CgType;
 
 use crate::kernel::{
-    KernelBlockItem, KernelBlockKind, KernelDef, KernelExpr, KernelMatchArm, KernelModule,
-    KernelPathSegment, KernelPattern, KernelProgram, KernelRecordField,
+    KernelDef, KernelExpr, KernelMatchArm, KernelModule, KernelPathSegment, KernelPattern,
+    KernelProgram, KernelRecordField,
 };
 use crate::AiviError;
 
@@ -541,114 +541,6 @@ fn lower_expr(
             op,
             left: Box::new(lower_expr(*left, globals, locals)?),
             right: Box::new(lower_expr(*right, globals, locals)?),
-        },
-        KernelExpr::Block {
-            id,
-            block_kind: KernelBlockKind::Resource,
-            items,
-        } => {
-            // Desugar `resource { A; yield X; C }` into:
-            //   __makeResource (\_ -> do Effect { A; yield X }) (\_ -> do Effect { C })
-            // This lets acquire/cleanup become normal lambdas with automatic
-            // variable capture, reusing the existing lambda compilation path.
-            let yield_pos = items
-                .iter()
-                .position(|item| matches!(item, KernelBlockItem::Yield { .. }));
-
-            let (acquire_items, cleanup_items) = match yield_pos {
-                Some(pos) => {
-                    let (acq, rest) = items.split_at(pos + 1); // include yield
-                    (acq.to_vec(), rest.to_vec())
-                }
-                None => (items, vec![]),
-            };
-
-            let before = locals.len();
-
-            // Lower acquire items (they may bind variables needed by cleanup)
-            let acq_lowered: Vec<RustIrBlockItem> = acquire_items
-                .into_iter()
-                .map(|item| lower_block_item(item, globals, locals))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            // Lower cleanup items (with locals from acquire in scope)
-            let cleanup_lowered: Vec<RustIrBlockItem> = cleanup_items
-                .into_iter()
-                .map(|item| lower_block_item(item, globals, locals))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            locals.truncate(before);
-
-            // Build acquire lambda: \_ -> do Effect { acquire_items... }
-            let acquire_body = RustIrExpr::Block {
-                id,
-                block_kind: RustIrBlockKind::Do {
-                    monad: "Effect".to_string(),
-                },
-                items: acq_lowered,
-            };
-            let acquire_lambda = RustIrExpr::Lambda {
-                id,
-                param: "__res_unused".to_string(),
-                body: Box::new(acquire_body),
-            };
-
-            // Build cleanup lambda: \_ -> do Effect { cleanup_items... }
-            let cleanup_body = if cleanup_lowered.is_empty() {
-                // No cleanup — just return Unit
-                RustIrExpr::Block {
-                    id,
-                    block_kind: RustIrBlockKind::Do {
-                        monad: "Effect".to_string(),
-                    },
-                    items: vec![RustIrBlockItem::Yield {
-                        expr: RustIrExpr::Builtin {
-                            id,
-                            builtin: "Unit".to_string(),
-                        },
-                    }],
-                }
-            } else {
-                RustIrExpr::Block {
-                    id,
-                    block_kind: RustIrBlockKind::Do {
-                        monad: "Effect".to_string(),
-                    },
-                    items: cleanup_lowered,
-                }
-            };
-            let cleanup_lambda = RustIrExpr::Lambda {
-                id,
-                param: "__res_unused".to_string(),
-                body: Box::new(cleanup_body),
-            };
-
-            // __makeResource acquireLambda cleanupLambda
-            RustIrExpr::Call {
-                id,
-                func: Box::new(RustIrExpr::Builtin {
-                    id,
-                    builtin: "__makeResource".to_string(),
-                }),
-                args: vec![acquire_lambda, cleanup_lambda],
-            }
-        }
-        KernelExpr::Block {
-            id,
-            block_kind,
-            items,
-        } => RustIrExpr::Block {
-            id,
-            block_kind: lower_block_kind(block_kind)?,
-            items: {
-                let before = locals.len();
-                let lowered = items
-                    .into_iter()
-                    .map(|item| lower_block_item(item, globals, locals))
-                    .collect::<Result<Vec<_>, _>>()?;
-                locals.truncate(before);
-                lowered
-            },
         },
         KernelExpr::Raw { id, text } => RustIrExpr::Raw { id, text },
         KernelExpr::Mock {

@@ -568,4 +568,24 @@ pub(crate) fn register_builtins(env: &Env) {
             Ok(Value::Resource(Arc::new(resource)))
         }),
     );
+
+    // __withResourceScope : Effect E A -> Effect E A
+    // Wraps an effect in a resource scope: push scope, run effect, pop scope
+    // (running all resource cleanups registered during the effect, LIFO).
+    env.set(
+        "__withResourceScope".to_string(),
+        builtin("__withResourceScope", 1, |mut args, _runtime| {
+            let effect = args.pop().unwrap();
+            Ok(Value::Effect(Arc::new(
+                crate::runtime::values::EffectValue::Thunk {
+                    func: Arc::new(move |runtime: &mut crate::runtime::Runtime| {
+                        runtime.push_resource_scope();
+                        let result = runtime.run_effect_value(effect.clone());
+                        runtime.pop_resource_scope();
+                        result
+                    }),
+                },
+            )))
+        }),
+    );
 }
