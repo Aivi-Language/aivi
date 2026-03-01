@@ -11,7 +11,7 @@ assert : Bool -> Effect Text Unit
 assert = ok => if ok then pure Unit else fail "assertion failed"
 
 assert_eq : A -> A -> Effect Text Unit
-assert_eq = a b => if a == b then pure Unit else fail "assert_eq failed"
+assert_eq = a b => if a == b then pure Unit else fail "assert_eq failed: left={ a }, right={ b }"
 
 assertEq : A -> A -> Effect Text Unit
 assertEq = a b => assert_eq a b

@@ -1,0 +1,71 @@
+@no_prelude
+module integrationTests.stdlib.aivi.json.decodeErrors
+
+use aivi
+use aivi.testing
+use aivi.text
+use aivi.json
+
+@test "render single schema issue contains path and message"
+renderSingleIssue = do Effect {
+  issues = [{ path: "$.user.age", message: "expected Int, got String" }]
+  rendered = renderSchemaIssues issues
+  assert (text.contains rendered "$.user.age")
+  assert (text.contains rendered "expected Int, got String")
+  assert (text.contains rendered "error[decode]")
+}
+
+@test "render multiple schema issues lists all paths"
+renderMultipleIssues = do Effect {
+  schema = { required: ["id", "name", "email"], strict: False }
+  payload = encodeObject [("id", encodeInt 42)]
+  issues = validateSchema schema payload
+  rendered = renderSchemaIssues issues
+  assert (text.contains rendered "error[decode]")
+  assert (text.contains rendered "$.name")
+  assert (text.contains rendered "$.email")
+  assertEq (List.length issues) 2
+}
+
+@test "render json error contains context and message"
+renderSingleError = do Effect {
+  err = { message: "expected Int" }
+  rendered = renderJsonError "$.user.id" err
+  assert (text.contains rendered "$.user.id")
+  assert (text.contains rendered "expected Int")
+  assert (text.contains rendered "error[decode]")
+}
+
+@test "log schema issues to stderr"
+logIssues = do Effect {
+  schema = { required: ["id", "name"], strict: False }
+  payload = encodeObject [("id", encodeInt 1)]
+  issues = validateSchema schema payload
+  logSchemaIssues issues
+  assertEq (List.length issues) 1
+}
+
+@test "log json error to stderr"
+logSingleError = do Effect {
+  err = { message: "expected Bool" }
+  logJsonError "$.config.enabled" err
+  assert True
+}
+
+@test "render schema issues shows count in header"
+renderIssueCount = do Effect {
+  issues = [
+    { path: "$.a", message: "missing required field" }
+    { path: "$.b", message: "missing required field" }
+    { path: "$.c", message: "missing required field" }
+  ]
+  rendered = renderSchemaIssues issues
+  assert (text.contains rendered "3 issue(s) found")
+}
+
+@test "render single schema issue shows index"
+renderIssueIndex = do Effect {
+  issues = [{ path: "$.x", message: "expected Text" }]
+  rendered = renderSchemaIssues issues
+  assert (text.contains rendered "1.")
+}

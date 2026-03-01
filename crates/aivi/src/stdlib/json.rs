@@ -12,9 +12,12 @@ export encodeBool, decodeBool
 export encodeObject, encodeArray
 export decodeField, decodeList
 export requiredField, strictFields, validateSchema, migrateObject
+export renderSchemaIssue, renderSchemaIssues, renderJsonError
+export logSchemaIssues, logJsonError
 
 use aivi
 use aivi.text
+use aivi.console
 
 JsonValue =
   | JsonNull
@@ -155,4 +158,55 @@ migrateObject : (List (Text, JsonValue) -> List (Text, JsonValue)) -> JsonValue 
 migrateObject = patchFn value => value match
   | JsonObject entries => JsonObject (patchFn entries)
   | _ => value
+
+// ── Coloured error rendering ──────────────────────────────────────────────────
+
+// Renders a single SchemaIssue as a numbered line with ANSI colour.
+//   1. at $.user.age — expected Int, got String
+renderSchemaIssue : Int -> SchemaIssue -> Text
+renderSchemaIssue = index issue =>
+  let num  = console.color Yellow (text.toText index ++ ".")
+  let path = console.color Cyan issue.path
+  "  " ++ num ++ " at " ++ path ++ " \xe2\x80\x94 " ++ issue.message
+
+renderSchemaIssueLines : List SchemaIssue -> Int -> List Text -> List Text
+renderSchemaIssueLines = issues index acc => issues match
+  | []           => List.reverse acc
+  | [x, ...rest] => renderSchemaIssueLines rest (index + 1) [renderSchemaIssue index x, ...acc]
+
+joinLinesJson : List Text -> Text
+joinLinesJson = lines => lines match
+  | []         => ""
+  | [x]        => x
+  | [x, ...xs] => x ++ "\n" ++ joinLinesJson xs
+
+// Renders a list of SchemaIssues as a compiler-style error block with ANSI colour.
+//
+//   error[decode]: 2 issue(s) found
+//     1. at $.user.age — expected Int, got String
+//     2. at $.user.email — missing required field
+renderSchemaIssues : List SchemaIssue -> Text
+renderSchemaIssues = issues =>
+  let count  = List.length issues
+  let label  = console.color Yellow "error[decode]"
+  let header = label ++ ": " ++ text.toText count ++ " issue(s) found"
+  let lines  = renderSchemaIssueLines issues 1 []
+  joinLinesJson [header, ...lines]
+
+// Renders a single JsonError at a given JSON path with ANSI colour.
+//
+//   error[decode] at $.user.id — expected Int
+renderJsonError : Text -> JsonError -> Text
+renderJsonError = context err =>
+  let label = console.color Yellow "error[decode]"
+  let path  = console.color Cyan context
+  label ++ " at " ++ path ++ " \xe2\x80\x94 " ++ err.message
+
+// Logs all SchemaIssues to stderr with ANSI colour.
+logSchemaIssues : List SchemaIssue -> Effect Text Unit
+logSchemaIssues = issues => console.error (renderSchemaIssues issues)
+
+// Logs a single JsonError to stderr with ANSI colour.
+logJsonError : Text -> JsonError -> Effect Text Unit
+logJsonError = context err => console.error (renderJsonError context err)
 "#;
