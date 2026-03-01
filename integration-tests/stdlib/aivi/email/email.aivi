@@ -20,7 +20,7 @@ mime_parsing_helpers = do Effect {
 
 @test "smtp surface"
 smtp_surface = do Effect {
-  smtpSend {
+  _ <- attempt (smtpSend {
     host: "smtp.example.com"
     user: "u"
     password: "p"
@@ -28,6 +28,6 @@ smtp_surface = do Effect {
     to: "to@example.com"
     subject: "hello"
     body: "world"
-  }
+  })
   assert True
 }

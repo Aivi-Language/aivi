@@ -39,11 +39,6 @@ impl Env {
         self.inner.values.write().insert(name, value);
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn has_local(&self, name: &str) -> bool {
-        self.inner.values.read().contains_key(name)
-    }
-
     #[cfg(test)]
     pub(crate) fn keys(&self) -> Vec<String> {
         let mut names: Vec<String> = self.inner.values.read().keys().cloned().collect();
@@ -62,22 +57,18 @@ impl Env {
 pub(crate) struct RuntimeContext {
     pub(crate) globals: Env,
     constructor_ordinals: HashMap<String, Option<usize>>,
-    #[allow(dead_code)]
     machine_specs: RwLock<HashMap<String, HashMap<String, Vec<MachineEdge>>>>,
-    #[allow(dead_code)]
     machine_states: RwLock<HashMap<String, String>>,
     machine_handlers: RwLock<HashMap<(String, String), Vec<Value>>>,
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub(crate) struct MachineEdge {
     pub(crate) source: Option<String>,
     pub(crate) target: String,
 }
 
 #[derive(Clone, Debug)]
-#[allow(dead_code)]
 pub(crate) struct MachineTransitionError {
     pub(crate) machine: String,
     pub(crate) from: String,
@@ -86,7 +77,6 @@ pub(crate) struct MachineTransitionError {
 }
 
 impl MachineTransitionError {
-    #[allow(dead_code)]
     pub(crate) fn into_value(self) -> Value {
         let mut detail = HashMap::new();
         detail.insert("machine".to_string(), Value::Text(self.machine));
@@ -109,11 +99,6 @@ impl MachineTransitionError {
 }
 
 impl RuntimeContext {
-    #[allow(dead_code)]
-    pub(crate) fn new(globals: Env) -> Self {
-        Self::new_with_constructor_ordinals(globals, HashMap::new())
-    }
-
     pub(crate) fn new_with_constructor_ordinals(
         globals: Env,
         constructor_ordinals: HashMap<String, Option<usize>>,

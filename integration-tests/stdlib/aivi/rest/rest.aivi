@@ -1,0 +1,30 @@
+@no_prelude
+module integrationTests.stdlib.aivi.rest.tests
+
+use aivi
+use aivi.testing
+use aivi.rest as restLib
+
+@test "rest.post compilation and structure"
+rest_post_test = do Effect {
+  url = ~u(https://example.com)
+  _ <- attempt (restLib.post url "body")
+  assert True
+}
+
+@test "rest.fetch compilation and structure"
+rest_fetch_test = do Effect {
+  url = ~u(https://example.com)
+  req = {
+    method: "POST"
+    url: url
+    headers: []
+    body: Some (restLib.Plain "body")
+    timeoutMs: None
+    retryCount: None
+    bearerToken: None
+    strictStatus: None
+  }
+  _ <- attempt (restLib.fetch req)
+  assert True
+}
