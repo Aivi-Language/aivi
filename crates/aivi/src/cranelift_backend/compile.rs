@@ -20,7 +20,7 @@ use crate::runtime::{
     Runtime, RuntimeError,
 };
 use crate::rust_ir::{
-    RustIrBlockItem, RustIrBlockKind, RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment,
+    RustIrDef, RustIrExpr, RustIrListItem, RustIrPathSegment,
     RustIrPattern, RustIrRecordField, RustIrTextPart,
 };
 use crate::AiviError;
@@ -65,11 +65,11 @@ fn jit_compile_into_runtime(
         }};
     }
 
-    // Lower HIR → Kernel → RustIR
-    let kernel_program = timed!("lower HIR → Kernel", kernel::lower_hir(program));
+    // Lower HIR → desugar blocks → RustIR
+    let desugared_program = timed!("desugar blocks (HIR)", kernel::desugar_blocks(program));
     let mut rust_program = timed!(
-        "lower Kernel → RustIR",
-        rust_ir::lower_kernel(kernel_program)?
+        "lower HIR → RustIR",
+        rust_ir::lower_kernel(desugared_program)?
     );
 
     // Annotate each def with its CgType
@@ -645,9 +645,9 @@ pub fn compile_to_object(
 ) -> Result<Vec<u8>, AiviError> {
     use super::object_module::create_object_module;
 
-    // 1. Lower HIR → Kernel → RustIR
-    let kernel_program = kernel::lower_hir(program);
-    let mut rust_program = rust_ir::lower_kernel(kernel_program)?;
+    // 1. Lower HIR → desugar blocks → RustIR
+    let desugared_program = kernel::desugar_blocks(program);
+    let mut rust_program = rust_ir::lower_kernel(desugared_program)?;
 
     // 2. Annotate each def with its CgType
     for module in &mut rust_program.modules {

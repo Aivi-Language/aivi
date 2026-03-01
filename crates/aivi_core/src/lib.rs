@@ -51,11 +51,7 @@ pub use hir::{
     HirMockSubstitution, HirModule, HirPathSegment, HirPattern, HirProgram, HirRecordField,
     HirRecordPatternField, HirTextPart,
 };
-pub use kernel::{
-    lower_hir as lower_kernel, KernelDef, KernelExpr, KernelListItem, KernelLiteral,
-    KernelMatchArm, KernelModule, KernelPathSegment, KernelPattern, KernelProgram,
-    KernelRecordField, KernelRecordPatternField, KernelTextPart,
-};
+pub use kernel::desugar_blocks;
 pub use resolver::check_modules;
 pub use stdlib::{embedded_stdlib_modules, embedded_stdlib_source};
 pub use surface::{

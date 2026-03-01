@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use crate::rust_ir::{
-    RustIrBlockItem, RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrMockSubstitution,
+    RustIrExpr, RustIrListItem, RustIrMatchArm, RustIrMockSubstitution,
     RustIrModule, RustIrPattern, RustIrRecordField, RustIrTextPart,
 };
 
@@ -97,8 +97,6 @@ pub(crate) fn expr_cost(expr: &RustIrExpr) -> u32 {
 
         RustIrExpr::Binary { left, right, .. } => 1 + expr_cost(left) + expr_cost(right),
 
-        RustIrExpr::Block { items, .. } => 1 + block_items_cost(items),
-
         RustIrExpr::Mock {
             substitutions,
             body,
@@ -146,19 +144,6 @@ fn pattern_cost(pat: &RustIrPattern) -> u32 {
             1 + fields.iter().map(|f| pattern_cost(&f.pattern)).sum::<u32>()
         }
     }
-}
-
-fn block_items_cost(items: &[RustIrBlockItem]) -> u32 {
-    items
-        .iter()
-        .map(|item| match item {
-            RustIrBlockItem::Bind { expr, .. } => 1 + expr_cost(expr),
-            RustIrBlockItem::Filter { expr }
-            | RustIrBlockItem::Yield { expr }
-            | RustIrBlockItem::Recurse { expr }
-            | RustIrBlockItem::Expr { expr } => expr_cost(expr),
-        })
-        .sum()
 }
 
 // ---------------------------------------------------------------------------
@@ -331,14 +316,6 @@ fn references_name(expr: &RustIrExpr, name: &str) -> bool {
             references_name(left, name) || references_name(right, name)
         }
 
-        RustIrExpr::Block { items, .. } => items.iter().any(|item| match item {
-            RustIrBlockItem::Bind { expr, .. }
-            | RustIrBlockItem::Filter { expr }
-            | RustIrBlockItem::Yield { expr }
-            | RustIrBlockItem::Recurse { expr }
-            | RustIrBlockItem::Expr { expr } => references_name(expr, name),
-        }),
-
         RustIrExpr::Mock {
             substitutions,
             body,
@@ -467,18 +444,6 @@ fn max_expr_id_in(expr: &RustIrExpr) -> u32 {
 
         RustIrExpr::Binary { left, right, .. } => max_expr_id_in(left).max(max_expr_id_in(right)),
 
-        RustIrExpr::Block { items, .. } => items
-            .iter()
-            .map(|item| match item {
-                RustIrBlockItem::Bind { expr, .. }
-                | RustIrBlockItem::Filter { expr }
-                | RustIrBlockItem::Yield { expr }
-                | RustIrBlockItem::Recurse { expr }
-                | RustIrBlockItem::Expr { expr } => max_expr_id_in(expr),
-            })
-            .max()
-            .unwrap_or(0),
-
         RustIrExpr::Mock {
             substitutions,
             body,
@@ -519,7 +484,6 @@ fn expr_id(expr: &RustIrExpr) -> u32 {
         | RustIrExpr::Match { id, .. }
         | RustIrExpr::If { id, .. }
         | RustIrExpr::Binary { id, .. }
-        | RustIrExpr::Block { id, .. }
         | RustIrExpr::Raw { id, .. }
         | RustIrExpr::Mock { id, .. } => *id,
     }
@@ -769,16 +733,6 @@ fn inline_children(
             right: Box::new(inline_expr(*right, candidates, id_gen, depth)),
         },
 
-        RustIrExpr::Block {
-            id,
-            block_kind,
-            items,
-        } => RustIrExpr::Block {
-            id,
-            block_kind,
-            items: inline_block_items(items, candidates, id_gen, depth),
-        },
-
         RustIrExpr::Mock {
             id,
             substitutions,
@@ -826,35 +780,6 @@ fn inline_record_fields(
                 })
                 .collect(),
             value: inline_expr(f.value, candidates, id_gen, depth),
-        })
-        .collect()
-}
-
-fn inline_block_items(
-    items: Vec<RustIrBlockItem>,
-    candidates: &HashMap<String, InlineCandidate>,
-    id_gen: &mut IdGen,
-    depth: u32,
-) -> Vec<RustIrBlockItem> {
-    items
-        .into_iter()
-        .map(|item| match item {
-            RustIrBlockItem::Bind { pattern, expr } => RustIrBlockItem::Bind {
-                pattern,
-                expr: inline_expr(expr, candidates, id_gen, depth),
-            },
-            RustIrBlockItem::Filter { expr } => RustIrBlockItem::Filter {
-                expr: inline_expr(expr, candidates, id_gen, depth),
-            },
-            RustIrBlockItem::Yield { expr } => RustIrBlockItem::Yield {
-                expr: inline_expr(expr, candidates, id_gen, depth),
-            },
-            RustIrBlockItem::Recurse { expr } => RustIrBlockItem::Recurse {
-                expr: inline_expr(expr, candidates, id_gen, depth),
-            },
-            RustIrBlockItem::Expr { expr } => RustIrBlockItem::Expr {
-                expr: inline_expr(expr, candidates, id_gen, depth),
-            },
         })
         .collect()
 }
@@ -978,10 +903,6 @@ fn substitute(expr: &mut RustIrExpr, param: &str, arg: &RustIrExpr) {
             substitute(right, param, arg);
         }
 
-        RustIrExpr::Block { items, .. } => {
-            substitute_in_block_items(items, param, arg);
-        }
-
         RustIrExpr::Mock {
             substitutions,
             body,
@@ -1007,30 +928,6 @@ fn substitute_in_record_fields(fields: &mut [RustIrRecordField], param: &str, ar
                     substitute(e, param, arg);
                 }
                 _ => {}
-            }
-        }
-    }
-}
-
-fn substitute_in_block_items(items: &mut [RustIrBlockItem], param: &str, arg: &RustIrExpr) {
-    let mut shadowed = false;
-    for item in items {
-        if shadowed {
-            break;
-        }
-        match item {
-            RustIrBlockItem::Bind { pattern, expr } => {
-                substitute(expr, param, arg);
-                // If this bind shadows our param, stop substituting
-                if pattern_binds(pattern, param) {
-                    shadowed = true;
-                }
-            }
-            RustIrBlockItem::Filter { expr }
-            | RustIrBlockItem::Yield { expr }
-            | RustIrBlockItem::Recurse { expr }
-            | RustIrBlockItem::Expr { expr } => {
-                substitute(expr, param, arg);
             }
         }
     }
@@ -1161,23 +1058,6 @@ fn freshen_ids(expr: &mut RustIrExpr, id_gen: &mut IdGen) {
             freshen_ids(right, id_gen);
         }
 
-        RustIrExpr::Block { items, .. } => {
-            for item in items {
-                match item {
-                    RustIrBlockItem::Bind { pattern, expr } => {
-                        freshen_pattern_ids(pattern, id_gen);
-                        freshen_ids(expr, id_gen);
-                    }
-                    RustIrBlockItem::Filter { expr }
-                    | RustIrBlockItem::Yield { expr }
-                    | RustIrBlockItem::Recurse { expr }
-                    | RustIrBlockItem::Expr { expr } => {
-                        freshen_ids(expr, id_gen);
-                    }
-                }
-            }
-        }
-
         RustIrExpr::Mock {
             substitutions,
             body,
@@ -1277,7 +1157,6 @@ fn set_expr_id(expr: &mut RustIrExpr, new_id: u32) {
         | RustIrExpr::Match { id, .. }
         | RustIrExpr::If { id, .. }
         | RustIrExpr::Binary { id, .. }
-        | RustIrExpr::Block { id, .. }
         | RustIrExpr::Raw { id, .. }
         | RustIrExpr::Mock { id, .. } => *id = new_id,
     }

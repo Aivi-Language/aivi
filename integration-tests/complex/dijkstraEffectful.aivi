@@ -15,11 +15,11 @@ processEdges = dists d edges pq => edges match
       currentDist = Map.getOrElse edge.to 999999.0 dists
       newDist = d + edge.weight
       nextDists = if newDist < currentDist
-      then Map.insert edge.to newDist dists
-      else dists
+        then Map.insert edge.to newDist dists
+        else dists
       nextPq = if newDist < currentDist
-      then Heap.push (newDist, edge.to) pq
-      else pq
+        then Heap.push (newDist, edge.to) pq
+        else pq
       processEdges nextDists d rest nextPq
     }
 
@@ -41,12 +41,12 @@ dijkstra_shortestPaths = do Effect {
             dF = d + 0.0
             currentDist = Map.getOrElse node 999999.0 state.dists
             if dF > currentDist
-            then do Effect { recurse { dists: state.dists, pq: restPq } }
-            else do Effect {
-              edges = edgesFrom g node
-              nextState <- processEdges state.dists dF edges restPq
-              recurse nextState
-            }
+              then do Effect { recurse { dists: state.dists, pq: restPq } }
+              else do Effect {
+                edges = edgesFrom g node
+                nextState <- processEdges state.dists dF edges restPq
+                recurse nextState
+              }
           }
     }
   }
