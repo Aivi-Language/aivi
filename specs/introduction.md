@@ -15,7 +15,7 @@ AIVI is a statically typed, purely functional language designed for **high-integ
 **Data**
 
 * Immutable by default
-* **Open structural records** (row polymorphism)
+* **Closed structural records**
 * Algebraic Data Types (ADTs)
 
 **Control**

@@ -720,6 +720,48 @@ fn collect_pattern_names(pattern: &Pattern, names: &mut std::collections::HashSe
 }
 
 /// Rewrite bare identifiers to their module-qualified forms.
+/// Split a number literal text into (number_part, suffix_part).
+/// E.g. "30s" → Some(("30", "s")), "100ms" → Some(("100", "ms")), "42" → None.
+fn split_number_suffix(text: &str) -> Option<(String, String)> {
+    let mut chars = text.chars().peekable();
+    let mut number = String::new();
+    if matches!(chars.peek(), Some('-')) {
+        number.push('-');
+        chars.next();
+    }
+    let mut saw_digit = false;
+    let mut saw_dot = false;
+    while let Some(&ch) = chars.peek() {
+        if ch.is_ascii_digit() {
+            saw_digit = true;
+            number.push(ch);
+            chars.next();
+            continue;
+        }
+        if ch == '.' && !saw_dot {
+            saw_dot = true;
+            number.push(ch);
+            chars.next();
+            continue;
+        }
+        break;
+    }
+    if !saw_digit {
+        return None;
+    }
+    let suffix: String = chars.collect();
+    if suffix.is_empty() {
+        return None;
+    }
+    if !suffix
+        .chars()
+        .all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+    {
+        return None;
+    }
+    Some((number, suffix))
+}
+
 ///
 /// `scope` tracks names currently bound by lambda params, let/bind, or match-arm patterns
 /// that shadow imports.
@@ -859,10 +901,42 @@ fn qualify_expr(
                 .collect(),
             span,
         },
-        Expr::Suffixed { base, suffix, span } => Expr::Suffixed {
-            base: Box::new(qualify_expr(*base, import_map, scope)),
-            suffix,
-            span,
+        Expr::Suffixed { base, suffix, span } => {
+            let template_name = format!("1{}", suffix.name);
+            let suffix = if let Some(qualified) = import_map.get(&template_name) {
+                // Strip the leading "1" from the qualified name's final segment to recover
+                // the qualified suffix. E.g. "aivi.duration.1s" → suffix "aivi.duration.s"
+                // is wrong; we need the full template name as-is. Instead, store the qualified
+                // template name and decompose in HIR lowering.
+                //
+                // Simpler: just rename the suffix so HIR lowering produces the qualified Var.
+                let suffix_portion = qualified.strip_prefix(&template_name[..1]).unwrap_or(qualified);
+                // Actually: the template name format is "1{suffix}" where suffix is e.g. "s".
+                // The qualified form is e.g. "aivi.duration.1s". HIR lowering produces
+                // Var("1{suffix}") from Suffixed. So we want the suffix such that
+                // format!("1{}", new_suffix) == qualified. That means new_suffix =
+                // qualified[1..] if qualified starts with '1'. But qualified is
+                // "aivi.duration.1s" which doesn't start with '1'.
+                // The simplest approach: just keep the full qualified name in the suffix and
+                // patch HIR lowering to check for dots. Actually, easier: rewrite Suffixed to
+                // Call(Ident(qualified), base).
+                let _ = suffix_portion;
+                return Expr::Call {
+                    func: Box::new(Expr::Ident(SpannedName {
+                        name: qualified.clone(),
+                        span: suffix.span.clone(),
+                    })),
+                    args: vec![qualify_expr(*base, import_map, scope)],
+                    span,
+                };
+            } else {
+                suffix
+            };
+            Expr::Suffixed {
+                base: Box::new(qualify_expr(*base, import_map, scope)),
+                suffix,
+                span,
+            }
         },
         Expr::UnaryNeg { expr, span } => Expr::UnaryNeg {
             expr: Box::new(qualify_expr(*expr, import_map, scope)),
@@ -881,6 +955,27 @@ fn qualify_expr(
                 .collect(),
             span,
         },
+        Expr::Literal(Literal::Number { ref text, ref span }) => {
+            // Handle suffixed number literals like "30s" — the suffix "s" maps to
+            // template "1s". If an import qualifies "1s", rewrite to a Call.
+            if let Some((number, suffix)) = split_number_suffix(text) {
+                let template_name = format!("1{suffix}");
+                if let Some(qualified) = import_map.get(&template_name) {
+                    return Expr::Call {
+                        func: Box::new(Expr::Ident(SpannedName {
+                            name: qualified.clone(),
+                            span: span.clone(),
+                        })),
+                        args: vec![Expr::Literal(Literal::Number {
+                            text: number,
+                            span: span.clone(),
+                        })],
+                        span: span.clone(),
+                    };
+                }
+            }
+            expr
+        }
         Expr::Literal(_) | Expr::Raw { .. } | Expr::FieldSection { .. } => expr,
         Expr::Mock {
             substitutions,

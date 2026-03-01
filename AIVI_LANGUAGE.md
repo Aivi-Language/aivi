@@ -15,7 +15,7 @@ apply: always
 - Immutable bindings; **no mutation**, no loops, no null.
 - Use `Option A` / `Result E A` instead of null; recursion, folds, or generators instead of loops.
 - Pattern bindings with `=` must be **total**; refutable matches use `match`.
-- Records are structural and open (row polymorphism).
+- Records are structural and closed (no row polymorphism).
 - Effects are explicit: `Effect E A` (error type `E`, success type `A`).
 - Domains give meaning to operators and suffix literals for non-`Int` types.
 
@@ -247,13 +247,13 @@ mkEmail = text => Email text
 Instances for the base type are auto-forwarded to the branded type when available; explicit
 instances for the branded type take precedence.
 
-### Open records (row polymorphism)
+### Closed records
 
 ```aivi
 User = { id: Int, name: Text, email: Option Text }
 
-// Functions require minimum fields, accept more:
-greet : { name: Text } -> Text
+// Functions require the exact record shape:
+greet : User -> Text
 greet = user => "Hello, { user.name }"
 ```
 

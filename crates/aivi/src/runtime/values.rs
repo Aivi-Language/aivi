@@ -10,7 +10,7 @@ use num_rational::BigRational;
 use regex::Regex;
 use rust_decimal::Decimal;
 
-use crate::hir::{HirBlockItem, HirExpr};
+use crate::hir::HirExpr;
 use aivi_http_server::{ServerHandle, WebSocketHandle};
 
 use super::environment::Env;
@@ -171,9 +171,11 @@ pub(crate) enum EffectValue {
     },
 }
 
-#[allow(dead_code)]
 pub(crate) struct ResourceValue {
-    pub(crate) items: Arc<Vec<HirBlockItem>>,
+    /// Runs the acquire phase (everything before `yield`), returning the yielded value.
+    pub(crate) acquire: Arc<ThunkFunc>,
+    /// Runs the cleanup phase (everything after `yield`).
+    pub(crate) cleanup: Arc<ThunkFunc>,
 }
 
 #[allow(dead_code)]

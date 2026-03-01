@@ -37,6 +37,7 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "assertEq",
     "__assertSnapshot",
     "__asGenerator",
+    "__makeResource",
     // Module records (stdlib namespaces)
     "file",
     "env",

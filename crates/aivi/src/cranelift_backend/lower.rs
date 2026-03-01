@@ -202,6 +202,9 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_run_effect: FuncRef,
     pub(crate) rt_bind_effect: FuncRef,
     pub(crate) rt_wrap_effect: FuncRef,
+    // Resource scope management
+    pub(crate) rt_push_resource_scope: FuncRef,
+    pub(crate) rt_pop_resource_scope: FuncRef,
     pub(crate) rt_binary_op: FuncRef,
     // Pattern matching helpers
     pub(crate) rt_constructor_name_eq: FuncRef,
@@ -222,6 +225,7 @@ pub(crate) struct HelperRefs {
     pub(crate) rt_generator_to_list: FuncRef,
     pub(crate) rt_gen_vec_new: FuncRef,
     pub(crate) rt_gen_vec_push: FuncRef,
+    pub(crate) rt_gen_vec_extend_generator: FuncRef,
     pub(crate) rt_gen_vec_into_generator: FuncRef,
     // AOT function registration
     pub(crate) rt_register_jit_fn: FuncRef,
@@ -309,6 +313,10 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_bind_effect: decl!("rt_bind_effect", [PTR, PTR, PTR], [PTR]),
         // (ctx, value_ptr) -> ptr (wrap value in Effect thunk)
         rt_wrap_effect: decl!("rt_wrap_effect", [PTR, PTR], [PTR]),
+        // (ctx) -> void — push resource scope marker
+        rt_push_resource_scope: decl!("rt_push_resource_scope", [PTR], []),
+        // (ctx) -> void — pop resource scope, run cleanups
+        rt_pop_resource_scope: decl!("rt_pop_resource_scope", [PTR], []),
         // (ctx, op_ptr, op_len, lhs_ptr, rhs_ptr) -> ptr
         rt_binary_op: decl!("rt_binary_op", [PTR, PTR, PTR, PTR, PTR], [PTR]),
         // Pattern matching: (ctx, value_ptr, name_ptr, name_len) -> i64
@@ -346,6 +354,8 @@ pub(crate) fn declare_helpers(module: &mut impl Module) -> Result<DeclaredHelper
         rt_gen_vec_new: decl!("rt_gen_vec_new", [PTR], [PTR]),
         // (ctx, vec_ptr, value_ptr)
         rt_gen_vec_push: decl!("rt_gen_vec_push", [PTR, PTR, PTR], []),
+        // (ctx, vec_ptr, value_ptr) — flatten generator into vec
+        rt_gen_vec_extend_generator: decl!("rt_gen_vec_extend_generator", [PTR, PTR, PTR], []),
         // (ctx, vec_ptr) -> ptr
         rt_gen_vec_into_generator: decl!("rt_gen_vec_into_generator", [PTR, PTR], [PTR]),
         // AOT function registration
@@ -418,6 +428,9 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_run_effect: cranelift_module::FuncId,
     pub(crate) rt_bind_effect: cranelift_module::FuncId,
     pub(crate) rt_wrap_effect: cranelift_module::FuncId,
+    // Resource scope management
+    pub(crate) rt_push_resource_scope: cranelift_module::FuncId,
+    pub(crate) rt_pop_resource_scope: cranelift_module::FuncId,
     pub(crate) rt_binary_op: cranelift_module::FuncId,
     pub(crate) rt_constructor_name_eq: cranelift_module::FuncId,
     pub(crate) rt_constructor_arity: cranelift_module::FuncId,
@@ -435,6 +448,7 @@ pub(crate) struct DeclaredHelpers {
     pub(crate) rt_generator_to_list: cranelift_module::FuncId,
     pub(crate) rt_gen_vec_new: cranelift_module::FuncId,
     pub(crate) rt_gen_vec_push: cranelift_module::FuncId,
+    pub(crate) rt_gen_vec_extend_generator: cranelift_module::FuncId,
     pub(crate) rt_gen_vec_into_generator: cranelift_module::FuncId,
     // AOT function registration
     pub(crate) rt_register_jit_fn: cranelift_module::FuncId,
@@ -494,6 +508,8 @@ impl DeclaredHelpers {
             rt_run_effect: imp!(rt_run_effect),
             rt_bind_effect: imp!(rt_bind_effect),
             rt_wrap_effect: imp!(rt_wrap_effect),
+            rt_push_resource_scope: imp!(rt_push_resource_scope),
+            rt_pop_resource_scope: imp!(rt_pop_resource_scope),
             rt_binary_op: imp!(rt_binary_op),
             rt_constructor_name_eq: imp!(rt_constructor_name_eq),
             rt_constructor_arity: imp!(rt_constructor_arity),
@@ -510,6 +526,7 @@ impl DeclaredHelpers {
             rt_generator_to_list: imp!(rt_generator_to_list),
             rt_gen_vec_new: imp!(rt_gen_vec_new),
             rt_gen_vec_push: imp!(rt_gen_vec_push),
+            rt_gen_vec_extend_generator: imp!(rt_gen_vec_extend_generator),
             rt_gen_vec_into_generator: imp!(rt_gen_vec_into_generator),
             rt_register_jit_fn: imp!(rt_register_jit_fn),
             rt_register_machines_from_data: imp!(rt_register_machines_from_data),
@@ -2305,7 +2322,15 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             RustIrBlockKind::Plain => self.lower_plain_block(builder, items),
             RustIrBlockKind::Do { .. } => self.lower_do_block(builder, items),
             RustIrBlockKind::Generate => self.lower_native_generate(builder, items),
-            RustIrBlockKind::Resource => self.lower_resource_block(builder, items),
+            RustIrBlockKind::Resource => {
+                // Resource blocks are desugared into __makeResource calls at the
+                // RustIR level. This arm should be unreachable.
+                eprintln!("warning[JIT] resource block reached lower_block — should have been desugared");
+                let call = builder
+                    .ins()
+                    .call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
+                TypedValue::boxed(builder.inst_results(call)[0])
+            }
         }
     }
 
@@ -2342,6 +2367,12 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         builder: &mut FunctionBuilder<'_>,
         items: &[RustIrBlockItem],
     ) -> TypedValue {
+        // Push a resource scope marker so any resources acquired in this block
+        // have their cleanups run when the block exits.
+        builder
+            .ins()
+            .call(self.helpers.rt_push_resource_scope, &[self.ctx_param]);
+
         // Effect block: each `<- expr` binds the result of running the effect,
         // each bare `expr` is a sequenced effect.
         let mut current_effect = {
@@ -2395,6 +2426,12 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                 }
             }
         }
+
+        // Pop the resource scope — runs all cleanups registered in this block (LIFO).
+        builder
+            .ins()
+            .call(self.helpers.rt_pop_resource_scope, &[self.ctx_param]);
+
         // Wrap the result in an Effect thunk so callers that use
         // `rt_run_effect` on the block's return value see a proper Effect.
         let wrapped = self.ensure_boxed(builder, current_effect);
@@ -2489,10 +2526,26 @@ impl<'a, M: Module> LowerCtx<'a, M> {
                     builder.seal_block(continue_block);
                 }
                 RustIrBlockItem::Expr { expr } => {
-                    let _tv = self.lower_expr(builder, expr);
+                    // Evaluate the expression. If it produces a generator
+                    // (e.g. from a loop/recurse call), flatten its elements
+                    // into the accumulator vec.
+                    let tv = self.lower_expr(builder, expr);
+                    let boxed = self.ensure_boxed(builder, tv);
+                    let current_vec = builder.use_var(vec_var);
+                    builder.ins().call(
+                        self.helpers.rt_gen_vec_extend_generator,
+                        &[self.ctx_param, current_vec, boxed],
+                    );
                 }
                 RustIrBlockItem::Recurse { expr } => {
-                    let _tv = self.lower_expr(builder, expr);
+                    // Same treatment: recurse produces a generator to flatten.
+                    let tv = self.lower_expr(builder, expr);
+                    let boxed = self.ensure_boxed(builder, tv);
+                    let current_vec = builder.use_var(vec_var);
+                    builder.ins().call(
+                        self.helpers.rt_gen_vec_extend_generator,
+                        &[self.ctx_param, current_vec, boxed],
+                    );
                 }
                 RustIrBlockItem::Bind { pattern, expr } => {
                     // 1. Evaluate the source expression (a generator)
@@ -2580,44 +2633,5 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             }
         }
         // No more items — falls through to caller (which adds jump to done)
-    }
-
-    fn lower_resource_block(
-        &mut self,
-        builder: &mut FunctionBuilder<'_>,
-        items: &[RustIrBlockItem],
-    ) -> TypedValue {
-        // Pre-convert RustIR → HIR at compile time to avoid runtime bridge
-        let hir_items = match crate::runtime::lower_runtime_rust_ir_block_items(items) {
-            Ok(items) => items,
-            Err(_) => {
-                let call = builder
-                    .ins()
-                    .call(self.helpers.rt_alloc_unit, &[self.ctx_param]);
-                return TypedValue::boxed(builder.inst_results(call)[0]);
-            }
-        };
-
-        // Construct the Resource value at compile time and leak it
-        let resource = crate::runtime::values::Value::Resource(std::sync::Arc::new(
-            crate::runtime::values::ResourceValue {
-                items: std::sync::Arc::new(hir_items),
-            },
-        ));
-        let leaked_ptr = Box::into_raw(Box::new(resource));
-
-        // At runtime: clone the pre-built resource value
-        let ptr_const = builder.ins().iconst(PTR, leaked_ptr as i64);
-        let call = builder
-            .ins()
-            .call(self.helpers.rt_clone_value, &[self.ctx_param, ptr_const]);
-        let resource_val = builder.inst_results(call)[0];
-
-        // Wrap the Resource in an Effect thunk so callers that use
-        // `rt_run_effect` on the result see a proper Effect.
-        let call = builder
-            .ins()
-            .call(self.helpers.rt_wrap_effect, &[self.ctx_param, resource_val]);
-        TypedValue::boxed(builder.inst_results(call)[0])
     }
 }

@@ -435,16 +435,11 @@ fn jit_compile_into_runtime(
         if !name.contains('.') {
             if let Some(Value::Builtin(_)) = runtime.ctx.globals.get(&name) {
                 if name == "sum" {
-                    eprintln!("[DEBUG install] SKIPPING sum (already a Builtin)");
                 }
                 continue;
             }
         }
         if name == "sum" {
-            eprintln!("[DEBUG install] setting sum to {:?}", match &value {
-                Value::Builtin(b) => format!("Builtin(name={})", b.imp.name),
-                other => format!("{:?}", std::mem::discriminant(other)),
-            });
         }
         runtime.ctx.globals.set(name, value);
     }
@@ -1393,8 +1388,6 @@ fn compile_definition_body<M: Module>(
     let mut called_globals = HashSet::new();
     collect_called_globals(body, &mut called_globals);
     if def.name == "recursionWorks" || def.name == "sum" {
-        eprintln!("[DEBUG collect_globals] qname={} def={} called_globals={:?}", qualified_name, def.name, called_globals);
-        eprintln!("[DEBUG collect_globals] body: {:?}", body);
     }
 
     let mut local_jit_funcs: HashMap<String, JitFuncInfo> = HashMap::new();
@@ -1406,7 +1399,6 @@ fn compile_definition_body<M: Module>(
             compiled_decls.get(&qualified)
         });
         if name == "sum" {
-            eprintln!("[DEBUG import_xmod] name=sum module_name={} decl_found={}", module_name, decl.is_some());
         }
         if let Some(decl) = decl {
             let func_ref = module.declare_func_in_func(decl.func_id, &mut function);
@@ -1573,8 +1565,8 @@ fn block_item_supported(item: &RustIrBlockItem) -> bool {
             pattern_supported(pattern) && expr_supported(expr)
         }
         RustIrBlockItem::Expr { expr } => expr_supported(expr),
+        RustIrBlockItem::Yield { expr } => expr_supported(expr),
         RustIrBlockItem::Filter { .. }
-        | RustIrBlockItem::Yield { .. }
         | RustIrBlockItem::Recurse { .. } => false,
     }
 }
@@ -1916,12 +1908,6 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
             name: format!("__jit|cranelift|{}", def_name),
             arity,
             func: Arc::new(move |args: Vec<Value>, runtime: &mut Runtime| {
-                if def_name.contains("fromList") && def_name.contains("generator") {
-                    eprintln!("[TRACE jit-call] {} args:", def_name);
-                    for (i, a) in args.iter().enumerate() {
-                        eprintln!("  arg[{}] = {:?} (ptr will be {:p})", i, a, &args[i] as *const Value);
-                    }
-                }
                 // Clear any stale pending error before entering JIT code
                 runtime.jit_pending_error = None;
 
@@ -1939,32 +1925,9 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                 for arg in &boxed_args {
                     call_args.push(*arg as i64);
                 }
-                if def_name.contains("fromList") && def_name.contains("generator") {
-                    for (i, arg_ptr) in boxed_args.iter().enumerate() {
-                        let v = unsafe { &**arg_ptr };
-                        eprintln!("[TRACE jit-call] boxed arg[{}] at {:p} = {:?}", i, *arg_ptr, v);
-                    }
-                }
 
                 // Call the JIT function
                 let result_ptr = unsafe { call_jit_function(func_ptr, &call_args) };
-                if def_name.contains("fromList") && def_name.contains("generator") {
-                    if result_ptr == 0 {
-                        eprintln!("[TRACE jit-call] {} returned NULL", def_name);
-                    } else {
-                        let rp = result_ptr as *const Value;
-                        let rv = unsafe { &*rp };
-                        eprintln!("[TRACE jit-call] {} returned {:?}", def_name, rv);
-                    }
-                    if runtime.jit_pending_error.is_some() {
-                        eprintln!("[TRACE jit-call] {} has pending error: {}", def_name,
-                            match &runtime.jit_pending_error {
-                                Some(e) => format!("{}", crate::runtime::format_runtime_error(e.clone())),
-                                None => "none".to_string(),
-                            });
-                    }
-                    eprintln!("[TRACE jit-call] {} match_failed={}", def_name, runtime.jit_match_failed);
-                }
 
                 // Check if the JIT function signalled a non-exhaustive match.
                 // This lets apply_multi_clause try the next clause.

@@ -174,9 +174,6 @@ pub extern "C" fn rt_enter_fn(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usiz
     let Some(name) = decode_utf8_owned(ctx, ptr, len, "rt_enter_fn") else {
         return;
     };
-    if name.contains("sum") || name.contains("recursion") {
-        eprintln!("[DEBUG rt_enter_fn] {}", name);
-    }
     let runtime = unsafe { (*ctx).runtime_mut() };
     runtime.jit_current_fn = Some(name.clone().into_boxed_str());
     FN_HISTORY.with(|h| {
@@ -746,21 +743,6 @@ pub extern "C" fn rt_get_global(
             return abi::box_value(Value::Unit);
         }
     };
-    if name == "sum" {
-        eprintln!("[DEBUG rt_get_global] sum => {:?}", match &val {
-            Value::Builtin(b) => format!("Builtin(name={})", b.imp.name),
-            other => format!("{:?}", std::mem::discriminant(other)),
-        });
-    }
-    if name == "fromList" || name == "aivi.generator.fromList" {
-        eprintln!("[DEBUG rt_get_global] {} => {:?}", name, match &val {
-            Value::Builtin(b) => format!("Builtin(name={}, arity={})", b.imp.name, b.imp.arity),
-            other => format!("{:?}", std::mem::discriminant(other)),
-        });
-    }
-    if name == "AccountSyncMachine" || name.contains("AccountSync") {
-        eprintln!("[DEBUG rt_get_global] {} => {:?}", name, std::mem::discriminant(&val));
-    }
     match runtime.force_value(val) {
         Ok(forced) => abi::box_value(forced),
         Err(e) => {
@@ -794,20 +776,12 @@ pub extern "C" fn rt_apply(
 
     // Fast path: fully-saturated builtin (arity reached with this arg)
     if let Value::Builtin(ref b) = func {
-        if b.imp.name.contains("fromList") {
-            eprintln!("[TRACE fromList] rt_apply: name={}, arity={}, args.len()={}, new_arg={:?}",
-                b.imp.name, b.imp.arity, b.args.len(), arg);
-        }
         if b.args.len() + 1 == b.imp.arity {
             let mut all_args = b.args.clone();
             all_args.push(arg.clone());
             let runtime = unsafe { (*ctx).runtime_mut() };
-            let trace_from_list = b.imp.name.contains("fromList");
             match (b.imp.func)(all_args, runtime) {
                 Ok(val) => {
-                    if trace_from_list {
-                        eprintln!("[TRACE fromList] RESULT: {:?}", val);
-                    }
                     return abi::box_value(val);
                 }
                 Err(e) => {
@@ -942,6 +916,21 @@ pub extern "C" fn rt_wrap_effect(_ctx: *mut JitRuntimeCtx, ptr: *const Value) ->
     abi::box_value(Value::Effect(Arc::new(effect)))
 }
 
+/// Push a resource scope marker. Called at the start of a do-block.
+#[no_mangle]
+pub extern "C" fn rt_push_resource_scope(ctx: *mut JitRuntimeCtx) {
+    let runtime = unsafe { (*ctx).runtime_mut() };
+    runtime.push_resource_scope();
+}
+
+/// Pop a resource scope and run all cleanups registered since the last marker.
+/// Called at the end of a do-block (before wrapping the result).
+#[no_mangle]
+pub extern "C" fn rt_pop_resource_scope(ctx: *mut JitRuntimeCtx) {
+    let runtime = unsafe { (*ctx).runtime_mut() };
+    runtime.pop_resource_scope();
+}
+
 // ---------------------------------------------------------------------------
 // Pattern matching helpers
 // ---------------------------------------------------------------------------
@@ -1063,17 +1052,8 @@ pub extern "C" fn rt_tuple_item(
 pub extern "C" fn rt_list_len(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };
     match value {
-        Value::List(items) => {
-            let len = items.len() as i64;
-            if len <= 5 {
-                eprintln!("[TRACE rt_list_len] List len={} items={:?}", len, items);
-            }
-            len
-        }
-        other => {
-            eprintln!("[TRACE rt_list_len] NOT A LIST: {:?}", std::mem::discriminant(other));
-            0
-        }
+        Value::List(items) => items.len() as i64,
+        _ => 0,
     }
 }
 
@@ -1129,11 +1109,6 @@ pub extern "C" fn rt_value_equals(
     let va = unsafe { &*a };
     let vb = unsafe { &*b };
     let result = crate::runtime::values_equal(va, vb);
-    if !result {
-        eprintln!("[DBG rt_value_equals] NOT EQUAL:");
-        eprintln!("  left  = {:?}", va);
-        eprintln!("  right = {:?}", vb);
-    }
     i64::from(result)
 }
 
@@ -1390,12 +1365,9 @@ pub extern "C" fn rt_binary_op(
     let rhs = unsafe { (*rhs_ptr).clone() };
 
     if op == "==" {
+        // Equality logic...
         let eq = crate::runtime::values_equal(&lhs, &rhs);
-        if !eq {
-            eprintln!("[DBG rt_binary_op ==] NOT EQUAL:");
-            eprintln!("  left  = {:?}", lhs);
-            eprintln!("  right = {:?}", rhs);
-        }
+        return abi::box_value(Value::Bool(eq));
     }
 
     // Fast path: try the pure built-in evaluation
@@ -1406,32 +1378,12 @@ pub extern "C" fn rt_binary_op(
     // Slow path: look up operator in globals and apply curried
     let runtime = unsafe { (*ctx).runtime_mut() };
     let op_name = format!("({})", op);
-    if let Some(op_value) = runtime.ctx.globals.get(&op_name) {
-        let clause_count = match op_value {
-            Value::MultiClause(cs) => cs.len(),
-            _ => 1,
-        };
-        eprintln!("[DBG rt_binary_op] op={op} clauses={clause_count} lhs={lhs:?} rhs={rhs:?}");
-        let op_val = op_value.clone();
-        match runtime.apply(op_val, lhs.clone()) {
-            Ok(applied) => {
-                eprintln!("[DBG rt_binary_op] after 1st apply: {}", crate::runtime::format_value(&applied));
-                match runtime.apply(applied, rhs.clone()) {
-                    Ok(result) => {
-                        eprintln!("[DBG rt_binary_op] result: {}", crate::runtime::format_value(&result));
-                        return abi::box_value(result);
-                    }
-                    Err(_e) => {
-                        eprintln!("[DBG rt_binary_op] 2nd apply err");
-                    }
-                }
-            }
-            Err(_e) => {
-                eprintln!("[DBG rt_binary_op] 1st apply err");
+    if let Some(op_value) = runtime.ctx.globals.get(&op_name).map(|v| v.clone()) {
+        if let Ok(applied) = runtime.apply(op_value, lhs.clone()) {
+            if let Ok(result) = runtime.apply(applied, rhs.clone()) {
+                return abi::box_value(result);
             }
         }
-    } else {
-        eprintln!("[DBG rt_binary_op] op={op} NOT FOUND in globals");
     }
     eprintln!(
         "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}operator error{RT_RESET}: binary operator `{op}` could not be applied to the given operand types"
@@ -1466,6 +1418,30 @@ pub extern "C" fn rt_gen_vec_push(
     let vec = unsafe { &mut *vec_ptr };
     let value = unsafe { (*value_ptr).clone() };
     vec.push(value);
+}
+
+/// Extend the generator accumulator with elements from a generator value.
+///
+/// If `value_ptr` points to a generator (fold function), it is folded and
+/// all yielded elements are pushed into `vec_ptr`. Non-generator values
+/// (e.g. `Unit` from side-effectful expressions) are silently ignored.
+///
+/// # Safety
+/// `vec_ptr` must point to a live `Vec<Value>` (from `rt_gen_vec_new`).
+/// `value_ptr` must point to a live `Value`.
+#[no_mangle]
+pub extern "C" fn rt_gen_vec_extend_generator(
+    ctx: *mut JitRuntimeCtx,
+    vec_ptr: *mut Vec<Value>,
+    value_ptr: *mut Value,
+) {
+    let runtime = unsafe { &mut *(*ctx).runtime };
+    let value = unsafe { (*value_ptr).clone() };
+    let vec = unsafe { &mut *vec_ptr };
+    match runtime.generator_to_list(value) {
+        Ok(items) => vec.extend(items),
+        Err(_) => {} // not a generator or fold error — silently ignore
+    }
 }
 
 /// Convert a `Vec<Value>` accumulator into a generator fold function.
@@ -2154,6 +2130,14 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_run_effect", rt_run_effect as *const u8),
         ("rt_bind_effect", rt_bind_effect as *const u8),
         ("rt_wrap_effect", rt_wrap_effect as *const u8),
+        (
+            "rt_push_resource_scope",
+            rt_push_resource_scope as *const u8,
+        ),
+        (
+            "rt_pop_resource_scope",
+            rt_pop_resource_scope as *const u8,
+        ),
         ("rt_binary_op", rt_binary_op as *const u8),
         // Pattern matching helpers
         (
@@ -2180,6 +2164,10 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
         ("rt_generator_to_list", rt_generator_to_list as *const u8),
         ("rt_gen_vec_new", rt_gen_vec_new as *const u8),
         ("rt_gen_vec_push", rt_gen_vec_push as *const u8),
+        (
+            "rt_gen_vec_extend_generator",
+            rt_gen_vec_extend_generator as *const u8,
+        ),
         (
             "rt_gen_vec_into_generator",
             rt_gen_vec_into_generator as *const u8,
