@@ -87,6 +87,7 @@ pub use aivi_core::desugar_modules;
 pub use aivi_core::lex_cst;
 
 pub use aivi_core::check_modules;
+pub use aivi_core::desugar_blocks;
 pub use aivi_core::{
     check_types, check_types_including_stdlib, elaborate_expected_coercions,
     elaborate_stdlib_checkpoint, elaborate_with_checkpoint, infer_value_types,
@@ -110,7 +111,6 @@ pub use aivi_core::{
     DiagnosticSeverity, FileDiagnostic, Position, Span,
 };
 pub use aivi_core::{format_text, format_text_with_options, BraceStyle, FormatOptions};
-pub use aivi_core::desugar_blocks;
 pub use aivi_core::{CstBundle, CstFile, CstToken};
 pub use aivi_core::{HirModule, HirProgram};
 use cranelift_backend::run_cranelift_jit_cancellable;

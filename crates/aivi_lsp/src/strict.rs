@@ -2,11 +2,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use aivi::{
-    elaborate_expected_coercions, embedded_stdlib_modules, lex_cst, parse_modules,
-    BlockKind, Module,
+    desugar_blocks, elaborate_expected_coercions, embedded_stdlib_modules, lex_cst, parse_modules,
+    BlockKind, HirExpr, HirTextPart, Module,
 };
-use aivi::hir::{HirExpr, HirTextPart};
-use aivi::kernel::desugar_blocks;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString, TextEdit, Url};

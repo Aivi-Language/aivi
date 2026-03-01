@@ -409,7 +409,6 @@ fn mark_last_uses_reverse(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rust_ir::RustIrPattern;
 
     fn local(id: u32, name: &str) -> RustIrExpr {
         RustIrExpr::Local {

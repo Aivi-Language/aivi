@@ -121,6 +121,7 @@ fn collect_unbound_vars_in_hir_expr(
             }
             collect_unbound_vars_in_hir_expr(body, globals, locals, bound, out);
         }
+        HirExpr::Block { .. } => unreachable!("Block should be desugared before RustIr lowering"),
     }
 }
 

@@ -6,7 +6,7 @@ use crate::rust_ir::cg_type::CgType;
 
 use crate::hir::{
     HirDef, HirExpr, HirListItem, HirLiteral, HirMatchArm, HirModule, HirPathSegment, HirPattern,
-    HirProgram, HirRecordField, HirRecordPatternField, HirTextPart,
+    HirProgram, HirRecordField, HirTextPart,
 };
 use crate::AiviError;
 
