@@ -298,7 +298,11 @@ impl Backend {
         self.workspace_modules_for(uri).await
     }
 
-    pub(super) async fn update_document(&self, uri: Url, text: String) {
+    pub(super) async fn update_document(
+        &self,
+        uri: Url,
+        text: String,
+    ) -> Vec<aivi::FileDiagnostic> {
         let path = PathBuf::from(Self::path_from_uri(&uri));
         let text_clone = text.clone();
         let (modules, parse_diags) =
@@ -327,9 +331,14 @@ impl Backend {
             );
         }
         state.open_modules_by_uri.insert(uri.clone(), module_names);
-        state
-            .documents
-            .insert(uri, DocumentState { text, parse_diags });
+        state.documents.insert(
+            uri,
+            DocumentState {
+                text,
+                parse_diags: parse_diags.clone(),
+            },
+        );
+        parse_diags
     }
 
     pub(super) async fn remove_document(&self, uri: &Url) {
