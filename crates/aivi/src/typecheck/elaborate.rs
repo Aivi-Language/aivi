@@ -220,6 +220,35 @@ fn elaborate_modules(
                 exports.insert(export.name.name.clone(), schemes.to_vec());
             }
         }
+        // Also add domain member schemes to module_exports so that
+        // wildcard imports and explicit domain imports can resolve them.
+        for export in &module.exports {
+            if export.kind != crate::surface::ScopeItemKind::Domain {
+                continue;
+            }
+            for item in &module.items {
+                let ModuleItem::DomainDecl(domain) = item else {
+                    continue;
+                };
+                if domain.name.name != export.name.name {
+                    continue;
+                }
+                for domain_item in &domain.items {
+                    let def_name = match domain_item {
+                        DomainItem::Def(def) | DomainItem::LiteralDef(def) => &def.name.name,
+                        _ => continue,
+                    };
+                    if exports.contains_key(def_name) {
+                        continue;
+                    }
+                    if let Some(schemes) = sigs.get(def_name) {
+                        exports.insert(def_name.clone(), schemes.clone());
+                    } else if let Some(schemes) = env.get_all(def_name) {
+                        exports.insert(def_name.clone(), schemes.to_vec());
+                    }
+                }
+            }
+        }
         module_exports.insert(module.name.name.clone(), exports);
 
         let mut domain_exports = HashMap::new();

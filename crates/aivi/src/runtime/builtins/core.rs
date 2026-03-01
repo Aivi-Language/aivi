@@ -502,4 +502,45 @@ pub(crate) fn register_builtins(env: &Env) {
             Ok(Value::Effect(std::sync::Arc::new(effect)))
         }),
     );
+
+    // __asGenerator : a -> Generator a
+    // If the value is a List, converts it to a generator (fold function).
+    // Otherwise, assumes it's already a generator and passes it through.
+    env.set(
+        "__asGenerator".to_string(),
+        builtin("__asGenerator", 1, |mut args, _runtime| {
+            let val = args.pop().unwrap();
+            match val {
+                Value::List(items) => {
+                    // Return a generator: \k -> \z -> foldl k z items
+                    let items = Arc::clone(&items);
+                    Ok(builtin("__asGenerator.gen", 2, move |mut args, _rt| {
+                        let z = args.pop().unwrap();
+                        let k = args.pop().unwrap();
+                        let mut acc = z;
+                        for item in items.iter() {
+                            // Apply k to acc and item
+                            let partial = match &acc {
+                                _ => {
+                                    // k acc item
+                                    let k_applied = match &k {
+                                        Value::Builtin(b) => b.apply(acc.clone(), _rt)?,
+                                        _ => _rt.apply(k.clone(), acc.clone())?,
+                                    };
+                                    match &k_applied {
+                                        Value::Builtin(b) => b.apply(item.clone(), _rt)?,
+                                        _ => _rt.apply(k_applied, item.clone())?,
+                                    }
+                                }
+                            };
+                            acc = partial;
+                        }
+                        Ok(acc)
+                    }))
+                }
+                // Already a generator (function) — pass through
+                other => Ok(other),
+            }
+        }),
+    );
 }

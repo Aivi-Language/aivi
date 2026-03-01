@@ -36,6 +36,7 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "chain",
     "assertEq",
     "__assertSnapshot",
+    "__asGenerator",
     // Module records (stdlib namespaces)
     "file",
     "env",

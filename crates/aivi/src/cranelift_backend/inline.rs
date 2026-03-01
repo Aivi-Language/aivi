@@ -184,7 +184,11 @@ fn collect_candidates(modules: &[RustIrModule]) -> HashMap<String, InlineCandida
     // function than Global("sum") in module B.
     let mut name_count: HashMap<&str, usize> = HashMap::new();
     for module in modules {
+        let module_dot = format!("{}.", module.name);
         for def in &module.defs {
+            if def.name.starts_with(&module_dot) {
+                continue;
+            }
             *name_count.entry(&def.name).or_insert(0) += 1;
         }
     }
@@ -192,7 +196,12 @@ fn collect_candidates(modules: &[RustIrModule]) -> HashMap<String, InlineCandida
     let mut candidates = HashMap::new();
 
     for module in modules {
+        let module_dot = format!("{}.", module.name);
         for def in &module.defs {
+            // Skip qualified aliases emitted by the Kernel
+            if def.name.starts_with(&module_dot) {
+                continue;
+            }
             let qualified = format!("{}.{}", module.name, def.name);
             let (params, body) = peel_params(&def.expr);
 

@@ -10,6 +10,7 @@ fn lower_block_item_ctx(
         BlockItem::Bind { pattern, expr, .. } => HirBlockItem::Bind {
             pattern: lower_pattern(pattern, id_gen),
             expr: lower_expr_ctx(expr, id_gen, ctx, false),
+            is_monadic: true,
         },
         BlockItem::Let { pattern, expr, .. } => {
             let lowered_expr = lower_expr_ctx(expr, id_gen, ctx, false);
@@ -34,6 +35,7 @@ fn lower_block_item_ctx(
             HirBlockItem::Bind {
                 pattern: lower_pattern(pattern, id_gen),
                 expr,
+                is_monadic: false,
             }
         }
         BlockItem::Filter { expr, .. } => HirBlockItem::Filter {
@@ -71,6 +73,7 @@ fn lower_block_item_ctx(
                     then_branch: Box::new(eff_hir),
                     else_branch: Box::new(pure_unit),
                 },
+                is_monadic: true,
             }
         }
         // Desugar `unless cond <- eff` → `_ <- if (not cond) then eff else pure Unit`
@@ -110,6 +113,7 @@ fn lower_block_item_ctx(
                     then_branch: Box::new(eff_hir),
                     else_branch: Box::new(pure_unit),
                 },
+                is_monadic: true,
             }
         }
         // Desugar `given cond or failExpr` → `_ <- if cond then pure Unit else failExpr`
@@ -135,6 +139,7 @@ fn lower_block_item_ctx(
                     then_branch: Box::new(pure_unit),
                     else_branch: Box::new(fail_hir),
                 },
+                is_monadic: true,
             }
         }
         // `on transition => handler` — register transition handlers at runtime.

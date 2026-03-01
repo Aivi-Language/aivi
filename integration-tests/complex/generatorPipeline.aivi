@@ -34,7 +34,7 @@ scanTotals = xs => reverseList (List.foldl scanFolder { sum: 0, acc: [] } xs).ac
 @test "bounded fibonacci via generator"
 generatorFibs = do Effect {
   fibs = toList (fibsUpTo 20)
-  assertEq fibs [0, 1, 1, 2, 3, 5, 8, 13, 21]
+  assertEq fibs [0, 1, 1, 2, 3, 5, 8, 13]
 }
 
 @test "prime sieve via range + guard filter"

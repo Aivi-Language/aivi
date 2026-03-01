@@ -186,7 +186,7 @@ fn lower_block_kind(kind: HirBlockKind) -> KernelBlockKind {
 
 fn lower_block_item(item: HirBlockItem, id_gen: &mut IdGen) -> KernelBlockItem {
     match item {
-        HirBlockItem::Bind { pattern, expr } => KernelBlockItem::Bind {
+        HirBlockItem::Bind { pattern, expr, .. } => KernelBlockItem::Bind {
             pattern: lower_pattern(pattern, id_gen),
             expr: lower_expr(expr, id_gen),
         },
@@ -365,7 +365,7 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
             }
             for item in items {
                 match item {
-                    HirBlockItem::Bind { pattern, expr } => {
+                    HirBlockItem::Bind { pattern, expr, .. } => {
                         find_max_id_pattern(pattern, max);
                         find_max_id_expr(expr, max);
                     }

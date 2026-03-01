@@ -357,6 +357,7 @@ fn lower_runtime_rust_ir_block_item(item: &rust_ir::RustIrBlockItem) -> Option<H
         rust_ir::RustIrBlockItem::Bind { pattern, expr } => HirBlockItem::Bind {
             pattern: lower_runtime_rust_ir_pattern(pattern),
             expr: lower_runtime_rust_ir_expr(expr)?,
+            is_monadic: true,
         },
         rust_ir::RustIrBlockItem::Filter { expr } => HirBlockItem::Filter {
             expr: lower_runtime_rust_ir_expr(expr)?,
