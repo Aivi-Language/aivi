@@ -197,13 +197,41 @@ fn header_or_none(parsed: &mailparse::ParsedMail<'_>, name: &str) -> Option<Stri
 }
 
 fn send_smtp_message(config: HashMap<String, Value>) -> Result<Value, RuntimeError> {
-    let _host = required_text(&config, "host", "email.smtpSend")?;
-    let _user = required_text(&config, "user", "email.smtpSend")?;
-    let _password = required_text(&config, "password", "email.smtpSend")?;
-    let _from = required_text(&config, "from", "email.smtpSend")?;
-    let _to = required_text(&config, "to", "email.smtpSend")?;
-    let _subject = required_text(&config, "subject", "email.smtpSend")?;
-    let _body = required_text(&config, "body", "email.smtpSend")?;
+    use lettre::transport::smtp::authentication::Credentials;
+    use lettre::{Message, SmtpTransport, Transport};
+
+    let host = required_text(&config, "host", "email.smtpSend")?;
+    let user = required_text(&config, "user", "email.smtpSend")?;
+    let password = required_text(&config, "password", "email.smtpSend")?;
+    let from = required_text(&config, "from", "email.smtpSend")?;
+    let to = required_text(&config, "to", "email.smtpSend")?;
+    let subject = required_text(&config, "subject", "email.smtpSend")?;
+    let body = required_text(&config, "body", "email.smtpSend")?;
+
+    let email = Message::builder()
+        .from(
+            from.parse()
+                .map_err(|e| RuntimeError::Message(format!("Invalid from address: {e}")))?,
+        )
+        .to(to
+            .parse()
+            .map_err(|e| RuntimeError::Message(format!("Invalid to address: {e}")))?)
+        .subject(subject)
+        .body(body)
+        .map_err(|e| RuntimeError::Message(format!("Failed to build email: {e}")))?;
+
+    let creds = Credentials::new(user, password);
+
+    // Assuming standard submission port or implied by relay
+    let mailer = SmtpTransport::relay(&host)
+        .map_err(|e| RuntimeError::Message(format!("Invalid SMTP host: {e}")))?
+        .credentials(creds)
+        .build();
+
+    mailer
+        .send(&email)
+        .map_err(|e| RuntimeError::Error(Value::Text(format!("SMTP send failed: {e}"))))?;
+
     Ok(Value::Unit)
 }
 

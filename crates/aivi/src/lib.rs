@@ -200,7 +200,7 @@ pub use aivi_driver::{
     desugar_target, desugar_target_lenient, desugar_target_typed, desugar_target_with_cg_types,
     desugar_target_with_cg_types_and_surface, format_target, kernel_target,
     load_module_diagnostics, load_modules, load_modules_from_paths, parse_file, parse_target,
-    resolve_target, test_target_program_and_names, AiviError,
+    resolve_target, AiviError, Pipeline,
 };
 
 pub fn rust_ir_target(target: &str) -> Result<rust_ir::RustIrProgram, AiviError> {

@@ -1,9 +1,9 @@
 use aivi::{
     check_modules, check_types,
-    desugar_target, embedded_stdlib_source, ensure_aivi_dependency, format_target, kernel_target,
-    load_module_diagnostics, load_modules, parse_target, render_diagnostics,
+    embedded_stdlib_source, ensure_aivi_dependency, format_target, kernel_target,
+    parse_target, render_diagnostics,
     rust_ir_target, serve_mcp_stdio_with_policy, validate_publish_preflight, write_scaffold,
-    AiviError, CargoDepSpec, McpPolicy, ProjectKind,
+    AiviError, CargoDepSpec, McpPolicy, Pipeline, ProjectKind,
 };
 use std::env;
 use std::io;
@@ -113,14 +113,14 @@ fn run() -> Result<(), AiviError> {
             if target.is_empty() {
                 return Ok(());
             }
-            let mut diagnostics = load_module_diagnostics(&target)?;
-            let modules = load_modules(&target)?;
-            diagnostics.extend(check_modules(&modules));
+            let pipeline = Pipeline::from_target(&target)?;
+            let mut diagnostics = pipeline.parse_diagnostics().to_vec();
+            diagnostics.extend(check_modules(pipeline.modules()));
             if !aivi::file_diagnostics_have_errors(&diagnostics) {
                 if check_stdlib {
-                    diagnostics.extend(aivi::check_types_including_stdlib(&modules));
+                    diagnostics.extend(aivi::check_types_including_stdlib(pipeline.modules()));
                 } else {
-                    diagnostics.extend(check_types(&modules));
+                    diagnostics.extend(check_types(pipeline.modules()));
                 }
             }
             if !check_stdlib {
@@ -396,9 +396,9 @@ fn run() -> Result<(), AiviError> {
                 print_help();
                 return Ok(());
             };
-            let diagnostics = load_module_diagnostics(target)?;
-            if aivi::file_diagnostics_have_errors(&diagnostics) {
-                for diag in diagnostics {
+            let pipeline = Pipeline::from_target(target)?;
+            if pipeline.has_parse_errors() {
+                for diag in pipeline.parse_diagnostics() {
                     let rendered =
                         render_diagnostics(&diag.path, std::slice::from_ref(&diag.diagnostic), use_color);
                     if !rendered.is_empty() {
@@ -407,7 +407,7 @@ fn run() -> Result<(), AiviError> {
                 }
                 return Err(AiviError::Diagnostics);
             }
-            let program = desugar_target(target)?;
+            let program = pipeline.desugar();
             let output = serde_json::to_string_pretty(&program)
                 .map_err(|err| AiviError::Io(std::io::Error::other(err)))?;
             println!("{output}");
