@@ -100,7 +100,7 @@ pub(crate) enum Value {
     ChannelSend(Arc<ChannelSend>),
     ChannelRecv(Arc<ChannelRecv>),
     FileHandle(Arc<Mutex<std::fs::File>>),
-    Listener(Arc<TcpListener>),
+    Listener(Arc<Mutex<Option<TcpListener>>>),
     Connection(Arc<Mutex<TcpStream>>),
     Stream(Arc<StreamHandle>),
     HttpServer(Arc<ServerHandle>),

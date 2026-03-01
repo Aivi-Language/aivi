@@ -12,7 +12,10 @@ Source (.aivi)
 Surface AST
   │  desugar
   ▼
-Kernel IR (HIR)
+HIR (High-level IR)
+  │  desugar blocks
+  ▼
+HIR (Block-free)
   │  type-check  →  CgType map
   ▼
 RustIR (monomorphised intermediate form)
@@ -170,7 +173,7 @@ Monomorphic definitions get concrete `CgType`s; polymorphic definitions get
 
 ## JIT Compilation (`aivi run`)
 
-1. Lower HIR → Kernel → RustIR with monomorphisation.
+1. Lower Surface → HIR → HIR (block-free) → RustIR with monomorphisation.
 2. Annotate each definition with its `CgType` from type inference.
 3. **Inline**: rewrite call sites of small functions
    with the callee's body (see [Function Inlining](#function-inlining) below).

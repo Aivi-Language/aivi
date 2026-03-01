@@ -11,7 +11,7 @@ use aivi_core::{
     check_modules, elaborate_expected_coercions, embedded_stdlib_modules,
     file_diagnostics_have_errors, format_text, parse_modules, parse_modules_from_tokens,
     render_diagnostics, resolve_import_names, CstBundle, CstFile, Diagnostic, FileDiagnostic,
-    HirProgram, Module, ModuleItem,
+    HirProgram, Module,
 };
 
 type CgTypesMap = std::collections::HashMap<
@@ -109,282 +109,170 @@ pub fn parse_file(path: &Path) -> Result<CstFile, AiviError> {
     })
 }
 
-/// Resolves a target and loads parsed modules, including embedded stdlib modules for full compilation context.
+// ---------------------------------------------------------------------------
+// Pipeline — single configurable entry point for all compilation stages
+// ---------------------------------------------------------------------------
+
+/// Holds parsed modules (user + stdlib) and parse-phase diagnostics.
+/// All `desugar_*` / `kernel_target` / `load_*` functions delegate to this.
+pub struct Pipeline {
+    modules: Vec<Module>,
+    parse_diagnostics: Vec<FileDiagnostic>,
+}
+
+impl Pipeline {
+    /// Parse user files from a target string, prepend stdlib, resolve imports.
+    pub fn from_target(target: &str) -> Result<Self, AiviError> {
+        let paths = workspace::expand_target(target)?;
+        Self::from_paths(&paths)
+    }
+
+    /// Parse user files from explicit paths, prepend stdlib, resolve imports.
+    pub fn from_paths(paths: &[PathBuf]) -> Result<Self, AiviError> {
+        let mut modules = Vec::new();
+        let mut parse_diagnostics = Vec::new();
+        for path in paths {
+            let content = fs::read_to_string(path)?;
+            let (mut parsed, mut diags) = parse_modules(path.as_path(), &content);
+            parse_diagnostics.append(&mut diags);
+            modules.append(&mut parsed);
+        }
+        let mut stdlib_modules = embedded_stdlib_modules();
+        stdlib_modules.append(&mut modules);
+        resolve_import_names(&mut stdlib_modules);
+        Ok(Self {
+            modules: stdlib_modules,
+            parse_diagnostics,
+        })
+    }
+
+    pub fn parse_diagnostics(&self) -> &[FileDiagnostic] {
+        &self.parse_diagnostics
+    }
+
+    pub fn has_parse_errors(&self) -> bool {
+        file_diagnostics_have_errors(&self.parse_diagnostics)
+    }
+
+    /// Run name-resolution checks and coercion elaboration. Returns check diagnostics.
+    pub fn typecheck(&mut self) -> Vec<FileDiagnostic> {
+        let mut diags = check_modules(&self.modules);
+        if diags.is_empty() {
+            diags.extend(elaborate_expected_coercions(&mut self.modules));
+        }
+        diags
+    }
+
+    pub fn infer_types_full(&self) -> aivi_core::InferResult {
+        aivi_core::infer_value_types_full(&self.modules)
+    }
+
+    pub fn infer_types_fast(&self) -> aivi_core::InferResult {
+        aivi_core::infer_value_types_fast(&self.modules)
+    }
+
+    pub fn desugar(&self) -> HirProgram {
+        aivi_core::desugar_modules(&self.modules)
+    }
+
+    pub fn modules(&self) -> &[Module] {
+        &self.modules
+    }
+
+    pub fn into_modules(self) -> Vec<Module> {
+        self.modules
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Public convenience functions (delegate to Pipeline)
+// ---------------------------------------------------------------------------
+
+/// Resolves a target and loads parsed modules with embedded stdlib.
 pub fn load_modules(target: &str) -> Result<Vec<Module>, AiviError> {
-    let paths = workspace::expand_target(target)?;
-    load_modules_from_paths(&paths)
+    Ok(Pipeline::from_target(target)?.into_modules())
 }
 
-/// Parses modules from explicit file paths and prepends embedded stdlib modules for downstream phases.
+/// Parses modules from explicit file paths with embedded stdlib.
 pub fn load_modules_from_paths(paths: &[PathBuf]) -> Result<Vec<Module>, AiviError> {
-    let mut modules = Vec::new();
-    for path in paths {
-        let content = fs::read_to_string(path)?;
-        let (mut file_modules, _) = parse_modules(path.as_path(), &content);
-        modules.append(&mut file_modules);
-    }
-    let mut stdlib_modules = embedded_stdlib_modules();
-    stdlib_modules.append(&mut modules);
-    resolve_import_names(&mut stdlib_modules);
-    Ok(stdlib_modules)
+    Ok(Pipeline::from_paths(paths)?.into_modules())
 }
 
-/// Collects parser diagnostics for all files in a target before semantic/type phases run.
+/// Collects parser diagnostics for all files in a target.
 pub fn load_module_diagnostics(target: &str) -> Result<Vec<FileDiagnostic>, AiviError> {
-    let paths = workspace::expand_target(target)?;
-    let mut diagnostics = Vec::new();
-    for path in paths {
-        let content = fs::read_to_string(&path)?;
-        let (_, mut file_diags) = parse_modules(&path, &content);
-        diagnostics.append(&mut file_diags);
-    }
-    Ok(diagnostics)
+    Ok(Pipeline::from_target(target)?.parse_diagnostics().to_vec())
 }
 
-/// Produces desugared HIR for a target after ensuring syntax diagnostics are clean.
+/// Produces desugared HIR after ensuring parse diagnostics are clean.
 pub fn desugar_target(target: &str) -> Result<HirProgram, AiviError> {
-    let diagnostics = load_module_diagnostics(target)?;
-    if file_diagnostics_have_errors(&diagnostics) {
+    let pipeline = Pipeline::from_target(target)?;
+    if pipeline.has_parse_errors() {
         return Err(AiviError::Diagnostics);
     }
-
-    let paths = workspace::expand_target(target)?;
-    let mut modules = Vec::new();
-    for path in &paths {
-        let content = fs::read_to_string(path)?;
-        let (mut parsed, _) = parse_modules(path.as_path(), &content);
-        modules.append(&mut parsed);
-    }
-    let mut stdlib_modules = embedded_stdlib_modules();
-    stdlib_modules.append(&mut modules);
-    resolve_import_names(&mut stdlib_modules);
-    Ok(aivi_core::desugar_modules(&stdlib_modules))
+    Ok(pipeline.desugar())
 }
 
-/// Like [`desugar_target`] but skips the diagnostic pre-check so files with
-/// parse warnings/errors are still desugared (best-effort).  Useful for codegen
-/// tests that want to exercise as much of the pipeline as possible even when
-/// some integration-test files have known issues.
+/// Like [`desugar_target`] but skips the diagnostic pre-check (best-effort).
 pub fn desugar_target_lenient(target: &str) -> Result<HirProgram, AiviError> {
-    let paths = workspace::expand_target(target)?;
-    let mut modules = Vec::new();
-    for path in &paths {
-        let content = fs::read_to_string(path)?;
-        let (mut parsed, _) = parse_modules(path.as_path(), &content);
-        modules.append(&mut parsed);
-    }
-    let mut stdlib_modules = embedded_stdlib_modules();
-    stdlib_modules.append(&mut modules);
-    resolve_import_names(&mut stdlib_modules);
-    Ok(aivi_core::desugar_modules(&stdlib_modules))
+    Ok(Pipeline::from_target(target)?.desugar())
 }
 
-/// Builds a test-only program view by finding `@test` definitions and validating their modules.
-#[allow(clippy::type_complexity)]
-pub fn test_target_program_and_names(
-    target: &str,
-    check_stdlib: bool,
-) -> Result<(HirProgram, Vec<(String, String)>, Vec<FileDiagnostic>), AiviError> {
-    let paths = workspace::expand_target(target)?;
-    let mut test_paths = Vec::new();
-    for path in &paths {
-        if path.extension().and_then(|s| s.to_str()) != Some("aivi") {
-            continue;
-        }
-        let content = fs::read_to_string(path)?;
-        if content.contains("@test") {
-            test_paths.push(path.clone());
-        }
-    }
-
-    let mut test_entries: Vec<(String, String)> = Vec::new();
-    for path in &test_paths {
-        let content = fs::read_to_string(path)?;
-        let (modules, _) = parse_modules(path.as_path(), &content);
-        for module in modules {
-            for item in module.items {
-                let ModuleItem::Def(def) = item else {
-                    continue;
-                };
-                if let Some(dec) = def.decorators.iter().find(|d| d.name.name == "test") {
-                    let name = format!("{}.{}", module.name.name, def.name.name);
-                    let description = match &dec.arg {
-                        Some(aivi_core::Expr::Literal(aivi_core::Literal::String {
-                            text, ..
-                        })) => text.clone(),
-                        _ => name.clone(),
-                    };
-                    test_entries.push((name, description));
-                }
-            }
-        }
-    }
-    test_entries.sort();
-    test_entries.dedup();
-    if test_entries.is_empty() {
-        return Err(AiviError::InvalidCommand(format!(
-            "no @test definitions found under {target}"
-        )));
-    }
-
-    let mut diagnostics = Vec::new();
-    for path in &test_paths {
-        let content = fs::read_to_string(path)?;
-        let (_, mut file_diags) = parse_modules(path.as_path(), &content);
-        diagnostics.append(&mut file_diags);
-    }
-    if file_diagnostics_have_errors(&diagnostics) {
-        return Err(AiviError::Diagnostics);
-    }
-
-    let mut modules = load_modules_from_paths(&test_paths)?;
-    let mut check_diags = check_modules(&modules);
-    if !file_diagnostics_have_errors(&check_diags) {
-        check_diags.extend(elaborate_expected_coercions(&mut modules));
-    }
-    if !check_stdlib {
-        check_diags.retain(|diag| !diag.path.starts_with("<embedded:"));
-    }
-    diagnostics.extend(check_diags);
-    if file_diagnostics_have_errors(&diagnostics) {
-        return Err(AiviError::Diagnostics);
-    }
-
-    let program = aivi_core::desugar_modules(&modules);
-    Ok((program, test_entries, diagnostics))
-}
-
-/// Produces typed desugared HIR by running syntax checks, type checks, and expected coercion elaboration.
+/// Produces typed desugared HIR (parse check → typecheck → elaborate → desugar).
 pub fn desugar_target_typed(target: &str) -> Result<HirProgram, AiviError> {
-    let diagnostics = load_module_diagnostics(target)?;
-    if file_diagnostics_have_errors(&diagnostics) {
+    let mut pipeline = Pipeline::from_target(target)?;
+    if pipeline.has_parse_errors() {
         return Err(AiviError::Diagnostics);
     }
-
-    let paths = workspace::expand_target(target)?;
-    let mut modules = Vec::new();
-    for path in &paths {
-        let content = fs::read_to_string(path)?;
-        let (mut parsed, _) = parse_modules(path.as_path(), &content);
-        modules.append(&mut parsed);
-    }
-    let mut stdlib_modules = embedded_stdlib_modules();
-    stdlib_modules.append(&mut modules);
-    resolve_import_names(&mut stdlib_modules);
-
-    let mut diagnostics = check_modules(&stdlib_modules);
-    if diagnostics.is_empty() {
-        diagnostics.extend(elaborate_expected_coercions(&mut stdlib_modules));
-    }
-    if file_diagnostics_have_errors(&diagnostics) {
+    let diags = pipeline.typecheck();
+    if file_diagnostics_have_errors(&diags) {
         return Err(AiviError::Diagnostics);
     }
-
-    Ok(aivi_core::desugar_modules(&stdlib_modules))
+    Ok(pipeline.desugar())
 }
 
-/// Like `desugar_target_typed` but also runs type inference and returns the `CgType` map
-/// for each module/definition. Used by the typed codegen path.
+/// Typed HIR plus `CgType` map for the typed codegen path.
 pub fn desugar_target_with_cg_types(
     target: &str,
 ) -> Result<(HirProgram, CgTypesMap, MonomorphPlan), AiviError> {
-    let diagnostics = load_module_diagnostics(target)?;
-    if file_diagnostics_have_errors(&diagnostics) {
-        emit_diagnostics(&diagnostics);
+    let mut pipeline = Pipeline::from_target(target)?;
+    if pipeline.has_parse_errors() {
+        emit_diagnostics(pipeline.parse_diagnostics());
         return Err(AiviError::Diagnostics);
     }
-
-    let paths = workspace::expand_target(target)?;
-    let mut modules = Vec::new();
-    for path in &paths {
-        let content = fs::read_to_string(path)?;
-        let (mut parsed, _) = parse_modules(path.as_path(), &content);
-        modules.append(&mut parsed);
-    }
-    let mut stdlib_modules = embedded_stdlib_modules();
-    stdlib_modules.append(&mut modules);
-    resolve_import_names(&mut stdlib_modules);
-
-    let mut diagnostics = check_modules(&stdlib_modules);
-    if diagnostics.is_empty() {
-        diagnostics.extend(elaborate_expected_coercions(&mut stdlib_modules));
-    }
-    if file_diagnostics_have_errors(&diagnostics) {
-        emit_diagnostics(&diagnostics);
+    let diags = pipeline.typecheck();
+    if file_diagnostics_have_errors(&diags) {
+        emit_diagnostics(&diags);
         return Err(AiviError::Diagnostics);
     }
-
-    let infer_result = aivi_core::infer_value_types_full(&stdlib_modules);
-    let program = aivi_core::desugar_modules(&stdlib_modules);
-    Ok((program, infer_result.cg_types, infer_result.monomorph_plan))
+    let infer = pipeline.infer_types_full();
+    let program = pipeline.desugar();
+    Ok((program, infer.cg_types, infer.monomorph_plan))
 }
 
 /// Like [`desugar_target_with_cg_types`] but also returns the surface modules
-/// so the caller can process machine declarations, constructor ordinals, etc.
+/// and uses optional timing instrumentation (`AIVI_TRACE_TIMING=1`).
 pub fn desugar_target_with_cg_types_and_surface(
     target: &str,
 ) -> Result<(HirProgram, CgTypesMap, MonomorphPlan, Vec<Module>), AiviError> {
     let trace = trace_timing();
     let t_total = if trace { Some(Instant::now()) } else { None };
 
-    // Parse user files and collect diagnostics in one pass (avoid double-parsing).
-    let paths = timing_step!(trace, "expand_target", workspace::expand_target(target)?);
-    let mut modules = Vec::new();
-    let mut parse_diagnostics = Vec::new();
-    timing_step!(trace, "parse user files", {
-        for path in &paths {
-            let content = fs::read_to_string(path)?;
-            let (mut parsed, mut diags) = parse_modules(path.as_path(), &content);
-            parse_diagnostics.append(&mut diags);
-            modules.append(&mut parsed);
-        }
+    let mut pipeline = timing_step!(trace, "pipeline init (parse + resolve)", {
+        Pipeline::from_target(target)?
     });
-    if file_diagnostics_have_errors(&parse_diagnostics) {
-        emit_diagnostics(&parse_diagnostics);
+    if pipeline.has_parse_errors() {
+        emit_diagnostics(pipeline.parse_diagnostics());
         return Err(AiviError::Diagnostics);
     }
 
-    let mut stdlib_modules = timing_step!(
-        trace,
-        "parse stdlib (embedded_stdlib_modules)",
-        embedded_stdlib_modules()
-    );
-    stdlib_modules.append(&mut modules);
-    timing_step!(
-        trace,
-        "resolve_import_names",
-        resolve_import_names(&mut stdlib_modules)
-    );
-
-    let mut diagnostics = timing_step!(
-        trace,
-        "check_modules (name resolution)",
-        check_modules(&stdlib_modules)
-    );
-    if diagnostics.is_empty() {
-        diagnostics.extend(timing_step!(
-            trace,
-            "elaborate_expected_coercions",
-            elaborate_expected_coercions(&mut stdlib_modules)
-        ));
-    }
-    if file_diagnostics_have_errors(&diagnostics) {
-        emit_diagnostics(&diagnostics);
+    let diags = timing_step!(trace, "typecheck (check + elaborate)", pipeline.typecheck());
+    if file_diagnostics_have_errors(&diags) {
+        emit_diagnostics(&diags);
         return Err(AiviError::Diagnostics);
     }
 
-    // Use the fast path: skip body-checking embedded stdlib modules. They are pre-verified at
-    // compiler build time and have explicit type signatures, so full re-inference is wasteful.
-    let infer_result = timing_step!(
-        trace,
-        "infer_value_types_fast",
-        aivi_core::infer_value_types_fast(&stdlib_modules)
-    );
-    let program = timing_step!(
-        trace,
-        "desugar_modules (HIR)",
-        aivi_core::desugar_modules(&stdlib_modules)
-    );
+    let infer = timing_step!(trace, "infer_value_types_fast", pipeline.infer_types_fast());
+    let program = timing_step!(trace, "desugar_modules (HIR)", pipeline.desugar());
 
     if let Some(t0) = t_total {
         eprintln!(
@@ -394,12 +282,8 @@ pub fn desugar_target_with_cg_types_and_surface(
         );
     }
 
-    Ok((
-        program,
-        infer_result.cg_types,
-        infer_result.monomorph_plan,
-        stdlib_modules,
-    ))
+    let modules = pipeline.into_modules();
+    Ok((program, infer.cg_types, infer.monomorph_plan, modules))
 }
 
 /// Lowers a typed HIR program through block desugaring for backend code generation.

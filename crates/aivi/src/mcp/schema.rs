@@ -238,14 +238,14 @@ fn execute_check_tool(arguments: &serde_json::Value) -> Result<serde_json::Value
     let target = get_required_string(args, "target")?;
     let check_stdlib = get_optional_bool(args, "checkStdlib", false)?;
 
-    let mut diagnostics = crate::load_module_diagnostics(target)?;
-    let modules = crate::load_modules(target)?;
-    diagnostics.extend(crate::check_modules(&modules));
+    let pipeline = crate::Pipeline::from_target(target)?;
+    let mut diagnostics = pipeline.parse_diagnostics().to_vec();
+    diagnostics.extend(crate::check_modules(pipeline.modules()));
     if !crate::file_diagnostics_have_errors(&diagnostics) {
         if check_stdlib {
-            diagnostics.extend(crate::check_types_including_stdlib(&modules));
+            diagnostics.extend(crate::check_types_including_stdlib(pipeline.modules()));
         } else {
-            diagnostics.extend(crate::check_types(&modules));
+            diagnostics.extend(crate::check_types(pipeline.modules()));
         }
     }
     if !check_stdlib {

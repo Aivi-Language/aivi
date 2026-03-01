@@ -49,7 +49,7 @@ pub(super) fn connection_from_value(
     }
 }
 
-fn listener_from_value(value: Value, ctx: &str) -> Result<Arc<TcpListener>, RuntimeError> {
+fn listener_from_value(value: Value, ctx: &str) -> Result<Arc<Mutex<Option<TcpListener>>>, RuntimeError> {
     match value {
         Value::Listener(handle) => Ok(handle),
         _ => Err(RuntimeError::Message(format!("{ctx} expects a listener"))),
@@ -78,7 +78,7 @@ pub(super) fn build_sockets_record() -> Value {
                 func: Arc::new(move |_| {
                     let listener = TcpListener::bind(addr)
                         .map_err(|err| RuntimeError::Error(socket_error_value(err.to_string())))?;
-                    Ok(Value::Listener(Arc::new(listener)))
+                    Ok(Value::Listener(Arc::new(Mutex::new(Some(listener)))))
                 }),
             };
             Ok(Value::Effect(Arc::new(effect)))
@@ -87,9 +87,15 @@ pub(super) fn build_sockets_record() -> Value {
     fields.insert(
         "accept".to_string(),
         builtin("sockets.accept", 1, |mut args, _| {
-            let listener = listener_from_value(args.pop().unwrap(), "sockets.accept")?;
+            let listener_lock = listener_from_value(args.pop().unwrap(), "sockets.accept")?;
             let effect = EffectValue::Thunk {
                 func: Arc::new(move |_| {
+                    let listener = listener_lock.lock().map_err(|_| {
+                        RuntimeError::Message("listener lock poisoned".to_string())
+                    })?;
+                    let listener = listener.as_ref().ok_or_else(|| {
+                        RuntimeError::Message("listener closed".to_string())
+                    })?;
                     let (stream, _) = listener
                         .accept()
                         .map_err(|err| RuntimeError::Error(socket_error_value(err.to_string())))?;
@@ -176,9 +182,15 @@ pub(super) fn build_sockets_record() -> Value {
     fields.insert(
         "closeListener".to_string(),
         builtin("sockets.closeListener", 1, |mut args, _| {
-            let _listener = listener_from_value(args.pop().unwrap(), "sockets.closeListener")?;
+            let listener_lock = listener_from_value(args.pop().unwrap(), "sockets.closeListener")?;
             let effect = EffectValue::Thunk {
-                func: Arc::new(move |_| Ok(Value::Unit)),
+                func: Arc::new(move |_| {
+                    let mut listener = listener_lock.lock().map_err(|_| {
+                        RuntimeError::Message("listener lock poisoned".to_string())
+                    })?;
+                    *listener = None;
+                    Ok(Value::Unit)
+                }),
             };
             Ok(Value::Effect(Arc::new(effect)))
         }),

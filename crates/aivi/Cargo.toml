@@ -55,6 +55,7 @@ zbus = "5.14.0"
 rayon = "1.11.0"
 proptest = { version = "1", optional = true }
 insta = { version = "1", features = ["json"], optional = true }
+lettre = { version = "0.11.19", default-features = false, features = ["tokio1", "tokio1-rustls-tls", "builder", "smtp-transport", "pool"] }
 
 [features]
 default = ["gtk4-libadwaita"]
