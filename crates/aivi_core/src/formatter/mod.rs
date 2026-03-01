@@ -587,11 +587,10 @@ mod align_tests {
 mod bench {
     use super::*;
     #[test]
+    #[ignore = "benchmark: requires /tmp/mailfox_main.aivi"]
     fn bench_format_large_file() {
-        let content = std::fs::read_to_string("/tmp/mailfox_main.aivi").unwrap_or_default();
-        if content.is_empty() {
-            return;
-        }
+        let content = std::fs::read_to_string("/tmp/mailfox_main.aivi")
+            .expect("/tmp/mailfox_main.aivi must exist for this benchmark");
         let start = std::time::Instant::now();
         let n = 200u32;
         for _ in 0..n {

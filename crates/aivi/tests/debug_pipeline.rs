@@ -1,6 +1,7 @@
 use aivi::lexer::{filter_tokens, lex};
 
 #[test]
+#[ignore = "debug-only: prints pipeline output, no assertions"]
 fn debug_full_pipeline() {
     let content = "base = ~map{\n    \"a\" => 1\n  }";
     let (cst_tokens, _lex_diags) = lex(content);

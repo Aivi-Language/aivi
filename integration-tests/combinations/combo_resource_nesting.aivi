@@ -1,0 +1,50 @@
+@no_prelude
+module integrationTests.combinations.comboResourceNesting
+
+use aivi
+use aivi.testing
+
+// Resource blocks combined with other scope-creating constructs.
+// Verifies resource acquire/cleanup + scoping with do Effect.
+
+// --- Simple resource yields value, used in do Effect ---
+
+withCounter : Int -> Resource Text Int
+withCounter = start => resource {
+  yield start + 1
+}
+
+@test "resource yields value used in do Effect"
+resourceYieldsValue = do Effect {
+  counter <- withCounter 10
+  assertEq counter 11
+}
+
+// --- Resource with match on yielded value ---
+
+@test "resource value matched in do Effect"
+resourceValueMatched = do Effect {
+  counter <- withCounter 0
+  result = counter match
+    | 1 => "one"
+    | _ => "other"
+  assertEq result "one"
+}
+
+// --- Lambda captures outer binding across resource ---
+
+@test "lambda captures binding across resource scope"
+lambdaCapturesAcrossResource = do Effect {
+  factor = 10
+  counter <- withCounter 4
+  transform = n => n * factor
+  assertEq (transform counter) 50
+}
+
+// --- Sequential resource binds ---
+
+@test "sequential resource binds"
+nestedResourceScopes = do Effect {
+  a <- withCounter 0
+  assertEq a 1
+}

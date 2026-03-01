@@ -1,0 +1,147 @@
+@no_prelude
+module integrationTests.combinations.comboClosuresAcrossScopes
+
+use aivi
+use aivi.testing
+use aivi.generator
+
+// Multi-level variable capture through different scope boundaries.
+// Verifies Cranelift correctly threads captured variables across nesting levels.
+
+// --- Three-level lambda capture ---
+
+@test "three-level lambda capture"
+threeLevelCapture = do Effect {
+  a = 10
+  f = x => y => a + x + y
+  assertEq (f 20 12) 42
+}
+
+// --- Capture through do Effect then lambda ---
+
+@test "capture through do Effect then lambda"
+captureThroughDoLambda = do Effect {
+  base = 100
+  result <- do Effect {
+    offset <- pure 20
+    transform = x => x + base + offset
+    pure (transform 5)
+  }
+  assertEq result 125
+}
+
+// --- Capture across three nested do Effect levels ---
+
+@test "capture across three nested do Effect levels"
+threeDoEffectLevels = do Effect {
+  a <- pure 10
+  b <- do Effect {
+    c <- pure 20
+    d <- do Effect {
+      pure (a + c)
+    }
+    pure (d + 12)
+  }
+  assertEq b 42
+}
+
+// --- Match arm returns closure capturing pattern variable and outer scope ---
+
+Wrapper = Val Int | Empty
+
+@test "match arm closure captures pattern var and outer scope"
+matchArmClosure = do Effect {
+  multiplier = 10
+  shape = Val 3
+  areaFn = shape match
+    | Val n => x => n * n * multiplier + x
+    | Empty => x => x
+  assertEq (areaFn 0) 90
+  assertEq (areaFn 2) 92
+}
+
+// --- Generator captures from multiple outer scopes ---
+
+@test "generator captures from two outer scopes"
+generatorTwoScopes = do Effect {
+  factor = 3
+  offset = 1
+  g = generate {
+    n <- [1, 2, 3]
+    yield (n * factor + offset)
+  }
+  assertEq (toList g) [4, 7, 10]
+}
+
+// --- Shadowing across nesting levels ---
+
+@test "shadowing innermost wins without affecting outer"
+shadowingLevels = do Effect {
+  x = 1
+  r <- do Effect {
+    x = 10
+    inner <- do Effect {
+      x = 100
+      pure x
+    }
+    pure (x + inner)
+  }
+  assertEq r 110
+  assertEq x 1
+}
+
+// --- Lambda captures effect-bound variable, used multiple times ---
+
+@test "lambda captures effect-bound variable"
+lambdaCapturesEffectBound = do Effect {
+  offset <- pure 50
+  transform = n => n + offset
+  a <- pure (transform 10)
+  b <- pure (transform 20)
+  assertEq a 60
+  assertEq b 70
+}
+
+// --- Three-arg curried closure preserves all captures ---
+
+makeProcessor = base => scale => x => (x + base) * scale
+
+@test "three-arg curried closure preserves all captures"
+curriedThreeArg = do Effect {
+  processor = makeProcessor 5 3
+  assertEq (processor 2) 21
+  assertEq (processor 10) 45
+}
+
+// --- Capture match-bound ADT payload through lambda into do Effect ---
+
+@test "capture ADT payload through lambda into nested do"
+adtPayloadThroughLambdaDo = do Effect {
+  w = Val 7
+  result <- w match
+    | Empty => pure 0
+    | Val n => do Effect {
+        f = x => x + n
+        a <- pure (f 10)
+        b <- pure (f 20)
+        pure (a + b)
+      }
+  assertEq result 44
+}
+
+// --- Function arg captured through three levels of nesting ---
+
+deepCapture = base => do Effect {
+  a <- pure 10
+  b <- do Effect {
+    f = x => x + base + a
+    pure (f 22)
+  }
+  pure b
+}
+
+@test "function arg captured through three nesting levels"
+funcArgDeepCapture = do Effect {
+  result <- deepCapture 100
+  assertEq result 132
+}

@@ -24,6 +24,8 @@ class Monad (M *) =
         parse_diags.is_empty(),
         "unexpected parse diagnostics: {parse_diags:#?}"
     );
+    // Monad must inherit from Functor, so we expect exactly 2 class definitions
+    assert_eq!(modules.len(), 1, "expected exactly one module");
 
     let type_diags = check_types(&modules);
     assert!(
@@ -59,6 +61,7 @@ instance Super Int = {
         parse_diags.is_empty(),
         "unexpected parse diagnostics: {parse_diags:#?}"
     );
+    assert_eq!(modules.len(), 1, "expected exactly one module");
 
     let type_diags = check_types(&modules);
     assert!(

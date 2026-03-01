@@ -78,6 +78,10 @@ fn kernel_dump_ir_dump_minimal_is_valid_json() {
         "expected JSON object/array, got {}",
         json_kind(&value)
     );
+    // Kernel IR should contain at least one module or definition
+    if let Some(obj) = value.as_object() {
+        assert!(!obj.is_empty(), "kernel IR JSON object should not be empty");
+    }
 }
 
 #[test]
@@ -98,4 +102,8 @@ fn rust_ir_dump_ir_dump_minimal_is_valid_json() {
         "expected JSON object/array, got {}",
         json_kind(&value)
     );
+    // Rust IR should contain at least one module or definition
+    if let Some(obj) = value.as_object() {
+        assert!(!obj.is_empty(), "rust IR JSON object should not be empty");
+    }
 }

@@ -836,11 +836,16 @@ mod tests {
     #[test]
     fn lex_rejects_non_ascii_identifier_start_as_unexpected_character() {
         let src = "π = 3";
-        let (_tokens, diags) = lex(src);
+        let (tokens, diags) = lex(src);
         assert!(
             diag_codes(&diags).contains(&"E1000".to_string()),
             "expected E1000, got: {:?}",
             diag_codes(&diags)
+        );
+        // Lexer should still produce tokens for the rest of the input (error recovery)
+        assert!(
+            tokens.iter().any(|t| t.text == "3"),
+            "lexer should recover and tokenize '3' after the error"
         );
     }
 

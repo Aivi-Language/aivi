@@ -354,3 +354,43 @@ fn syntax_remaining_batch_files_execute_without_failures() {
     );
     eprintln!("skipped remaining syntax batch files: {skipped_files}");
 }
+
+#[test]
+fn combinations_execute_without_failures() {
+    let _guard = runner_test_lock();
+    let root = test_support::workspace_root();
+    let files: Vec<PathBuf> = [
+        "integration-tests/combinations/combo_closures_across_scopes.aivi",
+        "integration-tests/combinations/combo_do_nesting.aivi",
+        "integration-tests/combinations/combo_lambda_nesting.aivi",
+        "integration-tests/combinations/combo_generator_nesting.aivi",
+        "integration-tests/combinations/combo_match_nesting.aivi",
+        "integration-tests/combinations/combo_loop_nesting.aivi",
+        "integration-tests/combinations/combo_resource_nesting.aivi",
+        "integration-tests/combinations/combo_operators_in_scopes.aivi",
+        "integration-tests/combinations/combo_adt_lifecycle.aivi",
+        "integration-tests/combinations/combo_multi_clause_with_nesting.aivi",
+        "integration-tests/combinations/combo_mock_nesting.aivi",
+    ]
+    .iter()
+    .map(|p| root.join(p))
+    .collect();
+
+    let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
+    let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
+
+    let (total_passed, total_failed, skipped_files, test_failures) =
+        run_files_parallel(&files, &stdlib_modules, &checkpoint);
+
+    for (name, message) in &test_failures {
+        eprintln!("  FAIL: {} — {}", name, message);
+    }
+
+    assert!(
+        total_passed > 0,
+        "expected combination tests to execute (skipped: {skipped_files})"
+    );
+    assert_eq!(total_failed, 0, "{total_failed} combination test(s) failed");
+    eprintln!("combinations: {total_passed} passed, {skipped_files} file(s) skipped");
+}

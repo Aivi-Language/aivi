@@ -1,0 +1,109 @@
+@no_prelude
+module integrationTests.combinations.comboMatchNesting
+
+use aivi
+use aivi.testing
+use aivi.generator
+
+// Match expressions nested with other scope-creating constructs.
+// Verifies pattern variables are correctly captured across boundaries.
+
+// --- Match in match using outer pattern variables ---
+
+Expr = Lit Int | Add Expr Expr | Neg Expr
+
+eval = e => e match
+  | Lit n     => n
+  | Add l r   => eval l + eval r
+  | Neg inner => 0 - eval inner
+
+@test "nested match via recursive ADT evaluation"
+nestedMatchEval = do Effect {
+  expr = Add (Lit 10) (Neg (Lit 3))
+  assertEq (eval expr) 7
+}
+
+// --- Match in do Effect, arms perform effects ---
+
+@test "match in do Effect arms perform effects"
+matchInDoEffect = do Effect {
+  val = Some 5
+  result <- val match
+    | None   => do Effect {
+        pure 0
+      }
+    | Some n => do Effect {
+        doubled <- pure (n * 2)
+        pure doubled
+      }
+  assertEq result 10
+}
+
+// --- Match returning closures per arm ---
+
+Color = Red | Green | Blue
+
+@test "match returns different closures per arm"
+matchReturnsClosure = do Effect {
+  makeFn = color => color match
+    | Red   => x => x + 1
+    | Green => x => x + 2
+    | Blue  => x => x + 3
+  assertEq (makeFn Red 10) 11
+  assertEq (makeFn Green 10) 12
+  assertEq (makeFn Blue 10) 13
+}
+
+// --- Match with guards invoking closures that capture outer scope ---
+
+@test "match guards with closures capturing outer"
+matchGuardsClosure = do Effect {
+  limit = 50
+  isSmall = n => n < limit
+  classify = n => n match
+    | n when isSmall n => "small"
+    | _                => "big"
+  assertEq (classify 10) "small"
+  assertEq (classify 100) "big"
+}
+
+// --- Match returning do Effect blocks that capture pattern variables ---
+
+@test "match arms return do Effect blocks using pattern vars"
+matchReturnDoEffect = do Effect {
+  val = Ok 21
+  result <- val match
+    | Err e => do Effect {
+        pure 0
+      }
+    | Ok n => do Effect {
+        doubled <- pure (n * 2)
+        pure doubled
+      }
+  assertEq result 42
+}
+
+// --- Match returning generators using pattern variables ---
+
+@test "match arms return generators using pattern vars"
+matchReturnGenerator = do Effect {
+  val = Some 3
+  g = val match
+    | None   => generate { yield 0 }
+    | Some n => generate {
+        i <- [1, 2, 3]
+        yield (i * n)
+      }
+  assertEq (toList g) [3, 6, 9]
+}
+
+// --- Record field access in match inside do ---
+
+@test "ADT match in do block with field access"
+adtMatchInDoBlock = do Effect {
+  data = Some { name: "Alice", score: 95 }
+  result = data match
+    | Some r => r.score
+    | None   => 0
+  assertEq result 95
+}

@@ -1,0 +1,83 @@
+@no_prelude
+module integrationTests.combinations.comboOperatorsInScopes
+
+use aivi
+use aivi.testing
+use aivi.generator
+
+// Operators (pipes, patches, concat) used inside nested scope constructs.
+// Verifies operator desugaring works with captured variables.
+
+// --- Pipe chain in do Effect ---
+
+double = x => x * 2
+inc = x => x + 1
+
+@test "pipe chain in do Effect"
+pipeInDoEffect = do Effect {
+  result <- pure (5 |> double |> inc)
+  assertEq result 11
+}
+
+// --- Pipe chain in generator ---
+
+@test "pipe chain in generator"
+pipeInGenerator = do Effect {
+  g = generate {
+    n <- [1, 2, 3]
+    yield (n |> double |> inc)
+  }
+  assertEq (toList g) [3, 5, 7]
+}
+
+// --- Patch operator in closure ---
+
+@test "patch operator in closure capturing record"
+patchInClosure = do Effect {
+  base = { x: 1, y: 2, name: "test" }
+  updateY = newY => base <| { y: newY }
+  r1 = updateY 10
+  r2 = updateY 20
+  assertEq r1.y 10
+  assertEq r2.y 20
+  assertEq r1.x 1
+  assertEq r2.name "test"
+}
+
+// --- Patch in loop accumulation ---
+
+@test "patch operator used in loop accumulation"
+patchInLoop = do Effect {
+  addValue = r v => r <| { total: r.total + v }
+  result = applyValues { total: 0 } [10, 20, 30]
+  assertEq result.total 60
+}
+
+applyValues = state values => values match
+  | []           => state
+  | [v, ...rest] => applyValues (state <| { total: state.total + v }) rest
+
+// --- List operations with generator ---
+
+@test "generator result combined with outer list"
+listWithGenerator = do Effect {
+  g = generate {
+    n <- [1, 2, 3]
+    yield (n * 10)
+  }
+  result = toList g
+  assertEq result [10, 20, 30]
+}
+
+// --- Pipe feeding into match ---
+
+@test "pipe into match expression"
+pipeIntoMatch = do Effect {
+  classify = n => n match
+    | n when n > 10 => "big"
+    | _             => "small"
+  result = 5 |> double |> classify
+  assertEq result "small"
+  result2 = 6 |> double |> classify
+  assertEq result2 "big"
+}

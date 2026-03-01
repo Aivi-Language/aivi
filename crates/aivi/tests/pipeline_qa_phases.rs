@@ -90,6 +90,7 @@ wrongType = "not an int"
 
 #[test]
 fn p3_multiple_errors_aggregated() {
+    // Two broken definitions: incomplete `if` and unclosed paren
     let src = "module gate.multi\n\n\
         bad1 = if True then\n\
         bad2 = (1, 2\n\
@@ -101,8 +102,8 @@ fn p3_multiple_errors_aggregated() {
         .filter(|d| d.diagnostic.severity == aivi::DiagnosticSeverity::Error)
         .count();
     assert!(
-        error_count >= 1,
-        "expected at least 1 error, got {error_count}"
+        error_count >= 2,
+        "expected at least 2 errors (one per broken def), got {error_count}"
     );
 }
 

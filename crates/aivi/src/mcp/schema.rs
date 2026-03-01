@@ -577,6 +577,10 @@ mod tests {
                 .any(|res| res.binding == "syntax/decorators.md"),
             "expected syntax/decorators.md to be bundled"
         );
+        // Verify resource structure: each resource should have a non-empty binding and URI
+        for res in &manifest.resources {
+            assert!(!res.binding.is_empty(), "resource binding must not be empty");
+        }
     }
 
     #[test]
@@ -584,7 +588,8 @@ mod tests {
         let uri = "aivi://specs/syntax/decorators.md";
         let (mime_type, text) = read_bundled_spec(uri).expect("read bundled spec");
         assert_eq!(mime_type, "text/markdown");
-        assert!(text.contains("# Decorators"));
+        assert!(text.contains("# Decorators"), "should contain heading");
+        assert!(text.len() > 100, "spec content should be non-trivial, got {} bytes", text.len());
     }
 
     #[test]

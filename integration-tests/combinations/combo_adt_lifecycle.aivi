@@ -1,0 +1,103 @@
+@no_prelude
+module integrationTests.combinations.comboAdtLifecycle
+
+use aivi
+use aivi.testing
+use aivi.generator
+
+// ADTs through construction, matching, and closures end-to-end.
+// Verifies ADT values flow correctly through nesting boundaries.
+
+// --- ADT definitions ---
+
+Tree = Leaf Int | Branch Tree Tree
+Shape = Circle Int | Rect Int Int | Point
+
+// --- ADT constructed in do, matched in lambda ---
+
+@test "ADT constructed in do Effect matched by lambda"
+adtDoToLambda = do Effect {
+  shape <- pure (Circle 5)
+  getArea = s => s match
+    | Circle r  => r * r
+    | Rect w h  => w * h
+    | Point     => 0
+  assertEq (getArea shape) 25
+}
+
+// --- ADT in generator pipeline ---
+
+@test "generator yields ADTs downstream generator matches"
+adtGeneratorPipeline = do Effect {
+  shapes = generate {
+    yield (Circle 3)
+    yield (Rect 4 5)
+    yield Point
+  }
+  areas = generate {
+    s <- shapes
+    yield (s match
+      | Circle r  => r * r
+      | Rect w h  => w * h
+      | Point     => 0
+    )
+  }
+  assertEq (toList areas) [9, 20, 0]
+}
+
+// --- Recursive ADT traversal with tail recursion ---
+
+sumTree = t => t match
+  | Leaf n       => n
+  | Branch l r   => sumTree l + sumTree r
+
+@test "recursive ADT tree traversal"
+recursiveTreeTraversal = do Effect {
+  tree = Branch (Branch (Leaf 1) (Leaf 2)) (Branch (Leaf 3) (Leaf 4))
+  assertEq (sumTree tree) 10
+}
+
+// --- ADT payload captured in closure, used after match scope ---
+
+@test "ADT payload captured in closure used after match"
+adtPayloadClosureCapture = do Effect {
+  shape = Rect 3 7
+  transform = shape match
+    | Rect w h => n => n + w * h
+    | _        => n => n
+  assertEq (transform 0) 21
+  assertEq (transform 10) 31
+}
+
+// --- ADT with record payloads in nested match + do ---
+
+Person = Student { name: Text, score: Int } | Teacher { name: Text, rating: Int }
+
+personScore = p => p match
+  | Student { name: _, score: s } => s
+  | Teacher { name: _, rating: r } => r * 10
+
+@test "ADT with record payloads in nested match and do"
+adtRecordPayloads = do Effect {
+  people = [Student { name: "Alice", score: 95 }, Teacher { name: "Bob", rating: 5 }]
+  results = mapList personScore people
+  assertEq results [95, 50]
+}
+
+mapList = f xs => xs match
+  | []           => []
+  | [x, ...rest] => [f x, ...(mapList f rest)]
+
+// --- Tree mapped with closure capturing outer ---
+
+mapTree = f t => t match
+  | Leaf n     => Leaf (f n)
+  | Branch l r => Branch (mapTree f l) (mapTree f r)
+
+@test "map over tree with closure capturing outer"
+mapTreeWithClosure = do Effect {
+  factor = 10
+  tree = Branch (Leaf 1) (Leaf 2)
+  mapped = mapTree (n => n * factor) tree
+  assertEq (sumTree mapped) 30
+}

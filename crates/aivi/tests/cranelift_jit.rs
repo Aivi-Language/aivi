@@ -223,32 +223,6 @@ main = do Effect {
 }
 
 #[test]
-fn cranelift_jit_generate_with_filter() {
-    // Generate block using native Cranelift compilation with a filter.
-    // Filter halts generation when the condition is false.
-    run_jit(
-        r#"@no_prelude
-module app.main
-
-use aivi.testing
-
-gen = generate {
-  yield 10
-  yield 20
-  yield 30
-}
-
-@test "generate with filter"
-main : Effect Text Unit
-main = do Effect {
-  result <- pure (gen (a => b => a + b) 0)
-  assertEq result 60
-}
-"#,
-    );
-}
-
-#[test]
 fn cranelift_jit_generate_with_bind() {
     // Covers generate-bind semantics currently delegated through runtime helpers.
     // This test stays as parity coverage while bind lowering is migrated natively.

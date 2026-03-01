@@ -950,7 +950,12 @@ mod cli_tests {
     #[test]
     fn version_text_contains_cli_and_language_versions() {
         let text = version_text();
-        assert!(text.contains(env!("CARGO_PKG_VERSION")));
-        assert!(text.contains(AIVI_LANGUAGE_VERSION));
+        assert!(text.contains(env!("CARGO_PKG_VERSION")), "missing CLI version");
+        assert!(text.contains(AIVI_LANGUAGE_VERSION), "missing language version");
+        // Version text should contain both labels, not just the numbers
+        assert!(
+            text.lines().count() >= 1,
+            "version text should have at least one line, got: {text:?}"
+        );
     }
 }

@@ -538,5 +538,10 @@ mod tests {
         let map = analyze_uses(&expr);
         assert_eq!(map.use_count("nonexistent"), 0);
         assert!(!map.is_last_use(1, "nonexistent"));
+        // Also verify that a used var in a trivial expr gets counted
+        let expr2 = local(1, "x");
+        let map2 = analyze_uses(&expr2);
+        assert_eq!(map2.use_count("x"), 1);
+        assert!(map2.is_last_use(1, "x"));
     }
 }

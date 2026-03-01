@@ -1,0 +1,85 @@
+@no_prelude
+module integrationTests.combinations.comboMultiClauseWithNesting
+
+use aivi
+use aivi.testing
+use aivi.generator
+
+// Multi-clause functions combined with nested scope constructs.
+// Verifies multi-clause dispatch works with closures and nesting.
+
+// --- Multi-clause returning closures ---
+
+Direction = Up | Down | Stay
+
+moveBy : Direction -> (Int -> Int)
+moveBy =
+  | Up   => n => n + 1
+  | Down => n => n - 1
+  | Stay => n => n
+
+@test "multi-clause function returns different closures"
+multiClauseReturnsClosure = do Effect {
+  upFn = moveBy Up
+  downFn = moveBy Down
+  stayFn = moveBy Stay
+  assertEq (upFn 10) 11
+  assertEq (downFn 10) 9
+  assertEq (stayFn 10) 10
+}
+
+// --- Multi-clause with do Effect bodies ---
+
+Priority = Low | Medium | High
+
+priorityScore : Priority -> Int
+priorityScore =
+  | Low    => 1
+  | Medium => 5
+  | High   => 10
+
+@test "multi-clause called from do Effect"
+multiClauseDoEffect = do Effect {
+  assertEq (priorityScore Low) 1
+  assertEq (priorityScore Medium) 5
+  assertEq (priorityScore High) 10
+}
+
+// --- Multi-clause with generators ---
+
+repeatN : Int -> Generator Int
+repeatN =
+  | 0 => generate { yield 0 }
+  | n => generate {
+      i <- [1, 2, 3]
+      yield (i * n)
+    }
+
+@test "multi-clause returning generators"
+multiClauseGenerator = do Effect {
+  assertEq (toList (repeatN 0)) [0]
+  assertEq (toList (repeatN 2)) [2, 4, 6]
+  assertEq (toList (repeatN 5)) [5, 10, 15]
+}
+
+// --- Multi-clause with guards and closures ---
+
+Bracket = Small | Big
+
+classify : Int -> Bracket
+classify =
+  | n when n < 10 => Small
+  | _             => Big
+
+bracketMultiplier : Bracket -> (Int -> Int)
+bracketMultiplier =
+  | Small => x => x * 2
+  | Big   => x => x * 10
+
+@test "multi-clause with guards feeding closures"
+multiClauseGuardsClosure = do Effect {
+  fn1 = bracketMultiplier (classify 5)
+  fn2 = bracketMultiplier (classify 50)
+  assertEq (fn1 3) 6
+  assertEq (fn2 3) 30
+}
