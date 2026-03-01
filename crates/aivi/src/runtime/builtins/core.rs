@@ -23,6 +23,7 @@ use super::system::{
     build_clock_record, build_console_record, build_env_source_record, build_file_record,
     build_random_record, build_system_record,
 };
+use super::json::build_json_record;
 use super::text::build_text_record;
 use super::timezone::build_timezone_record;
 use super::ui::build_ui_record;
@@ -358,6 +359,7 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("httpServer".to_string(), build_http_server_record());
     env.set("ui".to_string(), build_ui_record());
     env.set("text".to_string(), build_text_record());
+    env.set("json".to_string(), build_json_record());
     env.set("regex".to_string(), build_regex_record());
     env.set("math".to_string(), build_math_record());
     env.set("calendar".to_string(), build_calendar_record());

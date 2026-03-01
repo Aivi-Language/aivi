@@ -8,9 +8,10 @@ export get, post, fetch
 
 use aivi
 use aivi.url (Url)
+use aivi.json (JsonValue)
 
 Header = { name: Text, value: Text }
-Body = Plain Text | Form (List Header)
+Body = Plain Text | Form (List Header) | Json JsonValue
 Request = { method: Text, url: Url, headers: List Header, body: Option Body }
 Response = { status: Int, headers: List Header, body: Text }
 Error = { message: Text }

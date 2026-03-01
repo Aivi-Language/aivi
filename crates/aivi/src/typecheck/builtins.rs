@@ -90,6 +90,7 @@ impl TypeChecker {
             "WsMessage",
             "GtkNode",
             "GtkSignalEvent",
+            "JsonValue",
         ] {
             self.builtin_types.insert(name.to_string(), star.clone());
         }

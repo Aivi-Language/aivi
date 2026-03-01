@@ -326,7 +326,16 @@ class Collection (C A) = given (A: Eq) {
 
 ### Expected-type coercions
 
-In positions where a `Text` is expected, the compiler may insert `toText expr` if a `ToText A` instance is in scope. This is the only coercion mechanism (no global implicit casts).
+In positions where a `Text` is expected, the compiler may insert `toText expr` if a `ToText A` instance is in scope.
+
+When the expected type is `Body` (from `aivi.net.http`) and a record literal is provided, the compiler automatically wraps it: `Json (toJson record)`. This means you can pass a plain record as an HTTP request body and it will be JSON-serialised:
+
+```aivi
+body: Some { grant_type: "authorization_code", code: code }
+// elaborated to: Some (Json (toJson { grant_type: ..., code: ... }))
+```
+
+`toJson : A -> JsonValue` is a structural built-in that converts any value — records, lists, primitives, `Option` — to a `JsonValue`. The `Json` body variant also auto-injects `Content-Type: application/json`.
 
 ---
 

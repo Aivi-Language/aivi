@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use url::Url;
 
+use super::json::json_value_to_text;
 use super::util::{
     builtin, expect_int, expect_list, expect_record, expect_text, list_value, make_err, make_none,
     make_ok, make_some,
@@ -223,8 +224,23 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                         Some(value) => headers_from_value(value, "http.fetch")?,
                         None => Vec::new(),
                     };
-                    let body = match record.get("body") {
-                        Some(value) => body_option_from_value(value.clone(), "http.fetch")?,
+                    let raw_body = record.get("body").cloned();
+                    let is_json_body = matches!(
+                        &raw_body,
+                        Some(Value::Constructor { name, args })
+                            if name == "Some" && args.len() == 1
+                                && matches!(&args[0], Value::Constructor { name: n, .. } if n == "Json")
+                    );
+                    let mut headers = headers;
+                    if is_json_body
+                        && !headers
+                            .iter()
+                            .any(|(k, _)| k.to_ascii_lowercase() == "content-type")
+                    {
+                        headers.push(("content-type".to_string(), "application/json".to_string()));
+                    }
+                    let body = match raw_body {
+                        Some(value) => body_option_from_value(value, "http.fetch")?,
                         None => None,
                     };
                     let timeout_ms = optional_int_field(&record, "timeoutMs")?;
@@ -481,7 +497,10 @@ fn body_option_from_value(value: Value, ctx: &str) -> Result<Option<String>, Run
                         .finish();
                     Ok(Some(encoded))
                 }
-                _ => Err(RuntimeError::Message(format!("{ctx} expects body Option Body (Plain Text or Form)"))),
+                Value::Constructor { name, args } if name == "Json" && args.len() == 1 => {
+                    Ok(Some(json_value_to_text(&args[0])?))
+                }
+                _ => Err(RuntimeError::Message(format!("{ctx} expects body Option Body (Plain Text, Form, or Json JsonValue)"))),
             }
         }
         Value::Constructor { name, args } if name == "None" && args.is_empty() => Ok(None),

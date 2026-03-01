@@ -28,11 +28,19 @@ Header = { name: Text, value: Text }
 
 ### `Body`
 
-The request body. Use `Plain` for raw text and `Form` for form-encoded data.
+The request body. Use `Plain` for raw text, `Form` for form-encoded data, or `Json` for a JSON-serialised value.
 
 ```aivi
-Body = Plain Text | Form (List Header)
+Body = Plain Text | Form (List Header) | Json JsonValue
 ```
+
+When the expected type is `Body`, a plain record literal is automatically coerced to `Json (toJson record)`, so you can write:
+
+```aivi
+body: Some { grant_type: "authorization_code", code: code }
+```
+
+The `Json` variant automatically sets `Content-Type: application/json` when no `Content-Type` header is already present in the request.
 
 ### `Request`
 
@@ -43,7 +51,7 @@ Body = Plain Text | Form (List Header)
 | `method` | `Text` | HTTP method (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`). |
 | `url` | `Url` | Target URL. |
 | `headers` | `List Header` | Request headers. |
-| `body` | `Option Body` | Optional request body (`Plain Text` or `Form (List Header)`). |
+| `body` | `Option Body` | Optional request body. `Plain Text`, `Form (List Header)`, or `Json JsonValue` (record coerces automatically). |
 
 ### `Response`
 
