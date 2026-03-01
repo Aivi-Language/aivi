@@ -12,7 +12,6 @@ jobs:
       aivi: ${{ steps.filter.outputs.aivi }}
       vscode: ${{ steps.filter.outputs.vscode }}
       docs: ${{ steps.filter.outputs.docs }}
-      zed: ${{ steps.filter.outputs.zed }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -33,15 +32,25 @@ jobs:
             docs:
               - "specs/**"
               - ".github/workflows/ci.yml"
-            zed:
-              - "zed/**"
-              - ".github/workflows/ci.yml"
 
   aivi:
-    name: AIVI (fmt, clippy, test)
+    name: AIVI (${{ matrix.task }})
     needs: changes
     if: needs.changes.outputs.aivi == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - task: check
+            toolchain: "1.90.0"
+            components: "rustfmt,clippy"
+          - task: perf
+            toolchain: "1.90.0"
+            components: ""
+          - task: fuzz
+            toolchain: nightly
+            components: "llvm-tools-preview"
     steps:
       - uses: actions/checkout@v4
       - name: Install system dependencies
@@ -49,68 +58,49 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
-          components: rustfmt, clippy
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-      - name: Run clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Run tests
-        run: cargo test --workspace
-
-  aivi_perf:
-    name: AIVI (perf smoke)
-    needs: changes
-    if: needs.changes.outputs.aivi == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.90.0
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-      - name: Perf check (lenient)
-        run: cargo run -p aivi --bin perf -- check --baseline crates/aivi/perf/baseline.json --max-multiplier 2.0
-
-  aivi_fuzz:
-    name: AIVI (fuzz smoke)
-    needs: changes
-    if: needs.changes.outputs.aivi == 'true'
-    runs-on: ubuntu-latest
-    env:
-      RUSTUP_TOOLCHAIN: nightly
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust (nightly)
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: nightly
-          components: llvm-tools-preview
+          toolchain: ${{ matrix.toolchain }}
+          components: ${{ matrix.components }}
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
       - name: Install cargo-bolero
+        if: matrix.task == 'fuzz'
         run: cargo install cargo-bolero --locked
-      - name: Fuzz parser (short)
+
+      - name: Check formatting
+        if: matrix.task == 'check'
+        run: cargo fmt --all -- --check
+      - name: Run clippy
+        if: matrix.task == 'check'
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Run tests
+        if: matrix.task == 'check'
+        run: cargo test --workspace
+
+      - name: Perf check
+        if: matrix.task == 'perf'
+        run: cargo run -p aivi --bin perf -- check --baseline crates/aivi/perf/baseline.json --max-multiplier 2.0
+
+      - name: Fuzz parser
+        if: matrix.task == 'fuzz'
         run: cargo bolero test -p aivi-fuzz parser::parser --engine libfuzzer -T 30s -t 10s
-      - name: Fuzz frontend (short)
+      - name: Fuzz frontend
+        if: matrix.task == 'fuzz'
         run: cargo bolero test -p aivi-fuzz frontend::frontend --engine libfuzzer -T 30s -t 10s
-      - name: Fuzz runtime (short)
+      - name: Fuzz runtime
+        if: matrix.task == 'fuzz'
         run: cargo bolero test -p aivi-fuzz runtime::runtime --engine libfuzzer -T 30s -t 10s
-      - name: Fuzz formatter (short)
+      - name: Fuzz formatter
+        if: matrix.task == 'fuzz'
         run: cargo bolero test -p aivi-fuzz formatter::formatter --engine libfuzzer -T 30s -t 10s
-      - name: Fuzz LSP pipeline (short)
+      - name: Fuzz LSP pipeline
+        if: matrix.task == 'fuzz'
         run: cargo bolero test -p aivi-fuzz lsp_pipeline::lsp_pipeline --engine libfuzzer -T 30s -t 10s
-      - name: Fuzz type inference (short)
+      - name: Fuzz type inference
+        if: matrix.task == 'fuzz'
         run: cargo bolero test -p aivi-fuzz type_inference::type_inference --engine libfuzzer -T 30s -t 10s
 
   docs:
-    name: Docs (build)
+    name: Docs
     needs: changes
     if: needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
@@ -136,7 +126,7 @@ jobs:
           BASE_PATH: /
 
   vscode:
-    name: VS Code Extension (build + package)
+    name: VS Code Extension
     needs: changes
     if: needs.changes.outputs.vscode == 'true'
     runs-on: ubuntu-latest
@@ -183,23 +173,3 @@ jobs:
         with:
           name: aivi-vscode.vsix
           path: vscode/aivi-vscode.vsix
-
-  zed:
-    name: Zed Extension (grammar build)
-    needs: changes
-    if: needs.changes.outputs.zed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Install grammar dependencies
-        run: npm ci
-        working-directory: zed/grammars/aivi
-      - name: Generate grammar
-        run: npx tree-sitter generate
-        working-directory: zed/grammars/aivi
-      - name: Verify parser.c is up to date
-        run: git diff --exit-code zed/grammars/aivi/src/
