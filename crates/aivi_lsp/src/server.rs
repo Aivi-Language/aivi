@@ -11,16 +11,19 @@ use tower_lsp::lsp_types::request::{
     GotoImplementationResponse,
 };
 use tower_lsp::lsp_types::{
-    CodeActionOrCommand, CodeActionParams, CompletionParams, CompletionResponse,
+    CodeActionOrCommand, CodeActionParams, CompletionItem, CompletionParams, CompletionResponse,
     DeclarationCapability, DidChangeConfigurationParams, DidChangeWatchedFilesParams,
     DocumentFormattingParams, DocumentRangeFormattingParams, DocumentSymbolParams,
-    DocumentSymbolResponse, FileChangeType, GotoDefinitionParams, GotoDefinitionResponse, Hover,
+    DocumentSymbolResponse, FileChangeType, FoldingRange, FoldingRangeParams,
+    FoldingRangeProviderCapability, GotoDefinitionParams, GotoDefinitionResponse, Hover,
     HoverParams, HoverProviderCapability, ImplementationProviderCapability, InitializeParams,
-    InitializeResult, InitializedParams, Location, OneOf, ReferenceParams, RenameParams,
-    SemanticTokensFullOptions, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
-    SemanticTokensServerCapabilities, ServerCapabilities, SignatureHelp, SignatureHelpOptions,
-    SignatureHelpParams, TextDocumentPositionParams, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TextEdit, Url, WorkspaceEdit,
+    InitializeResult, InitializedParams, InlayHint, InlayHintParams, InlayHintServerCapabilities,
+    Location, OneOf, ReferenceParams, RenameParams, SelectionRange, SelectionRangeParams,
+    SelectionRangeProviderCapability, SemanticTokensFullOptions, SemanticTokensOptions,
+    SemanticTokensParams, SemanticTokensResult, SemanticTokensServerCapabilities,
+    ServerCapabilities, SignatureHelp, SignatureHelpOptions, SignatureHelpParams,
+    SymbolInformation, TextDocumentPositionParams, TextDocumentSyncCapability,
+    TextDocumentSyncKind, TextEdit, Url, WorkspaceEdit, WorkspaceSymbolParams,
 };
 use tower_lsp::{LanguageServer, LspService, Server};
 
@@ -129,8 +132,8 @@ impl LanguageServer for Backend {
                     tower_lsp::lsp_types::CodeActionProviderCapability::Simple(true),
                 ),
                 completion_provider: Some(tower_lsp::lsp_types::CompletionOptions {
-                    resolve_provider: Some(false),
-                    trigger_characters: None,
+                    resolve_provider: Some(true),
+                    trigger_characters: Some(vec![".".to_string(), "(".to_string()]),
                     ..tower_lsp::lsp_types::CompletionOptions::default()
                 }),
                 document_formatting_provider: Some(OneOf::Right(
@@ -138,6 +141,15 @@ impl LanguageServer for Backend {
                         work_done_progress_options: Default::default(),
                     },
                 )),
+                folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+                selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
+                inlay_hint_provider: Some(OneOf::Right(InlayHintServerCapabilities::Options(
+                    tower_lsp::lsp_types::InlayHintOptions {
+                        resolve_provider: Some(false),
+                        work_done_progress_options: Default::default(),
+                    },
+                ))),
+                workspace_symbol_provider: Some(OneOf::Left(true)),
                 ..ServerCapabilities::default()
             },
             server_info: Some(tower_lsp::lsp_types::ServerInfo {
@@ -803,6 +815,101 @@ impl LanguageServer for Backend {
         .await
         .unwrap_or_default();
         Ok(Some(CompletionResponse::Array(items)))
+    }
+
+    async fn completion_resolve(&self, item: CompletionItem) -> Result<CompletionItem> {
+        let doc_index = { Arc::clone(&self.state.lock().await.doc_index) };
+        let resolved =
+            tokio::task::spawn_blocking(move || Self::resolve_completion_item(item, &doc_index))
+                .await
+                .unwrap_or_else(|_| CompletionItem::default());
+        Ok(resolved)
+    }
+
+    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
+        let uri = params.text_document.uri;
+        let Some(text) = self
+            .with_document_text(&uri, |content| content.to_string())
+            .await
+        else {
+            return Ok(Some(Vec::new()));
+        };
+        let uri2 = uri.clone();
+        let ranges = tokio::task::spawn_blocking(move || Self::build_folding_ranges(&text, &uri2))
+            .await
+            .unwrap_or_default();
+        Ok(Some(ranges))
+    }
+
+    async fn selection_range(
+        &self,
+        params: SelectionRangeParams,
+    ) -> Result<Option<Vec<SelectionRange>>> {
+        let uri = params.text_document.uri;
+        let positions = params.positions;
+        let Some(text) = self
+            .with_document_text(&uri, |content| content.to_string())
+            .await
+        else {
+            return Ok(Some(Vec::new()));
+        };
+        let uri2 = uri.clone();
+        let ranges = tokio::task::spawn_blocking(move || {
+            Self::build_selection_ranges(&text, &uri2, &positions)
+        })
+        .await
+        .unwrap_or_default();
+        Ok(Some(ranges))
+    }
+
+    async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
+        let uri = params.text_document.uri;
+        let range = params.range;
+        let Some(text) = self
+            .with_document_text(&uri, |content| content.to_string())
+            .await
+        else {
+            return Ok(Some(Vec::new()));
+        };
+        let workspace = self.workspace_modules_for(&uri).await;
+        let uri2 = uri.clone();
+        let hints = tokio::task::spawn_blocking(move || {
+            Self::build_inlay_hints(&text, &uri2, range, &workspace)
+        })
+        .await
+        .unwrap_or_default();
+        Ok(Some(hints))
+    }
+
+    async fn symbol(
+        &self,
+        params: WorkspaceSymbolParams,
+    ) -> Result<Option<Vec<SymbolInformation>>> {
+        let query = params.query;
+        let modules: Vec<_> = {
+            let state = self.state.lock().await;
+            let mut all = Vec::new();
+            // Collect from open documents.
+            for indexed in state.open_module_index.values() {
+                all.push(indexed.clone());
+            }
+            // Collect from disk indexes.
+            for disk_index in state.disk_indexes.values() {
+                for indexed in disk_index.module_index.values() {
+                    if !all.iter().any(|m: &crate::state::IndexedModule| {
+                        m.module.name.name == indexed.module.name.name
+                    }) {
+                        all.push(indexed.clone());
+                    }
+                }
+            }
+            all
+        };
+        let symbols =
+            tokio::task::spawn_blocking(move || Self::build_workspace_symbols(&query, &modules))
+                .await
+                .unwrap_or_default();
+        Ok(Some(symbols))
     }
 }
 

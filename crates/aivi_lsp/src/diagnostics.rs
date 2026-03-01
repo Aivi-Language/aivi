@@ -518,6 +518,15 @@ impl Backend {
                         data: None,
                     }));
                 }
+                "E3100" => {
+                    // Non-exhaustive match: extract missing constructors from message and
+                    // generate skeleton arms.
+                    if let Some(action) =
+                        Self::add_missing_match_cases_action(text, uri, diagnostic)
+                    {
+                        out.push(action);
+                    }
+                }
                 _ => {}
             }
         }
@@ -822,6 +831,71 @@ impl Backend {
             disabled: None,
             data: None,
         }))
+    }
+
+    /// Code action for E3100: insert missing match arms based on the diagnostic message.
+    fn add_missing_match_cases_action(
+        text: &str,
+        uri: &Url,
+        diagnostic: &Diagnostic,
+    ) -> Option<CodeActionOrCommand> {
+        // Parse missing constructors from "non-exhaustive match (missing: Foo, Bar, Baz)"
+        let msg = &diagnostic.message;
+        let start_marker = "missing: ";
+        let start_idx = msg.find(start_marker)?;
+        let after = &msg[start_idx + start_marker.len()..];
+        let end_idx = after.find(')')?;
+        let missing_str = &after[..end_idx];
+        let missing: Vec<&str> = missing_str.split(", ").map(|s| s.trim()).collect();
+        if missing.is_empty() {
+            return None;
+        }
+
+        // Determine indentation from the match expression location.
+        let match_line = diagnostic.range.end.line as usize;
+        let indent = Self::line_indent(text, match_line);
+        let arm_indent = format!("{indent}  ");
+
+        // Build the arms text.
+        let mut arms_text = String::new();
+        for ctor in &missing {
+            arms_text.push_str(&format!("\n{arm_indent}| {ctor} => _"));
+        }
+
+        // Insert at the end of the match expression (end of diagnostic range).
+        let insert_pos = diagnostic.range.end;
+        let range = Range::new(insert_pos, insert_pos);
+
+        Some(CodeActionOrCommand::CodeAction(CodeAction {
+            title: format!("Add missing match cases ({})", missing.join(", ")),
+            kind: Some(CodeActionKind::QUICKFIX),
+            diagnostics: Some(vec![diagnostic.clone()]),
+            edit: Some(WorkspaceEdit {
+                changes: Some(HashMap::from([(
+                    uri.clone(),
+                    vec![TextEdit {
+                        range,
+                        new_text: arms_text,
+                    }],
+                )])),
+                document_changes: None,
+                change_annotations: None,
+            }),
+            command: None,
+            is_preferred: Some(true),
+            disabled: None,
+            data: None,
+        }))
+    }
+
+    fn line_indent(text: &str, line_0based: usize) -> String {
+        text.lines()
+            .nth(line_0based)
+            .map(|l| {
+                let trimmed = l.trim_start();
+                l[..l.len() - trimmed.len()].to_string()
+            })
+            .unwrap_or_default()
     }
 }
 
