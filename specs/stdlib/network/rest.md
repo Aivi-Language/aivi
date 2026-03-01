@@ -21,11 +21,13 @@ Header = { name: Text, value: Text }
 A fully-configurable REST request. All fields beyond `method`, `url`, and `headers` are optional.
 
 ```aivi
+Body = Plain Text | Form (List Header)
+
 Request = {
   method: Text
   url: Url
   headers: List Header
-  body: Option Text
+  body: Option Body
   timeoutMs: Option Int
   retryCount: Option Int
   bearerToken: Option Text
@@ -38,7 +40,7 @@ Request = {
 | `method` | `Text` | HTTP method (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`). |
 | `url` | `Url` | Target URL. |
 | `headers` | `List Header` | Additional request headers. |
-| `body` | `Option Text` | Optional request body. |
+| `body` | `Option Body` | Optional request body (`Plain Text` or `Form (List Header)`). |
 | `timeoutMs` | `Option Int` | Request timeout in milliseconds. `None` uses the runtime default. |
 | `retryCount` | `Option Int` | Number of automatic retries on transient failure. `None` disables retries. |
 | `bearerToken` | `Option Text` | If present, adds an `Authorization: Bearer <token>` header. |

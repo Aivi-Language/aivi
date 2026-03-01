@@ -54,11 +54,6 @@ impl TypedValue {
     pub(crate) fn boxed(val: Value) -> Self {
         Self { val, ty: None }
     }
-    /// Return `true` when the value is an unboxed scalar in a register.
-    #[allow(dead_code)]
-    fn is_unboxed_scalar(&self) -> bool {
-        matches!(self.ty, Some(CgType::Int | CgType::Float | CgType::Bool))
-    }
 }
 
 /// Information about a pre-compiled inner lambda function.

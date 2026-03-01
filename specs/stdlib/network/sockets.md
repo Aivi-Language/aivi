@@ -23,7 +23,7 @@ The `Sockets` domain exposes low-level TCP/UDP sockets for custom protocols and 
 
 | Function | Explanation |
 | --- | --- |
-| **listen** address<br><code>Address -> Resource Listener</code> | Creates a TCP listener bound to `address`. |
+| **listen** address<br><code>Address -> Resource SocketError Listener</code> | Creates a TCP listener bound to `address`. |
 | **accept** listener<br><code>Listener -> Effect SocketError Connection</code> | Waits for and returns an incoming TCP connection. |
 | **connect** address<br><code>Address -> Effect SocketError Connection</code> | Opens a TCP connection to `address`. |
 | **send** connection bytes<br><code>Connection -> List Int -> Effect SocketError Unit</code> | Sends raw bytes to the remote endpoint. |
