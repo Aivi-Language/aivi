@@ -30,21 +30,21 @@ For more control or large files, use the resource-based API.
 
 | Function | Explanation |
 | --- | --- |
-| **open** path<br><pre><code>`Text -> Resource FileError Handle`</code></pre> | Opens a file for reading and returns a managed `Handle` resource. |
+| **open** path<br><code>Text -> Resource FileError Handle</code> | Opens a file for reading and returns a managed `Handle` resource. |
 
 ### `readAll`
 
 
 | Function | Explanation |
 | --- | --- |
-| **readAll** handle<br><pre><code>`Handle -> Effect FileError Text`</code></pre> | Reads the entire contents of an open handle as text. |
+| **readAll** handle<br><code>Handle -> Effect FileError Text</code> | Reads the entire contents of an open handle as text. |
 
 ### `close`
 
 
 | Function | Explanation |
 | --- | --- |
-| **close** handle<br><pre><code>`Handle -> Effect FileError Unit`</code></pre> | Closes the file handle (automatic with `resource` blocks). |
+| **close** handle<br><code>Handle -> Effect FileError Unit</code> | Closes the file handle (automatic with `resource` blocks). |
 
 ## Path Operations
 
@@ -53,59 +53,59 @@ For more control or large files, use the resource-based API.
 
 | Function | Explanation |
 | --- | --- |
-| **readText** path<br><pre><code>`Text -> Effect FileError Text`</code></pre> | Reads the entire contents of `path` as text. |
-| **readJson** path<br><pre><code>`Text -> Effect FileError A`</code></pre> | Reads and decodes JSON from `path` into the expected type `A`. |
-| **readCsv** path<br><pre><code>`Text -> Effect FileError (List A)`</code></pre> | Reads and decodes CSV rows from `path` into typed row values. |
-| **imageMeta** path<br><pre><code>`Text -> Effect FileError A`</code></pre> | Reads image metadata (e.g. width/height/format) into the expected type. |
-| **image** path<br><pre><code>`Text -> Effect FileError A`</code></pre> | Loads image data (including pixels) into the expected typed shape. |
+| **readText** path<br><code>Text -> Effect FileError Text</code> | Reads the entire contents of `path` as text. |
+| **readJson** path<br><code>Text -> Effect FileError A</code> | Reads and decodes JSON from `path` into the expected type `A`. |
+| **readCsv** path<br><code>Text -> Effect FileError (List A)</code> | Reads and decodes CSV rows from `path` into typed row values. |
+| **imageMeta** path<br><code>Text -> Effect FileError A</code> | Reads image metadata (e.g. width/height/format) into the expected type. |
+| **image** path<br><code>Text -> Effect FileError A</code> | Loads image data (including pixels) into the expected typed shape. |
 
 ### `writeText`
 
 
 | Function | Explanation |
 | --- | --- |
-| **writeText** path contents<br><pre><code>`Text -> Text -> Effect FileError Unit`</code></pre> | Writes `contents` to `path`, overwriting if it exists. |
+| **writeText** path contents<br><code>Text -> Text -> Effect FileError Unit</code> | Writes `contents` to `path`, overwriting if it exists. |
 
 ### `exists`
 
 
 | Function | Explanation |
 | --- | --- |
-| **exists** path<br><pre><code>`Text -> Effect FileError Bool`</code></pre> | Returns whether a file or directory exists at `path`. |
+| **exists** path<br><code>Text -> Effect FileError Bool</code> | Returns whether a file or directory exists at `path`. |
 
 ### `stat`
 
 
 | Function | Explanation |
 | --- | --- |
-| **stat** path<br><pre><code>`Text -> Effect FileError FileStats`</code></pre> | Retrieves metadata about a file or directory at `path`. |
+| **stat** path<br><code>Text -> Effect FileError FileStats</code> | Retrieves metadata about a file or directory at `path`. |
 
 ### `delete`
 
 
 | Function | Explanation |
 | --- | --- |
-| **delete** path<br><pre><code>`Text -> Effect FileError Unit`</code></pre> | Removes the file at `path`. |
+| **delete** path<br><code>Text -> Effect FileError Unit</code> | Removes the file at `path`. |
 
 ## Directory Operations
 
 | Function | Explanation |
 | --- | --- |
-| **listDir** path<br><pre><code>`Text -> Effect FileError (List Text)`</code></pre> | Returns the names of entries in the directory at `path`. |
-| **mkdir** path<br><pre><code>`Text -> Effect FileError Unit`</code></pre> | Creates a directory at `path`. Fails when parent directories are missing. |
-| **mkdirAll** path<br><pre><code>`Text -> Effect FileError Unit`</code></pre> | Creates a directory and all missing parents. |
-| **rmdir** path<br><pre><code>`Text -> Effect FileError Unit`</code></pre> | Removes an empty directory. |
+| **listDir** path<br><code>Text -> Effect FileError (List Text)</code> | Returns the names of entries in the directory at `path`. |
+| **mkdir** path<br><code>Text -> Effect FileError Unit</code> | Creates a directory at `path`. Fails when parent directories are missing. |
+| **mkdirAll** path<br><code>Text -> Effect FileError Unit</code> | Creates a directory and all missing parents. |
+| **rmdir** path<br><code>Text -> Effect FileError Unit</code> | Removes an empty directory. |
 
 ## Additional Path Operations
 
 | Function | Explanation |
 | --- | --- |
-| **readBytes** path<br><pre><code>`Text -> Effect FileError Bytes`</code></pre> | Reads the entire contents of `path` as raw `Bytes`. |
-| **writeBytes** path bytes<br><pre><code>`Text -> Bytes -> Effect FileError Unit`</code></pre> | Writes raw `bytes` to `path`, overwriting if it exists. |
-| **appendText** path contents<br><pre><code>`Text -> Text -> Effect FileError Unit`</code></pre> | Appends `contents` to the end of the file at `path`. |
-| **copy** src dest<br><pre><code>`Text -> Text -> Effect FileError Unit`</code></pre> | Copies the file at `src` to `dest`. |
-| **move** src dest<br><pre><code>`Text -> Text -> Effect FileError Unit`</code></pre> | Moves (or renames) the file at `src` to `dest`. |
-| **readLines** path<br><pre><code>`Text -> Effect FileError (Generator Text)`</code></pre> | Returns a lazy generator of lines in the file. |
+| **readBytes** path<br><code>Text -> Effect FileError Bytes</code> | Reads the entire contents of `path` as raw `Bytes`. |
+| **writeBytes** path bytes<br><code>Text -> Bytes -> Effect FileError Unit</code> | Writes raw `bytes` to `path`, overwriting if it exists. |
+| **appendText** path contents<br><code>Text -> Text -> Effect FileError Unit</code> | Appends `contents` to the end of the file at `path`. |
+| **copy** src dest<br><code>Text -> Text -> Effect FileError Unit</code> | Copies the file at `src` to `dest`. |
+| **move** src dest<br><code>Text -> Text -> Effect FileError Unit</code> | Moves (or renames) the file at `src` to `dest`. |
+| **readLines** path<br><code>Text -> Effect FileError (Generator Text)</code> | Returns a lazy generator of lines in the file. |
 
 Notes:
 - All path operations resolve relative paths against the current working directory.

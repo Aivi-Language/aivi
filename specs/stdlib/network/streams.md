@@ -16,19 +16,19 @@ The `Streams` domain provides stream-oriented utilities for processing inbound a
 
 | Function | Explanation |
 | --- | --- |
-| **fromSocket** connection<br><pre><code>`Connection -> Stream (List Int)`</code></pre> | Creates a stream of byte chunks from the connection. |
-| **toSocket** connection stream<br><pre><code>`Connection -> Stream (List Int) -> Effect StreamError Unit`</code></pre> | Writes byte chunks from `stream` to the connection. |
-| **chunks** size stream<br><pre><code>`Int -> Stream (List Int) -> Stream (List Int)`</code></pre> | Rechunks a byte stream into fixed-size blocks of `size`. |
-| **fromList** items<br><pre><code>`List A -> Stream A`</code></pre> | Creates a finite stream that yields each item from the list in order. Useful for testing and in-memory pipelines. |
+| **fromSocket** connection<br><code>Connection -> Stream (List Int)</code> | Creates a stream of byte chunks from the connection. |
+| **toSocket** connection stream<br><code>Connection -> Stream (List Int) -> Effect StreamError Unit</code> | Writes byte chunks from `stream` to the connection. |
+| **chunks** size stream<br><code>Int -> Stream (List Int) -> Stream (List Int)</code> | Rechunks a byte stream into fixed-size blocks of `size`. |
+| **fromList** items<br><code>List A -> Stream A</code> | Creates a finite stream that yields each item from the list in order. Useful for testing and in-memory pipelines. |
 
 ## Stream Combinators
 
 | Function | Explanation |
 | --- | --- |
-| **map** f stream<br><pre><code>`(A -> B) -> Stream A -> Stream B`</code></pre> | Transforms each stream item. |
-| **filter** pred stream<br><pre><code>`(A -> Bool) -> Stream A -> Stream A`</code></pre> | Keeps items matching `pred`. |
-| **take** n stream<br><pre><code>`Int -> Stream A -> Stream A`</code></pre> | Takes first `n` items then closes. |
-| **drop** n stream<br><pre><code>`Int -> Stream A -> Stream A`</code></pre> | Skips first `n` items. |
-| **flatMap** f stream<br><pre><code>`(A -> Stream B) -> Stream A -> Stream B`</code></pre> | Maps and flattens nested streams. |
-| **merge** left right<br><pre><code>`Stream A -> Stream A -> Stream A`</code></pre> | Interleaves events from both streams. |
-| **fold** f seed stream<br><pre><code>`(B -> A -> B) -> B -> Stream A -> Effect StreamError B`</code></pre> | Consumes stream into one value. |
+| **map** f stream<br><code>(A -> B) -> Stream A -> Stream B</code> | Transforms each stream item. |
+| **filter** pred stream<br><code>(A -> Bool) -> Stream A -> Stream A</code> | Keeps items matching `pred`. |
+| **take** n stream<br><code>Int -> Stream A -> Stream A</code> | Takes first `n` items then closes. |
+| **drop** n stream<br><code>Int -> Stream A -> Stream A</code> | Skips first `n` items. |
+| **flatMap** f stream<br><code>(A -> Stream B) -> Stream A -> Stream B</code> | Maps and flattens nested streams. |
+| **merge** left right<br><code>Stream A -> Stream A -> Stream A</code> | Interleaves events from both streams. |
+| **fold** f seed stream<br><code>(B -> A -> B) -> B -> Stream A -> Effect StreamError B</code> | Consumes stream into one value. |

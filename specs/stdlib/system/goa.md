@@ -28,10 +28,10 @@ GoaToken = { token: Text, expiresUnix: Int }
 
 | Function | Explanation |
 | --- | --- |
-| **listAccounts**<br><pre><code>`Effect Text (List GoaAccount)`</code></pre> | Discovers configured GOA accounts from the GNOME session bus. |
-| **getAccessToken** key<br><pre><code>`Text -> Effect Text GoaToken`</code></pre> | Fetches OAuth access token metadata for an OAuth2-capable GOA account object path. |
-| **accountKey** account<br><pre><code>`GoaAccount -> Text`</code></pre> | Returns the GOA object path key. |
-| **filterByKey** key accounts<br><pre><code>`Text -> List GoaAccount -> List GoaAccount`</code></pre> | Filters discovered accounts by object path key. |
+| **listAccounts**<br><code>Effect Text (List GoaAccount)</code> | Discovers configured GOA accounts from the GNOME session bus. |
+| **getAccessToken** key<br><code>Text -> Effect Text GoaToken</code> | Fetches OAuth access token metadata for an OAuth2-capable GOA account object path. |
+| **accountKey** account<br><code>GoaAccount -> Text</code> | Returns the GOA object path key. |
+| **filterByKey** key accounts<br><code>Text -> List GoaAccount -> List GoaAccount</code> | Filters discovered accounts by object path key. |
 
 ## Notes
 

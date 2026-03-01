@@ -27,9 +27,9 @@ Whether you're simulating heat flow across a computer chip, calculating structur
 
 | Function | Explanation |
 | --- | --- |
-| **dot** a b<br><pre><code>`Vec -> Vec -> Float`</code></pre> | Returns the dot product of two vectors. |
-| **matMul** a b<br><pre><code>`Mat -> Mat -> Mat`</code></pre> | Multiplies matrices (rows of `a` by columns of `b`). |
-| **solve2x2** m v<br><pre><code>`Mat -> Vec -> Vec`</code></pre> | Solves the system `m * x = v`. |
+| **dot** a b<br><code>Vec -> Vec -> Float</code> | Returns the dot product of two vectors. |
+| **matMul** a b<br><code>Mat -> Mat -> Mat</code> | Multiplies matrices (rows of `a` by columns of `b`). |
+| **solve2x2** m v<br><code>Mat -> Vec -> Vec</code> | Solves the system `m * x = v`. |
 
 ## Usage Examples
 

@@ -41,8 +41,8 @@ Helpers:
 
 | Function | Explanation |
 | --- | --- |
-| **fromInt** value<br><pre><code>`Int -> BigInt`</code></pre> | Converts a machine `Int` into `BigInt`. |
-| **toInt** value<br><pre><code>`BigInt -> Option Int`</code></pre> | Converts a `BigInt` to `Int`. Returns `None` if the value overflows the machine `Int` range. |
+| **fromInt** value<br><code>Int -> BigInt</code> | Converts a machine `Int` into `BigInt`. |
+| **toInt** value<br><code>BigInt -> Option Int</code> | Converts a `BigInt` to `Int`. Returns `None` if the value overflows the machine `Int` range. |
 
 Example:
 
@@ -60,9 +60,9 @@ Helpers:
 
 | Function | Explanation |
 | --- | --- |
-| **fromFloat** value<br><pre><code>`Float -> Decimal`</code></pre> | Converts a `Float` into `Decimal` using base-10 rounding rules. |
-| **toFloat** value<br><pre><code>`Decimal -> Float`</code></pre> | Converts a `Decimal` into a `Float`. |
-| **round** value places<br><pre><code>`Decimal -> Int -> Decimal`</code></pre> | Rounds to `places` decimal digits. |
+| **fromFloat** value<br><code>Float -> Decimal</code> | Converts a `Float` into `Decimal` using base-10 rounding rules. |
+| **toFloat** value<br><code>Decimal -> Float</code> | Converts a `Decimal` into a `Float`. |
+| **round** value places<br><code>Decimal -> Int -> Decimal</code> | Rounds to `places` decimal digits. |
 
 Example:
 
@@ -80,9 +80,9 @@ Helpers:
 
 | Function | Explanation |
 | --- | --- |
-| **normalize** r<br><pre><code>`Rational -> Rational`</code></pre> | Reduces a fraction to lowest terms. |
-| **numerator** r<br><pre><code>`Rational -> BigInt`</code></pre> | Returns the numerator. |
-| **denominator** r<br><pre><code>`Rational -> BigInt`</code></pre> | Returns the denominator. |
+| **normalize** r<br><code>Rational -> Rational</code> | Reduces a fraction to lowest terms. |
+| **numerator** r<br><code>Rational -> BigInt</code> | Returns the numerator. |
+| **denominator** r<br><code>Rational -> BigInt</code> | Returns the denominator. |
 
 Example:
 
@@ -112,9 +112,9 @@ The `Quaternion` domain provides tools for handling **3D rotations** without gim
 
 | Function | Explanation |
 | --- | --- |
-| **fromAxisAngle** axis theta<br><pre><code>`{ x: Float, y: Float, z: Float } -> Float -> Quaternion`</code></pre> | Creates a rotation from axis/angle. |
-| **conjugate** q<br><pre><code>`Quaternion -> Quaternion`</code></pre> | Negates the vector part. |
-| **magnitude** q<br><pre><code>`Quaternion -> Float`</code></pre> | Returns the quaternion length. |
-| **normalize** q<br><pre><code>`Quaternion -> Quaternion`</code></pre> | Returns a unit-length quaternion. |
+| **fromAxisAngle** axis theta<br><code>{ x: Float, y: Float, z: Float } -> Float -> Quaternion</code> | Creates a rotation from axis/angle. |
+| **conjugate** q<br><code>Quaternion -> Quaternion</code> | Negates the vector part. |
+| **magnitude** q<br><code>Quaternion -> Float</code> | Returns the quaternion length. |
+| **normalize** q<br><code>Quaternion -> Quaternion</code> | Returns a unit-length quaternion. |
 
 <<< ../../snippets/from_md/stdlib/math/number/quaternion_04.aivi{aivi}

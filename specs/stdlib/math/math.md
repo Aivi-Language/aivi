@@ -25,119 +25,119 @@ Angles are represented by a dedicated domain so trigonometric functions are not 
 
 | Function | Explanation |
 | --- | --- |
-| **radians** value<br><pre><code>`Float -> Angle`</code></pre> | Creates an `Angle` from a raw radians value. |
-| **degrees** value<br><pre><code>`Float -> Angle`</code></pre> | Creates an `Angle` from a raw degrees value. |
-| **toRadians** angle<br><pre><code>`Angle -> Float`</code></pre> | Extracts the radians value from an `Angle`. |
-| **toDegrees** angle<br><pre><code>`Angle -> Float`</code></pre> | Extracts the degrees value from an `Angle`. |
+| **radians** value<br><code>Float -> Angle</code> | Creates an `Angle` from a raw radians value. |
+| **degrees** value<br><code>Float -> Angle</code> | Creates an `Angle` from a raw degrees value. |
+| **toRadians** angle<br><code>Angle -> Float</code> | Extracts the radians value from an `Angle`. |
+| **toDegrees** angle<br><code>Angle -> Float</code> | Extracts the degrees value from an `Angle`. |
 
 ## Basic helpers
 
 | Function | Explanation |
 | --- | --- |
-| **abs** value<br><pre><code>`Int -> Int`</code></pre> | Returns the absolute value of `value`. |
-| **abs** value<br><pre><code>`Float -> Float`</code></pre> | Returns the absolute value of `value`. |
+| **abs** value<br><code>Int -> Int</code> | Returns the absolute value of `value`. |
+| **abs** value<br><code>Float -> Float</code> | Returns the absolute value of `value`. |
 
 | Function | Explanation |
 | --- | --- |
-| **sign** x<br><pre><code>`Float -> Float`</code></pre> | Returns `-1.0`, `0.0`, or `1.0` based on the sign of `x`. |
-| **copysign** mag sign<br><pre><code>`Float -> Float -> Float`</code></pre> | Returns `mag` with the sign of `sign`. |
+| **sign** x<br><code>Float -> Float</code> | Returns `-1.0`, `0.0`, or `1.0` based on the sign of `x`. |
+| **copysign** mag sign<br><code>Float -> Float -> Float</code> | Returns `mag` with the sign of `sign`. |
 
 | Function | Explanation |
 | --- | --- |
-| **min** a b<br><pre><code>`Float -> Float -> Float`</code></pre> | Returns the smaller of `a` and `b`. |
-| **max** a b<br><pre><code>`Float -> Float -> Float`</code></pre> | Returns the larger of `a` and `b`. |
-| **minAll** values<br><pre><code>`List Float -> Option Float`</code></pre> | Returns the minimum of `values` or `None` when empty. |
-| **maxAll** values<br><pre><code>`List Float -> Option Float`</code></pre> | Returns the maximum of `values` or `None` when empty. |
+| **min** a b<br><code>Float -> Float -> Float</code> | Returns the smaller of `a` and `b`. |
+| **max** a b<br><code>Float -> Float -> Float</code> | Returns the larger of `a` and `b`. |
+| **minAll** values<br><code>List Float -> Option Float</code> | Returns the minimum of `values` or `None` when empty. |
+| **maxAll** values<br><code>List Float -> Option Float</code> | Returns the maximum of `values` or `None` when empty. |
 
 | Function | Explanation |
 | --- | --- |
-| **clamp** low high x<br><pre><code>`Float -> Float -> Float -> Float`</code></pre> | Limits `x` to the closed interval `[low, high]`. |
-| **sum** values<br><pre><code>`List Float -> Float`</code></pre> | Sums values (empty list yields `0.0`). |
-| **sumInt** values<br><pre><code>`List Int -> Int`</code></pre> | Sums values (empty list yields `0`). |
+| **clamp** low high x<br><code>Float -> Float -> Float -> Float</code> | Limits `x` to the closed interval `[low, high]`. |
+| **sum** values<br><code>List Float -> Float</code> | Sums values (empty list yields `0.0`). |
+| **sumInt** values<br><code>List Int -> Int</code> | Sums values (empty list yields `0`). |
 
 ## Rounding and decomposition
 
 | Function | Explanation |
 | --- | --- |
-| **floor** x<br><pre><code>`Float -> Float`</code></pre> | Rounds toward `-inf`. |
-| **ceil** x<br><pre><code>`Float -> Float`</code></pre> | Rounds toward `+inf`. |
-| **trunc** x<br><pre><code>`Float -> Float`</code></pre> | Rounds toward `0`. |
-| **round** x<br><pre><code>`Float -> Float`</code></pre> | Uses banker's rounding (ties to even). |
-| **fract** x<br><pre><code>`Float -> Float`</code></pre> | Returns the fractional part with the same sign as `x`. |
+| **floor** x<br><code>Float -> Float</code> | Rounds toward `-inf`. |
+| **ceil** x<br><code>Float -> Float</code> | Rounds toward `+inf`. |
+| **trunc** x<br><code>Float -> Float</code> | Rounds toward `0`. |
+| **round** x<br><code>Float -> Float</code> | Uses banker's rounding (ties to even). |
+| **fract** x<br><code>Float -> Float</code> | Returns the fractional part with the same sign as `x`. |
 
 | Function | Explanation |
 | --- | --- |
-| **modf** x<br><pre><code>`Float -> (Float, Float)`</code></pre> | Returns `(intPart, fracPart)` where `x = intPart + fracPart`. |
-| **frexp** x<br><pre><code>`Float -> (Float, Int)`</code></pre> | Returns `(mantissa, exponent)` such that `x = mantissa * 2^exponent`. |
-| **ldexp** mantissa exponent<br><pre><code>`Float -> Int -> Float`</code></pre> | Computes `mantissa * 2^exponent`. |
+| **modf** x<br><code>Float -> (Float, Float)</code> | Returns `(intPart, fracPart)` where `x = intPart + fracPart`. |
+| **frexp** x<br><code>Float -> (Float, Int)</code> | Returns `(mantissa, exponent)` such that `x = mantissa * 2^exponent`. |
+| **ldexp** mantissa exponent<br><code>Float -> Int -> Float</code> | Computes `mantissa * 2^exponent`. |
 
 ## Powers, roots, and logs
 
 | Function | Explanation |
 | --- | --- |
-| **pow** base exp<br><pre><code>`Float -> Float -> Float`</code></pre> | Raises `base` to `exp`. |
-| **sqrt** x<br><pre><code>`Float -> Float`</code></pre> | Computes the square root. |
-| **cbrt** x<br><pre><code>`Float -> Float`</code></pre> | Computes the cube root. |
-| **hypot** x y<br><pre><code>`Float -> Float -> Float`</code></pre> | Computes `sqrt(x*x + y*y)` with reduced overflow/underflow. |
+| **pow** base exp<br><code>Float -> Float -> Float</code> | Raises `base` to `exp`. |
+| **sqrt** x<br><code>Float -> Float</code> | Computes the square root. |
+| **cbrt** x<br><code>Float -> Float</code> | Computes the cube root. |
+| **hypot** x y<br><code>Float -> Float -> Float</code> | Computes `sqrt(x*x + y*y)` with reduced overflow/underflow. |
 
 | Function | Explanation |
 | --- | --- |
-| **exp** x<br><pre><code>`Float -> Float`</code></pre> | Computes `e^x`. |
-| **exp2** x<br><pre><code>`Float -> Float`</code></pre> | Computes `2^x`. |
-| **expm1** x<br><pre><code>`Float -> Float`</code></pre> | Computes `e^x - 1` with improved precision near zero. |
+| **exp** x<br><code>Float -> Float</code> | Computes `e^x`. |
+| **exp2** x<br><code>Float -> Float</code> | Computes `2^x`. |
+| **expm1** x<br><code>Float -> Float</code> | Computes `e^x - 1` with improved precision near zero. |
 
 | Function | Explanation |
 | --- | --- |
-| **log** x<br><pre><code>`Float -> Float`</code></pre> | Computes the natural log. |
-| **log10** x<br><pre><code>`Float -> Float`</code></pre> | Computes the base-10 log. |
-| **log2** x<br><pre><code>`Float -> Float`</code></pre> | Computes the base-2 log. |
-| **log1p** x<br><pre><code>`Float -> Float`</code></pre> | Computes `log(1 + x)` with improved precision near zero. |
+| **log** x<br><code>Float -> Float</code> | Computes the natural log. |
+| **log10** x<br><code>Float -> Float</code> | Computes the base-10 log. |
+| **log2** x<br><code>Float -> Float</code> | Computes the base-2 log. |
+| **log1p** x<br><code>Float -> Float</code> | Computes `log(1 + x)` with improved precision near zero. |
 
 ## Trigonometry
 
 | Function | Explanation |
 | --- | --- |
-| **sin** angle<br><pre><code>`Angle -> Float`</code></pre> | Computes the sine ratio for `angle`. |
-| **cos** angle<br><pre><code>`Angle -> Float`</code></pre> | Computes the cosine ratio for `angle`. |
-| **tan** angle<br><pre><code>`Angle -> Float`</code></pre> | Computes the tangent ratio for `angle`. |
+| **sin** angle<br><code>Angle -> Float</code> | Computes the sine ratio for `angle`. |
+| **cos** angle<br><code>Angle -> Float</code> | Computes the cosine ratio for `angle`. |
+| **tan** angle<br><code>Angle -> Float</code> | Computes the tangent ratio for `angle`. |
 
 | Function | Explanation |
 | --- | --- |
-| **asin** x<br><pre><code>`Float -> Angle`</code></pre> | Returns the angle whose sine is `x`. |
-| **acos** x<br><pre><code>`Float -> Angle`</code></pre> | Returns the angle whose cosine is `x`. |
-| **atan** x<br><pre><code>`Float -> Angle`</code></pre> | Returns the angle whose tangent is `x`. |
-| **atan2** y x<br><pre><code>`Float -> Float -> Angle`</code></pre> | Returns the angle of the vector `(x, y)` from the positive x-axis. |
+| **asin** x<br><code>Float -> Angle</code> | Returns the angle whose sine is `x`. |
+| **acos** x<br><code>Float -> Angle</code> | Returns the angle whose cosine is `x`. |
+| **atan** x<br><code>Float -> Angle</code> | Returns the angle whose tangent is `x`. |
+| **atan2** y x<br><code>Float -> Float -> Angle</code> | Returns the angle of the vector `(x, y)` from the positive x-axis. |
 
 ## Hyperbolic functions
 
 | Function | Explanation |
 | --- | --- |
-| **sinh** x<br><pre><code>`Float -> Float`</code></pre> | Computes hyperbolic sine. |
-| **cosh** x<br><pre><code>`Float -> Float`</code></pre> | Computes hyperbolic cosine. |
-| **tanh** x<br><pre><code>`Float -> Float`</code></pre> | Computes hyperbolic tangent. |
-| **asinh** x<br><pre><code>`Float -> Float`</code></pre> | Computes inverse hyperbolic sine. |
-| **acosh** x<br><pre><code>`Float -> Float`</code></pre> | Computes inverse hyperbolic cosine. |
-| **atanh** x<br><pre><code>`Float -> Float`</code></pre> | Computes inverse hyperbolic tangent. |
+| **sinh** x<br><code>Float -> Float</code> | Computes hyperbolic sine. |
+| **cosh** x<br><code>Float -> Float</code> | Computes hyperbolic cosine. |
+| **tanh** x<br><code>Float -> Float</code> | Computes hyperbolic tangent. |
+| **asinh** x<br><code>Float -> Float</code> | Computes inverse hyperbolic sine. |
+| **acosh** x<br><code>Float -> Float</code> | Computes inverse hyperbolic cosine. |
+| **atanh** x<br><code>Float -> Float</code> | Computes inverse hyperbolic tangent. |
 
 ## Integer math
 
 | Function | Explanation |
 | --- | --- |
-| **gcd** a b<br><pre><code>`Int -> Int -> Int`</code></pre> | Computes the greatest common divisor. |
-| **lcm** a b<br><pre><code>`Int -> Int -> Int`</code></pre> | Computes the least common multiple. |
-| **gcdAll** values<br><pre><code>`List Int -> Option Int`</code></pre> | Returns the gcd of all values or `None` when empty. |
-| **lcmAll** values<br><pre><code>`List Int -> Option Int`</code></pre> | Returns the lcm of all values or `None` when empty. |
+| **gcd** a b<br><code>Int -> Int -> Int</code> | Computes the greatest common divisor. |
+| **lcm** a b<br><code>Int -> Int -> Int</code> | Computes the least common multiple. |
+| **gcdAll** values<br><code>List Int -> Option Int</code> | Returns the gcd of all values or `None` when empty. |
+| **lcmAll** values<br><code>List Int -> Option Int</code> | Returns the lcm of all values or `None` when empty. |
 
 | Function | Explanation |
 | --- | --- |
-| **factorial** n<br><pre><code>`Int -> BigInt`</code></pre> | Computes `n!`. |
-| **comb** n k<br><pre><code>`Int -> Int -> BigInt`</code></pre> | Computes combinations ("n choose k"). |
-| **perm** n k<br><pre><code>`Int -> Int -> BigInt`</code></pre> | Computes permutations ("n P k"). |
+| **factorial** n<br><code>Int -> BigInt</code> | Computes `n!`. |
+| **comb** n k<br><code>Int -> Int -> BigInt</code> | Computes combinations ("n choose k"). |
+| **perm** n k<br><code>Int -> Int -> BigInt</code> | Computes permutations ("n P k"). |
 
 | Function | Explanation |
 | --- | --- |
-| **divmod** a b<br><pre><code>`Int -> Int -> (Int, Int)`</code></pre> | Returns `(q, r)` where `a = q * b + r` and `0 <= r < \|b\|`. |
-| **modPow** base exp modulus<br><pre><code>`Int -> Int -> Int -> Int`</code></pre> | Computes `(base^exp) mod modulus`. |
+| **divmod** a b<br><code>Int -> Int -> (Int, Int)</code> | Returns `(q, r)` where `a = q * b + r` and `0 <= r < \|b\|`. |
+| **modPow** base exp modulus<br><code>Int -> Int -> Int -> Int</code> | Computes `(base^exp) mod modulus`. |
 
 Notes:
 - `BigInt` is from `aivi.number.bigint` and is re-exported by `aivi.math`.
@@ -146,18 +146,18 @@ Notes:
 
 | Function | Explanation |
 | --- | --- |
-| **isFinite** x<br><pre><code>`Float -> Bool`</code></pre> | Returns whether `x` is finite. |
-| **isInf** x<br><pre><code>`Float -> Bool`</code></pre> | Returns whether `x` is infinite. |
-| **isNaN** x<br><pre><code>`Float -> Bool`</code></pre> | Returns whether `x` is NaN. |
-| **nextAfter** from to<br><pre><code>`Float -> Float -> Float`</code></pre> | Returns the next representable float after `from` toward `to`. |
-| **ulp** x<br><pre><code>`Float -> Float`</code></pre> | Returns the size of one unit-in-the-last-place at `x`. |
+| **isFinite** x<br><code>Float -> Bool</code> | Returns whether `x` is finite. |
+| **isInf** x<br><code>Float -> Bool</code> | Returns whether `x` is infinite. |
+| **isNaN** x<br><code>Float -> Bool</code> | Returns whether `x` is NaN. |
+| **nextAfter** from to<br><code>Float -> Float -> Float</code> | Returns the next representable float after `from` toward `to`. |
+| **ulp** x<br><code>Float -> Float</code> | Returns the size of one unit-in-the-last-place at `x`. |
 
 ## Remainders
 
 | Function | Explanation |
 | --- | --- |
-| **fmod** a b<br><pre><code>`Float -> Float -> Float`</code></pre> | Returns the remainder using truncation toward zero. |
-| **remainder** a b<br><pre><code>`Float -> Float -> Float`</code></pre> | Returns the IEEE-754 remainder (round-to-nearest quotient). |
+| **fmod** a b<br><code>Float -> Float -> Float</code> | Returns the remainder using truncation toward zero. |
+| **remainder** a b<br><code>Float -> Float -> Float</code> | Returns the IEEE-754 remainder (round-to-nearest quotient). |
 
 ## Usage Examples
 

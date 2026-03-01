@@ -18,18 +18,18 @@ It allows you to read **Environment Variables** (like secret queries or API keys
 
 | Function | Explanation |
 | --- | --- |
-| **env.get** name<br><pre><code>`Text -> Effect Text (Option Text)`</code></pre> | Reads the environment variable `name`. Returns `None` when the variable is not set. |
-| **env.decode** prefix<br><pre><code>`Text -> Effect Text A`</code></pre> | Reads all environment keys under `prefix` and decodes them into the expected typed config `A`. |
-| **env.set** name value<br><pre><code>`Text -> Text -> Effect Text Unit`</code></pre> | Sets the environment variable `name` to `value`. |
-| **env.remove** name<br><pre><code>`Text -> Effect Text Unit`</code></pre> | Removes the environment variable `name`. |
+| **env.get** name<br><code>Text -> Effect Text (Option Text)</code> | Reads the environment variable `name`. Returns `None` when the variable is not set. |
+| **env.decode** prefix<br><code>Text -> Effect Text A</code> | Reads all environment keys under `prefix` and decodes them into the expected typed config `A`. |
+| **env.set** name value<br><code>Text -> Text -> Effect Text Unit</code> | Sets the environment variable `name` to `value`. |
+| **env.remove** name<br><code>Text -> Effect Text Unit</code> | Removes the environment variable `name`. |
 
 ### Process
 
 | Function | Explanation |
 | --- | --- |
-| **args**<br><pre><code>`Effect Text (List Text)`</code></pre> | Returns the command-line arguments passed to the program. |
-| **localeTag**<br><pre><code>`Effect Text (Option Text)`</code></pre> | Returns the locale tag of the host system (e.g. `"en-GB"`), or `None` when unavailable. |
-| **exit** code<br><pre><code>`Int -> Effect Text Unit`</code></pre> | Terminates the process with `code`. A code of `0` signals success; any other value signals failure. |
+| **args**<br><code>Effect Text (List Text)</code> | Returns the command-line arguments passed to the program. |
+| **localeTag**<br><code>Effect Text (Option Text)</code> | Returns the locale tag of the host system (e.g. `"en-GB"`), or `None` when unavailable. |
+| **exit** code<br><code>Int -> Effect Text Unit</code> | Terminates the process with `code`. A code of `0` signals success; any other value signals failure. |
 
 ## Type Signatures
 

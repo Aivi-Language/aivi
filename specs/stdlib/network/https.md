@@ -12,9 +12,9 @@ The `Https` domain mirrors `Http`, but enforces secure (TLS) connections. It is 
 
 | Function | Explanation |
 | --- | --- |
-| **get** url<br><pre><code>`Url -> Effect Text (Result Error Response)`</code></pre> | Performs a secure GET request and returns a `Response`. |
-| **post** url body<br><pre><code>`Url -> Text -> Effect Text (Result Error Response)`</code></pre> | Performs a secure POST request with a text body. |
-| **fetch** request<br><pre><code>`Request -> Effect Text (Result Error Response)`</code></pre> | Performs a secure request with custom method, headers, and body. |
+| **get** url<br><code>Url -> Effect Text (Result Error Response)</code> | Performs a secure GET request and returns a `Response`. |
+| **post** url body<br><code>Url -> Text -> Effect Text (Result Error Response)</code> | Performs a secure POST request with a text body. |
+| **fetch** request<br><code>Request -> Effect Text (Result Error Response)</code> | Performs a secure request with custom method, headers, and body. |
 
 ## Types
 

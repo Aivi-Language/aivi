@@ -1109,7 +1109,13 @@ pub extern "C" fn rt_value_equals(
 ) -> i64 {
     let va = unsafe { &*a };
     let vb = unsafe { &*b };
-    i64::from(crate::runtime::values_equal(va, vb))
+    let result = crate::runtime::values_equal(va, vb);
+    if !result {
+        eprintln!("[DBG rt_value_equals] NOT EQUAL:");
+        eprintln!("  left  = {:?}", va);
+        eprintln!("  right = {:?}", vb);
+    }
+    i64::from(result)
 }
 
 // ---------------------------------------------------------------------------

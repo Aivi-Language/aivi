@@ -12,15 +12,15 @@ The `Console` domain is your program's voice. It handles basic interactions with
 
 | Function                                                                          | Explanation |
 |-----------------------------------------------------------------------------------| --- |
-| **log** message<br><pre><code>`Text -> Effect ConsoleError Unit`</code></pre>     | Prints `message` to standard output with a trailing newline. |
-| **println** message<br><pre><code>`Text -> Effect ConsoleError Unit`</code></pre> | Alias for `log`. |
-| **print** message<br><pre><code>`Text -> Effect ConsoleError Unit`</code></pre>   | Prints `message` without a trailing newline. |
-| **error** message<br><pre><code>`Text -> Effect ConsoleError Unit`</code></pre>   | Prints `message` to standard error. |
-| **readLine** :\(\)<br><pre><code>`Unit -> Effect ConsoleError Text`</code></pre>  | Reads a line from standard input. |
-| **color** color text<br><pre><code>`AnsiColor -> Text -> Text`</code></pre>       | Wraps `text` in ANSI foreground color codes. |
-| **bgColor** color text<br><pre><code>`AnsiColor -> Text -> Text`</code></pre>     | Wraps `text` in ANSI background color codes. |
-| **style** style text<br><pre><code>`AnsiStyle -> Text -> Text`</code></pre>       | Applies multiple ANSI attributes to `text`. |
-| **strip** text<br><pre><code>`Text -> Text`</code></pre>                          | Removes ANSI escape sequences from `text`. |
+| **log** message<br><code>Text -> Effect ConsoleError Unit</code>     | Prints `message` to standard output with a trailing newline. |
+| **println** message<br><code>Text -> Effect ConsoleError Unit</code> | Alias for `log`. |
+| **print** message<br><code>Text -> Effect ConsoleError Unit</code>   | Prints `message` without a trailing newline. |
+| **error** message<br><code>Text -> Effect ConsoleError Unit</code>   | Prints `message` to standard error. |
+| **readLine** :\(\)<br><code>Unit -> Effect ConsoleError Text</code>  | Reads a line from standard input. |
+| **color** color text<br><code>AnsiColor -> Text -> Text</code>       | Wraps `text` in ANSI foreground color codes. |
+| **bgColor** color text<br><code>AnsiColor -> Text -> Text</code>     | Wraps `text` in ANSI background color codes. |
+| **style** style text<br><code>AnsiStyle -> Text -> Text</code>       | Applies multiple ANSI attributes to `text`. |
+| **strip** text<br><code>Text -> Text</code>                          | Removes ANSI escape sequences from `text`. |
 
 ## ANSI Types
 

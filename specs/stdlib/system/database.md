@@ -72,39 +72,39 @@ and `withConn` guarantees deterministic release via AIVI resources even on failu
 
 | Function | Explanation |
 | --- | --- |
-| **db.table** name columns<br><pre><code>`Text -> List Column -> Table A`</code></pre> | Creates a table definition. The row type `A` is inferred from the binding's type annotation. |
-| **db.configure** config<br><pre><code>`DbConfig -> Effect DbError Unit`</code></pre> | Selects the runtime backend (Sqlite, Postgresql, Mysql). |
-| **db.runMigrations** tables<br><pre><code>`List (Table A) -> Effect DbError Unit`</code></pre> | Creates or updates tables to match their column definitions. |
-| **db.runMigrationSql** steps<br><pre><code>`List MigrationStep -> Effect DbError Unit`</code></pre> | Runs ordered SQL migration steps (id + sql) against the configured backend. |
-| **db.configureSqlite** tuning<br><pre><code>`SqliteTuning -> Effect DbError Unit`</code></pre> | Tunes SQLite `journal_mode` (WAL/DELETE) and busy-timeout for local-first workloads. |
+| **db.table** name columns<br><code>Text -> List Column -> Table A</code> | Creates a table definition. The row type `A` is inferred from the binding's type annotation. |
+| **db.configure** config<br><code>DbConfig -> Effect DbError Unit</code> | Selects the runtime backend (Sqlite, Postgresql, Mysql). |
+| **db.runMigrations** tables<br><code>List (Table A) -> Effect DbError Unit</code> | Creates or updates tables to match their column definitions. |
+| **db.runMigrationSql** steps<br><code>List MigrationStep -> Effect DbError Unit</code> | Runs ordered SQL migration steps (id + sql) against the configured backend. |
+| **db.configureSqlite** tuning<br><code>SqliteTuning -> Effect DbError Unit</code> | Tunes SQLite `journal_mode` (WAL/DELETE) and busy-timeout for local-first workloads. |
 
 ### Data loading
 
 | Function | Explanation |
 | --- | --- |
-| **db.load** table<br><pre><code>`Table A -> Effect (SourceError Db) (List A)`</code></pre> | Loads all rows from `table`. Validates fields against type `A`. |
-| **db.applyDelta** table delta<br><pre><code>`Table A -> Delta A -> Effect DbError (Table A)`</code></pre> | Applies an insert, update, delete, or upsert delta. Also available as the domain `+` operator. |
-| **db.applyDeltas** table deltas<br><pre><code>`Table A -> List (Delta A) -> Effect DbError (Table A)`</code></pre> | Applies many deltas in one effect for projection-heavy write workloads. |
+| **db.load** table<br><code>Table A -> Effect (SourceError Db) (List A)</code> | Loads all rows from `table`. Validates fields against type `A`. |
+| **db.applyDelta** table delta<br><code>Table A -> Delta A -> Effect DbError (Table A)</code> | Applies an insert, update, delete, or upsert delta. Also available as the domain `+` operator. |
+| **db.applyDeltas** table deltas<br><code>Table A -> List (Delta A) -> Effect DbError (Table A)</code> | Applies many deltas in one effect for projection-heavy write workloads. |
 
 ### Transactions and savepoints
 
 | Function | Explanation |
 | --- | --- |
-| **db.beginTx**<br><pre><code>`Effect DbError Unit`</code></pre> | Starts a transaction. |
-| **db.commitTx**<br><pre><code>`Effect DbError Unit`</code></pre> | Commits the current transaction. |
-| **db.rollbackTx**<br><pre><code>`Effect DbError Unit`</code></pre> | Rolls back the current transaction. |
-| **db.savepoint** name<br><pre><code>`Text -> Effect DbError Unit`</code></pre> | Creates a savepoint with SQL-safe identifier validation. |
-| **db.releaseSavepoint** name<br><pre><code>`Text -> Effect DbError Unit`</code></pre> | Releases a savepoint. |
-| **db.rollbackToSavepoint** name<br><pre><code>`Text -> Effect DbError Unit`</code></pre> | Rolls back to a savepoint while keeping outer transaction active. |
+| **db.beginTx**<br><code>Effect DbError Unit</code> | Starts a transaction. |
+| **db.commitTx**<br><code>Effect DbError Unit</code> | Commits the current transaction. |
+| **db.rollbackTx**<br><code>Effect DbError Unit</code> | Rolls back the current transaction. |
+| **db.savepoint** name<br><code>Text -> Effect DbError Unit</code> | Creates a savepoint with SQL-safe identifier validation. |
+| **db.releaseSavepoint** name<br><code>Text -> Effect DbError Unit</code> | Releases a savepoint. |
+| **db.rollbackToSavepoint** name<br><code>Text -> Effect DbError Unit</code> | Rolls back to a savepoint while keeping outer transaction active. |
 
 ### Delta constructors
 
 | Constructor | Explanation |
 | --- | --- |
-| **Insert** row<br><pre><code>`A -> Delta A`</code></pre> | Inserts a new row. |
-| **Update** pred patch<br><pre><code>`Pred A -> Patch A -> Delta A`</code></pre> | Updates rows matching `pred` with `patch`. |
-| **Delete** pred<br><pre><code>`Pred A -> Delta A`</code></pre> | Deletes rows matching `pred`. |
-| **Upsert** pred value patch<br><pre><code>`Pred A -> A -> Patch A -> Delta A`</code></pre> | Patches matching rows; inserts `value` when no row matches `pred`. |
+| **Insert** row<br><code>A -> Delta A</code> | Inserts a new row. |
+| **Update** pred patch<br><code>Pred A -> Patch A -> Delta A</code> | Updates rows matching `pred` with `patch`. |
+| **Delete** pred<br><code>Pred A -> Delta A</code> | Deletes rows matching `pred`. |
+| **Upsert** pred value patch<br><code>Pred A -> A -> Patch A -> Delta A</code> | Patches matching rows; inserts `value` when no row matches `pred`. |
 
 ### Convenience aliases
 
@@ -129,5 +129,5 @@ When `use aivi.database (domain Database)` is in scope, these are available in d
 
 | Function | Explanation |
 | --- | --- |
-| **Pool.create** config<br><pre><code>`Pool.Config Conn -> Effect E (Result Pool.PoolError (Pool Conn))`</code></pre> | Creates a connection pool from the given configuration. |
-| **Pool.withConn** pool f<br><pre><code>`Pool Conn -> (Conn -> Effect E A) -> Effect E (Result Pool.PoolError A)`</code></pre> | Acquires a connection, runs `f`, and guarantees release even on failure. |
+| **Pool.create** config<br><code>Pool.Config Conn -> Effect E (Result Pool.PoolError (Pool Conn))</code> | Creates a connection pool from the given configuration. |
+| **Pool.withConn** pool f<br><code>Pool Conn -> (Conn -> Effect E A) -> Effect E (Result Pool.PoolError A)</code> | Acquires a connection, runs `f`, and guarantees release even on failure. |

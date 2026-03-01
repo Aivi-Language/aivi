@@ -48,20 +48,20 @@ For matrix-vector transforms, use `×` from the `Matrix` domain (see [Matrix: `�
 
 | Function | Explanation |
 | --- | --- |
-| **magnitude** v<br><pre><code>`Vec2 -> Float`</code></pre> | Returns the Euclidean length of `v`. |
-| **magnitude** v<br><pre><code>`Vec3 -> Float`</code></pre> | Returns the Euclidean length of `v`. |
-| **normalize** v<br><pre><code>`Vec2 -> Vec2`</code></pre> | Returns a unit vector in the direction of `v`. |
-| **normalize** v<br><pre><code>`Vec3 -> Vec3`</code></pre> | Returns a unit vector in the direction of `v`. |
-| **dot** a b<br><pre><code>`Vec2 -> Vec2 -> Float`</code></pre> | Returns the dot product (scalar projection). |
-| **dot** a b<br><pre><code>`Vec3 -> Vec3 -> Float`</code></pre> | Returns the dot product (scalar projection). |
-| **cross** a b<br><pre><code>`Vec3 -> Vec3 -> Vec3`</code></pre> | Returns the 3D cross product orthogonal to `a` and `b`. |
-| **lerp** a b t<br><pre><code>`Vec2 -> Vec2 -> Float -> Vec2`</code></pre> | Linear interpolation between `a` and `b` at parameter `t`. |
-| **lerp** a b t<br><pre><code>`Vec3 -> Vec3 -> Float -> Vec3`</code></pre> | Linear interpolation between `a` and `b` at parameter `t`. |
-| **distance** a b<br><pre><code>`Vec2 -> Vec2 -> Float`</code></pre> | Euclidean distance between two points. |
-| **distance** a b<br><pre><code>`Vec3 -> Vec3 -> Float`</code></pre> | Euclidean distance between two points. |
-| **negate** v<br><pre><code>`Vec2 -> Vec2`</code></pre> | Returns `-v`. |
-| **negate** v<br><pre><code>`Vec3 -> Vec3`</code></pre> | Returns `-v`. |
-| **negate** v<br><pre><code>`Vec4 -> Vec4`</code></pre> | Returns `-v`. |
+| **magnitude** v<br><code>Vec2 -> Float</code> | Returns the Euclidean length of `v`. |
+| **magnitude** v<br><code>Vec3 -> Float</code> | Returns the Euclidean length of `v`. |
+| **normalize** v<br><code>Vec2 -> Vec2</code> | Returns a unit vector in the direction of `v`. |
+| **normalize** v<br><code>Vec3 -> Vec3</code> | Returns a unit vector in the direction of `v`. |
+| **dot** a b<br><code>Vec2 -> Vec2 -> Float</code> | Returns the dot product (scalar projection). |
+| **dot** a b<br><code>Vec3 -> Vec3 -> Float</code> | Returns the dot product (scalar projection). |
+| **cross** a b<br><code>Vec3 -> Vec3 -> Vec3</code> | Returns the 3D cross product orthogonal to `a` and `b`. |
+| **lerp** a b t<br><code>Vec2 -> Vec2 -> Float -> Vec2</code> | Linear interpolation between `a` and `b` at parameter `t`. |
+| **lerp** a b t<br><code>Vec3 -> Vec3 -> Float -> Vec3</code> | Linear interpolation between `a` and `b` at parameter `t`. |
+| **distance** a b<br><code>Vec2 -> Vec2 -> Float</code> | Euclidean distance between two points. |
+| **distance** a b<br><code>Vec3 -> Vec3 -> Float</code> | Euclidean distance between two points. |
+| **negate** v<br><code>Vec2 -> Vec2</code> | Returns `-v`. |
+| **negate** v<br><code>Vec3 -> Vec3</code> | Returns `-v`. |
+| **negate** v<br><code>Vec4 -> Vec4</code> | Returns `-v`. |
 
 ## Vector × Matrix
 
@@ -69,11 +69,11 @@ These functions bridge vectors and matrices (see [Matrix](matrix.md)). They are 
 
 | Function | Explanation |
 | --- | --- |
-| **transform2** m v<br><pre><code>`Mat2 -> Vec2 -> Vec2`</code></pre> | Multiplies a 2×2 matrix by a 2D vector. |
-| **transform3** m v<br><pre><code>`Mat3 -> Vec3 -> Vec3`</code></pre> | Multiplies a 3×3 matrix by a 3D vector. |
-| **transform4** m v<br><pre><code>`Mat4 -> Vec4 -> Vec4`</code></pre> | Multiplies a 4×4 matrix by a 4D vector (homogeneous). |
-| **transformPoint3** m p<br><pre><code>`Mat4 -> Vec3 -> Vec3`</code></pre> | Transforms a 3D point by a 4×4 matrix (w=1, perspective divide). |
-| **transformDir3** m d<br><pre><code>`Mat4 -> Vec3 -> Vec3`</code></pre> | Transforms a 3D direction by a 4×4 matrix (w=0, no translation). |
+| **transform2** m v<br><code>Mat2 -> Vec2 -> Vec2</code> | Multiplies a 2×2 matrix by a 2D vector. |
+| **transform3** m v<br><code>Mat3 -> Vec3 -> Vec3</code> | Multiplies a 3×3 matrix by a 3D vector. |
+| **transform4** m v<br><code>Mat4 -> Vec4 -> Vec4</code> | Multiplies a 4×4 matrix by a 4D vector (homogeneous). |
+| **transformPoint3** m p<br><code>Mat4 -> Vec3 -> Vec3</code> | Transforms a 3D point by a 4×4 matrix (w=1, perspective divide). |
+| **transformDir3** m d<br><code>Mat4 -> Vec3 -> Vec3</code> | Transforms a 3D direction by a 4×4 matrix (w=0, no translation). |
 
 > The `×` operator in the `Matrix` domain desugars to `transform4 m v` (or `transform2`/`transform3` for the respective sizes). Use `×` in domain-active contexts; use these functions directly when calling from module-qualified paths.
 

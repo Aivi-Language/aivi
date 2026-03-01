@@ -34,12 +34,12 @@ For direct channel edits, prefer record patching instead of deltas (e.g., `color
 
 | Function | Explanation |
 | --- | --- |
-| **adjustLightness** color amount<br><pre><code>`Rgb -> Int -> Rgb`</code></pre> | Increases or decreases lightness by a percentage. |
-| **adjustSaturation** color amount<br><pre><code>`Rgb -> Int -> Rgb`</code></pre> | Increases or decreases saturation by a percentage. |
-| **adjustHue** color degrees<br><pre><code>`Rgb -> Int -> Rgb`</code></pre> | Rotates hue by degrees. |
-| **toRgb** hsl<br><pre><code>`Hsl -> Rgb`</code></pre> | Converts HSL to RGB. |
-| **toHsl** rgb<br><pre><code>`Rgb -> Hsl`</code></pre> | Converts RGB to HSL. |
-| **toHex** rgb<br><pre><code>`Rgb -> Hex`</code></pre> | Renders RGB as a hex string. |
+| **adjustLightness** color amount<br><code>Rgb -> Int -> Rgb</code> | Increases or decreases lightness by a percentage. |
+| **adjustSaturation** color amount<br><code>Rgb -> Int -> Rgb</code> | Increases or decreases saturation by a percentage. |
+| **adjustHue** color degrees<br><code>Rgb -> Int -> Rgb</code> | Rotates hue by degrees. |
+| **toRgb** hsl<br><code>Hsl -> Rgb</code> | Converts HSL to RGB. |
+| **toHsl** rgb<br><code>Rgb -> Hsl</code> | Converts RGB to HSL. |
+| **toHex** rgb<br><code>Rgb -> Hex</code> | Renders RGB as a hex string. |
 
 ## Usage Examples
 

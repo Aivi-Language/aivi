@@ -75,7 +75,7 @@ MimePart = {
 
 | Function | Explanation |
 | --- | --- |
-| **imap** config<br><pre><code>`ImapConfig -> Effect Text (List A)`</code></pre> | Fetches messages from an IMAP mailbox using `config`. Each message is decoded into the expected type `A`. |
-| **smtpSend** config<br><pre><code>`SmtpConfig -> Effect Text Unit`</code></pre> | Sends an email using `config`. |
-| **mimeParts** raw<br><pre><code>`Text -> Result Text (List MimePart)`</code></pre> | Parses a raw MIME email string into a list of decoded parts. Returns `Err` on malformed input. |
-| **flattenBodies** parts<br><pre><code>`List MimePart -> Text`</code></pre> | Concatenates the `body` of each `MimePart` with newlines, producing a single text. |
+| **imap** config<br><code>ImapConfig -> Effect Text (List A)</code> | Fetches messages from an IMAP mailbox using `config`. Each message is decoded into the expected type `A`. |
+| **smtpSend** config<br><code>SmtpConfig -> Effect Text Unit</code> | Sends an email using `config`. |
+| **mimeParts** raw<br><code>Text -> Result Text (List MimePart)</code> | Parses a raw MIME email string into a list of decoded parts. Returns `Err` on malformed input. |
+| **flattenBodies** parts<br><code>List MimePart -> Text</code> | Concatenates the `body` of each `MimePart` with newlines, producing a single text. |

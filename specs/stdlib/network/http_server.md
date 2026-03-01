@@ -23,8 +23,8 @@ The `HttpServer` domain provides a scalable HTTP/1.1 + HTTP/2 server with option
 
 | Function | Explanation |
 | --- | --- |
-| **listen** config handler<br><pre><code>`ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource Server`</code></pre> | Starts a server and yields a `Server` resource that stops on cleanup. |
-| **stop** server<br><pre><code>`Server -> Effect HttpError Unit`</code></pre> | Stops a running server instance. |
-| **wsRecv** socket<br><pre><code>`WebSocket -> Effect WsError WsMessage`</code></pre> | Receives the next WebSocket message. |
-| **wsSend** socket message<br><pre><code>`WebSocket -> WsMessage -> Effect WsError Unit`</code></pre> | Sends a WebSocket message. |
-| **wsClose** socket<br><pre><code>`WebSocket -> Effect WsError Unit`</code></pre> | Closes the WebSocket connection. |
+| **listen** config handler<br><code>ServerConfig -> (Request -> Effect HttpError ServerReply) -> Resource Server</code> | Starts a server and yields a `Server` resource that stops on cleanup. |
+| **stop** server<br><code>Server -> Effect HttpError Unit</code> | Stops a running server instance. |
+| **wsRecv** socket<br><code>WebSocket -> Effect WsError WsMessage</code> | Receives the next WebSocket message. |
+| **wsSend** socket message<br><code>WebSocket -> WsMessage -> Effect WsError Unit</code> | Sends a WebSocket message. |
+| **wsClose** socket<br><code>WebSocket -> Effect WsError Unit</code> | Closes the WebSocket connection. |

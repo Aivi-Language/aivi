@@ -24,12 +24,12 @@ The `Log` module provides **Structured Logging** for modern observability.
 
 | Function | Explanation |
 | --- | --- |
-| **logger.log** level message context<br><pre><code>`Level -> Text -> Context -> Effect Text Unit`</code></pre> | Emits a log entry at the given `level` with `message` and key-value `context`. |
-| **logger.trace** message context<br><pre><code>`Text -> Context -> Effect Text Unit`</code></pre> | Shorthand for `logger.log Trace`. |
-| **logger.debug** message context<br><pre><code>`Text -> Context -> Effect Text Unit`</code></pre> | Shorthand for `logger.log Debug`. |
-| **logger.info** message context<br><pre><code>`Text -> Context -> Effect Text Unit`</code></pre> | Shorthand for `logger.log Info`. |
-| **logger.warn** message context<br><pre><code>`Text -> Context -> Effect Text Unit`</code></pre> | Shorthand for `logger.log Warn`. |
-| **logger.error** message context<br><pre><code>`Text -> Context -> Effect Text Unit`</code></pre> | Shorthand for `logger.log Error`. |
+| **logger.log** level message context<br><code>Level -> Text -> Context -> Effect Text Unit</code> | Emits a log entry at the given `level` with `message` and key-value `context`. |
+| **logger.trace** message context<br><code>Text -> Context -> Effect Text Unit</code> | Shorthand for `logger.log Trace`. |
+| **logger.debug** message context<br><code>Text -> Context -> Effect Text Unit</code> | Shorthand for `logger.log Debug`. |
+| **logger.info** message context<br><code>Text -> Context -> Effect Text Unit</code> | Shorthand for `logger.log Info`. |
+| **logger.warn** message context<br><code>Text -> Context -> Effect Text Unit</code> | Shorthand for `logger.log Warn`. |
+| **logger.error** message context<br><code>Text -> Context -> Effect Text Unit</code> | Shorthand for `logger.log Error`. |
 
 Notes:
 - `Context` is `List (Text, Text)` — a simple key-value pair list attached to each log output.
