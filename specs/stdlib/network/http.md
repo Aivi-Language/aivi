@@ -12,9 +12,9 @@ The `Http` domain connects your program to the world. Whether you're fetching da
 
 | Function | Explanation |
 | --- | --- |
-| **get** url<br><pre><code>`Url -> Effect Text (Result Error Response)`</code></pre> | Performs a GET request and returns a `Response`. |
-| **post** url body<br><pre><code>`Url -> Text -> Effect Text (Result Error Response)`</code></pre> | Performs a POST request with a text body. |
-| **fetch** request<br><pre><code>`Request -> Effect Text (Result Error Response)`</code></pre> | Performs a request with custom method, headers, and body. |
+| **get** url<br><code>Url -> Effect Text (Result Error Response)</code> | Performs a GET request and returns a `Response`. |
+| **post** url body<br><code>Url -> Text -> Effect Text (Result Error Response)</code> | Performs a POST request with a text body. |
+| **fetch** request<br><code>Request -> Effect Text (Result Error Response)</code> | Performs a request with custom method, headers, and body. |
 
 ## Types
 

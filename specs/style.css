@@ -329,12 +329,12 @@ hr {
 /* Long type signatures that may need to wrap */
 .type-sig {
   overflow-wrap: break-word;
-  word-break: break-all;
-  white-space: pre-wrap;
+  word-break: normal;
+  white-space: normal;
 }
 
-.type-sig pre,
 .type-sig code {
-  white-space: pre-wrap;
-  word-break: break-all;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
 }

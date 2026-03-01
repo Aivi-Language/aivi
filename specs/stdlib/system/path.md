@@ -24,11 +24,11 @@ Use `~path[...]` to build a `Path` literal without string-mashing separators, an
 
 | Function | Explanation |
 | --- | --- |
-| **parse** text<br><pre><code>`Text -> Path`</code></pre> | Parses and normalizes a textual path. |
-| **toString** path<br><pre><code>`Path -> Text`</code></pre> | Renders a `Path` as text (using `/`). |
-| **normalize** path<br><pre><code>`Path -> Path`</code></pre> | Removes `.` segments and resolves `..` where possible. |
-| **parent** path<br><pre><code>`Path -> Option Path`</code></pre> | Returns the parent directory, if any. |
-| **fileName** path<br><pre><code>`Path -> Option Text`</code></pre> | Returns the last segment, if any. |
+| **parse** text<br><code>Text -> Path</code> | Parses and normalizes a textual path. |
+| **toString** path<br><code>Path -> Text</code> | Renders a `Path` as text (using `/`). |
+| **normalize** path<br><code>Path -> Path</code> | Removes `.` segments and resolves `..` where possible. |
+| **parent** path<br><code>Path -> Option Path</code> | Returns the parent directory, if any. |
+| **fileName** path<br><code>Path -> Option Text</code> | Returns the last segment, if any. |
 
 ## Usage Examples
 

@@ -29,10 +29,10 @@ The **Fast Fourier Transform (FFT)** is a legendary algorithm that converts Time
 
 | Function | Explanation |
 | --- | --- |
-| **fft** signal<br><pre><code>`Signal -> Spectrum`</code></pre> | Transforms a signal into a frequency-domain spectrum. |
-| **ifft** spectrum<br><pre><code>`Spectrum -> Signal`</code></pre> | Reconstructs a time-domain signal from its spectrum. |
-| **windowHann** signal<br><pre><code>`Signal -> Signal`</code></pre> | Applies a Hann window to reduce spectral leakage. |
-| **normalize** signal<br><pre><code>`Signal -> Signal`</code></pre> | Scales samples so the max absolute value is `1.0`. |
+| **fft** signal<br><code>Signal -> Spectrum</code> | Transforms a signal into a frequency-domain spectrum. |
+| **ifft** spectrum<br><code>Spectrum -> Signal</code> | Reconstructs a time-domain signal from its spectrum. |
+| **windowHann** signal<br><code>Signal -> Signal</code> | Applies a Hann window to reduce spectral leakage. |
+| **normalize** signal<br><code>Signal -> Signal</code> | Scales samples so the max absolute value is `1.0`. |
 
 ## Usage Examples
 

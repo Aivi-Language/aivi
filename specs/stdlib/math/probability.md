@@ -30,10 +30,10 @@ This domain lets you define the *shape* of the chaotic world you want to simulat
 
 | Function | Explanation |
 | --- | --- |
-| **clamp** p<br><pre><code>`Probability -> Probability`</code></pre> | Bounds `p` into `[0.0, 1.0]`. |
-| **bernoulli** p<br><pre><code>`Probability -> Distribution Bool`</code></pre> | Creates a distribution over `Bool` with success probability `p`. |
-| **uniform** lo hi<br><pre><code>`Float -> Float -> Distribution Float`</code></pre> | Creates a uniform distribution over `[lo, hi]`. |
-| **expectation** dist x<br><pre><code>`Distribution Float -> Float -> Float`</code></pre> | Returns the contribution of `x` to the expected value. |
+| **clamp** p<br><code>Probability -> Probability</code> | Bounds `p` into `[0.0, 1.0]`. |
+| **bernoulli** p<br><code>Probability -> Distribution Bool</code> | Creates a distribution over `Bool` with success probability `p`. |
+| **uniform** lo hi<br><code>Float -> Float -> Distribution Float</code> | Creates a uniform distribution over `[lo, hi]`. |
+| **expectation** dist x<br><code>Distribution Float -> Float -> Float</code> | Returns the contribution of `x` to the expected value. |
 
 ## Usage Examples
 

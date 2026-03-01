@@ -48,6 +48,6 @@ Request = {
 
 | Function | Explanation |
 | --- | --- |
-| **get** url<br><pre><code>`Url -> Effect Text A`</code></pre> | Performs a GET request and decodes the response body into the expected type `A`. |
-| **post** url body<br><pre><code>`Url -> Text -> Effect Text A`</code></pre> | Performs a POST request with a text body and decodes the response into `A`. |
-| **fetch** request<br><pre><code>`Request -> Effect Text A`</code></pre> | Performs a fully-configured REST request and decodes the response into `A`. |
+| **get** url<br><code>Url -> Effect Text A</code> | Performs a GET request and decodes the response body into the expected type `A`. |
+| **post** url body<br><code>Url -> Text -> Effect Text A</code> | Performs a POST request with a text body and decodes the response into `A`. |
+| **fetch** request<br><code>Request -> Effect Text A</code> | Performs a fully-configured REST request and decodes the response into `A`. |

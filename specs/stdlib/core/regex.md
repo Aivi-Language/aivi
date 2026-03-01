@@ -18,15 +18,15 @@ The `Regex` module handles **Pattern Matching** for text. Whether you're validat
 
 | Function | Explanation |
 | --- | --- |
-| **compile** pattern<br><pre><code>`Text -> Result RegexError Regex`</code></pre> | Builds a `Regex`, returning `RegexError` when invalid. |
-| **test** regex text<br><pre><code>`Regex -> Text -> Bool`</code></pre> | Returns whether the regex matches anywhere in `text`. |
-| **match** regex text<br><pre><code>`Regex -> Text -> Option Match`</code></pre> | Returns the first `Match` with capture groups. |
-| **matches** regex text<br><pre><code>`Regex -> Text -> List Match`</code></pre> | Returns all matches in left-to-right order. |
-| **find** regex text<br><pre><code>`Regex -> Text -> Option (Int, Int)`</code></pre> | Returns the first match byte index range. |
-| **findAll** regex text<br><pre><code>`Regex -> Text -> List (Int, Int)`</code></pre> | Returns all match byte index ranges. |
-| **split** regex text<br><pre><code>`Regex -> Text -> List Text`</code></pre> | Splits `text` on regex matches. |
-| **replace** regex text replacement<br><pre><code>`Regex -> Text -> Text -> Text`</code></pre> | Replaces the first match. |
-| **replaceAll** regex text replacement<br><pre><code>`Regex -> Text -> Text -> Text`</code></pre> | Replaces all matches. |
+| **compile** pattern<br><code>Text -> Result RegexError Regex</code> | Builds a `Regex`, returning `RegexError` when invalid. |
+| **test** regex text<br><code>Regex -> Text -> Bool</code> | Returns whether the regex matches anywhere in `text`. |
+| **match** regex text<br><code>Regex -> Text -> Option Match</code> | Returns the first `Match` with capture groups. |
+| **matches** regex text<br><code>Regex -> Text -> List Match</code> | Returns all matches in left-to-right order. |
+| **find** regex text<br><code>Regex -> Text -> Option (Int, Int)</code> | Returns the first match byte index range. |
+| **findAll** regex text<br><code>Regex -> Text -> List (Int, Int)</code> | Returns all match byte index ranges. |
+| **split** regex text<br><code>Regex -> Text -> List Text</code> | Splits `text` on regex matches. |
+| **replace** regex text replacement<br><code>Regex -> Text -> Text -> Text</code> | Replaces the first match. |
+| **replaceAll** regex text replacement<br><code>Regex -> Text -> Text -> Text</code> | Replaces all matches. |
 
 Notes:
 - `match` returns the first match with capture groups (if any).

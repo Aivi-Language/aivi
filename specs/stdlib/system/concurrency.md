@@ -18,13 +18,13 @@ It provides **Fibers** (lightweight threads) and **Channels** for safe communica
 
 | Function | Explanation |
 | --- | --- |
-| **par** left right<br><pre><code>`Effect E A -> Effect E B -> Effect E (A, B)`</code></pre> | Runs both effects concurrently and returns both results; fails if either fails. |
-| **race** left right<br><pre><code>`Effect E A -> Effect E A -> Effect E A`</code></pre> | Runs two effects and resolves with the first completion; cancels the loser. |
-| **scope** run<br><pre><code>`(Scope -> Effect E A) -> Effect E A`</code></pre> | Creates a structured concurrency scope. The `Scope` handle is passed to `run` and can be used to spawn child tasks that are guaranteed to complete (or be cancelled) before `scope` returns. |
-| **spawn** effect<br><pre><code>`Effect Text A -> Effect Text (Task A)`</code></pre> | Starts an effect in the background and returns a `Task` handle with `join`, `cancel`, and `isCancelled`. |
-| **timeoutWith** ms timeoutError effect<br><pre><code>`Int -> E -> Effect E A -> Effect E A`</code></pre> | Races an effect with a timer and fails with `timeoutError` when the timer wins. |
-| **retry** attempts effect<br><pre><code>`Int -> Effect E A -> Effect E A`</code></pre> | Retries a failing effect up to `attempts` times. |
-| **sleep** millis<br><pre><code>`Int -> Effect Text Unit`</code></pre> | Suspends the current effect for `millis` milliseconds. |
+| **par** left right<br><code>Effect E A -> Effect E B -> Effect E (A, B)</code> | Runs both effects concurrently and returns both results; fails if either fails. |
+| **race** left right<br><code>Effect E A -> Effect E A -> Effect E A</code> | Runs two effects and resolves with the first completion; cancels the loser. |
+| **scope** run<br><code>(Scope -> Effect E A) -> Effect E A</code> | Creates a structured concurrency scope. The `Scope` handle is passed to `run` and can be used to spawn child tasks that are guaranteed to complete (or be cancelled) before `scope` returns. |
+| **spawn** effect<br><code>Effect Text A -> Effect Text (Task A)</code> | Starts an effect in the background and returns a `Task` handle with `join`, `cancel`, and `isCancelled`. |
+| **timeoutWith** ms timeoutError effect<br><code>Int -> E -> Effect E A -> Effect E A</code> | Races an effect with a timer and fails with `timeoutError` when the timer wins. |
+| **retry** attempts effect<br><code>Int -> Effect E A -> Effect E A</code> | Retries a failing effect up to `attempts` times. |
+| **sleep** millis<br><code>Int -> Effect Text Unit</code> | Suspends the current effect for `millis` milliseconds. |
 
 Code reference: `crates/aivi/src/stdlib/concurrency.rs` — `aivi.concurrency` exports `par`, `scope`, `make`, `send`, `recv`, `close`
 
@@ -36,23 +36,23 @@ Channels provide a mechanism for synchronization and communication between concu
 
 | Function | Explanation |
 | --- | --- |
-| **make** sample<br><pre><code>`A -> Effect E (Sender A, Receiver A)`</code></pre> | Creates a new channel and returns `(Sender, Receiver)`. |
-| **makeBounded** capacity<br><pre><code>`Int -> Effect E (Sender A, Receiver A)`</code></pre> | Creates a bounded channel with backpressure when the buffer is full. |
+| **make** sample<br><code>A -> Effect E (Sender A, Receiver A)</code> | Creates a new channel and returns `(Sender, Receiver)`. |
+| **makeBounded** capacity<br><code>Int -> Effect E (Sender A, Receiver A)</code> | Creates a bounded channel with backpressure when the buffer is full. |
 
 ### `send`
 
 | Function | Explanation |
 | --- | --- |
-| **send** sender value<br><pre><code>`Sender A -> A -> Effect E Unit`</code></pre> | Sends `value` to the channel; may block if buffered and full or no receiver is ready. |
+| **send** sender value<br><code>Sender A -> A -> Effect E Unit</code> | Sends `value` to the channel; may block if buffered and full or no receiver is ready. |
 
 ### `recv`
 
 | Function | Explanation |
 | --- | --- |
-| **recv** receiver<br><pre><code>`Receiver A -> Effect E (Result ChannelError A)`</code></pre> | Waits for the next value; returns `Ok value` or `Err Closed`. |
+| **recv** receiver<br><code>Receiver A -> Effect E (Result ChannelError A)</code> | Waits for the next value; returns `Ok value` or `Err Closed`. |
 
 ### `close`
 
 | Function | Explanation |
 | --- | --- |
-| **close** sender<br><pre><code>`Sender A -> Effect E Unit`</code></pre> | Closes the channel from the sender side; receivers observe `Err Closed`. |
+| **close** sender<br><code>Sender A -> Effect E Unit</code> | Closes the channel from the sender side; receivers observe `Err Closed`. |

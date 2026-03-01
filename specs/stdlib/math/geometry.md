@@ -44,11 +44,11 @@ Instead of verbose nested record literals, use convenience constructors:
 
 | Function | Explanation |
 | --- | --- |
-| **distance** a b<br><pre><code>`Point2 -> Point2 -> Float`</code></pre> | Returns the Euclidean distance between two 2D points. |
-| **distance** a b<br><pre><code>`Point3 -> Point3 -> Float`</code></pre> | Returns the Euclidean distance between two 3D points. |
-| **midpoint** segment<br><pre><code>`Segment2 -> Point2`</code></pre> | Returns the center point of a line segment. |
-| **area** polygon<br><pre><code>`Polygon -> Float`</code></pre> | Returns the signed area (positive for counter-clockwise winding). |
-| **intersect** ray shape<br><pre><code>`Ray -> Shape -> Bool`</code></pre> | Tests whether a ray intersects a shape. |
+| **distance** a b<br><code>Point2 -> Point2 -> Float</code> | Returns the Euclidean distance between two 2D points. |
+| **distance** a b<br><code>Point3 -> Point3 -> Float</code> | Returns the Euclidean distance between two 3D points. |
+| **midpoint** segment<br><code>Segment2 -> Point2</code> | Returns the center point of a line segment. |
+| **area** polygon<br><code>Polygon -> Float</code> | Returns the signed area (positive for counter-clockwise winding). |
+| **intersect** ray shape<br><code>Ray -> Shape -> Bool</code> | Tests whether a ray intersects a shape. |
 
 ## Usage Examples
 

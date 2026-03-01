@@ -76,36 +76,36 @@ SchemaIssue = { path: Text, message: Text }
 
 | Function | Explanation |
 | --- | --- |
-| **decode** raw<br><pre><code>`Text -> Result JsonError JsonValue`</code></pre> | Parses a JSON text string into a `JsonValue`. Returns `Err` on malformed input. |
-| **jsonToText** value<br><pre><code>`JsonValue -> Text`</code></pre> | Converts a `JsonValue` back to a JSON text string. |
+| **decode** raw<br><code>Text -> Result JsonError JsonValue</code> | Parses a JSON text string into a `JsonValue`. Returns `Err` on malformed input. |
+| **jsonToText** value<br><code>JsonValue -> Text</code> | Converts a `JsonValue` back to a JSON text string. |
 
 ### Encoding
 
 | Function | Explanation |
 | --- | --- |
-| **encodeText** t<br><pre><code>`Text -> JsonValue`</code></pre> | Wraps a `Text` value as `JsonString`. |
-| **encodeInt** n<br><pre><code>`Int -> JsonValue`</code></pre> | Wraps an `Int` as `JsonInt`. |
-| **encodeFloat** f<br><pre><code>`Float -> JsonValue`</code></pre> | Wraps a `Float` as `JsonFloat`. |
-| **encodeBool** b<br><pre><code>`Bool -> JsonValue`</code></pre> | Wraps a `Bool` as `JsonBool`. |
-| **encodeObject** entries<br><pre><code>`List (Text, JsonValue) -> JsonValue`</code></pre> | Builds a `JsonObject` from a key-value list. |
-| **encodeArray** items<br><pre><code>`List JsonValue -> JsonValue`</code></pre> | Builds a `JsonArray` from a list. |
+| **encodeText** t<br><code>Text -> JsonValue</code> | Wraps a `Text` value as `JsonString`. |
+| **encodeInt** n<br><code>Int -> JsonValue</code> | Wraps an `Int` as `JsonInt`. |
+| **encodeFloat** f<br><code>Float -> JsonValue</code> | Wraps a `Float` as `JsonFloat`. |
+| **encodeBool** b<br><code>Bool -> JsonValue</code> | Wraps a `Bool` as `JsonBool`. |
+| **encodeObject** entries<br><code>List (Text, JsonValue) -> JsonValue</code> | Builds a `JsonObject` from a key-value list. |
+| **encodeArray** items<br><code>List JsonValue -> JsonValue</code> | Builds a `JsonArray` from a list. |
 
 ### Decoding
 
 | Function | Explanation |
 | --- | --- |
-| **decodeText** value<br><pre><code>`JsonValue -> Result JsonError Text`</code></pre> | Extracts `Text` from a `JsonString`, or returns `Err`. |
-| **decodeInt** value<br><pre><code>`JsonValue -> Result JsonError Int`</code></pre> | Extracts `Int` from a `JsonInt`, or returns `Err`. |
-| **decodeFloat** value<br><pre><code>`JsonValue -> Result JsonError Float`</code></pre> | Extracts `Float` from a `JsonFloat` or `JsonInt`, or returns `Err`. |
-| **decodeBool** value<br><pre><code>`JsonValue -> Result JsonError Bool`</code></pre> | Extracts `Bool` from a `JsonBool`, or returns `Err`. |
-| **decodeField** name obj<br><pre><code>`Text -> JsonValue -> Result JsonError JsonValue`</code></pre> | Looks up a field by name in a `JsonObject`. Returns `Err` when missing or when `obj` is not an object. |
-| **decodeList** decoder arr<br><pre><code>`(JsonValue -> Result JsonError A) -> JsonValue -> Result JsonError (List A)`</code></pre> | Decodes each element of a `JsonArray` using `decoder`. |
+| **decodeText** value<br><code>JsonValue -> Result JsonError Text</code> | Extracts `Text` from a `JsonString`, or returns `Err`. |
+| **decodeInt** value<br><code>JsonValue -> Result JsonError Int</code> | Extracts `Int` from a `JsonInt`, or returns `Err`. |
+| **decodeFloat** value<br><code>JsonValue -> Result JsonError Float</code> | Extracts `Float` from a `JsonFloat` or `JsonInt`, or returns `Err`. |
+| **decodeBool** value<br><code>JsonValue -> Result JsonError Bool</code> | Extracts `Bool` from a `JsonBool`, or returns `Err`. |
+| **decodeField** name obj<br><code>Text -> JsonValue -> Result JsonError JsonValue</code> | Looks up a field by name in a `JsonObject`. Returns `Err` when missing or when `obj` is not an object. |
+| **decodeList** decoder arr<br><code>(JsonValue -> Result JsonError A) -> JsonValue -> Result JsonError (List A)</code> | Decodes each element of a `JsonArray` using `decoder`. |
 
 ### Validation and migration
 
 | Function | Explanation |
 | --- | --- |
-| **requiredField** name obj<br><pre><code>`Text -> JsonValue -> Result JsonError JsonValue`</code></pre> | Alias for `decodeField`; signals intent that the field is required. |
-| **strictFields** allowed obj<br><pre><code>`List Text -> JsonValue -> Result JsonError JsonValue`</code></pre> | Fails if `obj` contains any key not in `allowed`. |
-| **validateSchema** schema obj<br><pre><code>`JsonSchema -> JsonValue -> List SchemaIssue`</code></pre> | Validates `obj` against `schema`, returning all issues found. An empty list means the object is valid. |
-| **migrateObject** patchFn value<br><pre><code>`(List (Text, JsonValue) -> List (Text, JsonValue)) -> JsonValue -> JsonValue`</code></pre> | Applies `patchFn` to the entries of a `JsonObject`; passes non-objects through unchanged. Useful for schema migrations. |
+| **requiredField** name obj<br><code>Text -> JsonValue -> Result JsonError JsonValue</code> | Alias for `decodeField`; signals intent that the field is required. |
+| **strictFields** allowed obj<br><code>List Text -> JsonValue -> Result JsonError JsonValue</code> | Fails if `obj` contains any key not in `allowed`. |
+| **validateSchema** schema obj<br><code>JsonSchema -> JsonValue -> List SchemaIssue</code> | Validates `obj` against `schema`, returning all issues found. An empty list means the object is valid. |
+| **migrateObject** patchFn value<br><code>(List (Text, JsonValue) -> List (Text, JsonValue)) -> JsonValue -> JsonValue</code> | Applies `patchFn` to the entries of a `JsonObject`; passes non-objects through unchanged. Useful for schema migrations. |

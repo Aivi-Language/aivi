@@ -44,15 +44,15 @@ Requires `use aivi.matrix (domain Matrix)` (or `use aivi.matrix`) and `use aivi.
 
 | Function | Explanation |
 | --- | --- |
-| **identity2**<br><pre><code>`Mat2`</code></pre> | Identity matrix for 2x2. |
-| **identity3**<br><pre><code>`Mat3`</code></pre> | Identity matrix for 3x3. |
-| **identity4**<br><pre><code>`Mat4`</code></pre> | Identity matrix for 4x4. |
-| **transpose2** m<br><pre><code>`Mat2 -> Mat2`</code></pre> | Flips rows and columns of a 2x2. |
-| **transpose3** m<br><pre><code>`Mat3 -> Mat3`</code></pre> | Flips rows and columns of a 3x3. |
-| **transpose4** m<br><pre><code>`Mat4 -> Mat4`</code></pre> | Flips rows and columns of a 4x4. |
-| **multiply2** a b<br><pre><code>`Mat2 -> Mat2 -> Mat2`</code></pre> | Multiplies two 2x2 matrices. |
-| **multiply3** a b<br><pre><code>`Mat3 -> Mat3 -> Mat3`</code></pre> | Multiplies two 3x3 matrices. |
-| **multiply4** a b<br><pre><code>`Mat4 -> Mat4 -> Mat4`</code></pre> | Multiplies two 4x4 matrices. |
+| **identity2**<br><code>Mat2</code> | Identity matrix for 2x2. |
+| **identity3**<br><code>Mat3</code> | Identity matrix for 3x3. |
+| **identity4**<br><code>Mat4</code> | Identity matrix for 4x4. |
+| **transpose2** m<br><code>Mat2 -> Mat2</code> | Flips rows and columns of a 2x2. |
+| **transpose3** m<br><code>Mat3 -> Mat3</code> | Flips rows and columns of a 3x3. |
+| **transpose4** m<br><code>Mat4 -> Mat4</code> | Flips rows and columns of a 4x4. |
+| **multiply2** a b<br><code>Mat2 -> Mat2 -> Mat2</code> | Multiplies two 2x2 matrices. |
+| **multiply3** a b<br><code>Mat3 -> Mat3 -> Mat3</code> | Multiplies two 3x3 matrices. |
+| **multiply4** a b<br><code>Mat4 -> Mat4 -> Mat4</code> | Multiplies two 4x4 matrices. |
 
 ## Sigil Constructors
 

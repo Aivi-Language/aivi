@@ -55,5 +55,5 @@ The `aivi.text` module provides core string and character utilities for `Text` a
 Table cell documentation:
 
 ```md
-| **isEmpty** text<br><pre><code>`Text -> Bool`</code></pre> | <!-- quick-info: {"kind":"function","name":"isEmpty","module":"aivi.text"} -->Returns `true` when `text` has zero length.<!-- /quick-info --> |
+| **isEmpty** text<br><code>Text -> Bool</code> | <!-- quick-info: {"kind":"function","name":"isEmpty","module":"aivi.text"} -->Returns `true` when `text` has zero length.<!-- /quick-info --> |
 ```
