@@ -348,6 +348,20 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         },
     );
 
+    // Standalone toJson — always in scope, no import required.
+    let to_json_standalone_a = checker.fresh_var_id();
+    env.insert(
+        "toJson".to_string(),
+        Scheme {
+            vars: vec![to_json_standalone_a],
+            ty: Type::Func(
+                Box::new(Type::Var(to_json_standalone_a)),
+                Box::new(json_value_ty),
+            ),
+            origin: None,
+        },
+    );
+
     let regex_ty = Type::con("Regex");
     let regex_error_ty = Type::con("RegexError");
     let match_ty = Type::con("Match");
