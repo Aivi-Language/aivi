@@ -1,0 +1,32 @@
+@no_prelude
+module integrationTests.combinations.comboMockNesting
+
+use aivi
+use aivi.testing
+
+// Mock expressions combined with other scope-creating constructs.
+// Verifies mock scoping interacts correctly with closures and nesting.
+
+// --- Module-level bindings to mock ---
+
+greeting = "Hello"
+
+// --- Mock in do Effect ---
+
+@test "mock active in do Effect"
+mockInDoEffect =
+  mock greeting = "Hi"
+in do Effect {
+  assertEq greeting "Hi"
+}
+
+// --- Mock scope does not leak into outer ---
+
+@test "mock scope does not leak into outer do Effect"
+mockDoesNotLeak = do Effect {
+  mocked <-
+    mock greeting = "Temp"
+  in pure greeting
+  assertEq mocked "Temp"
+  assertEq greeting "Hello"
+}

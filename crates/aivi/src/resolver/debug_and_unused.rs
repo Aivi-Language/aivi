@@ -515,18 +515,31 @@ z = db.configure
         let path = std::path::Path::new("test.aivi");
         let (mut modules, diags) = crate::surface::parse_modules(path, source);
         assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        assert!(!modules.is_empty(), "expected at least one parsed module");
 
         let mut all = crate::stdlib::embedded_stdlib_modules();
         all.append(&mut modules);
         let diags = check_modules(&all);
 
         let errors: Vec<_> = diags
-            .into_iter()
+            .iter()
             .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
             .collect();
         assert!(
             errors.is_empty(),
             "unexpected unknown-name errors: {errors:#?}"
+        );
+        // Verify no other errors either
+        let all_errors: Vec<_> = diags
+            .iter()
+            .filter(|d| {
+                d.path == "test.aivi"
+                    && d.diagnostic.severity == crate::DiagnosticSeverity::Error
+            })
+            .collect();
+        assert!(
+            all_errors.is_empty(),
+            "unexpected errors in test module: {all_errors:#?}"
         );
     }
 
@@ -550,18 +563,31 @@ main = do Effect {
         let path = std::path::Path::new("test.aivi");
         let (mut modules, diags) = crate::surface::parse_modules(path, source);
         assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        assert!(!modules.is_empty(), "expected at least one parsed module");
 
         let mut all = crate::stdlib::embedded_stdlib_modules();
         all.append(&mut modules);
         let diags = check_modules(&all);
 
         let errors: Vec<_> = diags
-            .into_iter()
+            .iter()
             .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
             .collect();
         assert!(
             errors.is_empty(),
             "unexpected unknown-name errors: {errors:#?}"
+        );
+        // Verify no other errors either
+        let all_errors: Vec<_> = diags
+            .iter()
+            .filter(|d| {
+                d.path == "test.aivi"
+                    && d.diagnostic.severity == crate::DiagnosticSeverity::Error
+            })
+            .collect();
+        assert!(
+            all_errors.is_empty(),
+            "unexpected errors in test module: {all_errors:#?}"
         );
     }
 
@@ -577,18 +603,31 @@ x = gtk4.appRun
         let path = std::path::Path::new("test.aivi");
         let (mut modules, diags) = crate::surface::parse_modules(path, source);
         assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        assert!(!modules.is_empty(), "expected at least one parsed module");
 
         let mut all = crate::stdlib::embedded_stdlib_modules();
         all.append(&mut modules);
         let diags = check_modules(&all);
 
         let errors: Vec<_> = diags
-            .into_iter()
+            .iter()
             .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
             .collect();
         assert!(
             errors.is_empty(),
             "unexpected unknown-name errors: {errors:#?}"
+        );
+        // Verify no other errors for the test module
+        let all_errors: Vec<_> = diags
+            .iter()
+            .filter(|d| {
+                d.path == "test.aivi"
+                    && d.diagnostic.severity == crate::DiagnosticSeverity::Error
+            })
+            .collect();
+        assert!(
+            all_errors.is_empty(),
+            "unexpected errors in test module: {all_errors:#?}"
         );
     }
 

@@ -1424,7 +1424,20 @@ module B
 y = 2
 "#;
     let (_, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diag_codes(&diags).contains(&"E1516".to_string()));
+    let codes = diag_codes(&diags);
+    assert!(
+        codes.contains(&"E1516".to_string()),
+        "expected E1516, got: {codes:?}"
+    );
+    let e1516 = diags
+        .iter()
+        .find(|d| d.diagnostic.code == "E1516")
+        .expect("E1516 diagnostic should be present");
+    assert!(
+        e1516.diagnostic.message.to_lowercase().contains("module"),
+        "E1516 message should mention 'module', got: {:?}",
+        e1516.diagnostic.message
+    );
 }
 
 #[test]
@@ -1439,7 +1452,16 @@ value = (Ok 1) or
   | Err _ => 0
 "#;
     let (_, diags) = parse_modules(Path::new("test.aivi"), src);
-    assert!(diag_codes(&diags).contains(&"E1530".to_string()));
+    let codes = diag_codes(&diags);
+    assert!(
+        codes.contains(&"E1530".to_string()),
+        "expected E1530, got: {codes:?}"
+    );
+    assert_eq!(
+        codes.iter().filter(|c| *c == "E1530").count(),
+        1,
+        "expected exactly one E1530 diagnostic"
+    );
 }
 
 #[test]

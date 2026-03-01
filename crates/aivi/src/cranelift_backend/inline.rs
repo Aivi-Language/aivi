@@ -1569,7 +1569,16 @@ mod tests {
         let mut modules = vec![make_module("Main", vec![a_def, b_def, main_def])];
         // This should terminate thanks to MAX_INLINE_DEPTH
         inline_program(&mut modules);
-        // Just verify it didn't hang
+        // Verify the output is still a valid program with a main definition
+        let main = modules[0]
+            .defs
+            .iter()
+            .find(|d| d.name == "main")
+            .expect("main def should still exist after inlining");
+        assert!(
+            !matches!(main.expr, RustIrExpr::Global { .. }),
+            "main body should have been at least partially inlined"
+        );
     }
 
     #[test]

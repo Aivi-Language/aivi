@@ -1,0 +1,121 @@
+@no_prelude
+module integrationTests.combinations.comboGeneratorNesting
+
+use aivi
+use aivi.testing
+use aivi.generator
+
+// Generators combined with other scope-creating constructs.
+// Tests lazy evaluation with closures over various outer scopes.
+
+// --- Generator with match function ---
+
+classify = n => if n % 2 == 0 then n * 10 else n
+
+@test "generator uses function with conditional logic"
+generatorWithMatch = do Effect {
+  g = generate {
+    n <- [1, 2, 3, 4, 5]
+    yield (classify n)
+  }
+  assertEq (toList g) [1, 20, 3, 40, 5]
+}
+
+// --- Generator with lambda filter capturing outer scope ---
+
+@test "generator with lambda predicate capturing outer"
+generatorLambdaFilter = do Effect {
+  threshold = 3
+  g = generate {
+    n <- [1, 2, 3, 4, 5]
+    n -> n > threshold
+    yield (n * 2)
+  }
+  assertEq (toList g) [8, 10]
+}
+
+// --- Generator inside do Effect, consumed with toList ---
+
+@test "generator created inside do Effect consumed with toList"
+generatorInDoEffect = do Effect {
+  base <- pure 100
+  g = generate {
+    n <- [1, 2, 3]
+    yield (n + base)
+  }
+  result = toList g
+  assertEq result [101, 102, 103]
+}
+
+// --- Generator returned from function, captures function arg ---
+
+makeScaledGen = factor => generate {
+  n <- [1, 2, 3, 4]
+  yield (n * factor)
+}
+
+@test "generator returned from function captures arg"
+generatorFromFunction = do Effect {
+  g = makeScaledGen 5
+  assertEq (toList g) [5, 10, 15, 20]
+}
+
+// --- Nested generators: generator binding from another generator ---
+
+@test "nested generators: inner binds from outer"
+nestedGenerators = do Effect {
+  outer = generate {
+    yield 10
+    yield 20
+  }
+  inner = generate {
+    base <- outer
+    yield (base + 1)
+    yield (base + 2)
+  }
+  assertEq (toList inner) [11, 12, 21, 22]
+}
+
+// --- Generator with pipe chain ---
+
+double = x => x * 2
+inc = x => x + 1
+
+@test "generator with pipe chain in yield"
+generatorPipeChain = do Effect {
+  g = generate {
+    n <- [1, 2, 3]
+    yield (n |> double |> inc)
+  }
+  assertEq (toList g) [3, 5, 7]
+}
+
+// --- Generator cartesian with guard capturing outer state ---
+
+@test "generator cartesian with guard captures outer"
+generatorCartesianGuard = do Effect {
+  target = 10
+  pairs = generate {
+    x <- [1, 2, 3, 4]
+    y <- [6, 7, 8, 9]
+    s = x + y
+    s -> s == target
+    yield (x, y)
+  }
+  assertEq (toList pairs) [(1, 9), (2, 8), (3, 7), (4, 6)]
+}
+
+// --- Generator with loop/recurse capturing outer ---
+
+@test "generator loop captures outer scope"
+generatorLoopCapturesOuter = do Effect {
+  factor = 2
+  g = generate {
+    loop n = 1 => {
+      yield (n * factor)
+      if n >= 5 then {}
+      else recurse (n + 1)
+    }
+  }
+  assertEq (toList g) [2, 4, 6, 8, 10]
+}

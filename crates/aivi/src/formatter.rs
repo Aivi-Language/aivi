@@ -145,6 +145,6 @@ mod tests {
     fn format_preserves_default_brace_style_kr() {
         let text = "module demo\n\nf = x =>\n  {\n    x\n  }\n";
         let formatted = format_text(text);
-        assert!(formatted.contains("f = x => {"));
+        assert_eq!(formatted, "module demo\n\nf = x => {\n  x\n}\n");
     }
 }

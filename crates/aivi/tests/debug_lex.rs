@@ -1,6 +1,7 @@
 use aivi::lex_cst;
 
 #[test]
+#[ignore = "debug-only: prints token output, no assertions"]
 fn debug_tokenization() {
     let content = "\"=>\"";
     let (tokens, diags) = lex_cst(content);

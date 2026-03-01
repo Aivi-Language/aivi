@@ -2357,6 +2357,10 @@ main = do Effect { unit }
             names.contains(&"rt_register_machines_from_data"),
             "rt_register_machines_from_data must be in the runtime helper symbol table"
         );
+        // Each symbol must have a non-null function pointer
+        for (name, ptr) in &symbols {
+            assert!(!ptr.is_null(), "symbol {name} has a null function pointer");
+        }
     }
 
     /// Guard that `build_runtime_base()` (used by AOT) registers every global that

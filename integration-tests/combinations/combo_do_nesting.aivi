@@ -1,0 +1,147 @@
+@no_prelude
+module integrationTests.combinations.comboDoNesting
+
+use aivi
+use aivi.testing
+
+// Nested do blocks in various contexts.
+// Verifies cross-scope capture between different monadic block kinds.
+
+// --- do Option inside do Effect with outer capture ---
+
+@test "do Option inside do Effect captures outer binding"
+doOptionInDoEffect = do Effect {
+  base = 100
+  result = do Option {
+    a <- Some 10
+    Some (a + base)
+  }
+  assertEq result (Some 110)
+}
+
+// --- do Result inside do Effect with outer capture ---
+
+@test "do Result inside do Effect captures outer binding"
+doResultInDoEffect = do Effect {
+  factor = 5
+  result = do Result {
+    a <- Ok 10
+    Ok (a * factor)
+  }
+  assertEq result (Ok 50)
+}
+
+// --- do List inside do Effect with outer capture ---
+
+@test "do List inside do Effect captures outer binding"
+doListInDoEffect = do Effect {
+  offset = 100
+  result = do List {
+    x <- [1, 2, 3]
+    [x + offset]
+  }
+  assertEq result [101, 102, 103]
+}
+
+// --- Three nested do Effect blocks with cross-level capture ---
+
+@test "three nested do Effect blocks with cross-level capture"
+threeNestedDoEffect = do Effect {
+  a <- pure 1
+  b <- do Effect {
+    c <- pure 2
+    d <- do Effect {
+      e <- pure 3
+      pure (a + c + e)
+    }
+    pure d
+  }
+  assertEq b 6
+}
+
+// --- do Effect inside match arms ---
+
+@test "do Effect inside match arms uses pattern variables"
+doEffectInMatchArm = do Effect {
+  base = 10
+  val = Some 5
+  result <- val match
+    | None   => pure 0
+    | Some n => do Effect {
+        computed <- pure (n * base)
+        pure computed
+      }
+  assertEq result 50
+}
+
+// --- Chained do Option blocks ---
+
+safeDiv = a b => if b == 0 then None else Some (a / b)
+
+@test "chained do Option blocks"
+chainedDoOption = do Effect {
+  r1 = do Option {
+    a <- safeDiv 100 5
+    b <- safeDiv a 2
+    Some b
+  }
+  assertEq r1 (Some 10)
+
+  r2 = do Option {
+    a <- safeDiv 100 0
+    b <- safeDiv a 2
+    Some b
+  }
+  assertEq r2 None
+}
+
+// --- Nested match with do Effect arms captures outer ---
+
+@test "nested match with do Effect arms captures outer"
+nestedMatchDoEffectArms = do Effect {
+  scale = 3
+  xs = [1, 2, 3]
+  result <- xs match
+    | []           => pure 0
+    | [x, ...rest] => do Effect {
+        head = x * scale
+        tail = rest match
+          | []        => 0
+          | [y, ...z] => y * scale
+        pure (head + tail)
+      }
+  assertEq result 9
+}
+
+// --- attempt converts nested do Effect error to Result ---
+
+@test "attempt captures error from nested do Effect"
+attemptNestedDoEffect = do Effect {
+  base = 42
+  res <- attempt (do Effect {
+    given False or fail "nope"
+    pure base
+  })
+  res match
+    | Err e => assertEq e "nope"
+    | Ok _  => fail "should have errored"
+}
+
+// --- do Option short-circuits but outer do Effect continues ---
+
+@test "do Option short-circuit does not abort outer do Effect"
+doOptionShortCircuitOuter = do Effect {
+  r1 = do Option {
+    a <- Some 10
+    b <- None
+    Some (a + b)
+  }
+  assertEq r1 None
+
+  r2 = do Option {
+    a <- Some 10
+    b <- Some 20
+    Some (a + b)
+  }
+  assertEq r2 (Some 30)
+}
