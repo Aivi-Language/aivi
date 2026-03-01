@@ -1,8 +1,0 @@
-ViewId = Text // opaque; one per WebSocket connection
-HandlerId = Int
-SubscriptionId = Int
-RequestId = Int
-
-UrlInfo = { href: Text, path: Text, query: Text, hash: Text }
-
-InitContext = { viewId: ViewId, url: UrlInfo, online: Bool }

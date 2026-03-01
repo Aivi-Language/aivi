@@ -27,7 +27,6 @@ mod email;
 mod file;
 mod generator;
 mod geometry;
-mod goa;
 mod graph;
 mod gtk4;
 mod i18n;
@@ -62,7 +61,6 @@ mod text;
 mod tree;
 mod ui;
 mod ui_layout;
-mod ui_server_html;
 mod units;
 mod url;
 mod vector;
@@ -186,10 +184,6 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
         source: graph::SOURCE,
     },
     EmbeddedModule {
-        name: goa::MODULE_NAME,
-        source: goa::SOURCE,
-    },
-    EmbeddedModule {
         name: gtk4::MODULE_NAME,
         source: gtk4::SOURCE,
     },
@@ -308,10 +302,6 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: ui::MODULE_NAME,
         source: ui::SOURCE,
-    },
-    EmbeddedModule {
-        name: ui_server_html::MODULE_NAME,
-        source: ui_server_html::SOURCE,
     },
     EmbeddedModule {
         name: json::MODULE_NAME,

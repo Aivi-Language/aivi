@@ -15,9 +15,7 @@ Instead of treating formatting and “type help” as separate worlds, AIVI lean
 
 ## UI without switching ecosystems
 
-AIVI also has a clear story for building user interfaces without hopping between stacks. If you want interactive web UIs, `aivi.ui.ServerHtml` lets the server render typed view trees to HTML and handle user events in a structured way. There’s a small browser client in `ui-client/` that handles the browser-side wiring (events, patches, and a few platform capabilities) and gets synced into the Rust runtime crates, so the whole system stays cohesive.
-
-If you’d rather ship a native desktop app, `aivi.ui.gtk4` gives you a GTK4 path with AIVI types and functions mapped to runtime bindings. You can keep the same language and modeling approach while targeting a very different UI surface.
+AIVI also has a clear story for building user interfaces without hopping between stacks. If you’d rather ship a native desktop app, `aivi.ui.gtk4` gives you a GTK4 path with AIVI types and functions mapped to runtime bindings.
 
 ## Domains that make math feel safer
 

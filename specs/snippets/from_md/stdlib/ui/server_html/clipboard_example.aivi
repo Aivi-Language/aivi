@@ -1,6 +1,0 @@
-Msg = Paste (Result ClipboardError Text) | RequestPaste
-
-update = msg model => msg match
-  | RequestPaste   => (model, [ReadClipboard Paste])
-  | Paste (Ok txt) => (model <| { clipboard: txt }, [])
-  | Paste (Err _)  => (model, [])
