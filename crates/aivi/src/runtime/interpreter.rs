@@ -850,6 +850,7 @@ pub(crate) fn register_machines_for_jit(
             let crate::surface::ModuleItem::MachineDecl(machine_decl) = item else {
                 continue;
             };
+            eprintln!("[DEBUG register_machines] Found machine: {}.{}", module_name, machine_decl.name.name);
 
             let runtime_machine_name = format!("{module_name}.{}", machine_decl.name.name);
             let mut transitions: HashMap<String, Vec<MachineEdge>> = HashMap::new();
