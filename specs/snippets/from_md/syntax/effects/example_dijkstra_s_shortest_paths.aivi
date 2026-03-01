@@ -6,17 +6,17 @@ dijkstra = do Effect {
     result match
       | None                     => pure Unit
       | Some ((d, node), restPq) => do Effect {
-        currentDist = Map.getOrElse node infinity dists
-        if d > currentDist
-        then do Effect { recurse dists restPq }
-        else do Effect {
-          edges = edgesFrom graph node
-          result2 = processEdges dists d edges restPq
-          result2 match
-            | (newDists, newPq) => recurse newDists newPq
+          currentDist = Map.getOrElse node infinity dists
+          if d > currentDist
+            then do Effect { recurse dists restPq }
+            else do Effect {
+              edges = edgesFrom graph node
+              result2 = processEdges dists d edges restPq
+              result2 match
+                | (newDists, newPq) => recurse newDists newPq
+            }
         }
-      }
   }
 
-    loop dists0 (Heap.push (0.0, source) Heap.empty)
+  loop dists0 (Heap.push (0.0, source) Heap.empty)
 }

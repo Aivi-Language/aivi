@@ -1,7 +1,7 @@
 
 /// In `do Effect { ... }` blocks, bare `if cond then branch else Unit` (or vice-versa)
 /// desugars to `if cond then branch else pure Unit` so the branches typecheck as Effect.
-fn desugar_if_unit_branches(expr: Expr) -> Expr {
+pub(crate) fn desugar_if_unit_branches(expr: Expr) -> Expr {
     match expr {
         Expr::If {
             cond,

@@ -47,7 +47,13 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 #### Notation & Grammar
 - [Operators and Context](syntax/operators.md)
 - [Sigils](syntax/sigils.md)
-- [Decorators](syntax/decorators.md)
+##### Decorators
+- [Overview](syntax/decorators.md)
+- [@static](syntax/decorators/static.md)
+- [@native](syntax/decorators/native.md)
+- [@deprecated](syntax/decorators/deprecated.md)
+- [@debug](syntax/decorators/debug.md)
+- [@no_prelude](syntax/decorators/no_prelude.md)
 - [Comments](syntax/comments.md)
 - [Concrete Syntax](syntax/grammar.md)
 
@@ -58,11 +64,12 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Logic](stdlib/core/logic.md)
 - [Units](stdlib/core/units.md)
 - [Regex](stdlib/core/regex.md)
-- [Testing](stdlib/core/testing.md)
 - [Collections](stdlib/core/collections.md)
 - [I18n](stdlib/core/i18n.md)
 - [Generator](stdlib/core/generator.md)
 - [Validation](stdlib/core/validation.md)
+#### Data
+- [JSON](stdlib/data/json.md)
 #### Math & Science
 - [Math](stdlib/math/math.md)
 - [Vector](stdlib/math/vector.md)
@@ -91,12 +98,14 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [File](stdlib/system/file.md)
 - [Console](stdlib/system/console.md)
 - [Database](stdlib/system/database.md)
+- [Email](stdlib/system/email.md)
 - [Path](stdlib/system/path.md)
 - [URL](stdlib/system/url.md)
 #### Network
 - [HTTP](stdlib/network/http.md)
 - [HTTPS](stdlib/network/https.md)
 - [HTTP Server](stdlib/network/http_server.md)
+- [REST](stdlib/network/rest.md)
 - [Sockets](stdlib/network/sockets.md)
 - [Streams](stdlib/network/streams.md)
 #### UI
@@ -116,6 +125,10 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [LSP Server](tools/lsp_server.md)
 - [VSCode Extension](tools/vscode_extension.md)
 - [Spec Doc Markers](doc-markers-spec.md)
+#### Testing
+- [Testing Module](stdlib/core/testing.md)
+- [@test Decorator](syntax/decorators/test.md)
+- [Mock Expressions](syntax/decorators/mock.md)
 
 ### Compiler & Backend
 - [Compiler & Backend Design](typed_codegen/design.md)

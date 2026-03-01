@@ -437,26 +437,20 @@ fn build_runtime_from_program_scoped(
                 .push(def.expr.clone());
         }
     }
-    for (name, (module_env, exprs)) in grouped {
+    for (name, (_module_env, exprs)) in grouped {
         if globals.get(&name).is_some() {
             continue;
         }
         if exprs.len() == 1 {
             let thunk = ThunkValue {
-                expr: Arc::new(exprs.into_iter().next().unwrap()),
-                env: module_env,
                 cached: Mutex::new(None),
-                in_progress: AtomicBool::new(false),
             };
             globals.set(name, Value::Thunk(Arc::new(thunk)));
         } else {
             let mut clauses = Vec::new();
-            for expr in exprs {
+            for _expr in exprs {
                 let thunk = ThunkValue {
-                    expr: Arc::new(expr),
-                    env: module_env.clone(),
                     cached: Mutex::new(None),
-                    in_progress: AtomicBool::new(false),
                 };
                 clauses.push(Value::Thunk(Arc::new(thunk)));
             }

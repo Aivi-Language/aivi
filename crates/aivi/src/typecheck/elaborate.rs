@@ -1,15 +1,13 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::diagnostics::FileDiagnostic;
 use crate::surface::{DomainItem, Module, ModuleItem};
 
 use super::checker::TypeChecker;
+use super::setup_module;
 use super::types::Scheme;
 
-use super::class_env::{
-    collect_exported_class_env, collect_imported_class_env, collect_local_class_env,
-    expand_classes, synthesize_auto_forward_instances, ClassDeclInfo, InstanceDeclInfo,
-};
+use super::class_env::{collect_exported_class_env, ClassDeclInfo, InstanceDeclInfo};
 use super::global::collect_global_type_info;
 use super::ordering::ordered_module_indices;
 
@@ -138,31 +136,15 @@ fn elaborate_modules(
         }
 
         let module = &mut modules[idx];
-        checker.reset_module_context(module);
-
-        let mut env = checker.builtins.clone();
-        checker.register_module_types(module);
-        diagnostics.extend(checker.collect_type_expr_diags(module));
-        let sigs = checker.collect_type_sigs(module);
-        checker.register_module_constructors(module, &mut env);
-        checker.register_imports(module, module_exports, module_domain_exports, &mut env);
-
-        let (imported_classes, imported_instances) =
-            collect_imported_class_env(module, module_class_exports, module_instance_exports);
-        let (local_classes, local_instances) = collect_local_class_env(module);
-        let local_class_names: HashSet<String> = local_classes.keys().cloned().collect();
-        let mut classes = imported_classes;
-        classes.extend(local_classes);
-        let classes = expand_classes(classes);
-        let mut instances: Vec<InstanceDeclInfo> = imported_instances
-            .into_iter()
-            .filter(|instance| !local_class_names.contains(&instance.class_name))
-            .collect();
-        instances.extend(local_instances);
-        instances.extend(synthesize_auto_forward_instances(module, &instances));
-        checker.set_class_env(classes, instances);
-
-        checker.register_module_defs(module, &sigs, &mut env);
+        let setup = setup_module(
+            checker,
+            module,
+            module_exports,
+            module_domain_exports,
+            module_class_exports,
+            module_instance_exports,
+            diagnostics,
+        );
 
         // Rewrite user modules only. Embedded stdlib modules are not guaranteed to typecheck in v0.1,
         // but we still want their type signatures, classes, and instances in scope for elaboration.
@@ -171,13 +153,15 @@ fn elaborate_modules(
             for item in module.items.iter_mut() {
                 match item {
                     ModuleItem::Def(def) => {
-                        if let Err(err) = checker.elaborate_def_expr(def, &sigs, &env) {
+                        if let Err(err) = checker.elaborate_def_expr(def, &setup.sigs, &setup.env) {
                             elab_errors.push(err);
                         }
                     }
                     ModuleItem::InstanceDecl(instance) => {
                         for def in instance.defs.iter_mut() {
-                            if let Err(err) = checker.elaborate_def_expr(def, &sigs, &env) {
+                            if let Err(err) =
+                                checker.elaborate_def_expr(def, &setup.sigs, &setup.env)
+                            {
                                 elab_errors.push(err);
                             }
                         }
@@ -186,7 +170,9 @@ fn elaborate_modules(
                         for domain_item in domain.items.iter_mut() {
                             match domain_item {
                                 DomainItem::Def(def) | DomainItem::LiteralDef(def) => {
-                                    if let Err(err) = checker.elaborate_def_expr(def, &sigs, &env) {
+                                    if let Err(err) =
+                                        checker.elaborate_def_expr(def, &setup.sigs, &setup.env)
+                                    {
                                         elab_errors.push(err);
                                     }
                                 }
@@ -207,9 +193,9 @@ fn elaborate_modules(
             if export.kind != crate::surface::ScopeItemKind::Value {
                 continue;
             }
-            if let Some(schemes) = sigs.get(&export.name.name) {
+            if let Some(schemes) = setup.sigs.get(&export.name.name) {
                 exports.insert(export.name.name.clone(), schemes.clone());
-            } else if let Some(schemes) = env.get_all(&export.name.name) {
+            } else if let Some(schemes) = setup.env.get_all(&export.name.name) {
                 exports.insert(export.name.name.clone(), schemes.to_vec());
             }
         }
@@ -234,9 +220,9 @@ fn elaborate_modules(
                     if exports.contains_key(def_name) {
                         continue;
                     }
-                    if let Some(schemes) = sigs.get(def_name) {
+                    if let Some(schemes) = setup.sigs.get(def_name) {
                         exports.insert(def_name.clone(), schemes.clone());
-                    } else if let Some(schemes) = env.get_all(def_name) {
+                    } else if let Some(schemes) = setup.env.get_all(def_name) {
                         exports.insert(def_name.clone(), schemes.to_vec());
                     }
                 }

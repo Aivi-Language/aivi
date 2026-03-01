@@ -85,7 +85,7 @@ impl TypeChecker {
             }
             let expected = self.type_from_expr(member_sig, &mut ctx);
 
-            let expr = crate::surface::desugar_effect_sugars(desugar_holes(def.expr.clone()));
+            let expr = desugar_holes(def.expr.clone());
             let mut local_env = env.clone();
             local_env.insert(def.name.name.clone(), Scheme::mono(expected.clone()));
 
@@ -303,7 +303,7 @@ impl TypeChecker {
         diagnostics: &mut Vec<FileDiagnostic>,
     ) {
         let name = def.name.name.clone();
-        let expr = crate::surface::desugar_effect_sugars(desugar_holes(def.expr.clone()));
+        let expr = desugar_holes(def.expr.clone());
         if def_count > 1 && !sigs.contains_key(&name) {
             if !self.checked_defs.contains(&name) {
                 diagnostics.push(self.error_to_diag(

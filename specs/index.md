@@ -53,7 +53,13 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 #### Notation & Grammar
 - [Operators and Context](syntax/operators)
 - [Sigils](syntax/sigils)
-- [Decorators](syntax/decorators)
+##### Decorators
+- [Overview](syntax/decorators)
+- [@static](syntax/decorators/static)
+- [@native](syntax/decorators/native)
+- [@deprecated](syntax/decorators/deprecated)
+- [@debug](syntax/decorators/debug)
+- [@no_prelude](syntax/decorators/no_prelude)
 - [Comments](syntax/comments)
 - [Concrete Syntax](syntax/grammar)
 
@@ -64,11 +70,12 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Logic](stdlib/core/logic)
 - [Units](stdlib/core/units)
 - [Regex](stdlib/core/regex)
-- [Testing](stdlib/core/testing)
 - [Collections](stdlib/core/collections)
 - [I18n](stdlib/core/i18n)
 - [Generator](stdlib/core/generator)
 - [Validation](stdlib/core/validation)
+#### Data
+- [JSON](stdlib/data/json)
 #### Math & Science
 - [Math](stdlib/math/math)
 - [Vector](stdlib/math/vector)
@@ -97,12 +104,14 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [File](stdlib/system/file)
 - [Console](stdlib/system/console)
 - [Database](stdlib/system/database)
+- [Email](stdlib/system/email)
 - [Path](stdlib/system/path)
 - [URL](stdlib/system/url)
 #### Network
 - [HTTP](stdlib/network/http)
 - [HTTPS](stdlib/network/https)
 - [HTTP Server](stdlib/network/http_server)
+- [REST](stdlib/network/rest)
 - [Sockets](stdlib/network/sockets)
 - [Streams](stdlib/network/streams)
 #### UI
@@ -122,6 +131,10 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [LSP Server](tools/lsp_server)
 - [VSCode Extension](tools/vscode_extension)
 - [Spec Doc Markers](doc-markers-spec)
+#### Testing
+- [Testing Module](stdlib/core/testing)
+- [@test Decorator](syntax/decorators/test)
+- [Mock Expressions](syntax/decorators/mock)
 
 ### Compiler & Backend
 - [Compiler & Backend Design](typed_codegen/design)
