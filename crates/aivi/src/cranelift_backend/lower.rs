@@ -1022,7 +1022,12 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             return result;
         }
 
-        // Fallback: look up from globals or return unit
+        // Fallback: lambda not found in compiled_lambdas — this should not happen
+        // if lambda pre-compilation is correct.
+        eprintln!(
+            "warning[JIT] lambda fallback: key 0x{:x} not found in compiled_lambdas",
+            key
+        );
         let call = builder
             .ins()
             .call(self.helpers.rt_alloc_unit, &[self.ctx_param]);

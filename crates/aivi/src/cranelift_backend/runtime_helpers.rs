@@ -752,6 +752,12 @@ pub extern "C" fn rt_get_global(
             other => format!("{:?}", std::mem::discriminant(other)),
         });
     }
+    if name == "fromList" || name == "aivi.generator.fromList" {
+        eprintln!("[DEBUG rt_get_global] {} => {:?}", name, match &val {
+            Value::Builtin(b) => format!("Builtin(name={}, arity={})", b.imp.name, b.imp.arity),
+            other => format!("{:?}", std::mem::discriminant(other)),
+        });
+    }
     if name == "AccountSyncMachine" || name.contains("AccountSync") {
         eprintln!("[DEBUG rt_get_global] {} => {:?}", name, std::mem::discriminant(&val));
     }
@@ -788,16 +794,20 @@ pub extern "C" fn rt_apply(
 
     // Fast path: fully-saturated builtin (arity reached with this arg)
     if let Value::Builtin(ref b) = func {
-        if b.imp.name == "math.sum" {
-            eprintln!("[DEBUG rt_apply] calling math.sum builtin");
-            eprintln!("[DEBUG rt_apply] backtrace: {:?}", std::backtrace::Backtrace::force_capture());
+        if b.imp.name.contains("fromList") {
+            eprintln!("[TRACE fromList] rt_apply: name={}, arity={}, args.len()={}, new_arg={:?}",
+                b.imp.name, b.imp.arity, b.args.len(), arg);
         }
         if b.args.len() + 1 == b.imp.arity {
             let mut all_args = b.args.clone();
             all_args.push(arg.clone());
             let runtime = unsafe { (*ctx).runtime_mut() };
+            let trace_from_list = b.imp.name.contains("fromList");
             match (b.imp.func)(all_args, runtime) {
                 Ok(val) => {
+                    if trace_from_list {
+                        eprintln!("[TRACE fromList] RESULT: {:?}", val);
+                    }
                     return abi::box_value(val);
                 }
                 Err(e) => {
@@ -1053,8 +1063,17 @@ pub extern "C" fn rt_tuple_item(
 pub extern "C" fn rt_list_len(_ctx: *mut JitRuntimeCtx, ptr: *const Value) -> i64 {
     let value = unsafe { &*ptr };
     match value {
-        Value::List(items) => items.len() as i64,
-        _ => 0,
+        Value::List(items) => {
+            let len = items.len() as i64;
+            if len <= 5 {
+                eprintln!("[TRACE rt_list_len] List len={} items={:?}", len, items);
+            }
+            len
+        }
+        other => {
+            eprintln!("[TRACE rt_list_len] NOT A LIST: {:?}", std::mem::discriminant(other));
+            0
+        }
     }
 }
 
@@ -1388,11 +1407,31 @@ pub extern "C" fn rt_binary_op(
     let runtime = unsafe { (*ctx).runtime_mut() };
     let op_name = format!("({})", op);
     if let Some(op_value) = runtime.ctx.globals.get(&op_name) {
-        if let Ok(applied) = runtime.apply(op_value, lhs) {
-            if let Ok(result) = runtime.apply(applied, rhs) {
-                return abi::box_value(result);
+        let clause_count = match op_value {
+            Value::MultiClause(cs) => cs.len(),
+            _ => 1,
+        };
+        eprintln!("[DBG rt_binary_op] op={op} clauses={clause_count} lhs={lhs:?} rhs={rhs:?}");
+        let op_val = op_value.clone();
+        match runtime.apply(op_val, lhs.clone()) {
+            Ok(applied) => {
+                eprintln!("[DBG rt_binary_op] after 1st apply: {}", crate::runtime::format_value(&applied));
+                match runtime.apply(applied, rhs.clone()) {
+                    Ok(result) => {
+                        eprintln!("[DBG rt_binary_op] result: {}", crate::runtime::format_value(&result));
+                        return abi::box_value(result);
+                    }
+                    Err(_e) => {
+                        eprintln!("[DBG rt_binary_op] 2nd apply err");
+                    }
+                }
+            }
+            Err(_e) => {
+                eprintln!("[DBG rt_binary_op] 1st apply err");
             }
         }
+    } else {
+        eprintln!("[DBG rt_binary_op] op={op} NOT FOUND in globals");
     }
     eprintln!(
         "{RT_YELLOW}warning[RT]{RT_RESET} {RT_BOLD}operator error{RT_RESET}: binary operator `{op}` could not be applied to the given operand types"
@@ -1496,8 +1535,8 @@ pub extern "C" fn rt_generator_to_list(ctx: *mut JitRuntimeCtx, gen_ptr: *mut Va
     match runtime.generator_to_list(gen) {
         Ok(items) => abi::box_value(Value::List(Arc::new(items))),
         Err(e) => {
-            let _ = e;
-            abi::box_value(Value::List(Arc::new(Vec::new())))
+            unsafe { set_pending_error(ctx, e) };
+            abi::box_value(Value::Unit)
         }
     }
 }

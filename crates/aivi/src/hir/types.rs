@@ -291,7 +291,12 @@ impl HirBlockKind {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum HirBlockItem {
-    Bind { pattern: HirPattern, expr: HirExpr },
+    Bind {
+        pattern: HirPattern,
+        expr: HirExpr,
+        /// `true` when this was a `<-` bind, `false` for a `=` let-binding.
+        is_monadic: bool,
+    },
     Filter { expr: HirExpr },
     Yield { expr: HirExpr },
     Recurse { expr: HirExpr },

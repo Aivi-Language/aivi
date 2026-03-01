@@ -278,6 +278,23 @@ impl TypeChecker {
             }
 
             if use_decl.items.is_empty() {
+                // Wildcard import: also bring in all domain members.
+                if use_decl.wildcard {
+                    if let Some(domains) = module_domain_exports.get(&use_decl.module.name) {
+                        for members in domains.values() {
+                            for member in members {
+                                if let Some(schemes) = exports.get(member) {
+                                    Self::insert_schemes(env, member.clone(), schemes);
+                                    Self::insert_schemes(
+                                        env,
+                                        format!("{}.{}", use_decl.module.name, member),
+                                        schemes,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
                 continue;
             }
             for item in &use_decl.items {

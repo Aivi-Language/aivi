@@ -146,7 +146,13 @@ fn jit_compile_into_runtime(
     // Pass 1: Declare all eligible functions
     let _pass1_t0 = if trace { Some(Instant::now()) } else { None };
     for ir_module in &rust_program.modules {
+        let module_dot = format!("{}.", ir_module.name);
         for def in &ir_module.defs {
+            // Skip qualified aliases emitted by the Kernel (e.g. name="aivi.generator.fromList"
+            // in module "aivi.generator"). The bare def + Pass B alias is sufficient.
+            if def.name.starts_with(&module_dot) {
+                continue;
+            }
             let (params, body) = peel_params(&def.expr);
             let qualified = format!("{}.{}", ir_module.name, def.name);
             let is_stdlib_module = ir_module.name.starts_with("aivi.");
@@ -259,6 +265,18 @@ fn jit_compile_into_runtime(
 
     let _pass2_t0 = if trace { Some(Instant::now()) } else { None };
     for dd in &declared_defs {
+        // Pre-register so recursive self-calls resolve as direct JIT calls
+        // instead of falling through to rt_get_global (which may find the
+        // wrong function when the bare name is ambiguous across modules).
+        compiled_decls.insert(
+            dd.qualified.clone(),
+            JitFuncDecl {
+                func_id: dd.func_id,
+                arity: dd.arity,
+                param_types: dd.param_types.clone(),
+                return_type: dd.return_type.clone(),
+            },
+        );
         match compile_definition_body(
             &mut module,
             &helpers,
@@ -294,16 +312,6 @@ fn jit_compile_into_runtime(
                     arity: dd.arity,
                     is_effect_block: dd.is_effect_block,
                 });
-                // Register under qualified name only
-                compiled_decls.insert(
-                    dd.qualified.clone(),
-                    JitFuncDecl {
-                        func_id: dd.func_id,
-                        arity: dd.arity,
-                        param_types: dd.param_types.clone(),
-                        return_type: dd.return_type.clone(),
-                    },
-                );
             }
             Err(e) => {
                 return Err(AiviError::Runtime(format!(
@@ -336,17 +344,28 @@ fn jit_compile_into_runtime(
     // can try each clause in order via apply_multi_clause.
     fn insert_or_merge(map: &mut HashMap<String, Value>, key: String, value: Value) {
         use std::collections::hash_map::Entry;
+        // Flatten: if `value` is itself a MultiClause, extract its inner clauses.
+        let new_clauses: Vec<Value> = match value {
+            Value::MultiClause(cs) => cs,
+            other => vec![other],
+        };
         match map.entry(key) {
             Entry::Vacant(e) => {
-                e.insert(value);
+                if new_clauses.len() == 1 {
+                    e.insert(new_clauses.into_iter().next().unwrap());
+                } else {
+                    e.insert(Value::MultiClause(new_clauses));
+                }
             }
             Entry::Occupied(mut e) => {
                 let existing = e.get_mut();
                 match existing {
-                    Value::MultiClause(clauses) => clauses.push(value),
+                    Value::MultiClause(clauses) => clauses.extend(new_clauses),
                     _ => {
                         let prev = std::mem::replace(existing, Value::Unit);
-                        *existing = Value::MultiClause(vec![prev, value]);
+                        let mut all = vec![prev];
+                        all.extend(new_clauses);
+                        *existing = Value::MultiClause(all);
                     }
                 }
             }
@@ -393,16 +412,18 @@ fn jit_compile_into_runtime(
         }
     }
 
-    // Pass B: register short-name aliases. Each pd.name gets the (possibly
-    // multi-clause) value that was built for its pd.qualified group. Plain
-    // overwrite is correct here: if two modules define the same short name,
-    // the last one wins; there is no spurious MultiClause wrapping.
+    // Pass B: register short-name aliases. For domain operators (names like
+    // "(+)" that appear in multiple domains), merge clauses so the runtime can
+    // try each domain's implementation in order.  For regular defs the last
+    // writer wins (no spurious MultiClause wrapping).
     for pd in &pending {
-        if pd.name == "sum" {
-            eprintln!("[DEBUG Pass B] sum: qualified={} arity={}", pd.qualified, pd.arity);
-        }
         if let Some(value) = compiled_globals.get(&pd.qualified).cloned() {
-            compiled_globals.insert(pd.name.clone(), value);
+            let is_operator = pd.name.starts_with('(') && pd.name.ends_with(')');
+            if is_operator {
+                insert_or_merge(&mut compiled_globals, pd.name.clone(), value);
+            } else {
+                compiled_globals.insert(pd.name.clone(), value);
+            }
         }
     }
 
@@ -665,7 +686,12 @@ pub fn compile_to_object(
 
     // Pass 1: Declare all eligible functions
     for ir_module in &rust_program.modules {
+        let module_dot = format!("{}.", ir_module.name);
         for def in &ir_module.defs {
+            // Skip qualified aliases emitted by the Kernel
+            if def.name.starts_with(&module_dot) {
+                continue;
+            }
             let (params, body) = peel_params(&def.expr);
             let qualified = format!("{}.{}", ir_module.name, def.name);
             let is_stdlib_module = ir_module.name.starts_with("aivi.");
@@ -1890,6 +1916,12 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
             name: format!("__jit|cranelift|{}", def_name),
             arity,
             func: Arc::new(move |args: Vec<Value>, runtime: &mut Runtime| {
+                if def_name.contains("fromList") && def_name.contains("generator") {
+                    eprintln!("[TRACE jit-call] {} args:", def_name);
+                    for (i, a) in args.iter().enumerate() {
+                        eprintln!("  arg[{}] = {:?} (ptr will be {:p})", i, a, &args[i] as *const Value);
+                    }
+                }
                 // Clear any stale pending error before entering JIT code
                 runtime.jit_pending_error = None;
 
@@ -1907,9 +1939,32 @@ pub(crate) fn make_jit_builtin(def_name: &str, arity: usize, func_ptr: usize) ->
                 for arg in &boxed_args {
                     call_args.push(*arg as i64);
                 }
+                if def_name.contains("fromList") && def_name.contains("generator") {
+                    for (i, arg_ptr) in boxed_args.iter().enumerate() {
+                        let v = unsafe { &**arg_ptr };
+                        eprintln!("[TRACE jit-call] boxed arg[{}] at {:p} = {:?}", i, *arg_ptr, v);
+                    }
+                }
 
                 // Call the JIT function
                 let result_ptr = unsafe { call_jit_function(func_ptr, &call_args) };
+                if def_name.contains("fromList") && def_name.contains("generator") {
+                    if result_ptr == 0 {
+                        eprintln!("[TRACE jit-call] {} returned NULL", def_name);
+                    } else {
+                        let rp = result_ptr as *const Value;
+                        let rv = unsafe { &*rp };
+                        eprintln!("[TRACE jit-call] {} returned {:?}", def_name, rv);
+                    }
+                    if runtime.jit_pending_error.is_some() {
+                        eprintln!("[TRACE jit-call] {} has pending error: {}", def_name,
+                            match &runtime.jit_pending_error {
+                                Some(e) => format!("{}", crate::runtime::format_runtime_error(e.clone())),
+                                None => "none".to_string(),
+                            });
+                    }
+                    eprintln!("[TRACE jit-call] {} match_failed={}", def_name, runtime.jit_match_failed);
+                }
 
                 // Check if the JIT function signalled a non-exhaustive match.
                 // This lets apply_multi_clause try the next clause.

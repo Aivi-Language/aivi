@@ -551,9 +551,20 @@ pub fn resolve_import_names(modules: &mut [Module]) {
         let defined_names: HashSet<String> = module
             .items
             .iter()
-            .filter_map(|item| match item {
-                ModuleItem::Def(def) => Some(def.name.name.clone()),
-                _ => None,
+            .flat_map(|item| match item {
+                ModuleItem::Def(def) => vec![def.name.name.clone()],
+                ModuleItem::DomainDecl(domain) => domain
+                    .items
+                    .iter()
+                    .filter_map(|di| match di {
+                        crate::surface::DomainItem::Def(def)
+                        | crate::surface::DomainItem::LiteralDef(def) => {
+                            Some(def.name.name.clone())
+                        }
+                        _ => None,
+                    })
+                    .collect(),
+                _ => vec![],
             })
             .collect();
         let exported_values: HashSet<String> = module
@@ -562,12 +573,40 @@ pub fn resolve_import_names(modules: &mut [Module]) {
             .filter(|e| e.kind == ScopeItemKind::Value)
             .map(|e| e.name.name.clone())
             .collect();
-        let names = if exported_values.is_empty() {
+        // Collect domain member names from exported domains.
+        let domain_member_names: HashSet<String> = module
+            .exports
+            .iter()
+            .filter(|e| e.kind == ScopeItemKind::Domain)
+            .flat_map(|e| {
+                module
+                    .items
+                    .iter()
+                    .filter_map(|item| match item {
+                        ModuleItem::DomainDecl(domain) if domain.name.name == e.name.name => {
+                            Some(domain.items.iter().filter_map(|di| match di {
+                                crate::surface::DomainItem::Def(def)
+                                | crate::surface::DomainItem::LiteralDef(def) => {
+                                    Some(def.name.name.clone())
+                                }
+                                _ => None,
+                            }))
+                        }
+                        _ => None,
+                    })
+                    .flatten()
+            })
+            .collect();
+        let all_exported: HashSet<String> = exported_values
+            .into_iter()
+            .chain(domain_member_names)
+            .collect();
+        let names = if all_exported.is_empty() {
             // No export list → all defs are public.
             defined_names
         } else {
             // Intersection: only export names that have actual definitions.
-            exported_values
+            all_exported
                 .into_iter()
                 .filter(|name| defined_names.contains(name))
                 .collect()

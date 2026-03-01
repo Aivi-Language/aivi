@@ -536,29 +536,73 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> KernelE
                 gen_append(yield_expr, lower_generate_block(rest, id_gen), id_gen)
             }
         }
-        HirBlockItem::Bind { pattern, expr } => {
-            let src = lower_expr(expr, id_gen);
-            let next = lower_generate_block(rest, id_gen);
-            let param_name = format!("_gen_bind_{}", id_gen.next());
-            let param_var = KernelExpr::Var {
-                id: id_gen.next(),
-                name: param_name.clone(),
-            };
-            let body = KernelExpr::Match {
-                id: id_gen.next(),
-                scrutinee: Box::new(param_var),
-                arms: vec![KernelMatchArm {
-                    pattern: lower_pattern(pattern, id_gen),
-                    guard: None,
-                    body: next,
-                }],
-            };
-            let func = KernelExpr::Lambda {
-                id: id_gen.next(),
-                param: param_name,
-                body: Box::new(body),
-            };
-            gen_bind(src, func, id_gen)
+        HirBlockItem::Bind {
+            pattern,
+            expr,
+            is_monadic,
+        } => {
+            let raw_src = lower_expr(expr, id_gen);
+            if is_monadic {
+                // `x <- expr` in a generate block: iterate over expr as a generator.
+                // Wrap with __asGenerator so bare lists are implicitly converted.
+                let src = KernelExpr::App {
+                    id: id_gen.next(),
+                    func: Box::new(KernelExpr::Var {
+                        id: id_gen.next(),
+                        name: "__asGenerator".to_string(),
+                    }),
+                    arg: Box::new(raw_src),
+                };
+                let next = lower_generate_block(rest, id_gen);
+                let param_name = format!("_gen_bind_{}", id_gen.next());
+                let param_var = KernelExpr::Var {
+                    id: id_gen.next(),
+                    name: param_name.clone(),
+                };
+                let body = KernelExpr::Match {
+                    id: id_gen.next(),
+                    scrutinee: Box::new(param_var),
+                    arms: vec![KernelMatchArm {
+                        pattern: lower_pattern(pattern, id_gen),
+                        guard: None,
+                        body: next,
+                    }],
+                };
+                let func = KernelExpr::Lambda {
+                    id: id_gen.next(),
+                    param: param_name,
+                    body: Box::new(body),
+                };
+                gen_bind(src, func, id_gen)
+            } else {
+                // `s = expr` in a generate block: plain let-binding.
+                // Wrap next in a lambda applied to raw_src.
+                let next = lower_generate_block(rest, id_gen);
+                let param_name = format!("_gen_let_{}", id_gen.next());
+                let param_var = KernelExpr::Var {
+                    id: id_gen.next(),
+                    name: param_name.clone(),
+                };
+                let body = KernelExpr::Match {
+                    id: id_gen.next(),
+                    scrutinee: Box::new(param_var),
+                    arms: vec![KernelMatchArm {
+                        pattern: lower_pattern(pattern, id_gen),
+                        guard: None,
+                        body: next,
+                    }],
+                };
+                // (\param -> body) raw_src  — immediately-applied lambda = let binding
+                KernelExpr::App {
+                    id: id_gen.next(),
+                    func: Box::new(KernelExpr::Lambda {
+                        id: id_gen.next(),
+                        param: param_name,
+                        body: Box::new(body),
+                    }),
+                    arg: Box::new(raw_src),
+                }
+            }
         }
         HirBlockItem::Expr { expr } => {
             // Treat as generator to spread/append
