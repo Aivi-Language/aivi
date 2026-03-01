@@ -167,7 +167,10 @@ fn scalar_type(ty: &CgType) -> Option<CgType> {
 /// skipped, because `rt_try_reuse` would overwrite the memory that the
 /// pattern-bound variable still references.
 fn pattern_aliases_scrutinee(pattern: &RustIrPattern) -> bool {
-    matches!(pattern, RustIrPattern::Var { .. } | RustIrPattern::At { .. })
+    matches!(
+        pattern,
+        RustIrPattern::Var { .. } | RustIrPattern::At { .. }
+    )
 }
 
 /// Pre-declared `FuncRef`s for all runtime helpers in a JIT module.
@@ -2325,7 +2328,9 @@ impl<'a, M: Module> LowerCtx<'a, M> {
             RustIrBlockKind::Resource => {
                 // Resource blocks are desugared into __makeResource calls at the
                 // RustIR level. This arm should be unreachable.
-                eprintln!("warning[JIT] resource block reached lower_block — should have been desugared");
+                eprintln!(
+                    "warning[JIT] resource block reached lower_block — should have been desugared"
+                );
                 let call = builder
                     .ins()
                     .call(self.helpers.rt_alloc_unit, &[self.ctx_param]);

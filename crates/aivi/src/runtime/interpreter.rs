@@ -7,12 +7,8 @@ use chrono::{Datelike, NaiveDate, TimeZone as ChronoTimeZone, Timelike};
 use regex::RegexBuilder;
 use url::Url;
 
-use crate::hir::{
-    HirBlockItem, HirExpr, HirListItem, HirLiteral, HirMatchArm, HirPathSegment, HirPattern,
-    HirProgram, HirRecordField, HirTextPart,
-};
+use crate::hir::{HirExpr, HirProgram};
 use crate::i18n::{parse_message_template, validate_key_text, MessagePart};
-use crate::rust_ir;
 use crate::AiviError;
 
 mod builtins;

@@ -21,7 +21,6 @@ const RT_GRAY: &str = "\x1b[90m";
 const RT_RESET: &str = "\x1b[0m";
 const RT_BOLD: &str = "\x1b[1m";
 
-
 /// Print a formatted runtime warning to stderr.
 fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
     let (fn_ctx, loc_ctx) = unsafe {
@@ -1378,7 +1377,7 @@ pub extern "C" fn rt_binary_op(
     // Slow path: look up operator in globals and apply curried
     let runtime = unsafe { (*ctx).runtime_mut() };
     let op_name = format!("({})", op);
-    if let Some(op_value) = runtime.ctx.globals.get(&op_name).map(|v| v.clone()) {
+    if let Some(op_value) = runtime.ctx.globals.get(&op_name) {
         if let Ok(applied) = runtime.apply(op_value, lhs.clone()) {
             if let Ok(result) = runtime.apply(applied, rhs.clone()) {
                 return abi::box_value(result);
@@ -1438,9 +1437,8 @@ pub extern "C" fn rt_gen_vec_extend_generator(
     let runtime = unsafe { &mut *(*ctx).runtime };
     let value = unsafe { (*value_ptr).clone() };
     let vec = unsafe { &mut *vec_ptr };
-    match runtime.generator_to_list(value) {
-        Ok(items) => vec.extend(items),
-        Err(_) => {} // not a generator or fold error — silently ignore
+    if let Ok(items) = runtime.generator_to_list(value) {
+        vec.extend(items);
     }
 }
 
@@ -2134,10 +2132,7 @@ pub(crate) fn runtime_helper_symbols() -> Vec<(&'static str, *const u8)> {
             "rt_push_resource_scope",
             rt_push_resource_scope as *const u8,
         ),
-        (
-            "rt_pop_resource_scope",
-            rt_pop_resource_scope as *const u8,
-        ),
+        ("rt_pop_resource_scope", rt_pop_resource_scope as *const u8),
         ("rt_binary_op", rt_binary_op as *const u8),
         // Pattern matching helpers
         (
