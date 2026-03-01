@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use aivi::{
-    check_modules, check_types, embedded_stdlib_modules, infer_value_types, parse_modules,
-    ModuleItem, ScopeItemKind,
+    check_modules, check_types_with_checkpoint, embedded_stdlib_modules, infer_value_types,
+    parse_modules, ModuleItem, ScopeItemKind,
 };
 use tower_lsp::lsp_types::{
     CodeAction, CodeActionKind, CodeActionOrCommand, Diagnostic, DiagnosticRelatedInformation,
@@ -64,6 +64,8 @@ impl Backend {
             &HashMap::new(),
             false,
             &StrictConfig::default(),
+            None,
+            None,
         )
     }
 
@@ -73,7 +75,15 @@ impl Backend {
         uri: &Url,
         strict: &StrictConfig,
     ) -> Vec<Diagnostic> {
-        Self::build_diagnostics_with_workspace(text, uri, &HashMap::new(), false, strict)
+        Self::build_diagnostics_with_workspace(
+            text,
+            uri,
+            &HashMap::new(),
+            false,
+            strict,
+            None,
+            None,
+        )
     }
 
     pub(super) fn build_diagnostics_with_workspace(
@@ -82,6 +92,11 @@ impl Backend {
         workspace_modules: &HashMap<String, IndexedModule>,
         include_specs_snippets: bool,
         strict: &StrictConfig,
+        // Pre-parsed diagnostics from `update_document`. When `None`, the text is re-parsed
+        // (used by tests which don't go through `update_document`).
+        pre_parsed_diags: Option<Vec<aivi::FileDiagnostic>>,
+        // Pre-built stdlib typecheck checkpoint. When `None`, falls back to `check_types`.
+        typecheck_checkpoint: Option<&aivi::CheckTypesCheckpoint>,
     ) -> Vec<Diagnostic> {
         let path = PathBuf::from(Self::path_from_uri(uri));
         if !include_specs_snippets && Self::is_specs_snippet_path(&path) {
@@ -89,7 +104,19 @@ impl Backend {
             // modules. Avoid surfacing diagnostics as "nags" when authoring specs.
             return Vec::new();
         }
-        let (file_modules, parse_diags) = parse_modules(&path, text);
+
+        // Phase 2: use pre-parsed file_modules from workspace + pre-computed parse_diags when
+        // available; fall back to parse_modules for tests (empty workspace_modules).
+        let (file_modules, parse_diags) = if let Some(diags) = pre_parsed_diags {
+            let file_mods: Vec<aivi::Module> = workspace_modules
+                .values()
+                .filter(|im| &im.uri == uri)
+                .map(|im| im.module.clone())
+                .collect();
+            (file_mods, diags)
+        } else {
+            parse_modules(&path, text)
+        };
 
         // Always surface lex/parse diagnostics first; semantic checking on malformed syntax is
         // best-effort and must never crash the server.
@@ -119,7 +146,14 @@ impl Backend {
 
         let semantic_diags = std::panic::catch_unwind(|| {
             let mut diags = check_modules(&modules);
-            diags.extend(check_types(&modules));
+            // Phase 3: use pre-built stdlib checkpoint when available to skip setup_module
+            // for 63 embedded stdlib modules.
+            let type_diags = if let Some(cp) = typecheck_checkpoint {
+                check_types_with_checkpoint(&modules, cp)
+            } else {
+                aivi::check_types(&modules)
+            };
+            diags.extend(type_diags);
             diags
         })
         .unwrap_or_default();

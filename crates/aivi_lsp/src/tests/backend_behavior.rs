@@ -270,6 +270,8 @@ find = pred xs => xs
         &workspace,
         false,
         &crate::strict::StrictConfig::default(),
+        None,
+        None,
     );
 
     assert!(
@@ -317,6 +319,8 @@ navIcon = section => section match
         &workspace,
         false,
         &crate::strict::StrictConfig::default(),
+        None,
+        None,
     );
 
     assert!(
