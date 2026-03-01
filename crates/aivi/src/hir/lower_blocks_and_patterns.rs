@@ -1,4 +1,50 @@
 
+/// In `do Effect { ... }` blocks, bare `if cond then branch else Unit` (or vice-versa)
+/// desugars to `if cond then branch else pure Unit` so the branches typecheck as Effect.
+fn desugar_if_unit_branches(expr: Expr) -> Expr {
+    match expr {
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+            span,
+        } => {
+            let is_unit = |e: &Expr| matches!(e, Expr::Ident(n) if n.name == "Unit");
+            let wrap = |e: Expr| -> Expr {
+                let sp = match &e {
+                    Expr::Ident(n) => n.span.clone(),
+                    _ => span.clone(),
+                };
+                Expr::Call {
+                    func: Box::new(Expr::Ident(SpannedName {
+                        name: "pure".into(),
+                        span: sp.clone(),
+                    })),
+                    args: vec![e],
+                    span: sp,
+                }
+            };
+            let then_branch = if is_unit(&then_branch) {
+                Box::new(wrap(*then_branch))
+            } else {
+                then_branch
+            };
+            let else_branch = if is_unit(&else_branch) {
+                Box::new(wrap(*else_branch))
+            } else {
+                else_branch
+            };
+            Expr::If {
+                cond,
+                then_branch,
+                else_branch,
+                span,
+            }
+        }
+        other => other,
+    }
+}
+
 fn lower_block_item_ctx(
     item: BlockItem,
     surface_kind: &BlockKind,
