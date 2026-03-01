@@ -1,0 +1,10 @@
+---
+source: crates/aivi/tests/insta_compiler_snapshots.rs
+expression: normalize_newlines(format_text(src))
+---
+module snapshots.basic
+
+add = a b => a + b
+inc = add 1
+answer = if True then add 20 22 else 0
+tupled = (inc 1, inc 2)

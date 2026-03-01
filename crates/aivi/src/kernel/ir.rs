@@ -544,7 +544,9 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> KernelE
                 gen_bind(src, func, id_gen)
             } else {
                 // `s = expr` in a generate block: plain let-binding.
-                // Wrap next in a lambda applied to raw_src.
+                // Check if this is a recursive __loop binding (from loop/recurse desugaring).
+                let is_recursive_loop = matches!(&pattern, HirPattern::Var { name, .. } if name.starts_with("__loop"));
+
                 let next = lower_generate_block(rest, id_gen);
                 let param_name = format!("_gen_let_{}", id_gen.next());
                 let param_var = KernelExpr::Var {
@@ -555,12 +557,38 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> KernelE
                     id: id_gen.next(),
                     scrutinee: Box::new(param_var),
                     arms: vec![KernelMatchArm {
-                        pattern: lower_pattern(pattern, id_gen),
+                        pattern: lower_pattern(pattern.clone(), id_gen),
                         guard: None,
                         body: next,
                     }],
                 };
-                // (\param -> body) raw_src  — immediately-applied lambda = let binding
+
+                let value = if is_recursive_loop {
+                    // Recursive binding: __loop0 = λn → body_using___loop0
+                    // Desugar to: __fix (λ__loop0 → raw_src)
+                    // so __loop0 is bound before raw_src references it.
+                    let loop_name = match &pattern {
+                        HirPattern::Var { name, .. } => name.clone(),
+                        _ => unreachable!(),
+                    };
+                    let fix_body = KernelExpr::Lambda {
+                        id: id_gen.next(),
+                        param: loop_name,
+                        body: Box::new(raw_src),
+                    };
+                    KernelExpr::App {
+                        id: id_gen.next(),
+                        func: Box::new(KernelExpr::Var {
+                            id: id_gen.next(),
+                            name: "__fix".to_string(),
+                        }),
+                        arg: Box::new(fix_body),
+                    }
+                } else {
+                    raw_src
+                };
+
+                // (\param -> body) value  — immediately-applied lambda = let binding
                 KernelExpr::App {
                     id: id_gen.next(),
                     func: Box::new(KernelExpr::Lambda {
@@ -568,13 +596,23 @@ fn lower_generate_block(items: Vec<HirBlockItem>, id_gen: &mut IdGen) -> KernelE
                         param: param_name,
                         body: Box::new(body),
                     }),
-                    arg: Box::new(raw_src),
+                    arg: Box::new(value),
                 }
             }
         }
         HirBlockItem::Expr { expr } => {
-            // Treat as generator to spread/append
-            let head = lower_expr(expr, id_gen);
+            // Treat as sub-generator to spread/append.
+            // Wrap with __asGenerator so Unit (e.g. from empty else branches
+            // in loop/recurse) becomes an empty generator.
+            let raw = lower_expr(expr, id_gen);
+            let head = KernelExpr::App {
+                id: id_gen.next(),
+                func: Box::new(KernelExpr::Var {
+                    id: id_gen.next(),
+                    name: "__asGenerator".to_string(),
+                }),
+                arg: Box::new(raw),
+            };
             if rest.is_empty() {
                 head
             } else {

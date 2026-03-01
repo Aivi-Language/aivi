@@ -990,8 +990,7 @@ fn core_constructor_ordinals() -> HashMap<String, Option<usize>> {
     ordinals
 }
 
-#[allow(dead_code)]
-fn collect_surface_constructor_ordinals(
+pub(crate) fn collect_surface_constructor_ordinals(
     surface_modules: &[crate::surface::Module],
 ) -> HashMap<String, Option<usize>> {
     let mut ordinals = HashMap::new();

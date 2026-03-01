@@ -131,6 +131,15 @@ impl RuntimeContext {
         self.constructor_ordinals.get(name).copied()
     }
 
+    pub(crate) fn merge_constructor_ordinals(
+        &mut self,
+        ordinals: HashMap<String, Option<usize>>,
+    ) {
+        for (name, ordinal) in ordinals {
+            self.constructor_ordinals.entry(name).or_insert(ordinal);
+        }
+    }
+
     #[allow(dead_code)]
     pub(crate) fn register_machine(
         &self,

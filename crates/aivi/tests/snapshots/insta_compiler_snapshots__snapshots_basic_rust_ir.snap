@@ -1,0 +1,265 @@
+---
+source: crates/aivi/tests/insta_compiler_snapshots.rs
+expression: pretty_json(&rust_ir)
+---
+{
+  "modules": [
+    {
+      "name": "snapshots.basic",
+      "defs": [
+        {
+          "name": "add",
+          "expr": {
+            "kind": "Lambda",
+            "id": 4,
+            "param": "a",
+            "body": {
+              "kind": "Lambda",
+              "id": 3,
+              "param": "b",
+              "body": {
+                "kind": "Binary",
+                "id": 0,
+                "op": "+",
+                "left": {
+                  "kind": "Local",
+                  "id": 1,
+                  "name": "a"
+                },
+                "right": {
+                  "kind": "Local",
+                  "id": 2,
+                  "name": "b"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "snapshots.basic.add",
+          "expr": {
+            "kind": "Lambda",
+            "id": 4,
+            "param": "a",
+            "body": {
+              "kind": "Lambda",
+              "id": 3,
+              "param": "b",
+              "body": {
+                "kind": "Binary",
+                "id": 0,
+                "op": "+",
+                "left": {
+                  "kind": "Local",
+                  "id": 1,
+                  "name": "a"
+                },
+                "right": {
+                  "kind": "Local",
+                  "id": 2,
+                  "name": "b"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "inc",
+          "expr": {
+            "kind": "Call",
+            "id": 5,
+            "func": {
+              "kind": "Global",
+              "id": 6,
+              "name": "add"
+            },
+            "args": [
+              {
+                "kind": "LitNumber",
+                "id": 7,
+                "text": "1"
+              }
+            ]
+          }
+        },
+        {
+          "name": "snapshots.basic.inc",
+          "expr": {
+            "kind": "Call",
+            "id": 5,
+            "func": {
+              "kind": "Global",
+              "id": 6,
+              "name": "add"
+            },
+            "args": [
+              {
+                "kind": "LitNumber",
+                "id": 7,
+                "text": "1"
+              }
+            ]
+          }
+        },
+        {
+          "name": "answer",
+          "expr": {
+            "kind": "If",
+            "id": 8,
+            "cond": {
+              "kind": "LitBool",
+              "id": 9,
+              "value": true
+            },
+            "then_branch": {
+              "kind": "Call",
+              "id": 10,
+              "func": {
+                "kind": "Global",
+                "id": 11,
+                "name": "add"
+              },
+              "args": [
+                {
+                  "kind": "LitNumber",
+                  "id": 12,
+                  "text": "20"
+                },
+                {
+                  "kind": "LitNumber",
+                  "id": 13,
+                  "text": "22"
+                }
+              ]
+            },
+            "else_branch": {
+              "kind": "LitNumber",
+              "id": 14,
+              "text": "0"
+            }
+          }
+        },
+        {
+          "name": "snapshots.basic.answer",
+          "expr": {
+            "kind": "If",
+            "id": 8,
+            "cond": {
+              "kind": "LitBool",
+              "id": 9,
+              "value": true
+            },
+            "then_branch": {
+              "kind": "Call",
+              "id": 10,
+              "func": {
+                "kind": "Global",
+                "id": 11,
+                "name": "add"
+              },
+              "args": [
+                {
+                  "kind": "LitNumber",
+                  "id": 12,
+                  "text": "20"
+                },
+                {
+                  "kind": "LitNumber",
+                  "id": 13,
+                  "text": "22"
+                }
+              ]
+            },
+            "else_branch": {
+              "kind": "LitNumber",
+              "id": 14,
+              "text": "0"
+            }
+          }
+        },
+        {
+          "name": "tupled",
+          "expr": {
+            "kind": "Tuple",
+            "id": 15,
+            "items": [
+              {
+                "kind": "Call",
+                "id": 16,
+                "func": {
+                  "kind": "Global",
+                  "id": 17,
+                  "name": "inc"
+                },
+                "args": [
+                  {
+                    "kind": "LitNumber",
+                    "id": 18,
+                    "text": "1"
+                  }
+                ]
+              },
+              {
+                "kind": "Call",
+                "id": 19,
+                "func": {
+                  "kind": "Global",
+                  "id": 20,
+                  "name": "inc"
+                },
+                "args": [
+                  {
+                    "kind": "LitNumber",
+                    "id": 21,
+                    "text": "2"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "snapshots.basic.tupled",
+          "expr": {
+            "kind": "Tuple",
+            "id": 15,
+            "items": [
+              {
+                "kind": "Call",
+                "id": 16,
+                "func": {
+                  "kind": "Global",
+                  "id": 17,
+                  "name": "inc"
+                },
+                "args": [
+                  {
+                    "kind": "LitNumber",
+                    "id": 18,
+                    "text": "1"
+                  }
+                ]
+              },
+              {
+                "kind": "Call",
+                "id": 19,
+                "func": {
+                  "kind": "Global",
+                  "id": 20,
+                  "name": "inc"
+                },
+                "args": [
+                  {
+                    "kind": "LitNumber",
+                    "id": 21,
+                    "text": "2"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

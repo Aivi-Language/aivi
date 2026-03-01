@@ -1,0 +1,471 @@
+---
+source: crates/aivi/tests/insta_compiler_snapshots.rs
+expression: "format!(\"{:#?}\", modules)"
+---
+[
+    Module {
+        name: SpannedName {
+            name: "snapshots.matching",
+            span: Span {
+                start: Position {
+                    line: 1,
+                    column: 8,
+                },
+                end: Position {
+                    line: 1,
+                    column: 25,
+                },
+            },
+        },
+        exports: [],
+        uses: [
+            UseDecl {
+                module: SpannedName {
+                    name: "aivi.prelude",
+                    span: Span {
+                        start: Position {
+                            line: 1,
+                            column: 8,
+                        },
+                        end: Position {
+                            line: 1,
+                            column: 25,
+                        },
+                    },
+                },
+                items: [],
+                span: Span {
+                    start: Position {
+                        line: 1,
+                        column: 8,
+                    },
+                    end: Position {
+                        line: 1,
+                        column: 25,
+                    },
+                },
+                wildcard: true,
+                alias: None,
+            },
+        ],
+        items: [
+            Def(
+                Def {
+                    decorators: [],
+                    name: SpannedName {
+                        name: "describe",
+                        span: Span {
+                            start: Position {
+                                line: 3,
+                                column: 1,
+                            },
+                            end: Position {
+                                line: 3,
+                                column: 8,
+                            },
+                        },
+                    },
+                    params: [],
+                    expr: Lambda {
+                        params: [
+                            Ident(
+                                SpannedName {
+                                    name: "value",
+                                    span: Span {
+                                        start: Position {
+                                            line: 3,
+                                            column: 12,
+                                        },
+                                        end: Position {
+                                            line: 3,
+                                            column: 16,
+                                        },
+                                    },
+                                },
+                            ),
+                        ],
+                        body: Match {
+                            scrutinee: Some(
+                                Ident(
+                                    SpannedName {
+                                        name: "value",
+                                        span: Span {
+                                            start: Position {
+                                                line: 3,
+                                                column: 21,
+                                            },
+                                            end: Position {
+                                                line: 3,
+                                                column: 25,
+                                            },
+                                        },
+                                    },
+                                ),
+                            ),
+                            arms: [
+                                MatchArm {
+                                    pattern: Literal(
+                                        Number {
+                                            text: "0",
+                                            span: Span {
+                                                start: Position {
+                                                    line: 4,
+                                                    column: 3,
+                                                },
+                                                end: Position {
+                                                    line: 4,
+                                                    column: 3,
+                                                },
+                                            },
+                                        },
+                                    ),
+                                    guard: None,
+                                    body: Literal(
+                                        String {
+                                            text: "zero",
+                                            span: Span {
+                                                start: Position {
+                                                    line: 4,
+                                                    column: 8,
+                                                },
+                                                end: Position {
+                                                    line: 4,
+                                                    column: 13,
+                                                },
+                                            },
+                                        },
+                                    ),
+                                    span: Span {
+                                        start: Position {
+                                            line: 4,
+                                            column: 3,
+                                        },
+                                        end: Position {
+                                            line: 4,
+                                            column: 13,
+                                        },
+                                    },
+                                },
+                                MatchArm {
+                                    pattern: Literal(
+                                        Number {
+                                            text: "1",
+                                            span: Span {
+                                                start: Position {
+                                                    line: 5,
+                                                    column: 3,
+                                                },
+                                                end: Position {
+                                                    line: 5,
+                                                    column: 3,
+                                                },
+                                            },
+                                        },
+                                    ),
+                                    guard: None,
+                                    body: Literal(
+                                        String {
+                                            text: "one",
+                                            span: Span {
+                                                start: Position {
+                                                    line: 5,
+                                                    column: 8,
+                                                },
+                                                end: Position {
+                                                    line: 5,
+                                                    column: 12,
+                                                },
+                                            },
+                                        },
+                                    ),
+                                    span: Span {
+                                        start: Position {
+                                            line: 5,
+                                            column: 3,
+                                        },
+                                        end: Position {
+                                            line: 5,
+                                            column: 12,
+                                        },
+                                    },
+                                },
+                                MatchArm {
+                                    pattern: Wildcard(
+                                        Span {
+                                            start: Position {
+                                                line: 6,
+                                                column: 3,
+                                            },
+                                            end: Position {
+                                                line: 6,
+                                                column: 3,
+                                            },
+                                        },
+                                    ),
+                                    guard: None,
+                                    body: Literal(
+                                        String {
+                                            text: "many",
+                                            span: Span {
+                                                start: Position {
+                                                    line: 6,
+                                                    column: 8,
+                                                },
+                                                end: Position {
+                                                    line: 6,
+                                                    column: 13,
+                                                },
+                                            },
+                                        },
+                                    ),
+                                    span: Span {
+                                        start: Position {
+                                            line: 6,
+                                            column: 3,
+                                        },
+                                        end: Position {
+                                            line: 6,
+                                            column: 13,
+                                        },
+                                    },
+                                },
+                            ],
+                            span: Span {
+                                start: Position {
+                                    line: 3,
+                                    column: 21,
+                                },
+                                end: Position {
+                                    line: 6,
+                                    column: 13,
+                                },
+                            },
+                        },
+                        span: Span {
+                            start: Position {
+                                line: 3,
+                                column: 12,
+                            },
+                            end: Position {
+                                line: 6,
+                                column: 13,
+                            },
+                        },
+                    },
+                    span: Span {
+                        start: Position {
+                            line: 3,
+                            column: 1,
+                        },
+                        end: Position {
+                            line: 6,
+                            column: 13,
+                        },
+                    },
+                },
+            ),
+            Def(
+                Def {
+                    decorators: [],
+                    name: SpannedName {
+                        name: "flip",
+                        span: Span {
+                            start: Position {
+                                line: 8,
+                                column: 1,
+                            },
+                            end: Position {
+                                line: 8,
+                                column: 4,
+                            },
+                        },
+                    },
+                    params: [],
+                    expr: Lambda {
+                        params: [
+                            Ident(
+                                SpannedName {
+                                    name: "pair",
+                                    span: Span {
+                                        start: Position {
+                                            line: 8,
+                                            column: 8,
+                                        },
+                                        end: Position {
+                                            line: 8,
+                                            column: 11,
+                                        },
+                                    },
+                                },
+                            ),
+                        ],
+                        body: Match {
+                            scrutinee: Some(
+                                Ident(
+                                    SpannedName {
+                                        name: "pair",
+                                        span: Span {
+                                            start: Position {
+                                                line: 8,
+                                                column: 16,
+                                            },
+                                            end: Position {
+                                                line: 8,
+                                                column: 19,
+                                            },
+                                        },
+                                    },
+                                ),
+                            ),
+                            arms: [
+                                MatchArm {
+                                    pattern: Tuple {
+                                        items: [
+                                            Ident(
+                                                SpannedName {
+                                                    name: "a",
+                                                    span: Span {
+                                                        start: Position {
+                                                            line: 9,
+                                                            column: 4,
+                                                        },
+                                                        end: Position {
+                                                            line: 9,
+                                                            column: 4,
+                                                        },
+                                                    },
+                                                },
+                                            ),
+                                            Ident(
+                                                SpannedName {
+                                                    name: "b",
+                                                    span: Span {
+                                                        start: Position {
+                                                            line: 9,
+                                                            column: 7,
+                                                        },
+                                                        end: Position {
+                                                            line: 9,
+                                                            column: 7,
+                                                        },
+                                                    },
+                                                },
+                                            ),
+                                        ],
+                                        span: Span {
+                                            start: Position {
+                                                line: 9,
+                                                column: 4,
+                                            },
+                                            end: Position {
+                                                line: 9,
+                                                column: 8,
+                                            },
+                                        },
+                                    },
+                                    guard: None,
+                                    body: Tuple {
+                                        items: [
+                                            Ident(
+                                                SpannedName {
+                                                    name: "b",
+                                                    span: Span {
+                                                        start: Position {
+                                                            line: 9,
+                                                            column: 14,
+                                                        },
+                                                        end: Position {
+                                                            line: 9,
+                                                            column: 14,
+                                                        },
+                                                    },
+                                                },
+                                            ),
+                                            Ident(
+                                                SpannedName {
+                                                    name: "a",
+                                                    span: Span {
+                                                        start: Position {
+                                                            line: 9,
+                                                            column: 17,
+                                                        },
+                                                        end: Position {
+                                                            line: 9,
+                                                            column: 17,
+                                                        },
+                                                    },
+                                                },
+                                            ),
+                                        ],
+                                        span: Span {
+                                            start: Position {
+                                                line: 9,
+                                                column: 14,
+                                            },
+                                            end: Position {
+                                                line: 9,
+                                                column: 18,
+                                            },
+                                        },
+                                    },
+                                    span: Span {
+                                        start: Position {
+                                            line: 9,
+                                            column: 4,
+                                        },
+                                        end: Position {
+                                            line: 9,
+                                            column: 18,
+                                        },
+                                    },
+                                },
+                            ],
+                            span: Span {
+                                start: Position {
+                                    line: 8,
+                                    column: 16,
+                                },
+                                end: Position {
+                                    line: 9,
+                                    column: 18,
+                                },
+                            },
+                        },
+                        span: Span {
+                            start: Position {
+                                line: 8,
+                                column: 8,
+                            },
+                            end: Position {
+                                line: 9,
+                                column: 18,
+                            },
+                        },
+                    },
+                    span: Span {
+                        start: Position {
+                            line: 8,
+                            column: 1,
+                        },
+                        end: Position {
+                            line: 9,
+                            column: 18,
+                        },
+                    },
+                },
+            ),
+        ],
+        annotations: [],
+        span: Span {
+            start: Position {
+                line: 1,
+                column: 1,
+            },
+            end: Position {
+                line: 9,
+                column: 18,
+            },
+        },
+        path: "snapshots_matching.aivi",
+    },
+]

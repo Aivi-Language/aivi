@@ -1223,15 +1223,15 @@ pub extern "C" fn rt_patch_record_inplace(
         }
     }
 
-    // Fall back: clone the HashMap, patch, allocate a new box.
+    // Fall back: clone the HashMap, patch, write back into the same box.
     let mut map = match base {
         Value::Record(rec) => (**rec).clone(),
         _ => HashMap::new(),
     };
     apply_patch_fields(ctx, &mut map, patch_fields);
-    // Drop old box and allocate new one
-    unsafe { drop(Box::from_raw(base_ptr)) };
-    abi::box_value(Value::Record(Arc::new(map)))
+    // Overwrite in place so the caller can still free the same pointer.
+    *base = Value::Record(Arc::new(map));
+    base_ptr
 }
 
 // ---------------------------------------------------------------------------

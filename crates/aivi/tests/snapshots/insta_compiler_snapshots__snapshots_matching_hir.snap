@@ -1,0 +1,134 @@
+---
+source: crates/aivi/tests/insta_compiler_snapshots.rs
+expression: pretty_json(&hir_program)
+---
+{
+  "modules": [
+    {
+      "name": "snapshots.matching",
+      "defs": [
+        {
+          "name": "describe",
+          "expr": {
+            "kind": "Lambda",
+            "id": 8,
+            "param": "value",
+            "body": {
+              "kind": "Match",
+              "id": 1,
+              "scrutinee": {
+                "kind": "Var",
+                "id": 0,
+                "name": "value"
+              },
+              "arms": [
+                {
+                  "pattern": {
+                    "Literal": {
+                      "id": 2,
+                      "value": {
+                        "Number": "0"
+                      }
+                    }
+                  },
+                  "guard": null,
+                  "body": {
+                    "kind": "LitString",
+                    "id": 3,
+                    "text": "zero"
+                  }
+                },
+                {
+                  "pattern": {
+                    "Literal": {
+                      "id": 4,
+                      "value": {
+                        "Number": "1"
+                      }
+                    }
+                  },
+                  "guard": null,
+                  "body": {
+                    "kind": "LitString",
+                    "id": 5,
+                    "text": "one"
+                  }
+                },
+                {
+                  "pattern": {
+                    "Wildcard": {
+                      "id": 6
+                    }
+                  },
+                  "guard": null,
+                  "body": {
+                    "kind": "LitString",
+                    "id": 7,
+                    "text": "many"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "flip",
+          "expr": {
+            "kind": "Lambda",
+            "id": 17,
+            "param": "pair",
+            "body": {
+              "kind": "Match",
+              "id": 10,
+              "scrutinee": {
+                "kind": "Var",
+                "id": 9,
+                "name": "pair"
+              },
+              "arms": [
+                {
+                  "pattern": {
+                    "Tuple": {
+                      "id": 11,
+                      "items": [
+                        {
+                          "Var": {
+                            "id": 12,
+                            "name": "a"
+                          }
+                        },
+                        {
+                          "Var": {
+                            "id": 13,
+                            "name": "b"
+                          }
+                        }
+                      ]
+                    }
+                  },
+                  "guard": null,
+                  "body": {
+                    "kind": "Tuple",
+                    "id": 14,
+                    "items": [
+                      {
+                        "kind": "Var",
+                        "id": 15,
+                        "name": "b"
+                      },
+                      {
+                        "kind": "Var",
+                        "id": 16,
+                        "name": "a"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

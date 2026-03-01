@@ -1,0 +1,5 @@
+---
+source: crates/aivi/tests/insta_compiler_snapshots.rs
+expression: diagnostics_snapshot(&diags)
+---
+
