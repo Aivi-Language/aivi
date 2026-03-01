@@ -168,11 +168,18 @@ fn elaborate_modules(
         // but we still want their type signatures, classes, and instances in scope for elaboration.
         if !module.path.starts_with("<embedded:") {
             let mut elab_errors = Vec::new();
+            let _debug_mod = module.name.name.contains("recursion");
             for item in module.items.iter_mut() {
                 match item {
                     ModuleItem::Def(def) => {
+                        if _debug_mod {
+                            eprintln!("[ELAB-BEFORE] def={} expr={:?}", def.name.name, def.expr);
+                        }
                         if let Err(err) = checker.elaborate_def_expr(def, &sigs, &env) {
                             elab_errors.push(err);
+                        }
+                        if _debug_mod {
+                            eprintln!("[ELAB-AFTER] def={} expr={:?}", def.name.name, def.expr);
                         }
                     }
                     ModuleItem::InstanceDecl(instance) => {

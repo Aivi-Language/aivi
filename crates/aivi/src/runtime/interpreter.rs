@@ -159,7 +159,15 @@ pub(crate) fn run_main_effect(runtime: &mut Runtime) -> Result<(), AiviError> {
     };
 
     match runtime.run_effect_value(effect) {
-        Ok(_) => Ok(()),
+        Ok(_) => {
+            // Surface any errors that JIT runtime helpers caught but couldn't
+            // propagate through native code boundaries (e.g. assertEq failures).
+            if let Some(err) = runtime.jit_pending_error.take() {
+                Err(AiviError::Runtime(format_runtime_error(err)))
+            } else {
+                Ok(())
+            }
+        }
         Err(err) => Err(AiviError::Runtime(format_runtime_error(err))),
     }
 }

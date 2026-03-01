@@ -764,14 +764,14 @@ module app.main
 use aivi
 use aivi.testing
 
-sum = xs => xs match
+mySum = xs => xs match
   | []           => 0
-  | [x, ...rest] => x + sum rest
+  | [x, ...rest] => x + mySum rest
 
 @test "recursive sum"
 main : Effect Text Unit
 main = do Effect {
-  assertEq (sum [1, 2, 3, 4, 5]) 15
+  assertEq (mySum [1, 2, 3, 4, 5]) 15
 }
 "#,
     );

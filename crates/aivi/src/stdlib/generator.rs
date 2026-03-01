@@ -26,8 +26,7 @@ consRev = acc x => [x, ...acc]
 
 toList : Generator A -> List A
 toList = gen =>
-  // Build in reverse via cons, then reverse once (linear).
-  reverse (foldl consRev [] gen)
+  reverse (gen consRev [])
 
 fromList : List A -> Generator A
 fromList = xs => k => z => xs match

@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use aivi::{
     check_modules, desugar_modules, elaborate_stdlib_checkpoint, elaborate_with_checkpoint,
-    embedded_stdlib_modules, file_diagnostics_have_errors, parse_modules, run_test_suite,
-    ElaborationCheckpoint,
+    embedded_stdlib_modules, file_diagnostics_have_errors, parse_modules, resolve_import_names,
+    run_test_suite, ElaborationCheckpoint,
 };
 use walkdir::WalkDir;
 
@@ -77,6 +77,7 @@ fn process_test_file(
     let (file_modules, _) = parse_modules(path, &content);
     let mut modules = stdlib_modules.to_vec();
     modules.extend(file_modules);
+    resolve_import_names(&mut modules);
 
     let mut diags = check_modules(&modules);
     if !file_diagnostics_have_errors(&diags) {
@@ -249,6 +250,7 @@ fn run_aivi_sources_inner() {
 
     // Parse and pre-elaborate the stdlib once, reuse across all files.
     let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
     let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
 
     let (total_passed, total_failed, skipped_files, test_failures) =
@@ -296,6 +298,7 @@ fn syntax_effects_selected_files_execute_without_failures() {
     .collect();
 
     let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
     let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
 
     let (total_passed, _total_failed, skipped_files, _) =
@@ -337,6 +340,7 @@ fn syntax_remaining_batch_files_execute_without_failures() {
     .collect();
 
     let mut stdlib_modules = embedded_stdlib_modules();
+    resolve_import_names(&mut stdlib_modules);
     let checkpoint = elaborate_stdlib_checkpoint(&mut stdlib_modules);
 
     let (total_passed, _total_failed, skipped_files, _) =

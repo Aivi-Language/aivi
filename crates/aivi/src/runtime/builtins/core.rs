@@ -266,10 +266,24 @@ pub(crate) fn register_builtins(env: &Env) {
             let effect = EffectValue::Thunk {
                 func: std::sync::Arc::new(move |runtime| {
                     match runtime.run_effect_value(effect.clone()) {
-                        Ok(value) => Ok(Value::Constructor {
-                            name: "Ok".to_string(),
-                            args: vec![value],
-                        }),
+                        Ok(value) => {
+                            // Check for JIT errors that couldn't propagate through
+                            // native code boundaries (e.g. `fail` inside JIT code).
+                            if let Some(err) = runtime.jit_pending_error.take() {
+                                match err {
+                                    RuntimeError::Error(v) => Ok(Value::Constructor {
+                                        name: "Err".to_string(),
+                                        args: vec![v],
+                                    }),
+                                    other => Err(other),
+                                }
+                            } else {
+                                Ok(Value::Constructor {
+                                    name: "Ok".to_string(),
+                                    args: vec![value],
+                                })
+                            }
+                        }
                         Err(RuntimeError::Error(value)) => Ok(Value::Constructor {
                             name: "Err".to_string(),
                             args: vec![value],

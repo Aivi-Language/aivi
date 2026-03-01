@@ -252,9 +252,6 @@ main = do Effect {
 fn cranelift_jit_generate_with_bind() {
     // Covers generate-bind semantics currently delegated through runtime helpers.
     // This test stays as parity coverage while bind lowering is migrated natively.
-    // NOTE: the JIT does not yet compute pairSums correctly (generator bind
-    // lowering delegates to runtime helpers that return fallback values), so we
-    // only verify that the code compiles and runs without crashing.
     run_jit(
         r#"@no_prelude
 module app.main
@@ -275,8 +272,8 @@ pairSums = generate {
 @test "generate with bind"
 main : Effect Text Unit
 main = do Effect {
-  _ <- pure (pairSums (a => b => a + b) 0)
-  pure Unit
+  result <- pure (pairSums (a => b => a + b) 0)
+  assertEq result 12
 }
 "#,
     );

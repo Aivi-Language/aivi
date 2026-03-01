@@ -21,6 +21,7 @@ const RT_GRAY: &str = "\x1b[90m";
 const RT_RESET: &str = "\x1b[0m";
 const RT_BOLD: &str = "\x1b[1m";
 
+
 /// Print a formatted runtime warning to stderr.
 fn rt_warn(ctx: *mut JitRuntimeCtx, category: &str, message: &str, hint: &str) {
     let (fn_ctx, loc_ctx) = unsafe {
@@ -173,6 +174,9 @@ pub extern "C" fn rt_enter_fn(ctx: *mut JitRuntimeCtx, ptr: *const u8, len: usiz
     let Some(name) = decode_utf8_owned(ctx, ptr, len, "rt_enter_fn") else {
         return;
     };
+    if name.contains("sum") || name.contains("recursion") {
+        eprintln!("[DEBUG rt_enter_fn] {}", name);
+    }
     let runtime = unsafe { (*ctx).runtime_mut() };
     runtime.jit_current_fn = Some(name.clone().into_boxed_str());
     FN_HISTORY.with(|h| {
@@ -742,6 +746,12 @@ pub extern "C" fn rt_get_global(
             return abi::box_value(Value::Unit);
         }
     };
+    if name == "sum" {
+        eprintln!("[DEBUG rt_get_global] sum => {:?}", match &val {
+            Value::Builtin(b) => format!("Builtin(name={})", b.imp.name),
+            other => format!("{:?}", std::mem::discriminant(other)),
+        });
+    }
     match runtime.force_value(val) {
         Ok(forced) => abi::box_value(forced),
         Err(e) => {
@@ -775,12 +785,18 @@ pub extern "C" fn rt_apply(
 
     // Fast path: fully-saturated builtin (arity reached with this arg)
     if let Value::Builtin(ref b) = func {
+        if b.imp.name == "math.sum" {
+            eprintln!("[DEBUG rt_apply] calling math.sum builtin");
+            eprintln!("[DEBUG rt_apply] backtrace: {:?}", std::backtrace::Backtrace::force_capture());
+        }
         if b.args.len() + 1 == b.imp.arity {
             let mut all_args = b.args.clone();
             all_args.push(arg.clone());
             let runtime = unsafe { (*ctx).runtime_mut() };
             match (b.imp.func)(all_args, runtime) {
-                Ok(val) => return abi::box_value(val),
+                Ok(val) => {
+                    return abi::box_value(val);
+                }
                 Err(e) => {
                     unsafe { set_pending_error(ctx, e) };
                     return abi::box_value(Value::Unit);
@@ -1099,6 +1115,40 @@ pub extern "C" fn rt_value_equals(
 
 /// Patch a record: clone the base record and overlay new fields.
 ///
+/// Apply patch fields to a record map. When a patch value is callable
+/// (a function/closure), it is applied to the field's current value as a
+/// transform; otherwise the value replaces the field directly.
+fn apply_patch_fields(
+    ctx: *mut JitRuntimeCtx,
+    map: &mut HashMap<String, Value>,
+    patch_fields: HashMap<String, Value>,
+) {
+    for (name, value) in patch_fields {
+        if is_patch_transform(&value) {
+            if let Some(current) = map.get(&name) {
+                let func_box = abi::box_value(value);
+                let arg_box = abi::box_value(current.clone());
+                let result_ptr = rt_apply(ctx, func_box, arg_box);
+                let result = unsafe { (*result_ptr).clone() };
+                unsafe { drop(Box::from_raw(func_box)) };
+                unsafe { drop(Box::from_raw(arg_box)) };
+                unsafe { drop(Box::from_raw(result_ptr)) };
+                map.insert(name, result);
+            } else {
+                map.insert(name, value);
+            }
+        } else {
+            map.insert(name, value);
+        }
+    }
+}
+
+/// Returns true when the value is callable and should be treated as a
+/// transform (applied to the current field value) rather than a replacement.
+fn is_patch_transform(value: &Value) -> bool {
+    matches!(value, Value::Builtin(_) | Value::MultiClause(_))
+}
+
 /// # Safety
 /// `base_ptr` must be a valid `Value::Record` (or any Value — non-records
 /// produce a fresh record).  `names`, `name_lens`, `values` arrays must
@@ -1126,7 +1176,7 @@ pub extern "C" fn rt_patch_record(
     else {
         return unit_value();
     };
-    map.extend(patch_fields);
+    apply_patch_fields(ctx, &mut map, patch_fields);
     abi::box_value(Value::Record(Arc::new(map)))
 }
 
@@ -1165,7 +1215,7 @@ pub extern "C" fn rt_patch_record_inplace(
         // Safe: we have the only reference, so Arc::get_mut will succeed.
         if let Value::Record(ref mut arc) = base {
             if let Some(map) = Arc::get_mut(arc) {
-                map.extend(patch_fields);
+                apply_patch_fields(ctx, map, patch_fields);
                 return base_ptr;
             }
         }
@@ -1176,7 +1226,7 @@ pub extern "C" fn rt_patch_record_inplace(
         Value::Record(rec) => (**rec).clone(),
         _ => HashMap::new(),
     };
-    map.extend(patch_fields);
+    apply_patch_fields(ctx, &mut map, patch_fields);
     // Drop old box and allocate new one
     unsafe { drop(Box::from_raw(base_ptr)) };
     abi::box_value(Value::Record(Arc::new(map)))
@@ -1427,7 +1477,10 @@ pub extern "C" fn rt_generator_to_list(ctx: *mut JitRuntimeCtx, gen_ptr: *mut Va
     let runtime = unsafe { &mut *(*ctx).runtime };
     match runtime.generator_to_list(gen) {
         Ok(items) => abi::box_value(Value::List(Arc::new(items))),
-        Err(_) => abi::box_value(Value::List(Arc::new(Vec::new()))),
+        Err(e) => {
+            let _ = e;
+            abi::box_value(Value::List(Arc::new(Vec::new())))
+        }
     }
 }
 
