@@ -5,10 +5,10 @@ class Functor (F A) = given (A: Any) {
   map: (A -> B) -> F B
 }
 
-class Apply (F A) = given (A: Any),
-  Functor {
-    ap: F (A -> B) -> F B
-  }
+class Apply (F A) = given (A: Any)
+Functor {
+  ap: F (A -> B) -> F B
+}
 
 users = [
   { name: "Alice", active: True }
