@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::rust_ir::cg_type::CgType;
 
-use crate::hir::{
-    HirDef, HirExpr, HirListItem, HirLiteral, HirMatchArm, HirModule, HirPathSegment, HirPattern,
-    HirProgram, HirRecordField, HirRecordPatternField, HirTextPart,
+use crate::kernel::{
+    KernelDef, KernelExpr, KernelMatchArm, KernelModule, KernelPathSegment, KernelPattern,
+    KernelProgram, KernelRecordField,
 };
 use crate::AiviError;
 
@@ -167,6 +167,11 @@ pub enum RustIrExpr {
         left: Box<RustIrExpr>,
         right: Box<RustIrExpr>,
     },
+    Block {
+        id: u32,
+        block_kind: RustIrBlockKind,
+        items: Vec<RustIrBlockItem>,
+    },
     Raw {
         id: u32,
         text: String,
@@ -281,7 +286,36 @@ pub enum RustIrLiteral {
     DateTime(String),
 }
 
-pub fn lower_kernel(program: HirProgram) -> Result<RustIrProgram, AiviError> {
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum RustIrBlockKind {
+    Plain,
+    /// `do M { ... }` — monadic block. `monad` is the type constructor name.
+    Do { monad: String },
+    Generate,
+    Resource,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum RustIrBlockItem {
+    Bind {
+        pattern: RustIrPattern,
+        expr: RustIrExpr,
+    },
+    Filter {
+        expr: RustIrExpr,
+    },
+    Yield {
+        expr: RustIrExpr,
+    },
+    Recurse {
+        expr: RustIrExpr,
+    },
+    Expr {
+        expr: RustIrExpr,
+    },
+}
+
+pub fn lower_kernel(program: KernelProgram) -> Result<RustIrProgram, AiviError> {
     // Runtime/global namespace today is "flat": all defs from all modules end up in the same
     // global environment. For native codegen we mirror that so cross-module references lower.
     let globals: Vec<String> = program
@@ -297,7 +331,7 @@ pub fn lower_kernel(program: HirProgram) -> Result<RustIrProgram, AiviError> {
     Ok(RustIrProgram { modules })
 }
 
-fn lower_module(module: HirModule, globals: &[String]) -> Result<RustIrModule, AiviError> {
+fn lower_module(module: KernelModule, globals: &[String]) -> Result<RustIrModule, AiviError> {
     let mut defs = Vec::new();
     for def in module.defs {
         defs.push(lower_def(def, globals)?);
@@ -308,7 +342,7 @@ fn lower_module(module: HirModule, globals: &[String]) -> Result<RustIrModule, A
     })
 }
 
-fn lower_def(def: HirDef, globals: &[String]) -> Result<RustIrDef, AiviError> {
+fn lower_def(def: KernelDef, globals: &[String]) -> Result<RustIrDef, AiviError> {
     let mut locals = Vec::new();
     let expr = lower_expr(def.expr, globals, &mut locals)?;
     Ok(RustIrDef {
@@ -319,12 +353,12 @@ fn lower_def(def: HirDef, globals: &[String]) -> Result<RustIrDef, AiviError> {
 }
 
 fn lower_expr(
-    expr: HirExpr,
+    expr: KernelExpr,
     globals: &[String],
     locals: &mut Vec<String>,
 ) -> Result<RustIrExpr, AiviError> {
     Ok(match expr {
-        HirExpr::Var { id, name } => {
+        KernelExpr::Var { id, name } => {
             if locals.iter().rev().any(|local| local == &name) {
                 RustIrExpr::Local { id, name }
             } else if let Some(builtin) = resolve_builtin(&name) {
@@ -341,25 +375,25 @@ fn lower_expr(
                 RustIrExpr::Global { id, name }
             }
         }
-        HirExpr::LitNumber { id, text } => RustIrExpr::LitNumber { id, text },
-        HirExpr::LitString { id, text } => RustIrExpr::LitString { id, text },
-        HirExpr::TextInterpolate { id, parts } => RustIrExpr::TextInterpolate {
+        KernelExpr::LitNumber { id, text } => RustIrExpr::LitNumber { id, text },
+        KernelExpr::LitString { id, text } => RustIrExpr::LitString { id, text },
+        KernelExpr::TextInterpolate { id, parts } => RustIrExpr::TextInterpolate {
             id,
             parts: parts
                 .into_iter()
                 .map(|part| {
                     Ok::<RustIrTextPart, AiviError>(match part {
-                        HirTextPart::Text { text } => {
+                        crate::kernel::KernelTextPart::Text { text } => {
                             RustIrTextPart::Text { text }
                         }
-                        HirTextPart::Expr { expr } => RustIrTextPart::Expr {
+                        crate::kernel::KernelTextPart::Expr { expr } => RustIrTextPart::Expr {
                             expr: lower_expr(expr, globals, locals)?,
                         },
                     })
                 })
                 .collect::<Result<Vec<_>, _>>()?,
         },
-        HirExpr::LitSigil {
+        KernelExpr::LitSigil {
             id,
             tag,
             body,
@@ -370,9 +404,9 @@ fn lower_expr(
             body,
             flags,
         },
-        HirExpr::LitBool { id, value } => RustIrExpr::LitBool { id, value },
-        HirExpr::LitDateTime { id, text } => RustIrExpr::LitDateTime { id, text },
-        HirExpr::Lambda { id, param, body } => {
+        KernelExpr::LitBool { id, value } => RustIrExpr::LitBool { id, value },
+        KernelExpr::LitDateTime { id, text } => RustIrExpr::LitDateTime { id, text },
+        KernelExpr::Lambda { id, param, body } => {
             locals.push(param.clone());
             let body = lower_expr(*body, globals, locals)?;
             locals.pop();
@@ -382,12 +416,12 @@ fn lower_expr(
                 body: Box::new(body),
             }
         }
-        HirExpr::App { id, func, arg } => RustIrExpr::App {
+        KernelExpr::App { id, func, arg } => RustIrExpr::App {
             id,
             func: Box::new(lower_expr(*func, globals, locals)?),
             arg: Box::new(lower_expr(*arg, globals, locals)?),
         },
-        HirExpr::Call { id, func, args } => RustIrExpr::Call {
+        KernelExpr::Call { id, func, args } => RustIrExpr::Call {
             id,
             func: Box::new(lower_expr(*func, globals, locals)?),
             args: args
@@ -395,7 +429,7 @@ fn lower_expr(
                 .map(|arg| lower_expr(arg, globals, locals))
                 .collect::<Result<Vec<_>, _>>()?,
         },
-        HirExpr::DebugFn {
+        KernelExpr::DebugFn {
             id,
             fn_name,
             arg_vars,
@@ -412,7 +446,7 @@ fn lower_expr(
             log_time,
             body: Box::new(lower_expr(*body, globals, locals)?),
         },
-        HirExpr::Pipe {
+        KernelExpr::Pipe {
             id,
             pipe_id,
             step,
@@ -429,7 +463,7 @@ fn lower_expr(
             func: Box::new(lower_expr(*func, globals, locals)?),
             arg: Box::new(lower_expr(*arg, globals, locals)?),
         },
-        HirExpr::List { id, items } => RustIrExpr::List {
+        KernelExpr::List { id, items } => RustIrExpr::List {
             id,
             items: items
                 .into_iter()
@@ -441,21 +475,21 @@ fn lower_expr(
                 })
                 .collect::<Result<Vec<_>, AiviError>>()?,
         },
-        HirExpr::Tuple { id, items } => RustIrExpr::Tuple {
+        KernelExpr::Tuple { id, items } => RustIrExpr::Tuple {
             id,
             items: items
                 .into_iter()
                 .map(|item| lower_expr(item, globals, locals))
                 .collect::<Result<Vec<_>, _>>()?,
         },
-        HirExpr::Record { id, fields } => RustIrExpr::Record {
+        KernelExpr::Record { id, fields } => RustIrExpr::Record {
             id,
             fields: fields
                 .into_iter()
                 .map(|field| lower_record_field(field, globals, locals))
                 .collect::<Result<Vec<_>, _>>()?,
         },
-        HirExpr::Patch { id, target, fields } => RustIrExpr::Patch {
+        KernelExpr::Patch { id, target, fields } => RustIrExpr::Patch {
             id,
             target: Box::new(lower_expr(*target, globals, locals)?),
             fields: fields
@@ -463,18 +497,18 @@ fn lower_expr(
                 .map(|field| lower_record_field(field, globals, locals))
                 .collect::<Result<Vec<_>, _>>()?,
         },
-        HirExpr::FieldAccess { id, base, field } => RustIrExpr::FieldAccess {
+        KernelExpr::FieldAccess { id, base, field } => RustIrExpr::FieldAccess {
             id,
             base: Box::new(lower_expr(*base, globals, locals)?),
             field,
         },
-        HirExpr::Index { id, base, index, location } => RustIrExpr::Index {
+        KernelExpr::Index { id, base, index, location } => RustIrExpr::Index {
             id,
             base: Box::new(lower_expr(*base, globals, locals)?),
             index: Box::new(lower_expr(*index, globals, locals)?),
             location,
         },
-        HirExpr::Match {
+        KernelExpr::Match {
             id,
             scrutinee,
             arms,
@@ -486,7 +520,7 @@ fn lower_expr(
                 .map(|arm| lower_match_arm(arm, globals, locals))
                 .collect::<Result<Vec<_>, _>>()?,
         },
-        HirExpr::If {
+        KernelExpr::If {
             id,
             cond,
             then_branch,
@@ -497,7 +531,7 @@ fn lower_expr(
             then_branch: Box::new(lower_expr(*then_branch, globals, locals)?),
             else_branch: Box::new(lower_expr(*else_branch, globals, locals)?),
         },
-        HirExpr::Binary {
+        KernelExpr::Binary {
             id,
             op,
             left,
@@ -508,8 +542,8 @@ fn lower_expr(
             left: Box::new(lower_expr(*left, globals, locals)?),
             right: Box::new(lower_expr(*right, globals, locals)?),
         },
-        HirExpr::Raw { id, text } => RustIrExpr::Raw { id, text },
-        HirExpr::Mock {
+        KernelExpr::Raw { id, text } => RustIrExpr::Raw { id, text },
+        KernelExpr::Mock {
             id,
             substitutions,
             body,
@@ -533,12 +567,11 @@ fn lower_expr(
                 body: Box::new(lower_expr(*body, globals, locals)?),
             }
         }
-        HirExpr::Block { .. } => unreachable!("blocks should have been desugared before RustIr lowering"),
     })
 }
 
 fn lower_record_field(
-    field: HirRecordField,
+    field: KernelRecordField,
     globals: &[String],
     locals: &mut Vec<String>,
 ) -> Result<RustIrRecordField, AiviError> {
@@ -554,17 +587,17 @@ fn lower_record_field(
 }
 
 fn lower_path_segment(
-    seg: HirPathSegment,
+    seg: KernelPathSegment,
     globals: &[String],
     locals: &mut Vec<String>,
 ) -> Result<RustIrPathSegment, AiviError> {
     match seg {
-        HirPathSegment::Field(name) => Ok(RustIrPathSegment::Field(name)),
-        HirPathSegment::All => Ok(RustIrPathSegment::IndexAll),
-        HirPathSegment::Index(expr) => {
+        KernelPathSegment::Field(name) => Ok(RustIrPathSegment::Field(name)),
+        KernelPathSegment::All => Ok(RustIrPathSegment::IndexAll),
+        KernelPathSegment::Index(expr) => {
             // A bare unbound name `items[active]` is shorthand for patching elements where
             // `item.active == True`.
-            if let HirExpr::Var { id, name } = &expr {
+            if let KernelExpr::Var { id, name } = &expr {
                 let reserved = is_reserved_selector_name(name);
                 let is_bound = locals.iter().rev().any(|local| local == name)
                     || (!reserved && globals.iter().any(|g| g == name))
@@ -573,7 +606,7 @@ fn lower_path_segment(
                     return Ok(RustIrPathSegment::IndexFieldBool(name.clone()));
                 }
                 return Ok(RustIrPathSegment::IndexValue(lower_expr(
-                    HirExpr::Var {
+                    KernelExpr::Var {
                         id: *id,
                         name: name.clone(),
                     },
@@ -587,7 +620,7 @@ fn lower_path_segment(
             // as a predicate closure.
             let mut unbound: HashSet<String> = HashSet::new();
             let mut bound = Vec::new();
-            collect_unbound_vars_in_hir_expr(&expr, globals, locals, &mut bound, &mut unbound);
+            collect_unbound_vars_in_kernel_expr(&expr, globals, locals, &mut bound, &mut unbound);
             if !unbound.is_empty() {
                 let param = "__it".to_string();
                 let rewritten = rewrite_implicit_field_vars(expr, &param, &unbound);
@@ -634,6 +667,7 @@ fn rust_ir_expr_id(expr: &RustIrExpr) -> u32 {
         | RustIrExpr::Match { id, .. }
         | RustIrExpr::If { id, .. }
         | RustIrExpr::Binary { id, .. }
+        | RustIrExpr::Block { id, .. }
         | RustIrExpr::Raw { id, .. }
         | RustIrExpr::Mock { id, .. } => *id,
     }

@@ -1926,6 +1926,9 @@
 
     // Tracks multiline `if ... then ... else ...` indentation so nested `if`s format correctly.
     let mut if_stack: Vec<IfFrame> = Vec::new();
+    // When a line ends with `if <cond>` (no `then` yet), record its effective indentation so the
+    // following `then` / `else` lines can be indented one level deeper.
+    let mut pending_then_indent: Option<usize> = None;
 
     fn seeds_rhs_continuation(last: Option<&str>) -> bool {
         matches!(last, Some("=" | "=>" | "<-" | "->"))
@@ -2145,7 +2148,11 @@
             rhs_block_base_indent = None;
             rhs_block_base_depth = None;
             pipeop_seed_indent = None;
-            if_stack.clear();
+            // Preserve `if_stack` inside delimiter blocks so that `else` after a block-body
+            // `then do { ... // comment ... }` still aligns correctly.
+            if hang_delim_stack.is_empty() {
+                if_stack.clear();
+            }
             rhs_decorator_pending = false;
             prev_non_blank_last_token = last_continuation_token(&state.tokens);
             update_open_depth(&mut open_depth, &state.tokens);
@@ -2367,6 +2374,11 @@
                         .unwrap_or(0);
                     effective_indent_len = outer_body_indent.max(if_stack[idx].if_indent);
                 }
+            } else if first_text == "then" {
+                // `then` starting a line: indent one level deeper than the `if` it belongs to.
+                if let Some(if_indent) = pending_then_indent {
+                    effective_indent_len = effective_indent_len.max(if_indent + indent_size);
+                }
             } else if let Some(min_indent) = if_stack
                 .iter()
                 .filter(|f| f.active_indent)
@@ -2427,6 +2439,22 @@
                         phase: IfPhase::Then,
                         active_indent: true,
                     });
+                }
+                if state.tokens.get(first_idx).map(|t| t.text.as_str()) == Some("then")
+                    && prev_non_blank_last_token.as_deref() != Some("then")
+                {
+                    if_stack.push(IfFrame {
+                        if_indent: prev_effective_indent_len,
+                        phase: IfPhase::Then,
+                        active_indent: false,
+                    });
+                }
+                if find_top_level_token(&state.tokens, "if", first_idx).is_some()
+                    && find_top_level_token(&state.tokens, "then", first_idx).is_none()
+                {
+                    pending_then_indent = Some(prev_effective_indent_len);
+                } else {
+                    pending_then_indent = None;
                 }
                 if line_has_top_level_eq {
                     pipeop_seed_indent = Some(line_indent_len);
@@ -2506,6 +2534,22 @@
                             active_indent: true,
                         });
                     }
+                    if state.tokens.get(first_idx).map(|t| t.text.as_str()) == Some("then")
+                        && prev_non_blank_last_token.as_deref() != Some("then")
+                    {
+                        if_stack.push(IfFrame {
+                            if_indent: prev_effective_indent_len,
+                            phase: IfPhase::Then,
+                            active_indent: false,
+                        });
+                    }
+                    if find_top_level_token(&state.tokens, "if", first_idx).is_some()
+                        && find_top_level_token(&state.tokens, "then", first_idx).is_none()
+                    {
+                        pending_then_indent = Some(prev_effective_indent_len);
+                    } else {
+                        pending_then_indent = None;
+                    }
                     if line_has_top_level_eq {
                         pipeop_seed_indent = Some(line_indent_len);
                     }
@@ -2572,6 +2616,22 @@
                         phase: IfPhase::Then,
                         active_indent: true,
                     });
+                }
+                if state.tokens.get(first_idx).map(|t| t.text.as_str()) == Some("then")
+                    && prev_non_blank_last_token.as_deref() != Some("then")
+                {
+                    if_stack.push(IfFrame {
+                        if_indent: prev_effective_indent_len,
+                        phase: IfPhase::Then,
+                        active_indent: false,
+                    });
+                }
+                if find_top_level_token(&state.tokens, "if", first_idx).is_some()
+                    && find_top_level_token(&state.tokens, "then", first_idx).is_none()
+                {
+                    pending_then_indent = Some(prev_effective_indent_len);
+                } else {
+                    pending_then_indent = None;
                 }
                 if line_has_top_level_eq {
                     pipeop_seed_indent = Some(line_indent_len);
@@ -2665,6 +2725,7 @@
                         hang_delim_stack.push((open, prev_effective_indent_len));
                     }
                 }
+                pending_then_indent = None;
                 update_open_depth(&mut open_depth, &state.tokens);
                 continue;
             }
@@ -2737,6 +2798,22 @@
                                     active_indent: true,
                                 });
                             }
+                            if state.tokens.get(first_idx).map(|t| t.text.as_str()) == Some("then")
+                                && prev_non_blank_last_token.as_deref() != Some("then")
+                            {
+                                if_stack.push(IfFrame {
+                                    if_indent: prev_effective_indent_len,
+                                    phase: IfPhase::Then,
+                                    active_indent: false,
+                                });
+                            }
+                            if find_top_level_token(&state.tokens, "if", first_idx).is_some()
+                                && find_top_level_token(&state.tokens, "then", first_idx).is_none()
+                            {
+                                pending_then_indent = Some(prev_effective_indent_len);
+                            } else {
+                                pending_then_indent = None;
+                            }
                             if line_has_top_level_eq {
                                 pipeop_seed_indent = Some(line_indent_len);
                             }
@@ -2797,6 +2874,22 @@
                 phase: IfPhase::Then,
                 active_indent: true,
             });
+        }
+        if state.tokens.get(first_idx).map(|t| t.text.as_str()) == Some("then")
+            && prev_non_blank_last_token.as_deref() != Some("then")
+        {
+            if_stack.push(IfFrame {
+                if_indent: prev_effective_indent_len,
+                phase: IfPhase::Then,
+                active_indent: false,
+            });
+        }
+        if find_top_level_token(&state.tokens, "if", first_idx).is_some()
+            && find_top_level_token(&state.tokens, "then", first_idx).is_none()
+        {
+            pending_then_indent = Some(prev_effective_indent_len);
+        } else {
+            pending_then_indent = None;
         }
         if line_has_top_level_eq {
             pipeop_seed_indent = Some(line_indent_len);

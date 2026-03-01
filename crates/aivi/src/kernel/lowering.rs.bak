@@ -1,17 +1,14 @@
-use crate::hir::{
-    HirBlockItem, HirExpr, HirPathSegment, HirPattern, HirProgram, HirTextPart,
-};
 
 // genBind(g, f)
 // \k -> \z -> g (\acc -> \x -> f(x) k acc) z
-fn gen_bind(g: HirExpr, f: HirExpr, id_gen: &mut IdGen) -> HirExpr {
+fn gen_bind(g: KernelExpr, f: KernelExpr, id_gen: &mut IdGen) -> KernelExpr {
     let k_name = format!("_k_{}", id_gen.next());
     let z_name = format!("_z_{}", id_gen.next());
-    let k = HirExpr::Var {
+    let k = KernelExpr::Var {
         id: id_gen.next(),
         name: k_name.clone(),
     };
-    let z = HirExpr::Var {
+    let z = KernelExpr::Var {
         id: id_gen.next(),
         name: z_name.clone(),
     };
@@ -19,38 +16,38 @@ fn gen_bind(g: HirExpr, f: HirExpr, id_gen: &mut IdGen) -> HirExpr {
     // \acc -> \x -> ...
     let acc_name = format!("_acc_{}", id_gen.next());
     let x_name = format!("_x_{}", id_gen.next());
-    let acc = HirExpr::Var {
+    let acc = KernelExpr::Var {
         id: id_gen.next(),
         name: acc_name.clone(),
     };
-    let x = HirExpr::Var {
+    let x = KernelExpr::Var {
         id: id_gen.next(),
         name: x_name.clone(),
     };
 
     // f(x)
-    let fx = HirExpr::App {
+    let fx = KernelExpr::App {
         id: id_gen.next(),
         func: Box::new(f),
         arg: Box::new(x),
     };
     // f(x) k
-    let fx_k = HirExpr::App {
+    let fx_k = KernelExpr::App {
         id: id_gen.next(),
         func: Box::new(fx),
         arg: Box::new(k.clone()),
     };
     // f(x) k acc
-    let fx_k_acc = HirExpr::App {
+    let fx_k_acc = KernelExpr::App {
         id: id_gen.next(),
         func: Box::new(fx_k),
         arg: Box::new(acc),
     };
 
-    let step_fn = HirExpr::Lambda {
+    let step_fn = KernelExpr::Lambda {
         id: id_gen.next(),
         param: acc_name,
-        body: Box::new(HirExpr::Lambda {
+        body: Box::new(KernelExpr::Lambda {
             id: id_gen.next(),
             param: x_name,
             body: Box::new(fx_k_acc),
@@ -58,25 +55,123 @@ fn gen_bind(g: HirExpr, f: HirExpr, id_gen: &mut IdGen) -> HirExpr {
     };
 
     // g step_fn z
-    let g_step = HirExpr::App {
+    let g_step = KernelExpr::App {
         id: id_gen.next(),
         func: Box::new(g),
         arg: Box::new(step_fn),
     };
-    let g_step_z = HirExpr::App {
+    let g_step_z = KernelExpr::App {
         id: id_gen.next(),
         func: Box::new(g_step),
         arg: Box::new(z),
     };
 
-    HirExpr::Lambda {
+    KernelExpr::Lambda {
         id: id_gen.next(),
         param: k_name,
-        body: Box::new(HirExpr::Lambda {
+        body: Box::new(KernelExpr::Lambda {
             id: id_gen.next(),
             param: z_name,
             body: Box::new(g_step_z),
         }),
+    }
+}
+
+fn lower_list_item(item: HirListItem, id_gen: &mut IdGen) -> KernelListItem {
+    KernelListItem {
+        expr: lower_expr(item.expr, id_gen),
+        spread: item.spread,
+    }
+}
+
+fn lower_record_field(field: HirRecordField, id_gen: &mut IdGen) -> KernelRecordField {
+    KernelRecordField {
+        spread: field.spread,
+        path: field
+            .path
+            .into_iter()
+            .map(|s| lower_path_segment(s, id_gen))
+            .collect(),
+        value: lower_expr(field.value, id_gen),
+    }
+}
+
+fn lower_path_segment(seg: HirPathSegment, id_gen: &mut IdGen) -> KernelPathSegment {
+    match seg {
+        HirPathSegment::Field(name) => KernelPathSegment::Field(name),
+        HirPathSegment::Index(expr) => KernelPathSegment::Index(lower_expr(expr, id_gen)),
+        HirPathSegment::All => KernelPathSegment::All,
+    }
+}
+
+fn lower_match_arm(arm: HirMatchArm, id_gen: &mut IdGen) -> KernelMatchArm {
+    KernelMatchArm {
+        pattern: lower_pattern(arm.pattern, id_gen),
+        guard: arm.guard.map(|e| lower_expr(e, id_gen)),
+        body: lower_expr(arm.body, id_gen),
+    }
+}
+
+fn lower_pattern(pattern: HirPattern, id_gen: &mut IdGen) -> KernelPattern {
+    match pattern {
+        HirPattern::Wildcard { id } => KernelPattern::Wildcard { id },
+        HirPattern::Var { id, name } => KernelPattern::Var { id, name },
+        HirPattern::At { id, name, pattern } => KernelPattern::At {
+            id,
+            name,
+            pattern: Box::new(lower_pattern(*pattern, id_gen)),
+        },
+        HirPattern::Literal { id, value } => KernelPattern::Literal {
+            id,
+            value: lower_literal(value),
+        },
+        HirPattern::Constructor { id, name, args } => KernelPattern::Constructor {
+            id,
+            name,
+            args: args.into_iter().map(|p| lower_pattern(p, id_gen)).collect(),
+        },
+        HirPattern::Tuple { id, items } => KernelPattern::Tuple {
+            id,
+            items: items
+                .into_iter()
+                .map(|p| lower_pattern(p, id_gen))
+                .collect(),
+        },
+        HirPattern::List { id, items, rest } => KernelPattern::List {
+            id,
+            items: items
+                .into_iter()
+                .map(|p| lower_pattern(p, id_gen))
+                .collect(),
+            rest: rest.map(|p| Box::new(lower_pattern(*p, id_gen))),
+        },
+        HirPattern::Record { id, fields } => KernelPattern::Record {
+            id,
+            fields: fields
+                .into_iter()
+                .map(|f| lower_record_pattern_field(f, id_gen))
+                .collect(),
+        },
+    }
+}
+
+fn lower_record_pattern_field(
+    field: HirRecordPatternField,
+    id_gen: &mut IdGen,
+) -> KernelRecordPatternField {
+    KernelRecordPatternField {
+        path: field.path,
+        pattern: lower_pattern(field.pattern, id_gen),
+    }
+}
+
+fn lower_literal(lit: HirLiteral) -> KernelLiteral {
+    match lit {
+        HirLiteral::Number(text) => KernelLiteral::Number(text),
+        HirLiteral::String(text) => KernelLiteral::String(text),
+        HirLiteral::Sigil { tag, body, flags } => KernelLiteral::Sigil { tag, body, flags },
+        HirLiteral::Bool(value) => KernelLiteral::Bool(value),
+        HirLiteral::DateTime(text) => KernelLiteral::DateTime(text),
     }
 }
 
@@ -108,7 +203,7 @@ fn find_max_id_expr(expr: &HirExpr, max: &mut u32) {
                 *max = *id;
             }
             for part in parts {
-                if let HirTextPart::Expr { expr } = part {
+                if let crate::hir::HirTextPart::Expr { expr } = part {
                     find_max_id_expr(expr, max);
                 }
             }

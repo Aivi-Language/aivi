@@ -2,9 +2,11 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use aivi::{
-    elaborate_expected_coercions, embedded_stdlib_modules, lex_cst, lower_kernel, parse_modules,
-    BlockKind, KernelExpr, KernelTextPart, Module,
+    elaborate_expected_coercions, embedded_stdlib_modules, lex_cst, parse_modules,
+    BlockKind, Module,
 };
+use aivi::hir::{HirExpr, HirTextPart};
+use aivi::kernel::desugar_blocks;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString, TextEdit, Url};
@@ -2251,7 +2253,7 @@ fn strict_kernel_consistency(
     // Best-effort: lower to kernel and validate shallow invariants.
     let kernel = match std::panic::catch_unwind(|| {
         let hir = aivi::desugar_modules(all_modules);
-        lower_kernel(hir)
+        desugar_blocks(hir)
     }) {
         Ok(k) => k,
         Err(_) => return,
@@ -2262,35 +2264,36 @@ fn strict_kernel_consistency(
     let mut seen_ids = HashSet::new();
 
     fn walk_expr(
-        expr: &KernelExpr,
+        expr: &HirExpr,
         seen_ids: &mut HashSet<u32>,
         span_hint: &aivi::Span,
         out: &mut Vec<Diagnostic>,
     ) {
         let id = match expr {
-            KernelExpr::Var { id, .. }
-            | KernelExpr::LitNumber { id, .. }
-            | KernelExpr::LitString { id, .. }
-            | KernelExpr::TextInterpolate { id, .. }
-            | KernelExpr::LitSigil { id, .. }
-            | KernelExpr::LitBool { id, .. }
-            | KernelExpr::LitDateTime { id, .. }
-            | KernelExpr::Lambda { id, .. }
-            | KernelExpr::App { id, .. }
-            | KernelExpr::Call { id, .. }
-            | KernelExpr::DebugFn { id, .. }
-            | KernelExpr::Pipe { id, .. }
-            | KernelExpr::List { id, .. }
-            | KernelExpr::Tuple { id, .. }
-            | KernelExpr::Record { id, .. }
-            | KernelExpr::Patch { id, .. }
-            | KernelExpr::FieldAccess { id, .. }
-            | KernelExpr::Index { id, .. }
-            | KernelExpr::Match { id, .. }
-            | KernelExpr::If { id, .. }
-            | KernelExpr::Binary { id, .. }
-            | KernelExpr::Raw { id, .. }
-            | KernelExpr::Mock { id, .. } => *id,
+            HirExpr::Var { id, .. }
+            | HirExpr::LitNumber { id, .. }
+            | HirExpr::LitString { id, .. }
+            | HirExpr::TextInterpolate { id, .. }
+            | HirExpr::LitSigil { id, .. }
+            | HirExpr::LitBool { id, .. }
+            | HirExpr::LitDateTime { id, .. }
+            | HirExpr::Lambda { id, .. }
+            | HirExpr::App { id, .. }
+            | HirExpr::Call { id, .. }
+            | HirExpr::DebugFn { id, .. }
+            | HirExpr::Pipe { id, .. }
+            | HirExpr::List { id, .. }
+            | HirExpr::Tuple { id, .. }
+            | HirExpr::Record { id, .. }
+            | HirExpr::Patch { id, .. }
+            | HirExpr::FieldAccess { id, .. }
+            | HirExpr::Index { id, .. }
+            | HirExpr::Match { id, .. }
+            | HirExpr::If { id, .. }
+            | HirExpr::Binary { id, .. }
+            | HirExpr::Raw { id, .. }
+            | HirExpr::Mock { id, .. }
+            | HirExpr::Block { id, .. } => *id,
         };
 
         if !seen_ids.insert(id) {
@@ -2308,35 +2311,35 @@ fn strict_kernel_consistency(
         }
 
         match expr {
-            KernelExpr::Lambda { body, .. } => walk_expr(body, seen_ids, span_hint, out),
-            KernelExpr::App { func, arg, .. } => {
+            HirExpr::Lambda { body, .. } => walk_expr(body, seen_ids, span_hint, out),
+            HirExpr::App { func, arg, .. } => {
                 walk_expr(func, seen_ids, span_hint, out);
                 walk_expr(arg, seen_ids, span_hint, out);
             }
-            KernelExpr::Call { func, args, .. } => {
+            HirExpr::Call { func, args, .. } => {
                 walk_expr(func, seen_ids, span_hint, out);
                 for a in args {
                     walk_expr(a, seen_ids, span_hint, out);
                 }
             }
-            KernelExpr::DebugFn { body, .. } => walk_expr(body, seen_ids, span_hint, out),
-            KernelExpr::Pipe { func, arg, .. } => {
+            HirExpr::DebugFn { body, .. } => walk_expr(body, seen_ids, span_hint, out),
+            HirExpr::Pipe { func, arg, .. } => {
                 walk_expr(func, seen_ids, span_hint, out);
                 walk_expr(arg, seen_ids, span_hint, out);
             }
-            KernelExpr::TextInterpolate { parts, .. } => {
+            HirExpr::TextInterpolate { parts, .. } => {
                 for p in parts {
-                    if let KernelTextPart::Expr { expr } = p {
+                    if let HirTextPart::Expr { expr } = p {
                         walk_expr(expr, seen_ids, span_hint, out);
                     }
                 }
             }
-            KernelExpr::List { items, .. } => {
+            HirExpr::List { items, .. } => {
                 for it in items {
                     walk_expr(&it.expr, seen_ids, span_hint, out);
                 }
             }
-            KernelExpr::Tuple { items, .. } => {
+            HirExpr::Tuple { items, .. } => {
                 if items.is_empty() {
                     push_simple(
                         out,
@@ -2354,23 +2357,23 @@ fn strict_kernel_consistency(
                     walk_expr(it, seen_ids, span_hint, out);
                 }
             }
-            KernelExpr::Record { fields, .. } => {
+            HirExpr::Record { fields, .. } => {
                 for f in fields {
                     walk_expr(&f.value, seen_ids, span_hint, out);
                 }
             }
-            KernelExpr::Patch { target, fields, .. } => {
+            HirExpr::Patch { target, fields, .. } => {
                 walk_expr(target, seen_ids, span_hint, out);
                 for f in fields {
                     walk_expr(&f.value, seen_ids, span_hint, out);
                 }
             }
-            KernelExpr::FieldAccess { base, .. } => walk_expr(base, seen_ids, span_hint, out),
-            KernelExpr::Index { base, index, .. } => {
+            HirExpr::FieldAccess { base, .. } => walk_expr(base, seen_ids, span_hint, out),
+            HirExpr::Index { base, index, .. } => {
                 walk_expr(base, seen_ids, span_hint, out);
                 walk_expr(index, seen_ids, span_hint, out);
             }
-            KernelExpr::Match {
+            HirExpr::Match {
                 scrutinee, arms, ..
             } => {
                 walk_expr(scrutinee, seen_ids, span_hint, out);
@@ -2381,7 +2384,7 @@ fn strict_kernel_consistency(
                     walk_expr(&arm.body, seen_ids, span_hint, out);
                 }
             }
-            KernelExpr::If {
+            HirExpr::If {
                 cond,
                 then_branch,
                 else_branch,
@@ -2391,18 +2394,18 @@ fn strict_kernel_consistency(
                 walk_expr(then_branch, seen_ids, span_hint, out);
                 walk_expr(else_branch, seen_ids, span_hint, out);
             }
-            KernelExpr::Binary { left, right, .. } => {
+            HirExpr::Binary { left, right, .. } => {
                 walk_expr(left, seen_ids, span_hint, out);
                 walk_expr(right, seen_ids, span_hint, out);
             }
-            KernelExpr::Var { .. }
-            | KernelExpr::LitNumber { .. }
-            | KernelExpr::LitString { .. }
-            | KernelExpr::LitSigil { .. }
-            | KernelExpr::LitBool { .. }
-            | KernelExpr::LitDateTime { .. }
-            | KernelExpr::Raw { .. } => {}
-            KernelExpr::Mock {
+            HirExpr::Var { .. }
+            | HirExpr::LitNumber { .. }
+            | HirExpr::LitString { .. }
+            | HirExpr::LitSigil { .. }
+            | HirExpr::LitBool { .. }
+            | HirExpr::LitDateTime { .. }
+            | HirExpr::Raw { .. } => {}
+            HirExpr::Mock {
                 substitutions,
                 body,
                 ..
@@ -2413,6 +2416,20 @@ fn strict_kernel_consistency(
                     }
                 }
                 walk_expr(body, seen_ids, span_hint, out);
+            }
+            HirExpr::Block { .. } => {
+                // Blocks should be desugared away; if one slips through, flag it.
+                push_simple(
+                    out,
+                    "AIVI-S902",
+                    StrictCategory::Kernel,
+                    DiagnosticSeverity::WARNING,
+                    format!(
+                        "AIVI-S902 [{}]\nKernel invariant violated.\nFound: Block node after desugaring.\nFix: Report a compiler bug.",
+                        StrictCategory::Kernel.as_str()
+                    ),
+                    span_hint.clone(),
+                );
             }
         }
     }

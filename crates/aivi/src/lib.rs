@@ -52,15 +52,7 @@ pub mod hir {
 }
 
 pub mod kernel {
-    pub use aivi_core::{
-        KernelDef, KernelExpr, KernelListItem, KernelLiteral, KernelMatchArm, KernelModule,
-        KernelPathSegment, KernelPattern, KernelProgram, KernelRecordField,
-        KernelRecordPatternField, KernelTextPart,
-    };
-
-    pub fn lower_hir(program: crate::hir::HirProgram) -> crate::kernel::KernelProgram {
-        aivi_core::lower_kernel(program)
-    }
+    pub use aivi_core::desugar_blocks;
 }
 
 pub mod resolver {
@@ -118,11 +110,7 @@ pub use aivi_core::{
     DiagnosticSeverity, FileDiagnostic, Position, Span,
 };
 pub use aivi_core::{format_text, format_text_with_options, BraceStyle, FormatOptions};
-pub use aivi_core::{
-    lower_kernel, KernelDef, KernelExpr, KernelListItem, KernelLiteral, KernelMatchArm,
-    KernelModule, KernelPathSegment, KernelPattern, KernelProgram, KernelRecordField,
-    KernelRecordPatternField, KernelTextPart,
-};
+pub use aivi_core::desugar_blocks;
 pub use aivi_core::{CstBundle, CstFile, CstToken};
 pub use aivi_core::{HirModule, HirProgram};
 use cranelift_backend::run_cranelift_jit_cancellable;
@@ -216,6 +204,7 @@ pub use aivi_driver::{
 };
 
 pub fn rust_ir_target(target: &str) -> Result<rust_ir::RustIrProgram, AiviError> {
-    let kernel = kernel_target(target)?;
-    rust_ir::lower_kernel(kernel)
+    let hir = desugar_target_typed(target)?;
+    let desugared = aivi_core::desugar_blocks(hir);
+    rust_ir::lower_kernel(desugared)
 }

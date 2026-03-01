@@ -14,7 +14,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::rust_ir::{RustIrBlockItem, RustIrExpr, RustIrTextPart};
+use crate::rust_ir::{RustIrExpr, RustIrTextPart};
 
 /// Per-variable use information within a single function body.
 #[derive(Debug, Clone)]
@@ -184,13 +184,6 @@ fn collect_uses(expr: &RustIrExpr, out: &mut HashMap<String, Vec<u32>>) {
             }
         }
 
-        // Blocks
-        RustIrExpr::Block { items, .. } => {
-            for item in items {
-                collect_uses_in_block_item(item, out);
-            }
-        }
-
         RustIrExpr::Mock {
             substitutions,
             body,
@@ -203,16 +196,6 @@ fn collect_uses(expr: &RustIrExpr, out: &mut HashMap<String, Vec<u32>>) {
             }
             collect_uses(body, out);
         }
-    }
-}
-
-fn collect_uses_in_block_item(item: &RustIrBlockItem, out: &mut HashMap<String, Vec<u32>>) {
-    match item {
-        RustIrBlockItem::Bind { expr, .. } => collect_uses(expr, out),
-        RustIrBlockItem::Expr { expr }
-        | RustIrBlockItem::Yield { expr }
-        | RustIrBlockItem::Recurse { expr }
-        | RustIrBlockItem::Filter { expr } => collect_uses(expr, out),
     }
 }
 
@@ -408,23 +391,6 @@ fn mark_last_uses_reverse(
             mark_last_uses_reverse(scrutinee, last_uses, marked, counts);
         }
 
-        // Blocks — reverse item order
-        RustIrExpr::Block { items, .. } => {
-            for item in items.iter().rev() {
-                match item {
-                    RustIrBlockItem::Bind { expr, .. } => {
-                        mark_last_uses_reverse(expr, last_uses, marked, counts);
-                    }
-                    RustIrBlockItem::Expr { expr }
-                    | RustIrBlockItem::Yield { expr }
-                    | RustIrBlockItem::Recurse { expr }
-                    | RustIrBlockItem::Filter { expr } => {
-                        mark_last_uses_reverse(expr, last_uses, marked, counts);
-                    }
-                }
-            }
-        }
-
         RustIrExpr::Mock {
             substitutions,
             body,
@@ -506,30 +472,6 @@ mod tests {
         assert!(!map.is_last_use(1, "x"));
         assert!(!map.is_last_use(2, "x"));
         assert!(map.is_last_use(3, "x"));
-    }
-
-    #[test]
-    fn block_last_use() {
-        // { y = x; x } — second x (id=2) is last use
-        let expr = RustIrExpr::Block {
-            id: 0,
-            block_kind: crate::rust_ir::RustIrBlockKind::Plain,
-            items: vec![
-                RustIrBlockItem::Bind {
-                    pattern: RustIrPattern::Var {
-                        id: 10,
-                        name: "y".to_string(),
-                    },
-                    expr: local(1, "x"),
-                },
-                RustIrBlockItem::Expr {
-                    expr: local(2, "x"),
-                },
-            ],
-        };
-        let map = analyze_uses(&expr);
-        assert!(!map.is_last_use(1, "x"));
-        assert!(map.is_last_use(2, "x"));
     }
 
     #[test]

@@ -402,10 +402,10 @@ pub fn desugar_target_with_cg_types_and_surface(
     ))
 }
 
-/// Lowers a typed HIR program into kernel IR for backend code generation.
-pub fn kernel_target(target: &str) -> Result<aivi_core::KernelProgram, AiviError> {
+/// Lowers a typed HIR program through block desugaring for backend code generation.
+pub fn kernel_target(target: &str) -> Result<HirProgram, AiviError> {
     let hir = desugar_target_typed(target)?;
-    Ok(aivi_core::lower_kernel(hir))
+    Ok(aivi_core::desugar_blocks(hir))
 }
 
 /// Formats exactly one target file via the shared formatter used by CLI and tooling.
