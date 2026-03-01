@@ -129,6 +129,7 @@ fn stdlib_additional_modules_execute_without_failures() {
 fn stdlib_additional_modules_inner() {
     let root = test_support::workspace_root();
     let files = [
+        root.join("integration-tests/stdlib/aivi/email/email.aivi"),
         root.join("integration-tests/stdlib/aivi/geometry/geometry.aivi"),
         root.join("integration-tests/stdlib/aivi/graph/graph.aivi"),
         root.join("integration-tests/stdlib/aivi/i18n/i18n.aivi"),
@@ -143,6 +144,7 @@ fn stdlib_additional_modules_inner() {
         root.join("integration-tests/stdlib/aivi/number/number.aivi"),
         root.join("integration-tests/stdlib/aivi/path/path.aivi"),
         root.join("integration-tests/stdlib/aivi/regex/regex.aivi"),
+        root.join("integration-tests/stdlib/aivi/rest/rest.aivi"),
         root.join("integration-tests/stdlib/aivi/secrets/secrets.aivi"),
         root.join("integration-tests/stdlib/aivi/tree/Tree.aivi"),
         root.join("integration-tests/stdlib/aivi/ui/layout/domain_Layout/domain_Layout.aivi"),
