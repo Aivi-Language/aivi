@@ -28,7 +28,7 @@ The decorator appears on the line above the binding. The right-hand side must be
 
 ### File Embedding
 
-<<< ../../../snippets/from_md/syntax/decorators/compile_time_embedding.aivi{aivi}
+<<< ../../snippets/from_md/syntax/decorators/compile_time_embedding.aivi{aivi}
 
 The compiler evaluates the right-hand side at compile time and embeds the result as a constant.
 

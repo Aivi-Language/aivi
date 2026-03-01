@@ -115,6 +115,13 @@ export const sidebar = [
         ]
       },
       {
+        text: 'Data',
+        collapsed: true,
+        items: [
+          { text: 'JSON', link: '/stdlib/data/json' }
+        ]
+      },
+      {
         text: 'Math & Science',
         collapsed: true,
         items: [

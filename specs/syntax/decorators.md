@@ -13,7 +13,7 @@ Decorators are intentionally narrow:
 
 ## Syntax
 
-<<< ../../snippets/from_md/syntax/decorators/syntax.aivi{aivi}
+<<< ../snippets/from_md/syntax/decorators/syntax.aivi{aivi}
 
 Decorators appear before the binding they annotate.
 

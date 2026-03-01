@@ -13,6 +13,6 @@ binding = ...
 
 ## Example
 
-<<< ../../../snippets/from_md/syntax/decorators/deprecated_example.aivi{aivi}
+<<< ../../snippets/from_md/syntax/decorators/deprecated_example.aivi{aivi}
 
 The compiler emits a warning at every call site. Use a human-readable migration hint as the argument.
