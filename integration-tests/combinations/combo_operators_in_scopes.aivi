@@ -76,8 +76,8 @@ pipeIntoMatch = do Effect {
   classify = n => n match
     | n when n > 10 => "big"
     | _             => "small"
-  result = 5 |> double |> classify
-  assertEq result "small"
-  result2 = 6 |> double |> classify
-  assertEq result2 "big"
+    result = 5 |> double |> classify
+    assertEq result "small"
+    result2 = 6 |> double |> classify
+    assertEq result2 "big"
 }

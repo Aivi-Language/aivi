@@ -19,10 +19,10 @@ Shape = Circle Int | Rect Int Int | Point
 adtDoToLambda = do Effect {
   shape <- pure (Circle 5)
   getArea = s => s match
-    | Circle r  => r * r
-    | Rect w h  => w * h
-    | Point     => 0
-  assertEq (getArea shape) 25
+    | Circle r => r * r
+    | Rect w h => w * h
+    | Point    => 0
+    assertEq (getArea shape) 25
 }
 
 // --- ADT in generator pipeline ---
@@ -37,9 +37,9 @@ adtGeneratorPipeline = do Effect {
   areas = generate {
     s <- shapes
     yield (s match
-      | Circle r  => r * r
-      | Rect w h  => w * h
-      | Point     => 0
+      | Circle r => r * r
+      | Rect w h => w * h
+      | Point    => 0
     )
   }
   assertEq (toList areas) [9, 20, 0]
@@ -48,8 +48,8 @@ adtGeneratorPipeline = do Effect {
 // --- Recursive ADT traversal with tail recursion ---
 
 sumTree = t => t match
-  | Leaf n       => n
-  | Branch l r   => sumTree l + sumTree r
+  | Leaf n     => n
+  | Branch l r => sumTree l + sumTree r
 
 @test "recursive ADT tree traversal"
 recursiveTreeTraversal = do Effect {
@@ -65,8 +65,8 @@ adtPayloadClosureCapture = do Effect {
   transform = shape match
     | Rect w h => n => n + w * h
     | _        => n => n
-  assertEq (transform 0) 21
-  assertEq (transform 10) 31
+    assertEq (transform 0) 21
+    assertEq (transform 10) 31
 }
 
 // --- ADT with record payloads in nested match + do ---
@@ -74,7 +74,7 @@ adtPayloadClosureCapture = do Effect {
 Person = Student { name: Text, score: Int } | Teacher { name: Text, rating: Int }
 
 personScore = p => p match
-  | Student { name: _, score: s } => s
+  | Student { name: _, score: s }  => s
   | Teacher { name: _, rating: r } => r * 10
 
 @test "ADT with record payloads in nested match and do"
