@@ -326,6 +326,28 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
     };
     env.insert("text".to_string(), Scheme::mono(text_record));
 
+    let json_value_ty = Type::con("JsonValue");
+    let to_json_a = checker.fresh_var_id();
+    let json_record = Type::Record {
+        fields: vec![(
+            "toJson".to_string(),
+            Type::Func(
+                Box::new(Type::Var(to_json_a)),
+                Box::new(json_value_ty.clone()),
+            ),
+        )]
+        .into_iter()
+        .collect(),
+    };
+    env.insert(
+        "json".to_string(),
+        Scheme {
+            vars: vec![to_json_a],
+            ty: json_record,
+            origin: None,
+        },
+    );
+
     let regex_ty = Type::con("Regex");
     let regex_error_ty = Type::con("RegexError");
     let match_ty = Type::con("Match");

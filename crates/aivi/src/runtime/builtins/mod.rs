@@ -12,6 +12,7 @@ mod gtk4;
 mod gtk4_real;
 mod i18n;
 mod instant;
+mod json;
 mod linalg;
 mod list;
 mod log;

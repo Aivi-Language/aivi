@@ -1216,6 +1216,41 @@ impl TypeChecker {
             self.subst = base_subst3;
         }
 
+        // Coerce a record literal into `Body` via `Json (toJson record)`.
+        let is_body = matches!(
+            expected_applied,
+            Type::Con(ref name, ref args) if name == "Body" && args.is_empty()
+        );
+        if is_body && matches!(expr, Expr::Record { .. }) {
+            let to_json = Expr::Ident(SpannedName {
+                name: "toJson".into(),
+                span: expr_span(&expr),
+            });
+            let to_json_call = Expr::Call {
+                func: Box::new(to_json),
+                args: vec![expr.clone()],
+                span: expr_span(&expr),
+            };
+            let json_ctor = Expr::Ident(SpannedName {
+                name: "Json".into(),
+                span: expr_span(&expr),
+            });
+            let wrapped = Expr::Call {
+                func: Box::new(json_ctor),
+                args: vec![to_json_call],
+                span: expr_span(&expr),
+            };
+            let wrapped_ty = self.infer_expr(&wrapped, env)?;
+            let base_subst4 = self.subst.clone();
+            if self
+                .unify_with_span(wrapped_ty, expected.clone(), expr_span(&wrapped))
+                .is_ok()
+            {
+                return Ok((wrapped, self.apply(expected)));
+            }
+            self.subst = base_subst4;
+        }
+
         // Fall back to the original mismatch (without keeping any partial unifications).
         self.subst = base_subst;
         self.unify_with_span(inferred, expected.clone(), expr_span(&expr))?;

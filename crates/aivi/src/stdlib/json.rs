@@ -4,7 +4,7 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi.json
 export JsonValue, JsonError, JsonSchema, SchemaIssue
-export decode, jsonToText
+export decode, jsonToText, toJson
 export encodeText, decodeText
 export encodeInt, decodeInt
 export encodeFloat, decodeFloat
@@ -28,6 +28,12 @@ JsonValue =
   | JsonArray (List JsonValue)
   | JsonObject (List (Text, JsonValue))
 
+// Structural conversion of any value to JsonValue. Records become JsonObject,
+// lists become JsonArray, primitives map to their JSON equivalents.
+// Option None becomes JsonNull; Option Some unwraps before encoding.
+toJson : A -> JsonValue
+toJson = value => json.toJson value
+
 JsonError = { message: Text }
 SchemaIssue = { path: Text, message: Text }
 JsonSchema = {
@@ -44,9 +50,30 @@ jsonToText = value => value match
   | JsonBool b     => b match | True => "true" | False => "false"
   | JsonInt n      => text.toText n
   | JsonFloat f    => text.toText f
-  | JsonString s   => "\"" ++ s ++ "\""
-  | JsonArray _    => "[...]"
-  | JsonObject _   => "\{...\}"
+  | JsonString s   => "\"" ++ jsonEscapeText s ++ "\""
+  | JsonArray items  => "[" ++ joinJsonValues items ++ "]"
+  | JsonObject pairs => "{" ++ joinJsonPairs pairs ++ "}"
+
+jsonEscapeText : Text -> Text
+jsonEscapeText = s =>
+  s
+    |> text.replace "\\" "\\\\"
+    |> text.replace "\"" "\\\""
+    |> text.replace "\n" "\\n"
+    |> text.replace "\r" "\\r"
+    |> text.replace "\t" "\\t"
+
+joinJsonValues : List JsonValue -> Text
+joinJsonValues = items => items match
+  | []         => ""
+  | [x]        => jsonToText x
+  | [x, ...xs] => jsonToText x ++ "," ++ joinJsonValues xs
+
+joinJsonPairs : List (Text, JsonValue) -> Text
+joinJsonPairs = pairs => pairs match
+  | []              => ""
+  | [(k, v)]        => "\"" ++ jsonEscapeText k ++ "\":" ++ jsonToText v
+  | [(k, v), ...ps] => "\"" ++ jsonEscapeText k ++ "\":" ++ jsonToText v ++ "," ++ joinJsonPairs ps
 
 encodeText : Text -> JsonValue
 encodeText = t => JsonString t
