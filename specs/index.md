@@ -95,7 +95,6 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Scheduler](stdlib/chronos/scheduler)
 #### System
 - [Crypto](stdlib/system/crypto)
-- [GOA](stdlib/system/goa)
 - [Secrets](stdlib/system/secrets)
 - [System](stdlib/system/system)
 - [Log](stdlib/system/log)
@@ -120,7 +119,6 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [VDOM](stdlib/ui/vdom)
 - [HTML Sigil](stdlib/ui/html)
 - [Color](stdlib/ui/color)
-- [ServerHtml](stdlib/ui/server_html)
 
 ### Runtime
 - [Concurrency](runtime/concurrency)

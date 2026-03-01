@@ -149,7 +149,6 @@ export const sidebar = [
         collapsed: true,
         items: [
           { text: 'Crypto', link: '/stdlib/system/crypto' },
-          { text: 'GOA', link: '/stdlib/system/goa' },
           { text: 'Secrets', link: '/stdlib/system/secrets' },
           { text: 'System', link: '/stdlib/system/system' },
           { text: 'Log', link: '/stdlib/system/log' },
@@ -188,8 +187,7 @@ export const sidebar = [
           { text: 'Layout', link: '/stdlib/ui/layout' },
           { text: 'VDOM', link: '/stdlib/ui/vdom' },
           { text: 'HTML Sigil', link: '/stdlib/ui/html' },
-          { text: 'Color', link: '/stdlib/ui/color' },
-          { text: 'ServerHtml', link: '/stdlib/ui/server_html' }
+          { text: 'Color', link: '/stdlib/ui/color' }
         ]
       },
     ]

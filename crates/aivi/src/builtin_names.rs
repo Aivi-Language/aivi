@@ -76,7 +76,6 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "logger",
     "database",
     "i18n",
-    "goa",
     "secrets",
     "timezone",
     // Collection types

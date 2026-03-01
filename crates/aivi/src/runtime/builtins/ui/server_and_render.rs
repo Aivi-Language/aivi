@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use aivi_http_server::{AiviWsMessage, WebSocketHandle};
-
 use crate::runtime::builtins::builtin;
-use crate::runtime::{EffectValue, Runtime, RuntimeError, Value};
+use crate::runtime::{RuntimeError, Value};
 
 pub(super) fn build_ui_record() -> Value {
     let mut fields = HashMap::new();
@@ -36,30 +34,7 @@ pub(super) fn build_ui_record() -> Value {
     );
 
     // LiveView-style runtime with typed events/effects.
-    fields.insert("ServerHtml".to_string(), build_server_html_record());
     Value::Record(Arc::new(fields))
-}
-
-fn normalize_path(path: &str) -> String {
-    let p = path.trim();
-    if p.is_empty() {
-        return "/".to_string();
-    }
-    if p.starts_with('/') {
-        p.to_string()
-    } else {
-        format!("/{p}")
-    }
-}
-
-fn live_ws_path(path: &str) -> String {
-    // Historical helper name: used by the server-driven UI runtimes to route `/.../ws`.
-    let p = normalize_path(path);
-    if p == "/" {
-        "/ws".to_string()
-    } else {
-        format!("{}/ws", p.trim_end_matches('/'))
-    }
 }
 
 struct RenderState {
