@@ -36,3 +36,10 @@ code, kbd, samp, pre {
   border: 1px solid var(--vp-badge-warning-border, rgba(234, 179, 8, 0.3));
   vertical-align: middle;
 }
+
+.vp-doc table th,
+.vp-doc table td {
+  max-width: 50%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
