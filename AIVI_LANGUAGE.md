@@ -786,7 +786,7 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 `instant`, `calendar`, `duration`, `timezone`, `scheduler`
 
 **System** (`aivi.*`):
-`system`, `concurrency`, `crypto`, `secrets`, `goa`, `log`
+`system`, `concurrency`, `crypto`, `secrets`, `log`
 
 **IO** (`aivi.*`):
 `file`, `console`, `database`, `database.pool`, `email`, `path`, `url`
@@ -795,7 +795,7 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 `http`, `https`, `httpServer`, `rest`, `sockets`, `streams`
 
 **UI** (`aivi.ui.*` and `aivi.*`):
-`ui.gtk4`, `ui.layout`, `ui.ServerHtml`, `color`
+`ui.gtk4`, `ui.layout`, `color`
 
 ---
 
