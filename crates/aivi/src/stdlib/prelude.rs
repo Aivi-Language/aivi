@@ -20,7 +20,6 @@ use aivi.calendar
 use aivi.duration
 use aivi.color
 use aivi.vector
-use aivi.json (JsonValue, toJson)
 
 toText : A -> Text
 toText = value => text.toText value
