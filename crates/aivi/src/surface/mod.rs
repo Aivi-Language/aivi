@@ -1,13 +1,11 @@
 mod arena;
 mod ast;
-mod desugar;
 #[allow(dead_code)]
 pub(crate) mod openapi;
 mod parser;
 
 pub use arena::*;
 pub use ast::*;
-pub use desugar::desugar_effect_sugars;
 pub use parser::{parse_modules, parse_modules_from_tokens, resolve_import_names};
 
 /// Compute the value-level import map for a module: bare_name → qualified_name.

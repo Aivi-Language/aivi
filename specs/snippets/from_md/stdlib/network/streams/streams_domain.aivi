@@ -1,6 +1,6 @@
 use aivi.net.streams
 
 // fromList creates an in-memory stream for testing and pure pipelines.
-nums    = streams.fromList [1, 2, 3, 4, 5]
-evens   = streams.filter (x => x % 2 == 0) nums
+nums = streams.fromList [1, 2, 3, 4, 5]
+evens = streams.filter (x => x % 2 == 0) nums
 doubled = streams.map (x => x * 2) evens

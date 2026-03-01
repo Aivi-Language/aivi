@@ -154,7 +154,7 @@ impl TypeChecker {
         let base_subst = self.subst.clone();
         let result = (|| {
             let name = def.name.name.clone();
-            let expr = crate::surface::desugar_effect_sugars(desugar_holes(def.expr.clone()));
+            let expr = desugar_holes(def.expr.clone());
 
             let mut local_env = env.clone();
             // Ensure self-recursion sees the expected scheme when available.

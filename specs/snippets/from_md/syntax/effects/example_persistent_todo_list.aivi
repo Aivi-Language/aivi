@@ -14,8 +14,8 @@ machine TodoFlow = {
 
 encodeTodo = t =>
   if t.done
-  then "{t.id}|1|{t.text}"
-  else "{t.id}|0|{t.text}"
+    then "{t.id}|1|{t.text}"
+    else "{t.id}|0|{t.text}"
 
 decodeTodo = line => Text.split "|" line match
   | [idText, doneText, text] => Text.parseInt idText match

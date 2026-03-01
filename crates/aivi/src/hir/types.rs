@@ -533,9 +533,6 @@ fn lower_def_expr(
 }
 
 fn lower_expr_ctx(expr: Expr, id_gen: &mut IdGen, ctx: &mut LowerCtx<'_>, in_pipe_left: bool) -> HirExpr {
-    // Effect-block surface sugars (pure `=` bindings and `if ... else Unit` in statement position).
-    let expr = crate::surface::desugar_effect_sugars(expr);
-
     // Placeholder-lambda sugar: rewrite `_` occurrences into a lambda at the
     // smallest expression scope that still contains `_`.
     let expr = desugar_placeholder_lambdas(expr);

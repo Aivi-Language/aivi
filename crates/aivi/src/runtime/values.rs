@@ -10,10 +10,8 @@ use num_rational::BigRational;
 use regex::Regex;
 use rust_decimal::Decimal;
 
-use crate::hir::HirExpr;
 use aivi_http_server::{ServerHandle, WebSocketHandle};
 
-use super::environment::Env;
 use super::{Runtime, RuntimeError};
 
 pub(crate) type BuiltinFunc =
@@ -175,10 +173,7 @@ pub(crate) struct ResourceValue {
 }
 
 pub(crate) struct ThunkValue {
-    pub(crate) expr: Arc<HirExpr>,
-    pub(crate) env: Env,
     pub(crate) cached: Mutex<Option<Value>>,
-    pub(crate) in_progress: AtomicBool,
 }
 
 pub(crate) struct ChannelInner {
