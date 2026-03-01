@@ -25,13 +25,12 @@ Attributes are typed values, not raw strings:
 - `Class Text`, `Id Text`
 - `Style { ... }` where the style value is a record (see Layout units and CSS records below)
 - `OnClick msg`, `OnInput (Text -> msg)` for event wiring
-- Additional event handlers used by `aivi.ui.ServerHtml`:
-  - `OnClickE (Click -> msg)` (click payload record)
-  - `OnInputE (Input -> msg)` (input payload record)
-  - `OnKeyDown (Keyboard -> msg)`, `OnKeyUp (Keyboard -> msg)`
-  - `OnPointerDown (Pointer -> msg)`, `OnPointerUp (Pointer -> msg)`, `OnPointerMove (Pointer -> msg)`
-  - `OnTransitionEnd (TransitionEvent -> msg)`, `OnAnimationEnd (AnimationEvent -> msg)`
-  - `OnFocus msg`, `OnBlur msg`
+- `OnClickE (Click -> msg)` (click payload record)
+- `OnInputE (Input -> msg)` (input payload record)
+- `OnKeyDown (Keyboard -> msg)`, `OnKeyUp (Keyboard -> msg)`
+- `OnPointerDown (Pointer -> msg)`, `OnPointerUp (Pointer -> msg)`, `OnPointerMove (Pointer -> msg)`
+- `OnTransitionEnd (TransitionEvent -> msg)`, `OnAnimationEnd (AnimationEvent -> msg)`
+- `OnFocus msg`, `OnBlur msg`
 - `Attr Text Text` for unknown/escape-hatch attributes
 
 ## Constructing Nodes

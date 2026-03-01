@@ -89,7 +89,6 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Scheduler](stdlib/chronos/scheduler.md)
 #### System
 - [Crypto](stdlib/system/crypto.md)
-- [GOA](stdlib/system/goa.md)
 - [Secrets](stdlib/system/secrets.md)
 - [System](stdlib/system/system.md)
 - [Log](stdlib/system/log.md)
@@ -114,7 +113,6 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [VDOM](stdlib/ui/vdom.md)
 - [HTML Sigil](stdlib/ui/html.md)
 - [Color](stdlib/ui/color.md)
-- [ServerHtml](stdlib/ui/server_html.md)
 
 ### Runtime
 - [Concurrency](runtime/concurrency.md)

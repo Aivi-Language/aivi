@@ -28,7 +28,7 @@ Input = InputEvent
 // A typed Virtual DOM. Rendering is backend/runtime-specific.
 VNode msg = Element Text (List (Attr msg)) (List (VNode msg)) | TextNode Text | Keyed Text (VNode msg)
 
-// Typed UI event payload records (used by server-driven runtimes like `aivi.ui.ServerHtml`).
+// Typed UI event payload records.
 ClickEvent = { button: Int, alt: Bool, ctrl: Bool, shift: Bool, meta: Bool }
 
 InputEvent = { value: Text }
