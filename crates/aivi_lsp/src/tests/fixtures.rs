@@ -176,6 +176,8 @@ fn examples_open_without_lsp_errors() {
             &workspace,
             false,
             &crate::strict::StrictConfig::default(),
+            None,
+            None,
         );
         checked_files += 1;
         let errors: Vec<_> = diags
@@ -225,6 +227,8 @@ fn specs_snippets_open_without_lsp_diagnostics() {
             &HashMap::new(),
             false,
             &crate::strict::StrictConfig::default(),
+            None,
+            None,
         );
         if diags.is_empty() {
             continue;

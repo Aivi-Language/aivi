@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use serde::Deserialize;
 use tokio::sync::Mutex;
@@ -222,22 +222,46 @@ impl LanguageServer for Backend {
         let version = params.text_document.version;
         self.update_document(uri.clone(), text.clone()).await;
         let workspace = self.workspace_modules_for_diagnostics(&uri).await;
-        let (include_specs_snippets, strict) = {
+        let (include_specs_snippets, strict, parse_diags, checkpoint) = {
             let state = self.state.lock().await;
-            (state.diagnostics_in_specs_snippets, state.strict.clone())
+            let parse_diags = state
+                .documents
+                .get(&uri)
+                .map(|doc| doc.parse_diags.clone())
+                .unwrap_or_default();
+            (
+                state.diagnostics_in_specs_snippets,
+                state.strict.clone(),
+                parse_diags,
+                state.typecheck_checkpoint.clone(),
+            )
         };
         let uri2 = uri.clone();
-        let diagnostics = tokio::task::spawn_blocking(move || {
-            Self::build_diagnostics_with_workspace(
+        let (diagnostics, new_checkpoint) = tokio::task::spawn_blocking(move || {
+            let (cp, is_new) = match checkpoint {
+                Some(cp) => (cp, false),
+                None => {
+                    let stdlib = aivi::embedded_stdlib_modules();
+                    (aivi::check_types_stdlib_checkpoint(&stdlib), true)
+                }
+            };
+            let diags = Backend::build_diagnostics_with_workspace(
                 &text,
                 &uri2,
                 &workspace,
                 include_specs_snippets,
                 &strict,
-            )
+                Some(parse_diags),
+                Some(&cp),
+            );
+            (diags, is_new.then_some(cp))
         })
         .await
         .unwrap_or_default();
+        if let Some(cp) = new_checkpoint {
+            let mut state = self.state.lock().await;
+            state.typecheck_checkpoint.get_or_insert(cp);
+        }
         self.client
             .publish_diagnostics(uri, diagnostics, Some(version))
             .await;
@@ -246,29 +270,100 @@ impl LanguageServer for Backend {
     async fn did_change(&self, params: tower_lsp::lsp_types::DidChangeTextDocumentParams) {
         let uri = params.text_document.uri;
         let version = params.text_document.version;
-        if let Some(change) = params.content_changes.into_iter().next() {
-            let text = change.text;
-            self.update_document(uri.clone(), text.clone()).await;
-            let workspace = self.workspace_modules_for_diagnostics(&uri).await;
-            let (include_specs_snippets, strict) = {
-                let state = self.state.lock().await;
-                (state.diagnostics_in_specs_snippets, state.strict.clone())
-            };
-            let uri2 = uri.clone();
-            let diagnostics = tokio::task::spawn_blocking(move || {
-                Self::build_diagnostics_with_workspace(
-                    &text,
+        let Some(change) = params.content_changes.into_iter().next() else {
+            return;
+        };
+        let text = change.text;
+        self.update_document(uri.clone(), text.clone()).await;
+
+        // Phase 1: debounce — cancel the previous in-flight task and start a fresh timer.
+        let current_version = {
+            let mut state = self.state.lock().await;
+            if let Some(handle) = state.pending_diagnostics.take() {
+                handle.abort();
+            }
+            state.diagnostics_version += 1;
+            state.diagnostics_version
+        };
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+
+        // If another keystroke arrived while we were sleeping, bail out.
+        {
+            let state = self.state.lock().await;
+            if state.diagnostics_version != current_version {
+                return;
+            }
+        }
+
+        let workspace = self.workspace_modules_for_diagnostics(&uri).await;
+        let (include_specs_snippets, strict, parse_diags, checkpoint) = {
+            let state = self.state.lock().await;
+            let parse_diags = state
+                .documents
+                .get(&uri)
+                .map(|doc| doc.parse_diags.clone())
+                .unwrap_or_default();
+            (
+                state.diagnostics_in_specs_snippets,
+                state.strict.clone(),
+                parse_diags,
+                state.typecheck_checkpoint.clone(),
+            )
+        };
+
+        let uri2 = uri.clone();
+        let text2 = text.clone();
+        let state_arc = Arc::clone(&self.state);
+        let client = self.client.clone();
+
+        let handle = tokio::spawn(async move {
+            let (diagnostics, new_checkpoint) = tokio::task::spawn_blocking(move || {
+                let (cp, is_new) = match checkpoint {
+                    Some(cp) => (cp, false),
+                    None => {
+                        let stdlib = aivi::embedded_stdlib_modules();
+                        (aivi::check_types_stdlib_checkpoint(&stdlib), true)
+                    }
+                };
+                let diags = Backend::build_diagnostics_with_workspace(
+                    &text2,
                     &uri2,
                     &workspace,
                     include_specs_snippets,
                     &strict,
-                )
+                    Some(parse_diags),
+                    Some(&cp),
+                );
+                (diags, is_new.then_some(cp))
             })
             .await
             .unwrap_or_default();
-            self.client
-                .publish_diagnostics(uri, diagnostics, Some(version))
-                .await;
+
+            let should_publish = {
+                let mut state = state_arc.lock().await;
+                if let Some(cp) = new_checkpoint {
+                    state.typecheck_checkpoint.get_or_insert(cp);
+                }
+                state.pending_diagnostics = None;
+                state.diagnostics_version == current_version
+            };
+
+            if should_publish {
+                client
+                    .publish_diagnostics(uri, diagnostics, Some(version))
+                    .await;
+            }
+        });
+
+        // Store the abort handle so the next keystroke can cancel this task.
+        {
+            let mut state = self.state.lock().await;
+            if state.diagnostics_version == current_version {
+                state.pending_diagnostics = Some(handle.abort_handle());
+            } else {
+                handle.abort();
+            }
         }
     }
 
@@ -347,19 +442,37 @@ impl LanguageServer for Backend {
             };
             let uri2 = uri.clone();
             let strict2 = strict.clone();
+            let checkpoint = {
+                let state = self.state.lock().await;
+                state.typecheck_checkpoint.clone()
+            };
             let diagnostics = tokio::task::spawn_blocking(move || {
-                Self::build_diagnostics_with_workspace(
+                let (cp_opt, is_new) = match checkpoint {
+                    Some(cp) => (cp, false),
+                    None => {
+                        let stdlib = aivi::embedded_stdlib_modules();
+                        (aivi::check_types_stdlib_checkpoint(&stdlib), true)
+                    }
+                };
+                let diags = Self::build_diagnostics_with_workspace(
                     &text,
                     &uri2,
                     &workspace,
                     include_specs_snippets,
                     &strict2,
-                )
+                    None,
+                    Some(&cp_opt),
+                );
+                (diags, is_new.then_some(cp_opt))
             })
             .await
             .unwrap_or_default();
+            if let Some(cp) = diagnostics.1 {
+                let mut state = self.state.lock().await;
+                state.typecheck_checkpoint.get_or_insert(cp);
+            }
             self.client
-                .publish_diagnostics(uri, diagnostics, None)
+                .publish_diagnostics(uri, diagnostics.0, None)
                 .await;
         }
     }
