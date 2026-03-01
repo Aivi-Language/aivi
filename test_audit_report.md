@@ -1,8 +1,8 @@
 # AIVI Test Quality Audit Report
 
 **Total tests audited: 439**
-**Passed: 390 (88.8%)**
-**Failed: 49 (11.2%)**
+**Original audit: 390 pass (88.8%), 49 fail (11.2%)**
+**After fixes: 4 false positives corrected, 3 bugs fixed, 4 debug tests marked #[ignore], ~33 tests strengthened**
 
 ---
 
