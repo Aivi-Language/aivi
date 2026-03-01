@@ -1323,7 +1323,7 @@ fn parses_decorator_on_class_decl() {
 module Example
 
 @deprecated "use Mappable"
-class Functor (F *) = { map: (A -> B) -> F A -> F B }
+class Functor (F A) = given (A: Any) { map: (A -> B) -> F B }
 "#;
     let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(
@@ -1353,7 +1353,7 @@ fn parses_instance_decl() {
     let src = r#"
 module Example
 
-instance Functor (Option *) = {
+instance Functor (Option A) = given (A: Any) {
   map: f opt => opt
 }
 "#;
@@ -1383,7 +1383,7 @@ fn parses_class_type_variable_constraints() {
     let src = r#"
 module Example
 
-class Collection (C *) = given (A: Eq, B: Show) {
+class Collection (C A) = given (A: Eq, B: Show) {
   elem: A -> C A -> Bool
   render: B -> Text
 }

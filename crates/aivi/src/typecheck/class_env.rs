@@ -21,6 +21,75 @@ pub(super) struct InstanceDeclInfo {
 
 const AUTO_FORWARD_DECORATOR: &str = "__auto_forward";
 
+/// Extract the HKT container type from class params (e.g., `F A` from `Functor (F A)`).
+/// Returns `None` for non-HKT classes (e.g., `Setoid A`) or old-style `(F *)` params.
+fn hkt_container(params: &[TypeExpr]) -> Option<&TypeExpr> {
+    if params.len() != 1 {
+        return None;
+    }
+    match &params[0] {
+        TypeExpr::Apply { args, .. } if !args.iter().any(|a| matches!(a, TypeExpr::Star { .. })) => {
+            Some(&params[0])
+        }
+        _ => None,
+    }
+}
+
+/// Flatten a right-associative Func chain into all parameter types and the final result.
+fn flatten_func(ty: &TypeExpr) -> (Vec<&TypeExpr>, &TypeExpr) {
+    match ty {
+        TypeExpr::Func { params, result, .. } => {
+            let (mut rest_params, final_result) = flatten_func(result);
+            let mut all_params: Vec<&TypeExpr> = params.iter().collect();
+            all_params.append(&mut rest_params);
+            (all_params, final_result)
+        }
+        _ => (vec![], ty),
+    }
+}
+
+/// Insert the container type as the last parameter in a right-associative Func chain.
+fn insert_last_param(ty: &TypeExpr, container: &TypeExpr) -> TypeExpr {
+    match ty {
+        TypeExpr::Func { params, result, span } => match result.as_ref() {
+            TypeExpr::Func { .. } => TypeExpr::Func {
+                params: params.clone(),
+                result: Box::new(insert_last_param(result, container)),
+                span: span.clone(),
+            },
+            _ => TypeExpr::Func {
+                params: params.clone(),
+                result: Box::new(TypeExpr::Func {
+                    params: vec![container.clone()],
+                    result: result.clone(),
+                    span: span.clone(),
+                }),
+                span: span.clone(),
+            },
+        },
+        _ => ty.clone(),
+    }
+}
+
+/// Expand an abbreviated HKT class member signature by inserting the container type
+/// as the last function parameter. Skips if:
+/// - the member type is not a function type (e.g., `id: F A A`)
+/// - the container already appears as a parameter (already full form)
+/// - the return type equals the container (constructor like `of: A -> F A`)
+fn expand_hkt_member_sig(container: &TypeExpr, member_ty: &TypeExpr) -> TypeExpr {
+    let TypeExpr::Func { .. } = member_ty else {
+        return member_ty.clone();
+    };
+    let (all_params, final_result) = flatten_func(member_ty);
+    if all_params.iter().any(|p| type_expr_eq(p, container)) {
+        return member_ty.clone();
+    }
+    if type_expr_eq(final_result, container) {
+        return member_ty.clone();
+    }
+    insert_last_param(member_ty, container)
+}
+
 pub(super) fn collect_local_class_env(
     module: &Module,
 ) -> (HashMap<String, ClassDeclInfo>, Vec<InstanceDeclInfo>) {
@@ -29,14 +98,21 @@ pub(super) fn collect_local_class_env(
     for item in &module.items {
         match item {
             ModuleItem::ClassDecl(class_decl) => {
+                let container = hkt_container(&class_decl.params);
                 let mut members = HashMap::new();
                 for member in &class_decl.members {
-                    members.insert(member.name.name.clone(), member.ty.clone());
+                    let ty = match container {
+                        Some(c) => expand_hkt_member_sig(c, &member.ty),
+                        None => member.ty.clone(),
+                    };
+                    members.insert(member.name.name.clone(), ty);
                 }
                 let direct_members = members.clone();
+                // Filter out `Any` constraints (universally quantified, no actual restriction)
                 let constraints = class_decl
                     .constraints
                     .iter()
+                    .filter(|c| c.class.name != "Any")
                     .map(|constraint| (constraint.var.name.clone(), constraint.class.name.clone()))
                     .collect();
                 classes.insert(

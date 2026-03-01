@@ -8,14 +8,14 @@ fn class_inheritance_uses_type_and_combinator() {
 module Test
 export Functor, Monad
 
-class Functor (F *) = {
-  map: F A -> (A -> B) -> F B
+class Functor (F A) = given (A: Any) {
+  map: (A -> B) -> F B
 }
 
-class Monad (M *) =
+class Monad (M A) = given (A: Any),
   Functor {
     pure: A -> M A
-    flatMap: M A -> (A -> M B) -> M B
+    flatMap: (A -> M B) -> M B
   }
 "#;
 

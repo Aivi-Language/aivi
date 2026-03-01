@@ -5,21 +5,21 @@ use aivi.logic (Functor, Apply, Applicative, Chain, Monad)
 // A minimal "identity" type constructor.
 Id A = Id A
 
-instance Functor (Id *) = {
+instance Functor (Id A) = given (A: Any) {
   map: f (Id x) => Id (f x)
 }
 
-instance Apply (Id *) = {
+instance Apply (Id A) = given (A: Any) {
   ap: (Id f) (Id x) => Id (f x)
 }
 
-instance Applicative (Id *) = {
+instance Applicative (Id A) = given (A: Any) {
   of: x => Id x
 }
 
-instance Chain (Id *) = {
+instance Chain (Id A) = given (A: Any) {
   chain: f (Id x) => f x
 }
 
 // In aivi.logic, `Monad` is `Applicative` + `Chain`, so the dictionary is empty.
-instance Monad (Id *) = {}
+instance Monad (Id A) = given (A: Any) {}

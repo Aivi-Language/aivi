@@ -1,13 +1,13 @@
 module test.fmt_indent_after_eq
 export activeNames
 
-class Functor (F *) = {
-  map: F A -> (A -> B) -> F B
+class Functor (F A) = given (A: Any) {
+  map: (A -> B) -> F B
 }
 
-class Apply (F *) =
+class Apply (F A) = given (A: Any),
   Functor {
-    ap: F A -> F (A -> B) -> F B
+    ap: F (A -> B) -> F B
   }
 
 users = [
