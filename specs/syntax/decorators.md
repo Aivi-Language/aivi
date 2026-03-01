@@ -38,3 +38,4 @@ Decorators appear before the binding they annotate.
 ## Related
 
 - [Mock Expressions](./decorators/mock) — scoped binding substitution for testing
+- [Testing Module](/stdlib/core/testing) — assertions, test runner, snapshot assertions

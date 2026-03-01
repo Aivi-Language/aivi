@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::surface::{
-    BlockItem, BlockKind, Decorator, Def, DomainItem, Expr, Module, ModuleItem, Pattern, TextPart,
+    BlockItem, BlockKind, Decorator, Def, DomainItem, Expr, Module, ModuleItem, Pattern,
+    SpannedName, TextPart,
 };
 use std::cell::Cell;
 
@@ -365,6 +366,22 @@ fn collect_surface_defs(module: &Module) -> Vec<Def> {
                         DomainItem::TypeAlias(_) | DomainItem::TypeSig(_) => {}
                     }
                 }
+            }
+            // Machine declarations produce runtime-registered globals. Emit a
+            // synthetic def so that references inside JIT-compiled code resolve
+            // via `Global` instead of `ConstructorValue`.
+            ModuleItem::MachineDecl(machine_decl) => {
+                let span = machine_decl.name.span.clone();
+                defs.push(Def {
+                    decorators: Vec::new(),
+                    name: machine_decl.name.clone(),
+                    params: Vec::new(),
+                    expr: Expr::Ident(SpannedName {
+                        name: "Unit".to_string(),
+                        span: span.clone(),
+                    }),
+                    span,
+                });
             }
             _ => {}
         }
