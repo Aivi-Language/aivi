@@ -752,6 +752,9 @@ pub extern "C" fn rt_get_global(
             other => format!("{:?}", std::mem::discriminant(other)),
         });
     }
+    if name == "AccountSyncMachine" || name.contains("AccountSync") {
+        eprintln!("[DEBUG rt_get_global] {} => {:?}", name, std::mem::discriminant(&val));
+    }
     match runtime.force_value(val) {
         Ok(forced) => abi::box_value(forced),
         Err(e) => {

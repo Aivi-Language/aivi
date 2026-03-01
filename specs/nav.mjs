@@ -79,13 +79,10 @@ export const sidebar = [
             items: [
               { text: 'Overview', link: '/syntax/decorators' },
               { text: '@static', link: '/syntax/decorators/static' },
-              { text: 'OpenAPI Source', link: '/syntax/decorators/static/openapi' },
               { text: '@native', link: '/syntax/decorators/native' },
               { text: '@deprecated', link: '/syntax/decorators/deprecated' },
               { text: '@debug', link: '/syntax/decorators/debug' },
-              { text: '@test', link: '/syntax/decorators/test' },
-              { text: '@no_prelude', link: '/syntax/decorators/no_prelude' },
-              { text: 'Mock Expressions', link: '/syntax/decorators/mock' }
+              { text: '@no_prelude', link: '/syntax/decorators/no_prelude' }
             ]
           },
           { text: 'Comments', link: '/syntax/comments' },
@@ -107,7 +104,6 @@ export const sidebar = [
           { text: 'Logic', link: '/stdlib/core/logic' },
           { text: 'Units', link: '/stdlib/core/units' },
           { text: 'Regex', link: '/stdlib/core/regex' },
-          { text: 'Testing', link: '/stdlib/core/testing' },
           { text: 'Collections', link: '/stdlib/core/collections' },
           { text: 'I18n', link: '/stdlib/core/i18n' },
           { text: 'Generator', link: '/stdlib/core/generator' },
@@ -213,7 +209,16 @@ export const sidebar = [
       { text: 'CLI', link: '/tools/cli' },
       { text: 'LSP Server', link: '/tools/lsp_server' },
       { text: 'VSCode Extension', link: '/tools/vscode_extension' },
-      { text: 'Spec Doc Markers', link: '/doc-markers-spec' }
+      { text: 'Spec Doc Markers', link: '/doc-markers-spec' },
+      {
+        text: 'Testing',
+        collapsed: true,
+        items: [
+          { text: 'Testing Module', link: '/stdlib/core/testing' },
+          { text: '@test Decorator', link: '/syntax/decorators/test' },
+          { text: 'Mock Expressions', link: '/syntax/decorators/mock' }
+        ]
+      }
     ]
   },
   {

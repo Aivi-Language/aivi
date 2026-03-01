@@ -10,8 +10,8 @@
 - `@static x = file.json "..."`
 - `@static x = file.csv "..."`
 - `@static x = env.get "..."`
-- `@static x = openapi.fromUrl ~url(...)` — see [OpenAPI Source](/syntax/decorators/static/openapi)
-- `@static x = openapi.fromFile "..."` — see [OpenAPI Source](/syntax/decorators/static/openapi)
+- `@static x = openapi.fromUrl ~url(...)` — see [OpenAPI Source](/syntax/decorators/static#openapi-source)
+- `@static x = openapi.fromFile "..."` — see [OpenAPI Source](/syntax/decorators/static#openapi-source)
 
 ## Example
 
