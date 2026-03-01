@@ -235,7 +235,7 @@ pub(super) fn build_http_client_record(mode: HttpClientMode) -> Value {
                     if is_json_body
                         && !headers
                             .iter()
-                            .any(|(k, _)| k.to_ascii_lowercase() == "content-type")
+                            .any(|(k, _)| k.eq_ignore_ascii_case("content-type"))
                     {
                         headers.push(("content-type".to_string(), "application/json".to_string()));
                     }

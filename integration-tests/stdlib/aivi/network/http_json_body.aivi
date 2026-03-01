@@ -13,7 +13,7 @@ jsonBodyVariant = do Effect {
     method: "POST"
     url: reqUrl
     headers: []
-    body: Some (Json (toJson { grant_type: "authorization_code", code: "abc123" }))
+    body: Some { grant_type: "authorization_code", code: "abc123" }
   }
   assertEq req.method "POST"
   req.body match
@@ -24,16 +24,29 @@ jsonBodyVariant = do Effect {
 @test "record literal coerces to Body"
 recordCoercesToBody = do Effect {
   reqUrl = { protocol: "https", host: "example.com", port: None, path: "/token", query: [], hash: None }
-  b : Body = { grant_type: "authorization_code", code: "abc123" }
   req = {
     method: "POST"
     url: reqUrl
     headers: []
-    body: Some b
+    body: { grant_type: "authorization_code", code: "abc123" }
   }
   req.body match
     | Some (Json _) => assert True
     | _             => assert False
+}
+
+@test "text coerces to Body via Plain"
+textCoercesToBody = do Effect {
+  reqUrl = { protocol: "https", host: "example.com", port: None, path: "/token", query: [], hash: None }
+  req = {
+    method: "POST"
+    url: reqUrl
+    headers: []
+    body: "hello world"
+  }
+  req.body match
+    | Some (Plain t) => assertEq t "hello world"
+    | _              => assert False
 }
 
 @test "toJson encodes record to JsonObject"
@@ -58,7 +71,7 @@ toJsonInt = do Effect {
 
 @test "toJson encodes None to JsonNull"
 toJsonNone = do Effect {
-  encoded = toJson (None : Option Text)
+  encoded = toJson None
   assertEq encoded JsonNull
 }
 

@@ -1216,39 +1216,124 @@ impl TypeChecker {
             self.subst = base_subst3;
         }
 
-        // Coerce a record literal into `Body` via `Json (toJson record)`.
+        // Coerce into `Body`: record → Json (toJson record), Text → Plain, JsonValue → Json.
         let is_body = matches!(
             expected_applied,
             Type::Con(ref name, ref args) if name == "Body" && args.is_empty()
         );
-        if is_body && matches!(expr, Expr::Record { .. }) {
-            let to_json = Expr::Ident(SpannedName {
-                name: "toJson".into(),
-                span: expr_span(&expr),
-            });
-            let to_json_call = Expr::Call {
-                func: Box::new(to_json),
-                args: vec![expr.clone()],
-                span: expr_span(&expr),
-            };
-            let json_ctor = Expr::Ident(SpannedName {
-                name: "Json".into(),
-                span: expr_span(&expr),
-            });
-            let wrapped = Expr::Call {
-                func: Box::new(json_ctor),
-                args: vec![to_json_call],
-                span: expr_span(&expr),
-            };
-            let wrapped_ty = self.infer_expr(&wrapped, env)?;
-            let base_subst4 = self.subst.clone();
-            if self
-                .unify_with_span(wrapped_ty, expected.clone(), expr_span(&wrapped))
-                .is_ok()
-            {
-                return Ok((wrapped, self.apply(expected)));
+        if is_body {
+            let inferred_applied = self.apply(inferred.clone());
+            let inferred_expanded = self.expand_alias(inferred_applied);
+
+            // Record literal → Json (toJson record)
+            if matches!(expr, Expr::Record { .. }) {
+                let to_json = Expr::Ident(SpannedName {
+                    name: "toJson".into(),
+                    span: expr_span(&expr),
+                });
+                let to_json_call = Expr::Call {
+                    func: Box::new(to_json),
+                    args: vec![expr.clone()],
+                    span: expr_span(&expr),
+                };
+                let json_ctor = Expr::Ident(SpannedName {
+                    name: "Json".into(),
+                    span: expr_span(&expr),
+                });
+                let wrapped = Expr::Call {
+                    func: Box::new(json_ctor),
+                    args: vec![to_json_call],
+                    span: expr_span(&expr),
+                };
+                let wrapped_ty = self.infer_expr(&wrapped, env)?;
+                let checkpoint = self.subst.clone();
+                if self
+                    .unify_with_span(wrapped_ty, expected.clone(), expr_span(&wrapped))
+                    .is_ok()
+                {
+                    return Ok((wrapped, self.apply(expected)));
+                }
+                self.subst = checkpoint;
             }
-            self.subst = base_subst4;
+
+            // Text → Plain text
+            if matches!(inferred_expanded, Type::Con(ref n, ref a) if n == "Text" && a.is_empty())
+            {
+                let plain_ctor = Expr::Ident(SpannedName {
+                    name: "Plain".into(),
+                    span: expr_span(&expr),
+                });
+                let wrapped = Expr::Call {
+                    func: Box::new(plain_ctor),
+                    args: vec![expr.clone()],
+                    span: expr_span(&expr),
+                };
+                let wrapped_ty = self.infer_expr(&wrapped, env)?;
+                let checkpoint = self.subst.clone();
+                if self
+                    .unify_with_span(wrapped_ty, expected.clone(), expr_span(&wrapped))
+                    .is_ok()
+                {
+                    return Ok((wrapped, self.apply(expected)));
+                }
+                self.subst = checkpoint;
+            }
+
+            // JsonValue → Json jv
+            if matches!(inferred_expanded, Type::Con(ref n, ref a) if n == "JsonValue" && a.is_empty())
+            {
+                let json_ctor = Expr::Ident(SpannedName {
+                    name: "Json".into(),
+                    span: expr_span(&expr),
+                });
+                let wrapped = Expr::Call {
+                    func: Box::new(json_ctor),
+                    args: vec![expr.clone()],
+                    span: expr_span(&expr),
+                };
+                let wrapped_ty = self.infer_expr(&wrapped, env)?;
+                let checkpoint = self.subst.clone();
+                if self
+                    .unify_with_span(wrapped_ty, expected.clone(), expr_span(&wrapped))
+                    .is_ok()
+                {
+                    return Ok((wrapped, self.apply(expected)));
+                }
+                self.subst = checkpoint;
+            }
+        }
+
+        // Option coercion: when expected is `Option A`, try coercing the expression
+        // to `A` and wrap in `Some`. This enables e.g. `body: { ... }` where
+        // `Option Body` is expected.
+        if let Type::Con(ref opt_name, ref opt_args) = expected_applied {
+            if opt_name == "Option" && opt_args.len() == 1 {
+                let inner_expected = opt_args[0].clone();
+                let option_checkpoint = self.subst.clone();
+                if let Ok((coerced_expr, _)) =
+                    self.check_or_coerce(expr.clone(), Some(inner_expected), env)
+                {
+                    let some_ctor = Expr::Ident(SpannedName {
+                        name: "Some".into(),
+                        span: expr_span(&coerced_expr),
+                    });
+                    let wrapped = Expr::Call {
+                        func: Box::new(some_ctor),
+                        args: vec![coerced_expr],
+                        span: expr_span(&expr),
+                    };
+                    let wrapped_ty = self.infer_expr(&wrapped, env)?;
+                    let checkpoint = self.subst.clone();
+                    if self
+                        .unify_with_span(wrapped_ty, expected.clone(), expr_span(&wrapped))
+                        .is_ok()
+                    {
+                        return Ok((wrapped, self.apply(expected)));
+                    }
+                    self.subst = checkpoint;
+                }
+                self.subst = option_checkpoint;
+            }
         }
 
         // Fall back to the original mismatch (without keeping any partial unifications).

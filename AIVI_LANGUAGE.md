@@ -328,10 +328,15 @@ class Collection (C A) = given (A: Eq) {
 
 In positions where a `Text` is expected, the compiler may insert `toText expr` if a `ToText A` instance is in scope.
 
-When the expected type is `Body` (from `aivi.net.http`) and a record literal is provided, the compiler automatically wraps it: `Json (toJson record)`. This means you can pass a plain record as an HTTP request body and it will be JSON-serialised:
+When the expected type is `Body` (from `aivi.net.http`), the compiler coerces:
+- Record literal → `Json (toJson record)`
+- `Text` → `Plain text`
+- `JsonValue` → `Json jv`
+
+When the expected type is `Option A` and the expression does not match, the compiler tries to coerce to `A` and wraps in `Some`. These coercions chain, so a bare record in an `Option Body` position becomes `Some (Json (toJson { ... }))`:
 
 ```aivi
-body: Some { grant_type: "authorization_code", code: code }
+body: { grant_type: "authorization_code", code: code }
 // elaborated to: Some (Json (toJson { grant_type: ..., code: ... }))
 ```
 
