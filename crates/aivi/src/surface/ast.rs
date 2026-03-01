@@ -119,6 +119,7 @@ pub struct InstanceDecl {
     pub decorators: Vec<Decorator>,
     pub name: SpannedName,
     pub params: Vec<TypeExpr>,
+    pub constraints: Vec<TypeVarConstraint>,
     pub defs: Vec<Def>,
     pub span: Span,
 }

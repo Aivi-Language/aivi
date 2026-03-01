@@ -1,9 +1,9 @@
-class Functor (F *) = {
-  map: F A -> (A -> B) -> F B
+class Functor (F A) = given (A: Any) {
+  map: (A -> B) -> F B
 }
 
 // Tokens explained:
 // - Functor: The class name
-// - F: Generic type parameter
-// - *: Denotes a higher-kinded type (F takes one type argument)
-// - A, B: Type variables within the definition
+// - F: Generic type constructor parameter
+// - A: Named type variable (bound by `given`)
+// - given (A: Any): Declares universally quantified type variables

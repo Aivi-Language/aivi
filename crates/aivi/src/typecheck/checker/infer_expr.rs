@@ -742,8 +742,47 @@ impl TypeChecker {
         self.unify_with_span(cond_ty, Type::con("Bool"), expr_span(cond))?;
         let then_ty = self.infer_expr(then_branch, env)?;
         let else_ty = self.infer_expr(else_branch, env)?;
-        self.unify_with_span(then_ty.clone(), else_ty.clone(), expr_span(else_branch))?;
+        let snapshot = self.subst.clone();
+        if self
+            .unify_with_span(then_ty.clone(), else_ty.clone(), expr_span(else_branch))
+            .is_err()
+        {
+            // If one branch is `Effect E Unit` and the other is bare `Unit`, coerce the `Unit`
+            // branch to `Effect E Unit` so that `if cond then someEffect else Unit` type-checks.
+            self.subst = snapshot;
+            let then_applied = self.apply(then_ty.clone());
+            let else_applied = self.apply(else_ty.clone());
+            let then_is_unit = matches!(&then_applied, Type::Con(n, a) if n == "Unit" && a.is_empty());
+            let else_is_unit = matches!(&else_applied, Type::Con(n, a) if n == "Unit" && a.is_empty());
+            let effect_ty = if else_is_unit && Self::is_fully_applied_effect(&then_applied) {
+                Some(then_applied)
+            } else if then_is_unit && Self::is_fully_applied_effect(&else_applied) {
+                Some(else_applied)
+            } else {
+                None
+            };
+            if let Some(eff) = effect_ty {
+                return Ok(eff);
+            }
+            // No coercion possible — re-run to produce the diagnostic.
+            self.unify_with_span(then_ty.clone(), else_ty, expr_span(else_branch))?;
+        }
         Ok(then_ty)
+    }
+
+    fn is_fully_applied_effect(ty: &Type) -> bool {
+        match ty {
+            Type::Con(name, args) => name == "Effect" && args.len() == 2,
+            Type::App(base, args) => {
+                if let Type::Con(name, existing) = &**base {
+                    if name == "Effect" {
+                        return existing.len() + args.len() == 2;
+                    }
+                }
+                false
+            }
+            _ => false,
+        }
     }
 
     fn infer_binary(

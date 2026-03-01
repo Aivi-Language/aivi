@@ -721,18 +721,18 @@ export value
 
 Option A = None | Some A
 
-class Functor (F *) = {
-  map: F A -> (A -> B) -> F B
+class Functor (F A) = given (A: Any) {
+  map: (A -> B) -> F B
 }
 
-instance Functor (Option *) = {
-  map: opt f => opt match
+instance Functor (Option A) = given (A: Any) {
+  map: f opt => opt match
     | None => None
     | Some x => Some (f x)
 }
 
  inc = x => x + 1
-value = map (Some 1) inc"#;
+value = map inc (Some 1)"#;
     check_ok(source);
 }
 

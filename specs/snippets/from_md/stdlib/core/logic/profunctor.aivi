@@ -1,3 +1,3 @@
-class Profunctor (F * *) = {
-  promap: (A -> B) -> (C -> D) -> F B C -> F A D
+class Profunctor (F A B) = given (A: Any, B: Any) {
+  promap: (A -> B) -> (C -> D) -> F A D
 }

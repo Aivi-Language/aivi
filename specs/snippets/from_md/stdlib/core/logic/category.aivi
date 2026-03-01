@@ -1,3 +1,3 @@
-class Category (F * *) = Semigroupoid {
+class Category (F A B) = given (A: Any, B: Any), Semigroupoid {
   id: F A A
 }

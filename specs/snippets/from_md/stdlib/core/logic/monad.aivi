@@ -1,1 +1,1 @@
-class Monad (M *) = Applicative, Chain {}
+class Monad (M A) = given (A: Any), Applicative, Chain {}

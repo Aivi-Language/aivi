@@ -481,6 +481,44 @@ impl Parser {
         }
         self.consume_newlines();
         self.expect_symbol("=", "expected '=' in instance declaration");
+        self.consume_newlines();
+
+        // Parse optional `given (...)` constraint clause on instances.
+        let mut constraints = Vec::new();
+        if self.peek_keyword("given")
+            && self
+                .tokens
+                .get(self.pos + 1)
+                .is_some_and(|tok| tok.kind == TokenKind::Symbol && tok.text == "(")
+        {
+            self.consume_ident_text("given");
+            self.expect_symbol("(", "expected '(' after 'given' in instance constraints");
+            self.consume_newlines();
+            while self.pos < self.tokens.len() && !self.check_symbol(")") {
+                self.consume_newlines();
+                let var = match self.consume_ident() {
+                    Some(var) => var,
+                    None => break,
+                };
+                self.consume_newlines();
+                self.expect_symbol(":", "expected ':' in instance type-variable constraint");
+                self.consume_newlines();
+                let class = self.consume_ident().unwrap_or(SpannedName {
+                    name: String::new(),
+                    span: var.span.clone(),
+                });
+                let span = merge_span(var.span.clone(), class.span.clone());
+                constraints.push(crate::surface::TypeVarConstraint { var, class, span });
+                self.consume_newlines();
+                if self.consume_symbol(",") {
+                    self.consume_newlines();
+                    continue;
+                }
+            }
+            self.expect_symbol(")", "expected ')' to close instance constraints");
+            self.consume_newlines();
+        }
+
         self.expect_symbol("{", "expected '{' to start instance body");
         let mut defs = Vec::new();
         while self.pos < self.tokens.len() {
@@ -500,6 +538,7 @@ impl Parser {
             decorators,
             name,
             params,
+            constraints,
             defs,
             span,
         })

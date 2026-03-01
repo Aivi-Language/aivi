@@ -4,8 +4,8 @@ module integrationTests.compileFail.overlappingInstances
 
 use aivi
 
-class Show2 (F *) = {
-  show2: F -> Text
+class Show2 A = {
+  show2: A -> Text
 }
 
 instance Show2 Int = {
@@ -15,3 +15,5 @@ instance Show2 Int = {
 instance Show2 Int = {
   show2 = x => "b"
 }
+
+value = show2 42

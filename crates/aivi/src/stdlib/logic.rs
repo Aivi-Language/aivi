@@ -38,52 +38,52 @@ class Group A = Monoid {
 
 // 3. Categories
 
-class Semigroupoid (F * *) = {
-  compose: F B C -> F A B -> F A C
+class Semigroupoid (F A B) = given (A: Any, B: Any) {
+  compose: F B C -> F A C
 }
 
-class Category (F * *) = Semigroupoid {
+class Category (F A B) = given (A: Any, B: Any), Semigroupoid {
   id: F A A
 }
 
 // 4. Functional Mappings
 
-class Functor (F *) = {
-  map: (A -> B) -> F A -> F B
+class Functor (F A) = given (A: Any) {
+  map: (A -> B) -> F B
 }
 
-class Apply (F *) = Functor {
-  ap: F (A -> B) -> F A -> F B
+class Apply (F A) = given (A: Any), Functor {
+  ap: F (A -> B) -> F B
 }
 
-class Applicative (F *) = Apply {
+class Applicative (F A) = given (A: Any), Apply {
   of: A -> F A
 }
 
-class Chain (F *) = Apply {
-  chain: (A -> F B) -> F A -> F B
+class Chain (F A) = given (A: Any), Apply {
+  chain: (A -> F B) -> F B
 }
 
-class Monad (M *) = Applicative, Chain {}
+class Monad (M A) = given (A: Any), Applicative, Chain {}
 
 // 5. Folds and Traversals
 
-class Foldable (F *) = {
-  reduce: (B -> A -> B) -> B -> F A -> B
+class Foldable (F A) = given (A: Any) {
+  reduce: (B -> A -> B) -> B -> B
 }
 
-class Traversable (T *) = Functor, Foldable {
-  traverse: (A -> F B) -> T A -> F (T B)
+class Traversable (T A) = given (A: Any), Functor, Foldable {
+  traverse: (A -> F B) -> F (T B)
 }
 
 // 6. Higher-Order Mappings
 
-class Bifunctor (F * *) = {
-  bimap: (A -> C) -> (B -> D) -> F A B -> F C D
+class Bifunctor (F A B) = given (A: Any, B: Any) {
+  bimap: (A -> C) -> (B -> D) -> F C D
 }
 
-class Profunctor (F * *) = {
-  promap: (A -> B) -> (C -> D) -> F B C -> F A D
+class Profunctor (F A B) = given (A: Any, B: Any) {
+  promap: (A -> B) -> (C -> D) -> F A D
 }
 
 // ------------------------------------------------------------
@@ -92,43 +92,43 @@ class Profunctor (F * *) = {
 
 // Option
 
-instance Functor (Option *) = {
+instance Functor (Option A) = given (A: Any) {
   map: f opt =>
     opt match
       | None   => None
       | Some x => Some (f x)
 }
 
-instance Apply (Option *) = {
+instance Apply (Option A) = given (A: Any) {
   ap: fOpt opt =>
     (fOpt, opt) match
       | (Some f, Some x) => Some (f x)
       | _                => None
 }
 
-instance Applicative (Option *) = {
+instance Applicative (Option A) = given (A: Any) {
   of: Some
 }
 
-instance Chain (Option *) = {
+instance Chain (Option A) = given (A: Any) {
   chain: f opt =>
     opt match
       | None   => None
       | Some x => f x
 }
 
-instance Monad (Option *) = {}
+instance Monad (Option A) = given (A: Any) {}
 
 // Result
 
-instance Functor (Result E *) = {
+instance Functor (Result E A) = given (A: Any) {
   map: f res =>
     res match
       | Ok x  => Ok (f x)
       | Err e => Err e
 }
 
-instance Apply (Result E *) = {
+instance Apply (Result E A) = given (A: Any) {
   ap: fRes xRes =>
     (fRes, xRes) match
       | (Ok f, Ok x)   => Ok (f x)
@@ -136,16 +136,16 @@ instance Apply (Result E *) = {
       | (_, Err e)     => Err e
 }
 
-instance Applicative (Result E *) = {
+instance Applicative (Result E A) = given (A: Any) {
   of: Ok
 }
 
-instance Chain (Result E *) = {
+instance Chain (Result E A) = given (A: Any) {
   chain: f res =>
     res match
       | Ok x  => f x
       | Err e => Err e
 }
 
-instance Monad (Result E *) = {}
+instance Monad (Result E A) = given (A: Any) {}
 "#;
