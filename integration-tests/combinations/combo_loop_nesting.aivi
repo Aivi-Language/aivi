@@ -64,7 +64,7 @@ loopCreatesClosures = do Effect {
   results = result match
     | [f3, f2, f1] => [f1 10, f2 10, f3 10]
     | _            => [0, 0, 0]
-  assertEq results [11, 12, 13]
+    assertEq results [11, 12, 13]
 }
 
 // --- Loop with nested do Effect ---

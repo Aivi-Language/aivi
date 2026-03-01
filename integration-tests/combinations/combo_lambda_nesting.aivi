@@ -77,10 +77,10 @@ lambdaFromMatchArm = do Effect {
   makeAdder = opt => opt match
     | Some n => x => x + n
     | None   => x => x
-  adder = makeAdder (Some 10)
-  identity = makeAdder None
-  assertEq (adder 5) 15
-  assertEq (identity 5) 5
+    adder = makeAdder (Some 10)
+    identity = makeAdder None
+    assertEq (adder 5) 15
+    assertEq (identity 5) 5
 }
 
 // --- Triple nesting: lambda in lambda in do Effect ---

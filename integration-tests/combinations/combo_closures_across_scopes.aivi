@@ -56,8 +56,8 @@ matchArmClosure = do Effect {
   areaFn = shape match
     | Val n => x => n * n * multiplier + x
     | Empty => x => x
-  assertEq (areaFn 0) 90
-  assertEq (areaFn 2) 92
+    assertEq (areaFn 0) 90
+    assertEq (areaFn 2) 92
 }
 
 // --- Generator captures from multiple outer scopes ---
@@ -126,7 +126,7 @@ adtPayloadThroughLambdaDo = do Effect {
         b <- pure (f 20)
         pure (a + b)
       }
-  assertEq result 44
+    assertEq result 44
 }
 
 // --- Function arg captured through three levels of nesting ---

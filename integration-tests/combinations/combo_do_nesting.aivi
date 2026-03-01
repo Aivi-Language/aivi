@@ -71,7 +71,7 @@ doEffectInMatchArm = do Effect {
         computed <- pure (n * base)
         pure computed
       }
-  assertEq result 50
+    assertEq result 50
 }
 
 // --- Chained do Option blocks ---
@@ -110,7 +110,7 @@ nestedMatchDoEffectArms = do Effect {
           | [y, ...z] => y * scale
         pure (head + tail)
       }
-  assertEq result 9
+    assertEq result 9
 }
 
 // --- attempt converts nested do Effect error to Result ---
@@ -119,9 +119,10 @@ nestedMatchDoEffectArms = do Effect {
 attemptNestedDoEffect = do Effect {
   base = 42
   res <- attempt (do Effect {
-    given False or fail "nope"
-    pure base
-  })
+      given False or fail "nope"
+      pure base
+  }
+  )
   res match
     | Err e => assertEq e "nope"
     | Ok _  => fail "should have errored"

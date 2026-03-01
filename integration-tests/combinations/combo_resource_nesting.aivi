@@ -28,7 +28,7 @@ resourceValueMatched = do Effect {
   result = counter match
     | 1 => "one"
     | _ => "other"
-  assertEq result "one"
+    assertEq result "one"
 }
 
 // --- Lambda captures outer binding across resource ---
