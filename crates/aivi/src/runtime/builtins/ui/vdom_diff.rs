@@ -240,6 +240,7 @@ fn patch_ops_to_json_value(value: &Value) -> Result<serde_json::Value, RuntimeEr
     Ok(serde_json::Value::Array(out))
 }
 
+#[allow(dead_code)]
 fn runtime_error_to_text(err: RuntimeError) -> String {
     match err {
         RuntimeError::Message(message) => message,
@@ -248,6 +249,7 @@ fn runtime_error_to_text(err: RuntimeError) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn expect_record(value: Value, message: &str) -> Result<Arc<HashMap<String, Value>>, RuntimeError> {
     match value {
         Value::Record(fields) => Ok(fields),

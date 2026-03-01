@@ -43,3 +43,41 @@ For other types, importing `ToDefault` enables instance-driven filling through `
 
 Defaults are prepended before user-written fields, so explicit fields and later spreads still
 override synthesized defaults.
+
+## `Body` Coercions
+
+When `Body` is expected (e.g. in an HTTP request), the compiler inserts constructor wrapping:
+
+| Expression type | Rewritten to |
+| --- | --- |
+| Record literal `{ ... }` | `Json (toJson { ... })` |
+| `Text` | `Plain text` |
+| `JsonValue` | `Json jv` |
+
+This enables ergonomic HTTP code:
+
+```aivi
+fetch {
+  method: "POST"
+  url: url
+  headers: []
+  body: Some { grant_type: "authorization_code", code: code }
+}
+```
+
+## `Option` Coercion
+
+When `Option A` is expected and the expression does not directly unify, the compiler attempts to
+coerce the expression to type `A` using the rules above, then wraps the result in `Some`.
+
+This chains with other coercions. For example, when `Option Body` is expected, a bare record
+literal is rewritten to `Some (Json (toJson { ... }))`:
+
+```aivi
+fetch {
+  method: "POST"
+  url: url
+  headers: []
+  body: { grant_type: "authorization_code", code: code }
+}
+```

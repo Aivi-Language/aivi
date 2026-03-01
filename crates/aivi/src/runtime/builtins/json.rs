@@ -189,9 +189,9 @@ pub(super) fn json_value_to_text(value: &Value) -> Result<String, RuntimeError> 
                 .collect();
             Ok(format!("{{{}}}", parts?.join(",")))
         }
-        _ => Err(RuntimeError::Message(format!(
-            "json: expected JsonValue, got unexpected constructor"
-        ))),
+        _ => Err(RuntimeError::Message(
+            "json: expected JsonValue, got unexpected constructor".to_string(),
+        )),
     }
 }
 
