@@ -12,7 +12,6 @@ jobs:
       aivi: ${{ steps.filter.outputs.aivi }}
       vscode: ${{ steps.filter.outputs.vscode }}
       docs: ${{ steps.filter.outputs.docs }}
-      zed: ${{ steps.filter.outputs.zed }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -32,9 +31,6 @@ jobs:
               - ".github/workflows/ci.yml"
             docs:
               - "specs/**"
-              - ".github/workflows/ci.yml"
-            zed:
-              - "zed/**"
               - ".github/workflows/ci.yml"
 
   aivi:
@@ -177,23 +173,3 @@ jobs:
         with:
           name: aivi-vscode.vsix
           path: vscode/aivi-vscode.vsix
-
-  zed:
-    name: Zed Extension
-    needs: changes
-    if: needs.changes.outputs.zed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Install grammar dependencies
-        run: npm ci
-        working-directory: zed/grammars/aivi
-      - name: Generate grammar
-        run: npx tree-sitter generate
-        working-directory: zed/grammars/aivi
-      - name: Verify parser.c is up to date
-        run: git diff --exit-code zed/grammars/aivi/src/

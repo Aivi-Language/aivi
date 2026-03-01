@@ -21,7 +21,6 @@ Authoritative guide for AI agents working on the AIVI language project. Covers t
 | `crates/doc_index_gen`    | **Doc tooling**      | Generates doc indices for LSP hover and the docs site.                                           |
 | `integration-tests/`      | **Validation**       | Canonical `.aivi` files: `syntax/`, `runtime/`, `stdlib/`, `complex/`, `compile_fail/`.          |
 | `vscode/`                 | **VSCode extension** | TypeScript, pnpm. Grammar auto-generated via `gen_vscode_syntax` binary.                         |
-| `zed/`                    | **Zed extension**    | Tree-sitter grammar (`zed/grammars/aivi/`), language config, dark theme.                         |
 | `specs/`                  | **Docs site**        | VitePress site. `specs/nav.mjs` is the single TOC source of truth.                               |
 | `ui-client/`              | **Browser client**   | Vite micro-client for `aivi.ui.ServerHtml`: DOM patches via WebSocket, event delegation.         |
 | `fuzz/`                   | **Fuzz targets**     | cargo-bolero fuzz targets: parser, frontend, runtime, formatter, LSP pipeline, type inference.   |
@@ -33,7 +32,6 @@ specs/  →  crates/aivi_core  →  crates/aivi (runtime/stdlib/CLI)
                               →  crates/aivi_lsp (LSP server)
 crates/aivi (gen_vscode_syntax bin)  →  vscode/syntaxes/
 crates/aivi_lsp  →  vscode/ (bundled binary)
-zed/grammars/aivi/  (Tree-sitter grammar, independent)
 ```
 
 ### 1.3 Key Source Locations
@@ -54,8 +52,6 @@ zed/grammars/aivi/  (Tree-sitter grammar, independent)
 | LSP semantic tokens | `crates/aivi_lsp/src/semantic_tokens/`                 |
 | VSCode grammar gen  | `crates/aivi/src/bin/gen_vscode_syntax` (or similar)   |
 | VSCode syntaxes     | `vscode/syntaxes/` (generated — do not hand-edit)      |
-| Zed grammar         | `zed/grammars/aivi/src/grammar.json`                   |
-| Zed lang config     | `zed/languages/aivi/config.toml`                       |
 
 ### 1.4 Terminal Command Tips
 
@@ -83,7 +79,7 @@ When replacing a feature with something new (different syntax, different API, re
 - **Delete** all Rust code implementing the old feature.
 - **Delete** all integration test files and AIVI snippets that used the old form.
 - **Delete** the old spec page(s) or sections, not just add a note saying "deprecated".
-- **Remove** any grammar rules or token types from the LSP/VSCode/Zed integration that only served the old feature.
+- **Remove** any grammar rules or token types from the LSP/VSCode integration that only served the old feature.
 
 The goal: after the change, `git grep` for the old construct returns zero results (except this AGENTS.md if mentioned for documentation purposes).
 
@@ -96,8 +92,7 @@ Adding a new language or stdlib feature is never complete until all layers are u
 3. **`crates/aivi`** — runtime/stdlib implementation, Cranelift lowering if applicable.
 4. **`crates/aivi_lsp`** — semantic token types, hover docs, completion items, diagnostics.
 5. **`vscode/syntaxes/`** — regenerate via `cargo run -p aivi --bin gen_vscode_syntax -- vscode/syntaxes` (do not hand-edit generated files).
-6. **`zed/grammars/aivi/`** — update the Tree-sitter grammar (`grammar.json` / source) so Zed highlights the new syntax correctly; bump `zed/extension.toml` version if needed.
-7. **`integration-tests/`** — add at least one positive test and, if the feature has failure modes, a `compile_fail/` test.
+6. **`integration-tests/`** — add at least one positive test and, if the feature has failure modes, a `compile_fail/` test.
 8. **`AIVI_LANGUAGE.md`** — update the LLM quick-reference.
 
 Skipping any layer leaves the tooling in an inconsistent state and will break CI.
@@ -300,6 +295,5 @@ Before finishing any change:
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes
 - [ ] `cargo test --workspace` is fully green (Rust + AIVI tests)
 - [ ] VSCode extension compiles (`pnpm compile` in `vscode/`) if LSP or grammar changed
-- [ ] Zed grammar updated if new syntax was introduced
 - [ ] Aivi builds without warnings (also pre-existing ones).
  
