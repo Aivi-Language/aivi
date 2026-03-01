@@ -261,8 +261,8 @@ cargo test --workspace 2>&1 | tail -20
 # 4. VSCode extension (only needed when vscode/ or aivi_lsp/ changed)
 cd vscode && pnpm install --frozen-lockfile && pnpm compile && cd ..
 
-# 5. Docs site (only needed when specs/ changed)
-cd specs && pnpm install --frozen-lockfile && pnpm docs:build && cd ..
+# 5. Docs site — dead-link check + build (only needed when specs/ changed)
+cd specs && pnpm install --frozen-lockfile && pnpm docs:build 2>&1 | grep -E "dead link|error|Error" && cd ..
 ```
 
 On test failure, get full output with:
@@ -295,6 +295,7 @@ Before finishing any change:
 - [ ] AIVI code snippets formatted with `aivi fmt`
 - [ ] At least one integration test added (positive + `compile_fail/` if applicable)
 - [ ] Make sure *.aivi files in the codebase have no lsp/formatting issues
+- [ ] No dead links in `specs/` (`pnpm docs:build` in `specs/` reports none)
 - [ ] `cargo fmt --all -- --check` passes
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` passes
 - [ ] `cargo test --workspace` is fully green (Rust + AIVI tests)
