@@ -17,7 +17,7 @@ testName = ...
 
 ## Example
 
-<<< ../../../snippets/from_md/syntax/decorators/test_example.aivi{aivi}
+<<< ../../snippets/from_md/syntax/decorators/test_example.aivi{aivi}
 
 ## Rules
 

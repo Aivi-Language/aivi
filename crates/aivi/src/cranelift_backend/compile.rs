@@ -495,6 +495,7 @@ pub fn run_test_suite_jit(
         infer_result.monomorph_plan,
         &mut runtime,
     )?;
+    register_machines_for_jit(&runtime, surface_modules);
     // Discard any pending errors from the compilation phase so they don't
     // contaminate the first test.
     runtime.jit_pending_error = None;

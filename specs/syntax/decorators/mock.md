@@ -23,11 +23,11 @@ in <body>
 
 ## Basic Example
 
-<<< ../../../snippets/from_md/syntax/mock_expression/basic.aivi{aivi}
+<<< ../../snippets/from_md/syntax/mock_expression/basic.aivi{aivi}
 
 ## Multiple Mocks
 
-<<< ../../../snippets/from_md/syntax/mock_expression/multiple.aivi{aivi}
+<<< ../../snippets/from_md/syntax/mock_expression/multiple.aivi{aivi}
 
 ## Semantics
 
@@ -90,7 +90,7 @@ nestedTest =
 The `mock snapshot` variant **records real responses** on the first run and
 **replays from snapshot files** on subsequent runs:
 
-<<< ../../../snippets/from_md/syntax/mock_expression/snapshot.aivi{aivi}
+<<< ../../snippets/from_md/syntax/mock_expression/snapshot.aivi{aivi}
 
 ### Behaviour
 

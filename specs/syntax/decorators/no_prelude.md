@@ -12,4 +12,4 @@
 
 ## Example
 
-<<< ../../../snippets/from_md/syntax/decorators/no_prelude_example.aivi{aivi}
+<<< ../../snippets/from_md/syntax/decorators/no_prelude_example.aivi{aivi}

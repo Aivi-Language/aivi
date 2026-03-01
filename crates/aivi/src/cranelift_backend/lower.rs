@@ -2606,6 +2606,13 @@ impl<'a, M: Module> LowerCtx<'a, M> {
         let call = builder
             .ins()
             .call(self.helpers.rt_clone_value, &[self.ctx_param, ptr_const]);
+        let resource_val = builder.inst_results(call)[0];
+
+        // Wrap the Resource in an Effect thunk so callers that use
+        // `rt_run_effect` on the result see a proper Effect.
+        let call = builder
+            .ins()
+            .call(self.helpers.rt_wrap_effect, &[self.ctx_param, resource_val]);
         TypedValue::boxed(builder.inst_results(call)[0])
     }
 }

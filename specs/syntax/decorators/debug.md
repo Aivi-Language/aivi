@@ -18,7 +18,7 @@
 
 ## Example
 
-<<< ../../../snippets/from_md/syntax/decorators/debug_example.aivi{aivi}
+<<< ../../snippets/from_md/syntax/decorators/debug_example.aivi{aivi}
 
 ## Output
 

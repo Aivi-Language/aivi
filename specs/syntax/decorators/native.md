@@ -14,7 +14,7 @@ binding = param1 param2 => dummyBody
 
 ## Example
 
-<<< ../../../snippets/from_md/syntax/decorators/native_basic.aivi{aivi}
+<<< ../../snippets/from_md/syntax/decorators/native_basic.aivi{aivi}
 
 ## Rules
 
@@ -47,7 +47,7 @@ The module name is chosen by the AIVI runtime, **not** by the Cargo crate. A sin
 
 Suppose you want to expose the [uuid](https://crates.io/crates/uuid) crate to AIVI programs so users can generate UUIDs.
 
-<<< ../../../snippets/from_md/syntax/decorators/native_walkthrough.aivi{aivi}
+<<< ../../snippets/from_md/syntax/decorators/native_walkthrough.aivi{aivi}
 
 Under the hood the compiler carries out these steps:
 
