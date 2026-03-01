@@ -1370,6 +1370,15 @@ pub extern "C" fn rt_binary_op(
     let lhs = unsafe { (*lhs_ptr).clone() };
     let rhs = unsafe { (*rhs_ptr).clone() };
 
+    if op == "==" {
+        let eq = crate::runtime::values_equal(&lhs, &rhs);
+        if !eq {
+            eprintln!("[DBG rt_binary_op ==] NOT EQUAL:");
+            eprintln!("  left  = {:?}", lhs);
+            eprintln!("  right = {:?}", rhs);
+        }
+    }
+
     // Fast path: try the pure built-in evaluation
     if let Some(result) = crate::runtime::eval_binary_builtin(op, &lhs, &rhs) {
         return abi::box_value(result);
