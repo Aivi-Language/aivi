@@ -79,18 +79,58 @@ impl Runtime {
     /// Execute an effect value directly (no trampoline needed).
     pub(crate) fn run_effect_value(&mut self, value: Value) -> Result<Value, RuntimeError> {
         self.check_cancelled()?;
-        let effect = match &value {
-            Value::Effect(e) => e.clone(),
-            Value::Source(s) => s.effect.clone(),
-            _ => {
-                return Err(RuntimeError::Message(format!(
-                    "expected Effect, got {}",
-                    format_value(&value)
-                )))
+        match &value {
+            Value::Resource(r) => {
+                // Run acquire phase and push cleanup onto the resource stack
+                let cleanup = r.cleanup.clone();
+                let result = (r.acquire)(self)?;
+                self.resource_cleanups.push(Some(cleanup));
+                Ok(result)
             }
-        };
-        match effect.as_ref() {
-            EffectValue::Thunk { func } => func(self),
+            _ => {
+                let effect = match &value {
+                    Value::Effect(e) => e.clone(),
+                    Value::Source(s) => s.effect.clone(),
+                    _ => {
+                        return Err(RuntimeError::Message(format!(
+                            "expected Effect, got {}",
+                            format_value(&value)
+                        )))
+                    }
+                };
+                match effect.as_ref() {
+                    EffectValue::Thunk { func } => func(self),
+                }
+            }
+        }
+    }
+
+    /// Push a scope marker onto the resource cleanup stack.
+    /// Called at the start of a do-block.
+    pub(crate) fn push_resource_scope(&mut self) {
+        self.resource_cleanups.push(None); // None = scope boundary
+    }
+
+    /// Run all resource cleanups registered since the last scope marker (LIFO).
+    /// Called at the end of a do-block. Cleanup errors are suppressed;
+    /// the original result/error takes priority.
+    pub(crate) fn pop_resource_scope(&mut self) {
+        // Save any pending JIT error so cleanup code doesn't clear it
+        // (make_jit_builtin resets jit_pending_error on entry).
+        let saved_error = self.jit_pending_error.take();
+        while let Some(entry) = self.resource_cleanups.pop() {
+            match entry {
+                None => break, // reached scope boundary
+                Some(cleanup) => {
+                    let _ = cleanup(self); // suppress cleanup errors
+                    // Discard any pending error from cleanup itself
+                    self.jit_pending_error = None;
+                }
+            }
+        }
+        // Restore the original pending error
+        if saved_error.is_some() {
+            self.jit_pending_error = saved_error;
         }
     }
 }

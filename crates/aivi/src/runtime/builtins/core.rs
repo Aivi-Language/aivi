@@ -284,11 +284,15 @@ pub(crate) fn register_builtins(env: &Env) {
                                 })
                             }
                         }
-                        Err(RuntimeError::Error(value)) => Ok(Value::Constructor {
-                            name: "Err".to_string(),
-                            args: vec![value],
-                        }),
-                        Err(err) => Err(err),
+                        Err(RuntimeError::Error(value)) => {
+                            Ok(Value::Constructor {
+                                name: "Err".to_string(),
+                                args: vec![value],
+                            })
+                        }
+                        Err(err) => {
+                            Err(err)
+                        }
                     }
                 }),
             };
@@ -541,6 +545,27 @@ pub(crate) fn register_builtins(env: &Env) {
                 // Already a generator (function) — pass through
                 other => Ok(other),
             }
+        }),
+    );
+
+    // __makeResource : (Unit -> Effect a) -> (Unit -> Effect Unit) -> Resource a
+    // Creates a Resource value from an acquire closure and a cleanup closure.
+    env.set(
+        "__makeResource".to_string(),
+        builtin("__makeResource", 2, |mut args, _runtime| {
+            let cleanup_fn = args.pop().unwrap();
+            let acquire_fn = args.pop().unwrap();
+            let resource = crate::runtime::values::ResourceValue {
+                acquire: Arc::new(move |runtime: &mut crate::runtime::Runtime| {
+                    let result = runtime.apply(acquire_fn.clone(), Value::Unit)?;
+                    runtime.run_effect_value(result)
+                }),
+                cleanup: Arc::new(move |runtime: &mut crate::runtime::Runtime| {
+                    let result = runtime.apply(cleanup_fn.clone(), Value::Unit)?;
+                    runtime.run_effect_value(result)
+                }),
+            };
+            Ok(Value::Resource(Arc::new(resource)))
         }),
     );
 }

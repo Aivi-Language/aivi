@@ -164,10 +164,11 @@ migrateObject = patchFn value => value match
 // Renders a single SchemaIssue as a numbered line with ANSI colour.
 //   1. at $.user.age — expected Int, got String
 renderSchemaIssue : Int -> SchemaIssue -> Text
-renderSchemaIssue = index issue =>
-  let num  = console.color Yellow (text.toText index ++ ".")
-  let path = console.color Cyan issue.path
-  "  " ++ num ++ " at " ++ path ++ " \xe2\x80\x94 " ++ issue.message
+renderSchemaIssue = index issue => {
+  num  = console.color Yellow (text.toText index ++ ".")
+  path = console.color Cyan issue.path
+  "  " ++ num ++ " at " ++ path ++ " — " ++ issue.message
+}
 
 renderSchemaIssueLines : List SchemaIssue -> Int -> List Text -> List Text
 renderSchemaIssueLines = issues index acc => issues match
@@ -186,21 +187,23 @@ joinLinesJson = lines => lines match
 //     1. at $.user.age — expected Int, got String
 //     2. at $.user.email — missing required field
 renderSchemaIssues : List SchemaIssue -> Text
-renderSchemaIssues = issues =>
-  let count  = List.length issues
-  let label  = console.color Yellow "error[decode]"
-  let header = label ++ ": " ++ text.toText count ++ " issue(s) found"
-  let lines  = renderSchemaIssueLines issues 1 []
+renderSchemaIssues = issues => {
+  count  = List.length issues
+  label  = console.color Yellow "error[decode]"
+  header = label ++ ": " ++ text.toText count ++ " issue(s) found"
+  lines  = renderSchemaIssueLines issues 1 []
   joinLinesJson [header, ...lines]
+}
 
 // Renders a single JsonError at a given JSON path with ANSI colour.
 //
 //   error[decode] at $.user.id — expected Int
 renderJsonError : Text -> JsonError -> Text
-renderJsonError = context err =>
-  let label = console.color Yellow "error[decode]"
-  let path  = console.color Cyan context
-  label ++ " at " ++ path ++ " \xe2\x80\x94 " ++ err.message
+renderJsonError = context err => {
+  label = console.color Yellow "error[decode]"
+  path  = console.color Cyan context
+  label ++ " at " ++ path ++ " — " ++ err.message
+}
 
 // Logs all SchemaIssues to stderr with ANSI colour.
 logSchemaIssues : List SchemaIssue -> Effect Text Unit

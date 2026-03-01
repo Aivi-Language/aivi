@@ -1,2 +1,2 @@
 getName : { name: Text } -> Text
-getName = .name
+getName = user => user.name

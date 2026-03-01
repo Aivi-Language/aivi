@@ -23,6 +23,7 @@ impl Runtime {
             snapshot_recordings: HashMap::new(),
             snapshot_replay_cursors: HashMap::new(),
             snapshot_failure: None,
+            resource_cleanups: Vec::new(),
         }
     }
 

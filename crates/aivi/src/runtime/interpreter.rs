@@ -25,7 +25,7 @@ use self::builtins::register_builtins;
 use self::environment::{Env, MachineEdge, RuntimeContext};
 use self::values::{
     BuiltinImpl, BuiltinValue, EffectValue,
-    SourceValue, TaggedValue, ThunkValue, Value,
+    SourceValue, TaggedValue, ThunkFunc, ThunkValue, Value,
 };
 
 #[derive(Debug)]
@@ -108,6 +108,10 @@ pub(crate) struct Runtime {
     /// mode when a mismatch is detected. Checked by the test runner after the
     /// test Effect completes, since the JIT cannot propagate Effect errors.
     pub(crate) snapshot_failure: Option<String>,
+    /// Stack of resource cleanup closures. Each entry is a ThunkFunc that runs
+    /// the resource's cleanup phase. Cleanups are run in LIFO order when a
+    /// do-block scope exits. Scope boundaries are marked by `None` entries.
+    pub(crate) resource_cleanups: Vec<Option<Arc<ThunkFunc>>>,
 }
 
 #[derive(Clone)]
@@ -850,7 +854,6 @@ pub(crate) fn register_machines_for_jit(
             let crate::surface::ModuleItem::MachineDecl(machine_decl) = item else {
                 continue;
             };
-            eprintln!("[DEBUG register_machines] Found machine: {}.{}", module_name, machine_decl.name.name);
 
             let runtime_machine_name = format!("{module_name}.{}", machine_decl.name.name);
             let mut transitions: HashMap<String, Vec<MachineEdge>> = HashMap::new();

@@ -237,29 +237,29 @@
       ]
     },
     {
-      "path": "specs/snippets/from_md/syntax/types/open_records_row_polymorphism_01.aivi",
-      "module": "docs.snippets.syntax.types.open_records_row_polymorphism_01",
+      "path": "specs/snippets/from_md/syntax/types/closed_records_01.aivi",
+      "module": "docs.snippets.syntax.types.closed_records_01",
       "verify": [
         "fmt"
       ]
     },
     {
-      "path": "specs/snippets/from_md/syntax/types/open_records_row_polymorphism_02.aivi",
-      "module": "docs.snippets.syntax.types.open_records_row_polymorphism_02",
+      "path": "specs/snippets/from_md/syntax/types/closed_records_02.aivi",
+      "module": "docs.snippets.syntax.types.closed_records_02",
       "verify": [
         "fmt"
       ]
     },
     {
-      "path": "specs/snippets/from_md/syntax/types/open_records_row_polymorphism_03.aivi",
-      "module": "docs.snippets.syntax.types.open_records_row_polymorphism_03",
+      "path": "specs/snippets/from_md/syntax/types/closed_records_03.aivi",
+      "module": "docs.snippets.syntax.types.closed_records_03",
       "verify": [
         "fmt"
       ]
     },
     {
-      "path": "specs/snippets/from_md/syntax/types/open_records_row_polymorphism_04.aivi",
-      "module": "docs.snippets.syntax.types.open_records_row_polymorphism_04",
+      "path": "specs/snippets/from_md/syntax/types/closed_records_04.aivi",
+      "module": "docs.snippets.syntax.types.closed_records_04",
       "verify": [
         "fmt"
       ]
