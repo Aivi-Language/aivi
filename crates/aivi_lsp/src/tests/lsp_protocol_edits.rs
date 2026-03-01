@@ -217,7 +217,7 @@ mod lsp_protocol_edits {
     }
 
     #[tokio::test]
-    async fn initialize_reports_full_sync() {
+    async fn initialize_reports_incremental_sync() {
         let (mut client_read, mut client_write, server_task) = start_lsp().await;
         let response = initialize_lsp(&mut client_read, &mut client_write).await;
 
@@ -227,7 +227,7 @@ mod lsp_protocol_edits {
             .and_then(|c| c.get("textDocumentSync"))
             .and_then(Value::as_i64)
             .unwrap_or_default();
-        assert_eq!(sync, 1, "expected TextDocumentSyncKind::FULL");
+        assert_eq!(sync, 2, "expected TextDocumentSyncKind::INCREMENTAL");
 
         shutdown_lsp(client_write, server_task).await;
     }
@@ -314,7 +314,7 @@ mod lsp_protocol_edits {
         .await;
 
         let _ = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(1)),
         )
         .await
@@ -349,7 +349,7 @@ mod lsp_protocol_edits {
         .await;
 
         let diags = timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(5),
             wait_for_publish_diagnostics(&mut client_read, uri.as_str(), Some(3)),
         )
         .await

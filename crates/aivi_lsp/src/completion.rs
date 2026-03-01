@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use aivi::{parse_modules, BlockItem, Def, DomainItem, Expr, MatchArm, ModuleItem, Pattern};
+use aivi::{parse_modules, BlockItem, DomainItem, Expr, MatchArm, ModuleItem, Pattern};
 use tower_lsp::lsp_types::{
-    CompletionItem, CompletionItemKind, Documentation, MarkupContent, MarkupKind, Position, Url,
+    CompletionItem, CompletionItemKind, Documentation, InsertTextFormat, MarkupContent, MarkupKind,
+    Position, Url,
 };
 
 use crate::backend::Backend;
@@ -262,6 +263,19 @@ impl Backend {
             });
         }
 
+        // 4b. AIVI-specific snippets
+        for (label, body, detail) in Self::AIVI_SNIPPETS {
+            push_item(CompletionItem {
+                label: label.to_string(),
+                kind: Some(CompletionItemKind::SNIPPET),
+                insert_text: Some(body.to_string()),
+                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                detail: Some(detail.to_string()),
+                sort_text: Some("5".to_string()),
+                ..CompletionItem::default()
+            });
+        }
+
         // 5. Remaining workspace exports (not already imported)
         for module in module_map.values() {
             for (label, kind, detail) in Self::module_export_completions(module) {
@@ -416,6 +430,52 @@ impl Backend {
         out
     }
 
+    /// Snippet templates for common AIVI patterns.
+    /// Each entry: (label, snippet body with $tabstops, detail description).
+    const AIVI_SNIPPETS: &[(&str, &str, &str)] = &[
+        (
+            "do Effect",
+            "do ${1:Effect} {\n  ${2:result} <- ${3:expression}\n  $0\n}",
+            "do Effect block",
+        ),
+        (
+            "match",
+            "${1:expr} match\n  | ${2:pattern} => ${3:body}\n  | ${0:_ => _}",
+            "match expression",
+        ),
+        (
+            "generate",
+            "generate {\n  ${1:x} <- ${2:source}\n  yield ${0:x}\n}",
+            "generator expression",
+        ),
+        (
+            "loop/recurse",
+            "loop ${1:init} => ${2:state} =>\n  ${3:body}\n  recurse ${0:next}",
+            "loop with recurse",
+        ),
+        (
+            "resource",
+            "resource {\n  ${1:handle} <- ${2:acquire}\n  $0\n}",
+            "resource block (auto-cleanup)",
+        ),
+        ("lambda", "${1:x} => ${0:body}", "lambda expression"),
+        (
+            "if/else",
+            "if ${1:condition}\n  then ${2:trueExpr}\n  else ${0:falseExpr}",
+            "if-then-else",
+        ),
+        (
+            "when",
+            "when ${1:condition} <- ${0:effect}",
+            "conditional effect (in do block)",
+        ),
+        (
+            "given/or",
+            "given ${1:condition} or fail ${0:errorExpr}",
+            "given guard (in do block)",
+        ),
+    ];
+
     pub(super) fn resolve_completion_item(
         mut item: CompletionItem,
         doc_index: &crate::doc_index::DocIndex,
@@ -544,18 +604,13 @@ impl Backend {
                 BlockItem::Filter { expr, span } => (None, Some(expr), span),
                 BlockItem::Yield { expr, span } => (None, Some(expr), span),
                 BlockItem::Recurse { expr, span } => (None, Some(expr), span),
-                BlockItem::When {
-                    effect, span, ..
+                BlockItem::When { effect, span, .. } | BlockItem::Unless { effect, span, .. } => {
+                    (None, Some(effect), span)
                 }
-                | BlockItem::Unless {
-                    effect, span, ..
-                } => (None, Some(effect), span),
                 BlockItem::Given {
                     fail_expr, span, ..
                 } => (None, Some(fail_expr), span),
-                BlockItem::On {
-                    handler, span, ..
-                } => (None, Some(handler), span),
+                BlockItem::On { handler, span, .. } => (None, Some(handler), span),
             };
 
             // Names from bindings that start before cursor are in scope

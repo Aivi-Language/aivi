@@ -102,7 +102,7 @@ impl LanguageServer for Backend {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::FULL,
+                    TextDocumentSyncKind::INCREMENTAL,
                 )),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 definition_provider: Some(OneOf::Left(true)),
@@ -282,10 +282,28 @@ impl LanguageServer for Backend {
     async fn did_change(&self, params: tower_lsp::lsp_types::DidChangeTextDocumentParams) {
         let uri = params.text_document.uri;
         let version = params.text_document.version;
-        let Some(change) = params.content_changes.into_iter().next() else {
-            return;
+
+        // Apply incremental edits to the current document text.
+        let text = {
+            let state = self.state.lock().await;
+            let mut text = state
+                .documents
+                .get(&uri)
+                .map(|doc| doc.text.clone())
+                .unwrap_or_default();
+            for change in params.content_changes {
+                if let Some(range) = change.range {
+                    let start = Self::offset_at(&text, range.start).min(text.len());
+                    let end = Self::offset_at(&text, range.end).min(text.len());
+                    text.replace_range(start..end, &change.text);
+                } else {
+                    // Full content replacement (fallback).
+                    text = change.text;
+                }
+            }
+            text
         };
-        let text = change.text;
+
         self.update_document(uri.clone(), text.clone()).await;
 
         // Phase 1: debounce — cancel the previous in-flight task and start a fresh timer.

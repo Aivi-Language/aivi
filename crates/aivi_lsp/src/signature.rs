@@ -2,9 +2,13 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use aivi::{
-    infer_value_types, parse_modules, BlockItem, DomainItem, Expr, Literal, Module, ModuleItem,
+    infer_value_types, parse_modules, BlockItem, Def, DomainItem, Expr, Literal, Module,
+    ModuleItem, Pattern,
 };
-use tower_lsp::lsp_types::{Position, SignatureHelp, SignatureInformation, Url};
+use tower_lsp::lsp_types::{
+    Documentation, MarkupContent, MarkupKind, ParameterInformation, ParameterLabel, Position,
+    SignatureHelp, SignatureInformation, Url,
+};
 
 use crate::backend::Backend;
 use crate::state::IndexedModule;
@@ -44,12 +48,31 @@ impl Backend {
             &inferred,
         )?;
 
+        // Extract parameter names from the function definition.
+        let param_names =
+            Self::resolve_param_names(current_module, &callee_name, workspace_modules);
+
+        // Build ParameterInformation from type signature parts.
+        let parameters = Self::build_parameter_info(&signature_label, &param_names);
+
+        // Look up documentation from the doc index (via doc comment above def).
+        let doc = Self::find_def_doc_comment(current_module, &callee_name, workspace_modules);
+
         Some(SignatureHelp {
             signatures: vec![SignatureInformation {
                 label: signature_label,
-                documentation: None,
-                parameters: None,
-                active_parameter: None,
+                documentation: doc.map(|d| {
+                    Documentation::MarkupContent(MarkupContent {
+                        kind: MarkupKind::Markdown,
+                        value: d,
+                    })
+                }),
+                parameters: if parameters.is_empty() {
+                    None
+                } else {
+                    Some(parameters)
+                },
+                active_parameter: Some(call.active_parameter as u32),
             }],
             active_signature: Some(0),
             active_parameter: Some(call.active_parameter as u32),
@@ -326,5 +349,153 @@ impl Backend {
             | Expr::Raw { span, .. }
             | Expr::Mock { span, .. } => span,
         }
+    }
+
+    /// Extract parameter names from the Def of a function in current or imported modules.
+    fn resolve_param_names(
+        current_module: &Module,
+        ident: &str,
+        workspace_modules: &HashMap<String, IndexedModule>,
+    ) -> Vec<String> {
+        // Look in current module first
+        if let Some(names) = Self::param_names_from_module(current_module, ident) {
+            return names;
+        }
+        // Look in imported modules
+        for use_decl in &current_module.uses {
+            let imported =
+                use_decl.wildcard || use_decl.items.iter().any(|item| item.name.name == ident);
+            if !imported {
+                continue;
+            }
+            if let Some(indexed) = workspace_modules.get(&use_decl.module.name) {
+                if let Some(names) = Self::param_names_from_module(&indexed.module, ident) {
+                    return names;
+                }
+            }
+        }
+        Vec::new()
+    }
+
+    fn param_names_from_module(module: &Module, ident: &str) -> Option<Vec<String>> {
+        for item in &module.items {
+            if let ModuleItem::Def(def) = item {
+                if def.name.name == ident {
+                    let names: Vec<String> =
+                        def.params.iter().map(Self::pattern_display_name).collect();
+                    if !names.is_empty() {
+                        return Some(names);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn pattern_display_name(pat: &Pattern) -> String {
+        match pat {
+            Pattern::Ident(name) | Pattern::SubjectIdent(name) => name.name.clone(),
+            Pattern::Wildcard(_) => "_".to_string(),
+            Pattern::At { name, .. } => name.name.clone(),
+            Pattern::Constructor { name, .. } => name.name.clone(),
+            Pattern::Record { .. } => "{..}".to_string(),
+            Pattern::Tuple { .. } => "(..)".to_string(),
+            Pattern::List { .. } => "[..]".to_string(),
+            Pattern::Literal(_) => "_".to_string(),
+        }
+    }
+
+    /// Build ParameterInformation from a type signature string like "`f` : `Int -> Text -> Bool`".
+    /// Splits on ` -> ` to identify parameter types, and pairs with param names if available.
+    fn build_parameter_info(
+        signature_label: &str,
+        param_names: &[String],
+    ) -> Vec<ParameterInformation> {
+        // Extract the type part from format: `name` : `Type1 -> Type2 -> Result`
+        let type_part = signature_label
+            .rsplit_once(": `")
+            .map(|(_, t)| t.trim_end_matches('`'))
+            .unwrap_or(signature_label);
+
+        // Split into arrow-separated parts; last part is the return type.
+        let parts: Vec<&str> = type_part.split(" -> ").collect();
+        if parts.len() < 2 {
+            return Vec::new();
+        }
+
+        // All parts except the last are parameter types.
+        parts[..parts.len() - 1]
+            .iter()
+            .enumerate()
+            .map(|(i, &part)| {
+                let label = if let Some(name) = param_names.get(i) {
+                    format!("{name}: {part}")
+                } else {
+                    part.to_string()
+                };
+                ParameterInformation {
+                    label: ParameterLabel::Simple(label),
+                    documentation: None,
+                }
+            })
+            .collect()
+    }
+
+    /// Find a doc comment above the function definition.
+    fn find_def_doc_comment(
+        current_module: &Module,
+        ident: &str,
+        workspace_modules: &HashMap<String, IndexedModule>,
+    ) -> Option<String> {
+        // Check current module
+        if let Some(def) = Self::find_def_in_module(current_module, ident) {
+            if !def.decorators.is_empty() {
+                // Could extract doc from decorators in the future
+            }
+        }
+        // Check imported modules with text
+        for use_decl in &current_module.uses {
+            if let Some(indexed) = workspace_modules.get(&use_decl.module.name) {
+                if let Some(text) = &indexed.text {
+                    if let Some(def) = Self::find_def_in_module(&indexed.module, ident) {
+                        return Self::extract_doc_comment_above(text, &def.span);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn find_def_in_module<'a>(module: &'a Module, ident: &str) -> Option<&'a Def> {
+        module.items.iter().find_map(|item| {
+            if let ModuleItem::Def(def) = item {
+                if def.name.name == ident {
+                    return Some(def);
+                }
+            }
+            None
+        })
+    }
+
+    fn extract_doc_comment_above(text: &str, span: &aivi::Span) -> Option<String> {
+        let lines: Vec<&str> = text.lines().collect();
+        let def_line = span.start.line.saturating_sub(1); // 1-based to 0-based
+        let mut doc_lines = Vec::new();
+        let mut line_idx = def_line;
+        while line_idx > 0 {
+            line_idx -= 1;
+            let line = lines.get(line_idx)?;
+            let trimmed = line.trim();
+            if let Some(comment) = trimmed.strip_prefix("//") {
+                doc_lines.push(comment.trim().to_string());
+            } else {
+                break;
+            }
+        }
+        if doc_lines.is_empty() {
+            return None;
+        }
+        doc_lines.reverse();
+        Some(doc_lines.join("\n"))
     }
 }
