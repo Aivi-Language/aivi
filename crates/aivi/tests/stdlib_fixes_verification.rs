@@ -35,8 +35,8 @@ fn run_stdlib_file(path: &Path) -> (usize, usize) {
         .unwrap_or_else(|e| panic!("run_test_suite({}): {e}", path.display()));
     
     if report.failed > 0 {
-        for (name, error) in &report.failures {
-            eprintln!("Test {} failed: {}", name, error);
+        for failure in &report.failures {
+            eprintln!("Test failure: {:?}", failure);
         }
     }
     

@@ -27,7 +27,7 @@ get : Url -> Effect Text A
 get = url => load (rest.get url)
 
 post : Url -> Text -> Effect Text A
-post = url body => load (rest.post url (Some (Plain body)))
+post = url body => load (rest.post url body)
 
 fetch : Request -> Effect Text A
 fetch = request => load (rest.fetch request)

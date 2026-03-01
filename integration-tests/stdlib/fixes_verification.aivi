@@ -3,8 +3,7 @@ module integrationTests.stdlib.fixes_verification
 
 use aivi
 use aivi.testing
-use aivi.rest
-use aivi.rest (Plain)
+use aivi.rest as restLib
 use aivi.net.sockets
 use aivi.email
 use aivi.goa
@@ -13,7 +12,8 @@ use aivi.goa
 rest_post_compiles = do Effect {
   url = ~u(https://example.com)
   // Just verifying this expression typechecks and compiles
-  _ <- rest.post url "body"
+  // Wrap in attempt to avoid network failures failing the test
+  _ <- attempt (restLib.post url "body")
   assert True
 }
 
@@ -24,13 +24,13 @@ rest_fetch_compiles = do Effect {
     method: "POST"
     url: url
     headers: []
-    body: Some (Plain "body")
+    body: Some (restLib.Plain "body")
     timeoutMs: None
     retryCount: None
     bearerToken: None
     strictStatus: None
   }
-  _ <- rest.fetch req
+  _ <- attempt (restLib.fetch req)
   assert True
 }
 
@@ -47,7 +47,7 @@ email_smtp_send_exists = do Effect {
     subject: "Subject"
     body: "Body"
   }
-  _ <- email.smtpSend config
+  _ <- attempt (email.smtpSend config)
   assert True
 }
 
