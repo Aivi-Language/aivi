@@ -523,21 +523,14 @@ pub(crate) fn register_builtins(env: &Env) {
                         let k = args.pop().unwrap();
                         let mut acc = z;
                         for item in items.iter() {
-                            // Apply k to acc and item
-                            let partial = match &acc {
-                                _ => {
-                                    // k acc item
-                                    let k_applied = match &k {
-                                        Value::Builtin(b) => b.apply(acc.clone(), _rt)?,
-                                        _ => _rt.apply(k.clone(), acc.clone())?,
-                                    };
-                                    match &k_applied {
-                                        Value::Builtin(b) => b.apply(item.clone(), _rt)?,
-                                        _ => _rt.apply(k_applied, item.clone())?,
-                                    }
-                                }
+                            let k_applied = match &k {
+                                Value::Builtin(b) => b.apply(acc.clone(), _rt)?,
+                                _ => _rt.apply(k.clone(), acc.clone())?,
                             };
-                            acc = partial;
+                            acc = match &k_applied {
+                                Value::Builtin(b) => b.apply(item.clone(), _rt)?,
+                                _ => _rt.apply(k_applied, item.clone())?,
+                            };
                         }
                         Ok(acc)
                     }))

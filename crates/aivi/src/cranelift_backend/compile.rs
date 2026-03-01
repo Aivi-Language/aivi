@@ -434,12 +434,8 @@ fn jit_compile_into_runtime(
         // when import resolution has rewritten a bare name to its qualified form.
         if !name.contains('.') {
             if let Some(Value::Builtin(_)) = runtime.ctx.globals.get(&name) {
-                if name == "sum" {
-                }
                 continue;
             }
-        }
-        if name == "sum" {
         }
         runtime.ctx.globals.set(name, value);
     }
@@ -1387,8 +1383,6 @@ fn compile_definition_body<M: Module>(
     // Also import specializations (from spec_map) when the original is referenced.
     let mut called_globals = HashSet::new();
     collect_called_globals(body, &mut called_globals);
-    if def.name == "recursionWorks" || def.name == "sum" {
-    }
 
     let mut local_jit_funcs: HashMap<String, JitFuncInfo> = HashMap::new();
     let mut local_spec_map: HashMap<String, Vec<String>> = HashMap::new();
@@ -1398,8 +1392,6 @@ fn compile_definition_body<M: Module>(
             let qualified = format!("{}.{}", module_name, name);
             compiled_decls.get(&qualified)
         });
-        if name == "sum" {
-        }
         if let Some(decl) = decl {
             let func_ref = module.declare_func_in_func(decl.func_id, &mut function);
             local_jit_funcs.insert(
@@ -1566,8 +1558,7 @@ fn block_item_supported(item: &RustIrBlockItem) -> bool {
         }
         RustIrBlockItem::Expr { expr } => expr_supported(expr),
         RustIrBlockItem::Yield { expr } => expr_supported(expr),
-        RustIrBlockItem::Filter { .. }
-        | RustIrBlockItem::Recurse { .. } => false,
+        RustIrBlockItem::Filter { .. } | RustIrBlockItem::Recurse { .. } => false,
     }
 }
 
