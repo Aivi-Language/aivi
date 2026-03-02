@@ -65,7 +65,7 @@ pub use surface::{
     Decorator, Def, DomainDecl, DomainItem, Expr, InstanceDecl, ListItem, Literal, MatchArm,
     Module, ModuleItem, PathSegment, Pattern, RecordField, RecordPatternField, ScopeItemKind,
     SpannedName, SpannedSymbol, TextPart, TypeAlias, TypeCtor, TypeDecl, TypeExpr, TypeSig,
-    UseDecl,
+    UseDecl, UseItem,
 };
 pub use typecheck::{
     check_types, check_types_including_stdlib, check_types_stdlib_checkpoint,
