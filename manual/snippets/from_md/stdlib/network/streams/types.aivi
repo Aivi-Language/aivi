@@ -1,2 +1,0 @@
-Stream A
-StreamError = { message: Text }

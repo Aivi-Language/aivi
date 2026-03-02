@@ -1,3 +1,0 @@
-// Read a single environment variable as Text
-appEnv : Source Env Text
-appEnv = env.get "APP_ENV"

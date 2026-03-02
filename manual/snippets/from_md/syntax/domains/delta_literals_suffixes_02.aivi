@@ -1,3 +1,0 @@
-use aivi.chronos.duration (domain Duration)
-
-deadline = { millis: 0 } + 10min

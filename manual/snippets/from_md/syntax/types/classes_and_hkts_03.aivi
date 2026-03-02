@@ -1,3 +1,0 @@
-class Applicative (F A) = given (A: Any), Apply {
-  of: A -> F A
-}

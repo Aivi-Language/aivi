@@ -1,4 +1,0 @@
-msg =
-  res or
-| Err NotFound m => m
-| Err _          => "boom"

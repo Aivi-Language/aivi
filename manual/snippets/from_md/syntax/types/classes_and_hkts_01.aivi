@@ -1,9 +1,0 @@
-class Functor (F A) = given (A: Any) {
-  map: (A -> B) -> F B
-}
-
-// Tokens explained:
-// - Functor: The class name
-// - F: Generic type constructor parameter
-// - A: Named type variable (bound by `given`)
-// - given (A: Any): Declares universally quantified type variables

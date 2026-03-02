@@ -1,8 +1,0 @@
-// getOrElse: provide a default value
-value = getOrElse 0 result
-
-// Pipe-friendly usage
-count = parseResult |> getOrElse 0
-
-// getOrElseLazy: handle error to produce value
-message = result |> getOrElseLazy (err => "Error: { err }")

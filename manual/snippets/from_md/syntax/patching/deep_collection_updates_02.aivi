@@ -1,3 +1,0 @@
-users2 = usersById <| {
-  ["id-1"].profile.name: toUpper
-}

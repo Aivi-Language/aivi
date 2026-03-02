@@ -1,4 +1,0 @@
-do Effect {
-  given (age >= 18) or fail (AccessDenied "must be 18+")
-  // continues only if age >= 18
-}

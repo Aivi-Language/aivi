@@ -1,1 +1,0 @@
-{ data.user.profile as { name } } = response

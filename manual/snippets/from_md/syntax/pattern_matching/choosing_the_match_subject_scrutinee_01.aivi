@@ -1,5 +1,0 @@
-value = parse input
-
-value match
-  | Ok x  => x
-  | Err _ => 0

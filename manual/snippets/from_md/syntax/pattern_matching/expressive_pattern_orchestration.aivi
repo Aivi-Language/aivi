@@ -1,4 +1,0 @@
-headerLabel = response match
-  | { data.user.profile as { name } } => name
-  | { data.guest: True }              => "Guest"
-  | _                                 => "Unknown"

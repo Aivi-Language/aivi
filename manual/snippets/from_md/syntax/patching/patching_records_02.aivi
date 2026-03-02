@@ -1,2 +1,0 @@
-promote : Patch User
-promote = patch { isAdmin: True }

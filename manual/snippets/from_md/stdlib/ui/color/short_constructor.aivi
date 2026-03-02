@@ -1,2 +1,0 @@
-rgb : Int -> Int -> Int -> Rgb
-rgb = r g b => { r: r, g: g, b: b }

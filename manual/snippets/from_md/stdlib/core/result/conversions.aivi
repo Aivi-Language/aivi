@@ -1,6 +1,0 @@
-// toOption: discard error information
-maybeValue = Ok 42 |> toOption      // Some 42
-noValue = Err "x" |> toOption       // None
-
-// fromOption: convert Option to Result
-result = maybeUser |> fromOption "User not found"

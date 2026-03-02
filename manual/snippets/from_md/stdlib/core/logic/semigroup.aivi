@@ -1,3 +1,0 @@
-class Semigroup A = {
-  concat: A -> A -> A
-}

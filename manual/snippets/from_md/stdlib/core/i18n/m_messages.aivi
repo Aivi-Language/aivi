@@ -1,2 +1,0 @@
-welcomeMsg : Message
-welcomeMsg = ~m"Hello, {name:Text}!"
