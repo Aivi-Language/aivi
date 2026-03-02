@@ -41,7 +41,7 @@ export notificationNew, notificationSetBody, appSendNotification, appWithdrawNot
 export layoutManagerNew, widgetSetLayoutManager
 export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
 export gtkElement, gtkTextNode, gtkAttr, gtkSignalAttr
-export buildFromNode
+export buildFromNode, buildWithIds
 export signalPoll, signalEmit, signalStream
 export widgetById, widgetSetBoolProperty, signalBindBoolProperty, signalBindCssClass, signalBindToggleBoolProperty, signalToggleCssClass
 export signalBindDialogPresent, signalBindStackPage
@@ -83,15 +83,15 @@ GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text
 GtkAttr = GtkAttribute Text Text
 
 GtkSignalEvent =
-  | GtkClicked       WidgetId
-  | GtkInputChanged  WidgetId Text
-  | GtkActivated     WidgetId
-  | GtkToggled       WidgetId Bool
-  | GtkValueChanged  WidgetId Float
-  | GtkKeyPressed    WidgetId Text Text
-  | GtkFocusIn       WidgetId
-  | GtkFocusOut      WidgetId
-  | GtkUnknownSignal WidgetId Text Text Text
+  | GtkClicked       WidgetId Text
+  | GtkInputChanged  WidgetId Text Text
+  | GtkActivated     WidgetId Text
+  | GtkToggled       WidgetId Text Bool
+  | GtkValueChanged  WidgetId Text Float
+  | GtkKeyPressed    WidgetId Text Text Text
+  | GtkFocusIn       WidgetId Text
+  | GtkFocusOut      WidgetId Text
+  | GtkUnknownSignal WidgetId Text Text Text Text
 
 gtkElement : Text -> List GtkAttr -> List GtkNode -> GtkNode
 gtkElement = tag attrs children => GtkElement tag attrs children
@@ -107,6 +107,9 @@ gtkSignalAttr = name value => GtkAttribute name (gtk4.serializeSignal value)
 
 buildFromNode : GtkNode -> Effect GtkError WidgetId
 buildFromNode = gtk4.buildFromNode
+
+buildWithIds : GtkNode -> Effect GtkError { root: WidgetId, widgets: Map Text WidgetId }
+buildWithIds = gtk4.buildWithIds
 
 signalPoll : Unit -> Effect GtkError (Option GtkSignalEvent)
 signalPoll = gtk4.signalPoll

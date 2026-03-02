@@ -303,7 +303,7 @@ mod linux {
                         handler: action_name,
                         payload: coords,
                     };
-                    let typed_value = make_signal_event_value(event.clone());
+                    let typed_value = make_signal_event_value(event.clone(), String::new());
                     GTK_STATE.with(|state| {
                         let mut state = state.borrow_mut();
                         state.signal_senders.retain(|s| s.try_send(typed_value.clone()).is_ok());
@@ -339,6 +339,7 @@ mod linux {
         signal_dialog_bindings: HashMap<String, Vec<SignalDialogBinding>>,
         signal_stack_page_bindings: HashMap<String, Vec<SignalStackPageBinding>>,
         named_widgets: HashMap<String, i64>,
+        widget_id_to_name: HashMap<i64, String>,
         tray_handles: HashMap<i64, Arc<Mutex<SniTrayState>>>,
         pending_icon_search_paths: Vec<String>,
         pending_css_texts: Vec<String>,
@@ -1211,18 +1212,19 @@ mod linux {
         }
     }
 
-    fn make_signal_event_value(event: SignalEventState) -> Value {
+    fn make_signal_event_value(event: SignalEventState, widget_name: String) -> Value {
+        let wid = Value::Int(event.widget_id);
+        let name = Value::Text(widget_name);
         let inner = match event.signal.as_str() {
             "clicked" => {
-                // If the handler is an AIVI constructor (starts with uppercase), emit
-                // GtkUnknownSignal so the event loop can pattern-match on the signal name.
                 if event.handler.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
-                    let (name, arg) = parse_constructor_handler(&event.handler);
+                    let (cname, arg) = parse_constructor_handler(&event.handler);
                     Value::Constructor {
                         name: "GtkUnknownSignal".to_string(),
                         args: vec![
-                            Value::Int(event.widget_id),
-                            Value::Text(name),
+                            wid,
+                            name,
+                            Value::Text(cname),
                             Value::Text(arg),
                             Value::Text(String::new()),
                         ],
@@ -1230,44 +1232,45 @@ mod linux {
                 } else {
                     Value::Constructor {
                         name: "GtkClicked".to_string(),
-                        args: vec![Value::Int(event.widget_id)],
+                        args: vec![wid, name],
                     }
                 }
             }
             "changed" => Value::Constructor {
                 name: "GtkInputChanged".to_string(),
-                args: vec![Value::Int(event.widget_id), Value::Text(event.payload)],
+                args: vec![wid, name, Value::Text(event.payload)],
             },
             "activate" => Value::Constructor {
                 name: "GtkActivated".to_string(),
-                args: vec![Value::Int(event.widget_id)],
+                args: vec![wid, name],
             },
             "toggled" => {
                 let active = event.payload == "true";
                 Value::Constructor {
                     name: "GtkToggled".to_string(),
-                    args: vec![Value::Int(event.widget_id), Value::Bool(active)],
+                    args: vec![wid, name, Value::Bool(active)],
                 }
             }
             "value-changed" => {
                 let val = event.payload.parse::<f64>().unwrap_or(0.0);
                 Value::Constructor {
                     name: "GtkValueChanged".to_string(),
-                    args: vec![Value::Int(event.widget_id), Value::Float(val)],
+                    args: vec![wid, name, Value::Float(val)],
                 }
             }
             "focus-enter" => Value::Constructor {
                 name: "GtkFocusIn".to_string(),
-                args: vec![Value::Int(event.widget_id)],
+                args: vec![wid, name],
             },
             "focus-leave" => Value::Constructor {
                 name: "GtkFocusOut".to_string(),
-                args: vec![Value::Int(event.widget_id)],
+                args: vec![wid, name],
             },
             _ => Value::Constructor {
                 name: "GtkUnknownSignal".to_string(),
                 args: vec![
-                    Value::Int(event.widget_id),
+                    wid,
+                    name,
                     Value::Text(event.signal),
                     Value::Text(event.handler),
                     Value::Text(event.payload),
@@ -2256,7 +2259,12 @@ mod linux {
                 payload,
             };
             // Broadcast to signalStream receivers (retain only live senders)
-            let typed_value = make_signal_event_value(event.clone());
+            let widget_name = state
+                .widget_id_to_name
+                .get(&binding.widget_id)
+                .cloned()
+                .unwrap_or_default();
+            let typed_value = make_signal_event_value(event.clone(), widget_name);
             state.signal_senders.retain(|s| s.try_send(typed_value.clone()).is_ok());
             state.signal_events.push_back(event);
             // Apply any registered property bindings for this handler
@@ -4335,10 +4343,46 @@ mod linux {
                         let mut id_map = HashMap::new();
                         let root = first_object_in_interface(&decoded)?;
                         let id = build_widget_from_node_real(&mut state, root, &mut id_map)?;
-                        state.named_widgets.extend(id_map);
+                        state.named_widgets.extend(id_map.clone());
+                        for (name, wid) in &id_map {
+                            state.widget_id_to_name.insert(*wid, name.clone());
+                        }
                         Ok(id)
                     })?;
                     Ok(Value::Int(id))
+                }))
+            }),
+        );
+
+        fields.insert(
+            "buildWithIds".to_string(),
+            builtin("gtk4.buildWithIds", 1, |mut args, _| {
+                let node = args.remove(0);
+                Ok(effect(move |_| {
+                    let decoded = decode_gtk_node(&node)?;
+                    let (root_id, id_map) =
+                        GTK_STATE.with(|state| -> Result<(i64, HashMap<String, i64>), RuntimeError> {
+                            let mut state = state.borrow_mut();
+                            let mut id_map = HashMap::new();
+                            let root = first_object_in_interface(&decoded)?;
+                            let id = build_widget_from_node_real(&mut state, root, &mut id_map)?;
+                            state.named_widgets.extend(id_map.clone());
+                            for (name, wid) in &id_map {
+                                state.widget_id_to_name.insert(*wid, name.clone());
+                            }
+                            Ok((id, id_map))
+                        })?;
+                    let mut widgets_map = im::HashMap::new();
+                    for (name, wid) in id_map {
+                        widgets_map.insert(
+                            crate::runtime::values::KeyValue::Text(name),
+                            Value::Int(wid),
+                        );
+                    }
+                    let mut record = HashMap::new();
+                    record.insert("root".to_string(), Value::Int(root_id));
+                    record.insert("widgets".to_string(), Value::Map(Arc::new(widgets_map)));
+                    Ok(Value::Record(Arc::new(record)))
                 }))
             }),
         );
@@ -4354,9 +4398,14 @@ mod linux {
                     GTK_STATE.with(|state| {
                         let mut state = state.borrow_mut();
                         if let Some(event) = state.signal_events.pop_front() {
+                            let widget_name = state
+                                .widget_id_to_name
+                                .get(&event.widget_id)
+                                .cloned()
+                                .unwrap_or_default();
                             Ok(Value::Constructor {
                                 name: "Some".to_string(),
-                                args: vec![make_signal_event_value(event)],
+                                args: vec![make_signal_event_value(event, widget_name)],
                             })
                         } else {
                             Ok(Value::Constructor {
