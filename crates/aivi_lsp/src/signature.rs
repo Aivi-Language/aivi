@@ -95,19 +95,20 @@ impl Backend {
         }
 
         for use_decl in current_module.uses.iter() {
-            let imported =
-                use_decl.wildcard || use_decl.items.iter().any(|item| item.name.name == ident);
+            let original = crate::navigation::resolve_import_name(&use_decl.items, ident);
+            let imported = use_decl.wildcard || original.is_some();
             if !imported {
                 continue;
             }
+            let lookup = original.unwrap_or(ident);
             let Some(indexed) = workspace_modules.get(&use_decl.module.name) else {
                 continue;
             };
-            if let Some(label) = Self::type_signature_label_in_module(&indexed.module, ident) {
+            if let Some(label) = Self::type_signature_label_in_module(&indexed.module, lookup) {
                 return Some(label);
             }
             if let Some(label) =
-                Self::inferred_signature_label(&indexed.module.name.name, ident, inferred)
+                Self::inferred_signature_label(&indexed.module.name.name, lookup, inferred)
             {
                 return Some(label);
             }
@@ -363,13 +364,14 @@ impl Backend {
         }
         // Look in imported modules
         for use_decl in &current_module.uses {
-            let imported =
-                use_decl.wildcard || use_decl.items.iter().any(|item| item.name.name == ident);
+            let original = crate::navigation::resolve_import_name(&use_decl.items, ident);
+            let imported = use_decl.wildcard || original.is_some();
             if !imported {
                 continue;
             }
+            let lookup = original.unwrap_or(ident);
             if let Some(indexed) = workspace_modules.get(&use_decl.module.name) {
-                if let Some(names) = Self::param_names_from_module(&indexed.module, ident) {
+                if let Some(names) = Self::param_names_from_module(&indexed.module, lookup) {
                     return names;
                 }
             }

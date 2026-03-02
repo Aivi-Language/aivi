@@ -13,6 +13,21 @@ use crate::backend::Backend;
 use crate::doc_index::DocIndex;
 use crate::state::IndexedModule;
 
+/// For a selective import list, check if `ident` matches any item either by
+/// original name or by alias. Returns the *original* (exported) name so
+/// callers can look it up in the target module.
+pub(crate) fn resolve_import_name<'a>(items: &'a [aivi::UseItem], ident: &str) -> Option<&'a str> {
+    items.iter().find_map(|item| {
+        let matches =
+            item.name.name == ident || item.alias.as_ref().is_some_and(|a| a.name == ident);
+        if matches {
+            Some(item.name.name.as_str())
+        } else {
+            None
+        }
+    })
+}
+
 impl Backend {
     fn hover_debug_enabled() -> bool {
         std::env::var_os("AIVI_LSP_DEBUG_HOVER").is_some()
@@ -95,14 +110,14 @@ impl Backend {
             }
             let mut found = false;
             for use_decl in current_module.uses.iter() {
-                let imported = use_decl.wildcard
-                    || use_decl.items.is_empty()
-                    || use_decl.items.iter().any(|item| item.name.name == *name);
+                let original = resolve_import_name(&use_decl.items, name);
+                let imported = use_decl.wildcard || use_decl.items.is_empty() || original.is_some();
                 if !imported {
                     continue;
                 }
+                let lookup = original.unwrap_or(name);
                 if let Some(indexed) = workspace_modules.get(&use_decl.module.name) {
-                    if let Some(brief) = Self::find_type_definition_brief(&indexed.module, name) {
+                    if let Some(brief) = Self::find_type_definition_brief(&indexed.module, lookup) {
                         defs.push(brief);
                         found = true;
                         break;
@@ -569,16 +584,16 @@ impl Backend {
                 return Some(ty);
             }
             for use_decl in current_module.uses.iter() {
-                let imported = use_decl.wildcard
-                    || use_decl.items.is_empty()
-                    || use_decl.items.iter().any(|item| item.name.name == ident);
+                let original = resolve_import_name(&use_decl.items, ident);
+                let imported = use_decl.wildcard || use_decl.items.is_empty() || original.is_some();
                 if !imported {
                     continue;
                 }
+                let lookup = original.unwrap_or(ident);
                 let Some(indexed) = workspace_modules.get(&use_decl.module.name) else {
                     continue;
                 };
-                if let Some(ty) = type_sig_expr_in_module(&indexed.module, ident) {
+                if let Some(ty) = type_sig_expr_in_module(&indexed.module, lookup) {
                     return Some(ty);
                 }
             }
@@ -656,19 +671,16 @@ impl Backend {
                 return Some(alias);
             }
             for use_decl in current_module.uses.iter() {
-                let imported = use_decl.wildcard
-                    || use_decl.items.is_empty()
-                    || use_decl
-                        .items
-                        .iter()
-                        .any(|item| item.name.name == alias_name);
+                let original = resolve_import_name(&use_decl.items, &alias_name);
+                let imported = use_decl.wildcard || use_decl.items.is_empty() || original.is_some();
                 if !imported {
                     continue;
                 }
+                let lookup = original.unwrap_or(&alias_name);
                 let Some(indexed) = workspace_modules.get(&use_decl.module.name) else {
                     continue;
                 };
-                if let Some(alias) = find_alias_definition(&indexed.module, &alias_name) {
+                if let Some(alias) = find_alias_definition(&indexed.module, lookup) {
                     return Some(alias);
                 }
             }
@@ -1018,16 +1030,17 @@ impl Backend {
         }
 
         for use_decl in current_module.uses.iter() {
-            let imported =
-                use_decl.wildcard || use_decl.items.iter().any(|item| item.name.name == ident);
+            let original = resolve_import_name(&use_decl.items, &ident);
+            let imported = use_decl.wildcard || original.is_some();
             if !imported {
                 continue;
             }
 
+            let lookup = original.unwrap_or(&ident);
             let Some(indexed) = workspace_modules.get(&use_decl.module.name) else {
                 continue;
             };
-            if let Some(range) = Self::module_member_definition_range(&indexed.module, &ident) {
+            if let Some(range) = Self::module_member_definition_range(&indexed.module, lookup) {
                 return Some(Location::new(indexed.uri.clone(), range));
             }
         }
@@ -1252,7 +1265,7 @@ impl Backend {
         let mut result = Vec::new();
         for use_decl in current_module.uses.iter() {
             let imports_name =
-                use_decl.wildcard || use_decl.items.iter().any(|item| item.name.name == name);
+                use_decl.wildcard || resolve_import_name(&use_decl.items, name).is_some();
             if !imports_name {
                 continue;
             }
@@ -1419,11 +1432,12 @@ impl Backend {
         }
 
         for use_decl in current_module.uses.iter() {
-            let imported =
-                use_decl.wildcard || use_decl.items.iter().any(|item| item.name.name == ident);
+            let original = resolve_import_name(&use_decl.items, &ident);
+            let imported = use_decl.wildcard || original.is_some();
             if !imported {
                 continue;
             }
+            let lookup = original.unwrap_or(&ident);
             let Some(indexed) = workspace_modules.get(&use_decl.module.name) else {
                 continue;
             };
@@ -1434,18 +1448,18 @@ impl Backend {
                 .and_then(|path| fs::read_to_string(path).ok());
             let doc = doc_text
                 .as_deref()
-                .and_then(|text| Self::doc_for_ident(text, &indexed.module, &ident));
+                .and_then(|text| Self::doc_for_ident(text, &indexed.module, lookup));
             let inferred = inferred.get(&indexed.module.name.name);
             if let Some(mut contents) = Self::hover_contents_for_module(
                 &indexed.module,
-                &ident,
+                lookup,
                 inferred,
                 doc.as_deref(),
                 doc_index,
             ) {
                 Self::append_type_definitions(
                     &mut contents,
-                    &ident,
+                    lookup,
                     &indexed.module,
                     current_module,
                     workspace_modules,
@@ -1542,23 +1556,29 @@ impl Backend {
             return Self::build_references(text, uri, position, include_declaration);
         };
 
-        let origin_module = if Self::module_member_definition_range(current_module, &ident)
-            .is_some()
-        {
-            Some(current_module.name.name.clone())
-        } else {
-            current_module
-                .uses
-                .iter()
-                .find(|use_decl| {
-                    use_decl.wildcard || use_decl.items.iter().any(|item| item.name.name == ident)
-                })
-                .map(|use_decl| use_decl.module.name.clone())
-        };
+        let origin_module =
+            if Self::module_member_definition_range(current_module, &ident).is_some() {
+                Some(current_module.name.name.clone())
+            } else {
+                current_module
+                    .uses
+                    .iter()
+                    .find(|use_decl| {
+                        use_decl.wildcard || resolve_import_name(&use_decl.items, &ident).is_some()
+                    })
+                    .map(|use_decl| use_decl.module.name.clone())
+            };
 
         let Some(origin_module) = origin_module else {
             return Self::build_references(text, uri, position, include_declaration);
         };
+
+        // Resolve the original (exported) name for cross-module reference search.
+        let original_name = current_module
+            .uses
+            .iter()
+            .find_map(|use_decl| resolve_import_name(&use_decl.items, &ident))
+            .unwrap_or(&ident);
 
         let mut locations = Vec::new();
         for (module_name, indexed) in workspace_modules.iter() {
@@ -1566,7 +1586,7 @@ impl Backend {
                 || indexed.module.uses.iter().any(|use_decl| {
                     use_decl.module.name == origin_module
                         && (use_decl.wildcard
-                            || use_decl.items.iter().any(|item| item.name.name == ident))
+                            || resolve_import_name(&use_decl.items, original_name).is_some())
                 });
             if !should_search {
                 continue;
