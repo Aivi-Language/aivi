@@ -270,6 +270,12 @@ mod linux {
         PENDING_TRAY_ACTIONS.get_or_init(|| Mutex::new(VecDeque::new()))
     }
 
+    // Flag set when menu items change; tokio thread polls and emits LayoutUpdated.
+    static PENDING_LAYOUT_UPDATE: OnceLock<Mutex<bool>> = OnceLock::new();
+    fn pending_layout_update() -> &'static Mutex<bool> {
+        PENDING_LAYOUT_UPDATE.get_or_init(|| Mutex::new(false))
+    }
+
     pub(super) fn pump_gtk_events() {
         GTK_PUMP_ACTIVE.with(|active| {
             if *active.borrow() {
@@ -436,6 +442,34 @@ mod linux {
                             &(bus_name.as_str(),),
                         )
                         .await;
+                    // Poll for menu-items changes and emit LayoutUpdated to refresh GNOME cache.
+                    let conn_signal = conn.clone();
+                    tokio::spawn(async move {
+                        let mut revision: u32 = 1;
+                        loop {
+                            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+                            let should_update = pending_layout_update()
+                                .lock()
+                                .map(|mut f| { let v = *f; *f = false; v })
+                                .unwrap_or(false);
+                            if should_update {
+                                revision += 1;
+                                if let Ok(iface_ref) = conn_signal
+                                    .object_server()
+                                    .interface::<_, DbusMenuObject>("/MenuBar")
+                                    .await
+                                {
+                                    let _ = DbusMenuObject::layout_updated(
+                                        iface_ref.signal_emitter(),
+                                        revision,
+                                        0i32,
+                                    )
+                                    .await;
+                                    eprintln!("dbusmenu: LayoutUpdated emitted (rev={revision})");
+                                }
+                            }
+                        }
+                    });
                     // Keep alive
                     std::future::pending::<()>().await;
                 });
@@ -4214,6 +4248,10 @@ mod linux {
                             if let Ok(mut ts) = handle.lock() {
                                 ts.menu_items = items.clone();
                             }
+                        }
+                        // Signal the tokio thread to emit LayoutUpdated on the DBusMenu.
+                        if let Ok(mut flag) = pending_layout_update().lock() {
+                            *flag = true;
                         }
                         Ok(Value::Unit)
                     })
