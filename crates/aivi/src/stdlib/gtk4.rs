@@ -40,7 +40,7 @@ export shortcutNew, widgetAddShortcut
 export notificationNew, notificationSetBody, appSendNotification, appWithdrawNotification
 export layoutManagerNew, widgetSetLayoutManager
 export osOpenUri, osShowInFileManager, osSetBadgeCount, osThemePreference
-export gtkElement, gtkTextNode, gtkAttr
+export gtkElement, gtkTextNode, gtkAttr, gtkSignalAttr
 export buildFromNode
 export signalPoll, signalEmit, signalStream
 export widgetById, widgetSetBoolProperty, signalBindBoolProperty, signalBindCssClass, signalBindToggleBoolProperty, signalToggleCssClass
@@ -101,6 +101,9 @@ gtkTextNode = t => GtkTextNode t
 
 gtkAttr : Text -> Text -> GtkAttr
 gtkAttr = name value => GtkAttribute name value
+
+gtkSignalAttr : Text -> A -> GtkAttr
+gtkSignalAttr = name value => GtkAttribute name (gtk4.serializeSignal value)
 
 buildFromNode : GtkNode -> Effect GtkError WidgetId
 buildFromNode = gtk4.buildFromNode
