@@ -1,0 +1,2 @@
+Vec = { size: Int, data: List Float }
+Mat = { rows: Int, cols: Int, data: List Float }

@@ -1,0 +1,38 @@
+---
+title: "3.3 Closed Records"
+description: "User = { id: Int, name: Text, email: Option Text }"
+---
+Records are:
+
+* structural
+* closed
+
+```aivi
+User = { id: Int, name: Text, email: Option Text }
+```
+
+
+To create a record value, use a record literal:
+
+```aivi
+alice : User
+alice = { id: 1, name: "Alice", email: None }
+```
+
+
+Record literals can spread existing records:
+
+```aivi
+alice = { ...defaults, name: "Alice" }
+```
+
+
+Spreads merge fields left-to-right; later entries override earlier ones.
+
+Functions specify an **exact record shape** in type signatures.
+
+```aivi
+getName : { name: Text } -> Text
+getName = user => user.name
+```
+

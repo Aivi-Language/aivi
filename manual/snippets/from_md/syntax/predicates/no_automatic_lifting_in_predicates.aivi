@@ -1,0 +1,2 @@
+filter (email == "x") // ❌ if email : Option Text
+filter (email == Some "x") // ✅

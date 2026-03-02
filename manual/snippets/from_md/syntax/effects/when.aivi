@@ -1,0 +1,3 @@
+do Effect {
+  when isVerbose <- print "debug info"
+}

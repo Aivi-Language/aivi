@@ -1,0 +1,3 @@
+class Monoid A = Semigroup {
+  empty: A
+}

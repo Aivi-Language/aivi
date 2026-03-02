@@ -1,0 +1,3 @@
+class Traversable (T A) = given (A: Any), Functor, Foldable {
+  traverse: (A -> F B) -> F (T B)
+}

@@ -1,0 +1,6 @@
+use aivi.text
+
+slug = "  Hello World  "
+clean = slug |> trim |> toLower |> replaceAll " " "-"
+
+maybePort = parseInt "8080"

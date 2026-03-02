@@ -1,0 +1,4 @@
+use aivi.math
+
+area = pi * r * r
+clamped = clamp 0.0 1.0 x

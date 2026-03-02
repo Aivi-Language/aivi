@@ -1,0 +1,259 @@
+---
+title: "Standard Library: Logic (Algebraic Hierarchy)"
+description: "The aivi.logic module defines the standard algebraic hierarchy for AIVI, based on the Fantasy Land Specification. These classes provide a universal language for"
+---
+<!-- quick-info: {"kind":"module","name":"aivi.logic"} -->
+The `aivi.logic` module defines the standard algebraic hierarchy for AIVI, based on the **Fantasy Land Specification**. These classes provide a universal language for data transformation, equality, and composition.
+<!-- /quick-info -->
+<Note>use aivi.logic</Note>
+
+```aivi
+module aivi.logic
+```
+
+
+See also:
+
+- Syntax: classes and instances ([The Type System](/language/primitive-types))
+- Syntax: effects as monads ([Effects](/language/effects))
+- Fantasy Land upstream spec (naming + laws): https://github.com/fantasyland/fantasy-land
+
+## 1. Equality and Ordering
+
+### Setoid
+A `Setoid` has an equivalence relation.
+
+```aivi
+class Setoid A = {
+  equals: A -> A -> Bool
+}
+```
+
+
+### Ord
+An `Ord` provides a [total](https://en.wikipedia.org/wiki/Total_order) ordering.
+
+```aivi
+class Ord A = Setoid {
+  lte: A -> A -> Bool
+}
+```
+
+
+## 2. Monoids and Semigroups
+
+### Semigroup
+A `Semigroup` has an associative binary operation.
+
+```aivi
+class Semigroup A = {
+  concat: A -> A -> A
+}
+```
+
+
+### Monoid
+A `Monoid` provides an `empty` value.
+
+```aivi
+class Monoid A = Semigroup {
+  empty: A
+}
+```
+
+
+### Group
+A `Group` provides an `invert` operation.
+
+```aivi
+class Group A = Monoid {
+  invert: A -> A
+}
+```
+
+
+## 3. Categories
+
+### Semigroupoid
+
+```aivi
+class Semigroupoid (F A B) = given (A: Any, B: Any) {
+  compose: F B C -> F A C
+}
+```
+
+
+### Category
+
+```aivi
+class Category (F A B) = given (A: Any, B: Any), Semigroupoid {
+  id: F A A
+}
+```
+
+
+## 4. Functional Mappings
+
+### Functor
+
+<!-- quick-info: {"kind":"class","name":"Functor","module":"aivi.logic"} -->
+```aivi
+class Functor (F A) = given (A: Any) {
+  map: (A -> B) -> F B
+}
+```
+
+<!-- /quick-info -->
+
+### Apply
+
+```aivi
+class Apply (F A) = given (A: Any), Functor {
+  ap: F (A -> B) -> F B
+}
+```
+
+
+### Applicative
+
+```aivi
+class Applicative (F A) = given (A: Any), Apply {
+  of: A -> F A
+}
+```
+
+
+### Chain
+
+```aivi
+class Chain (F A) = given (A: Any), Apply {
+  chain: (A -> F B) -> F B
+}
+```
+
+
+### Monad
+
+```aivi
+class Monad (M A) = given (A: Any), Applicative, Chain {}
+```
+
+
+## 5. Folds and Traversals
+
+### Foldable
+
+```aivi
+class Foldable (F A) = given (A: Any) {
+  reduce: (B -> A -> B) -> B -> B
+}
+```
+
+
+### Traversable
+
+```aivi
+class Traversable (T A) = given (A: Any), Functor, Foldable {
+  traverse: (A -> F B) -> F (T B)
+}
+```
+
+
+## 6. Higher-Order Mappings
+
+### Bifunctor
+
+```aivi
+class Bifunctor (F A B) = given (A: Any, B: Any) {
+  bimap: (A -> C) -> (B -> D) -> F C D
+}
+```
+
+
+### Profunctor
+
+```aivi
+class Profunctor (F A B) = given (A: Any, B: Any) {
+  promap: (A -> B) -> (C -> D) -> F A D
+}
+```
+
+
+## Examples
+
+### `Functor` for `Option`
+
+```aivi
+use aivi.logic
+
+instance Functor (Option A) = given (A: Any) {
+  map: f opt => opt match
+    | None   => None
+    | Some x => Some (f x)
+}
+```
+
+
+### Implementing a new `Monad`: `Id`
+
+```aivi
+module examples.IdentityMonad
+
+use aivi.logic (Functor, Apply, Applicative, Chain, Monad)
+
+// A minimal "identity" type constructor.
+Id A = Id A
+
+instance Functor (Id A) = given (A: Any) {
+  map: f (Id x) => Id (f x)
+}
+
+instance Apply (Id A) = given (A: Any) {
+  ap: (Id f) (Id x) => Id (f x)
+}
+
+instance Applicative (Id A) = given (A: Any) {
+  of: x => Id x
+}
+
+instance Chain (Id A) = given (A: Any) {
+  chain: f (Id x) => f x
+}
+
+// In aivi.logic, `Monad` is `Applicative` + `Chain`, so the dictionary is empty.
+instance Monad (Id A) = given (A: Any) {}
+```
+
+
+### `Monoid` for `Text`
+
+```aivi
+use aivi.logic
+use aivi.text as text
+
+instance Semigroup Text = {
+  concat: a b => text.concat[a, b]
+}
+
+instance Monoid Text = {
+  empty: ""
+}
+```
+
+
+### `Effect` sequencing is `chain`/`bind`
+
+`do Effect { ... }` is surface syntax for repeated sequencing (see [Effects](/language/effects)):
+
+```aivi
+// Sugar
+val = do Effect {
+  x <- fetch
+  y <- decode x
+  pure y
+}
+
+// Desugared shape (conceptually)
+val2 = (fetch |> bind) (x => (decode x |> bind) (y => pure y))
+```
+

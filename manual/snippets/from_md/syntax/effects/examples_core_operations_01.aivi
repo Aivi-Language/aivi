@@ -1,0 +1,2 @@
+greeting = pure "hello"
+// greeting : Effect E String   succeeds immediately with "hello"

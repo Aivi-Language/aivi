@@ -1,0 +1,5 @@
+Point2 = { x: Float, y: Float }
+Point3 = { x: Float, y: Float, z: Float }
+Line2 = { origin: Point2, direction: Point2 }
+Segment2 = { start: Point2, end: Point2 }
+Polygon = { vertices: List Point2 }

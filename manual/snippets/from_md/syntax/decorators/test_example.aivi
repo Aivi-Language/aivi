@@ -1,0 +1,16 @@
+@test "addition is commutative"
+addCommutative =
+  assert.equal (add 2 3) (add 3 2)
+
+@test "empty list has length zero"
+emptyLen =
+  assert.equal (list.length []) 0
+
+// Test-only module: excluded from production builds entirely
+@test module OrderTests
+
+use aivi
+
+@test "discount rounds down"
+discountFloor =
+  assert.equal (applyDiscount 100.0 0.15) 85.0

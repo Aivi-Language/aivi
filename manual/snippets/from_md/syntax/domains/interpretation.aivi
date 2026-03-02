@@ -1,0 +1,2 @@
+red = { r: 255, g: 0, b: 0 }
+lighter = red + 10l

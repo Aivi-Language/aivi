@@ -1,0 +1,3 @@
+class Foldable (F A) = given (A: Any) {
+  reduce: (B -> A -> B) -> B -> B
+}

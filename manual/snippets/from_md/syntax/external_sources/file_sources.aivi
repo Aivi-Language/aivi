@@ -1,0 +1,10 @@
+// Read entire file as text
+readme = file.read "./README.md"
+
+// Stream bytes from a large file
+blob = file.stream "./large.bin"
+
+// Read structured CSV (the expected type drives decoding)
+User = { id: Int, name: Text, email: Text }
+users : Source File (List User)
+users = file.csv "./users.csv"

@@ -1,0 +1,221 @@
+---
+title: "External Sources"
+description: "External data enters AIVI through typed Sources. A source represents a persistent connection or a one-off fetch to an external system, with decoding intended to"
+---
+External data enters AIVI through typed **Sources**. A source represents a persistent connection or a one-off fetch to an external system, with decoding intended to be type-driven at the boundary (see the v0.1 status note below).
+
+> [!NOTE]
+> v0.1 status:
+> - Implemented: `Source K A`, `load`, `file.read`/`json`/`csv`, `file.imageMeta`/`image`, `http.get`/`post`/`fetch` (and `https.*`), `rest.*`, `env.get`, and `env.decode`.
+> - Streaming sources remain out of scope in runtime v0.1.
+> - `SourceError K` is upgraded from `Text` to an ADT supporting `DecodeError` accumulation.
+
+## Source Guides
+
+- [File Sources](/language/sources/file)
+- [REST / HTTP Sources](/language/sources/rest-http)
+- [Environment Sources](/language/sources/environment)
+- [IMAP Email Sources](/language/sources/imap-email)
+- [Image Sources](/language/sources/image)
+- [Compile-Time Sources](/language/sources/compile-time)
+
+## 12.1 The Source Type
+
+```aivi
+Source K A
+```
+
+
+- `K`   the **kind** of source (File, Http, Db, etc.)
+- `A`   the **decoded type** of the content
+
+### SourceError
+A `Source K A` yields an `Effect (SourceError K) A`. The error encapsulates transport boundaries vs structural bounds.
+
+```aivi
+SourceError K = 
+  | IOError Text
+  | DecodeError (List aivi.validation.DecodeError)
+```
+
+Sources are effectful. Loading a source performs I/O and returns an `Effect E A` (where `E` captures the possible source errors). All source interactions must occur within a `do Effect { ... }` block.
+
+Typical API shape:
+
+```aivi
+load: Source K A -> Effect (SourceError K) A
+```
+
+
+To handle errors as values, use `attempt` (see [Effects](/language/effects)):
+
+```aivi
+do Effect {
+  txt <- load (file.read "./README.md") or "(missing)"
+  pure txt
+}
+```
+
+
+
+## 12.2 File Sources
+
+Used for local system access. Supports structured (JSON, CSV) and unstructured (Bytes, Text) data.
+
+```aivi
+// Read entire file as text
+readme = file.read "./README.md"
+
+// Stream bytes from a large file
+blob = file.stream "./large.bin"
+
+// Read structured CSV (the expected type drives decoding)
+User = { id: Int, name: Text, email: Text }
+users : Source File (List User)
+users = file.csv "./users.csv"
+```
+
+
+
+## 12.3 HTTP Sources
+
+Typed REST/API integration.
+In v0.1 this is available through `http.*`/`https.*` and the `aivi.rest` facade.
+
+```aivi
+User = { id: Int, name: Text }
+
+// GET request as a Source
+users = http.get ~u(https://api.example.com/v1/users)
+
+// Request with headers and body (raw JSON text)
+req = http.fetch {
+  method: "POST"
+  url: ~u(https://api.example.com/v1/users)
+  headers: [{ name: "Content-Type", value: "application/json" }]
+  body: Some "{\"name\":\"New User\"}"
+}
+```
+
+
+
+## 12.4 Environment Sources (Env)
+
+Typed access to environment configuration. Values are decoded using the expected type and optional defaults.
+
+```aivi
+// Read a single environment variable as Text
+appEnv : Source Env Text
+appEnv = env.get "APP_ENV"
+```
+
+
+## 12.5 Database Sources (Db)
+
+Integration with relational and document stores. Uses carrier-specific domains for querying.
+
+```aivi
+// SQLite connection
+db = sqlite.open "./local.db"
+
+User = { id: Int, name: Text }
+
+// Typed query source (the expected type drives decoding)
+activeUsers : Source Db (List User)
+activeUsers = db.query "SELECT id, name FROM users WHERE active = 1"
+```
+
+
+See the [Database Domain](/stdlib/io/database) for table operations, deltas, and migrations.
+
+
+## 12.6 Email Sources
+
+Interacting with mail servers (IMAP/SMTP).
+In v0.1, IMAP reads are available through `email.imap` / `aivi.email`.
+
+```aivi
+// Fetch unread emails
+inbox = email.imap {
+  host: "imap.gmail.com"
+  filter: "UNSEEN"
+}
+
+// Sending as a sink effect
+sendWelcome = user => email.send {
+  to: user.email
+  subject: "Welcome!"
+  body: "Glad to have you, {user.name}"
+}
+```
+
+
+
+## 12.7 LLM Sources
+
+AIVI treats Large Language Models as typed probabilistic sources. This is a core part of the AIVI vision for intelligent data pipelines.
+
+```aivi
+// Define expected output shape
+Sentiment = Positive | Negative | Neutral
+
+Analysis = {
+  sentiment: Sentiment
+  summary: Text
+}
+
+// LLM completion with strict schema enforcement
+analyze = input => llm.complete {
+  model: "gpt-4o"
+  prompt: "Analyze this feedback: {input}"
+  schema: Analysis
+}
+```
+
+
+
+## 12.8 Image Sources
+
+Images are typed by their metadata and pixel data format.
+
+```aivi
+Image A = { width: Int, height: Int, format: ImageFormat, pixels: A }
+
+// Load image metadata only
+meta = file.imageMeta "./photo.jpg"
+
+// Load full image with RGB pixel access
+photo = file.image "./photo.jpg"
+```
+
+
+
+## 12.9 S3 / Cloud Storage Sources
+
+Integration with object storage.
+
+```aivi
+// Bucket listings
+images = s3.bucket "my-assets" |> s3.list "thumbnails/"
+
+// Fetch object content
+logo = s3.get "my-assets" "branding/logo.png"
+```
+
+
+> [!NOTE]
+> Browser sources are **Experimental** and not guaranteed across all v0.1 runtime targets (including WASM).
+
+
+## 12.10 Compile-Time Sources (@static)
+
+Some sources are resolved at compile time and embedded into the binary. This ensures zero latency/failure at runtime.
+
+```aivi
+@static
+version = file.read "./VERSION"
+
+@static
+locales = file.read "./i18n/en.json"
+```
+

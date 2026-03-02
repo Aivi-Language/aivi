@@ -1,0 +1,5 @@
+// in `my/app/api.aivi`
+module my.app.api
+export fetchDashboard
+
+fetchDashboard = ... // Real HTTP call

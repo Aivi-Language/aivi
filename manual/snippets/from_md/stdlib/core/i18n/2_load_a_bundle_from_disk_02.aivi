@@ -1,0 +1,13 @@
+use aivi.file as file
+use aivi.i18n
+
+loadBundleWithResource : Locale -> Text -> Effect Text Bundle
+loadBundleWithResource = locale path => do Effect {
+  h      <- file.open path
+  txtRes <- file.readAll h
+
+  txtRes match
+    | Ok txt => bundleFromProperties locale txt match
+      | Ok b   => pure b
+      | Err e  => fail e
+}

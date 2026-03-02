@@ -1,0 +1,6 @@
+// Proposed surface syntax (future):
+// next = select {
+//   rx1.recv () => msg => handle1 msg
+//   rx2.recv () => msg => handle2 msg
+//   timeout 1s  => _   => handleTimeout ()
+// }

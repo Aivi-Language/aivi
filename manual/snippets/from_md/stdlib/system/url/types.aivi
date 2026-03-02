@@ -1,0 +1,8 @@
+Url = {
+  protocol: Text
+  host: Text
+  port: Option Int
+  path: Text
+  query: List (Text, Text)
+  hash: Option Text
+}

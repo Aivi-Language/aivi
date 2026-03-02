@@ -1,0 +1,4 @@
+do M {
+  x = expr
+  body
+}

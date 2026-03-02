@@ -1,0 +1,61 @@
+---
+title: "Path Domain"
+description: "The Path domain provides a structured filesystem path type and safe, composable path operations."
+---
+<!-- quick-info: {"kind":"module","name":"aivi.path"} -->
+The `Path` domain provides a **structured filesystem path** type and safe, composable path operations.
+
+Use `~path[...]` to build a `Path` literal without string-mashing separators, and `/` to join paths.
+<!-- /quick-info -->
+<Note>use aivi.path<span class="domain-badge">domain</span></Note>
+
+
+## Module
+
+```aivi
+module aivi.path
+export domain Path
+export Path
+export parse, toString, isAbsolute, parent, fileName, normalize
+```
+
+
+## Types
+
+```aivi
+Path = { absolute: Bool, segments: List Text }
+```
+
+
+## Domain Definition
+
+```aivi
+domain Path over Path = {
+  // Join paths, then normalize (lexically).
+  (/): Path -> Path -> Path
+}
+```
+
+
+## Helper Functions
+
+| Function | Explanation |
+| --- | --- |
+| **parse** text<br><code>Text -> Path</code> | Parses and normalizes a textual path. |
+| **toString** path<br><code>Path -> Text</code> | Renders a `Path` as text (using `/`). |
+| **normalize** path<br><code>Path -> Path</code> | Removes `.` segments and resolves `..` where possible. |
+| **parent** path<br><code>Path -> Option Path</code> | Returns the parent directory, if any. |
+| **fileName** path<br><code>Path -> Option Text</code> | Returns the last segment, if any. |
+
+## Usage Examples
+
+```aivi
+use aivi.path
+
+root = ~path[/usr/local]
+bin = root / ~path[bin]
+
+cfg = ~path[./config/../config/app.json]
+cfgText = toString cfg
+```
+

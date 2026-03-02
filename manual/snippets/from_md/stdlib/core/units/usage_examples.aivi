@@ -1,0 +1,7 @@
+use aivi.units
+
+meter = defineUnit "m" 1.0
+kilometer = defineUnit "km" 1000.0
+
+distance = { value: 1500.0, unit: meter }
+distanceKm = convert distance kilometer

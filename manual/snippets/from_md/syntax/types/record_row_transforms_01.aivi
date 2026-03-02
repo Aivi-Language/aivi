@@ -1,0 +1,6 @@
+Pick (id, name) User
+Omit (isAdmin) User
+Optional (email, name) User
+Required (email, name) User
+Rename { createdAt: created_at, updatedAt: updated_at } User
+Defaulted { createdAt: Instant, updatedAt: Instant } User

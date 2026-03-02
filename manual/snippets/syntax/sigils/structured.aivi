@@ -1,0 +1,8 @@
+// Map literal (entries use =>, spread with ...)
+users = ~map{
+  "id-1" => { name: "Alice" }
+  "id-2" => { name: "Bob" }
+}
+
+// Set literal (spread with ...)
+tags = ~set[...baseTags, "hot", "new"]

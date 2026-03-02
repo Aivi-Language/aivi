@@ -1,0 +1,8 @@
+config = {
+  host: "localhost"
+  port: 8080
+  debug: True
+}
+
+{ host, port } = config
+serverUrl = "http://{host}:{port}"

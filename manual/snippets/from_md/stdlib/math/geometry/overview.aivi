@@ -1,0 +1,12 @@
+use aivi.geometry (ray3, point3, Sphere, intersect)
+
+// A ray firing forwards from origin
+ray = ray3 0.0 0.0 0.0 0.0 0.0 1.0
+
+// A sphere 5 units away
+sphere = Sphere { center: point3 0.0 0.0 5.0, radius: 1.0 }
+
+if intersect ray sphere then
+  print "Hit!"
+else
+  print "Miss!"

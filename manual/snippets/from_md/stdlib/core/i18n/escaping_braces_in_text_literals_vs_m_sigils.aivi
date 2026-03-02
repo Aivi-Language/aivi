@@ -1,0 +1,3 @@
+// AIVI Text literal that contains a message template
+raw = "Hello, \\{name:Text\\}!"
+msg = message raw

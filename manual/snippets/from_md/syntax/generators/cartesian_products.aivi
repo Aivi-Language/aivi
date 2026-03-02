@@ -1,0 +1,6 @@
+// Generate all pairs in a grid
+grid = generate {
+  x <- [0.. width]
+  y <- [0.. height]
+  yield (x, y)
+}

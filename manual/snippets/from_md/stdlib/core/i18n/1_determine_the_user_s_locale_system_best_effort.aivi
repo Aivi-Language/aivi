@@ -1,0 +1,15 @@
+use aivi.i18n
+use aivi.system (localeTag)
+
+defaultLocale : Locale
+defaultLocale = { language: "en", region: Some "US", variants: [], tag: "en-US" }
+
+systemLocale : Effect Text Locale
+systemLocale = do Effect {
+  tagOpt <- localeTag
+  tag =
+    tagOpt match
+      | Some t => t
+      | None   => defaultLocale.tag
+      pure (parseLocale tag or defaultLocale)
+}

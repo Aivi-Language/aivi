@@ -1,0 +1,3 @@
+class Functor (F A) = given (A: Any) {
+  map: (A -> B) -> F B
+}

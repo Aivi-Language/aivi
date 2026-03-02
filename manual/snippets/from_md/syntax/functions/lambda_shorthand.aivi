@@ -1,0 +1,15 @@
+// Single arg with _
+double = _ * 2
+isEven = _ % 2 == 0
+getName = .name // Accessor shorthand for x => x.name
+
+// Equivalent explicit forms
+double = x => x * 2
+isEven = x => x % 2 == 0
+getName = user => user.name
+
+// Predicates can automatically deconstruct fields:
+// filter active is a shortcut for filter (_.active)
+
+// Complexity can be handled inline via explicit record deconstruction:
+// map { name, id } => if id > 10 then name else "Anonymous"

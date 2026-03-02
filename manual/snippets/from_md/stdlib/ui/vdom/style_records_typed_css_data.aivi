@@ -1,0 +1,2 @@
+base = { width: 10px, display: "block" }
+next = base <| { width: 12px }

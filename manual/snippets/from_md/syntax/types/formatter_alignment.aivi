@@ -1,0 +1,6 @@
+machine OrderFlow = {
+            -> Pending   : init {}
+  Pending   -> Confirmed : confirm { confirmedAt: Instant }
+  Confirmed -> Shipped   : ship { trackingId: Text }
+  Shipped   -> Delivered : deliver { deliveredAt: Instant }
+}

@@ -1,0 +1,10 @@
+Expr = Num Int | Add Expr Expr | Mul Expr Expr
+
+eval =
+  | Num n   => n
+  | Add a b => eval a + eval b
+  | Mul a b => eval a * eval b
+
+// (2 + 3) * 4 = 20
+expr = Mul (Add (Num 2) (Num 3)) (Num 4)
+result = eval expr

@@ -1,0 +1,3 @@
+class Bifunctor (F A B) = given (A: Any, B: Any) {
+  bimap: (A -> C) -> (B -> D) -> F C D
+}

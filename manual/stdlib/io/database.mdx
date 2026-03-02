@@ -1,0 +1,318 @@
+---
+title: "Database Domain"
+description: "The Database domain provides a type-safe, composable way to work with relational data. It treats tables as immutable records of schema plus rows, while compilin"
+---
+<!-- quick-info: {"kind":"module","name":"aivi.database"} -->
+The `Database` domain provides a type-safe, composable way to work with relational data. It treats tables as immutable records of schema plus rows, while compiling predicates and patches into efficient SQL under the hood.
+
+It builds on existing AIVI features:
+- **Domains** for operator overloading and delta literals
+- **Predicates** for filtering and joins
+- **Patching** for declarative updates
+- **Effects** for explicit error handling
+
+<!-- /quick-info -->
+<Note>use aivi.database<span class="domain-badge">domain</span></Note>
+
+## Overview
+
+```aivi
+use aivi.database as db
+
+User = { id: Int, name: Text, email: Option Text, active: Bool, loginCount: Int, createdAt: Instant }
+
+dbDefault = { driver: Sqlite, url: ":memory:" }
+
+@static
+userTable : Table User
+userTable = db.table "users"[
+  { name: "id",         type: IntType,       constraints: [AutoIncrement, NotNull], default: None }
+  { name: "name",       type: Varchar 100,   constraints: [NotNull],                default: None }
+  { name: "email",      type: Varchar 255,   constraints: [],                       default: None }
+  { name: "active",     type: BoolType,      constraints: [NotNull],                default: Some (DefaultBool True) }
+  { name: "loginCount", type: IntType,       constraints: [NotNull],                default: Some (DefaultInt 0) }
+  { name: "createdAt",  type: TimestampType, constraints: [NotNull],                default: Some DefaultNow }
+]
+
+getActiveUsers : Effect DbError (List User)
+getActiveUsers = do Effect {
+  _     <- db.configure dbDefault
+  _     <- db.runMigrations[userTable]
+  users <- db.load userTable
+  pure (users |> filter active |> sortBy.createdAt)
+}
+```
+
+
+Table schemas are defined with ordinary values. `db.table` takes a table name and a
+list of `Column` values; the row type comes from the table binding's type annotation.
+
+## Types
+
+```aivi
+// Tables carry schema metadata and hold rows
+Table A = {
+  name: Text
+  columns: List Column
+  rows: List A
+}
+
+// Schema definitions are regular AIVI values.
+// The row type is inferred from the table binding (e.g. Table User).
+ColumnType =
+  | IntType
+  | BoolType
+  | TimestampType
+  | Varchar Int
+
+ColumnConstraint =
+  | AutoIncrement
+  | NotNull
+
+ColumnDefault =
+  | DefaultBool Bool
+  | DefaultInt Int
+  | DefaultText Text
+  | DefaultNow
+
+Column = {
+  name: Text
+  type: ColumnType
+  constraints: List ColumnConstraint
+  default: Option ColumnDefault
+}
+
+// Predicate alias
+Pred A = A => Bool
+
+// Select the runtime backend.
+Driver =
+  | Sqlite
+  | Postgresql
+  | Mysql
+
+// Configure the default database backend used by db.load / db.applyDelta / db.runMigrations.
+// - Sqlite: url is a filesystem path or ":memory:".
+// - Postgresql/Mysql: url is a connection string.
+DbConfig = { driver: Driver, url: Text }
+
+// Deltas express insert/update/delete/upsert
+Delta A =
+  | Insert A
+  | Update (Pred A) (Patch A)
+  | Delete (Pred A)
+  | Upsert (Pred A) A (Patch A)
+
+// Patch functions apply record updates
+Patch A = A -> A
+```
+
+
+## Domain Definition
+
+```aivi
+domain Database over Table A = {
+  Delta = Delta A
+
+  (+) : Table A -> Delta A -> Effect DbError (Table A)
+  (+) = table delta => db.applyDelta table delta
+
+  // Constructor aliases exposed by the domain.
+  ins = Insert
+  upd = Update
+  del = Delete
+  ups = Upsert
+}
+```
+
+
+### Applying Deltas
+
+```aivi
+createUser : User -> Effect DbError User
+createUser = newUser => do Effect {
+  _ <- userTable + ins newUser
+  pure newUser
+}
+
+activateUsers : Effect DbError Unit
+activateUsers = do Effect {
+  _ <- userTable + upd (!active) (u => u <| { active: True, loginCount: _ + 1 })
+}
+
+deleteOldPosts : Instant -> Effect DbError Unit
+deleteOldPosts = cutoff => do Effect {
+  _ <- postTable + del (_.createdAt < cutoff)
+}
+
+upsertActiveUser : User -> Effect DbError Unit
+upsertActiveUser = user => do Effect {
+  _ <- userTable + ups (id == user.id) user (u => u <| { active: True, loginCount: _ + 1 })
+}
+```
+
+
+## Querying
+
+In v0.1, `Table A` is a persistent in-memory structure with explicit observation via `db.load`.
+
+Query planning utilities (`filter`, `find`, `sortBy`, `groupBy`, `join`) are specified, but runtime coverage is partial in v0.1.
+
+```aivi
+getUserById : Int -> Effect DbError (Option User)
+getUserById = id => do Effect {
+  users <- db.load userTable
+  pure = (users |> find (_.id == id))
+}
+```
+
+
+## Joins and Preloading
+
+```aivi
+UserWithPosts = { user: User, posts: List Post }
+
+getUsersWithPosts : Effect DbError (List UserWithPosts)
+getUsersWithPosts = do Effect {
+  users <- db.load userTable
+  posts <- db.load postTable
+  pure (
+    users
+    |> join posts on (_.id == _.authorId)
+    |> groupBy { userId = _.id, user = _.left, post = _.right }
+    |> map { key, group } => {
+      user: group.head.user
+      posts: group |> map.post
+    }
+  )
+}
+```
+
+
+For eager loading:
+
+```aivi
+usersWithPosts = <- db.load (userTable |> preload posts on (_.id == _.authorId))
+```
+
+
+## Migrations
+
+Schema definitions are typed values. Mark them `@static` to allow compile-time validation and migration planning.
+
+```aivi
+migrate : Effect DbError Unit
+migrate = do Effect {
+  db.runMigrations[userTable]
+}
+```
+
+
+## Pooling
+
+Database pooling is provided by `aivi.database.pool`. The pool is configured explicitly (no hidden globals),
+and `withConn` guarantees deterministic release via AIVI resources even on failure or cancellation.
+
+```aivi
+use aivi
+use aivi.database.pool as Pool
+
+Conn = { id: Int }
+
+cfg : Pool.Config Conn
+cfg = {
+  maxSize: 4
+  minIdle: 1
+  acquireTimeout: { millis: 1000 }
+  idleTimeout: None
+  maxLifetime: None
+  healthCheckInterval: None
+  backoffPolicy: Pool.Fixed ({ millis: 25 })
+  queuePolicy: Pool.Fifo
+
+  acquire: _ => pure { id: 0 }
+  release: _ => pure Unit
+  healthCheck: _ => pure True
+}
+
+main : Effect Text (Result Pool.PoolError Int)
+main = do Effect {
+  poolRes <- Pool.create cfg
+  poolRes match
+    | Err e   => pure (Err e)
+    | Ok pool => Pool.withConn pool (_ => pure 123)
+}
+```
+
+
+## Notes
+
+- `Database` compiles predicate expressions into `WHERE` clauses and patch instructions into `SET` clauses.
+- Joins are translated into single SQL queries to avoid N+1 patterns.
+- Advanced SQL remains available via `db.query` in [External Sources](/language/external-sources).
+
+## Core API (v0.1)
+
+### Table management
+
+| Function | Explanation |
+| --- | --- |
+| **db.table** name columns<br><code>Text -> List Column -> Table A</code> | Creates a table definition. The row type `A` is inferred from the binding's type annotation. |
+| **db.configure** config<br><code>DbConfig -> Effect DbError Unit</code> | Selects the runtime backend (Sqlite, Postgresql, Mysql). |
+| **db.runMigrations** tables<br><code>List (Table A) -> Effect DbError Unit</code> | Creates or updates tables to match their column definitions. |
+| **db.runMigrationSql** steps<br><code>List MigrationStep -> Effect DbError Unit</code> | Runs ordered SQL migration steps (id + sql) against the configured backend. |
+| **db.configureSqlite** tuning<br><code>SqliteTuning -> Effect DbError Unit</code> | Tunes SQLite `journal_mode` (WAL/DELETE) and busy-timeout for local-first workloads. |
+
+### Data loading
+
+| Function | Explanation |
+| --- | --- |
+| **db.load** table<br><code>Table A -> Effect (SourceError Db) (List A)</code> | Loads all rows from `table`. Validates fields against type `A`. |
+| **db.applyDelta** table delta<br><code>Table A -> Delta A -> Effect DbError (Table A)</code> | Applies an insert, update, delete, or upsert delta. Also available as the domain `+` operator. |
+| **db.applyDeltas** table deltas<br><code>Table A -> List (Delta A) -> Effect DbError (Table A)</code> | Applies many deltas in one effect for projection-heavy write workloads. |
+
+### Transactions and savepoints
+
+| Function | Explanation |
+| --- | --- |
+| **db.beginTx**<br><code>Effect DbError Unit</code> | Starts a transaction. |
+| **db.commitTx**<br><code>Effect DbError Unit</code> | Commits the current transaction. |
+| **db.rollbackTx**<br><code>Effect DbError Unit</code> | Rolls back the current transaction. |
+| **db.savepoint** name<br><code>Text -> Effect DbError Unit</code> | Creates a savepoint with SQL-safe identifier validation. |
+| **db.releaseSavepoint** name<br><code>Text -> Effect DbError Unit</code> | Releases a savepoint. |
+| **db.rollbackToSavepoint** name<br><code>Text -> Effect DbError Unit</code> | Rolls back to a savepoint while keeping outer transaction active. |
+
+### Delta constructors
+
+| Constructor | Explanation |
+| --- | --- |
+| **Insert** row<br><code>A -> Delta A</code> | Inserts a new row. |
+| **Update** pred patch<br><code>Pred A -> Patch A -> Delta A</code> | Updates rows matching `pred` with `patch`. |
+| **Delete** pred<br><code>Pred A -> Delta A</code> | Deletes rows matching `pred`. |
+| **Upsert** pred value patch<br><code>Pred A -> A -> Patch A -> Delta A</code> | Patches matching rows; inserts `value` when no row matches `pred`. |
+
+### Convenience aliases
+
+`aivi.database` also exports constructor aliases and domain sugar:
+
+- `ins = Insert`
+- `upd = Update`
+- `del = Delete`
+- `ups = Upsert`
+
+When `use aivi.database (domain Database)` is in scope, these are available in delta expressions such as `table + upd (...) (...)` and `table + ups (...) value (...)`.
+
+### FTS helpers
+
+`aivi.database` now includes typed helpers for preparing FTS payloads and queries:
+
+- `ftsDoc : Text -> List Text -> FtsDoc`
+- `ftsMatchAny : List Text -> FtsQuery`
+- `ftsMatchAll : List Text -> FtsQuery`
+
+### Pooling (`aivi.database.pool`)
+
+| Function | Explanation |
+| --- | --- |
+| **Pool.create** config<br><code>Pool.Config Conn -> Effect E (Result Pool.PoolError (Pool Conn))</code> | Creates a connection pool from the given configuration. |
+| **Pool.withConn** pool f<br><code>Pool Conn -> (Conn -> Effect E A) -> Effect E (Result Pool.PoolError A)</code> | Acquires a connection, runs `f`, and guarantees release even on failure. |

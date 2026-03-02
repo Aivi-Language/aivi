@@ -1,0 +1,2 @@
+// RFC3339-backed timestamp (UTC)
+Timestamp = DateTime
