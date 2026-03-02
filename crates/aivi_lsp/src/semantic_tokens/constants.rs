@@ -429,35 +429,140 @@ impl Backend {
 
     fn signature_lines(tokens: &[CstToken]) -> HashSet<u32> {
         let mut lines = HashSet::new();
-        let mut index = 0;
-        while index < tokens.len() {
-            let line = tokens[index].span.start.line;
-            let mut sig_tokens: Vec<usize> = Vec::new();
-            while index < tokens.len() && tokens[index].span.start.line == line {
-                if tokens[index].kind != "whitespace" {
-                    sig_tokens.push(index);
+
+        let significant: Vec<usize> = tokens
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.kind != "whitespace")
+            .map(|(i, _)| i)
+            .collect();
+
+        let mut i = 0;
+        while i < significant.len() {
+            let idx = significant[i];
+            let token = &tokens[idx];
+            let col = token.span.start.column; // 1-based
+
+            // Only look for declaration starts at column 1 (top-level).
+            if col == 1 {
+                // Type signature: lowercase_ident [space] : ...
+                if Self::is_lower_ident(token)
+                    && !Self::KEYWORDS.contains(&token.text.as_str())
+                {
+                    if let Some(&next_idx) = significant.get(i + 1) {
+                        let next = &tokens[next_idx];
+                        if next.kind == "symbol"
+                            && next.text == ":"
+                            && !Self::is_adjacent_span(&token.span, &next.span)
+                        {
+                            let start_line = token.span.start.line.saturating_sub(1) as u32;
+                            let end_line =
+                                Self::find_decl_end_line(&significant, tokens, i, start_line);
+                            for line in start_line..=end_line {
+                                lines.insert(line);
+                            }
+                            i += 1;
+                            continue;
+                        }
+                    }
                 }
-                index += 1;
+
+                // Type declaration: [export] UpperIdent [TypeParams] =
+                if Self::is_typedef_head(&significant, tokens, i) {
+                    let start_line = token.span.start.line.saturating_sub(1) as u32;
+                    let end_line =
+                        Self::find_decl_end_line(&significant, tokens, i, start_line);
+                    for line in start_line..=end_line {
+                        lines.insert(line);
+                    }
+                    i += 1;
+                    continue;
+                }
             }
-            if sig_tokens.len() < 2 {
-                continue;
-            }
-            let first = &tokens[sig_tokens[0]];
-            let second = &tokens[sig_tokens[1]];
-            if first.kind != "ident" || second.kind != "symbol" || second.text != ":" {
-                continue;
-            }
-            let Some(first_ch) = first.text.chars().next() else {
-                continue;
-            };
-            if !first_ch.is_ascii_lowercase() {
-                continue;
-            }
-            if first.span.end.column.saturating_add(1) == second.span.start.column {
-                continue;
-            }
-            lines.insert(line.saturating_sub(1) as u32);
+
+            i += 1;
         }
+
         lines
+    }
+
+    /// Returns `true` when `significant[pos]` starts a type declaration:
+    /// an optional `export` keyword, then an uppercase identifier, then
+    /// zero or more type-parameter identifiers, then `=`.
+    fn is_typedef_head(significant: &[usize], tokens: &[CstToken], pos: usize) -> bool {
+        let mut j = pos;
+        // Skip optional `export` keyword.
+        if j < significant.len() && tokens[significant[j]].text == "export" {
+            j += 1;
+        }
+        // First non-export token must be an uppercase identifier.
+        if j >= significant.len() {
+            return false;
+        }
+        let first = &tokens[significant[j]];
+        if first.kind != "ident"
+            || !first
+                .text
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_uppercase())
+        {
+            return false;
+        }
+        j += 1;
+        // Skip optional type parameters (any identifier tokens).
+        while j < significant.len() && tokens[significant[j]].kind == "ident" {
+            j += 1;
+        }
+        // Must be followed by bare `=` (not `==`, `=>`, etc.).
+        if j >= significant.len() {
+            return false;
+        }
+        let eq = &tokens[significant[j]];
+        eq.kind == "symbol" && eq.text == "="
+    }
+
+    /// Returns the last 0-based line number that belongs to a type declaration or
+    /// type signature starting at `significant[start_pos]` on `start_line`.
+    ///
+    /// Continuation rules (at depth == 0):
+    ///   - Same line as the last marked line → always continues.
+    ///   - Immediately next line (`last + 1`) → continues if indented
+    ///     (`column > 1`) or if it is a `|` pipe (union-variant at col 1).
+    ///   - Tokens inside open brackets/braces are always part of the declaration.
+    fn find_decl_end_line(
+        significant: &[usize],
+        tokens: &[CstToken],
+        start_pos: usize,
+        start_line: u32,
+    ) -> u32 {
+        let mut depth: i32 = 0;
+        let mut last_line = start_line;
+
+        for &idx in &significant[start_pos..] {
+            let token = &tokens[idx];
+            let line = token.span.start.line.saturating_sub(1) as u32;
+            let col = token.span.start.column; // 1-based
+
+            let is_still_part = depth > 0
+                || line == last_line
+                || (line == last_line + 1
+                    && (col > 1 || (token.kind == "symbol" && token.text == "|")));
+
+            if !is_still_part {
+                break;
+            }
+
+            last_line = line;
+            if token.kind == "symbol" {
+                match token.text.as_str() {
+                    "{" | "(" | "[" => depth += 1,
+                    "}" | ")" | "]" => depth = (depth - 1).max(0),
+                    _ => {}
+                }
+            }
+        }
+
+        last_line
     }
 }
