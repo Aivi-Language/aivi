@@ -100,7 +100,7 @@ fn find_symbol_span(text: &str, name: &str) -> Span {
 fn completion_items_include_keywords_and_defs() {
     let text = sample_text();
     let uri = sample_uri();
-    let items = Backend::build_completion_items(text, &uri, Position::new(0, 0), &HashMap::new());
+    let items = Backend::build_completion_items(text, &uri, Position::new(0, 0), &HashMap::new(), &GtkIndex::default());
     let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
     assert!(labels.contains(&"module"));
     assert!(labels.contains(&"examples.compiler.math"));
@@ -253,7 +253,7 @@ fn completion_after_use_suggests_modules() {
     let uri = sample_uri();
     let workspace = workspace_with_stdlib(&["aivi", "aivi.text"]);
     let position = position_after(text, "use aivi.t");
-    let items = Backend::build_completion_items(text, &uri, position, &workspace);
+    let items = Backend::build_completion_items(text, &uri, position, &workspace, &GtkIndex::default());
     let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
     assert!(labels.contains(&"aivi.text"));
 }
@@ -264,7 +264,7 @@ fn completion_inside_use_import_list_suggests_remaining_exports() {
     let uri = sample_uri();
     let workspace = workspace_with_stdlib(&["aivi.text"]);
     let position = position_after(text, "use aivi.text (length, isE");
-    let items = Backend::build_completion_items(text, &uri, position, &workspace);
+    let items = Backend::build_completion_items(text, &uri, position, &workspace, &GtkIndex::default());
     let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
     assert!(
         !labels.contains(&"length"),
@@ -282,7 +282,7 @@ fn completion_after_qualified_module_name_suggests_exports() {
     let uri = sample_uri();
     let workspace = workspace_with_stdlib(&["aivi.text"]);
     let position = position_after(text, "aivi.text.");
-    let items = Backend::build_completion_items(text, &uri, position, &workspace);
+    let items = Backend::build_completion_items(text, &uri, position, &workspace, &GtkIndex::default());
     let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
     assert!(labels.contains(&"length"));
     assert!(labels.contains(&"isEmpty"));

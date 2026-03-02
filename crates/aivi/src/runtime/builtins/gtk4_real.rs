@@ -285,12 +285,17 @@ mod linux {
                     .lock()
                     .map(|mut q| q.drain(..).collect())
                     .unwrap_or_default();
-                for action in actions {
+                for raw_action in actions {
+                    // Format is "action_name:x:y" (coords optional)
+                    let (action_name, coords) = raw_action
+                        .split_once(':')
+                        .map(|(a, rest)| (a.to_string(), rest.to_string()))
+                        .unwrap_or_else(|| (raw_action.clone(), String::new()));
                     let event = SignalEventState {
                         widget_id: 0,
                         signal: "mailfox.tray.action".to_string(),
-                        handler: action.clone(),
-                        payload: action,
+                        handler: action_name,
+                        payload: coords,
                     };
                     let typed_value = make_signal_event_value(event.clone());
                     GTK_STATE.with(|state| {
@@ -504,15 +509,17 @@ mod linux {
                 .unwrap_or_else(|_| zbus::zvariant::OwnedObjectPath::try_from("/").unwrap())
         }
 
-        fn activate(&self, _x: i32, _y: i32) {
+        fn activate(&self, x: i32, y: i32) {
+            eprintln!("sni-tray: Activate({x}, {y}) called");
             if let Ok(mut q) = pending_tray_actions().lock() {
-                q.push_back("left_click".to_string());
+                q.push_back(format!("left_click:{x}:{y}"));
             }
         }
         fn secondary_activate(&self, _x: i32, _y: i32) {}
-        fn context_menu(&self, _x: i32, _y: i32) {
+        fn context_menu(&self, x: i32, y: i32) {
+            eprintln!("sni-tray: ContextMenu({x}, {y}) called");
             if let Ok(mut q) = pending_tray_actions().lock() {
-                q.push_back("context_menu".to_string());
+                q.push_back(format!("context_menu:{x}:{y}"));
             }
         }
         fn scroll(&self, _delta: i32, _orientation: &str) {}
@@ -564,6 +571,8 @@ mod linux {
                 .lock()
                 .map(|s| s.menu_items.clone())
                 .unwrap_or_default();
+
+            eprintln!("dbusmenu: GetLayout called, {} items", items.len());
 
             let children: Vec<OwnedValue> = items
                 .iter()

@@ -22,6 +22,7 @@ pub struct GtkPropertyInfo {
     pub writable: bool,
     pub construct_only: bool,
     #[serde(default)]
+    #[allow(dead_code)]
     pub default_value: Option<String>,
     #[serde(default)]
     pub doc: Option<String>,
@@ -31,6 +32,7 @@ pub struct GtkPropertyInfo {
 pub struct GtkSignalInfo {
     pub name: String,
     #[serde(default)]
+    #[allow(dead_code)]
     pub doc: Option<String>,
 }
 
@@ -61,10 +63,5 @@ impl GtkIndex {
             .iter()
             .filter(|w| w.name.starts_with(prefix))
             .collect()
-    }
-
-    /// Returns all widget names.
-    pub fn all_widget_names(&self) -> impl Iterator<Item = &str> {
-        self.widgets.iter().map(|w| w.name.as_str())
     }
 }

@@ -25,7 +25,8 @@ In addition, the UI layer defines a structured HTML sigil:
 - `~<html>...</html>` for HTML literals to typed `aivi.ui.VNode` constructors and supports `{ expr }` splices.
   - Uppercase/dotted tags are treated as component calls with record-based lowering (for example `<Ui.Card title="Hello" />` lowers to `Ui.Card { title: "Hello" }`).
 - `~<gtk>...</gtk>` for GtkBuilder-style XML literals to typed `aivi.ui.gtk4.GtkNode` constructors.
-  - Uppercase/dotted tags are treated as component calls with record-based lowering (for example `<Row id="one" onClick={ Save } />` lowers to `Row { id: "one", onClick: Save }`). Signal sugar and `props` normalization do not apply to component tags.
+  - **Shorthand widget tags**: tags starting with `Gtk`, `Adw`, or `Gsk` (e.g. `<GtkButton>`, `<AdwActionRow>`) are syntactic sugar for `<object class="WidgetName">`. Attributes on shorthand tags are treated as properties automatically — no `props={{ }}` wrapper needed. Signal sugar (`onClick`, `onInput`, etc.) works on shorthand tags too.
+  - Uppercase/dotted tags that are **not** GTK widget prefixes are treated as component calls with record-based lowering (for example `<Row id="one" onClick={ Save } />` lowers to `Row { id: "one", onClick: Save }`). Signal sugar and `props` normalization do not apply to component tags.
   - `props={ { marginTop: 24, spacing: 24 } }` is sugar that lowers to normalized GTK property entries (`margin-top`, `spacing`).
   - `props` only accepts compile-time record literals in v0.1; non-literal values are diagnostics.
   - Dynamic repeated children can be expressed with `<each items={items} as={item}>...</each>` inside GTK elements.
@@ -34,6 +35,28 @@ In addition, the UI layer defines a structured HTML sigil:
     - `onInput={ Msg.Changed }` lowers to a `changed` signal binding.
     - `<signal name="clicked" on={ Msg.Save } />` lowers to the same typed binding path.
   - Signal handlers must be compile-time expressions in v0.1.
+
+GTK widget shorthand example:
+
+```aivi
+~<gtk>
+  <GtkBox spacing="24" marginTop="12">
+    <GtkLabel label="Hello" />
+    <GtkButton label="Save" onClick={ Msg.Save } />
+  </GtkBox>
+</gtk>
+```
+
+Equivalent verbose form:
+
+```aivi
+~<gtk>
+  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
+    <object class="GtkLabel" props={{ label: "Hello" }} />
+    <object class="GtkButton" props={{ label: "Save" }} onClick={ Msg.Save } />
+  </object>
+</gtk>
+```
 
 GTK signal sugar quick reference:
 

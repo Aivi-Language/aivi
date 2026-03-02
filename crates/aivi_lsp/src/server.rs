@@ -829,9 +829,10 @@ impl LanguageServer for Backend {
             return Ok(Some(CompletionResponse::Array(Vec::new())));
         };
         let workspace = self.workspace_modules_for(&uri).await;
+        let gtk_index = { Arc::clone(&self.state.lock().await.gtk_index) };
         let uri2 = uri.clone();
         let items = tokio::task::spawn_blocking(move || {
-            Self::build_completion_items(&text, &uri2, position, &workspace)
+            Self::build_completion_items(&text, &uri2, position, &workspace, &gtk_index)
         })
         .await
         .unwrap_or_default();

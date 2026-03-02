@@ -32,7 +32,8 @@ AIVI is expression-oriented with a clean, minimal syntax. Bindings are immutable
 module user.myapp
 
 use aivi
-use aivi.net.http
+use aivi.net.http (get)
+use aivi.json (decode)
 
 // Types are structural records and ADTs
 User = { id: Int, name: Text, email: Option Text }
@@ -46,8 +47,8 @@ greet = user => "Hello, { user.name }!"
 // Effects are explicit: Effect ErrorType SuccessType
 fetchUser : Int -> Effect ApiError User
 fetchUser = id => do Effect {
-  resp <- http.get (~u(https://api.example.com/users/{ id }))
-  resp.body |> json.decode or
+  resp <- get (~u(https://api.example.com/users/{ id }))
+  decode resp.body or
     | ParseError msg => fail (ParseError msg)
 }
 
@@ -83,10 +84,8 @@ editorNode : GtkNode
 editorNode =
   ~<gtk>
     <GtkBox orientation="vertical" spacing="8" marginTop="16">
-      <GtkEntry id="titleInput" onInput={ Msg.TitleChanged }
-        placeholder-text="Note title" />
-      <GtkEntry id="bodyInput" onInput={ Msg.BodyChanged }
-        placeholder-text="Write something..." />
+      <GtkEntry id="titleInput" onInput={ Msg.TitleChanged } />
+      <GtkEntry id="bodyInput" onInput={ Msg.BodyChanged } />
       <GtkButton label="Save" onClick={ Msg.Save } />
     </GtkBox>
   </gtk>
@@ -99,27 +98,6 @@ No callback spaghetti. Signal handlers are typed ADT constructors — the compil
 Events arrive through a typed channel. You dispatch them in a tail-recursive loop — purely functional, no mutable state:
 
 ```aivi
-State = { title: Text, body: Text }
-
-runLoop : AppWindow -> State -> Recv GtkSignalEvent -> Effect GtkError Unit
-runLoop = win => state => rx => do Effect {
-  result <- channel.recv rx
-  result match
-    | Err _ => pure Unit    // channel closed, app is shutting down
-    | Ok event =>
-        event match
-          | GtkInputChanged wid txt when wid == titleInputId =>
-              runLoop win (state <| { title: txt }) rx
-          | GtkInputChanged wid txt when wid == bodyInputId =>
-              runLoop win (state <| { body: txt }) rx
-          | GtkClicked _ =>
-              do Effect {
-                _ <- saveNote state
-                runLoop win state rx
-              }
-          | _ => runLoop win state rx
-}
-
 main : Effect GtkError Unit
 main = do Effect {
   init Unit
@@ -127,10 +105,28 @@ main = do Effect {
   win   <- windowNew appId "Notepad" 640 480
   root  <- buildFromNode editorNode
   windowSetChild win root
+  titleInputId <- widgetById "titleInput"
+  bodyInputId  <- widgetById "bodyInput"
   rx    <- signalStream {}
   windowPresent win
   _ <- appRun appId
-  runLoop win { title: "", body: "" } rx
+  loop state = { title: "", body: "" } => {
+    result <- channel.recv rx
+    result match
+      | Err _ => pure Unit           // channel closed, app is shutting down
+      | Ok event =>
+          event match
+            | GtkInputChanged wid txt when wid == titleInputId =>
+                recurse (state <| { title: txt })
+            | GtkInputChanged wid txt when wid == bodyInputId =>
+                recurse (state <| { body: txt })
+            | GtkClicked _ =>
+                do Effect {
+                  _ <- saveNote state
+                  recurse state
+                }
+            | _ => recurse state
+  }
 }
 ```
 
@@ -187,9 +183,10 @@ timeout  = 30s
 debounce = 200ms
 animDur  = 0.3s
 
-// Color math with perceptual adjustments
-hoverColor = brand + 10% lightness   // brighter variant
-mutedColor = brand - 30% saturation  // desaturated variant
+// Color math with perceptual adjustments (l=lightness, s=saturation, h=hue)
+hoverColor = brand + 10l   // brighter variant
+mutedColor = brand - 30s   // desaturated variant
+shiftedHue = brand + 45h   // hue rotation
 ```
 
 You can define your own domains to give operators meaning in your problem space — pixel coordinates, monetary values, physical units, anything.
@@ -200,52 +197,87 @@ You can define your own domains to give operators meaning in your problem space 
 
 The stdlib covers the typical surface you need to ship a real app. A few highlights:
 
-| Area | Modules |
-|:-----|:--------|
-| **Collections** | `list`, `map`, `set`, `queue`, `heap` |
-| **Text** | `text`, `regex`, `i18n` |
-| **Time** | `chronos.instant`, `chronos.duration`, `chronos.calendar`, `chronos.timezone` |
-| **Math** | `math`, `vector`, `matrix`, `geometry`, `probability`, `signal`, `linearAlgebra` |
-| **I/O** | `file`, `console`, `database`, `database.pool`, `path`, `url` |
-| **Network** | `net.http`, `net.https`, `net.httpServer`, `net.rest`, `net.sockets` |
-| **Concurrency** | `concurrency` (scoped tasks, typed channels, `Send`/`Recv`) |
-| **System** | `system`, `crypto`, `secrets`, `log` |
-| **UI** | `ui.gtk4`, `ui.color`, `ui.layout`, `ui.html`, `ui.vdom` |
+| Area            | Modules                                                                          |
+|:--------------- |:-------------------------------------------------------------------------------- |
+| **Collections** | `list`, `map`, `set`, `queue`, `heap`                                            |
+| **Text**        | `text`, `regex`, `i18n`                                                          |
+| **Time**        | `chronos.instant`, `chronos.duration`, `chronos.calendar`, `chronos.timezone`    |
+| **Math**        | `math`, `vector`, `matrix`, `geometry`, `probability`, `signal`, `linearAlgebra` |
+| **I/O**         | `file`, `console`, `database`, `database.pool`, `path`, `url`                    |
+| **Network**     | `net.http`, `net.https`, `net.httpServer`, `net.rest`, `net.sockets`             |
+| **Concurrency** | `concurrency` (scoped tasks, typed channels, `Send`/`Recv`)                      |
+| **System**      | `system`, `crypto`, `secrets`, `log`                                             |
+| **UI**          | `ui.gtk4`, `ui.color`, `ui.layout`, `ui.html`, `ui.vdom`                         |
 
 The `aivi.concurrency` module gives you scoped tasks and typed channels — real async concurrency modelled as values, without shared mutable state.
 
 ---
 
-## Effects and resources
+## Effects, resources, and typed data
 
 Effects are part of the type. You can't accidentally call an effectful function in a pure context, and error types are tracked like any other:
 
 ```aivi
-// Resource cleanup is automatic and guaranteed
-withDatabase : Effect DbError Unit
-withDatabase = do Effect {
-  conn <- managedConnection "postgres://localhost/myapp"
-  rows <- db.query conn "SELECT id, name FROM users"
-  rows |> list.forEach (row => print "{ row.id }: { row.name }")
-}  // conn released here, even on error
+use aivi.database as db
+
+// Schema is a typed value — the compiler knows the row shape
+User = { id: Int, name: Text, active: Bool, createdAt: Instant }
+
+@static
+userTable : Table User
+userTable = db.table "users" [
+  { name: "id",        type: IntType,       constraints: [AutoIncrement, NotNull] }
+  { name: "name",      type: Varchar 100,   constraints: [NotNull] }
+  { name: "active",    type: BoolType,      constraints: [NotNull] }
+  { name: "createdAt", type: TimestampType, constraints: [NotNull], default: Some DefaultNow }
+]
+
+// Query returns typed rows — pipe directly into list operations
+getActiveUsers : Effect DbError (List User)
+getActiveUsers = do Effect {
+  _ <- db.configure { driver: Sqlite, url: "./local.db" }
+  _ <- db.runMigrations [userTable]
+  users <- db.load userTable
+  pure (users |> filter active |> sortBy.createdAt)
+}
 
 // Precondition guards read like prose
 withdraw : Float -> Account -> Effect BankError Account
 withdraw = amount => account => do Effect {
-  given amount > 0                    or fail (InvalidAmount amount)
-  given account.balance >= amount     or fail InsufficientFunds
+  given amount > 0                or fail (InvalidAmount amount)
+  given account.balance >= amount or fail InsufficientFunds
   pure (account <| { balance: account.balance - amount })
 }
 ```
+
+### Typed API clients from OpenAPI specs — at compile time
+
+Point AIVI at any OpenAPI spec and it generates a fully typed client, checked at compile time. No code generation step, no stale types:
+
+```aivi
+// Fetched and type-checked at compile time; zero runtime overhead
+@static
+api = openapi.fromUrl ~url(https://petstore.swagger.io/v2/swagger.json)
+
+main = do Effect {
+  // Return type is inferred from the spec — no json.decode needed
+  pets <- api.listPets { limit: Some 10 }
+  print "Found { List.length pets } pets: { pets |> map .name }"
+
+  newPet <- api.createPet { name: "Fido", tag: Some "dog" }
+  print "Created: { newPet.name } (id: { newPet.id })"
+}
+```
+
+Works equally well with a local file: `openapi.fromFile "./specs/api.yaml"`. The same type-driven decoding applies everywhere — HTTP sources, file sources, environment variables — if the type is known at the call site, AIVI decodes into it automatically.
 
 ---
 
 ## Tooling
 
-- **LSP server** (`aivi-lsp`) — autocomplete, hover with inline docs, go-to-definition, rename, real-time diagnostics, semantic highlighting
+- **LSP server** (`aivi-lsp`) — autocomplete, hover with inline docs, go-to-definition, rename, real-time diagnostics, semantic highlighting; works with VS Code, Neovim, Zed, and any LSP-compatible editor
 - **Formatter** — `aivi fmt` formats any `.aivi` file to canonical style; also available as a format-on-save action in the VS Code extension
 - **VS Code extension** — bundles the LSP, grammar highlighting, and formatting in one install
-- **Zed extension** — grammar and LSP support for Zed
 - **MCP server** — `aivi mcp serve` exposes the language specs as MCP resources for AI-assisted development workflows
 
 ---
