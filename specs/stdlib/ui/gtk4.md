@@ -242,19 +242,19 @@ listNode =
 
 ```aivi
 nextMsg : Effect GtkError (Option Text)
-nextMsg = effect {
+nextMsg = do Effect {
   eventOpt <- signalPoll {}
   eventOpt match
-    | None                         => yield None
-    | Some (GtkClicked _)          => yield Some "clicked"
-    | Some (GtkInputChanged _ txt) => yield Some txt
-    | Some (GtkActivated _)        => yield Some "activated"
-    | Some (GtkToggled _ active)   => yield Some (active | Bool.toString)
-    | Some (GtkValueChanged _ val) => yield Some (val | Float.toString)
-    | Some (GtkFocusIn _)          => yield Some "focus-in"
-    | Some (GtkFocusOut _)         => yield Some "focus-out"
-    | Some (GtkKeyPressed _ key _) => yield Some key
-    | Some (GtkUnknownSignal _ sig _ _) => yield Some sig
+    | None                         => pure None
+    | Some (GtkClicked _)          => pure (Some "clicked")
+    | Some (GtkInputChanged _ txt) => pure (Some txt)
+    | Some (GtkActivated _)        => pure (Some "activated")
+    | Some (GtkToggled _ active)   => pure (Some (active | Bool.toString))
+    | Some (GtkValueChanged _ val) => pure (Some (val | Float.toString))
+    | Some (GtkFocusIn _)          => pure (Some "focus-in")
+    | Some (GtkFocusOut _)         => pure (Some "focus-out")
+    | Some (GtkKeyPressed _ key _) => pure (Some key)
+    | Some (GtkUnknownSignal _ sig _ _) => pure (Some sig)
 }
 ```
 
@@ -273,11 +273,11 @@ toMsg = event =>
     | _                     => None
 
 runLoop : Effect GtkError Unit
-runLoop = effect {
+runLoop = do Effect {
   events <- signalStream {}
   channel.forEach events (event =>
     toMsg event match
-      | None     => yield {}
+      | None     => pure {}
       | Some msg => handleMsg msg
   )
 }

@@ -67,3 +67,27 @@ palette = [
         "Should have spaces inside record braces if on one line"
     );
 }
+
+#[test]
+fn test_typedef_space_before_colon() {
+    // Adjacent colon in a multi-line type signature should get a space inserted.
+    let input = "module examples.types\n\nuser: {\n  id: Int\n  name: Text\n}\nexport user = {\n  id: 1\n  name: \"Alice\"\n}\n";
+    let formatted = format_text(input);
+    assert!(
+        formatted.contains("user : {"),
+        "Type signature should have space before colon, got:\n{}",
+        formatted
+    );
+}
+
+#[test]
+fn test_typedef_space_before_colon_with_export() {
+    // Type signature followed by `export name = ...` definition.
+    let input = "module examples.types\n\nuser : Text\nexport user = \"Alice\"\n";
+    let formatted = format_text(input);
+    assert!(
+        formatted.contains("user : Text"),
+        "Type signature should preserve space before colon, got:\n{}",
+        formatted
+    );
+}

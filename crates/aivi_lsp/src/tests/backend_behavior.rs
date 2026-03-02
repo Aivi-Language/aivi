@@ -854,3 +854,25 @@ export extractionRunPlan = emailId => schemaVer => promptVer => modelId => exist
     assert!(v1.is_some(), "v1 string should exist");
     assert_eq!(v1.unwrap().0, Backend::SEM_TOKEN_STRING);
 }
+
+#[test]
+fn semantic_tokens_multiline_typedef_brackets_get_signature_modifier() {
+    // Both { and } of a multi-line type signature should carry the signature modifier.
+    let text = "module test\nuser : {\n  id: Int\n  name: Text\n}\nuser = { id: 1, name: \"Alice\" }\n";
+    let sig_mod = 1u32 << Backend::SEM_MOD_SIGNATURE;
+    let details = collect_semantic_token_details(text);
+
+    let open_brace = details.iter().find(|(tt, t, _)| t == "{" && *tt == Backend::SEM_TOKEN_BRACKET);
+    let close_brace = details.iter().rfind(|(_, t, mods)| t == "}" && *mods == sig_mod);
+
+    assert!(
+        open_brace.map(|(.., m)| *m == sig_mod).unwrap_or(false),
+        "opening {{ of typedef should have signature modifier, got: {:?}",
+        open_brace
+    );
+    assert!(
+        close_brace.is_some(),
+        "closing }} of typedef should have signature modifier, details: {:?}",
+        details.iter().filter(|(_, t, _)| t == "}").collect::<Vec<_>>()
+    );
+}
