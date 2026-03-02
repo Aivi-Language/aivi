@@ -838,6 +838,46 @@ impl TypeChecker {
         };
 
         let fields = self.prepend_missing_record_defaults(fields, expected_ty.as_ref(), &span);
+
+        // Check for missing required fields in the record literal.
+        // Skip when a spread field is present (it may supply the missing fields).
+        if let Some(Type::Record {
+            fields: ref expected_fields,
+        }) = expected_ty
+        {
+            let has_spread = fields.iter().any(|f| f.spread);
+            if !has_spread {
+                let present: HashSet<&str> = fields
+                    .iter()
+                    .filter_map(|f| match f.path.first() {
+                        Some(PathSegment::Field(name)) => Some(name.name.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                let missing: Vec<&str> = expected_fields
+                    .keys()
+                    .filter(|k| !present.contains(k.as_str()))
+                    .map(|k| k.as_str())
+                    .collect();
+                if !missing.is_empty() {
+                    return Err(TypeError {
+                        span: span.clone(),
+                        message: format!(
+                            "missing required field{} {} in record",
+                            if missing.len() > 1 { "s" } else { "" },
+                            missing
+                                .iter()
+                                .map(|n| format!("'{n}'"))
+                                .collect::<Vec<_>>()
+                                .join(", "),
+                        ),
+                        expected: None,
+                        found: None,
+                    });
+                }
+            }
+        }
+
         let mut new_fields = Vec::new();
         for field in fields {
             let value_expected = if field.spread {
