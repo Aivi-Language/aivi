@@ -20,7 +20,4 @@ else
   rm -rf "$TMP_DIR"
 fi
 
-cd ../ui-client
-pnpm build
-cd ..
 
