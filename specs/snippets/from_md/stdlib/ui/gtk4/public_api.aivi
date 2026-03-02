@@ -28,15 +28,15 @@ GtkError = Text
 GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text
 GtkAttr = GtkAttribute Text Text
 GtkSignalEvent =
-  | GtkClicked       WidgetId
-  | GtkInputChanged  WidgetId Text
-  | GtkActivated     WidgetId
-  | GtkToggled       WidgetId Bool
-  | GtkValueChanged  WidgetId Float
-  | GtkKeyPressed    WidgetId Text Text
-  | GtkFocusIn       WidgetId
-  | GtkFocusOut      WidgetId
-  | GtkUnknownSignal WidgetId Text Text Text
+  | GtkClicked       WidgetId Text
+  | GtkInputChanged  WidgetId Text Text
+  | GtkActivated     WidgetId Text
+  | GtkToggled       WidgetId Text Bool
+  | GtkValueChanged  WidgetId Text Float
+  | GtkKeyPressed    WidgetId Text Text Text
+  | GtkFocusIn       WidgetId Text
+  | GtkFocusOut      WidgetId Text
+  | GtkUnknownSignal WidgetId Text Text Text Text
 
 init: Unit -> Effect GtkError Unit
 appNew: Text -> Effect GtkError AppId
@@ -133,9 +133,12 @@ layoutManagerNew: Text -> Effect GtkError LayoutManagerId
 widgetSetLayoutManager: WidgetId -> LayoutManagerId -> Effect GtkError Unit
 
 buildFromNode: GtkNode -> Effect GtkError WidgetId
+buildWithIds: GtkNode -> Effect GtkError { root: WidgetId, widgets: Map Text WidgetId }
 signalPoll: Unit -> Effect GtkError (Option GtkSignalEvent)
 signalStream: Unit -> Effect GtkError (Recv GtkSignalEvent)
 signalEmit: WidgetId -> Text -> Text -> Text -> Effect GtkError Unit
+
+gtkApp: { id: Text, title: Text, size: (Int, Int), model: s, view: GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError s } -> Effect GtkError Unit
 
 osOpenUri: AppId -> Text -> Effect GtkError Unit
 osShowInFileManager: Text -> Effect GtkError Unit

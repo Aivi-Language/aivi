@@ -56,3 +56,15 @@ Channels provide a mechanism for synchronization and communication between concu
 | Function | Explanation |
 | --- | --- |
 | **close** sender<br><code>Sender A -> Effect E Unit</code> | Closes the channel from the sender side; receivers observe `Err Closed`. |
+
+### `fold`
+
+| Function | Explanation |
+| --- | --- |
+| **fold** init fn receiver<br><code>S -> (S -> A -> Effect E S) -> Receiver A -> Effect E S</code> | Consumes values from the channel, threading state through each step. Returns the final state when the channel closes. Eliminates the need for manual `recv` + `Err`/`Ok` matching + `recurse`. |
+
+### `forEach`
+
+| Function | Explanation |
+| --- | --- |
+| **forEach** receiver fn<br><code>Receiver A -> (A -> Effect E Unit) -> Effect E Unit</code> | Consumes all values from the channel, running an effectful action on each. Returns `Unit` when the channel closes. |
