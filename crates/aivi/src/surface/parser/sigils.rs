@@ -1201,16 +1201,26 @@ impl Parser {
                                             );
                                             continue;
                                         }
-                                        // Try compile-time evaluation first; fall back to
-                                        // the expression itself for runtime values (e.g. widget IDs).
+                                        // Literals (strings, numbers, bools) are stringified
+                                        // at compile time. Everything else — idents, field
+                                        // accesses, match expressions, etc. — is kept as a
+                                        // runtime expression so variables resolve to their
+                                        // actual values.
                                         let prop_name = normalize_prop_name(&name.name);
-                                        let value_expr =
-                                            if let Some(text) = compile_time_expr_text(&field.value)
-                                            {
-                                                mk_string(&text)
-                                            } else {
-                                                field.value
-                                            };
+                                        let value_expr = match &field.value {
+                                            Expr::Literal(_)
+                                            | Expr::UnaryNeg { .. }
+                                            | Expr::Suffixed { .. } => {
+                                                if let Some(text) =
+                                                    compile_time_expr_text(&field.value)
+                                                {
+                                                    mk_string(&text)
+                                                } else {
+                                                    field.value
+                                                }
+                                            }
+                                            _ => field.value,
+                                        };
                                         lowered_attrs.push(call2(
                                             "gtkAttr",
                                             mk_string(&format!("prop:{prop_name}")),
