@@ -1,0 +1,5 @@
+n = 10
+
+// Use a variable/expression as the numeric part of a suffix literal:
+timeout1 = (n)s
+timeout2 = (n + 5)s

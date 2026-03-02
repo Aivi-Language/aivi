@@ -1,0 +1,4 @@
+numbers = [1, 2, 3, 4, 5]
+[first, second, ...rest] = numbers
+
+// first = 1, second = 2, rest = [3, 4, 5]

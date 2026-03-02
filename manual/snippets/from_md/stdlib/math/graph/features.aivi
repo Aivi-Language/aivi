@@ -1,0 +1,3 @@
+NodeId = Int
+Edge = { from: NodeId, to: NodeId, weight: Float }
+Graph = { nodes: List NodeId, edges: List Edge }

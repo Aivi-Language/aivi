@@ -1,0 +1,3 @@
+class Group A = Monoid {
+  invert: A -> A
+}

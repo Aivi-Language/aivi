@@ -1,0 +1,76 @@
+---
+title: "TimeZone and ZonedDateTime"
+description: "The TimeZone and ZonedDateTime domains handle geographic time offsets, daylight saving transitions, and global time coordination."
+---
+> **Status: Implemented**   available in the stdlib and runtime.
+
+<!-- quick-info: {"kind":"module","name":"aivi.chronos.timezone"} -->
+The `TimeZone` and `ZonedDateTime` domains handle geographic time offsets, daylight saving transitions, and global time coordination.
+
+**Implementation note (v0.1):** time zone rules come from the IANA database (via `chrono-tz`); offsets include DST and ambiguous/invalid local times are runtime errors. `ZonedDateTime` literals use millisecond precision.
+
+<!-- /quick-info -->
+<Note>use aivi.chronos.timezone<span class="domain-badge">domain</span></Note>
+
+## Overview
+
+```aivi
+use aivi.chronos.calendar (DateTime)
+use aivi.chronos.timezone (TimeZone, ZonedDateTime)
+
+// Instantiation
+paris = ~tz(Europe/Paris)
+tokyo = ~tz(Asia/Tokyo)
+
+// Creating a ZonedDateTime
+meeting = ~zdt(2024-05-21T12:00:00[Europe/Paris])
+
+// Conversion
+localTime = meeting.dateTime
+utcMoment = meeting.instant
+```
+
+
+## Features
+
+```aivi
+TimeZone = { id: Text }
+
+ZonedDateTime = {
+  dateTime: DateTime
+  zone: TimeZone
+  offset: Span
+}
+```
+
+
+## Domain Definition
+
+```aivi
+domain TimeZone over TimeZone = {
+  // Returns the offset at a specific instant
+  getOffset: TimeZone -> Timestamp -> Span
+}
+
+domain ZonedDateTime over ZonedDateTime = {
+  // Conversion to physics time (UTC)
+  toInstant: ZonedDateTime -> Timestamp
+
+  // Changing zones (keeping the same instant)
+  atZone: ZonedDateTime -> TimeZone -> ZonedDateTime
+}
+```
+
+
+## Usage Examples
+
+```aivi
+use aivi.chronos.calendar
+use aivi.chronos.timezone
+
+original = ~zdt(2024-01-01T10:00:00[Europe/London])
+travel = original |> ZonedDateTime.atZone ~tz(America/New_York)
+
+// travel is ~zdt(2024-01-01T05:00:00[America/New_York])
+```
+

@@ -1,0 +1,135 @@
+---
+title: "Standard Library: Result Utilities"
+description: "The aivi.result module provides utility functions for working with Result E A values. These complement the Functor/Monad instances from aivi.logic and the attem"
+---
+<!-- quick-info: {"kind":"module","name":"aivi.result"} -->
+The `aivi.result` module provides utility functions for working with `Result E A` values. These complement the `Functor`/`Monad` instances from `aivi.logic` and the `attempt` effect operator.
+<!-- /quick-info -->
+
+<Note>use aivi.result</Note>
+
+## Overview
+
+`Result E A` represents a computation that may fail: either `Ok x` containing a success value, or `Err e` containing an error. This module provides common operations for inspecting, transforming, and recovering from results.
+
+## Predicates
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `isOk` | `Result E A -> Bool` | Returns `True` if the result is successful |
+| `isErr` | `Result E A -> Bool` | Returns `True` if the result is an error |
+
+```aivi
+isOk (Ok 42)        // True
+isOk (Err "fail")   // False
+
+isErr (Ok 42)       // False
+isErr (Err "fail")  // True
+```
+
+
+## Extracting Values
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `getOrElse` | `A -> Result E A -> A` | Unwrap or return default value |
+| `getOrElseLazy` | `(E -> A) -> Result E A -> A` | Unwrap or map error to value |
+
+```aivi
+// getOrElse: provide a default value
+value = getOrElse 0 result
+
+// Pipe-friendly usage
+count = parseResult |> getOrElse 0
+
+// getOrElseLazy: handle error to produce value
+message = result |> getOrElseLazy (err => "Error: { err }")
+```
+
+
+## Transformations
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `map` | `(A -> B) -> Result E B` | Transform success value |
+| `mapErr` | `(E -> F) -> Result E A -> Result F A` | Transform error value |
+| `flatMap` | `(A -> Result E B) -> Result E A -> Result E B` | Chain fallible operations |
+
+```aivi
+// map: transform the success value
+doubled = Ok 5 |> map (_ * 2)    // Ok 10
+
+// mapErr: transform the error value
+wrapped = Err "not found" |> mapErr (e => { code: 404, message: e })
+
+// flatMap: chain fallible operations
+validateAge = age => age >= 0 match
+  | True  => Ok age
+  | False => Err "Age must be non-negative"
+
+parseAndValidate = input =>
+  parseInt input |> flatMap validateAge
+```
+
+
+## Conversions
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `toOption` | `Result E A -> Option A` | Discard error, keep success as `Some` |
+| `fromOption` | `E -> Option A -> Result E A` | Convert `Option` to `Result` with error |
+
+```aivi
+// toOption: discard error information
+maybeValue = Ok 42 |> toOption      // Some 42
+noValue = Err "x" |> toOption       // None
+
+// fromOption: convert Option to Result
+result = maybeUser |> fromOption "User not found"
+```
+
+
+## Combining Results
+
+| Function | Type | Description |
+|----------|------|-------------|
+| `flatten` | `Result E (Result E A) -> Result E A` | Remove one layer of nesting |
+| `orElse` | `Result E A -> Result E A -> Result E A` | Return first `Ok`, or fallback |
+
+```aivi
+// flatten: remove nesting
+nested = Ok (Ok 42)
+flat = flatten nested    // Ok 42
+
+// orElse: fallback chain
+primary = Err "failed"
+secondary = Ok "backup"
+value = primary |> orElse secondary    // Ok "backup"
+```
+
+
+## Relationship to Other Modules
+
+- **`attempt`**: Effect operator that catches errors as `Result`
+- **`aivi.logic`**: Provides `Functor`, `Applicative`, `Monad` instances for `Result`
+- **`aivi.option`**: Sister module for `Option A` utilities
+- **`do Result { ... }`**: Monadic syntax for chaining result operations
+
+## Example: Validation Pipeline
+
+```aivi
+use aivi.result
+
+// Validation pipeline with error transformation
+validateUser = input => {
+  parseJson input
+    |> mapErr (e => { field: "body", error: e })
+    |> flatMap validateSchema
+    |> flatMap checkPermissions
+    |> map normalizeData
+}
+
+// Usage with default
+userData = validateUser rawInput |> getOrElse defaultUser
+```
+

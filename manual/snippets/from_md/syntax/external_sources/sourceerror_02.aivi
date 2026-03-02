@@ -1,0 +1,4 @@
+do Effect {
+  txt <- load (file.read "./README.md") or "(missing)"
+  pure txt
+}

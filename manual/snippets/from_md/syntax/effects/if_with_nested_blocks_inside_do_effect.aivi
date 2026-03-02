@@ -1,0 +1,9 @@
+main = do Effect {
+  u     <- loadUser
+  token <- if u.isAdmin then do Effect {
+    log "admin login"
+    token <- mintToken u
+    pure token
+  } else pure "guest"
+  pure token
+}

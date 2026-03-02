@@ -1,0 +1,1 @@
+txt <- load (file.read path) or "(missing)"

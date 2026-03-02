@@ -1,0 +1,4 @@
+module aivi.path
+export domain Path
+export Path
+export parse, toString, isAbsolute, parent, fileName, normalize

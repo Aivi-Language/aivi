@@ -1,0 +1,4 @@
+point = (10, 20)
+(x, y) = point
+
+distance = sqrt ((x * x) + (y * y))

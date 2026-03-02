@@ -1,0 +1,57 @@
+---
+title: "Standard Library: Prelude"
+description: "The Prelude is your default toolkit. It acts as the "standard library of the standard library," automatically using the core types and domains you use in almost"
+---
+<!-- quick-info: {"kind":"module","name":"aivi.prelude"} -->
+The **Prelude** is your default toolkit. It acts as the "standard library of the standard library," automatically using the core types and domains you use in almost every program (like `Int`, `List`, `Text`, and `Result`). It ensures you don't have to write fifty `use` lines just to add two numbers or print "Hello World".
+<!-- /quick-info -->
+
+<Note>use aivi.prelude</Note>
+
+```aivi
+module aivi.prelude
+// Core types
+export Int, Float, Bool, Text, Char, Bytes
+export List, Option, Result, Tuple
+
+// Standard domains
+export domain Calendar
+export domain Duration
+export domain Color
+export domain Vector
+
+// Re-exports
+use aivi
+use aivi.text
+use aivi.logic
+use aivi.chronos.calendar
+use aivi.chronos.duration
+use aivi.color
+use aivi.vector
+```
+
+
+## Opting Out
+
+```aivi
+@no_prelude
+module my.custom.module
+// Nothing used automatically
+use aivi (Int, Bool)
+```
+
+
+## Rationale
+
+- Common domains (dates, colors, vectors) are used universally
+- Delta literals should "just work" without explicit `use`
+- Explicit opt-out preserves control for advanced use cases
+
+## Constructor introspection
+
+The prelude also exposes two helpers for ADT values:
+
+| Function | Type | Description |
+| --- | --- | --- |
+| `constructorName value` | `A -> Text` | Returns the constructor tag name (for example `Some`, `Err`, `Published`). |
+| `constructorOrdinal value` | `A -> Int` | Returns the zero-based declaration index of the constructor inside its ADT definition. |

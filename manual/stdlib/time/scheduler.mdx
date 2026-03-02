@@ -1,0 +1,108 @@
+---
+title: "Scheduler Domain"
+description: "The Scheduler domain models production-grade scheduling primitives for cron, interval, and one-shot jobs with deterministic planning semantics."
+---
+<!-- quick-info: {"kind":"module","name":"aivi.chronos.scheduler"} -->
+The `Scheduler` domain models production-grade scheduling primitives for cron, interval, and one-shot jobs with deterministic planning semantics.
+
+It is designed for distributed workers: plan keys are idempotent, leases and heartbeats are explicit values, retries support exponential backoff + jitter, and tenant limits are enforced through typed run-state analysis.
+
+<!-- /quick-info -->
+<Note>use aivi.chronos.scheduler<span class="domain-badge">domain</span></Note>
+
+## Overview
+
+```aivi
+use aivi.chronos.scheduler
+
+invoiceSchedule = {
+  jobId: "invoice-rollup"
+  tenantId: "tenant-apac"
+  trigger: cron "0 0 * * *" ~tz(Asia/Singapore)
+  maxAttempts: 8
+  leaseTtl: { millis: 120000 }
+  heartbeatEvery: { millis: 10000 }
+}
+```
+
+
+## Features
+
+```aivi
+use aivi.chronos.scheduler
+
+backoff = Exponential {
+  base: { millis: 1000 }
+  cap: { millis: 60000 }
+  jitter: PlusMinusPermille 150
+}
+
+lease = {
+  runKey: planKey "invoice-rollup" 2026-01-01T00:00:00Z
+  ownerId: "worker-17"
+  leasedAt: 2026-01-01T00:00:00Z
+  leaseUntil: 2026-01-01T00:02:00Z
+  heartbeatEvery: { millis: 10000 }
+}
+
+isLeaseFresh = leaseActive 2026-01-01T00:00:30Z lease
+nextRetry = retryDelay backoff 3 900
+```
+
+
+## Domain Definition
+
+```aivi
+use aivi.chronos.scheduler
+use aivi.chronos.scheduler (domain Scheduler)
+
+planned = {
+  key: planKey "invoice-rollup" 2026-01-01T00:00:00Z
+  tenantId: "tenant-apac"
+  trigger: once 2026-01-01T00:00:00Z
+  scheduledAt: 2026-01-01T00:00:00Z
+  attempt: 0
+  status: Planned
+}
+
+plannedKey = keyText planned
+terminal = isTerminal Succeeded
+```
+
+
+## Usage Examples
+
+```aivi
+use aivi.chronos.scheduler
+
+key = planKey "email-drip" 2026-02-01T12:00:00Z
+
+run = {
+  key
+  tenantId: "tenant-eu"
+  trigger: interval { millis: 900000 }
+  scheduledAt: 2026-02-01T12:00:00Z
+  attempt: 1
+  status: Running
+}
+
+idx0 = Map.empty
+idx1 = upsertPlan run idx0
+
+limit = { tenantId: "tenant-eu", maxConcurrent: 4 }
+allowed = canStartForTenant limit [run]
+
+metric = metricRetried "tenant-eu" "email-drip" run.scheduledAt 2
+log = logRetry run 2 { millis: 2000 }
+```
+
+
+## Worker/runtime helpers (v0.1)
+
+The scheduler module also exposes execution-planning helpers for durable workers:
+
+- `chooseWorkerAction : PlannedRun -> WorkerState -> Int -> WorkerDecision`
+- `renewLease : Lease -> Timestamp -> Lease`
+- `planRetryRun : PlannedRun -> WorkerState -> Int -> PlannedRun`
+
+These helpers keep lease, retry, and next-action logic deterministic and testable as pure values.

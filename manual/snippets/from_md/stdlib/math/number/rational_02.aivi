@@ -1,0 +1,6 @@
+domain Rational over Rational = {
+  (+): Rational -> Rational -> Rational
+  (-): Rational -> Rational -> Rational
+  (*): Rational -> Rational -> Rational
+  (/): Rational -> Rational -> Rational
+}

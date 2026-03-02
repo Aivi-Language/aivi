@@ -1,0 +1,12 @@
+// Fetch unread emails
+inbox = email.imap {
+  host: "imap.gmail.com"
+  filter: "UNSEEN"
+}
+
+// Sending as a sink effect
+sendWelcome = user => email.send {
+  to: user.email
+  subject: "Welcome!"
+  body: "Glad to have you, {user.name}"
+}

@@ -1,0 +1,2 @@
+Signal = { samples: List Float, rate: Float }
+Spectrum = { bins: List Complex, rate: Float }

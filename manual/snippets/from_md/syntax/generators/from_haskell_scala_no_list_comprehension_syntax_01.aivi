@@ -1,0 +1,2 @@
+// Haskell: [x * 2 | x <- [1..10], even x]
+// AIVI does NOT have this syntax.

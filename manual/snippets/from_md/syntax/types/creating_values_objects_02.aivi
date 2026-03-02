@@ -1,0 +1,3 @@
+someCount = Some 123
+okText = Ok "done"
+bad = Err "nope"

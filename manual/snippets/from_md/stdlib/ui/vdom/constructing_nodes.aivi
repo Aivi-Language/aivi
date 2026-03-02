@@ -1,0 +1,3 @@
+use aivi.ui
+
+view = name => Element "div" [Class "greeting"] [TextNode "Hello {name}"]

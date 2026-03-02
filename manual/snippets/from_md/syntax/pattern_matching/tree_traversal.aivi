@@ -1,0 +1,9 @@
+Tree A = Leaf A | Node (Tree A) (Tree A)
+
+depth =
+  | Leaf _          => 1
+  | Node left right => 1 + max (depth left) (depth right)
+
+flatten =
+  | Leaf x          => [x]
+  | Node left right => flatten left ++ flatten right

@@ -1,0 +1,5 @@
+loop pattern = initialValue => {
+  // body: may yield, may recurse
+  yield someValue
+  recurse nextState
+}

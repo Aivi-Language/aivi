@@ -1,0 +1,5 @@
+// Move all shapes to the origin
+scene2 = scene <| {
+  shapes[*].Circle.center: origin
+  shapes[*].Square.origin: origin
+}

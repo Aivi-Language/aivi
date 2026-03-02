@@ -1,0 +1,20 @@
+createUser : User -> Effect DbError User
+createUser = newUser => do Effect {
+  _ <- userTable + ins newUser
+  pure newUser
+}
+
+activateUsers : Effect DbError Unit
+activateUsers = do Effect {
+  _ <- userTable + upd (!active) (u => u <| { active: True, loginCount: _ + 1 })
+}
+
+deleteOldPosts : Instant -> Effect DbError Unit
+deleteOldPosts = cutoff => do Effect {
+  _ <- postTable + del (_.createdAt < cutoff)
+}
+
+upsertActiveUser : User -> Effect DbError Unit
+upsertActiveUser = user => do Effect {
+  _ <- userTable + ups (id == user.id) user (u => u <| { active: True, loginCount: _ + 1 })
+}

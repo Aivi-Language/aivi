@@ -1,0 +1,18 @@
+use aivi.chronos.scheduler
+
+backoff = Exponential {
+  base: { millis: 1000 }
+  cap: { millis: 60000 }
+  jitter: PlusMinusPermille 150
+}
+
+lease = {
+  runKey: planKey "invoice-rollup" 2026-01-01T00:00:00Z
+  ownerId: "worker-17"
+  leasedAt: 2026-01-01T00:00:00Z
+  leaseUntil: 2026-01-01T00:02:00Z
+  heartbeatEvery: { millis: 10000 }
+}
+
+isLeaseFresh = leaseActive 2026-01-01T00:00:30Z lease
+nextRetry = retryDelay backoff 3 900

@@ -1,0 +1,15 @@
+domain Layout over UnitVal = {
+  // Length (pixels)
+  Length = Px Int | Em Int | Rem Int | Vh Int | Vw Int
+
+  // Percentage (0.0 - 1.0 or 0 - 100)
+  Percentage = Pct Int
+
+  // Literals
+  1px = Px 1
+  1em = Em 1
+  1rem = Rem 1
+  1vh = Vh 1
+  1vw = Vw 1
+  1% = Pct 1
+}

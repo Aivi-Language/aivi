@@ -1,0 +1,7 @@
+// Facade (types + helpers)
+use aivi.number
+
+// Domain modules (operators + literals)
+use aivi.number.bigint
+use aivi.number.rational
+use aivi.number.complex

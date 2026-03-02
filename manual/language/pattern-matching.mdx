@@ -1,0 +1,320 @@
+---
+title: "Pattern Matching"
+description: "This is a concise way to do case analysis, similar to match in Rust or case in Haskell/Elixir."
+---
+## 8.1 `match` branching
+
+```aivi
+value = parse input
+
+value match
+  | Ok x  => x
+  | Err _ => 0
+```
+
+
+This is a concise way to do case analysis, similar to `match` in Rust or `case` in Haskell/Elixir.
+
+### Choosing the match subject (scrutinee)
+
+<!-- quick-info: {"kind":"operator","name":"match"} -->
+`match` matches on the expression immediately to its left.
+<!-- /quick-info -->
+
+```aivi
+value = parse input
+
+value match
+  | Ok x  => x
+  | Err _ => 0
+```
+
+
+
+This rule composes with pipelines because `match` comes *after* the full expression:
+
+```aivi
+input |> parse |> validate match
+  | Ok x  => x
+  | Err e => handle e
+```
+
+
+
+In a multi-clause unary function (Section 8.2), the subject is the function's single implicit argument.
+
+See also: [Functions and Pipes](/language/functions) for `|>`.
+
+Compiler checks:
+
+- Non-exhaustive matches are a compile-time error unless a catch-all arm (`_`) is present.
+- Unreachable arms (shadowed by earlier patterns) produce a warning.
+
+
+## 8.2 Multi-clause functions
+
+This is **not** a pipeline (`|>`). A leading `|` introduces an arm of a **unary** function that pattern-matches on its single (implicit) argument.
+
+Multi-clause function definitions require an explicit type signature for the function name.
+With closed records, that signature provides the exact input shape used to type-check each arm.
+If no arm matches at runtime, evaluation fails with a non-exhaustive-match runtime error.
+
+```aivi
+input |> parse |> validate match
+  | Ok x  => x
+  | Err e => handle e
+```
+
+
+Here is the same multi-clause shape without the `|>` pipeline operator, using rebinding plus record destructuring inside each arm:
+
+The leading `|` tokens below start multi-clause function arms (pattern branches); they are not pipelines.
+
+```aivi
+resolveAuthor : { author: { alias: Option Text, legalName: Text } } -> { author: { alias: Option Text, legalName: Text }, label: Text }
+resolveAuthor =
+  | { author as { alias: Some label } } => { author, label }
+  | { author as { legalName: label } }  => { author, label }
+```
+
+
+```aivi
+{ name: n } // binds field 'name' to variable 'n'
+{ role: Admin } // matches field 'role' against constructor 'Admin'
+{ name } // shorthand for { name: name }
+```
+
+
+
+## 8.3 Record Patterns
+
+```aivi
+user as { name, age } // 'user' holds the whole record; 'name' and 'age' are also bound
+```
+
+
+
+## 8.4 Nested Patterns
+
+Record patterns support dotted keys, so nested patterns can often be written without extra braces.
+
+```aivi
+{ profile as { name, age } }
+```
+
+
+### Nested constructor patterns
+
+Constructor patterns may themselves take pattern arguments, so you can nest them:
+
+```aivi
+{ profile.{ name, age } }
+```
+
+
+### Flattened constructor-chain patterns
+
+For readability, nested constructor patterns can be written without parentheses in pattern position:
+
+```aivi
+// Parsed as: `Err (NotFound m)`
+msg = res match
+  | Err NotFound m => m
+  | _              => "no-msg"
+```
+
+
+This "constructor chain" rule applies only in pattern context (after `|` and before `=>`).
+
+## 8.5 Record Pattern Syntax: `as`, `.{ }`, and `:`
+
+Record patterns use three distinct operators for different purposes:
+
+### `:`   Matching and renaming (instantiation)
+
+`{ field: pat }` matches the field and binds the result of the nested pattern `pat`. This is the primary form for both matching and renaming:
+
+```aivi
+{ name: n } // binds field 'name' to variable 'n'
+{ role: Admin } // matches field 'role' against constructor 'Admin'
+{ name } // shorthand for { name: name }
+```
+
+
+
+### `as`   Whole-value plus destructuring
+
+`field as { pat }` binds `field` to the **entire** field value *and* destructures it. Both `field` and the contents of `pat` are in scope:
+
+```aivi
+user as { name, age } // 'user' holds the whole record; 'name' and 'age' are also bound
+```
+
+
+
+In nested position:
+
+```aivi
+{ profile as { name, age } }
+```
+
+
+
+Here `profile` is bound to the full value of the `profile` field, and `name`/`age` are also brought into scope from within that field.
+
+### `.{ }`   Destructuring only (no whole-value binding)
+
+`field.{ pat }` destructures the field but does **not** bind the field itself. Only the contents of the nested pattern are in scope:
+
+```aivi
+{ profile.{ name, age } }
+```
+
+
+
+Here `name` and `age` are in scope, but `profile` is **not**   it is only used as a path to reach the nested fields.
+
+### Summary
+
+| Syntax | `field` in scope? | `pat` contents in scope? | Use case |
+| :--- | :---: | :---: | :--- |
+| `{ field: pat }` | no (renamed) | yes | Match/rename a field |
+| `{ field as { pat } }` | yes | yes | Keep whole field + destructure |
+| `{ field.{ pat } }` | no | yes | Destructure only, discard field |
+| `{ field }` | yes |   | Shorthand, binds field by name |
+
+## 8.6 Guards
+
+Patterns can have guards using `when`:
+
+```aivi
+classify =
+  | n when n < 0   => "negative"
+  | 0              => "zero"
+  | n when n < 10  => "small"
+  | n when n < 100 => "medium"
+  | _              => "large"
+```
+
+
+
+## 8.7 Usage Examples
+
+### Option Handling
+
+```aivi
+Option A = None | Some A
+
+getOrDefault = default => v => v match
+  | None       => default
+  | Some value => value
+
+userName = user.nickname |> getOrDefault "Anonymous"
+```
+
+
+### Result Processing
+
+```aivi
+Result E A = Err E | Ok A
+
+handleResult =
+  | Ok data => processData data
+  | Err e   => logError e
+
+// With chaining
+fetchUser id
+|> handleResult
+|> renderView
+```
+
+
+### List Processing
+
+```aivi
+// Safe head
+head =
+  | []       => None
+  | [x, ...] => Some x
+
+// Take first n
+take = (n, xs) => (n, xs) match
+  | (n, _) when n <= 0 => []
+  | (_, [])            => []
+  | (n, [x, ...xs])    => [x, ...take (n - 1, xs)]
+
+// Zip two lists
+zip =
+  | ([], _)                  => []
+  | (_, [])                  => []
+  | ([x, ...xs], [y, ...ys]) => [(x, y), ...zip (xs, ys)]
+```
+
+
+### Tree Traversal
+
+```aivi
+Tree A = Leaf A | Node (Tree A) (Tree A)
+
+depth =
+  | Leaf _          => 1
+  | Node left right => 1 + max (depth left) (depth right)
+
+flatten =
+  | Leaf x          => [x]
+  | Node left right => flatten left ++ flatten right
+```
+
+
+### Expression Evaluation
+
+```aivi
+Expr = Num Int | Add Expr Expr | Mul Expr Expr
+
+eval =
+  | Num n   => n
+  | Add a b => eval a + eval b
+  | Mul a b => eval a * eval b
+
+// (2 + 3) * 4 = 20
+expr = Mul (Add (Num 2) (Num 3)) (Num 4)
+result = eval expr
+```
+
+
+## 8.8 Expressive Pattern Orchestration
+
+Pattern matching excels at simplifying complex conditional branches into readable declarations.
+
+```aivi
+headerLabel = response match
+  | { data.user.profile as { name } } => name
+  | { data.guest: True }              => "Guest"
+  | _                                 => "Unknown"
+```
+
+
+### Concise State Machines
+
+```aivi
+// Update application state based on event
+nextState = (state, event) => (state, event) match
+  | (Idle, Start)    => Running
+  | (Running, Pause) => Paused
+  | (Paused, Resume) => Running
+  | (Running, Stop)  => Idle
+  | _                => state // Unchanged on invalid events
+```
+
+
+### Expressive Logic Branches
+
+```aivi
+// Business rule mapping
+discount = user => user match
+  | _ when user.age > 65 && user.tier == Gold => 0.3
+  | _ when user.tier == Gold                  => 0.2
+  | _ when user.tier == Silver                => 0.1
+  | _                                         => 0.0
+```
+

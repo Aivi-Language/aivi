@@ -1,0 +1,236 @@
+---
+title: "Modules"
+description: "Modules are the primary unit of code organization, encapsulation, and reuse in AIVI. They define a closed scope and explicitly export symbols for public use."
+---
+## 10.1 Module Definitions
+
+Modules are the primary unit of code organization, encapsulation, and reuse in AIVI. They define a closed scope and explicitly export symbols for public use.
+
+Modules can be written in a **flat** form that keeps file indentation shallow. The module body runs until end-of-file:
+
+```aivi
+module my.utility.math
+export add, subtract
+export pi
+
+pi = 3.14159
+add = a b => a + b
+subtract = a b => a - b
+
+// Internal helper, not exported
+abs = n => if n < 0 then - n else n
+```
+
+
+In v0.1, there is exactly one module per file. The `module` declaration must be the first non-empty item in the file (after any module decorators), and its body extends to EOF.
+
+
+## 10.2 Module Pathing (Dot Separator)
+
+Modules are identified by hierarchical paths using common **dot notation**. This separates logical namespaces. By convention:
+- `aivi.…`   Standard library
+- `vendor.name.…`   Foreign libraries
+- `user.app.…`   Application-specific logic
+
+Module resolution is static and determined at compile time based on the project manifest.
+
+
+## 10.3 Importing and Scope
+
+Use the `use` keyword to bring symbols from another module into the current scope.
+
+### Basic Import
+
+```aivi
+use aivi
+```
+
+
+### Selective / Selective Hiding
+
+```aivi
+use aivi.chronos.calendar (Date, isLeapYear)
+use aivi.list hiding (map, filter)
+```
+
+
+### Renaming / Aliasing
+
+```aivi
+use aivi.chronos.calendar as Cal
+
+use vendor.legacy.math (v1_add as add)
+```
+
+
+Compiler checks:
+
+- Importing a missing module or symbol is a compile-time error.
+- Unused imports produce a warning (suppressed if importing solely for a domain side-effect in v0.1).
+
+
+## 10.4 Domain Exports
+
+Modules are the primary vehicle for delivering **Domains**. Exporting a domain automatically exports its carrier type, delta types, and operators.
+
+```aivi
+module geo.vector
+export domain Vector
+export Vec2
+
+Vec2 = { x: Float, y: Float }
+
+domain Vector over Vec2 = {
+  (+) : Vec2 -> Vec2 -> Vec2
+  (+) = a b => { x: a.x + b.x, y: a.y + b.y }
+}
+```
+
+
+When another module imports the domain (for example: `use geo.vector (domain Vector)`), it gains the ability to use domain-resolved operators like `+` on `Vec2` records.
+
+In v0.1, importing a module does not automatically activate its domains; domains must be imported explicitly via `use ... (domain Name)` (or by importing specific operator/template bindings as values).
+
+## 10.4.1 Inline export declarations
+
+`export` can also prefix declarations directly to reduce noise:
+
+```aivi
+module app.flow
+
+export run = input => input
+
+export domain Status over Int = {
+  next : Int -> Int
+  next = x => x + 1
+}
+
+export machine Workflow = {
+  -> Idle : boot {}
+}
+```
+
+The original export-list form remains valid (`export run, Workflow`, `export domain Status`) and is still useful for re-export modules.
+
+
+## 10.5 File-Scoped Modules (No Nesting)
+
+In v0.1, modules are **file-scoped**. There is no `{ ... }` module body syntax and no nested module declarations.
+
+Use dot notation to define hierarchy: `module my.app.api` lives in a file such as `my/app/api.aivi` (project layout is determined by the manifest and tooling).
+
+### Module Re-exports
+A module can aggregate other modules, acting as a facade.
+
+```aivi
+module aivi.prelude
+export domain Calendar
+export domain Color
+export List, Result, Ok, Err
+
+use aivi.chronos.calendar (domain Calendar)
+use aivi.color (domain Color)
+use aivi (List, Result, Ok, Err)
+```
+
+
+
+## 10.6 The Prelude
+
+Every AIVI module implicitly starts with `use aivi.prelude`. This provides access to the core language types and the most common domains without boilerplate.
+
+To opt-out of this behavior (mandatory for the core stdlib itself):
+
+```aivi
+@no_prelude
+module aivi.bootstrap
+
+// Pure bootstrap logic
+```
+
+
+
+## 10.7 Circular Dependencies
+
+Circular module dependencies are **strictly prohibited** at the import level. The compiler enforces a Directed Acyclic Graph (DAG) for module resolution. For mutually recursive types or functions, they must reside within the same module or be decoupled via higher-order abstractions.
+## 10.8 Expressive Module Orchestration
+
+Modules allow for building clean, layered architectures where complex internal implementations are hidden behind simple, expressive facades.
+
+### Clean App Facade
+
+```aivi
+// Aggregate multiple sub-modules into a single clean API
+module my.app.api
+export login, fetchDashboard, updateProfile
+
+use my.app.auth (login)
+use my.app.data (fetchDashboard)
+use my.app.user (updateProfile)
+```
+
+
+### Domain Extension Pattern
+
+```aivi
+// Enhance an existing domain with local helpers
+module my.geo.utils
+export domain Vector
+export distanceToOrigin, isZero
+
+use geo.vector (domain Vector, Vec2)
+
+distanceToOrigin = v => sqrt (v.x * v.x + v.y * v.y)
+isZero = v => v.x == 0 && v.y == 0
+```
+
+
+### Context-Specific Environments (Static Injection)
+
+This pattern allows you to **statically swap** entire module implementations for different build contexts (e.g., Test vs. Prod). This is not for runtime configuration (see below), but for compile-time substitution of logic.
+
+```aivi
+// in `my/app/api.aivi`
+module my.app.api
+export fetchDashboard
+
+fetchDashboard = ... // Real HTTP call
+```
+
+
+```aivi
+// in `my/app/api/test.aivi`
+module my.app.api.test
+export fetchDashboard
+
+fetchDashboard = _ => { id: 1, title: "Mock Dash" }
+```
+
+
+To use the test environment, your test entry point (`tests/main.aivi`) simply imports the test module instead of the production one:
+
+```aivi
+// within tests/main.aivi
+use my.app.api.test (fetchDashboard) // injected mock
+```
+
+
+## 10.9 Runtime Configuration (Env Vars)
+
+For values that change between deployments (like API URLs or DB passwords) without changing code, use **Runtime Configuration** via the `Env` source.
+
+Do not use module swapping for this. Instead, inject the configuration as data.
+
+See [12.4 Environment Sources](/language/external-sources#124-environment-sources-env) for details.
+
+```aivi
+// Instead of hardcoding, load from environment
+config : Source Env Text
+config = env.get "API_URL"
+
+connect = do Effect {
+  apiUrl <- load config
+  // ... use apiUrl
+}
+```
+

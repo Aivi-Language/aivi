@@ -1,0 +1,10 @@
+Result E A = Err E | Ok A
+
+handleResult =
+  | Ok data => processData data
+  | Err e   => logError e
+
+// With chaining
+fetchUser id
+|> handleResult
+|> renderView

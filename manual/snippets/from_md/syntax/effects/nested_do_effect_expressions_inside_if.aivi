@@ -1,0 +1,4 @@
+main = do Effect {
+  token <- if shouldMint then mintToken user else pure "guest"
+  pure token
+}

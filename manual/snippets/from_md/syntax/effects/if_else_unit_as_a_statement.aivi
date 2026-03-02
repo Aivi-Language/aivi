@@ -1,0 +1,3 @@
+do Effect {
+  if cond then print "branch" else Unit
+}

@@ -1,0 +1,5 @@
+use aivi.number.decimal
+
+price = 19.99dec
+tax = price * 0.2dec
+total = price + tax

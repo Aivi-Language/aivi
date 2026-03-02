@@ -1,0 +1,12 @@
+use aivi.chronos.duration (Duration)
+
+// Clear, unambiguous literals
+timeout = 500ms
+delay = 2s
+
+// Type-safe comparison
+if delay > timeout then
+// delay exceeds timeout
+True
+else
+False

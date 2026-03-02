@@ -1,0 +1,6 @@
+// Same token, different full types — all valid in one domain body:
+domain Matrix over Mat4 = {
+  (*): Mat4 -> Float -> Mat4 // scalar scaling (keeps `*` for scalars)
+  (×): Mat4 -> Mat4 -> Mat4 // matrix-matrix product (structural transform)
+  (×): Mat4 -> Vec4 -> Vec4 // matrix-vector transform (homogeneous)
+}
