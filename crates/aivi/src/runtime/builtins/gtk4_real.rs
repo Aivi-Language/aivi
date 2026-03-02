@@ -47,6 +47,8 @@ mod linux {
         fn gtk_widget_set_name(widget: *mut c_void, name: *const c_char);
         fn gtk_widget_queue_draw(widget: *mut c_void);
         fn gtk_widget_set_opacity(widget: *mut c_void, opacity: f64);
+        // Sets the AT-SPI accessible label (GTK_ACCESSIBLE_PROPERTY_LABEL = 5)
+        fn gtk_accessible_update_property(accessible: *mut c_void, first_property: c_int, ...);
 
         fn gtk_box_new(orientation: c_int, spacing: c_int) -> *mut c_void;
         fn gtk_box_append(container: *mut c_void, child: *mut c_void);
@@ -1650,9 +1652,28 @@ mod linux {
         let id = state.alloc_id();
         if let Some(object_id) = node_attr(attrs, "id") {
             id_map.insert(object_id.to_string(), id);
-            // Set the GTK widget name so AT-SPI can discover it
             if let Ok(name_c) = CString::new(object_id.as_bytes()) {
-                unsafe { gtk_widget_set_name(raw, name_c.as_ptr()) };
+                unsafe {
+                    // Set the GTK CSS widget name (used for styling/lookup)
+                    gtk_widget_set_name(raw, name_c.as_ptr());
+                    // For GtkBox (which defaults to GTK_ACCESSIBLE_ROLE_GENERIC),
+                    // upgrade to GROUP (18) so the accessible name is exposed by AT-SPI.
+                    // GTK_ACCESSIBLE_ROLE_GROUP = 18
+                    if matches!(class_name, "GtkBox") {
+                        if let Ok(role_prop) = CString::new("accessible-role") {
+                            g_object_set(raw, role_prop.as_ptr(), 18i32, std::ptr::null::<c_char>());
+                        }
+                    }
+                    // Set the AT-SPI accessible label so AT-SPI clients can find
+                    // widgets by their id. GTK_ACCESSIBLE_PROPERTY_LABEL = 4,
+                    // terminated by -1.
+                    gtk_accessible_update_property(
+                        raw,
+                        4i32,                  // GTK_ACCESSIBLE_PROPERTY_LABEL
+                        name_c.as_ptr(),       // label value (const char*)
+                        -1i32,                 // sentinel
+                    );
+                }
             }
         }
         state.widgets.insert(id, raw);
