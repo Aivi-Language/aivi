@@ -22,7 +22,6 @@ Authoritative guide for AI agents working on the AIVI language project. Covers t
 | `integration-tests/`      | **Validation**       | Canonical `.aivi` files: `syntax/`, `runtime/`, `stdlib/`, `complex/`, `compile_fail/`.          |
 | `vscode/`                 | **VSCode extension** | TypeScript, pnpm. Grammar auto-generated via `gen_vscode_syntax` binary.                         |
 | `specs/`                  | **Docs site**        | VitePress site. `specs/nav.mjs` is the single TOC source of truth.                               |
-| `ui-client/`              | **Browser client**   | Vite micro-client for `aivi.ui.ServerHtml`: DOM patches via WebSocket, event delegation.         |
 | `fuzz/`                   | **Fuzz targets**     | cargo-bolero fuzz targets: parser, frontend, runtime, formatter, LSP pipeline, type inference.   |
 
 ### 1.2 Crate Dependency Flow
