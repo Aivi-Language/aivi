@@ -1338,18 +1338,25 @@ impl Parser {
                             _ => None,
                         };
                         if let Some(signal_name) = signal_name_opt {
-                            let Some(handler) = attr_handler_text(&attr.name, attr.value) else {
-                                this.emit_diag(
-                                    "E1614",
-                                    "signal handlers must be compile-time values",
-                                    span.clone(),
-                                );
-                                continue;
+                            let handler_expr = match attr.value {
+                                GtkAttrValue::Splice(expr) => expr,
+                                GtkAttrValue::Text(v) => mk_string(&v),
+                                GtkAttrValue::Bare => {
+                                    this.emit_diag(
+                                        "E1614",
+                                        &format!(
+                                            "`{}` handler requires a value expression",
+                                            attr.name
+                                        ),
+                                        span.clone(),
+                                    );
+                                    continue;
+                                }
                             };
                             lowered_attrs.push(call2(
-                                "gtkAttr",
+                                "gtkSignalAttr",
                                 mk_string(&format!("signal:{signal_name}")),
-                                mk_string(&handler),
+                                handler_expr,
                             ));
                             continue;
                         }

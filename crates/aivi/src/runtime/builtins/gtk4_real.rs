@@ -706,6 +706,21 @@ mod linux {
         }
     }
 
+    fn serialize_signal_value(val: &Value) -> String {
+        match val {
+            Value::Text(t) => t.clone(),
+            Value::Int(n) => n.to_string(),
+            Value::Bool(b) => b.to_string(),
+            Value::Float(f) => f.to_string(),
+            Value::Constructor { name, args } if args.is_empty() => name.clone(),
+            Value::Constructor { name, args } => {
+                let arg_strs: Vec<String> = args.iter().map(serialize_signal_value).collect();
+                format!("{}({})", name, arg_strs.join(","))
+            }
+            _ => String::new(),
+        }
+    }
+
     fn decode_gtk_attr(value: &Value) -> Result<(String, String), RuntimeError> {
         let Value::Constructor { name, args } = value else {
             return Err(invalid("gtk4.buildFromNode expects GtkAttribute values"));
@@ -716,7 +731,7 @@ mod linux {
         let key =
             decode_text(&args[0]).ok_or_else(|| invalid("gtk4.buildFromNode invalid attr name"))?;
         let val = decode_text(&args[1])
-            .ok_or_else(|| invalid("gtk4.buildFromNode invalid attr value"))?;
+            .unwrap_or_else(|| serialize_signal_value(&args[1]));
         Ok((key, val))
     }
 
@@ -934,12 +949,39 @@ mod linux {
         out
     }
 
+    fn parse_constructor_handler(handler: &str) -> (String, String) {
+        if let Some(paren_pos) = handler.find('(') {
+            let name = handler[..paren_pos].to_string();
+            let arg = handler[paren_pos + 1..handler.len().saturating_sub(1)].to_string();
+            (name, arg)
+        } else {
+            (handler.to_string(), String::new())
+        }
+    }
+
     fn make_signal_event_value(event: SignalEventState) -> Value {
         let inner = match event.signal.as_str() {
-            "clicked" => Value::Constructor {
-                name: "GtkClicked".to_string(),
-                args: vec![Value::Int(event.widget_id)],
-            },
+            "clicked" => {
+                // If the handler is an AIVI constructor (starts with uppercase), emit
+                // GtkUnknownSignal so the event loop can pattern-match on the signal name.
+                if event.handler.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                    let (name, arg) = parse_constructor_handler(&event.handler);
+                    Value::Constructor {
+                        name: "GtkUnknownSignal".to_string(),
+                        args: vec![
+                            Value::Int(event.widget_id),
+                            Value::Text(name),
+                            Value::Text(arg),
+                            Value::Text(String::new()),
+                        ],
+                    }
+                } else {
+                    Value::Constructor {
+                        name: "GtkClicked".to_string(),
+                        args: vec![Value::Int(event.widget_id)],
+                    }
+                }
+            }
             "changed" => Value::Constructor {
                 name: "GtkInputChanged".to_string(),
                 args: vec![Value::Int(event.widget_id), Value::Text(event.payload)],
@@ -2043,7 +2085,8 @@ mod linux {
         match (class_name, signal_name) {
             ("GtkButton", "clicked") => Some(SignalPayloadKind::None),
             ("GtkEntry", "changed") | ("GtkEntry", "activate")
-            | ("GtkPasswordEntry", "changed") | ("GtkPasswordEntry", "activate") => {
+            | ("GtkPasswordEntry", "changed") | ("GtkPasswordEntry", "activate")
+            | ("AdwEntryRow", "changed") | ("AdwPasswordEntryRow", "changed") => {
                 Some(SignalPayloadKind::EditableText)
             }
             ("GtkCheckButton", "toggled") => Some(SignalPayloadKind::ToggleActive),
@@ -4452,6 +4495,14 @@ mod linux {
                         Ok(Value::Unit)
                     })
                 }))
+            }),
+        );
+
+        fields.insert(
+            "serializeSignal".to_string(),
+            builtin("gtk4.serializeSignal", 1, |mut args, _| {
+                let val = args.pop().unwrap();
+                Ok(Value::Text(serialize_signal_value(&val)))
             }),
         );
 
