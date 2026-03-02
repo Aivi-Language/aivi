@@ -1175,8 +1175,9 @@ x = ~<gtk><object class="GtkButton" onClick={ Msg.Save } /></gtk>
         .expect("x def");
     assert!(
         expr_contains_string(&def.expr, "signal:clicked")
-            && expr_contains_string(&def.expr, "Msg.Save"),
-        "expected onClick sugar to lower into signal:clicked attribute"
+            && expr_contains_ident(&def.expr, "Msg")
+            && expr_contains_ident(&def.expr, "Save"),
+        "expected onClick sugar to lower into signal:clicked attribute with Msg.Save handler"
     );
 }
 
