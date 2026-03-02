@@ -485,7 +485,7 @@ Statements inside `do Effect { ... }`:
 
 ```aivi
 dijkstra = source graph => do Effect {
-  dists0 = Map.insert source 0.0 Map.empty
+  dists0 = empty |> insert source 0.0
 
   loop state = { dists: dists0, pq: Heap.push (0.0, source) Heap.empty } => {
     dists = state.dists
@@ -494,7 +494,7 @@ dijkstra = source graph => do Effect {
     result match
       | None                       => pure dists
       | Some ((d, node), restPq)   => do Effect {
-          currentDist = Map.getOrElse node 999999.0 dists
+          currentDist = dists |> getOrElse node 999999.0
           if d > currentDist
           then do Effect { recurse { dists: dists, pq: restPq } }
           else do Effect {
@@ -533,8 +533,8 @@ main = do Effect {
 ```aivi
 // do Option: short-circuits on None
 safeLookup = key1 key2 map => do Option {
-  x <- Map.get key1 map
-  y <- Map.get key2 map
+  x <- map |> get key1
+  y <- map |> get key2
   Some (x + y)
 }
 
@@ -1171,7 +1171,7 @@ use aivi.map
 
 Graph = { nodes: List Int, adj: Map Int (List Int) }
 
-neighbors = node graph => Map.get node graph.adj match
+neighbors = node graph => graph.adj |> get node match
   | Some ns => ns
   | None    => []
 
@@ -1183,13 +1183,13 @@ reverseGo = list acc => list match
 
 buildIndegree : Graph -> Map Int Int
 buildIndegree = graph => {
-  start = initIndegree graph.nodes Map.empty
+  start = initIndegree graph.nodes empty
   processNodes graph graph.nodes start
 }
 
 initIndegree = nodes acc => nodes match
   | []        => acc
-  | [n, ...t] => initIndegree t (Map.insert n 0 acc)
+  | [n, ...t] => initIndegree t (acc |> insert n 0)
 
 topologicalSort : Graph -> Result (List Int) (List Int)
 topologicalSort = graph => {
