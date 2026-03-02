@@ -32,8 +32,7 @@ AIVI is expression-oriented with a clean, minimal syntax. Bindings are immutable
 module user.myapp
 
 use aivi
-use aivi.net.http (get)
-use aivi.json (decode)
+use aivi.rest
 
 // Types are structural records and ADTs
 User = { id: Int, name: Text, email: Option Text }
@@ -44,12 +43,13 @@ ApiError = NotFound | Timeout | ParseError Text
 greet : User -> Text
 greet = user => "Hello, { user.name }!"
 
-// Effects are explicit: Effect ErrorType SuccessType
+// The return type drives decoding — no json.decode needed
+userSource : Int -> Source RestApi User
+userSource = id => rest.get ~u(https://api.example.com/users/{ id })
+
 fetchUser : Int -> Effect ApiError User
 fetchUser = id => do Effect {
-  resp <- get (~u(https://api.example.com/users/{ id }))
-  decode resp.body or
-    | ParseError msg => fail (ParseError msg)
+  load (userSource id)
 }
 
 // Pattern matching is exhaustive — the compiler rejects non-exhaustive cases
@@ -262,7 +262,7 @@ api = openapi.fromUrl ~url(https://petstore.swagger.io/v2/swagger.json)
 main = do Effect {
   // Return type is inferred from the spec — no json.decode needed
   pets <- api.listPets { limit: Some 10 }
-  print "Found { List.length pets } pets: { pets |> map .name }"
+  print "Found { pets |> length } pets: { pets |> map name }"
 
   newPet <- api.createPet { name: "Fido", tag: Some "dog" }
   print "Created: { newPet.name } (id: { newPet.id })"
