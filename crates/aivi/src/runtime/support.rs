@@ -54,6 +54,10 @@ pub(crate) fn eval_binary_builtin(op: &str, left: &Value, right: &Value) -> Opti
         ("&&", Value::Bool(a), Value::Bool(b)) => Some(Value::Bool(*a && *b)),
         ("||", Value::Bool(a), Value::Bool(b)) => Some(Value::Bool(*a || *b)),
         ("++", Value::Text(a), Value::Text(b)) => Some(Value::Text(format!("{a}{b}"))),
+        ("??", Value::Constructor { name, args }, _rhs) if name == "Some" && args.len() == 1 => {
+            Some(args[0].clone())
+        }
+        ("??", Value::Constructor { name, .. }, rhs) if name == "None" => Some(rhs.clone()),
         _ => None,
     }
 }
