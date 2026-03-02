@@ -1,1 +1,0 @@
-Path = { absolute: Bool, segments: List Text }

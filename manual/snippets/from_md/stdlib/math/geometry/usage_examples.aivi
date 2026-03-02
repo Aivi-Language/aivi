@@ -1,7 +1,0 @@
-use aivi.geometry
-
-p1 = point2 0.0 0.0
-p2 = point2 3.0 4.0
-
-d = distance p1 p2
-center = midpoint (segment2 0.0 0.0 3.0 4.0)

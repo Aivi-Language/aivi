@@ -1,3 +1,0 @@
-use aivi.log
-
-logger.info "Server started" [("port", "8080"), ("env", "prod")]

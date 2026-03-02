@@ -1,3 +1,0 @@
-do Effect {
-  unless isValid <- fail (ValidationError "invalid input")
-}

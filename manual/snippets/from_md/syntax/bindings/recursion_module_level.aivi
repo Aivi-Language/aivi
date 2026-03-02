@@ -1,6 +1,0 @@
-module demo.recursion
-export sum
-
-sum =
-  | []        => 0
-  | [h, ...t] => h + sum t

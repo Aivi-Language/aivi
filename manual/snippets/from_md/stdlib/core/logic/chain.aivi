@@ -1,3 +1,0 @@
-class Chain (F A) = given (A: Any), Apply {
-  chain: (A -> F B) -> F B
-}

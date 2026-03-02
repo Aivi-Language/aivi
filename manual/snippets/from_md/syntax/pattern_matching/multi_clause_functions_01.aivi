@@ -1,3 +1,0 @@
-input |> parse |> validate match
-  | Ok x  => x
-  | Err e => handle e

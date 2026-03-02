@@ -1,2 +1,0 @@
-getName : { name: Text } -> Text
-getName = user => user.name

@@ -1,4 +1,0 @@
-fromResult : Result E A -> Validation (List E) A
-fromResult = r => r match
-  | Ok a  => Valid a
-  | Err e => Invalid [e]

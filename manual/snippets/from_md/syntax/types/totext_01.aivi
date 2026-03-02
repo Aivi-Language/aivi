@@ -1,1 +1,0 @@
-class ToText A = { toText: A -> Text }

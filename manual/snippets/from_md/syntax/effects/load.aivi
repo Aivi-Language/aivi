@@ -1,5 +1,0 @@
-main = do Effect {
-  cfg <- load (file.read "config.json")
-  // cfg is now the decoded Config value
-  print cfg.appName
-}

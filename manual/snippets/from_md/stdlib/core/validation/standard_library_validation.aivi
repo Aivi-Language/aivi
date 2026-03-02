@@ -1,3 +1,0 @@
-module aivi.validation
-
-Validation E A = Valid A | Invalid E

@@ -1,5 +1,0 @@
-isSome (Some 42)    // True
-isSome None         // False
-
-isNone (Some 42)    // False
-isNone None         // True

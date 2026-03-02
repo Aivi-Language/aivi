@@ -1,2 +1,0 @@
-// within tests/main.aivi
-use my.app.api.test (fetchDashboard) // injected mock

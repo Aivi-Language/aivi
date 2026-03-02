@@ -1,8 +1,0 @@
-// flatten: remove nesting
-nested = Some (Some 42)
-flat = flatten nested // Some 42
-
-// orElse: fallback chain
-primary = None
-secondary = Some "backup"
-value = primary |> orElse secondary // Some "backup"

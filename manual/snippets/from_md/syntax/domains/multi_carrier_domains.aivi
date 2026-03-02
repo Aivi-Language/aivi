@@ -1,3 +1,0 @@
-domain Vector over Vec2 = { ...}
-domain Vector over Vec3 = { ...}
-domain Vector over Vec4 = { ...}

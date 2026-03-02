@@ -1,3 +1,0 @@
-class Semigroupoid (F A B) = given (A: Any, B: Any) {
-  compose: F B C -> F A C
-}

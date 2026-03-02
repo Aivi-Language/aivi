@@ -1,5 +1,0 @@
-getUserById : Int -> Effect DbError (Option User)
-getUserById = id => do Effect {
-  users <- db.load userTable
-  pure = (users |> find (_.id == id))
-}

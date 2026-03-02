@@ -1,3 +1,0 @@
-nextState =
-  | (Idle, Start) => Running
-  | (state, _)    => state

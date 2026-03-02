@@ -1,8 +1,0 @@
-// getOrElse: provide a default value
-name = getOrElse "Anonymous" maybeName
-
-// Pipe-friendly usage
-age = maybeAge |> getOrElse 0
-
-// getOrElseLazy: defer computation of default
-config = maybeConfig |> getOrElseLazy (_ => loadDefaultConfig Unit)

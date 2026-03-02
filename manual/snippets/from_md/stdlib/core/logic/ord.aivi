@@ -1,3 +1,0 @@
-class Ord A = Setoid {
-  lte: A -> A -> Bool
-}

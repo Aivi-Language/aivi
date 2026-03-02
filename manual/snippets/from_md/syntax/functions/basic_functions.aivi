@@ -1,3 +1,0 @@
-input |> parse match
-  | Ok x  => x
-  | Err _ => 0

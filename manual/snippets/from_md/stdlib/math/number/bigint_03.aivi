@@ -1,4 +1,0 @@
-use aivi.number.bigint
-
-huge = 10_000_000_000_000_000_000_000n
-sum = huge + 1n

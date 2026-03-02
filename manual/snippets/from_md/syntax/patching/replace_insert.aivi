@@ -1,4 +1,0 @@
-user2 = user <| {
-  name: "Grace"
-  profile.avatar.url: "https://img"
-}

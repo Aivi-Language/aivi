@@ -1,7 +1,0 @@
-@static
-version : Text
-version = file.read "./VERSION"
-
-@static
-schema : Text
-schema = file.read "./schema.json"
