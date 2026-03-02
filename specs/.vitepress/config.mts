@@ -12,6 +12,16 @@ const ebnfLanguage = {
   displayName: 'EBNF'
 }
 
+const aiviGrammar = JSON.parse(
+  readFileSync(new URL('../../vscode/syntaxes/aivi.tmLanguage.json', import.meta.url), 'utf-8')
+)
+
+const aiviLanguage = {
+  ...aiviGrammar,
+  name: 'aivi',
+  displayName: 'AIVI'
+}
+
 function normalizeBase(base: string): string {
   if (!base.startsWith('/')) base = `/${base}`
   if (!base.endsWith('/')) base = `${base}/`
@@ -95,9 +105,6 @@ export default defineConfig({
     sidebar
   },
   markdown: {
-    languages: [ebnfLanguage],
-    languageAlias: {
-      'aivi': 'rust'
-    }
+    languages: [ebnfLanguage, aiviLanguage]
   }
 })
