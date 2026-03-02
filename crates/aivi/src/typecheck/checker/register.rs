@@ -247,11 +247,12 @@ impl TypeChecker {
 
         // Register value imports (bare + qualified) with their type schemes.
         for (bare, qualified) in &import_pairs {
-            let mod_name = qualified.rsplit_once('.').map(|(m, _)| m).unwrap_or("");
-            if let Some(exports) = module_exports.get(mod_name) {
-                if let Some(schemes) = exports.get(bare) {
-                    Self::insert_schemes(env, bare.clone(), schemes);
-                    Self::insert_schemes(env, qualified.clone(), schemes);
+            if let Some((mod_name, original)) = qualified.rsplit_once('.') {
+                if let Some(exports) = module_exports.get(mod_name) {
+                    if let Some(schemes) = exports.get(original) {
+                        Self::insert_schemes(env, bare.clone(), schemes);
+                        Self::insert_schemes(env, qualified.clone(), schemes);
+                    }
                 }
             }
         }

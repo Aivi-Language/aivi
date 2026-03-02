@@ -507,10 +507,10 @@ fn check_defs(
 
     // Register imported value names (bare + qualified) into scope with deprecation info.
     for (bare, qualified) in &import_pairs {
-        let depr = if let Some(mod_name) = qualified.rsplit_once('.').map(|(m, _)| m) {
+        let depr = if let Some((mod_name, original)) = qualified.rsplit_once('.') {
             module_map
                 .get(mod_name)
-                .and_then(|target| deprecated_message_for_export(target, bare))
+                .and_then(|target| deprecated_message_for_export(target, original))
         } else {
             None
         };
