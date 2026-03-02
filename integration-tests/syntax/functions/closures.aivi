@@ -44,7 +44,7 @@ innerClosureInDoEffect = do Effect {
 @test "closure passed to higher-order map"
 closureInHigherOrder = do Effect {
   multiplier = 4
-  assertEq (map (n => n * multiplier) [3, 4, 5]) [12, 16, 20]
+  assertEq ([3, 4, 5] |> map (n => n * multiplier)) [12, 16, 20]
 }
 
 @test "closure used inside do Option"

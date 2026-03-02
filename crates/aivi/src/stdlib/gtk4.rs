@@ -7,7 +7,7 @@ export AppId, WindowId, WidgetId, BoxId, ButtonId, LabelId, EntryId, ScrollAreaI
 export GtkNode, GtkAttr, GtkElement, GtkTextNode, GtkAttribute
 export GtkSignalEvent, GtkClicked, GtkInputChanged, GtkActivated, GtkToggled, GtkValueChanged, GtkKeyPressed, GtkFocusIn, GtkFocusOut, GtkUnknownSignal
 export init, appNew, appRun
-export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent, windowClose, windowOnClose, windowSetHideOnClose
+export windowNew, windowSetTitle, windowSetTitlebar, windowSetChild, windowPresent, windowClose, windowOnClose, windowSetHideOnClose, windowSetDecorated
 export widgetShow, widgetHide
 export widgetSetSizeRequest, widgetSetHexpand, widgetSetVexpand
 export widgetSetHalign, widgetSetValign
@@ -24,7 +24,7 @@ export drawAreaNew, drawAreaSetContentSize, drawAreaQueueDraw
 export widgetSetCss, appSetCss
 export imageNewFromFile, imageSetFile, imageNewFromResource, imageSetResource, imageNewFromIconName, imageSetPixelSize
 export iconThemeAddSearchPath
-export trayIconNew, trayIconSetTooltip, trayIconSetVisible
+export trayIconNew, trayIconSetTooltip, trayIconSetVisible, trayIconSetMenuItems
 export dragSourceNew, dragSourceSetText
 export dropTargetNew, dropTargetLastText
 export menuModelNew, menuModelAppendItem, menuButtonNew, menuButtonSetMenuModel
@@ -171,6 +171,9 @@ windowOnClose = gtk4.windowOnClose
 windowSetHideOnClose : WindowId -> Bool -> Effect GtkError Unit
 windowSetHideOnClose = gtk4.windowSetHideOnClose
 
+windowSetDecorated : WindowId -> Bool -> Effect GtkError Unit
+windowSetDecorated = gtk4.windowSetDecorated
+
 appRun : AppId -> Effect GtkError Unit
 appRun = gtk4.appRun
 
@@ -311,6 +314,11 @@ trayIconSetTooltip = gtk4.trayIconSetTooltip
 
 trayIconSetVisible : TrayIconId -> Bool -> Effect GtkError Unit
 trayIconSetVisible = gtk4.trayIconSetVisible
+
+TrayMenuItem = { label: Text, action: Text }
+
+trayIconSetMenuItems : TrayIconId -> List TrayMenuItem -> Effect GtkError Unit
+trayIconSetMenuItems = gtk4.trayIconSetMenuItems
 
 dragSourceNew : WidgetId -> Effect GtkError DragSourceId
 dragSourceNew = gtk4.dragSourceNew

@@ -23,19 +23,19 @@ apply: always
 
 ## 2 Lexical Basics
 
-| Element                                            | Syntax                                                                                                                                                         |
-|:-------------------------------------------------- |:-------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Line comment                                       | `//` to end of line                                                                                                                                            |
-| Block comment                                      | `/* ... */` — may span multiple lines; **does not nest**                                                                                                       |
-| Value / function / field names                     | `lowerCamelCase` (`lowerIdent`)                                                                                                                                |
-| Type / constructor / domain / class names          | `UpperCamelCase` (`UpperIdent`)                                                                                                                                |
-| Module path segments / `.aivi` file names          | `snake_case` (for example `myapp.daemon.command_queue` -> `myapp/daemon/command_queue.aivi`)                                                             |
-| Text literal                                       | `"hello { name }"` (interpolation with `{ expr }`)                                                                                                             |
-| Int, Float                                         | `42`, `3.14`                                                                                                                                                   |
-| Char                                               | `'a'`                                                                                                                                                          |
-| ISO instant                                        | `2024-05-21T12:00:00Z`                                                                                                                                         |
-| Suffixed number                                    | `10px`, `30s`, `100%` (domain-resolved)                                                                                                                        |
-| Keywords                                           | `as class do domain effect else export generate given hiding if in instance machine match mock module on or over patch recurse resource snapshot then use when with yield loop` |
+| Element                                   | Syntax                                                                                                                                                                          |
+|:----------------------------------------- |:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Line comment                              | `//` to end of line                                                                                                                                                             |
+| Block comment                             | `/* ... */` — may span multiple lines; **does not nest**                                                                                                                        |
+| Value / function / field names            | `lowerCamelCase` (`lowerIdent`)                                                                                                                                                 |
+| Type / constructor / domain / class names | `UpperCamelCase` (`UpperIdent`)                                                                                                                                                 |
+| Module path segments / `.aivi` file names | `snake_case` (for example `myapp.daemon.command_queue` -> `myapp/daemon/command_queue.aivi`)                                                                                    |
+| Text literal                              | `"hello { name }"` (interpolation with `{ expr }`)                                                                                                                              |
+| Int, Float                                | `42`, `3.14`                                                                                                                                                                    |
+| Char                                      | `'a'`                                                                                                                                                                           |
+| ISO instant                               | `2024-05-21T12:00:00Z`                                                                                                                                                          |
+| Suffixed number                           | `10px`, `30s`, `100%` (domain-resolved)                                                                                                                                         |
+| Keywords                                  | `as class do domain effect else export generate given hiding if in instance machine match mock module on or over patch recurse resource snapshot then use when with yield loop` |
 
 `True`, `False`, `None`, `Some`, `Ok`, `Err` are constructors, not keywords.
 
@@ -115,9 +115,6 @@ Pipes apply the value on the left as the **last** argument to the right-hand sid
 
 ```aivi
 xs |> map inc |> filter (_ > 0)
-
-// equivalent to:
-filter (_ > 0) (map inc xs)
 ```
 
 Rules: `x |> f` = `f x`; `x |> f a b` = `f a b x`.
@@ -290,7 +287,6 @@ User |> Pick (id, name) |> Optional (name)
 
 ```aivi
 add : Int -> Int -> Int
-map : (A -> B) -> List A -> List B
 ```
 
 Type signatures are also required for multi-clause function definitions (`f = | ... => ...`).
@@ -312,7 +308,10 @@ instance Monad (Result E A) = given (A: Any) { ... }
 
 `given (A: Any)` declares universally quantified type variables for higher-kinded types.
 HKT class member signatures use **abbreviated form**: the container type is omitted and
-added internally by the compiler as the last argument.
+added internally by the compiler as the last argument. Class members such as `map` are
+**only accessible via pipe**: `fa |> map f` — the compiler resolves `map` from the
+appropriate typeclass instance (e.g. `Functor`) based on the type of `fa`. The form
+`map f fa` is not valid for typeclass methods.
 `A with B` in types is record/type composition (intersection).
 
 ### Type variable constraints
@@ -329,6 +328,7 @@ class Collection (C A) = given (A: Eq) {
 In positions where a `Text` is expected, the compiler may insert `toText expr` if a `ToText A` instance is in scope.
 
 When the expected type is `Body` (from `aivi.net.http`), the compiler coerces:
+
 - Record literal → `Json (toJson record)`
 - `Text` → `Plain text`
 - `JsonValue` → `Json jv`
@@ -822,6 +822,7 @@ Available source APIs in v0.1: `file.read/json/csv/imageMeta/image`, `http`/`htt
 `@static` embeds sources at compile time: `@static schema = file.json "schema.json"` or `@static envName = env.get "AIVI_BUILD_ENV"`.
 
 `@static` can also generate typed API client modules from OpenAPI specs:
+
 ```aivi
 @static
 petStore = openapi.fromUrl ~url(https://petstore.example.com/v2/swagger.json)
@@ -930,14 +931,14 @@ Component-style tags (uppercase/dotted) use **record-based lowering** in both si
 
 Compile-time metadata only. No user-defined decorators.
 
-| Decorator                                      | Purpose                                        |
-|:---------------------------------------------- |:---------------------------------------------- |
-| `@test "desc"`                                 | Mark as test case (mandatory description)      |
-| `@static`                                      | Embed at compile time                          |
-| `@native "mod.fn"`                             | Bind typed def to runtime/native path          |
-| `@deprecated`                                  | Emit warning on use                            |
-| `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`)           |
-| `@no_prelude`                                  | Skip implicit `use aivi.prelude`               |
+| Decorator                                      | Purpose                                   |
+|:---------------------------------------------- |:----------------------------------------- |
+| `@test "desc"`                                 | Mark as test case (mandatory description) |
+| `@static`                                      | Embed at compile time                     |
+| `@native "mod.fn"`                             | Bind typed def to runtime/native path     |
+| `@deprecated`                                  | Emit warning on use                       |
+| `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`)      |
+| `@no_prelude`                                  | Skip implicit `use aivi.prelude`          |
 
 `@static` supported sources: `file.read/json/csv`, `env.get`, `openapi.fromUrl ~url(...)`, `openapi.fromFile "..."`.
 
@@ -988,12 +989,12 @@ in mock rest.get = _ => pure [{ id: 1, name: "Ada" }]
    in do Effect { ... }   // sees inner mock
 ```
 
-| Rule | Detail |
-|:-----|:-------|
+| Rule                 | Detail                                                                  |
+|:-------------------- |:----------------------------------------------------------------------- |
 | Only qualified paths | `mock rest.get = ...` ✓ — `mock localFn = ...` ✗ (use `let` for locals) |
-| Type-safe | Mock expression must match the original binding's type |
-| Scoped | Mock is only active inside `in <body>` — originals restored after |
-| Composable | Works in any expression position, not just `@test` |
+| Type-safe            | Mock expression must match the original binding's type                  |
+| Scoped               | Mock is only active inside `in <body>` — originals restored after       |
+| Composable           | Works in any expression position, not just `@test`                      |
 
 ### Snapshot mocks
 
@@ -1009,10 +1010,10 @@ snapshotTest =
   }
 ```
 
-| CLI command | Behaviour |
-|:------------|:----------|
-| `aivi test` | Replay from `.snap` — fail if missing |
-| `aivi test --update-snapshots` | Re-record from real calls |
+| CLI command                    | Behaviour                             |
+|:------------------------------ |:------------------------------------- |
+| `aivi test`                    | Replay from `.snap` — fail if missing |
+| `aivi test --update-snapshots` | Re-record from real calls             |
 
 ### Snapshot assertions
 
@@ -1223,7 +1224,7 @@ topoSmoke = do Effect {
 | State machine                | `machine Name = { -> Idle : init {}; Idle -> Running : start {}; ... }` |
 | Acquire resource             | `handle <- managedFile "data.txt"` (inside `do Effect`)                 |
 | Write a test                 | `@test "adds correctly" myTest = do Effect { assertEq (f 1) 2 }`        |
-| Mock a dependency in test    | `mock rest.get = _ => pure [...] in do Effect { ... }`                   |
+| Mock a dependency in test    | `mock rest.get = _ => pure [...] in do Effect { ... }`                  |
 
 ---
 

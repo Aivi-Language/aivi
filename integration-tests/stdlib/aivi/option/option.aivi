@@ -64,13 +64,13 @@ test_getOrElseLazy_none = do Effect {
 
 @test "map transforms Some value"
 test_map_some = do Effect {
-  result = map (_ * 2) (Some 5)
+  result = Some 5 |> map (_ * 2)
   assertEq result (Some 10)
 }
 
 @test "map preserves None"
 test_map_none = do Effect {
-  result = map (_ * 2) None
+  result = None |> map (_ * 2)
   assertEq result None
 }
 

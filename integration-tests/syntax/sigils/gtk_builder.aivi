@@ -3,7 +3,7 @@ module integrationTests.syntax.sigils.gtkBuilder
 
 use aivi.ui.gtk4
 
-export node, interfaceNode, templateNode, signalSugarNode, nestedSigilInSplice
+export node, interfaceNode, templateNode, signalSugarNode, nestedSigilInSplice, shorthandNode, shorthandSignalNode
 
 node : GtkNode
 node =
@@ -86,4 +86,21 @@ nestedSigilInSplice =
     <object class="GtkBox">
       { ~<gtk><object class="GtkLabel" /></gtk> }
     </object>
+  </gtk>
+
+// GTK widget shorthand: <GtkButton label="..."> → <object class="GtkButton" props={{ label: "..." }}>
+shorthandNode : GtkNode
+shorthandNode =
+  ~<gtk>
+    <GtkBox spacing="24" marginTop="12">
+      <GtkLabel label="Hello" />
+    </GtkBox>
+  </gtk>
+
+// GTK shorthand with signal sugar
+shorthandSignalNode : GtkNode
+shorthandSignalNode =
+  ~<gtk>
+    <GtkButton label="Save" onClick={ Msg.Save }>
+    </GtkButton>
   </gtk>

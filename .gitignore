@@ -10,5 +10,4 @@ vscode/bin/aivi-lsp
 target
 aivi-vscode-*
 /*.aivi
-
-
+assets/gir/

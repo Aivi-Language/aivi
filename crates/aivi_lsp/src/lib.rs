@@ -4,6 +4,7 @@ mod diagnostics;
 mod doc_index;
 mod document_symbols;
 mod folding;
+mod gtk_index;
 mod inlay_hints;
 mod navigation;
 mod selection;

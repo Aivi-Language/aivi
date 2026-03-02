@@ -64,13 +64,13 @@ test_getOrElseLazy_err = do Effect {
 
 @test "map transforms Ok value"
 test_map_ok = do Effect {
-  result = map (_ * 2) (Ok 5)
+  result = Ok 5 |> map (_ * 2)
   assertEq result (Ok 10)
 }
 
 @test "map preserves Err"
 test_map_err = do Effect {
-  result = map (_ * 2) (Err "error")
+  result = Err "error" |> map (_ * 2)
   assertEq result (Err "error")
 }
 
