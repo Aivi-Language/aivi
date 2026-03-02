@@ -914,11 +914,14 @@ Dynamic child lists are supported with `<each>`:
 </gtk>
 ```
 
-Component-style tags are also supported in both sigils:
+Component-style tags (uppercase/dotted) use **record-based lowering** in both sigils — attributes become record fields, children become a `children` field. Signal sugar and `props` normalization do not apply to component tags:
 
 ```aivi
+// HTML component: Ui.Card { title: "Hello", children: [vElement "span" ...] }
 ~<html><Ui.Card title="Hello"><span>Body</span></Ui.Card></html>
-~<gtk><Ui.Row id="r1" /></gtk>
+
+// GTK component: Ui.Row { id: "r1", onClick: Save }
+~<gtk><Ui.Row id="r1" onClick={ Save } /></gtk>
 ```
 
 ---

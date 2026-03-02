@@ -615,6 +615,7 @@ impl Parser {
                         items.push(crate::surface::UseItem {
                             kind: crate::surface::ScopeItemKind::Domain,
                             name,
+                            alias: None,
                         });
                     } else {
                         let span = self.peek_span().unwrap_or_else(|| self.previous_span());
@@ -622,9 +623,26 @@ impl Parser {
                         break;
                     }
                 } else if let Some(name) = self.consume_ident() {
+                    let alias = if self.match_keyword("as") {
+                        let as_span = self.previous_span();
+                        match self.consume_ident() {
+                            Some(a) => Some(a),
+                            None => {
+                                self.emit_diag(
+                                    "E1500",
+                                    "expected alias name after 'as'",
+                                    as_span,
+                                );
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    };
                     items.push(crate::surface::UseItem {
                         kind: crate::surface::ScopeItemKind::Value,
                         name,
+                        alias,
                     });
                 }
                 self.consume_newlines();

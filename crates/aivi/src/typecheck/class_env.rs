@@ -518,7 +518,12 @@ pub(super) fn collect_imported_class_env(
                 continue;
             }
             if let Some(info) = class_exports.get(&item.name.name) {
-                classes.insert(item.name.name.clone(), info.clone());
+                let local = item
+                    .alias
+                    .as_ref()
+                    .map(|a| a.name.clone())
+                    .unwrap_or_else(|| item.name.name.clone());
+                classes.insert(local, info.clone());
                 imported_classes.insert(item.name.name.clone());
             }
         }

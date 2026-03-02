@@ -156,10 +156,14 @@ Uppercase or dotted GTK tags are treated as component calls:
 - `<Row ... />`
 - `<Ui.Row ... />`
 
+Component tags use **record-based lowering**: attributes become record fields and children become a `children` field. Signal sugar (`onClick`, `onInput`, …) and `props` normalization do **not** apply to component tags — the component function owns its API.
+
 Lowering shape:
 
-- `Row [gtkAttrs...] [gtkChildren...]`
-- `Ui.Row [gtkAttrs...] [gtkChildren...]`
+- `Row { id: "one", onClick: Save }` (single record argument)
+- `Ui.Row { title: "Hello", children: [...] }` (children present)
+
+This mirrors JSX/React conventions: each component is a function that receives a typed record of props.
 
 Lowercase GTK tags continue to lower to `gtkElement`.
 

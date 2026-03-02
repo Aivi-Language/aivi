@@ -629,6 +629,29 @@ fn expr_contains_ident(expr: &Expr, target: &str) -> bool {
     }
 }
 
+fn expr_contains_record_field(expr: &Expr, field_name: &str) -> bool {
+    match expr {
+        Expr::Record { fields, .. } | Expr::PatchLit { fields, .. } => fields.iter().any(|f| {
+            f.path.first().is_some_and(|seg| match seg {
+                PathSegment::Field(name) => name.name == field_name,
+                _ => false,
+            }) || expr_contains_record_field(&f.value, field_name)
+        }),
+        Expr::Call { func, args, .. } => {
+            expr_contains_record_field(func, field_name)
+                || args
+                    .iter()
+                    .any(|a| expr_contains_record_field(a, field_name))
+        }
+        Expr::List { items, .. } => items
+            .iter()
+            .any(|item| expr_contains_record_field(&item.expr, field_name)),
+        Expr::FieldAccess { base, .. } => expr_contains_record_field(base, field_name),
+        Expr::Lambda { body, .. } => expr_contains_record_field(body, field_name),
+        _ => false,
+    }
+}
+
 fn expr_contains_string(expr: &Expr, target: &str) -> bool {
     match expr {
         Expr::Literal(Literal::String { text, .. }) => text == target,
@@ -973,11 +996,18 @@ x = ~<html><Ui.Card title="Hello"><span>Body</span></Ui.Card></html>
         })
         .expect("x def");
 
+    // Component call should use record-based lowering
     assert!(
-        expr_contains_ident(&def.expr, "Ui")
-            && expr_contains_ident(&def.expr, "Card")
-            && expr_contains_ident(&def.expr, "vAttr"),
-        "expected component tag to lower into component call with lowered attrs"
+        expr_contains_ident(&def.expr, "Ui") && expr_contains_ident(&def.expr, "Card"),
+        "expected component tag to produce a component call"
+    );
+    assert!(
+        expr_contains_record_field(&def.expr, "title"),
+        "expected component attrs to lower to record fields"
+    );
+    assert!(
+        expr_contains_record_field(&def.expr, "children"),
+        "expected component children to be a `children` record field"
     );
 }
 
@@ -1046,7 +1076,7 @@ module Example
 x =
   ~<gtk>
     <object class="GtkBox">
-      <Ui.Row id="one" />
+      <Ui.Row id="one" onClick={ Save } />
     </object>
   </gtk>
 "#;
@@ -1067,11 +1097,23 @@ x =
         })
         .expect("x def");
 
+    // Component call should use record-based lowering
     assert!(
-        expr_contains_ident(&def.expr, "Ui")
-            && expr_contains_ident(&def.expr, "Row")
-            && expr_contains_ident(&def.expr, "gtkAttr"),
-        "expected GTK component tag to lower into component call with gtkAttr props"
+        expr_contains_ident(&def.expr, "Ui") && expr_contains_ident(&def.expr, "Row"),
+        "expected GTK component tag to produce a component call"
+    );
+    assert!(
+        expr_contains_record_field(&def.expr, "id"),
+        "expected component attrs to lower to record fields"
+    );
+    // onClick on a component tag must NOT be lowered to signal sugar
+    assert!(
+        expr_contains_record_field(&def.expr, "onClick"),
+        "expected onClick on component to be a plain record field, not signal sugar"
+    );
+    assert!(
+        !expr_contains_string(&def.expr, "signal:clicked"),
+        "signal sugar must not fire on component tags"
     );
 }
 
@@ -1565,4 +1607,42 @@ x = { name, age: 42 }
 
     // explicit field: { age: 42 }
     assert!(matches!(&fields[1].path[..], [PathSegment::Field(n)] if n.name == "age"));
+}
+
+#[test]
+fn selective_import_alias_parses() {
+    let src = r#"
+@no_prelude
+module Example
+
+use some.module (foo as Bar, baz)
+
+x = Bar
+"#;
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(
+        diags.is_empty(),
+        "unexpected diagnostics: {:?}",
+        diag_codes(&diags)
+    );
+
+    let module = modules.first().expect("module");
+    let use_decl = module
+        .uses
+        .iter()
+        .find(|u| u.module.name == "some.module")
+        .expect("use decl for some.module");
+    assert_eq!(use_decl.items.len(), 2, "expected 2 import items");
+
+    let item0 = &use_decl.items[0];
+    assert_eq!(item0.name.name, "foo");
+    assert_eq!(
+        item0.alias.as_ref().map(|a| a.name.as_str()),
+        Some("Bar"),
+        "expected alias Bar for foo"
+    );
+
+    let item1 = &use_decl.items[1];
+    assert_eq!(item1.name.name, "baz");
+    assert!(item1.alias.is_none(), "baz should have no alias");
 }

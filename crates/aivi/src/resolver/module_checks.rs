@@ -78,14 +78,18 @@ fn check_unused_imports_and_bindings(module: &Module, diagnostics: &mut Vec<File
             if item.kind == crate::surface::ScopeItemKind::Domain {
                 continue;
             }
-            if !used.contains(item.name.name.as_str()) {
+            let local = item
+                .alias
+                .as_ref()
+                .unwrap_or(&item.name);
+            if !used.contains(local.name.as_str()) {
                 diagnostics.push(file_diag(
                     module,
                     Diagnostic {
                         code: "W2100".to_string(),
                         severity: DiagnosticSeverity::Warning,
-                        message: format!("unused import '{}'", item.name.name),
-                        span: item.name.span.clone(),
+                        message: format!("unused import '{}'", local.name),
+                        span: local.span.clone(),
                         labels: Vec::new(),
                     },
                 ));
@@ -818,7 +822,8 @@ fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>
                 // Domain imports activate operators; name conflicts don't apply.
                 continue;
             }
-            let name = item.name.name.as_str();
+            let local_ref = item.alias.as_ref().unwrap_or(&item.name);
+            let name = local_ref.name.as_str();
 
             // Selective import covered by a wildcard of the same module.
             if wildcard_modules.contains(source) {
@@ -830,7 +835,7 @@ fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>
                         message: format!(
                             "redundant import '{name}': already in scope via wildcard import of '{source}'"
                         ),
-                        span: item.name.span.clone(),
+                        span: local_ref.span.clone(),
                         labels: Vec::new(),
                     },
                 ));
@@ -848,7 +853,7 @@ fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>
                             message: format!(
                                 "ambiguous import '{name}': imported from '{prev_source}' and '{source}'"
                             ),
-                            span: item.name.span.clone(),
+                            span: local_ref.span.clone(),
                             labels: Vec::new(),
                         },
                     ));
@@ -862,7 +867,7 @@ fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>
                             message: format!(
                                 "redundant import '{name}': already imported from '{source}'"
                             ),
-                            span: item.name.span.clone(),
+                            span: local_ref.span.clone(),
                             labels: Vec::new(),
                         },
                     ));
@@ -878,7 +883,7 @@ fn check_import_conflicts(module: &Module, diagnostics: &mut Vec<FileDiagnostic>
                             message: format!(
                                 "import '{name}' shadows local definition '{name}' in this module"
                             ),
-                            span: item.name.span.clone(),
+                            span: local_ref.span.clone(),
                             labels: Vec::new(),
                         },
                     ));

@@ -44,14 +44,16 @@ pub fn compute_import_pairs(
         } else {
             // Selective import.
             for item in &use_decl.items {
-                if item.kind == ScopeItemKind::Value
-                    && target_names.contains(&item.name.name)
-                    && !local_defs.contains(&item.name.name)
-                {
-                    import_map.insert(
-                        item.name.name.clone(),
-                        format!("{target_module}.{}", item.name.name),
-                    );
+                if item.kind == ScopeItemKind::Value && target_names.contains(&item.name.name) {
+                    let local = item
+                        .alias
+                        .as_ref()
+                        .map(|a| &a.name)
+                        .unwrap_or(&item.name.name);
+                    if !local_defs.contains(local) {
+                        import_map
+                            .insert(local.clone(), format!("{target_module}.{}", item.name.name));
+                    }
                 }
             }
         }

@@ -1,0 +1,11 @@
+@no_prelude
+module integrationTests.syntax.modules.selectiveImportAlias
+
+use aivi.text (length as len, toUpper)
+use aivi.testing
+
+@test "selective import alias"
+aliasWorks = do Effect {
+  assertEq (len "hello") 5
+  assertEq (toUpper "hi") "HI"
+}
