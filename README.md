@@ -28,7 +28,7 @@ The open desktop is having a moment. Governments, enterprises, and individuals a
 
 AIVI is expression-oriented with a clean, minimal syntax. Bindings are immutable, functions are curried, and effects are tracked in the type system.
 
-```fsharp
+```ocaml
 module user.myapp
 
 use aivi
@@ -70,7 +70,7 @@ This is where AIVI really shines. The `~<gtk>...</gtk>` sigil lets you write GTK
 
 ### Declarative UI with the GTK sigil
 
-```fsharp
+```ocaml
 module user.notepad
 
 use aivi
@@ -97,7 +97,7 @@ No callback spaghetti. Signal handlers are typed ADT constructors — the compil
 
 Events arrive through a typed channel. You dispatch them in a tail-recursive loop — purely functional, no mutable state:
 
-```fsharp
+```ocaml
 main : Effect GtkError Unit
 main = do Effect {
   init Unit
@@ -132,7 +132,7 @@ main = do Effect {
 
 ### Dynamic lists with `<each>`
 
-```fsharp
+```ocaml
 renderTodos : List Text -> GtkNode
 renderTodos = items =>
   ~<gtk>
@@ -152,7 +152,7 @@ One list value, one `<each>` — no manual widget creation loops, no index track
 
 State updates read like plain data declarations, not mutating assignments. The `<|` operator applies a type-checked patch:
 
-```fsharp
+```ocaml
 // Update a single field
 newState = state <| { title: "New Title" }
 
@@ -174,7 +174,7 @@ The compiler verifies every path exists and every value matches the expected typ
 
 AIVI's domain system lets you give meaning to numeric literals and operators at the type level. Common suffixes from the standard library just work:
 
-```fsharp
+```ocaml
 use aivi.chronos.duration (domain Duration)
 use aivi.color (domain Color)
 
@@ -217,7 +217,7 @@ The `aivi.concurrency` module gives you scoped tasks and typed channels — real
 
 Effects are part of the type. You can't accidentally call an effectful function in a pure context, and error types are tracked like any other:
 
-```fsharp
+```ocaml
 use aivi.database as db
 
 // Schema is a typed value — the compiler knows the row shape
@@ -254,7 +254,7 @@ withdraw = amount => account => do Effect {
 
 Point AIVI at any OpenAPI spec and it generates a fully typed client, checked at compile time. No code generation step, no stale types:
 
-```fsharp
+```ocaml
 // Fetched and type-checked at compile time; zero runtime overhead
 @static
 api = openapi.fromUrl ~url(https://petstore.swagger.io/v2/swagger.json)
