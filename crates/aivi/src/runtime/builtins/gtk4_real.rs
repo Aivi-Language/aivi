@@ -27,6 +27,7 @@ mod linux {
         fn gtk_window_set_transient_for(window: *mut c_void, parent: *mut c_void);
         fn gtk_window_present(window: *mut c_void);
         fn gtk_window_close(window: *mut c_void);
+        fn gtk_window_set_hide_on_close(window: *mut c_void, setting: c_int);
 
         fn gtk_widget_set_visible(widget: *mut c_void, visible: c_int);
         fn gtk_widget_set_sensitive(widget: *mut c_void, sensitive: c_int);
@@ -2305,6 +2306,32 @@ mod linux {
                             )))
                         })?;
                         unsafe { gtk_window_close(window) };
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
+            "windowSetHideOnClose".to_string(),
+            builtin("gtk4.windowSetHideOnClose", 2, |mut args, _| {
+                let hide = match args.remove(1) {
+                    Value::Bool(v) => v,
+                    _ => return Err(invalid("gtk4.windowSetHideOnClose expects Bool")),
+                };
+                let window_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowSetHideOnClose expects Int window id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let window = state.windows.get(&window_id).copied().ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.windowSetHideOnClose unknown window id {window_id}"
+                            )))
+                        })?;
+                        unsafe { gtk_window_set_hide_on_close(window, if hide { 1 } else { 0 }) };
                         Ok(Value::Unit)
                     })
                 }))

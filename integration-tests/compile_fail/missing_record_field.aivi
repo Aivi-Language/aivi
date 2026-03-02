@@ -1,12 +1,10 @@
 // EXPECT-ERROR: E3000
 module integrationTests.compileFail.missingRecordField
 
-use aivi.defaults
-
 MyProps = { label: Text, onChange: Text -> Effect Unit }
 
 render : MyProps -> Text
 render = props => props.label
 
-// `onChange` has a function type with no default — this should be an error
+// `onChange` has no default — calling with a partial record is an error
 bad = render { label: "hello" }
