@@ -896,19 +896,19 @@ Sugar attrs: `onClick`→`clicked`, `onInput`→`changed`, `onActivate`→`activ
 `onValueChanged`→`value-changed`, `onFocusIn`→`focus-enter`, `onFocusOut`→`focus-leave`.
 Invalid dynamic handlers produce `E1614`.
 
-GTK signals arrive as typed `GtkSignalEvent` constructors:
+GTK signals arrive as typed `GtkSignalEvent` constructors (second field is the widget's `id="..."` name, `""` if unset):
 
 ```aivi
 GtkSignalEvent =
-  | GtkClicked       WidgetId
-  | GtkInputChanged  WidgetId Text
-  | GtkActivated     WidgetId
-  | GtkToggled       WidgetId Bool
-  | GtkValueChanged  WidgetId Float
-  | GtkKeyPressed    WidgetId Text Text
-  | GtkFocusIn       WidgetId
-  | GtkFocusOut      WidgetId
-  | GtkUnknownSignal WidgetId Text Text Text
+  | GtkClicked       WidgetId Text
+  | GtkInputChanged  WidgetId Text Text
+  | GtkActivated     WidgetId Text
+  | GtkToggled       WidgetId Text Bool
+  | GtkValueChanged  WidgetId Text Float
+  | GtkKeyPressed    WidgetId Text Text Text
+  | GtkFocusIn       WidgetId Text
+  | GtkFocusOut      WidgetId Text
+  | GtkUnknownSignal WidgetId Text Text Text Text
 ```
 
 Consume events via `signalStream` (preferred) or `signalPoll`:
@@ -917,11 +917,32 @@ Consume events via `signalStream` (preferred) or `signalPoll`:
 events <- signalStream {}      // Recv GtkSignalEvent — push-based, no polling loop needed
 channel.forEach events (event =>
   event match
-    | GtkClicked _          => handleSave
-    | GtkInputChanged _ txt => handleInput txt
-    | GtkToggled _ active   => handleToggle active
-    | _                     => yield {}
+    | GtkClicked _ _            => handleSave
+    | GtkInputChanged _ _ txt   => handleInput txt
+    | GtkToggled _ _ active     => handleToggle active
+    | _                         => yield {}
 )
+```
+
+`channel.fold` threads state over a channel: `fold : s -> (s -> a -> Effect e s) -> Recv a -> Effect e s`.
+`channel.forEach` runs an action on each event: `forEach : Recv a -> (a -> Effect e Unit) -> Effect e Unit`.
+
+`buildWithIds` builds a widget tree and returns `{ root: WidgetId, widgets: Map Text WidgetId }` — avoids separate `widgetById` calls.
+
+`gtkApp` provides an Elm-architecture combinator that encapsulates init, window creation, and event loop:
+
+```aivi
+main = gtkApp {
+  id:     "com.example.app",
+  title:  "My App",
+  size:   (800, 600),
+  model:  { count: 0 },
+  view:   myNode,
+  toMsg:  event => event match
+    | GtkClicked _ _ => Some Increment
+    | _              => None,
+  update: msg => state => pure (state <| { count: state.count + 1 })
+}
 ```
 
 Dynamic child lists are supported with `<each>`:

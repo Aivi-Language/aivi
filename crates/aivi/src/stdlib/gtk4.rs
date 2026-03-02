@@ -45,6 +45,7 @@ export buildFromNode, buildWithIds
 export signalPoll, signalEmit, signalStream
 export widgetById, widgetSetBoolProperty, signalBindBoolProperty, signalBindCssClass, signalBindToggleBoolProperty, signalToggleCssClass
 export signalBindDialogPresent, signalBindStackPage
+export gtkApp
 
 use aivi
 
@@ -475,4 +476,29 @@ osSetBadgeCount = gtk4.osSetBadgeCount
 
 osThemePreference : Unit -> Effect GtkError Text
 osThemePreference = gtk4.osThemePreference
+
+gtkApp : { id: Text, title: Text, size: (Int, Int), model: s, view: GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError s } -> Effect GtkError Unit
+gtkApp = config => do Effect {
+  init Unit
+  appId <- appNew config.id
+  (w, h) = config.size
+  win <- windowNew appId config.title w h
+  root <- buildFromNode config.view
+  windowSetChild win root
+  rx <- signalStream {}
+  windowPresent win
+  _ <- appRun appId
+  loop state = config.model => {
+    result <- channel.recv rx
+    result match
+      | Err _ => pure Unit
+      | Ok event =>
+          config.toMsg event match
+            | None     => recurse state
+            | Some msg => do Effect {
+                next <- config.update msg state
+                recurse next
+              }
+  }
+}
 "#;

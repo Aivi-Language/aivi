@@ -141,39 +141,61 @@ When writing `.aivi` code in `integration-tests/`, `specs/` snippets, or doc exa
 
 ### 4.4 GTK4 UI — Signal Streams
 
-When writing GTK4 UI code, **always use `signalStream` for event handling**. The old `on Msg => handler` callback style and the `signalBind*` helper family (`signalBindBoolProperty`, `signalBindCssClass`, `signalBindToggleBoolProperty`, `signalToggleCssClass`, `signalBindDialogPresent`, `signalBindStackPage`) are **deprecated** and must not appear in new code.
+When writing GTK4 UI code, **prefer `gtkApp` for new apps** and **`signalStream` for custom event loops**. The old `on Msg => handler` callback style and the `signalBind*` helper family (`signalBindBoolProperty`, `signalBindCssClass`, `signalBindToggleBoolProperty`, `signalToggleCssClass`, `signalBindDialogPresent`, `signalBindStackPage`) are **deprecated** and must not appear in new code.
 
-**Canonical pattern — recursive event loop:**
+**Preferred pattern — Elm-architecture with `gtkApp`:**
 
 ```aivi
-// 1. Build UI, get a single push-based receiver
-root    <- buildFromNode myNode
-widgets <- fetchMyWidgets   // { saveBtnId: WidgetId, nameInputId: WidgetId, ... }
-rx      <- signalStream {}
+Msg = Save | NameChanged Text
 
-// 2. Tail-recursive dispatch loop
-runLoop = win => state => widgets => rx => do Effect {
-  result <- channel.recv rx
-  result match
-    | Err _ => pure Unit   // channel closed
-    | Ok event =>
-        event match
-          | GtkClicked wid when wid == widgets.saveBtnId => handleSave state
-          | GtkInputChanged wid txt when wid == widgets.nameInputId => do Effect {
-              runLoop win (state <| { name: txt }) widgets rx
-            }
-          | _ => runLoop win state widgets rx
+toMsg : GtkSignalEvent -> Option Msg
+toMsg = event =>
+  event match
+    | GtkClicked _ _                    => Some Save
+    | GtkInputChanged _ "nameInput" txt => Some (NameChanged txt)
+    | _                                 => None
+
+update : Msg -> State -> Effect GtkError State
+update = msg => state =>
+  msg match
+    | Save            => do Effect { _ <- saveData state; pure state }
+    | NameChanged txt => pure (state <| { name: txt })
+
+main = gtkApp {
+  id:     "com.example.app",
+  title:  "My App",
+  size:   (800, 600),
+  model:  { name: "" },
+  view:   myNode,
+  toMsg:  toMsg,
+  update: update
 }
+```
+
+**Manual pattern — `signalStream` + `channel.fold`:**
+
+```aivi
+root <- buildFromNode myNode
+rx   <- signalStream {}
+channel.fold initState (state => event =>
+  event match
+    | GtkClicked _ _                    => handleSave state
+    | GtkInputChanged _ "nameInput" txt => pure (state <| { name: txt })
+    | _                                 => pure state
+) rx
 ```
 
 **Rules for agents:**
 
+- **Prefer `gtkApp`** for standard single-window apps; use manual `signalStream` only when you need multi-window or custom lifecycle control.
+- Signal events carry both `WidgetId` and the widget's `id="..."` name (e.g., `GtkClicked widgetId "saveBtn"`). Match by name string instead of comparing integer IDs.
 - Call `signalStream {}` **once** per UI flow; pass the `rx` value down through the loop.
 - Re-fetch widget IDs with `widgetById "id"` after any `windowSetChild`/`dialogSetChild` call, since widget tree rebuilds produce new IDs.
 - Use `attempt (widgetById "id")` when a widget may not exist yet (e.g., dialog content not yet built).
 - For state-driven re-renders (sidebar toggle, tab switch, form validation), update state → `buildFromNode` → `windowSetChild`/`dialogSetChild` → re-fetch IDs → tail-recurse.
 - Prefer typed variants (`GtkClicked`, `GtkInputChanged`, `GtkToggled`, etc.) over `GtkUnknownSignal` wherever possible.
 - `signalPoll` is available for one-shot reads; `signalStream` is preferred for continuous loops.
+- `channel.fold` threads state over events; `channel.forEach` runs a stateless action per event.
 
 ### 4.5 Decorators
 

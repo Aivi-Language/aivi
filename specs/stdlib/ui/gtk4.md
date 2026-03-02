@@ -88,6 +88,7 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 | `layoutManagerNew` | `gtk4.layoutManagerNew` |
 | `widgetSetLayoutManager` | `gtk4.widgetSetLayoutManager` |
 | `buildFromNode` | `gtk4.buildFromNode` |
+| `buildWithIds` | `gtk4.buildWithIds` |
 | `signalPoll` | `gtk4.signalPoll` |
 | `signalStream` | `gtk4.signalStream` |
 | `signalEmit` | `gtk4.signalEmit` |
@@ -107,20 +108,21 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 - `GtkNode = GtkElement Text (List GtkAttr) (List GtkNode) | GtkTextNode Text`
 - `GtkAttr = GtkAttribute Text Text`
 - helpers: `gtkElement`, `gtkTextNode`, `gtkAttr`
-- `GtkSignalEvent` — typed ADT with variants:
-  - `GtkClicked WidgetId`
-  - `GtkInputChanged WidgetId Text`
-  - `GtkActivated WidgetId`
-  - `GtkToggled WidgetId Bool`
-  - `GtkValueChanged WidgetId Float`
-  - `GtkKeyPressed WidgetId Text Text`
-  - `GtkFocusIn WidgetId`
-  - `GtkFocusOut WidgetId`
-  - `GtkUnknownSignal WidgetId Text Text Text`
+- `GtkSignalEvent` — typed ADT with variants (second field is the widget's `id="..."` name, `""` if unset):
+  - `GtkClicked WidgetId Text`
+  - `GtkInputChanged WidgetId Text Text`
+  - `GtkActivated WidgetId Text`
+  - `GtkToggled WidgetId Text Bool`
+  - `GtkValueChanged WidgetId Text Float`
+  - `GtkKeyPressed WidgetId Text Text Text`
+  - `GtkFocusIn WidgetId Text`
+  - `GtkFocusOut WidgetId Text`
+  - `GtkUnknownSignal WidgetId Text Text Text Text`
 
 The parser lowers `~<gtk>...</gtk>` into those constructors.
-Instantiate the resulting node tree with `buildFromNode`.
-`buildFromNode` accepts `<object>`, `<interface>`, or `<template>` roots.
+Instantiate the resulting node tree with `buildFromNode` or `buildWithIds`.
+`buildFromNode` accepts `<object>`, `<interface>`, or `<template>` roots and returns a single `WidgetId`.
+`buildWithIds` accepts the same roots but returns `{ root: WidgetId, widgets: Map Text WidgetId }` — a record containing the root widget and a map from `id="..."` names to their `WidgetId` values. This eliminates the need for separate `widgetById` calls after building.
 For `<interface>`/`<template>`, the first nested `<object>` becomes the instantiated root.
 Object references via `ref`/`idref` are resolved against `id` attributes.
 `<child type="overlay">` and `<child type="controller">` are supported for overlay/controller wiring.
@@ -323,16 +325,16 @@ nextMsg : Effect GtkError (Option Text)
 nextMsg = do Effect {
   eventOpt <- signalPoll {}
   eventOpt match
-    | None                         => pure None
-    | Some (GtkClicked _)          => pure (Some "clicked")
-    | Some (GtkInputChanged _ txt) => pure (Some txt)
-    | Some (GtkActivated _)        => pure (Some "activated")
-    | Some (GtkToggled _ active)   => pure (Some (active | Bool.toString))
-    | Some (GtkValueChanged _ val) => pure (Some (val | Float.toString))
-    | Some (GtkFocusIn _)          => pure (Some "focus-in")
-    | Some (GtkFocusOut _)         => pure (Some "focus-out")
-    | Some (GtkKeyPressed _ key _) => pure (Some key)
-    | Some (GtkUnknownSignal _ sig _ _) => pure (Some sig)
+    | None                              => pure None
+    | Some (GtkClicked _ _)             => pure (Some "clicked")
+    | Some (GtkInputChanged _ _ txt)    => pure (Some txt)
+    | Some (GtkActivated _ _)           => pure (Some "activated")
+    | Some (GtkToggled _ _ active)      => pure (Some (active | Bool.toString))
+    | Some (GtkValueChanged _ _ val)    => pure (Some (val | Float.toString))
+    | Some (GtkFocusIn _ _)             => pure (Some "focus-in")
+    | Some (GtkFocusOut _ _)            => pure (Some "focus-out")
+    | Some (GtkKeyPressed _ _ key _)    => pure (Some key)
+    | Some (GtkUnknownSignal _ _ sig _ _) => pure (Some sig)
 }
 ```
 
@@ -344,11 +346,11 @@ Msg = Save | NameChanged Text | Toggled Bool | VolumeChanged Float
 toMsg : GtkSignalEvent -> Option Msg
 toMsg = event =>
   event match
-    | GtkClicked _          => Some Save
-    | GtkInputChanged _ txt => Some (NameChanged txt)
-    | GtkToggled _ active   => Some (Toggled active)
-    | GtkValueChanged _ val => Some (VolumeChanged val)
-    | _                     => None
+    | GtkClicked _ _            => Some Save
+    | GtkInputChanged _ _ txt   => Some (NameChanged txt)
+    | GtkToggled _ _ active     => Some (Toggled active)
+    | GtkValueChanged _ _ val   => Some (VolumeChanged val)
+    | _                         => None
 
 runLoop : Effect GtkError Unit
 runLoop = do Effect {
@@ -358,6 +360,64 @@ runLoop = do Effect {
       | None     => pure {}
       | Some msg => handleMsg msg
   )
+}
+```
+
+### `gtkApp` — Elm-architecture combinator
+
+`gtkApp` encapsulates the entire GTK application lifecycle (init, window creation, event loop) into a single call. The user provides a configuration record and `gtkApp` handles the rest:
+
+```aivi
+gtkApp : {
+  id:     Text,
+  title:  Text,
+  size:   (Int, Int),
+  model:  s,
+  view:   GtkNode,
+  toMsg:  GtkSignalEvent -> Option msg,
+  update: msg -> s -> Effect GtkError s
+} -> Effect GtkError Unit
+```
+
+Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `buildFromNode` → `windowSetChild` → `signalStream` → `windowPresent` → `appRun` → event loop using `channel.fold` with `toMsg`/`update`.
+
+#### Full example
+
+```aivi
+Msg = TitleChanged Text | BodyChanged Text | Save
+
+editorNode = ~<gtk>
+  <GtkBox orientation="vertical" spacing="8">
+    <GtkEntry id="titleInput" placeholderText="Title" />
+    <GtkEntry id="bodyInput" placeholderText="Body" />
+    <GtkButton label="Save" onClick={ Msg.Save } />
+  </GtkBox>
+</gtk>
+
+toMsg : GtkSignalEvent -> Option Msg
+toMsg = event =>
+  event match
+    | GtkInputChanged _ "titleInput" txt => Some (TitleChanged txt)
+    | GtkInputChanged _ "bodyInput" txt  => Some (BodyChanged txt)
+    | GtkClicked _ _                     => Some Save
+    | _                                  => None
+
+update : Msg -> { title: Text, body: Text } -> Effect GtkError { title: Text, body: Text }
+update = msg => state =>
+  msg match
+    | TitleChanged txt => pure (state <| { title: txt })
+    | BodyChanged txt  => pure (state <| { body: txt })
+    | Save             => do Effect { _ <- saveNote state; pure state }
+
+main : Effect GtkError Unit
+main = gtkApp {
+  id:     "com.example.notepad",
+  title:  "Notepad",
+  size:   (640, 480),
+  model:  { title: "", body: "" },
+  view:   editorNode,
+  toMsg:  toMsg,
+  update: update
 }
 ```
 
