@@ -504,17 +504,22 @@ fn build_runtime_from_program_scoped(
             for item in &use_decl.items {
                 match item.kind {
                     crate::surface::ScopeItemKind::Value => {
-                        let name = item.name.name.clone();
-                        let qualified = format!("{imported_mod}.{name}");
+                        let original = item.name.name.clone();
+                        let local = item
+                            .alias
+                            .as_ref()
+                            .map(|a| a.name.clone())
+                            .unwrap_or_else(|| original.clone());
+                        let qualified = format!("{imported_mod}.{original}");
                         if let Some(value) = globals.get(&qualified) {
-                            if let Some(existing) = module_env.get(&name) {
-                                if method_names.contains(&name) {
+                            if let Some(existing) = module_env.get(&local) {
+                                if method_names.contains(&local) {
                                     module_env
-                                        .set(name.clone(), merge_method_binding(existing, value));
+                                        .set(local.clone(), merge_method_binding(existing, value));
                                     continue;
                                 }
                             }
-                            module_env.set(name, value);
+                            module_env.set(local, value);
                         }
                     }
                     crate::surface::ScopeItemKind::Domain => {

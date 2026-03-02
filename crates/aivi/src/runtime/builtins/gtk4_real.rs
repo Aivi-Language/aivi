@@ -29,6 +29,7 @@ mod linux {
         fn gtk_window_close(window: *mut c_void);
 
         fn gtk_widget_set_visible(widget: *mut c_void, visible: c_int);
+        fn gtk_widget_set_sensitive(widget: *mut c_void, sensitive: c_int);
         fn gtk_widget_set_size_request(widget: *mut c_void, width: c_int, height: c_int);
         fn gtk_widget_set_hexpand(widget: *mut c_void, expand: c_int);
         fn gtk_widget_set_vexpand(widget: *mut c_void, expand: c_int);
@@ -1156,6 +1157,9 @@ mod linux {
         }
         if let Some(value) = props.get("visible").and_then(|v| parse_bool_text(v)) {
             unsafe { gtk_widget_set_visible(widget, if value { 1 } else { 0 }) };
+        }
+        if let Some(value) = props.get("sensitive").and_then(|v| parse_bool_text(v)) {
+            unsafe { gtk_widget_set_sensitive(widget, if value { 1 } else { 0 }) };
         }
         if let Some(value) = props.get("css-class") {
             for class_name in value.split_whitespace() {

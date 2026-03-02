@@ -23,6 +23,7 @@ pub enum ScopeItemKind {
 pub struct UseItem {
     pub kind: ScopeItemKind,
     pub name: SpannedName,
+    pub alias: Option<SpannedName>,
 }
 
 #[derive(Debug, Clone)]

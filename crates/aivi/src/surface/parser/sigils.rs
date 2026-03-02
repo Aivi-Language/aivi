@@ -484,6 +484,55 @@ impl Parser {
                     attrs,
                     children,
                 } => {
+                    // Component tags: record-based lowering (same as GTK).
+                    if let Some(component_expr) = component_tag_expr(&tag, span) {
+                        let mut fields: Vec<RecordField> = Vec::new();
+                        for attr in attrs {
+                            let value_expr = match attr.value {
+                                HtmlAttrValue::Text(v) => mk_string(&v),
+                                HtmlAttrValue::Splice(expr) => expr,
+                                HtmlAttrValue::Bare => Expr::Literal(Literal::Bool {
+                                    value: true,
+                                    span: span.clone(),
+                                }),
+                            };
+                            fields.push(RecordField {
+                                spread: false,
+                                path: vec![PathSegment::Field(SpannedName {
+                                    name: attr.name,
+                                    span: span.clone(),
+                                })],
+                                value: value_expr,
+                                span: span.clone(),
+                            });
+                        }
+                        if !children.is_empty() {
+                            let lowered: Vec<Expr> = children
+                                .into_iter()
+                                .map(|child| lower_node(this, child, span))
+                                .collect();
+                            fields.push(RecordField {
+                                spread: false,
+                                path: vec![PathSegment::Field(SpannedName {
+                                    name: "children".to_string(),
+                                    span: span.clone(),
+                                })],
+                                value: list(lowered),
+                                span: span.clone(),
+                            });
+                        }
+                        let record = Expr::Record {
+                            fields,
+                            span: span.clone(),
+                        };
+                        return Expr::Call {
+                            func: Box::new(component_expr),
+                            args: vec![record],
+                            span: span.clone(),
+                        };
+                    }
+
+                    // Built-in HTML element lowering.
                     let mut key_expr: Option<Expr> = None;
                     let mut lowered_attrs = Vec::new();
                     for attr in attrs {
@@ -507,19 +556,10 @@ impl Parser {
 
                     let attrs_expr = list(lowered_attrs);
                     let children_expr = list(lowered_children);
-                    let element_expr = if let Some(component_expr) = component_tag_expr(&tag, span)
-                    {
-                        Expr::Call {
-                            func: Box::new(component_expr),
-                            args: vec![attrs_expr, children_expr],
-                            span: span.clone(),
-                        }
-                    } else {
-                        Expr::Call {
-                            func: Box::new(mk_ui("vElement")),
-                            args: vec![mk_string(&tag), attrs_expr, children_expr],
-                            span: span.clone(),
-                        }
+                    let element_expr = Expr::Call {
+                        func: Box::new(mk_ui("vElement")),
+                        args: vec![mk_string(&tag), attrs_expr, children_expr],
+                        span: span.clone(),
                     };
                     if let Some(key_expr) = key_expr {
                         Expr::Call {
@@ -1151,6 +1191,55 @@ impl Parser {
                     attrs,
                     children,
                 } => {
+                    // Component tags (uppercase / dotted) get record-based
+                    // lowering: attrs become record fields, children become
+                    // a `children` field. No signal sugar or props
+                    // normalization — the component function owns its API.
+                    if let Some(component_expr) = component_tag_expr(&tag, span) {
+                        let mut fields: Vec<RecordField> = Vec::new();
+                        for attr in attrs {
+                            let value_expr = match attr.value {
+                                GtkAttrValue::Text(v) => mk_string(&v),
+                                GtkAttrValue::Splice(expr) => expr,
+                                GtkAttrValue::Bare => Expr::Literal(Literal::Bool {
+                                    value: true,
+                                    span: span.clone(),
+                                }),
+                            };
+                            fields.push(RecordField {
+                                spread: false,
+                                path: vec![PathSegment::Field(SpannedName {
+                                    name: attr.name,
+                                    span: span.clone(),
+                                })],
+                                value: value_expr,
+                                span: span.clone(),
+                            });
+                        }
+                        if !children.is_empty() {
+                            let children_expr = lower_children(this, children, span);
+                            fields.push(RecordField {
+                                spread: false,
+                                path: vec![PathSegment::Field(SpannedName {
+                                    name: "children".to_string(),
+                                    span: span.clone(),
+                                })],
+                                value: children_expr,
+                                span: span.clone(),
+                            });
+                        }
+                        let record = Expr::Record {
+                            fields,
+                            span: span.clone(),
+                        };
+                        return Expr::Call {
+                            func: Box::new(component_expr),
+                            args: vec![record],
+                            span: span.clone(),
+                        };
+                    }
+
+                    // Built-in GTK element lowering (lowercase tags).
                     let mut lowered_attrs = Vec::new();
                     let attr_handler_text =
                         |attr_name: &str, value: GtkAttrValue| -> Option<String> {
@@ -1351,18 +1440,10 @@ impl Parser {
                     } else {
                         lower_children(this, kept_children, span)
                     };
-                    if let Some(component_expr) = component_tag_expr(&tag, span) {
-                        Expr::Call {
-                            func: Box::new(component_expr),
-                            args: vec![attrs_expr, children_expr],
-                            span: span.clone(),
-                        }
-                    } else {
-                        Expr::Call {
-                            func: Box::new(mk_ui("gtkElement")),
-                            args: vec![mk_string(&tag), attrs_expr, children_expr],
-                            span: span.clone(),
-                        }
+                    Expr::Call {
+                        func: Box::new(mk_ui("gtkElement")),
+                        args: vec![mk_string(&tag), attrs_expr, children_expr],
+                        span: span.clone(),
                     }
                 }
             }

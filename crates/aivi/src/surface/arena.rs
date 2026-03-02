@@ -491,6 +491,7 @@ pub struct ArenaModule {
 pub struct ArenaScopeItem {
     pub kind: ScopeItemKind,
     pub name: SpannedSymbol,
+    pub alias: Option<SpannedSymbol>,
 }
 
 #[derive(Debug, Clone)]
@@ -791,6 +792,7 @@ impl ArenaBuilder {
         ArenaScopeItem {
             kind: item.kind,
             name: SpannedSymbol::from(&item.name),
+            alias: None,
         }
     }
 
@@ -798,6 +800,7 @@ impl ArenaBuilder {
         ArenaScopeItem {
             kind: item.kind,
             name: SpannedSymbol::from(&item.name),
+            alias: item.alias.as_ref().map(SpannedSymbol::from),
         }
     }
 
