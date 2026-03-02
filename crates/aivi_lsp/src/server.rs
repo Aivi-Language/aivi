@@ -304,16 +304,25 @@ impl LanguageServer for Backend {
             text
         };
 
-        self.update_document(uri.clone(), text.clone()).await;
+        // Capture parse diagnostics for *this* handler's text before the debounce sleep so
+        // a concurrently executed stale handler cannot overwrite the document state with its
+        // own (potentially broken) parse results and corrupt what we pass to the type-checker.
+        let parse_diags = self.update_document(uri.clone(), text.clone()).await;
 
         // Phase 1: debounce — cancel the previous in-flight task and start a fresh timer.
+        // Use the LSP document version (strictly monotonic per document) so that a concurrently
+        // processed older change can never "win" the race against a newer one by happening to
+        // increment the internal counter last.
         let current_version = {
             let mut state = self.state.lock().await;
-            if let Some(handle) = state.pending_diagnostics.take() {
-                handle.abort();
+            let v = version as u64;
+            if v > state.diagnostics_version {
+                if let Some(handle) = state.pending_diagnostics.take() {
+                    handle.abort();
+                }
+                state.diagnostics_version = v;
             }
-            state.diagnostics_version += 1;
-            state.diagnostics_version
+            v
         };
 
         tokio::time::sleep(Duration::from_millis(150)).await;
@@ -327,17 +336,11 @@ impl LanguageServer for Backend {
         }
 
         let workspace = self.workspace_modules_for_diagnostics(&uri).await;
-        let (include_specs_snippets, strict, parse_diags, checkpoint) = {
+        let (include_specs_snippets, strict, checkpoint) = {
             let state = self.state.lock().await;
-            let parse_diags = state
-                .documents
-                .get(&uri)
-                .map(|doc| doc.parse_diags.clone())
-                .unwrap_or_default();
             (
                 state.diagnostics_in_specs_snippets,
                 state.strict.clone(),
-                parse_diags,
                 state.typecheck_checkpoint.clone(),
             )
         };
