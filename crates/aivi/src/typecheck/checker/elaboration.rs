@@ -794,6 +794,9 @@ impl TypeChecker {
         let allow_predicate_try = matches!(expected_applied, Type::Func(_, _) | Type::Var(_))
             || matches!(&expected_applied, Type::Con(name, _) if name == "Pred");
 
+        let prev_in_call_arg = self.in_call_arg;
+        self.in_call_arg = true;
+
         if allow_predicate_try {
             if let Some(rewritten) = lift_predicate_expr(&arg, env, "__pred") {
                 let checkpoint = self.subst.clone();
@@ -813,6 +816,7 @@ impl TypeChecker {
                         false
                     };
                     if is_predicate_fn {
+                        self.in_call_arg = prev_in_call_arg;
                         return Ok((elab_arg, elab_ty));
                     }
                 }
@@ -820,7 +824,9 @@ impl TypeChecker {
             }
         }
 
-        self.elab_expr(arg, Some(expected_arg_ty), env)
+        let result = self.elab_expr(arg, Some(expected_arg_ty), env);
+        self.in_call_arg = prev_in_call_arg;
+        result
     }
 
     fn elab_record(
@@ -839,11 +845,13 @@ impl TypeChecker {
 
         let fields = self.prepend_missing_record_defaults(fields, expected_ty.as_ref(), &span);
 
-        // When record defaults are enabled (`use aivi.defaults`), any expected fields
-        // that are STILL missing after default synthesis have no valid default and will
-        // crash at runtime (e.g. function-typed props like `onChange`).
+        // When elaborating a function call argument (in_call_arg) OR when record
+        // defaults are enabled (`use aivi.defaults`), check for fields that are STILL
+        // missing after default synthesis.  These have no valid default and will crash
+        // at runtime (e.g. function-typed props like `onChange`, or any field when
+        // defaults are not imported).
         // Skip the check when a spread is present — it may supply the missing fields.
-        if !self.enabled_record_default_types.is_empty() {
+        if self.in_call_arg || !self.enabled_record_default_types.is_empty() {
             if let Some(Type::Record {
                 fields: ref expected_fields,
             }) = expected_ty

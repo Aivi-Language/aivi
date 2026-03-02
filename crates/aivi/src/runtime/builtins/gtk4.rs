@@ -36,6 +36,7 @@ fn build_gtk4_stubs() -> Value {
         ("windowSetTitlebar", 2),
         ("windowSetChild", 2),
         ("windowPresent", 1),
+        ("windowSetHideOnClose", 2),
         ("widgetShow", 1),
         ("widgetHide", 1),
         ("widgetSetSizeRequest", 3),

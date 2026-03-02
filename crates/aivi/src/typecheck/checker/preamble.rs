@@ -34,6 +34,9 @@ pub(super) struct TypeChecker {
     extra_diagnostics: Vec<FileDiagnostic>,
     adt_constructors: HashMap<String, Vec<String>>,
     enabled_record_default_types: HashSet<String>,
+    /// Set to `true` while elaborating a function call argument, so that
+    /// `elab_record` can enforce field completeness for call-site records.
+    in_call_arg: bool,
     pub(super) constraints: ConstraintState,
     pub(super) query_cache: TypeQueryCache,
     /// Records `(qualified_callee_name, resolved_type)` for polymorphic call sites.
@@ -70,6 +73,7 @@ impl TypeChecker {
             extra_diagnostics: Vec::new(),
             adt_constructors: HashMap::new(),
             enabled_record_default_types: HashSet::new(),
+            in_call_arg: false,
             constraints: ConstraintState::default(),
             query_cache: TypeQueryCache::default(),
             poly_instantiations: Vec::new(),
