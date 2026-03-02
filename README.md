@@ -132,7 +132,7 @@ main = do Effect {
 
 ### Dynamic lists with `<each>`
 
-```ocaml
+```fsharp
 renderTodos : List Text -> GtkNode
 renderTodos = items =>
   ~<gtk>
@@ -152,7 +152,7 @@ One list value, one `<each>` — no manual widget creation loops, no index track
 
 State updates read like plain data declarations, not mutating assignments. The `<|` operator applies a type-checked patch:
 
-```ocaml
+```fsharp
 // Update a single field
 newState = state <| { title: "New Title" }
 
