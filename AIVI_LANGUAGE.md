@@ -1199,7 +1199,14 @@ topoSmoke = do Effect {
 | Find first match             | `xs \|> find (name == "Alice")`                                         |
 | Handle Option                | `opt match \| Some x => x \| None => default`                           |
 | Handle Result                | `res match \| Ok x => x \| Err e => handle e`                           |
-| Provide default for Option   | `opt ?? default`                                                        |
+| Provide default for Option   | `opt ?? default` or `opt \|> getOrElse default`                         |
+| Provide default for Result   | `res \|> getOrElse default`                                             |
+| Check Option state           | `isSome opt`, `isNone opt`                                              |
+| Check Result state           | `isOk res`, `isErr res`                                                 |
+| Transform Option             | `opt \|> map f \|> filter pred \|> flatMap g`                           |
+| Transform Result             | `res \|> map f \|> mapErr g \|> flatMap h`                              |
+| Option to Result             | `opt \|> toResult "error msg"`                                          |
+| Result to Option             | `res \|> toOption`                                                      |
 | Run fallback on effect error | `val <- riskyOp or default` (inside `do Effect`)                        |
 | Catch error as Result        | `res <- attempt riskyOp` (inside `do Effect`)                           |
 | Conditional effect           | `when cond <- eff` (inside `do Effect`)                                 |
