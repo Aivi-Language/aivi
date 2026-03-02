@@ -5,7 +5,7 @@ mod linux {
     use std::cell::RefCell;
     use std::collections::{HashMap, VecDeque};
     use std::ffi::{CStr, CString};
-    use std::os::raw::{c_char, c_int, c_ulong, c_void};
+    use std::os::raw::{c_char, c_int, c_uint, c_ulong, c_void};
     use std::ptr::null_mut;
     use std::sync::atomic::AtomicBool;
     use std::sync::{mpsc, Arc, Mutex};
@@ -149,6 +149,12 @@ mod linux {
         fn gtk_stack_set_visible_child_name(stack: *mut c_void, name: *const c_char);
 
         fn gtk_menu_button_new() -> *mut c_void;
+
+        fn gtk_revealer_new() -> *mut c_void;
+        fn gtk_revealer_set_child(revealer: *mut c_void, child: *mut c_void);
+        fn gtk_revealer_set_reveal_child(revealer: *mut c_void, reveal_child: c_int);
+        fn gtk_revealer_set_transition_type(revealer: *mut c_void, transition: c_int);
+        fn gtk_revealer_set_transition_duration(revealer: *mut c_void, duration: c_uint);
 
         fn gdk_display_get_default() -> *mut c_void;
     }
@@ -688,6 +694,7 @@ mod linux {
         ListBox,
         SplitView,
         Stack,
+        Revealer,
         PreferencesDialog,
         PreferencesPage,
         PreferencesGroup,
@@ -1384,8 +1391,31 @@ mod linux {
                     unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
                 }
             }
-            "GtkMenuButton" => {
-                if let Some(value) = props.get("label") {
+            "GtkRevealer" => {
+                if let Some(value) = props.get("reveal-child").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_revealer_set_reveal_child(widget, if value { 1 } else { 0 }) };
+                }
+                if let Some(value) = props.get("transition-type") {
+                    let t: c_int = match value.as_str() {
+                        "none" => 0,
+                        "crossfade" => 1,
+                        "slide-right" => 2,
+                        "slide-left" => 3,
+                        "slide-up" => 4,
+                        "slide-down" => 5,
+                        "swing-right" => 6,
+                        "swing-left" => 7,
+                        "swing-up" => 8,
+                        "swing-down" => 9,
+                        _ => 0,
+                    };
+                    unsafe { gtk_revealer_set_transition_type(widget, t) };
+                }
+                if let Some(value) = props.get("transition-duration").and_then(|v| v.parse::<u32>().ok()) {
+                    unsafe { gtk_revealer_set_transition_duration(widget, value) };
+                }
+            }
+            "GtkMenuButton" => {                if let Some(value) = props.get("label") {
                     let text_c = c_text(value, "gtk4.buildFromNode invalid GtkMenuButton label")?;
                     let prop_c = CString::new("label").unwrap();
                     unsafe { g_object_set(widget, prop_c.as_ptr(), text_c.as_ptr(), std::ptr::null::<c_char>()) };
@@ -1604,6 +1634,7 @@ mod linux {
             "GtkListBox" => (unsafe { gtk_list_box_new() }, CreatedWidgetKind::ListBox),
             "GtkMenuButton" => (unsafe { gtk_menu_button_new() }, CreatedWidgetKind::Other),
             "GtkStack" => (unsafe { gtk_stack_new() }, CreatedWidgetKind::Stack),
+            "GtkRevealer" => (unsafe { gtk_revealer_new() }, CreatedWidgetKind::Revealer),
             "AdwOverlaySplitView" => (create_adw_widget(class_name)?, CreatedWidgetKind::SplitView),
             "AdwPreferencesDialog" => (create_adw_widget(class_name)?, CreatedWidgetKind::PreferencesDialog),
             "AdwPreferencesPage" => (create_adw_widget(class_name)?, CreatedWidgetKind::PreferencesPage),
@@ -1828,6 +1859,7 @@ mod linux {
                     }
                 }
                 CreatedWidgetKind::ListBox => unsafe { gtk_list_box_append(raw, child_raw) },
+                CreatedWidgetKind::Revealer => unsafe { gtk_revealer_set_child(raw, child_raw) },
                 CreatedWidgetKind::Stack => {
                     let page_name = child.child_type.as_deref().unwrap_or("page");
                     if let Ok(name_c) = CString::new(page_name) {
