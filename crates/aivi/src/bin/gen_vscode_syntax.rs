@@ -226,7 +226,11 @@ fn aivi_tmlanguage() -> serde_json::Value {
               "end": "(</html>)",
               "endCaptures": {
                 "1": { "name": "storage.type.sigil.aivi" }
-              }
+              },
+              "patterns": [
+                { "include": "#sigil_splice" },
+                { "include": "#xml_tags" }
+              ]
             },
             {
               "name": "string.quoted.other.sigil.gtk.aivi",
@@ -237,11 +241,55 @@ fn aivi_tmlanguage() -> serde_json::Value {
               "end": "(</gtk>)",
               "endCaptures": {
                 "1": { "name": "storage.type.sigil.aivi" }
-              }
+              },
+              "patterns": [
+                { "include": "#sigil_splice" },
+                { "include": "#xml_tags" }
+              ]
+            },
+            // Structured sigils: content is parsed as AIVI expressions
+            {
+              "name": "meta.sigil.structured.aivi",
+              "begin": "(~map)(\\{)",
+              "beginCaptures": {
+                "1": { "name": "entity.name.function.sigil.aivi" },
+                "2": { "name": "punctuation.section.bracket.aivi" }
+              },
+              "end": "(\\})",
+              "endCaptures": {
+                "1": { "name": "punctuation.section.bracket.aivi" }
+              },
+              "patterns": [{ "include": "#sigil_inner" }]
+            },
+            {
+              "name": "meta.sigil.structured.aivi",
+              "begin": "(~set)(\\[)",
+              "beginCaptures": {
+                "1": { "name": "entity.name.function.sigil.aivi" },
+                "2": { "name": "punctuation.section.bracket.aivi" }
+              },
+              "end": "(\\])",
+              "endCaptures": {
+                "1": { "name": "punctuation.section.bracket.aivi" }
+              },
+              "patterns": [{ "include": "#sigil_inner" }]
+            },
+            {
+              "name": "meta.sigil.structured.aivi",
+              "begin": "(~mat)(\\[)",
+              "beginCaptures": {
+                "1": { "name": "entity.name.function.sigil.aivi" },
+                "2": { "name": "punctuation.section.bracket.aivi" }
+              },
+              "end": "(\\])",
+              "endCaptures": {
+                "1": { "name": "punctuation.section.bracket.aivi" }
+              },
+              "patterns": [{ "include": "#sigil_inner" }]
             },
             {
               "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(/)",
+              "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(/)",
               "beginCaptures": {
                 "1": { "name": "entity.name.function.sigil.aivi" },
                 "2": { "name": "punctuation.definition.string.begin.aivi" }
@@ -256,7 +304,7 @@ fn aivi_tmlanguage() -> serde_json::Value {
             },
             {
               "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\\")",
+              "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\\")",
               "beginCaptures": {
                 "1": { "name": "entity.name.function.sigil.aivi" },
                 "2": { "name": "punctuation.definition.string.begin.aivi" }
@@ -271,7 +319,7 @@ fn aivi_tmlanguage() -> serde_json::Value {
             },
             {
               "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\()",
+              "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\()",
               "beginCaptures": {
                 "1": { "name": "entity.name.function.sigil.aivi" },
                 "2": { "name": "punctuation.definition.string.begin.aivi" }
@@ -286,7 +334,7 @@ fn aivi_tmlanguage() -> serde_json::Value {
             },
             {
               "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\[)",
+              "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\[)",
               "beginCaptures": {
                 "1": { "name": "entity.name.function.sigil.aivi" },
                 "2": { "name": "punctuation.definition.string.begin.aivi" }
@@ -301,7 +349,7 @@ fn aivi_tmlanguage() -> serde_json::Value {
             },
             {
               "name": "string.quoted.other.sigil.aivi",
-              "begin": "(~(?!map\\b|set\\b)[a-z][A-Za-z0-9_]*)(\\{)",
+              "begin": "(~(?!map\\b|set\\b|mat\\b)[a-z][A-Za-z0-9_]*)(\\{)",
               "beginCaptures": {
                 "1": { "name": "entity.name.function.sigil.aivi" },
                 "2": { "name": "punctuation.definition.string.begin.aivi" }
@@ -450,6 +498,94 @@ fn aivi_tmlanguage() -> serde_json::Value {
             {
               "name": "keyword.operator.aivi",
               "match": operators
+            }
+          ]
+        },
+        "balanced_braces": {
+          "begin": r"\{",
+          "end": r"\}",
+          "beginCaptures": { "0": { "name": "punctuation.section.bracket.aivi" } },
+          "endCaptures": { "0": { "name": "punctuation.section.bracket.aivi" } },
+          "patterns": [{ "include": "#sigil_inner" }]
+        },
+        "balanced_brackets": {
+          "begin": r"\[",
+          "end": r"\]",
+          "beginCaptures": { "0": { "name": "punctuation.section.bracket.aivi" } },
+          "endCaptures": { "0": { "name": "punctuation.section.bracket.aivi" } },
+          "patterns": [{ "include": "#sigil_inner" }]
+        },
+        "balanced_parens": {
+          "begin": r"\(",
+          "end": r"\)",
+          "beginCaptures": { "0": { "name": "punctuation.section.bracket.aivi" } },
+          "endCaptures": { "0": { "name": "punctuation.section.bracket.aivi" } },
+          "patterns": [{ "include": "#sigil_inner" }]
+        },
+        "sigil_inner": {
+          "patterns": [
+            { "include": "#comment" },
+            { "include": "#type_signature" },
+            { "include": "#sigil" },
+            { "include": "#string" },
+            { "include": "#color" },
+            { "include": "#unit" },
+            { "include": "#number" },
+            { "include": "#decorator" },
+            { "include": "#placeholder" },
+            { "include": "#field" },
+            { "include": "#keyword" },
+            { "include": "#boolean" },
+            { "include": "#constructor" },
+            { "include": "#type" },
+            { "include": "#pipe" },
+            { "include": "#arrow" },
+            { "include": "#cmp" },
+            { "include": "#question" },
+            { "include": "#balanced_braces" },
+            { "include": "#balanced_brackets" },
+            { "include": "#balanced_parens" },
+            { "include": "#punctuation" },
+            { "include": "#operator" }
+          ]
+        },
+        "sigil_splice": {
+          "name": "meta.interpolation.aivi",
+          "begin": r"\{",
+          "beginCaptures": {
+            "0": { "name": "punctuation.section.interpolation.begin.aivi" }
+          },
+          "end": r"\}",
+          "endCaptures": {
+            "0": { "name": "punctuation.section.interpolation.end.aivi" }
+          },
+          "patterns": [{ "include": "#sigil_inner" }]
+        },
+        "xml_tags": {
+          "patterns": [
+            {
+              "match": r"</([a-zA-Z][a-zA-Z0-9._]*)>",
+              "name": "entity.name.tag.aivi"
+            },
+            {
+              "match": r"<([a-zA-Z][a-zA-Z0-9._]*)(?=[\s/>])",
+              "name": "entity.name.tag.aivi"
+            },
+            {
+              "match": r"/>|>",
+              "name": "punctuation.definition.tag.aivi"
+            },
+            {
+              "match": r"\b([a-zA-Z][a-zA-Z0-9_]*)(?==)",
+              "name": "entity.other.attribute-name.aivi"
+            },
+            {
+              "name": "string.quoted.double.xml.aivi",
+              "begin": r#"""#,
+              "end": r#"""#,
+              "patterns": [
+                { "include": "#sigil_splice" }
+              ]
             }
           ]
         }

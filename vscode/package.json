@@ -2,11 +2,7 @@
   "name": "aivi-vscode",
   "displayName": "AIVI Language Support",
   "description": "Syntax highlighting and formatting for the AIVI language (from the AIVI specs).",
-<<<<<<< HEAD
-  "version": "0.2.74",
-=======
-  "version": "0.2.66",
->>>>>>> d7bb288803d9f466e34f5f3f2a5e31bc60c54884
+  "version": "0.2.76",
   "publisher": "aivi",
   "packageManager": "pnpm@9.15.4",
   "repository": {
