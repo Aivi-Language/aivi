@@ -2,7 +2,7 @@
   "name": "aivi-vscode",
   "displayName": "AIVI Language Support",
   "description": "Syntax highlighting and formatting for the AIVI language (from the AIVI specs).",
-  "version": "0.2.65",
+  "version": "0.2.74",
   "publisher": "aivi",
   "packageManager": "pnpm@9.15.4",
   "repository": {
@@ -244,7 +244,8 @@
     },
     "configurationDefaults": {
       "[aivi]": {
-        "editor.defaultFormatter": "aivi.aivi-vscode"
+        "editor.defaultFormatter": "aivi.aivi-vscode",
+        "editor.bracketPairColorization.enabled": false
       }
     }
   },

@@ -2738,8 +2738,35 @@
                 let rest_tokens = &state.tokens[colon_idx + 1..];
                 let name_len = name_tokens.len();
 
+                // If the current line ends with an open bracket (multi-line type body),
+                // skip past the matching closing bracket before looking for the definition.
+                let search_from = if last_code_token(&state.tokens)
+                    .as_deref()
+                    .and_then(is_open_sym)
+                    .is_some()
+                {
+                    let mut depth = 1isize;
+                    let mut close_line = line_index;
+                    'outer: for (j, line) in lines.iter().enumerate().skip(line_index + 1) {
+                        for tok in &line.tokens {
+                            if is_open_sym(tok.text.as_str()).is_some() {
+                                depth += 1;
+                            } else if is_close_sym(tok.text.as_str()).is_some() {
+                                depth -= 1;
+                                if depth == 0 {
+                                    close_line = j;
+                                    break 'outer;
+                                }
+                            }
+                        }
+                    }
+                    close_line + 1
+                } else {
+                    line_index + 1
+                };
+
                 let mut next_line = None;
-                for (j, line) in lines.iter().enumerate().skip(line_index + 1) {
+                for (j, line) in lines.iter().enumerate().skip(search_from) {
                     if line.degraded || line.tokens.is_empty() {
                         continue;
                     }
@@ -2749,10 +2776,29 @@
 
                 if let Some(j) = next_line {
                     if let Some(next_first) = first_code_index(&lines[j].tokens) {
+                        // Skip 'export' on the definition line only when the signature
+                        // itself does NOT start with 'export' (e.g. `user : T` matched
+                        // against `export user = ...`).
+                        let sig_starts_with_export = name_tokens
+                            .first()
+                            .map(|t| t.text.as_str())
+                            == Some("export");
+                        let def_first = if !sig_starts_with_export
+                            && lines[j]
+                                .tokens
+                                .get(next_first)
+                                .map(|t| t.text.as_str())
+                                == Some("export")
+                        {
+                            next_first + 1
+                        } else {
+                            next_first
+                        };
+
                         let mut name_matches = true;
                         for k in 0..name_len {
                             let a = name_tokens.get(k).map(|t| t.text.as_str());
-                            let b = lines[j].tokens.get(next_first + k).map(|t| t.text.as_str());
+                            let b = lines[j].tokens.get(def_first + k).map(|t| t.text.as_str());
                             if a != b {
                                 name_matches = false;
                                 break;
@@ -2760,7 +2806,7 @@
                         }
 
                         if name_matches
-                            && find_top_level_token(&lines[j].tokens, "=", next_first + name_len)
+                            && find_top_level_token(&lines[j].tokens, "=", def_first + name_len)
                                 .is_some()
                         {
                             out.push_str(&effective_indent);

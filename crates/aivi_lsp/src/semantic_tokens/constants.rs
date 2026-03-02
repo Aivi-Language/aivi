@@ -443,40 +443,29 @@ impl Backend {
             let token = &tokens[idx];
             let col = token.span.start.column; // 1-based
 
-            // Only look for declaration starts at column 1 (top-level).
-            if col == 1 {
-                // Type signature: lowercase_ident [space] : ...
-                if Self::is_lower_ident(token)
-                    && !Self::KEYWORDS.contains(&token.text.as_str())
-                {
-                    if let Some(&next_idx) = significant.get(i + 1) {
-                        let next = &tokens[next_idx];
-                        if next.kind == "symbol"
-                            && next.text == ":"
-                            && !Self::is_adjacent_span(&token.span, &next.span)
-                        {
-                            let start_line = token.span.start.line.saturating_sub(1) as u32;
-                            let end_line =
-                                Self::find_decl_end_line(&significant, tokens, i, start_line);
-                            for line in start_line..=end_line {
-                                lines.insert(line);
-                            }
-                            i += 1;
-                            continue;
+            // Only detect type signatures at column 1 (top-level).
+            // Type signature: lowercase_ident [space] : ...
+            if col == 1
+                && Self::is_lower_ident(token)
+                && !Self::KEYWORDS.contains(&token.text.as_str())
+            {
+                if let Some(&next_idx) = significant.get(i + 1) {
+                    let next = &tokens[next_idx];
+                    // At column 1 (top level), any lowercase ident followed by `:` is
+                    // a type signature, even without a space (the formatter will add one).
+                    if next.kind == "symbol"
+                        && next.text == ":"
+                        && (col == 1 || !Self::is_adjacent_span(&token.span, &next.span))
+                    {
+                        let start_line = token.span.start.line.saturating_sub(1) as u32;
+                        let end_line =
+                            Self::find_decl_end_line(&significant, tokens, i, start_line);
+                        for line in start_line..=end_line {
+                            lines.insert(line);
                         }
+                        i += 1;
+                        continue;
                     }
-                }
-
-                // Type declaration: [export] UpperIdent [TypeParams] =
-                if Self::is_typedef_head(&significant, tokens, i) {
-                    let start_line = token.span.start.line.saturating_sub(1) as u32;
-                    let end_line =
-                        Self::find_decl_end_line(&significant, tokens, i, start_line);
-                    for line in start_line..=end_line {
-                        lines.insert(line);
-                    }
-                    i += 1;
-                    continue;
                 }
             }
 
@@ -484,42 +473,6 @@ impl Backend {
         }
 
         lines
-    }
-
-    /// Returns `true` when `significant[pos]` starts a type declaration:
-    /// an optional `export` keyword, then an uppercase identifier, then
-    /// zero or more type-parameter identifiers, then `=`.
-    fn is_typedef_head(significant: &[usize], tokens: &[CstToken], pos: usize) -> bool {
-        let mut j = pos;
-        // Skip optional `export` keyword.
-        if j < significant.len() && tokens[significant[j]].text == "export" {
-            j += 1;
-        }
-        // First non-export token must be an uppercase identifier.
-        if j >= significant.len() {
-            return false;
-        }
-        let first = &tokens[significant[j]];
-        if first.kind != "ident"
-            || !first
-                .text
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_uppercase())
-        {
-            return false;
-        }
-        j += 1;
-        // Skip optional type parameters (any identifier tokens).
-        while j < significant.len() && tokens[significant[j]].kind == "ident" {
-            j += 1;
-        }
-        // Must be followed by bare `=` (not `==`, `=>`, etc.).
-        if j >= significant.len() {
-            return false;
-        }
-        let eq = &tokens[significant[j]];
-        eq.kind == "symbol" && eq.text == "="
     }
 
     /// Returns the last 0-based line number that belongs to a type declaration or
