@@ -231,6 +231,10 @@ petStore.withAuth : { bearerToken: Text } -> petStore
 
 When using `openapi.fromUrl`, the fetched spec is cached in `.aivi-cache/openapi/` keyed by URL hash. Reuse the cache on subsequent compilations; pass `--refresh-static` to force a re-fetch.
 
+### File Formats
+
+`openapi.fromFile` accepts both **JSON** (`.json`) and **YAML** (`.yaml` / `.yml`) spec files. The format is detected automatically by content, not by file extension.
+
 ### Supported OpenAPI Versions
 
 - OpenAPI 3.0.x — fully supported
