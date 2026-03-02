@@ -1,0 +1,183 @@
+@no_prelude
+module integrationTests.stdlib.aivi.option.tests
+
+use aivi
+use aivi.prelude
+use aivi.testing
+use aivi.option
+
+// -- Predicates --
+
+@test "isSome returns True for Some"
+test_isSome_some = do Effect {
+  assert (isSome (Some 42))
+}
+
+@test "isSome returns False for None"
+test_isSome_none = do Effect {
+  assert (isSome None == False)
+}
+
+@test "isNone returns True for None"
+test_isNone_none = do Effect {
+  assert (isNone None)
+}
+
+@test "isNone returns False for Some"
+test_isNone_some = do Effect {
+  assert (isNone (Some 42) == False)
+}
+
+// -- Extracting Values --
+
+@test "getOrElse returns value for Some"
+test_getOrElse_some = do Effect {
+  result = getOrElse 0 (Some 42)
+  assertEq result 42
+}
+
+@test "getOrElse returns default for None"
+test_getOrElse_none = do Effect {
+  result = getOrElse 0 None
+  assertEq result 0
+}
+
+@test "getOrElse is pipe-friendly"
+test_getOrElse_pipe = do Effect {
+  result = Some 42 |> getOrElse 0
+  assertEq result 42
+}
+
+@test "getOrElseLazy returns value for Some"
+test_getOrElseLazy_some = do Effect {
+  result = getOrElseLazy (_ => 999) (Some 42)
+  assertEq result 42
+}
+
+@test "getOrElseLazy calls thunk for None"
+test_getOrElseLazy_none = do Effect {
+  result = getOrElseLazy (_ => 999) None
+  assertEq result 999
+}
+
+// -- Transformations --
+
+@test "map transforms Some value"
+test_map_some = do Effect {
+  result = map (_ * 2) (Some 5)
+  assertEq result (Some 10)
+}
+
+@test "map preserves None"
+test_map_none = do Effect {
+  result = map (_ * 2) None
+  assertEq result None
+}
+
+@test "flatMap chains Some values"
+test_flatMap_some = do Effect {
+  result = flatMap (x => Some (x + 1)) (Some 5)
+  assertEq result (Some 6)
+}
+
+@test "flatMap short-circuits on None"
+test_flatMap_none = do Effect {
+  result = flatMap (x => Some (x + 1)) None
+  assertEq result None
+}
+
+@test "flatMap propagates None from function"
+test_flatMap_returns_none = do Effect {
+  result = flatMap (_ => None) (Some 5)
+  assertEq result None
+}
+
+@test "filter keeps value when predicate is true"
+test_filter_true = do Effect {
+  result = filter (_ > 10) (Some 42)
+  assertEq result (Some 42)
+}
+
+@test "filter removes value when predicate is false"
+test_filter_false = do Effect {
+  result = filter (_ > 100) (Some 42)
+  assertEq result None
+}
+
+@test "filter preserves None"
+test_filter_none = do Effect {
+  result = filter (_ > 10) None
+  assertEq result None
+}
+
+// -- Conversions --
+
+@test "toList returns singleton for Some"
+test_toList_some = do Effect {
+  result = toList (Some 42)
+  assertEq result [42]
+}
+
+@test "toList returns empty for None"
+test_toList_none = do Effect {
+  result = toList None
+  assertEq result []
+}
+
+@test "toResult returns Ok for Some"
+test_toResult_some = do Effect {
+  result = toResult "error" (Some 42)
+  assertEq result (Ok 42)
+}
+
+@test "toResult returns Err for None"
+test_toResult_none = do Effect {
+  result = toResult "not found" None
+  assertEq result (Err "not found")
+}
+
+// -- Combining --
+
+@test "flatten removes nesting from Some Some"
+test_flatten_some_some = do Effect {
+  result = flatten (Some (Some 42))
+  assertEq result (Some 42)
+}
+
+@test "flatten returns None for Some None"
+test_flatten_some_none = do Effect {
+  result = flatten (Some None)
+  assertEq result None
+}
+
+@test "flatten returns None for None"
+test_flatten_none = do Effect {
+  result = flatten None
+  assertEq result None
+}
+
+@test "orElse returns first Some"
+test_orElse_first_some = do Effect {
+  result = Some 1 |> orElse (Some 2)
+  assertEq result (Some 1)
+}
+
+@test "orElse returns fallback for None"
+test_orElse_fallback = do Effect {
+  result = None |> orElse (Some 2)
+  assertEq result (Some 2)
+}
+
+@test "orElse returns None when both None"
+test_orElse_both_none = do Effect {
+  result = None |> orElse None
+  assertEq result None
+}
+
+// -- Pipeline --
+
+@test "option pipeline"
+test_pipeline = do Effect {
+  result = Some 5 |> map (_ * 2) |> filter (_ > 5) |> getOrElse 0
+  assertEq result 10
+}

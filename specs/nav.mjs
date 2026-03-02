@@ -100,6 +100,8 @@ export const sidebar = [
         collapsed: true,
         items: [
           { text: 'Prelude', link: '/stdlib/core/prelude' },
+          { text: 'Option', link: '/stdlib/core/option' },
+          { text: 'Result', link: '/stdlib/core/result' },
           { text: 'Text', link: '/stdlib/core/text' },
           { text: 'Logic', link: '/stdlib/core/logic' },
           { text: 'Units', link: '/stdlib/core/units' },

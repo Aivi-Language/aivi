@@ -1,0 +1,180 @@
+@no_prelude
+module integrationTests.stdlib.aivi.result.tests
+
+use aivi
+use aivi.prelude
+use aivi.testing
+use aivi.result
+
+// -- Predicates --
+
+@test "isOk returns True for Ok"
+test_isOk_ok = do Effect {
+  assert (isOk (Ok 42))
+}
+
+@test "isOk returns False for Err"
+test_isOk_err = do Effect {
+  assert (isOk (Err "error") == False)
+}
+
+@test "isErr returns True for Err"
+test_isErr_err = do Effect {
+  assert (isErr (Err "error"))
+}
+
+@test "isErr returns False for Ok"
+test_isErr_ok = do Effect {
+  assert (isErr (Ok 42) == False)
+}
+
+// -- Extracting Values --
+
+@test "getOrElse returns value for Ok"
+test_getOrElse_ok = do Effect {
+  result = getOrElse 0 (Ok 42)
+  assertEq result 42
+}
+
+@test "getOrElse returns default for Err"
+test_getOrElse_err = do Effect {
+  result = getOrElse 0 (Err "error")
+  assertEq result 0
+}
+
+@test "getOrElse is pipe-friendly"
+test_getOrElse_pipe = do Effect {
+  result = Ok 42 |> getOrElse 0
+  assertEq result 42
+}
+
+@test "getOrElseLazy returns value for Ok"
+test_getOrElseLazy_ok = do Effect {
+  result = getOrElseLazy (_ => 999) (Ok 42)
+  assertEq result 42
+}
+
+@test "getOrElseLazy maps error for Err"
+test_getOrElseLazy_err = do Effect {
+  result = getOrElseLazy (e => 100) (Err "error")
+  assertEq result 100
+}
+
+// -- Transformations --
+
+@test "map transforms Ok value"
+test_map_ok = do Effect {
+  result = map (_ * 2) (Ok 5)
+  assertEq result (Ok 10)
+}
+
+@test "map preserves Err"
+test_map_err = do Effect {
+  result = map (_ * 2) (Err "error")
+  assertEq result (Err "error")
+}
+
+@test "mapErr transforms Err value"
+test_mapErr_err = do Effect {
+  result = mapErr (e => "wrapped: { e }") (Err "original")
+  assertEq result (Err "wrapped: original")
+}
+
+@test "mapErr preserves Ok"
+test_mapErr_ok = do Effect {
+  result = mapErr (e => "wrapped") (Ok 42)
+  assertEq result (Ok 42)
+}
+
+@test "flatMap chains Ok values"
+test_flatMap_ok = do Effect {
+  result = flatMap (x => Ok (x + 1)) (Ok 5)
+  assertEq result (Ok 6)
+}
+
+@test "flatMap short-circuits on Err"
+test_flatMap_err = do Effect {
+  result = flatMap (x => Ok (x + 1)) (Err "error")
+  assertEq result (Err "error")
+}
+
+@test "flatMap propagates Err from function"
+test_flatMap_returns_err = do Effect {
+  result = flatMap (_ => Err "inner error") (Ok 5)
+  assertEq result (Err "inner error")
+}
+
+// -- Conversions --
+
+@test "toOption returns Some for Ok"
+test_toOption_ok = do Effect {
+  result = toOption (Ok 42)
+  assertEq result (Some 42)
+}
+
+@test "toOption returns None for Err"
+test_toOption_err = do Effect {
+  result = toOption (Err "error")
+  assertEq result None
+}
+
+@test "fromOption returns Ok for Some"
+test_fromOption_some = do Effect {
+  result = fromOption "error" (Some 42)
+  assertEq result (Ok 42)
+}
+
+@test "fromOption returns Err for None"
+test_fromOption_none = do Effect {
+  result = fromOption "not found" None
+  assertEq result (Err "not found")
+}
+
+// -- Combining --
+
+@test "flatten removes nesting from Ok Ok"
+test_flatten_ok_ok = do Effect {
+  result = flatten (Ok (Ok 42))
+  assertEq result (Ok 42)
+}
+
+@test "flatten returns Err for Ok Err"
+test_flatten_ok_err = do Effect {
+  result = flatten (Ok (Err "inner"))
+  assertEq result (Err "inner")
+}
+
+@test "flatten returns Err for Err"
+test_flatten_err = do Effect {
+  result = flatten (Err "outer")
+  assertEq result (Err "outer")
+}
+
+@test "orElse returns first Ok"
+test_orElse_first_ok = do Effect {
+  result = Ok 1 |> orElse (Ok 2)
+  assertEq result (Ok 1)
+}
+
+@test "orElse returns fallback for Err"
+test_orElse_fallback = do Effect {
+  result = Err "error" |> orElse (Ok 2)
+  assertEq result (Ok 2)
+}
+
+@test "orElse returns Err when both Err"
+test_orElse_both_err = do Effect {
+  result = Err "first" |> orElse (Err "second")
+  assertEq result (Err "second")
+}
+
+// -- Pipeline --
+
+checkValue : Int -> Result Text Int
+checkValue = x => if x > 5 then Ok x else Err "too small"
+
+@test "result pipeline"
+test_pipeline = do Effect {
+  result = Ok 5 |> map (_ * 2) |> flatMap checkValue |> getOrElse 0
+  assertEq result 10
+}

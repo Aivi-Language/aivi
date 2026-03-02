@@ -46,6 +46,7 @@ mod network_https;
 mod network_sockets;
 mod network_streams;
 mod number_facade;
+mod option;
 mod path;
 mod prelude;
 mod probability;
@@ -53,6 +54,7 @@ mod quaternion;
 mod rational;
 mod regex;
 mod rest;
+mod result;
 mod secrets;
 mod signal;
 mod system;
@@ -106,6 +108,14 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: list::MODULE_NAME,
         source: list::SOURCE,
+    },
+    EmbeddedModule {
+        name: option::MODULE_NAME,
+        source: option::SOURCE,
+    },
+    EmbeddedModule {
+        name: result::MODULE_NAME,
+        source: result::SOURCE,
     },
     EmbeddedModule {
         name: regex::MODULE_NAME,
