@@ -8,4 +8,5 @@ use tower_lsp::lsp_types::{
 
 use crate::backend::Backend;
 use crate::doc_index::DocIndex;
+use crate::gtk_index::GtkIndex;
 use crate::state::IndexedModule;

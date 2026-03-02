@@ -8,7 +8,16 @@ use tower_lsp::lsp_types::{
 };
 
 use crate::backend::Backend;
+use crate::gtk_index::GtkIndex;
 use crate::state::IndexedModule;
+
+#[derive(Debug)]
+enum GtkCompletionContext {
+    /// Cursor is in tag name position: `<|` or `<Gtk|`
+    TagName { prefix: String },
+    /// Cursor is in attribute position: `<GtkButton |` or `<GtkButton lab|`
+    Attribute { tag_name: String, prefix: String },
+}
 
 impl Backend {
     pub(super) fn build_completion_items(
@@ -16,6 +25,7 @@ impl Backend {
         uri: &Url,
         position: Position,
         workspace_modules: &HashMap<String, IndexedModule>,
+        gtk_index: &GtkIndex,
     ) -> Vec<CompletionItem> {
         let path = PathBuf::from(Self::path_from_uri(uri));
         let (file_modules, _) = parse_modules(&path, text);
@@ -54,6 +64,11 @@ impl Backend {
         };
 
         let line_prefix = Self::line_prefix(text, position);
+
+        // GTK sigil completions: detect cursor inside ~<gtk>...</gtk>
+        if let Some(gtk_ctx) = Self::gtk_sigil_context(text, position) {
+            return Self::gtk_completions(&gtk_ctx, gtk_index);
+        }
 
         if let Some(prefix) = Self::use_module_prefix(&line_prefix) {
             for name in module_map.keys() {
@@ -693,5 +708,249 @@ impl Backend {
         let range = Self::span_to_range(span.clone());
         range.start.line < position.line
             || (range.start.line == position.line && range.start.character <= position.character)
+    }
+
+    // --- GTK sigil completion support ---
+
+    /// Detect whether the cursor is inside a `~<gtk>...</gtk>` sigil and determine context.
+    fn gtk_sigil_context(text: &str, position: Position) -> Option<GtkCompletionContext> {
+        let offset = Self::offset_at(text, position).min(text.len());
+        let before = &text[..offset];
+
+        // Check we're inside a ~<gtk> sigil (find last ~<gtk> before cursor, ensure no </gtk> after it)
+        let gtk_open = before.rfind("~<gtk>")?;
+        let after_open = &before[gtk_open + 6..];
+        // Count open/close to ensure we're still inside
+        if after_open.matches("</gtk>").count() > 0 {
+            return None;
+        }
+
+        // Now analyze what's immediately around the cursor.
+        // Walk backwards from cursor to find the context.
+        let sigil_content = after_open;
+
+        // Find the last `<` that isn't closed by `>` or `/>`
+        let mut last_open_tag_start = None;
+        let mut i = sigil_content.len();
+        while i > 0 {
+            i -= 1;
+            let ch = sigil_content.as_bytes()[i];
+            if ch == b'>' {
+                // This closes some tag — skip to its opening `<`
+                while i > 0 {
+                    i -= 1;
+                    if sigil_content.as_bytes()[i] == b'<' {
+                        break;
+                    }
+                }
+                continue;
+            }
+            if ch == b'<' {
+                last_open_tag_start = Some(i);
+                break;
+            }
+        }
+
+        let tag_start = last_open_tag_start?;
+        let inside_tag = &sigil_content[tag_start + 1..]; // after '<'
+
+        // Skip '/' for closing tags
+        if inside_tag.starts_with('/') {
+            return None;
+        }
+
+        // Parse: tag_name followed by attributes
+        let mut chars = inside_tag.char_indices();
+        let mut tag_name_end = 0;
+        let mut found_space = false;
+        for (idx, ch) in chars.by_ref() {
+            if ch.is_whitespace() {
+                tag_name_end = idx;
+                found_space = true;
+                break;
+            }
+            if ch == '/' || ch == '>' {
+                tag_name_end = idx;
+                break;
+            }
+            tag_name_end = idx + ch.len_utf8();
+        }
+
+        let tag_name = &inside_tag[..tag_name_end];
+
+        if !found_space {
+            // Cursor is still in the tag name
+            return Some(GtkCompletionContext::TagName {
+                prefix: tag_name.to_string(),
+            });
+        }
+
+        // Cursor is after the tag name — attribute context
+        let after_tag = &inside_tag[tag_name_end..];
+        // Find the last word being typed (attribute prefix)
+        let attr_prefix: String = after_tag
+            .chars()
+            .rev()
+            .take_while(|ch| ch.is_alphanumeric() || *ch == '-' || *ch == '_')
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+
+        // Only offer GTK completions for Gtk/Adw/Gsk tags
+        if tag_name.starts_with("Gtk")
+            || tag_name.starts_with("Adw")
+            || tag_name.starts_with("Gsk")
+            || tag_name == "object"
+        {
+            // For <object>, try to find the class attr
+            let effective_tag = if tag_name == "object" {
+                Self::extract_class_attr(after_tag).unwrap_or(tag_name)
+            } else {
+                tag_name
+            };
+            return Some(GtkCompletionContext::Attribute {
+                tag_name: effective_tag.to_string(),
+                prefix: attr_prefix,
+            });
+        }
+
+        None
+    }
+
+    /// Extract `class="ClassName"` from an attribute string.
+    fn extract_class_attr(attrs: &str) -> Option<&str> {
+        let class_pos = attrs.find("class=\"")?;
+        let value_start = class_pos + 7;
+        let rest = &attrs[value_start..];
+        let end = rest.find('"')?;
+        Some(&rest[..end])
+    }
+
+    fn gtk_completions(ctx: &GtkCompletionContext, gtk_index: &GtkIndex) -> Vec<CompletionItem> {
+        let mut items = Vec::new();
+
+        match ctx {
+            GtkCompletionContext::TagName { prefix } => {
+                for widget in gtk_index.complete_widget_name(prefix) {
+                    let mut snippet = widget.name.clone();
+                    // Build snippet with construct-only (mandatory) props as tab stops
+                    let mandatory: Vec<_> = widget
+                        .properties
+                        .iter()
+                        .filter(|p| p.construct_only && p.writable)
+                        .collect();
+                    if !mandatory.is_empty() {
+                        let mut parts: Vec<String> = Vec::new();
+                        for (i, prop) in mandatory.iter().enumerate() {
+                            parts.push(format!(
+                                " {}=\"${{{}:{}}}\"",
+                                prop.name,
+                                i + 1,
+                                Self::default_for_type(&prop.prop_type)
+                            ));
+                        }
+                        snippet = format!("{}{}", widget.name, parts.join(""));
+                    }
+                    let doc = widget.doc.as_deref().unwrap_or("");
+                    items.push(CompletionItem {
+                        label: widget.name.clone(),
+                        kind: Some(CompletionItemKind::CLASS),
+                        detail: widget.parent.as_ref().map(|p| format!("extends {p}")),
+                        documentation: if doc.is_empty() {
+                            None
+                        } else {
+                            Some(Documentation::MarkupContent(MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value: doc.to_string(),
+                            }))
+                        },
+                        insert_text: Some(snippet),
+                        insert_text_format: Some(InsertTextFormat::SNIPPET),
+                        sort_text: Some("0".to_string()),
+                        ..CompletionItem::default()
+                    });
+                }
+            }
+            GtkCompletionContext::Attribute { tag_name, prefix } => {
+                if let Some(widget) = gtk_index.lookup(tag_name) {
+                    // Properties
+                    for prop in &widget.properties {
+                        if !prop.writable {
+                            continue;
+                        }
+                        if !prefix.is_empty() && !prop.name.starts_with(prefix.as_str()) {
+                            continue;
+                        }
+                        let doc = prop.doc.as_deref().unwrap_or("");
+                        let snippet = format!(
+                            "{}=\"${{1:{}}}\"",
+                            prop.name,
+                            Self::default_for_type(&prop.prop_type)
+                        );
+                        items.push(CompletionItem {
+                            label: prop.name.clone(),
+                            kind: Some(CompletionItemKind::PROPERTY),
+                            detail: Some(format!("prop ({})", prop.prop_type)),
+                            documentation: if doc.is_empty() {
+                                None
+                            } else {
+                                Some(Documentation::MarkupContent(MarkupContent {
+                                    kind: MarkupKind::Markdown,
+                                    value: doc.to_string(),
+                                }))
+                            },
+                            insert_text: Some(snippet),
+                            insert_text_format: Some(InsertTextFormat::SNIPPET),
+                            sort_text: Some(if prop.construct_only {
+                                "0".to_string()
+                            } else {
+                                "1".to_string()
+                            }),
+                            ..CompletionItem::default()
+                        });
+                    }
+
+                    // Signal sugar shortcuts
+                    let signal_sugar = [
+                        ("onClick", "clicked"),
+                        ("onInput", "changed"),
+                        ("onActivate", "activate"),
+                        ("onToggle", "toggled"),
+                        ("onValueChanged", "value-changed"),
+                        ("onFocusIn", "focus-enter"),
+                        ("onFocusOut", "focus-leave"),
+                    ];
+                    for (sugar, signal_name) in &signal_sugar {
+                        if !prefix.is_empty() && !sugar.starts_with(prefix.as_str()) {
+                            continue;
+                        }
+                        let has_signal = widget.signals.iter().any(|s| s.name == *signal_name);
+                        if has_signal {
+                            items.push(CompletionItem {
+                                label: sugar.to_string(),
+                                kind: Some(CompletionItemKind::EVENT),
+                                detail: Some(format!("signal:{signal_name}")),
+                                insert_text: Some(format!("{sugar}={{{{ ${{1:handler}} }}}}")),
+                                insert_text_format: Some(InsertTextFormat::SNIPPET),
+                                sort_text: Some("2".to_string()),
+                                ..CompletionItem::default()
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        items
+    }
+
+    fn default_for_type(gir_type: &str) -> &str {
+        match gir_type {
+            "utf8" => "",
+            "gboolean" => "true",
+            "gint" | "guint" | "gfloat" | "gdouble" => "0",
+            _ => "",
+        }
     }
 }

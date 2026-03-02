@@ -505,8 +505,7 @@ fn parse_property(
                     b"type" if depth == 2 => {
                         for attr in e.attributes().filter_map(|a| a.ok()) {
                             if attr.key.as_ref() == b"name" {
-                                prop_type =
-                                    String::from_utf8_lossy(&attr.value).to_string();
+                                prop_type = String::from_utf8_lossy(&attr.value).to_string();
                             }
                         }
                     }
@@ -701,7 +700,7 @@ fn truncate_doc(doc: &str) -> String {
     trimmed.to_string()
 }
 
-fn resolve_inheritance(widgets: &mut Vec<GtkWidgetInfo>) {
+fn resolve_inheritance(widgets: &mut [GtkWidgetInfo]) {
     // Build a name→index map.
     let index: HashMap<String, usize> = widgets
         .iter()
@@ -714,7 +713,7 @@ fn resolve_inheritance(widgets: &mut Vec<GtkWidgetInfo>) {
     for _ in 0..10 {
         let mut changed = false;
         // Clone current state for reading while we mutate.
-        let snapshot: Vec<GtkWidgetInfo> = widgets.clone();
+        let snapshot: Vec<GtkWidgetInfo> = widgets.to_vec();
         for widget in widgets.iter_mut() {
             if let Some(ref parent_name) = widget.parent {
                 if let Some(&pi) = index.get(parent_name) {

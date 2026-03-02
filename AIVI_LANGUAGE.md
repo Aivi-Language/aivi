@@ -850,9 +850,30 @@ Custom literals with `~tag` and a delimiter:
 ~tz(Europe/Paris)              // TimeZone
 ~<html><div>{ "x" }</div></html> // Typed VDOM node
 ~<gtk><object class="GtkBox" /></gtk> // Typed GTK builder node
+~<gtk><GtkBox spacing="24" /></gtk> // Shorthand widget syntax
 ```
 
 `~map{...}`, `~set[...]`, `~mat[...]`, `~<html>...</html>`, and `~<gtk>...</gtk>` are **structured** (parsed as AIVI expressions). Other sigils are raw text until the closing delimiter.
+
+GTK sigils support **widget shorthand**: tags starting with `Gtk`, `Adw`, or `Gsk` are sugar for `<object class="...">` where attributes become props automatically:
+
+```aivi
+// Shorthand (preferred)
+~<gtk>
+  <GtkBox spacing="24" marginTop="12">
+    <GtkLabel label="Hello" />
+    <GtkButton label="Save" onClick={ Msg.Save } />
+  </GtkBox>
+</gtk>
+
+// Equivalent verbose form
+~<gtk>
+  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
+    <object class="GtkLabel" props={{ label: "Hello" }} />
+    <object class="GtkButton" props={{ label: "Save" }} onClick={ Msg.Save } />
+  </object>
+</gtk>
+```
 
 GTK sigils also support signal sugar in v0.1:
 

@@ -56,7 +56,7 @@ fn completion_handler_serializes_to_json() {
     };
 
     let position = position_after(&item.text, "add ");
-    let items = Backend::build_completion_items(&item.text, &item.uri, position, &HashMap::new());
+    let items = Backend::build_completion_items(&item.text, &item.uri, position, &HashMap::new(), &GtkIndex::default());
     let response = CompletionResponse::Array(items);
 
     let json = serde_json::to_value(&response).expect("completion json");
@@ -121,7 +121,7 @@ fn completion_handler_handles_position_at_eof() {
 
     let eof_position = Position::new(10, 100);
     let items =
-        Backend::build_completion_items(&item.text, &item.uri, eof_position, &HashMap::new());
+        Backend::build_completion_items(&item.text, &item.uri, eof_position, &HashMap::new(), &GtkIndex::default());
     assert!(
         items.iter().any(|entry| entry.label == "add"),
         "expected completion to include local defs at EOF, got: {items:#?}"
