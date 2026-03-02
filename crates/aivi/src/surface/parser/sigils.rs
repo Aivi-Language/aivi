@@ -1191,6 +1191,184 @@ impl Parser {
                     attrs,
                     children,
                 } => {
+                    // GTK widget shorthand: tags starting with Gtk/Adw/Gsk are
+                    // lowered as `<object class="WidgetName">` where all
+                    // non-signal attributes become props automatically.
+                    let is_gtk_shorthand = tag.starts_with("Gtk")
+                        || tag.starts_with("Adw")
+                        || tag.starts_with("Gsk");
+
+                    if is_gtk_shorthand {
+                        // Rewrite: <GtkButton label="Hello" onClick={handler}>
+                        // → <object class="GtkButton" props={{ label: "Hello" }} onClick={handler}>
+                        let mut lowered_attrs = Vec::new();
+                        lowered_attrs.push(call2(
+                            "gtkAttr",
+                            mk_string("class"),
+                            mk_string(&tag),
+                        ));
+
+                        let attr_handler_text =
+                            |attr_name: &str, value: GtkAttrValue| -> Option<String> {
+                                match value {
+                                    GtkAttrValue::Text(v) => Some(v),
+                                    GtkAttrValue::Splice(expr) => compile_time_expr_text(&expr),
+                                    GtkAttrValue::Bare => {
+                                        let _ = attr_name;
+                                        None
+                                    }
+                                }
+                            };
+                        for attr in attrs {
+                            // Signal sugar (onClick, onInput, etc.)
+                            let signal_name_opt = match attr.name.as_str() {
+                                "onClick" => Some("clicked"),
+                                "onInput" => Some("changed"),
+                                "onActivate" => Some("activate"),
+                                "onToggle" => Some("toggled"),
+                                "onValueChanged" => Some("value-changed"),
+                                "onFocusIn" => Some("focus-enter"),
+                                "onFocusOut" => Some("focus-leave"),
+                                _ => None,
+                            };
+                            if let Some(signal_name) = signal_name_opt {
+                                let handler_expr = match attr.value {
+                                    GtkAttrValue::Splice(expr) => expr,
+                                    GtkAttrValue::Text(v) => mk_string(&v),
+                                    GtkAttrValue::Bare => {
+                                        this.emit_diag(
+                                            "E1614",
+                                            &format!(
+                                                "`{}` handler requires a value expression",
+                                                attr.name
+                                            ),
+                                            span.clone(),
+                                        );
+                                        continue;
+                                    }
+                                };
+                                lowered_attrs.push(call2(
+                                    "gtkSignalAttr",
+                                    mk_string(&format!("signal:{signal_name}")),
+                                    handler_expr,
+                                ));
+                                continue;
+                            }
+
+                            // Skip standard XML attrs that are handled separately
+                            if attr.name == "id" || attr.name == "ref" {
+                                lowered_attrs.push(lower_attr(attr, span));
+                                continue;
+                            }
+
+                            // Everything else is a prop: normalize and emit as prop:name
+                            let prop_name = normalize_prop_name(&attr.name);
+                            let value_expr = match attr.value {
+                                GtkAttrValue::Text(v) => mk_string(&v),
+                                GtkAttrValue::Splice(expr) => match &expr {
+                                    Expr::Literal(_)
+                                    | Expr::UnaryNeg { .. }
+                                    | Expr::Suffixed { .. } => {
+                                        if let Some(text) = compile_time_expr_text(&expr) {
+                                            mk_string(&text)
+                                        } else {
+                                            expr
+                                        }
+                                    }
+                                    _ => expr,
+                                },
+                                GtkAttrValue::Bare => mk_string("true"),
+                            };
+                            lowered_attrs.push(call2(
+                                "gtkAttr",
+                                mk_string(&format!("prop:{prop_name}")),
+                                value_expr,
+                            ));
+                        }
+
+                        // Process children same as <object>
+                        let mut kept_children = Vec::new();
+                        for child in children {
+                            let (child_tag, child_has_type) = match &child {
+                                GtkNode::Element { tag, attrs, .. } => (
+                                    tag.clone(),
+                                    attrs.iter().any(|a| a.name == "type"),
+                                ),
+                                _ => {
+                                    kept_children.push(child);
+                                    continue;
+                                }
+                            };
+                            if child_tag == "signal" {
+                                let (mut signal_name, mut signal_handler) =
+                                    (None::<String>, None::<String>);
+                                if let GtkNode::Element { attrs, .. } = child {
+                                    for attr in attrs {
+                                        if attr.name == "name" {
+                                            signal_name =
+                                                attr_handler_text("name", attr.value);
+                                        } else if attr.name == "handler"
+                                            || attr.name == "on"
+                                        {
+                                            signal_handler =
+                                                attr_handler_text(&attr.name, attr.value);
+                                        }
+                                    }
+                                }
+                                let Some(name) = signal_name else {
+                                    this.emit_diag(
+                                        "E1614",
+                                        "signal tag requires a compile-time `name` attribute",
+                                        span.clone(),
+                                    );
+                                    continue;
+                                };
+                                let Some(handler) = signal_handler else {
+                                    this.emit_diag(
+                                        "E1614",
+                                        "signal tag requires a compile-time `handler` or `on` attribute",
+                                        span.clone(),
+                                    );
+                                    continue;
+                                };
+                                lowered_attrs.push(call2(
+                                    "gtkAttr",
+                                    mk_string(&format!("signal:{name}")),
+                                    mk_string(&handler),
+                                ));
+                                continue;
+                            }
+                            if child_tag == "child" {
+                                if child_has_type {
+                                    kept_children.push(child);
+                                } else {
+                                    this.emit_diag(
+                                        "E1616",
+                                        "bare <child> wrapper is not allowed; nest elements directly inside the parent",
+                                        span.clone(),
+                                    );
+                                    if let GtkNode::Element {
+                                        children: inner, ..
+                                    } = child
+                                    {
+                                        kept_children.extend(inner);
+                                    }
+                                }
+                                continue;
+                            }
+                            kept_children.push(child);
+                        }
+
+                        let attrs_expr = list(lowered_attrs);
+                        let children_expr =
+                            lower_children(this, kept_children, span);
+                        return Expr::Call {
+                            func: Box::new(mk_ui("gtkElement")),
+                            args: vec![mk_string("object"), attrs_expr, children_expr],
+                            span: span.clone(),
+                        };
+                    }
+
                     // Component tags (uppercase / dotted) get record-based
                     // lowering: attrs become record fields, children become
                     // a `children` field. No signal sugar or props

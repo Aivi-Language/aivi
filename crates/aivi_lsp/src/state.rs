@@ -6,6 +6,7 @@ use aivi::Module;
 use tower_lsp::lsp_types::Url;
 
 use crate::doc_index::{DocIndex, DOC_INDEX_JSON};
+use crate::gtk_index::{GtkIndex, GTK_INDEX_JSON};
 use crate::strict::StrictConfig;
 
 #[derive(Default)]
@@ -33,6 +34,7 @@ pub(super) struct BackendState {
     pub(super) diagnostics_in_specs_snippets: bool,
     pub(super) strict: StrictConfig,
     pub(super) doc_index: Arc<DocIndex>,
+    pub(super) gtk_index: Arc<GtkIndex>,
     /// Pre-built stdlib typecheck checkpoint; populated lazily on first diagnostic run.
     pub(super) typecheck_checkpoint: Option<aivi::CheckTypesCheckpoint>,
     /// Abort handle for the in-flight diagnostic task; used for per-keystroke cancellation.
@@ -44,6 +46,7 @@ pub(super) struct BackendState {
 impl Default for BackendState {
     fn default() -> Self {
         let doc_index = DocIndex::from_json(DOC_INDEX_JSON).unwrap_or_default();
+        let gtk_index = GtkIndex::from_json(GTK_INDEX_JSON).unwrap_or_default();
         Self {
             documents: HashMap::new(),
             workspace_root: None,
@@ -56,6 +59,7 @@ impl Default for BackendState {
             diagnostics_in_specs_snippets: false,
             strict: StrictConfig::default(),
             doc_index: Arc::new(doc_index),
+            gtk_index: Arc::new(gtk_index),
             typecheck_checkpoint: None,
             pending_diagnostics: None,
             diagnostics_version: 0,

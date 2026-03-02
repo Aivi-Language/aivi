@@ -32,7 +32,7 @@ The `aivi.result` module provides utility functions for working with `Result E A
 
 | Function | Type | Description |
 |----------|------|-------------|
-| `map` | `(A -> B) -> Result E A -> Result E B` | Transform success value |
+| `map` | `(A -> B) -> Result E B` | Transform success value |
 | `mapErr` | `(E -> F) -> Result E A -> Result F A` | Transform error value |
 | `flatMap` | `(A -> Result E B) -> Result E A -> Result E B` | Chain fallible operations |
 

@@ -38,7 +38,7 @@ name = maybeUser.name ?? "Anonymous"
 
 | Function | Type | Description |
 |----------|------|-------------|
-| `map` | `(A -> B) -> Option A -> Option B` | Transform inner value if present |
+| `map` | `(A -> B) -> Option B` | Transform inner value if present |
 | `flatMap` | `(A -> Option B) -> Option A -> Option B` | Chain operations that may fail |
 | `filter` | `(A -> Bool) -> Option A -> Option A` | Keep value only if predicate holds |
 

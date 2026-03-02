@@ -35,7 +35,7 @@ fromList_toList = do Effect {
 @test "map"
 map_functional = do Effect {
   g = range 1 4
-  doubled = map (x => x * 2) g
+  doubled = g |> map (x => x * 2)
   xs = toList doubled
   assertEq xs [2, 4, 6]
 }

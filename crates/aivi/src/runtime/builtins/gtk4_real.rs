@@ -8,7 +8,7 @@ mod linux {
     use std::os::raw::{c_char, c_int, c_uint, c_ulong, c_void};
     use std::ptr::null_mut;
     use std::sync::atomic::AtomicBool;
-    use std::sync::{mpsc, Arc, Mutex};
+    use std::sync::{mpsc, Arc, Mutex, OnceLock};
 
     use super::super::util::builtin;
     use crate::runtime::values::{ChannelInner, ChannelRecv};
@@ -28,6 +28,7 @@ mod linux {
         fn gtk_window_present(window: *mut c_void);
         fn gtk_window_close(window: *mut c_void);
         fn gtk_window_set_hide_on_close(window: *mut c_void, setting: c_int);
+        fn gtk_window_set_decorated(window: *mut c_void, setting: c_int);
 
         fn gtk_widget_set_visible(widget: *mut c_void, visible: c_int);
         fn gtk_widget_set_sensitive(widget: *mut c_void, sensitive: c_int);
@@ -263,6 +264,12 @@ mod linux {
         static GTK_PUMP_ACTIVE: RefCell<bool> = const { RefCell::new(false) };
     }
 
+    // Cross-thread queue for tray icon actions (SNI runs in a separate tokio thread).
+    static PENDING_TRAY_ACTIONS: OnceLock<Mutex<VecDeque<String>>> = OnceLock::new();
+    fn pending_tray_actions() -> &'static Mutex<VecDeque<String>> {
+        PENDING_TRAY_ACTIONS.get_or_init(|| Mutex::new(VecDeque::new()))
+    }
+
     pub(super) fn pump_gtk_events() {
         GTK_PUMP_ACTIVE.with(|active| {
             if *active.borrow() {
@@ -272,6 +279,25 @@ mod linux {
                     while g_main_context_pending(ctx) != 0 {
                         g_main_context_iteration(ctx, 0);
                     }
+                }
+                // Drain cross-thread tray actions into the signal stream.
+                let actions: Vec<String> = pending_tray_actions()
+                    .lock()
+                    .map(|mut q| q.drain(..).collect())
+                    .unwrap_or_default();
+                for action in actions {
+                    let event = SignalEventState {
+                        widget_id: 0,
+                        signal: "mailfox.tray.action".to_string(),
+                        handler: action.clone(),
+                        payload: action,
+                    };
+                    let typed_value = make_signal_event_value(event.clone());
+                    GTK_STATE.with(|state| {
+                        let mut state = state.borrow_mut();
+                        state.signal_senders.retain(|s| s.try_send(typed_value.clone()).is_ok());
+                        state.signal_events.push_back(event);
+                    });
                 }
             }
         });
@@ -344,6 +370,7 @@ mod linux {
         icon_name: String,
         tooltip: String,
         visible: bool,
+        menu_items: Vec<(String, String)>,
     }
 
     impl Default for SniTrayState {
@@ -352,6 +379,7 @@ mod linux {
                 icon_name: String::new(),
                 tooltip: String::new(),
                 visible: true,
+                menu_items: Vec::new(),
             }
         }
     }
@@ -379,10 +407,15 @@ mod linux {
 
                     // Create the interface at obj_path using raw method calls
                     // We register an interface implementor manually
-                    let sni = SniObject { state: state_clone };
+                    let sni = SniObject { state: state_clone.clone() };
                     if let Err(e) = conn.object_server().at(obj_path, sni).await {
                         eprintln!("sni-tray: object_server error: {e}");
                         return;
+                    }
+                    // Register DBusMenu at /MenuBar for GNOME AppIndicator compatibility
+                    let dbus_menu = DbusMenuObject { tray_state: state_clone };
+                    if let Err(e) = conn.object_server().at("/MenuBar", dbus_menu).await {
+                        eprintln!("sni-tray: dbusmenu register error: {e}");
                     }
                     if let Err(e) = conn.request_name(bus_name.as_str()).await {
                         eprintln!("sni-tray: request_name error: {e}");
@@ -471,9 +504,178 @@ mod linux {
                 .unwrap_or_else(|_| zbus::zvariant::OwnedObjectPath::try_from("/").unwrap())
         }
 
-        fn activate(&self, _x: i32, _y: i32) {}
+        fn activate(&self, _x: i32, _y: i32) {
+            if let Ok(mut q) = pending_tray_actions().lock() {
+                q.push_back("left_click".to_string());
+            }
+        }
         fn secondary_activate(&self, _x: i32, _y: i32) {}
+        fn context_menu(&self, _x: i32, _y: i32) {
+            if let Ok(mut q) = pending_tray_actions().lock() {
+                q.push_back("context_menu".to_string());
+            }
+        }
         fn scroll(&self, _delta: i32, _orientation: &str) {}
+    }
+
+    // ── DBusMenu (com.canonical.dbusmenu) ─────────────────────────────────────
+    // Provides the right-click context menu to GNOME AppIndicator and compatible
+    // tray hosts. Items are stored in SniTrayState and reflected here.
+
+    type ItemProps = std::collections::HashMap<String, zbus::zvariant::OwnedValue>;
+    type DMenuItem = (i32, ItemProps, Vec<zbus::zvariant::OwnedValue>);
+
+    struct DbusMenuObject {
+        tray_state: Arc<Mutex<SniTrayState>>,
+    }
+
+    #[zbus::interface(name = "com.canonical.dbusmenu")]
+    impl DbusMenuObject {
+        #[zbus(property)]
+        fn version(&self) -> u32 {
+            3
+        }
+
+        #[zbus(property)]
+        fn text_direction(&self) -> &str {
+            "ltr"
+        }
+
+        #[zbus(property)]
+        fn status(&self) -> &str {
+            "normal"
+        }
+
+        #[zbus(property)]
+        fn icon_theme_path(&self) -> Vec<String> {
+            vec![]
+        }
+
+        fn get_layout(
+            &self,
+            _parent_id: i32,
+            _recursion_depth: i32,
+            _property_names: Vec<String>,
+        ) -> (u32, DMenuItem) {
+            use zbus::zvariant::{OwnedValue, Str, StructureBuilder};
+
+            let items = self
+                .tray_state
+                .lock()
+                .map(|s| s.menu_items.clone())
+                .unwrap_or_default();
+
+            let children: Vec<OwnedValue> = items
+                .iter()
+                .enumerate()
+                .filter_map(|(i, (label, action))| {
+                    let id = (i + 1) as i32;
+                    let mut props = ItemProps::new();
+                    props.insert(
+                        "label".to_string(),
+                        OwnedValue::from(Str::from(label.as_str())),
+                    );
+                    props.insert("enabled".to_string(), OwnedValue::from(true));
+                    props.insert("visible".to_string(), OwnedValue::from(true));
+                    // Store action in accessible-desc so Event can look it up by id
+                    let _ = action; // looked up in event() by id
+                    let item: DMenuItem = (id, props, vec![]);
+                    let s = StructureBuilder::new()
+                        .add_field(item.0)
+                        .add_field(item.1)
+                        .add_field(item.2)
+                        .build()
+                        .ok()?;
+                    OwnedValue::try_from(s).ok()
+                })
+                .collect();
+
+            let mut root_props = ItemProps::new();
+            root_props.insert(
+                "children-display".to_string(),
+                OwnedValue::from(Str::from_static("submenu")),
+            );
+
+            (1u32, (0i32, root_props, children))
+        }
+
+        fn event(
+            &self,
+            id: i32,
+            event_id: &str,
+            _data: zbus::zvariant::OwnedValue,
+            _timestamp: u32,
+        ) -> zbus::fdo::Result<()> {
+            if event_id == "clicked" {
+                let items = self
+                    .tray_state
+                    .lock()
+                    .map(|s| s.menu_items.clone())
+                    .unwrap_or_default();
+                let idx = (id - 1) as usize;
+                if let Some((_label, action)) = items.get(idx) {
+                    if let Ok(mut q) = pending_tray_actions().lock() {
+                        q.push_back(action.clone());
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        fn event_group(
+            &self,
+            events: Vec<(i32, String, zbus::zvariant::OwnedValue, u32)>,
+        ) -> zbus::fdo::Result<Vec<i32>> {
+            for (id, event_id, data, timestamp) in events {
+                let _ = self.event(id, &event_id, data, timestamp);
+            }
+            Ok(vec![])
+        }
+
+        fn about_to_show(&self, _id: i32) -> bool {
+            false
+        }
+
+        fn about_to_show_group(&self, _ids: Vec<i32>) -> (Vec<i32>, Vec<i32>) {
+            (vec![], vec![])
+        }
+
+        fn get_group_properties(
+            &self,
+            _ids: Vec<i32>,
+            _property_names: Vec<String>,
+        ) -> Vec<(i32, ItemProps)> {
+            vec![]
+        }
+
+        fn get_property(
+            &self,
+            _id: i32,
+            _name: &str,
+        ) -> zbus::zvariant::OwnedValue {
+            zbus::zvariant::OwnedValue::from(0i32)
+        }
+
+        #[zbus(signal)]
+        async fn layout_updated(
+            ctxt: &zbus::object_server::SignalEmitter<'_>,
+            revision: u32,
+            parent: i32,
+        ) -> zbus::Result<()>;
+
+        #[zbus(signal)]
+        async fn item_activation_requested(
+            ctxt: &zbus::object_server::SignalEmitter<'_>,
+            id: i32,
+            timestamp: u32,
+        ) -> zbus::Result<()>;
+
+        #[zbus(signal)]
+        async fn items_properties_updated(
+            ctxt: &zbus::object_server::SignalEmitter<'_>,
+            updated_props: Vec<(i32, ItemProps)>,
+            removed_props: Vec<(i32, Vec<String>)>,
+        ) -> zbus::Result<()>;
     }
 
     struct GestureClickState {
@@ -2409,6 +2611,34 @@ mod linux {
         );
 
         fields.insert(
+            "windowSetDecorated".to_string(),
+            builtin("gtk4.windowSetDecorated", 2, |mut args, _| {
+                let decorated = match args.remove(1) {
+                    Value::Bool(v) => v,
+                    _ => return Err(invalid("gtk4.windowSetDecorated expects Bool")),
+                };
+                let window_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.windowSetDecorated expects Int window id")),
+                };
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|state| {
+                        let state = state.borrow();
+                        let window = *state.windows.get(&window_id).ok_or_else(|| {
+                            RuntimeError::Error(Value::Text(format!(
+                                "gtk4.windowSetDecorated unknown window id {window_id}"
+                            )))
+                        })?;
+                        unsafe {
+                            gtk_window_set_decorated(window, if decorated { 1 } else { 0 });
+                        }
+                        Ok(Value::Unit)
+                    })
+                }))
+            }),
+        );
+
+        fields.insert(
             "windowSetHideOnClose".to_string(),
             builtin("gtk4.windowSetHideOnClose", 2, |mut args, _| {
                 let hide = match args.remove(1) {
@@ -3869,6 +4099,7 @@ mod linux {
                         icon_name: icon_name.clone(),
                         tooltip: tooltip.clone(),
                         visible: true,
+                        menu_items: Vec::new(),
                     }));
                     if let Err(e) = spawn_sni_tray(state.clone()) {
                         return Err(RuntimeError::Error(Value::Text(format!(
@@ -3933,6 +4164,50 @@ mod linux {
                         }
                     }
                     Ok(Value::Unit)
+                }))
+            }),
+        );
+
+        fields.insert(
+            "trayIconSetMenuItems".to_string(),
+            builtin("gtk4.trayIconSetMenuItems", 2, |mut args, _| {
+                let items_val = args.remove(1);
+                let tray_id = match args.remove(0) {
+                    Value::Int(v) => v,
+                    _ => return Err(invalid("gtk4.trayIconSetMenuItems expects Int tray_id")),
+                };
+                // Parse list of {label, action} records
+                let mut items: Vec<(String, String)> = Vec::new();
+                let mut list = items_val;
+                loop {
+                    match list {
+                        Value::Constructor { name, mut args } if name == "Cons" => {
+                            let head = args.remove(0);
+                            list = args.remove(0);
+                            if let Value::Record(fields) = head {
+                                let label = fields.get("label")
+                                    .and_then(|v| if let Value::Text(t) = v { Some(t.clone()) } else { None })
+                                    .unwrap_or_default();
+                                let action = fields.get("action")
+                                    .and_then(|v| if let Value::Text(t) = v { Some(t.clone()) } else { None })
+                                    .unwrap_or_default();
+                                items.push((label, action));
+                            }
+                        }
+                        Value::Constructor { name, .. } if name == "Nil" || name == "Empty" => break,
+                        _ => break,
+                    }
+                }
+                Ok(effect(move |_| {
+                    GTK_STATE.with(|s| {
+                        let s = s.borrow();
+                        if let Some(handle) = s.tray_handles.get(&tray_id) {
+                            if let Ok(mut ts) = handle.lock() {
+                                ts.menu_items = items.clone();
+                            }
+                        }
+                        Ok(Value::Unit)
+                    })
                 }))
             }),
         );
