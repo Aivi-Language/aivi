@@ -126,18 +126,65 @@ Object references via `ref`/`idref` are resolved against `id` attributes.
 `<child type="overlay">` and `<child type="controller">` are supported for overlay/controller wiring.
 Header-bar child placement is supported via `<child type="title">` and `<child type="end">` (`start` is the default).
 Bare `<child>` without a `type` attribute is an error (E1616); nest `<object>` elements directly inside the parent instead.
-Signal sugar is supported and lowered to typed signal attrs:
 
-- `<object ... onClick={ Msg.Save } />` -> `signal:clicked`
-- `<object ... onInput={ Msg.Changed } />` -> `signal:changed`
-- `<object ... onActivate={ Msg.Submit } />` -> `signal:activate`
-- `<object ... onToggle={ Msg.Toggled } />` -> `signal:toggled`
-- `<object ... onValueChanged={ Msg.VolumeChanged } />` -> `signal:value-changed`
-- `<object ... onFocusIn={ Msg.Focused } />` -> `signal:focus-enter`
-- `<object ... onFocusOut={ Msg.Blurred } />` -> `signal:focus-leave`
-- `<signal name="clicked" on={ Msg.Save } />` -> same binding path
+### Shorthand widget tags (preferred)
+
+Tags starting with `Gtk`, `Adw`, or `Gsk` are syntactic sugar for `<object class="...">`. Attributes on shorthand tags become properties automatically — no `props={{ }}` wrapper is needed. Signal sugar (`onClick`, `onInput`, etc.) works identically on shorthand tags.
+
+```aivi
+// Shorthand — preferred style
+~<gtk>
+  <GtkBox spacing="24" marginTop="12">
+    <AdwActionRow title="Save AI Settings" />
+    <GtkButton label="Save" onClick={ Msg.Save } />
+  </GtkBox>
+</gtk>
+```
+
+The parser lowers shorthand tags to the same IR as the verbose `<object>` form:
+
+```aivi
+// Equivalent verbose form
+~<gtk>
+  <object class="GtkBox" props={{ spacing: 24, marginTop: 12 }}>
+    <object class="AdwActionRow" props={{ title: "Save AI Settings" }} />
+    <object class="GtkButton" props={{ label: "Save" }} onClick={ Msg.Save } />
+  </object>
+</gtk>
+```
+
+**Attribute handling on shorthand tags:**
+
+| Attribute        | Lowering                                           |
+|:---------------- |:-------------------------------------------------- |
+| `label="Save"`   | `prop:label` (camelCase normalized to kebab-case)  |
+| `marginTop="12"` | `prop:margin-top`                                  |
+| `id="my-btn"`    | `id` (pass-through, not a property)                |
+| `ref="btnRef"`   | `ref` (pass-through, not a property)               |
+| `onClick={...}`  | `signal:clicked` (signal sugar)                    |
+| `onInput={...}`  | `signal:changed` (signal sugar)                    |
+
+**LSP support:** Inside `~<gtk>` sigils, the LSP provides:
+- **Tag name completion** — typing `<Gtk` or `<Adw` offers matching widget class names from the GIR index (350+ widgets from GTK4 and libadwaita).
+- **Attribute completion** — after a tag name, offers property names for that widget class (including inherited properties).
+- **Snippet insertion** — selecting a widget from completions inserts a snippet with tab stops for construct-only (mandatory) properties.
+
+### Signal sugar
+
+Signal sugar is supported on both shorthand and `<object>` tags, lowered to typed signal attrs:
+
+- `onClick={ Msg.Save }` → `signal:clicked`
+- `onInput={ Msg.Changed }` → `signal:changed`
+- `onActivate={ Msg.Submit }` → `signal:activate`
+- `onToggle={ Msg.Toggled }` → `signal:toggled`
+- `onValueChanged={ Msg.VolumeChanged }` → `signal:value-changed`
+- `onFocusIn={ Msg.Focused }` → `signal:focus-enter`
+- `onFocusOut={ Msg.Blurred }` → `signal:focus-leave`
+- `<signal name="clicked" on={ Msg.Save } />` → same binding path
 
 Signal handler values must be compile-time expressions (for example constructor-like tags such as `Msg.Save`), not runtime lambdas.
+
+### Runtime coverage
 
 Current runtime coverage includes common classes such as `GtkBox`, `GtkHeaderBar`, `AdwHeaderBar`, `AdwClamp`, `GtkLabel`, `GtkButton`, `GtkEntry`, `GtkImage`, `GtkDrawingArea`, `GtkScrolledWindow`, `GtkOverlay`, `GtkSeparator`, `GtkListBox`, and `GtkGestureClick`. Additional `Adw*` classes are created dynamically when the runtime can resolve their GType.
 Supported builder properties include layout/widget basics (`margin-*`, `hexpand`, `vexpand`, `halign`, `valign`, `width-request`, `height-request`, `visible`, `tooltip-text`, `opacity`, style classes), plus class-specific fields like `homogeneous`, `wrap`, `ellipsize`, `xalign`, `max-width-chars`, scrollbar policies, natural-propagation flags, `decoration-layout`, and `show-title-buttons`/`show-end-title-buttons`.
@@ -178,7 +225,19 @@ In v0.1, `props` must be a compile-time record literal; dynamic `props={expr}` i
 `signalStream : Unit -> Effect GtkError (Recv GtkSignalEvent)` returns a channel receiver that receives typed signal events as they fire — preferred over polling loops.
 `signalEmit` is available for synthetic/manual event injection (useful in tests and mock-driven flows).
 
-### Example: builder + property sugar
+### Example: builder + shorthand (recommended)
+
+```aivi
+uiNode : GtkNode
+uiNode =
+  ~<gtk>
+    <GtkBox orientation="vertical" spacing="12" marginTop="16">
+      <GtkLabel label="Settings" />
+    </GtkBox>
+  </gtk>
+```
+
+### Example: builder + property sugar (verbose form)
 
 ```aivi
 uiNode : GtkNode
@@ -192,7 +251,22 @@ uiNode =
   </gtk>
 ```
 
-### Example: signal sugar (recommended style)
+### Example: signal sugar with shorthand (recommended)
+
+```aivi
+Msg = Save | NameChanged Text
+
+formNode : GtkNode
+formNode =
+  ~<gtk>
+    <GtkBox orientation="vertical" spacing="8">
+      <GtkEntry onInput={ Msg.NameChanged } />
+      <GtkButton label="Save" onClick={ Msg.Save } />
+    </GtkBox>
+  </gtk>
+```
+
+### Example: signal sugar with verbose form
 
 ```aivi
 Msg = Save | NameChanged
