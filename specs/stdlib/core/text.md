@@ -117,7 +117,7 @@ Notes:
 
 | Function | Explanation |
 | --- | --- |
-| **toText** value<br><code>A -> Text</code> | Converts `value` to `Text` (via in-scope `ToText` instances; otherwise uses the default debug formatter). |
+| **debugText** value<br><code>A -> Text</code> | Converts `value` to `Text` using the default debug formatter. For `ToText`-based conversion, use `toText` from `aivi.prelude`. |
 | **parseInt** text<br><code>Text -> Option Int</code> | Parses a decimal integer, returning `None` on failure. |
 | **parseFloat** text<br><code>Text -> Option Float</code> | Parses a decimal float, returning `None` on failure. |
 

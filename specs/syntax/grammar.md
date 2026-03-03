@@ -24,8 +24,8 @@ This chapter is intentionally pragmatic: it aims to be complete enough to build 
 ### Keywords (v0.1)
 
 ```text
-as class do domain effect else export generate given hiding if
-instance machine match module on or over patch recurse resource then use when with yield loop
+as class do domain effect else export generate given hiding if in
+instance machine match mock module on or over patch recurse resource snapshot then unless use when with yield loop
 ```
 
 (`True`, `False`, `None`, `Some`, `Ok`, `Err` are ordinary constructors, not keywords.)

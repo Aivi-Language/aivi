@@ -109,3 +109,13 @@ SchemaIssue = { path: Text, message: Text }
 | **strictFields** allowed obj<br><code>List Text -> JsonValue -> Result JsonError JsonValue</code> | Fails if `obj` contains any key not in `allowed`. |
 | **validateSchema** schema obj<br><code>JsonSchema -> JsonValue -> List SchemaIssue</code> | Validates `obj` against `schema`, returning all issues found. An empty list means the object is valid. |
 | **migrateObject** patchFn value<br><code>(List (Text, JsonValue) -> List (Text, JsonValue)) -> JsonValue -> JsonValue</code> | Applies `patchFn` to the entries of a `JsonObject`; passes non-objects through unchanged. Useful for schema migrations. |
+
+### Error rendering
+
+| Function | Explanation |
+| --- | --- |
+| **renderSchemaIssue** index issue<br><code>Int -> SchemaIssue -> Text</code> | Renders a single `SchemaIssue` as a numbered, ANSI-coloured line (e.g. `1. at $.user.age — expected Int`). |
+| **renderSchemaIssues** issues<br><code>List SchemaIssue -> Text</code> | Renders all `SchemaIssue`s as a compiler-style error block with ANSI colour. |
+| **renderJsonError** context err<br><code>Text -> JsonError -> Text</code> | Renders a `JsonError` at the given JSON path with ANSI colour. |
+| **logSchemaIssues** issues<br><code>List SchemaIssue -> Effect Text Unit</code> | Writes all `SchemaIssue`s to stderr using `renderSchemaIssues`. |
+| **logJsonError** context err<br><code>Text -> JsonError -> Effect Text Unit</code> | Writes a `JsonError` to stderr using `renderJsonError`. |

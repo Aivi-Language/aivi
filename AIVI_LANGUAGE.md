@@ -802,10 +802,10 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 - In application code, module path segments and backing file names should be `snake_case`.
 
 **Core & Utils** (`aivi.*`):
-`prelude` (implicit), `text`, `logic`, `units`, `regex`, `testing`, `collections` (re-exports `list`, `map`, `set`, `queue`, `heap`), `i18n`, `generator`, `validation`, `json`, `defaults`
+`prelude` (implicit), `text`, `logic`, `units`, `regex`, `testing`, `collections` (re-exports `list`, `map`, `set`, `queue`, `heap`), `i18n`, `generator`, `json`, `defaults`
 
 **Math & Science** (`aivi.*`):
-`math`, `vector`, `matrix`, `number`, `probability`, `signal`, `geometry`, `graph`, `linearAlgebra`, `tree`
+`math`, `vector`, `matrix`, `number`, `probability`, `signal`, `geometry`, `graph`, `linear_algebra`, `tree`
 
 **Time** (`aivi.chronos.*`):
 `instant`, `calendar`, `duration`, `timezone`, `scheduler`
@@ -814,10 +814,10 @@ Every module implicitly does `use aivi.prelude`. Disable with `@no_prelude`.
 `system`, `concurrency`, `crypto`, `secrets`, `log`
 
 **IO** (`aivi.*`):
-`file`, `console`, `database`, `database.pool`, `email`, `path`, `url`
+`file`, `console`, `database`, `database.pool`, `email`, `path`, `url`, `rest`
 
 **Network** (`aivi.net.*`):
-`http`, `https`, `httpServer`, `rest`, `sockets`, `streams`
+`http`, `https`, `httpServer`, `sockets`, `streams`
 
 **UI** (`aivi.ui.*` and `aivi.*`):
 `ui.gtk4`, `ui.layout`, `color`

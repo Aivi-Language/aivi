@@ -547,9 +547,6 @@
                 }
             }
             "GtkRevealer" => {
-                if let Some(value) = props.get("reveal-child").and_then(|v| parse_bool_text(v)) {
-                    unsafe { gtk_revealer_set_reveal_child(widget, if value { 1 } else { 0 }) };
-                }
                 if let Some(value) = props.get("transition-type") {
                     let t: c_int = match value.as_str() {
                         "none" => 0,
@@ -568,6 +565,9 @@
                 }
                 if let Some(value) = props.get("transition-duration").and_then(|v| v.parse::<u32>().ok()) {
                     unsafe { gtk_revealer_set_transition_duration(widget, value) };
+                }
+                if let Some(value) = props.get("reveal-child").and_then(|v| parse_bool_text(v)) {
+                    unsafe { gtk_revealer_set_reveal_child(widget, if value { 1 } else { 0 }) };
                 }
             }
             "GtkMenuButton" => {                if let Some(value) = props.get("label") {
