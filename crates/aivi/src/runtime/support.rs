@@ -190,7 +190,14 @@ pub(crate) fn format_value(value: &Value) -> String {
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
-        Value::Record(_) => "{...}".to_string(),
+        Value::Record(fields) => {
+            let mut pairs: Vec<String> = fields
+                .iter()
+                .map(|(k, v)| format!("{}: {}", k, format_value(v)))
+                .collect();
+            pairs.sort();
+            format!("{{ {} }}", pairs.join(", "))
+        }
         Value::Constructor { name, args } => {
             if args.is_empty() {
                 name.clone()
