@@ -26,7 +26,7 @@ fn has_code(diags: &[tower_lsp::lsp_types::Diagnostic], code: &str) -> bool {
 #[test]
 fn strict_level_off_returns_no_strict_diags() {
     let text = "module demo\n\nid = x = > x\n";
-    let diags = Backend::build_diagnostics_strict(&text, &uri(), &strict(StrictLevel::Off));
+    let diags = Backend::build_diagnostics_strict(text, &uri(), &strict(StrictLevel::Off));
     assert!(
         !has_code(&diags, "AIVI-S014"),
         "strict Off must not emit AIVI-S014"
@@ -71,7 +71,7 @@ fn warnings_as_errors_elevates_severity() {
 #[test]
 fn lexical_invisible_unicode_s001() {
     // Insert a zero-width space inside an identifier.
-    let text = format!("module demo\n\nval\u{200B}ue = 1\n");
+    let text = "module demo\n\nval\u{200B}ue = 1\n".to_string();
     let diags = Backend::build_diagnostics_strict(&text, &uri(), &strict(StrictLevel::LexicalStructural));
     assert!(has_code(&diags, "AIVI-S001"), "expected AIVI-S001 for invisible unicode");
 }
@@ -79,7 +79,7 @@ fn lexical_invisible_unicode_s001() {
 #[test]
 fn lexical_invisible_unicode_multiple_chars() {
     // Multiple invisible characters → multiple diagnostics.
-    let text = format!("module demo\n\n\u{200B}\u{FEFF}x = 1\n");
+    let text = "module demo\n\n\u{200B}\u{FEFF}x = 1\n".to_string();
     let diags = Backend::build_diagnostics_strict(&text, &uri(), &strict(StrictLevel::LexicalStructural));
     let count = diags.iter().filter(|d| {
         matches!(d.code.as_ref(), Some(NumberOrString::String(c)) if c == "AIVI-S001")

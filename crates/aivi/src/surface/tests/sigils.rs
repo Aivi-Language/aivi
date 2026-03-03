@@ -541,7 +541,7 @@ fn gtk_sigil_splice_in_property() {
 #[test]
 fn gtk_sigil_boolean_attribute() {
     let src = "module Example\n\nx = ~<gtk><object class=\"GtkButton\" visible={ True } sensitive={ False } /></gtk>\n";
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(
         diags.is_empty(),
         "unexpected diags: {:?}",
@@ -552,7 +552,7 @@ fn gtk_sigil_boolean_attribute() {
 #[test]
 fn gtk_sigil_numeric_attribute_splice() {
     let src = "module Example\n\nx = ~<gtk><object class=\"GtkBox\" spacing={ 12 } /></gtk>\n";
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(
         diags.is_empty(),
         "unexpected diags: {:?}",
@@ -567,7 +567,7 @@ fn gtk_sigil_numeric_attribute_splice() {
 #[test]
 fn html_sigil_void_elements() {
     let src = "module Example\n\nx =\n  ~<html>\n    <div>\n      <br />\n      <hr />\n      <img src=\"test.png\" />\n    </div>\n  </html>\n";
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(
         diags.is_empty(),
         "unexpected diags: {:?}",
@@ -640,7 +640,7 @@ fn html_sigil_nested_splices() {
 #[test]
 fn html_sigil_empty_element() {
     let src = "module Example\n\nx = ~<html><div></div></html>\n";
-    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    let (_modules, diags) = parse_modules(Path::new("test.aivi"), src);
     assert!(
         diags.is_empty(),
         "unexpected diags: {:?}",

@@ -767,4 +767,320 @@ updated = tableRows + upd (id == 1) (row => row)
             "expected no unknown-name errors for predicate-position bare fields, got {unknown_name_errors:#?}"
         );
     }
+
+    // ---- resolver/debug_and_unused.rs: additional tests ----
+
+    #[test]
+    fn resolver_detects_unknown_name() {
+        let source = r#"
+module test.unknown
+x = unknownFunc 42
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        assert!(
+            diags.iter().any(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005"),
+            "expected E2005 for unknown name, got: {:?}",
+            diags.iter().filter(|d| d.path == "test.aivi").collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn resolver_lambda_params_are_in_scope() {
+        let source = r#"
+module test.lambda_scope
+
+f = x => y => x + y
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:?}");
+    }
+
+    #[test]
+    fn resolver_match_pattern_binders_in_scope() {
+        let source = r#"
+module test.match_scope
+
+f = opt =>
+  opt match
+    | Some x => x
+    | None => 0
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:?}");
+    }
+
+    #[test]
+    fn resolver_block_let_binding_in_scope() {
+        let source = r#"
+module test.block_scope
+
+f = do Effect {
+  x <- pure 1
+  y = 2
+  pure (x + y)
+}
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:?}");
+    }
+
+    #[test]
+    fn resolver_constructor_names_always_valid() {
+        let source = r#"
+module test.constructors
+
+x = Some 42
+y = None
+z = True
+w = False
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:?}");
+    }
+
+    #[test]
+    fn resolver_as_pattern_binder_in_scope() {
+        let source = r#"
+module test.as_pattern
+
+f = all as (Some _) => all
+f = None => None
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:?}");
+    }
+
+    #[test]
+    fn resolver_list_pattern_rest_in_scope() {
+        let source = r#"
+module test.list_pattern
+
+tail = [_, ...rest] => rest
+tail = _ => []
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:?}");
+    }
+
+    #[test]
+    fn resolver_special_unknown_name_messages() {
+        let source = r#"
+module test.special_names
+
+x = return
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(
+            !errors.is_empty(),
+            "expected error for 'return' keyword"
+        );
+        assert!(
+            errors.iter().any(|d| d.diagnostic.message.contains("AIVI has no `return`")),
+            "expected special message for 'return', got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn resolver_special_message_for_null() {
+        let source = r#"
+module test.null_name
+
+x = null
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(
+            !errors.is_empty(),
+            "expected error for 'null'"
+        );
+        assert!(
+            errors.iter().any(|d| d.diagnostic.message.contains("AIVI has no nulls")),
+            "expected special message for 'null', got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn resolver_special_message_for_loop_keywords() {
+        let source = r#"
+module test.loop_name
+
+x = while
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(
+            !errors.is_empty(),
+            "expected error for 'while'"
+        );
+        assert!(
+            errors.iter().any(|d| d.diagnostic.message.contains("AIVI has no loops")),
+            "expected special message for 'while', got: {errors:?}"
+        );
+    }
+
+    #[test]
+    fn resolver_tuple_pattern_binders_in_scope() {
+        let source = r#"
+module test.tuple_scope
+
+fst = (a, _) => a
+snd = (_, b) => b
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:?}");
+    }
+
+    #[test]
+    fn resolver_guard_in_match_scope() {
+        let source = r#"
+module test.guard_scope
+
+classify = x =>
+  x match
+    | n when n > 0 => "positive"
+    | 0 => "zero"
+    | _ => "negative"
+"#;
+        let (mut modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let mut all = crate::stdlib::embedded_stdlib_modules();
+        all.append(&mut modules);
+        let diags = check_modules(&all);
+        let errors: Vec<_> = diags
+            .iter()
+            .filter(|d| d.path == "test.aivi" && d.diagnostic.code == "E2005")
+            .collect();
+        assert!(errors.is_empty(), "unexpected unknown-name errors: {errors:?}");
+    }
+
+    #[test]
+    fn debug_decorator_on_lambda_def_fires_e2010() {
+        let source = r#"
+module test.debug_lambda
+
+@debug(pipes, args, return, time)
+f = x => x + 1
+"#;
+        let (modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let diags = check_modules(&modules);
+        // Lambda-style defs have empty params, so E2010 fires
+        assert!(
+            diags.iter().any(|d| d.diagnostic.code == "E2010"),
+            "expected E2010 for lambda-style function, got: {diags:?}"
+        );
+    }
+
+    #[test]
+    fn debug_decorator_unknown_param_still_fires_e2012() {
+        let source = r#"
+module test.debug_e2012
+
+@debug(pipes, nope)
+f = x => x
+"#;
+        let (modules, diags) =
+            crate::surface::parse_modules(std::path::Path::new("test.aivi"), source);
+        assert!(diags.is_empty(), "unexpected parse diagnostics: {diags:?}");
+        let diags = check_modules(&modules);
+        assert!(
+            diags.iter().any(|d| d.diagnostic.code == "E2012"),
+            "expected E2012 for unknown debug param, got: {diags:?}"
+        );
+    }
 }

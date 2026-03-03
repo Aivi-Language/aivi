@@ -1,0 +1,251 @@
+@no_prelude
+module integrationTests.runtime.textBuiltins
+
+use aivi
+use aivi.testing
+use aivi.text
+
+// --- Length and isEmpty ---
+
+@test "length of text"
+lengthTest = do Effect {
+  assertEq (length "hello") 5
+  assertEq (length "") 0
+  assertEq (length "a") 1
+}
+
+@test "isEmpty"
+isEmptyTest = do Effect {
+  assertEq (isEmpty "") True
+  assertEq (isEmpty "a") False
+}
+
+// --- Contains, startsWith, endsWith ---
+
+@test "contains"
+containsTest = do Effect {
+  assertEq (contains "ell" "hello") True
+  assertEq (contains "xyz" "hello") False
+  assertEq (contains "" "hello") True
+}
+
+@test "startsWith"
+startsWithTest = do Effect {
+  assertEq (startsWith "hel" "hello") True
+  assertEq (startsWith "xyz" "hello") False
+  assertEq (startsWith "" "hello") True
+}
+
+@test "endsWith"
+endsWithTest = do Effect {
+  assertEq (endsWith "llo" "hello") True
+  assertEq (endsWith "xyz" "hello") False
+  assertEq (endsWith "" "hello") True
+}
+
+// --- indexOf, lastIndexOf, count ---
+
+@test "indexOf found"
+indexOfFound = do Effect {
+  assertEq (indexOf "ll" "hello") (Some 2)
+}
+
+@test "indexOf not found"
+indexOfNotFound = do Effect {
+  assertEq (indexOf "xyz" "hello") None
+}
+
+@test "lastIndexOf"
+lastIndexOfTest = do Effect {
+  assertEq (lastIndexOf "l" "hello world") (Some 9)
+}
+
+@test "count occurrences"
+countTest = do Effect {
+  assertEq (count "l" "hello world") 3
+  assertEq (count "z" "hello") 0
+}
+
+@test "compare"
+compareTest = do Effect {
+  assertEq (compare "a" "b") (-1)
+  assertEq (compare "b" "a") 1
+  assertEq (compare "a" "a") 0
+}
+
+// --- Trim ---
+
+@test "trim"
+trimTest = do Effect {
+  assertEq (trim "  hello  ") "hello"
+  assertEq (trim "hello") "hello"
+  assertEq (trim "  ") ""
+}
+
+@test "trimStart"
+trimStartTest = do Effect {
+  assertEq (trimStart "  hello  ") "hello  "
+}
+
+@test "trimEnd"
+trimEndTest = do Effect {
+  assertEq (trimEnd "  hello  ") "  hello"
+}
+
+// --- Case conversion ---
+
+@test "toLower"
+toLowerTest = do Effect {
+  assertEq (toLower "HELLO") "hello"
+  assertEq (toLower "Hello World") "hello world"
+  assertEq (toLower "") ""
+}
+
+@test "toUpper"
+toUpperTest = do Effect {
+  assertEq (toUpper "hello") "HELLO"
+  assertEq (toUpper "") ""
+}
+
+@test "capitalize"
+capitalizeTest = do Effect {
+  assertEq (capitalize "hello") "Hello"
+  assertEq (capitalize "") ""
+}
+
+@test "titleCase"
+titleCaseTest = do Effect {
+  assertEq (titleCase "hello world") "Hello World"
+}
+
+@test "caseFold"
+caseFoldTest = do Effect {
+  assertEq (caseFold "HELLO") "hello"
+}
+
+// --- Replace ---
+
+@test "replace first occurrence"
+replaceTest = do Effect {
+  assertEq (replace "l" "r" "hello") "herlo"
+}
+
+@test "replaceAll"
+replaceAllTest = do Effect {
+  assertEq (replaceAll "l" "r" "hello") "herro"
+}
+
+@test "remove"
+removeTest = do Effect {
+  assertEq (remove "l" "hello") "heo"
+}
+
+// --- Split and join ---
+
+@test "split"
+splitTest = do Effect {
+  assertEq (split "," "a,b,c") ["a", "b", "c"]
+  assertEq (split "," "hello") ["hello"]
+}
+
+@test "splitLines"
+splitLinesTest = do Effect {
+  assertEq (splitLines "a\nb\nc") ["a", "b", "c"]
+}
+
+@test "concat"
+concatTest = do Effect {
+  assertEq (concat ["a", "b", "c"]) "abc"
+  assertEq (concat []) ""
+}
+
+// --- Slice ---
+
+@test "slice basic"
+sliceBasic = do Effect {
+  assertEq (slice 1 3 "hello") "el"
+  assertEq (slice 0 5 "hello") "hello"
+}
+
+@test "slice empty result"
+sliceEmpty = do Effect {
+  assertEq (slice 3 3 "hello") ""
+  assertEq (slice 5 3 "hello") ""
+}
+
+@test "slice negative index"
+sliceNeg = do Effect {
+  assertEq (slice (-2) 5 "hello") "lo"
+}
+
+// --- Pad ---
+
+@test "padStart"
+padStartTest = do Effect {
+  assertEq (padStart 8 "0" "hello") "000hello"
+}
+
+@test "padEnd"
+padEndTest = do Effect {
+  assertEq (padEnd 8 "." "hello") "hello..."
+}
+
+@test "padStart no padding needed"
+padStartNoPad = do Effect {
+  assertEq (padStart 3 "0" "hello") "hello"
+}
+
+// --- Repeat and reverse ---
+
+@test "repeat"
+repeatTest = do Effect {
+  assertEq (repeat 3 "ab") "ababab"
+  assertEq (repeat 0 "ab") ""
+}
+
+@test "reverse"
+reverseTest = do Effect {
+  assertEq (reverse "hello") "olleh"
+  assertEq (reverse "") ""
+  assertEq (reverse "a") "a"
+}
+
+// --- Chunk ---
+
+@test "chunk"
+chunkTest = do Effect {
+  assertEq (chunk 2 "abcde") ["ab", "cd", "e"]
+  assertEq (chunk 3 "abcdef") ["abc", "def"]
+}
+
+// --- parseInt and parseFloat ---
+
+@test "parseInt valid"
+parseIntValid = do Effect {
+  assertEq (parseInt "42") (Some 42)
+  assertEq (parseInt "-7") (Some (-7))
+}
+
+@test "parseInt invalid"
+parseIntInvalid = do Effect {
+  assertEq (parseInt "abc") None
+  assertEq (parseInt "") None
+}
+
+@test "parseFloat valid"
+parseFloatValid = do Effect {
+  assertEq (parseFloat "3.14") (Some 3.14)
+}
+
+@test "parseFloat invalid"
+parseFloatInvalid = do Effect {
+  assertEq (parseFloat "abc") None
+}
+
+// --- debugText ---
+
+@test "debugText on int"
+debugTextInt = do Effect {
+  result = debugText 42
+  assertEq result "42"
+}

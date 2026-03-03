@@ -1,0 +1,201 @@
+@no_prelude
+module integrationTests.runtime.collectionsBuiltins
+
+use aivi
+use aivi.testing
+use aivi.map
+
+// --- Map.empty and basic operations ---
+
+@test "map empty has size 0"
+mapEmptySize = do Effect {
+  m = empty
+  assertEq (size m) 0
+}
+
+@test "map insert and get"
+mapInsertGet = do Effect {
+  m = insert "a" 1 empty
+  assertEq (get "a" m) (Some 1)
+  assertEq (get "b" m) None
+}
+
+@test "map size after inserts"
+mapSizeInserts = do Effect {
+  m = insert "a" 1 (insert "b" 2 empty)
+  assertEq (size m) 2
+}
+
+@test "map has"
+mapHas = do Effect {
+  m = insert "x" 42 empty
+  assertEq (has "x" m) True
+  assertEq (has "y" m) False
+}
+
+@test "map remove"
+mapRemove = do Effect {
+  m = insert "a" 1 (insert "b" 2 empty)
+  m2 = remove "a" m
+  assertEq (get "a" m2) None
+  assertEq (get "b" m2) (Some 2)
+}
+
+@test "map update existing"
+mapUpdate = do Effect {
+  m = insert "a" 10 empty
+  m2 = update "a" (v => v + 5) m
+  assertEq (get "a" m2) (Some 15)
+}
+
+@test "map update missing key unchanged"
+mapUpdateMissing = do Effect {
+  m = insert "a" 10 empty
+  m2 = update "b" (v => v + 5) m
+  assertEq (size m2) 1
+}
+
+@test "map keys"
+mapKeys = do Effect {
+  m = insert "a" 1 empty
+  ks = keys m
+  assertEq ks ["a"]
+}
+
+@test "map values"
+mapValues = do Effect {
+  m = insert "a" 1 empty
+  vs = values m
+  assertEq vs [1]
+}
+
+@test "map fromList and toList"
+mapFromList = do Effect {
+  m = fromList [("a", 1), ("b", 2)]
+  assertEq (get "a" m) (Some 1)
+  assertEq (get "b" m) (Some 2)
+  assertEq (size m) 2
+}
+
+@test "map union"
+mapUnion = do Effect {
+  m1 = fromList [("a", 1)]
+  m2 = fromList [("b", 2)]
+  m3 = union m1 m2
+  assertEq (get "a" m3) (Some 1)
+  assertEq (get "b" m3) (Some 2)
+}
+
+@test "map union right overrides"
+mapUnionOverride = do Effect {
+  m1 = fromList [("a", 1)]
+  m2 = fromList [("a", 2)]
+  m3 = union m1 m2
+  assertEq (get "a" m3) (Some 2)
+}
+
+@test "map getOrElse"
+mapGetOrElse = do Effect {
+  m = fromList [("a", 1)]
+  assertEq (getOrElse "a" 0 m) 1
+  assertEq (getOrElse "b" 0 m) 0
+}
+
+@test "map map values"
+mapMapValues = do Effect {
+  m = fromList [("a", 1), ("b", 2)]
+  m2 = map (v => v * 10) m
+  assertEq (get "a" m2) (Some 10)
+  assertEq (get "b" m2) (Some 20)
+}
+
+// --- Set operations ---
+
+@test "set empty has size 0"
+setEmptySize = do Effect {
+  s = Set.empty
+  assertEq (Set.size s) 0
+}
+
+@test "set insert and contains"
+setInsertContains = do Effect {
+  s = Set.insert 1 (Set.insert 2 Set.empty)
+  assertEq (Set.contains 1 s) True
+  assertEq (Set.contains 3 s) False
+}
+
+@test "set remove"
+setRemove = do Effect {
+  s = Set.insert 1 (Set.insert 2 Set.empty)
+  s2 = Set.remove 1 s
+  assertEq (Set.contains 1 s2) False
+  assertEq (Set.contains 2 s2) True
+}
+
+@test "set union"
+setUnion = do Effect {
+  s1 = Set.fromList [1, 2, 3]
+  s2 = Set.fromList [3, 4, 5]
+  s3 = Set.union s1 s2
+  assertEq (Set.size s3) 5
+  assertEq (Set.contains 1 s3) True
+  assertEq (Set.contains 5 s3) True
+}
+
+@test "set intersection"
+setIntersection = do Effect {
+  s1 = Set.fromList [1, 2, 3]
+  s2 = Set.fromList [2, 3, 4]
+  s3 = Set.intersection s1 s2
+  assertEq (Set.size s3) 2
+  assertEq (Set.contains 2 s3) True
+  assertEq (Set.contains 3 s3) True
+  assertEq (Set.contains 1 s3) False
+}
+
+@test "set difference"
+setDifference = do Effect {
+  s1 = Set.fromList [1, 2, 3]
+  s2 = Set.fromList [2, 3, 4]
+  s3 = Set.difference s1 s2
+  assertEq (Set.size s3) 1
+  assertEq (Set.contains 1 s3) True
+  assertEq (Set.contains 2 s3) False
+}
+
+@test "set fromList deduplicates"
+setFromListDedup = do Effect {
+  s = Set.fromList [1, 1, 2, 2, 3]
+  assertEq (Set.size s) 3
+}
+
+@test "set toList"
+setToList = do Effect {
+  s = Set.fromList [1]
+  xs = Set.toList s
+  assertEq xs [1]
+}
+
+// --- Queue operations ---
+
+@test "queue basic"
+queueBasic = do Effect {
+  q = Queue.enqueue 1 (Queue.enqueue 2 Queue.empty)
+  assertEq (Queue.peek q) (Some 2)
+}
+
+// --- Heap operations ---
+
+@test "heap basic"
+heapBasic = do Effect {
+  h = Heap.push 3 (Heap.push 1 (Heap.push 2 Heap.empty))
+  assertEq (Heap.peekMin h) (Some 1)
+  assertEq (Heap.size h) 3
+}
+
+@test "heap fromList"
+heapFromList = do Effect {
+  h = Heap.fromList [5, 3, 1, 4, 2]
+  assertEq (Heap.peekMin h) (Some 1)
+  assertEq (Heap.size h) 5
+}

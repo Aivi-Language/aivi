@@ -28,7 +28,8 @@ use super::text::build_text_record;
 use super::timezone::build_timezone_record;
 use super::ui::build_ui_record;
 use super::url_http::{
-    build_http_client_record, build_rest_api_record, build_url_record, HttpClientMode,
+    build_http_client_record, build_openapi_call_builtin, build_rest_api_record, build_url_record,
+    HttpClientMode,
 };
 use super::util::{builtin, builtin_constructor};
 use super::{database::build_database_record, log::build_log_record};
@@ -403,6 +404,10 @@ pub(crate) fn register_builtins(env: &Env) {
         build_http_client_record(HttpClientMode::Https),
     );
     env.set("rest".to_string(), build_rest_api_record());
+    env.set(
+        "__openapi_call".to_string(),
+        build_openapi_call_builtin(),
+    );
     env.set("email".to_string(), build_email_record());
     env.set(
         "sockets".to_string(),

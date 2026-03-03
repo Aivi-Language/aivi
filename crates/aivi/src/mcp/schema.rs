@@ -1,9 +1,31 @@
+use std::collections::HashMap;
 use std::io::{BufRead, Write};
+use std::sync::{Mutex, OnceLock};
+
+#[cfg(unix)]
+use std::io::BufReader;
+#[cfg(unix)]
+use std::os::unix::fs::FileTypeExt;
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
+#[cfg(unix)]
+use std::process::Stdio;
+#[cfg(unix)]
+use std::time::Duration;
 
 const MCP_TOOL_PARSE: &str = "aivi.parse";
 const MCP_TOOL_CHECK: &str = "aivi.check";
 const MCP_TOOL_FMT: &str = "aivi.fmt";
 const MCP_TOOL_FMT_WRITE: &str = "aivi.fmt.write";
+
+const MCP_TOOL_GTK_DISCOVER: &str = "aivi.gtk.discover";
+const MCP_TOOL_GTK_ATTACH: &str = "aivi.gtk.attach";
+const MCP_TOOL_GTK_LAUNCH: &str = "aivi.gtk.launch";
+const MCP_TOOL_GTK_HELLO: &str = "aivi.gtk.hello";
+const MCP_TOOL_GTK_LIST_WIDGETS: &str = "aivi.gtk.listWidgets";
+const MCP_TOOL_GTK_DUMP_TREE: &str = "aivi.gtk.dumpTree";
+const MCP_TOOL_GTK_CLICK: &str = "aivi.gtk.click";
+const MCP_TOOL_GTK_TYPE: &str = "aivi.gtk.type";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StdioFraming {
@@ -179,6 +201,14 @@ fn execute_tool(name: &str, arguments: &serde_json::Value) -> Result<serde_json:
         MCP_TOOL_CHECK => execute_check_tool(arguments),
         MCP_TOOL_FMT => execute_fmt_tool(arguments),
         MCP_TOOL_FMT_WRITE => execute_fmt_write_tool(arguments),
+        MCP_TOOL_GTK_DISCOVER => execute_gtk_discover_tool(arguments),
+        MCP_TOOL_GTK_ATTACH => execute_gtk_attach_tool(arguments),
+        MCP_TOOL_GTK_LAUNCH => execute_gtk_launch_tool(arguments),
+        MCP_TOOL_GTK_HELLO => execute_gtk_hello_tool(arguments),
+        MCP_TOOL_GTK_LIST_WIDGETS => execute_gtk_list_widgets_tool(arguments),
+        MCP_TOOL_GTK_DUMP_TREE => execute_gtk_dump_tree_tool(arguments),
+        MCP_TOOL_GTK_CLICK => execute_gtk_click_tool(arguments),
+        MCP_TOOL_GTK_TYPE => execute_gtk_type_tool(arguments),
         _ => Err(AiviError::InvalidCommand(format!("unknown tool {name}"))),
     }
 }
@@ -337,6 +367,323 @@ fn execute_fmt_write_tool(arguments: &serde_json::Value) -> Result<serde_json::V
             "processed": processed_count,
             "changed": changed_count
         }
+    }))
+}
+
+#[derive(Clone, Debug)]
+struct GtkUiSession {
+    socket_path: String,
+    token: String,
+    pid: Option<u32>,
+}
+
+static GTK_UI_SESSIONS: OnceLock<Mutex<HashMap<String, GtkUiSession>>> = OnceLock::new();
+
+fn gtk_ui_sessions() -> &'static Mutex<HashMap<String, GtkUiSession>> {
+    GTK_UI_SESSIONS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn gtk_get_session(session_id: &str) -> Result<GtkUiSession, AiviError> {
+    let sessions = gtk_ui_sessions()
+        .lock()
+        .map_err(|_| AiviError::InvalidCommand("gtk sessions lock poisoned".to_string()))?;
+    sessions
+        .get(session_id)
+        .cloned()
+        .ok_or_else(|| AiviError::InvalidCommand(format!("unknown gtk session {session_id}")))
+}
+
+#[cfg(unix)]
+fn gtk_ui_call(
+    session: &GtkUiSession,
+    method: &str,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    let mut stream = UnixStream::connect(&session.socket_path)?;
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+
+    let mut request = serde_json::to_vec(&serde_json::json!({
+        "id": 1,
+        "token": session.token,
+        "method": method,
+        "params": params,
+    }))
+    .map_err(|err| AiviError::InvalidCommand(err.to_string()))?;
+    request.push(b'\n');
+    stream.write_all(&request)?;
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    let resp: serde_json::Value =
+        serde_json::from_str(&line).map_err(|err| AiviError::InvalidCommand(err.to_string()))?;
+
+    if resp.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        Ok(resp
+            .get("result")
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({})))
+    } else {
+        let msg = resp
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|m| m.as_str())
+            .unwrap_or("ui_debug error");
+        Err(AiviError::InvalidCommand(msg.to_string()))
+    }
+}
+
+#[cfg(not(unix))]
+fn gtk_ui_call(
+    _session: &GtkUiSession,
+    _method: &str,
+    _params: serde_json::Value,
+) -> Result<serde_json::Value, AiviError> {
+    Err(AiviError::InvalidCommand(
+        "gtk ui tools require a unix platform".to_string(),
+    ))
+}
+
+fn gtk_widget_params(args: &serde_json::Map<String, serde_json::Value>) -> Result<serde_json::Value, AiviError> {
+    let mut params = serde_json::Map::new();
+    if let Some(name) = args.get("name").and_then(|v| v.as_str()) {
+        params.insert("name".to_string(), serde_json::Value::String(name.to_string()));
+    }
+    if let Some(id) = args.get("id").and_then(|v| v.as_i64()) {
+        params.insert("id".to_string(), serde_json::Value::Number(id.into()));
+    }
+    if !params.contains_key("name") && !params.contains_key("id") {
+        return Err(AiviError::InvalidCommand(
+            "expected one of: name (string) or id (integer)".to_string(),
+        ));
+    }
+    Ok(serde_json::Value::Object(params))
+}
+
+fn execute_gtk_discover_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let _args = parse_tool_args(arguments, &[])?;
+
+    #[cfg(unix)]
+    {
+        let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
+        let mut sockets = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&runtime_dir) {
+            for entry in entries.flatten() {
+                let Ok(file_type) = entry.file_type() else {
+                    continue;
+                };
+                if !file_type.is_socket() {
+                    continue;
+                }
+                let name = entry.file_name();
+                let Some(name) = name.to_str() else {
+                    continue;
+                };
+                if name.starts_with("aivi-ui-") && name.ends_with(".sock") {
+                    sockets.push(entry.path().display().to_string());
+                }
+            }
+        }
+        sockets.sort();
+        Ok(serde_json::json!({
+            "ok": true,
+            "tool": MCP_TOOL_GTK_DISCOVER,
+            "runtimeDir": runtime_dir,
+            "sockets": sockets,
+        }))
+    }
+
+    #[cfg(not(unix))]
+    {
+        Err(AiviError::InvalidCommand(
+            "gtk ui tools require a unix platform".to_string(),
+        ))
+    }
+}
+
+fn execute_gtk_attach_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["socketPath", "token"])?;
+    let socket_path = get_required_string(args, "socketPath")?;
+    let token = get_required_string(args, "token")?;
+
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let session = GtkUiSession {
+        socket_path: socket_path.to_string(),
+        token: token.to_string(),
+        pid: None,
+    };
+    gtk_ui_sessions()
+        .lock()
+        .map_err(|_| AiviError::InvalidCommand("gtk sessions lock poisoned".to_string()))?
+        .insert(session_id.clone(), session);
+
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_ATTACH,
+        "sessionId": session_id,
+        "socketPath": socket_path,
+    }))
+}
+
+fn execute_gtk_launch_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["target", "release"])?;
+    let target = get_required_string(args, "target")?;
+    let release = get_optional_bool(args, "release", false)?;
+
+    #[cfg(unix)]
+    {
+        let runtime_dir = std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".to_string());
+        let token = uuid::Uuid::new_v4().to_string();
+        let socket_path = format!(
+            "{}/aivi-ui-mcp-{}.sock",
+            runtime_dir,
+            uuid::Uuid::new_v4()
+        );
+
+        let exe = std::env::current_exe()?;
+        let mut cmd = std::process::Command::new(exe);
+        cmd.arg("run");
+        if release {
+            cmd.arg("--release");
+        }
+        cmd.arg(target);
+        cmd.env("AIVI_UI_DEBUG", "1");
+        cmd.env("AIVI_UI_DEBUG_SOCKET", &socket_path);
+        cmd.env("AIVI_UI_DEBUG_TOKEN", &token);
+        cmd.stdin(Stdio::null());
+        cmd.stdout(Stdio::null());
+        cmd.stderr(Stdio::inherit());
+
+        let mut child = cmd.spawn()?;
+        let pid = child.id();
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+
+        let mut ready = false;
+        for _ in 0..60 {
+            if std::fs::metadata(&socket_path).is_ok() {
+                ready = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let session = GtkUiSession {
+            socket_path: socket_path.clone(),
+            token: token.clone(),
+            pid: Some(pid),
+        };
+        gtk_ui_sessions()
+            .lock()
+            .map_err(|_| AiviError::InvalidCommand("gtk sessions lock poisoned".to_string()))?
+            .insert(session_id.clone(), session);
+
+        Ok(serde_json::json!({
+            "ok": true,
+            "tool": MCP_TOOL_GTK_LAUNCH,
+            "sessionId": session_id,
+            "pid": pid,
+            "socketPath": socket_path,
+            "token": token,
+            "ready": ready,
+        }))
+    }
+
+    #[cfg(not(unix))]
+    {
+        Err(AiviError::InvalidCommand(
+            "gtk ui tools require a unix platform".to_string(),
+        ))
+    }
+}
+
+fn execute_gtk_hello_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+
+    let result = gtk_ui_call(&session, "hello", serde_json::json!({}))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_HELLO,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_list_widgets_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+
+    let result = gtk_ui_call(&session, "listNamedWidgets", serde_json::json!({}))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_LIST_WIDGETS,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_dump_tree_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "rootId"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+
+    let mut params = serde_json::Map::new();
+    if let Some(root_id) = args.get("rootId").and_then(|v| v.as_i64()) {
+        params.insert("rootId".to_string(), serde_json::Value::Number(root_id.into()));
+    }
+    let result = gtk_ui_call(&session, "dumpLiveTree", serde_json::Value::Object(params))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_DUMP_TREE,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_click_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+
+    let params = gtk_widget_params(args)?;
+    let result = gtk_ui_call(&session, "click", params)?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_CLICK,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
+    }))
+}
+
+fn execute_gtk_type_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
+    let args = parse_tool_args(arguments, &["sessionId", "name", "id", "text"])?;
+    let session_id = get_required_string(args, "sessionId")?;
+    let session = gtk_get_session(session_id)?;
+    let text = get_required_string(args, "text")?;
+
+    let mut params = match gtk_widget_params(args)? {
+        serde_json::Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    params.insert("text".to_string(), serde_json::Value::String(text.to_string()));
+
+    let result = gtk_ui_call(&session, "type", serde_json::Value::Object(params))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "tool": MCP_TOOL_GTK_TYPE,
+        "sessionId": session_id,
+        "pid": session.pid,
+        "result": result,
     }))
 }
 

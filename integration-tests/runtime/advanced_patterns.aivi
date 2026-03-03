@@ -1,0 +1,264 @@
+@no_prelude
+module integrationTests.runtime.advancedPatterns
+
+use aivi
+use aivi.testing
+use aivi.list
+
+// --- Nested pattern matching ---
+
+Tree A = Leaf A | Branch (Tree A) (Tree A)
+
+treeSum : Tree Int -> Int
+treeSum = t => t match
+  | Leaf n        => n
+  | Branch l r    => (treeSum l) + (treeSum r)
+
+@test "nested tree pattern matching"
+nestedTreeMatch = do Effect {
+  tree = Branch (Branch (Leaf 1) (Leaf 2)) (Leaf 3)
+  assertEq (treeSum tree) 6
+}
+
+maxInt : Int -> Int -> Int
+maxInt = a b => if a > b then a else b
+
+treeDepth : Tree A -> Int
+treeDepth = t => t match
+  | Leaf _      => 1
+  | Branch l r  => 1 + (maxInt (treeDepth l) (treeDepth r))
+
+@test "tree depth"
+treeDepthTest = do Effect {
+  tree = Branch (Branch (Leaf 1) (Leaf 2)) (Leaf 3)
+  assertEq (treeDepth tree) 3
+}
+
+// --- Complex currying and closures ---
+
+@test "triple nested closure"
+tripleNested = do Effect {
+  make = a => b => c => d => a + b + c + d
+  f = make 1
+  g = f 2
+  h = g 3
+  assertEq (h 4) 10
+}
+
+@test "closure captures computed value"
+closureCapturesComputed = do Effect {
+  x = 10 * 5
+  f = n => n + x
+  assertEq (f 8) 58
+}
+
+@test "closure in list operations"
+closureInList = do Effect {
+  multiplier = 3
+  result = map (x => x * multiplier) [1, 2, 3, 4]
+  assertEq result [3, 6, 9, 12]
+}
+
+// --- Higher-order function chains ---
+
+@test "chained map and filter"
+chainedMapFilter = do Effect {
+  result = [1, 2, 3, 4, 5, 6]
+    |> filter (x => x > 2)
+    |> map (x => x * 10)
+  assertEq result [30, 40, 50, 60]
+}
+
+@test "foldl with pipe"
+foldlPipe = do Effect {
+  result = [1, 2, 3, 4, 5]
+    |> foldl (acc => x => acc + x) 0
+  assertEq result 15
+}
+
+@test "map then foldl"
+mapThenFold = do Effect {
+  result = [1, 2, 3]
+    |> map (x => x * x)
+    |> foldl (acc => x => acc + x) 0
+  assertEq result 14
+}
+
+// --- Record construction and field access ---
+
+@test "complex record with nested fields"
+complexRecord = do Effect {
+  user = {
+    name: "Alice",
+    age: 30,
+    address: {
+      city: "Wonderland",
+      zip: "12345"
+    }
+  }
+  assertEq user.name "Alice"
+  assertEq user.address.city "Wonderland"
+  assertEq user.address.zip "12345"
+}
+
+@test "record patch with nested update"
+recordPatchNested = do Effect {
+  config = { debug: False, maxRetries: 3, label: "prod" }
+  updated = config <| { debug: True, label: "dev" }
+  assertEq updated.debug True
+  assertEq updated.maxRetries 3
+  assertEq updated.label "dev"
+}
+
+@test "record as function return"
+recordAsReturn = do Effect {
+  mkPair = a b => { first: a, second: b }
+  pair = mkPair 1 "hello"
+  assertEq pair.first 1
+  assertEq pair.second "hello"
+}
+
+// --- Nested do blocks with effects ---
+
+@test "nested do option in do effect"
+nestedDoOptionInEffect = do Effect {
+  result = do Option {
+    a <- Some 10
+    b <- Some 20
+    Some (a + b)
+  }
+  assertEq result (Some 30)
+}
+
+@test "nested do result in do effect"
+nestedDoResultInEffect = do Effect {
+  result = do Result {
+    x <- Ok 5
+    y <- Ok 10
+    Ok (x * y)
+  }
+  assertEq result (Ok 50)
+}
+
+@test "nested do result short-circuit"
+nestedDoResultShort = do Effect {
+  result = do Result {
+    x <- Ok 5
+    y <- Err "bad"
+    Ok (x + y)
+  }
+  assertEq result (Err "bad")
+}
+
+@test "attempt and recover"
+attemptRecover = do Effect {
+  result <- attempt (fail "boom")
+  val = result match
+    | Ok v  => v
+    | Err _ => 42
+  assertEq val 42
+}
+
+// --- Multi-clause function definitions ---
+
+Shape = Circle Float | Rectangle Float Float | Point
+
+describeShape : Shape -> Text
+describeShape =
+  | Circle _       => "circle"
+  | Rectangle _ _  => "rectangle"
+  | Point          => "point"
+
+@test "multi-clause shape"
+multiClauseShape = do Effect {
+  assertEq (describeShape (Circle 5.0)) "circle"
+  assertEq (describeShape (Rectangle 3.0 4.0)) "rectangle"
+  assertEq (describeShape Point) "point"
+}
+
+Expr = Num Int | Add Expr Expr | Mul Expr Expr
+
+eval : Expr -> Int
+eval = e => e match
+  | Num n     => n
+  | Add l r   => (eval l) + (eval r)
+  | Mul l r   => (eval l) * (eval r)
+
+@test "recursive ADT evaluation"
+recursiveAdtEval = do Effect {
+  expr = Add (Mul (Num 3) (Num 4)) (Num 5)
+  assertEq (eval expr) 17
+}
+
+// --- Complex list comprehension patterns ---
+
+@test "do list comprehension"
+doListComprehension = do Effect {
+  result = do List {
+    x <- [1, 2, 3]
+    y <- [10, 20]
+    [x * y]
+  }
+  assertEq result [10, 20, 20, 40, 30, 60]
+}
+
+// --- String interpolation with expressions ---
+
+@test "string concatenation"
+stringConcat = do Effect {
+  name = "world"
+  greeting = "hello " ++ name
+  assertEq greeting "hello world"
+}
+
+// --- Tuple patterns ---
+
+@test "tuple destructuring"
+tupleDestructure = do Effect {
+  pair = (1, "hello")
+  (a, b) = pair
+  assertEq a 1
+  assertEq b "hello"
+}
+
+@test "triple tuple"
+tripleTuple = do Effect {
+  t = (1, 2, 3)
+  (a, b, c) = t
+  assertEq (a + b + c) 6
+}
+
+// --- Boolean operations ---
+
+@test "boolean and or"
+boolOps = do Effect {
+  assertEq (True && True) True
+  assertEq (True && False) False
+  assertEq (False || True) True
+  assertEq (False || False) False
+}
+
+// --- Equality on ADTs ---
+
+Color = Red | Green | Blue
+
+@test "adt equality"
+adtEquality = do Effect {
+  assertEq Red Red
+  assertEq (Red == Green) False
+  assertEq (Some 42) (Some 42)
+  assertEq (Some 42 == None) False
+}
+
+// --- Recursive list function ---
+
+myLength : List A -> Int
+myLength = xs => xs match
+  | []          => 0
+  | [_, ...rest] => 1 + (myLength rest)
+
+@test "recursive list length"
+recursiveListLength = do Effect {
+  assertEq (myLength [1, 2, 3]) 3
+  assertEq (myLength []) 0
+}

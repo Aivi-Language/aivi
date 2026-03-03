@@ -122,8 +122,8 @@ pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
 };
 pub use mcp::{
-    bundled_specs_manifest, serve_mcp_stdio, serve_mcp_stdio_with_policy, McpManifest, McpPolicy,
-    McpResource, McpTool,
+    bundled_specs_manifest, bundled_specs_manifest_with_ui, serve_mcp_stdio,
+    serve_mcp_stdio_with_policy, McpManifest, McpPolicy, McpResource, McpTool,
 };
 pub use pm::{
     collect_aivi_sources, edit_cargo_toml_dependencies, ensure_aivi_dependency,

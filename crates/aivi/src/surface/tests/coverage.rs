@@ -3011,8 +3011,9 @@ fn lower_decorator_with_arg_to_arena() {
         .expect("x");
     assert_eq!(def.decorators.len(), 1);
     assert!(def.decorators[0].arg.is_some());
+    let arg = def.decorators[0].arg.expect("decorator arg");
     assert!(matches!(
-        arena.expr(def.decorators[0].arg.unwrap()),
+        arena.expr(arg),
         ArenaExpr::Literal(ArenaLiteral::String { .. })
     ));
 }
@@ -3088,7 +3089,7 @@ fn lower_use_decl_with_alias_to_arena() {
         .find(|u| u.module.symbol.as_str() == "some.module")
         .expect("use");
     assert!(u.alias.is_some());
-    assert_eq!(u.alias.as_ref().unwrap().symbol.as_str(), "SM");
+    assert_eq!(u.alias.as_ref().expect("alias").symbol.as_str(), "SM");
 }
 
 #[test]
@@ -3809,9 +3810,9 @@ fn openapi_with_boolean_and_number_schema() {
     };
     let j = r#"{"openapi":"3.0.0","info":{"title":"T","version":"1.0"},"paths":{},"components":{"schemas":{"Config":{"type":"object","properties":{"enabled":{"type":"boolean"},"weight":{"type":"number"},"count":{"type":"integer"}},"required":["enabled"]}}}}"#;
     let tmp = std::env::temp_dir().join("test_openapi_bn.json");
-    std::fs::write(&tmp, j).unwrap();
+    std::fs::write(&tmp, j).expect("write temp openapi bn");
     assert!(openapi_to_expr(
-        tmp.to_str().unwrap(),
+        tmp.to_str().expect("tmp path utf-8"),
         false,
         &PathBuf::from("/"),
         &span,
@@ -3831,15 +3832,15 @@ fn openapi_with_head_and_options_methods() {
     };
     let j = r#"{"openapi":"3.0.0","info":{"title":"T","version":"1.0"},"paths":{"/r":{"head":{"operationId":"headR","responses":{"200":{"description":"ok"}}},"options":{"operationId":"optR","responses":{"200":{"description":"ok"}}}}}}"#;
     let tmp = std::env::temp_dir().join("test_openapi_ho.json");
-    std::fs::write(&tmp, j).unwrap();
+    std::fs::write(&tmp, j).expect("write temp openapi ho");
     let res = openapi_to_expr(
-        tmp.to_str().unwrap(),
+        tmp.to_str().expect("tmp path utf-8"),
         false,
         &PathBuf::from("/"),
         &span,
         "api",
     )
-    .unwrap();
+    .expect("openapi_to_expr");
     match &res.expr {
         Expr::Record { fields, .. } => {
             let names: Vec<&str> = fields
@@ -3867,9 +3868,9 @@ fn openapi_with_array_schema() {
     };
     let j = r#"{"openapi":"3.0.0","info":{"title":"T","version":"1.0"},"paths":{},"components":{"schemas":{"UserList":{"type":"array","items":{"type":"string"}}}}}"#;
     let tmp = std::env::temp_dir().join("test_openapi_arr.json");
-    std::fs::write(&tmp, j).unwrap();
+    std::fs::write(&tmp, j).expect("write temp openapi arr");
     assert!(openapi_to_expr(
-        tmp.to_str().unwrap(),
+        tmp.to_str().expect("tmp path utf-8"),
         false,
         &PathBuf::from("/"),
         &span,

@@ -572,7 +572,7 @@ Fix:\n\
 
 fn print_help() {
     println!(
-        "aivi {} (language {})\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  version\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [--watch|-w] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] [--check-stdlib] <path|dir/...>\n  fmt [--write] <path|dir/...>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  test [--check-stdlib] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--out <dir|path>]\n  run <path|dir/...> [--debug-trace] [--watch|-w]\n  mcp serve <path|dir/...> [--allow-effects]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help\n  -V, --version",
+        "aivi {} (language {})\n\nUSAGE:\n  aivi <COMMAND>\n\nCOMMANDS:\n  version\n  init <name> [--bin|--lib] [--edition 2024] [--language-version 0.1] [--force]\n  new <name> ... (alias of init)\n  search <query>\n  install <spec> [--no-fetch]\n  package [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  publish [--dry-run] [--allow-dirty] [--no-verify] [-- <cargo args...>]\n  build [--release] [-- <cargo args...>]\n  run [--release] [--watch|-w] [-- <cargo args...>]\n  clean [--all]\n\n  parse <path|dir/...>\n  check [--debug-trace] [--check-stdlib] <path|dir/...>\n  fmt [--write] <path|dir/...>\n  desugar [--debug-trace] <path|dir/...>\n  kernel [--debug-trace] <path|dir/...>\n  rust-ir [--debug-trace] <path|dir/...>\n  test [--check-stdlib] <path|dir/...>\n  lsp\n  build <path|dir/...> [--debug-trace] [--out <dir|path>]\n  run <path|dir/...> [--debug-trace] [--watch|-w]\n  mcp serve <path|dir/...> [--allow-effects] [--ui]\n  i18n gen <catalog.properties> --locale <tag> --module <name> --out <file>\n\n  -h, --help\n  -V, --version",
         env!("CARGO_PKG_VERSION"),
         AIVI_LANGUAGE_VERSION
     );
@@ -599,9 +599,11 @@ fn cmd_mcp(args: &[String]) -> Result<(), AiviError> {
         "serve" => {
             let mut target = None;
             let mut allow_effects = false;
+            let mut ui = false;
             for arg in args.iter().skip(1) {
                 match arg.as_str() {
                     "--allow-effects" => allow_effects = true,
+                    "--ui" => ui = true,
                     value if !value.starts_with('-') && target.is_none() => {
                         target = Some(value.to_string());
                     }
@@ -613,7 +615,7 @@ fn cmd_mcp(args: &[String]) -> Result<(), AiviError> {
                 }
             }
             let target = target.as_deref().unwrap_or("./...");
-            cmd_mcp_serve(target, allow_effects)
+            cmd_mcp_serve(target, allow_effects, ui)
         }
         _ => Err(AiviError::InvalidCommand(format!("mcp {subcommand}"))),
     }
@@ -694,11 +696,15 @@ fn cmd_i18n_gen(args: &[String]) -> Result<(), AiviError> {
     Ok(())
 }
 
-fn cmd_mcp_serve(target: &str, allow_effects: bool) -> Result<(), AiviError> {
+fn cmd_mcp_serve(target: &str, allow_effects: bool, ui: bool) -> Result<(), AiviError> {
     // `aivi mcp serve` is meant to work even outside of a project checkout. In v0.1 it exposes
     // the bundled language specifications and does not depend on project code.
     let _ = target;
-    let manifest = aivi::bundled_specs_manifest();
+    let manifest = if ui {
+        aivi::bundled_specs_manifest_with_ui()
+    } else {
+        aivi::bundled_specs_manifest()
+    };
     serve_mcp_stdio_with_policy(
         &manifest,
         McpPolicy {

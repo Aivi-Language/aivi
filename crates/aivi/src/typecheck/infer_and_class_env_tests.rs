@@ -54,8 +54,14 @@ constant = 42
     );
     let types = result.type_strings.get("Test").expect("Test module types");
     assert!(types.contains_key("add"), "expected 'add' in types");
-    assert!(types.contains_key("identity"), "expected 'identity' in types");
-    assert!(types.contains_key("constant"), "expected 'constant' in types");
+    assert!(
+        types.contains_key("identity"),
+        "expected 'identity' in types"
+    );
+    assert!(
+        types.contains_key("constant"),
+        "expected 'constant' in types"
+    );
 }
 
 #[test]
@@ -290,7 +296,10 @@ display = x => prettyPrint x
         .into_iter()
         .filter(|d| !d.path.starts_with("<embedded:"))
         .collect();
-    assert!(!has_errors(&non_embedded), "unexpected errors: {non_embedded:?}");
+    assert!(
+        !has_errors(&non_embedded),
+        "unexpected errors: {non_embedded:?}"
+    );
 }
 
 // ---- checker/type_expr_and_rows.rs: row types ----
@@ -451,6 +460,593 @@ module Test
 
 describe : { name: Text, age: Int } -> Text
 describe = { name, age } => name
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+// ---- class_env.rs: more class environment tests ----
+
+#[test]
+fn class_env_default_method_implementation() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+class Printable A = {
+  toString: A -> Text
+}
+
+instance Printable Int = {
+  toString: x => "int"
+}
+
+render : Int -> Text
+render = x => toString x
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn class_env_parameterized_instance() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+class Show A = {
+  show: A -> Text
+}
+
+instance Show Int = {
+  show: _ => "int"
+}
+
+instance Show Text = {
+  show: x => x
+}
+
+x = show 42
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn class_env_class_with_no_supers() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+class Hashable A = {
+  hash: A -> Int
+}
+
+instance Hashable Int = {
+  hash: x => x
+}
+
+h = hash 42
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+// ---- elaboration.rs: type inference with expressions ----
+
+#[test]
+fn elaboration_lambda_type_propagation() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+apply : (Int -> Int) -> Int -> Int
+apply = f => x => f x
+
+double : Int -> Int
+double = x => x * 2
+
+result = apply double 21
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn elaboration_polymorphic_identity() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+id : A -> A
+id = x => x
+
+x = id 42
+y = id "hello"
+z = id True
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn elaboration_record_update_patch() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+Point = { x: Int, y: Int }
+
+origin : Point
+origin = { x: 0, y: 0 }
+
+moved = origin <| { x: 10 }
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn elaboration_nested_match() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+flatten : Option (Option A) -> Option A
+flatten = opt =>
+  opt ?
+    | Some (Some x) => Some x
+    | Some None => None
+    | None => None
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn elaboration_list_operations() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+nums : List Int
+nums = [1, 2, 3]
+
+head : List A -> Option A
+head = lst =>
+  lst ?
+    | [x, ...] => Some x
+    | [] => None
+
+first = head nums
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn elaboration_higher_order_function() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+compose : (B -> C) -> (A -> B) -> A -> C
+compose = f => g => x => f (g x)
+
+double : Int -> Int
+double = x => x * 2
+
+addOne : Int -> Int
+addOne = x => x + 1
+
+doubleAndAdd = compose addOne double
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+// ---- infer_effects_and_patches.rs: effect block type inference ----
+
+#[test]
+fn infer_effect_block_bind() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+f : Effect Text Int
+f = do Effect {
+  x <- pure 42
+  pure x
+}
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn infer_effect_let_rejects_effectful_rhs() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+f = do Effect {
+  x = pure 42
+  pure x
+}
+"#,
+    );
+    assert!(
+        has_errors(&diags),
+        "expected error for effectful let-binding"
+    );
+}
+
+#[test]
+fn infer_effect_block_multiple_binds() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+f : Effect Text Int
+f = do Effect {
+  a <- pure 1
+  b <- pure 2
+  c <- pure 3
+  pure (a + b + c)
+}
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn infer_patch_type_matches() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+Point = { x: Int, y: Int }
+
+move : Int -> Point -> Point
+move = dx => pt => pt <| { x: pt.x + dx }
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+// ---- spans_and_holes.rs: hole desugaring in type checker ----
+
+#[test]
+fn holes_in_pipe_chain() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+double : Int -> Int
+double = _ * 2
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn holes_multiple_in_binary() {
+    let result = parse_and_infer(
+        r#"
+module Test
+
+sub = _ - _
+"#,
+    );
+    let types = result.type_strings.get("Test").expect("Test module");
+    assert!(types.contains_key("sub"), "expected 'sub' in types");
+}
+
+#[test]
+fn holes_in_text_interpolation() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+greet : Text -> Text
+greet = name => "Hello ${name}!"
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+// ---- unbound_names.rs: more unbound name detection ----
+
+#[test]
+fn unbound_names_do_block_bind_in_scope() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+f = do Effect {
+  x <- pure 42
+  y <- pure (x + 1)
+  pure y
+}
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn unbound_names_nested_lambda_scope() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+f = a => b => c => a + b + c
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn unbound_names_constructor_names_always_in_scope() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+x = Some 42
+y = None
+z = True
+w = False
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn unbound_names_as_pattern_binder_in_scope() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+f : Option A -> Option A
+f = all as (Some _) => all
+f = None => None
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn unbound_names_list_pattern_rest_in_scope() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+tail : List A -> List A
+tail = [_, ...rest] => rest
+tail = _ => []
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn unbound_names_tuple_pattern_binders() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+fst = (a, _) => a
+snd = (_, b) => b
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+// ---- elaboration.rs: type alias tests ----
+
+#[test]
+fn type_alias_used_in_annotation() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+Pair A B = (A, B)
+
+swap : Pair A B -> Pair B A
+swap = (a, b) => (b, a)
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn type_alias_record_used_in_annotation() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+User = { name: Text, age: Int }
+
+mkUser : Text -> Int -> User
+mkUser = name => age => { name: name, age: age }
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+// ---- elaboration.rs: domain (ADT) types ----
+
+#[test]
+fn domain_type_match() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+Color = Red | Green | Blue
+
+isRed : Color -> Bool
+isRed = c =>
+  c ?
+    | Red => True
+    | _ => False
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn domain_type_with_data() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+Shape = Circle Float | Rect Float Float
+
+area : Shape -> Float
+area = s =>
+  s ?
+    | Circle r => 3.14159 * r * r
+    | Rect w h => w * h
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+// ---- checker: error detection ----
+
+#[test]
+fn detects_arity_mismatch() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+f : Int -> Int -> Int
+f = x => x
+"#,
+    );
+    assert!(has_errors(&diags), "expected arity error");
+}
+
+#[test]
+fn detects_record_field_type_mismatch() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+Point = { x: Int, y: Int }
+
+bad : Point
+bad = { x: "hello", y: 2 }
+"#,
+    );
+    assert!(
+        has_errors(&diags),
+        "expected type mismatch for record field"
+    );
+}
+
+// ---- infer_effects_and_patches.rs: generator type inference ----
+
+#[test]
+fn infer_generator_block() {
+    let result = parse_and_infer(
+        r#"
+module Test
+
+nums = generate {
+  yield 1
+  yield 2
+  yield 3
+}
+"#,
+    );
+    let non_embedded: Vec<_> = result
+        .diagnostics
+        .into_iter()
+        .filter(|d| !d.path.starts_with("<embedded:"))
+        .collect();
+    assert!(!has_errors(&non_embedded));
+    let types = result.type_strings.get("Test").expect("Test module");
+    assert!(types.contains_key("nums"));
+}
+
+// ---- class_env.rs: multi-param class ----
+
+#[test]
+fn class_env_multi_instance() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+class Eq A = {
+  eq: A -> A -> Bool
+}
+
+instance Eq Int = {
+  eq: a => b => a == b
+}
+
+instance Eq Text = {
+  eq: a => b => a == b
+}
+
+sameInt = eq 1 2
+sameText = eq "a" "b"
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+// ---- elaboration.rs: if expression type inference ----
+
+#[test]
+fn if_branches_must_match_types() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+f : Bool -> Int
+f = b => if b then 1 else 0
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn if_branches_type_mismatch_detected() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+f : Bool -> Int
+f = b => if b then 1 else "no"
+"#,
+    );
+    assert!(has_errors(&diags), "expected type mismatch in if branches");
+}
+
+// ---- elaboration.rs: unary neg type inference ----
+
+#[test]
+fn infer_unary_neg_int() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+x : Int
+x = -42
+"#,
+    );
+    assert!(!has_errors(&diags), "unexpected errors: {diags:?}");
+}
+
+#[test]
+fn infer_unary_neg_float() {
+    let diags = parse_and_check(
+        r#"
+module Test
+
+x : Float
+x = -3.14
 "#,
     );
     assert!(!has_errors(&diags), "unexpected errors: {diags:?}");

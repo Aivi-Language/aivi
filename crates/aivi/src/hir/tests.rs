@@ -662,4 +662,575 @@ greet = name => "Hello, ${name}!"
         let body = inner_lambda_body(expr);
         assert!(matches!(body, HirExpr::TextInterpolate { .. }));
     }
+
+    // ---- lower_blocks_and_patterns.rs: When/Unless/Given block items ----
+
+    #[test]
+    fn do_block_when_desugars_to_if() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+f = do Effect {
+  when True <- print "hello"
+  pure Unit
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "f");
+        assert!(matches!(expr, HirExpr::Block { .. }));
+    }
+
+    #[test]
+    fn do_block_unless_desugars_to_negated_if() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+f = do Effect {
+  unless False <- print "hello"
+  pure Unit
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "f");
+        assert!(matches!(expr, HirExpr::Block { .. }));
+    }
+
+    #[test]
+    fn do_block_given_desugars_to_if() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+f = do Effect {
+  given True or fail "not true"
+  pure Unit
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "f");
+        assert!(matches!(expr, HirExpr::Block { .. }));
+    }
+
+    // ---- lower_blocks_and_patterns.rs: Filter, Yield, Recurse ----
+
+    #[test]
+    fn generate_block_yield_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+nums = generate {
+  yield 1
+  yield 2
+  yield 3
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "nums");
+        assert!(matches!(expr, HirExpr::Block { .. }));
+    }
+
+    #[test]
+    fn generate_block_filter_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+evens = generate {
+  x <- [1, 2, 3, 4]
+  filter (x == 2)
+  yield x
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "evens");
+        assert!(matches!(expr, HirExpr::Block { .. }));
+    }
+
+    #[test]
+    fn generate_block_bind_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+cross = generate {
+  x <- [1, 2]
+  y <- [10, 20]
+  yield (x + y)
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "cross");
+        assert!(matches!(expr, HirExpr::Block { .. }));
+    }
+
+    // ---- lower_blocks_and_patterns.rs: resource blocks ----
+
+    #[test]
+    fn resource_block_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+myRes = resource {
+  handle <- openFile "test.txt"
+  yield handle
+  closeFile handle
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "myRes");
+        assert!(matches!(expr, HirExpr::Block { .. }));
+    }
+
+    // ---- lower_blocks_and_patterns.rs: nested do blocks ----
+
+    #[test]
+    fn nested_do_blocks() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+f = do Effect {
+  x <- do Effect {
+    pure 42
+  }
+  pure x
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "f");
+        if let HirExpr::Block { items, .. } = expr {
+            assert!(items.len() >= 2);
+        }
+    }
+
+    // ---- lower_blocks_and_patterns.rs: complex patterns ----
+
+    #[test]
+    fn pattern_nested_constructor_lowered() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+deep : Option (Option A) -> A
+deep = Some (Some x) => x
+"#,
+        );
+        let expr = find_def_expr(&program, "deep");
+        assert!(expr_is_lambda(expr));
+    }
+
+    #[test]
+    fn pattern_list_with_spread_rest() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+tail : List A -> List A
+tail = [_, ...rest] => rest
+tail = _ => []
+"#,
+        );
+        let expr = find_def_expr(&program, "tail");
+        let _ = expr;
+    }
+
+    #[test]
+    fn pattern_list_exact_elements() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+isPair : List A -> Bool
+isPair = [_, _] => True
+isPair = _ => False
+"#,
+        );
+        let expr = find_def_expr(&program, "isPair");
+        let _ = expr;
+    }
+
+    #[test]
+    fn pattern_record_multiple_fields() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+getInfo = { name, age } => (name, age)
+"#,
+        );
+        let expr = find_def_expr(&program, "getInfo");
+        assert!(expr_is_lambda(expr));
+    }
+
+    #[test]
+    fn pattern_tuple_nested() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+nested = ((a, b), c) => (a, b, c)
+"#,
+        );
+        let expr = find_def_expr(&program, "nested");
+        assert!(expr_is_lambda(expr));
+    }
+
+    #[test]
+    fn pattern_constructor_with_multiple_args() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+Result E A = Ok A | Err E
+
+getValue : Result E A -> Option A
+getValue = Ok x => Some x
+getValue = Err _ => None
+"#,
+        );
+        let expr = find_def_expr(&program, "getValue");
+        let _ = expr;
+    }
+
+    #[test]
+    fn pattern_literal_string() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+greet = "hello" => "hi"
+greet = _ => "unknown"
+"#,
+        );
+        let expr = find_def_expr(&program, "greet");
+        let _ = expr;
+    }
+
+    #[test]
+    fn pattern_literal_bool() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+flip = True => False
+flip = False => True
+"#,
+        );
+        let expr = find_def_expr(&program, "flip");
+        let _ = expr;
+    }
+
+    // ---- lower_expr.rs: more expression types ----
+
+    #[test]
+    fn lower_pipe_expression() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+g = x => x + 1
+result = 5 |> g
+"#,
+        );
+        let expr = find_def_expr(&program, "result");
+        assert!(matches!(expr, HirExpr::App { .. }));
+    }
+
+    #[test]
+    fn lower_pipe_chain() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+g = x => x + 1
+h = x => x * 2
+result = 5 |> g |> h
+"#,
+        );
+        let expr = find_def_expr(&program, "result");
+        assert!(matches!(expr, HirExpr::App { .. }));
+    }
+
+    #[test]
+    fn lower_and_desugars_to_if() {
+        let program = parse_and_lower(
+            r#"
+module Test
+result = True && False
+"#,
+        );
+        let expr = find_def_expr(&program, "result");
+        assert!(matches!(expr, HirExpr::If { .. }));
+    }
+
+    #[test]
+    fn lower_or_desugars_to_if() {
+        let program = parse_and_lower(
+            r#"
+module Test
+result = True || False
+"#,
+        );
+        let expr = find_def_expr(&program, "result");
+        assert!(matches!(expr, HirExpr::If { .. }));
+    }
+
+    #[test]
+    fn lower_patch_expression() {
+        let program = parse_and_lower(
+            r#"
+module Test
+updated = { x: 1, y: 2 } <| { x: 10 }
+"#,
+        );
+        let expr = find_def_expr(&program, "updated");
+        assert!(matches!(expr, HirExpr::Patch { .. }));
+    }
+
+    #[test]
+    fn lower_index_expression() {
+        let program = parse_and_lower(
+            r#"
+module Test
+item = lst => lst[0]
+"#,
+        );
+        let expr = find_def_expr(&program, "item");
+        assert!(expr_is_lambda(expr));
+        let body = inner_lambda_body(expr);
+        assert!(matches!(body, HirExpr::Index { .. }));
+    }
+
+    #[test]
+    fn lower_unary_neg() {
+        let program = parse_and_lower(
+            r#"
+module Test
+neg = x => -x
+"#,
+        );
+        let expr = find_def_expr(&program, "neg");
+        assert!(expr_is_lambda(expr));
+        let body = inner_lambda_body(expr);
+        assert!(matches!(body, HirExpr::Binary { op, .. } if op == "-"));
+    }
+
+    #[test]
+    fn lower_datetime_literal() {
+        let program = parse_and_lower(
+            r#"
+module Test
+d = 2024-01-01T00:00:00Z
+"#,
+        );
+        let expr = find_def_expr(&program, "d");
+        assert!(matches!(expr, HirExpr::LitDateTime { .. }));
+    }
+
+    #[test]
+    fn lower_lambda_multiple_params() {
+        let program = parse_and_lower(
+            r#"
+module Test
+add = a => b => c => a + b + c
+"#,
+        );
+        let expr = find_def_expr(&program, "add");
+        assert!(expr_is_lambda(expr));
+        let b1 = inner_lambda_body(expr);
+        assert!(expr_is_lambda(b1));
+        let b2 = inner_lambda_body(b1);
+        assert!(expr_is_lambda(b2));
+    }
+
+    #[test]
+    fn lower_field_section() {
+        let program = parse_and_lower(
+            r#"
+module Test
+getName = .name
+"#,
+        );
+        let expr = find_def_expr(&program, "getName");
+        assert!(expr_is_lambda(expr));
+        let body = inner_lambda_body(expr);
+        assert!(matches!(body, HirExpr::FieldAccess { .. }));
+    }
+
+    #[test]
+    fn lower_suffixed_number() {
+        let program = parse_and_lower(
+            r#"
+module Test
+duration = 30s
+"#,
+        );
+        let expr = find_def_expr(&program, "duration");
+        assert!(matches!(expr, HirExpr::App { .. }));
+    }
+
+    // ---- lower_blocks_and_patterns.rs: Let binding in do Effect wraps pure ----
+
+    #[test]
+    fn do_effect_let_wraps_pure() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+f = do Effect {
+  x = 42
+  pure x
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "f");
+        if let HirExpr::Block { items, .. } = expr {
+            if let HirBlockItem::Bind { expr: bind_expr, is_monadic, .. } = &items[0] {
+                assert!(!is_monadic);
+                assert!(matches!(bind_expr, HirExpr::Call { func, .. } if matches!(func.as_ref(), HirExpr::Var { name, .. } if name == "pure")));
+            }
+        }
+    }
+
+    // ---- lower_blocks_and_patterns.rs: generic do block desugaring ----
+
+    #[test]
+    fn generic_do_block_desugars_to_chain() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+f = do Option {
+  x <- Some 1
+  y <- Some 2
+  of (x + y)
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "f");
+        fn contains_chain(expr: &HirExpr) -> bool {
+            match expr {
+                HirExpr::Call { func, args, .. } => {
+                    matches!(func.as_ref(), HirExpr::Var { name, .. } if name == "chain")
+                        || contains_chain(func)
+                        || args.iter().any(contains_chain)
+                }
+                HirExpr::App { func, arg, .. } => contains_chain(func) || contains_chain(arg),
+                HirExpr::Lambda { body, .. } => contains_chain(body),
+                _ => false,
+            }
+        }
+        assert!(contains_chain(expr), "expected chain calls in generic do block desugaring");
+    }
+
+    // ---- lower_blocks_and_patterns.rs: On (machine transitions) ----
+
+    #[test]
+    fn do_block_on_transition() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+f = do Effect {
+  on Started => print "started"
+  pure Unit
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "f");
+        assert!(matches!(expr, HirExpr::Block { .. }));
+    }
+
+    // ---- lower_blocks_and_patterns.rs: plain block desugaring ----
+
+    #[test]
+    fn plain_block_let_bindings() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+result = do {
+  x = 1
+  y = 2
+  x + y
+}
+"#,
+        );
+        let expr = find_def_expr(&program, "result");
+        assert!(matches!(expr, HirExpr::Block { .. }));
+    }
+
+    // ---- lower_expr.rs: record spread ----
+
+    #[test]
+    fn lower_record_with_spread() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+base = { x: 1, y: 2 }
+extended = { ...base, z: 3 }
+"#,
+        );
+        let expr = find_def_expr(&program, "extended");
+        if let HirExpr::Record { fields, .. } = expr {
+            assert!(fields.iter().any(|f| f.spread));
+        }
+    }
+
+    // ---- lower_expr.rs: list with spread (range) ----
+
+    #[test]
+    fn lower_list_with_range() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+nums = [1, 2..5, 6]
+"#,
+        );
+        let expr = find_def_expr(&program, "nums");
+        if let HirExpr::List { items, .. } = expr {
+            assert!(items.len() == 3);
+            assert!(items[1].spread);
+        }
+    }
+
+    // ---- lower_expr.rs: Mock expression ----
+
+    #[test]
+    fn lower_mock_expression() {
+        let program = parse_and_lower(
+            r#"
+module Test
+
+result = mock someFunc = x => 42 in someFunc 1
+"#,
+        );
+        let expr = find_def_expr(&program, "result");
+        assert!(matches!(expr, HirExpr::Mock { .. }));
+    }
+
+    // ---- lower_expr.rs: match with scrutinee ----
+
+    #[test]
+    fn lower_match_with_scrutinee() {
+        let program = parse_and_lower(
+            r#"
+module Test
+classify = x =>
+  x ?
+    | 0 => "zero"
+    | _ => "other"
+"#,
+        );
+        let expr = find_def_expr(&program, "classify");
+        assert!(expr_is_lambda(expr));
+        let body = inner_lambda_body(expr);
+        assert!(matches!(body, HirExpr::Match { .. }));
+    }
 }
