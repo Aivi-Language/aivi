@@ -553,11 +553,11 @@ fn generate_binding_type_sig(
     binding_name: &str,
     ops: &[(String, &str, String, &Operation)],
 ) -> TypeSig {
-    // Config type: { bearerToken: Option Text, headers: List { name: Text, value: Text }, ... }
-    let header_ty = TypeExpr::Record {
-        fields: vec![
-            (sn("name", span), TypeExpr::Name(sn("Text", span))),
-            (sn("value", span), TypeExpr::Name(sn("Text", span))),
+    // Config type: all fields are Option per spec (decorators.md §Config Record Fields).
+    let header_pair_ty = TypeExpr::Tuple {
+        items: vec![
+            TypeExpr::Name(sn("Text", span)),
+            TypeExpr::Name(sn("Text", span)),
         ],
         span: span.clone(),
     };
@@ -576,15 +576,19 @@ fn generate_binding_type_sig(
         args: vec![TypeExpr::Name(sn("Bool", span))],
         span: span.clone(),
     };
-    let header_list_ty = TypeExpr::Apply {
-        base: Box::new(TypeExpr::Name(sn("List", span))),
-        args: vec![header_ty],
+    let option_header_list = TypeExpr::Apply {
+        base: Box::new(TypeExpr::Name(sn("Option", span))),
+        args: vec![TypeExpr::Apply {
+            base: Box::new(TypeExpr::Name(sn("List", span))),
+            args: vec![header_pair_ty],
+            span: span.clone(),
+        }],
         span: span.clone(),
     };
     let config_ty = TypeExpr::Record {
         fields: vec![
             (sn("bearerToken", span), option_text.clone()),
-            (sn("headers", span), header_list_ty),
+            (sn("headers", span), option_header_list),
             (sn("timeoutMs", span), option_int.clone()),
             (sn("retryCount", span), option_int),
             (sn("strictStatus", span), option_bool),

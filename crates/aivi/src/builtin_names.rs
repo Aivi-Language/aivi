@@ -42,6 +42,7 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "__makeResource",
     "__withResourceScope",
     "__fix",
+    "__openapi_call",
     // Module records (stdlib namespaces)
     "file",
     "env",

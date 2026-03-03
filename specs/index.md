@@ -129,7 +129,6 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Minimality Proof](typed_codegen/minimality)
 
 ### Appendix
-- [Missing Features (v0.1)](missing_features_v0.1)
 - [Spec Doc Markers](doc-markers-spec)
 
 <!-- toc:end -->
