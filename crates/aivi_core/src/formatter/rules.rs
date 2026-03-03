@@ -9,11 +9,11 @@
         if token.kind == "whitespace" {
             continue;
         }
-        let line = token.span.start.line;
-        if line == 0 {
+        let start_line = token.span.start.line;
+        if start_line == 0 {
             continue;
         }
-        if let Some(bucket) = tokens_by_line.get_mut(line - 1) {
+        if let Some(bucket) = tokens_by_line.get_mut(start_line - 1) {
             bucket.push(token);
         }
     }
@@ -787,7 +787,10 @@
                 }
                 let (tag, attrs, self_close) = parse_open_markup_tag(trimmed)?;
                 let indent = " ".repeat(depth * 2);
-                if attrs.len() < 5 {
+                // If the source tag spans multiple lines, break all attributes onto
+                // their own lines.  Otherwise keep them inline (just fix spacing).
+                let attrs_on_new_lines = attrs.len() > 0 && tag_text.contains('\n');
+                if !attrs_on_new_lines {
                     let wrapped = attrs
                         .iter()
                         .enumerate()
@@ -1891,6 +1894,26 @@
     // formatter deterministic and robust even when the input indentation is inconsistent, we
     // compute indentation from delimiter nesting (`{[(` / `}])`) plus a small set of newline
     // continuations (`|` arms, `then`/`else`, trailing `=`/`=>`).
+
+    // Lines that are interior to a multi-line token (e.g. sigil body) have no tokens of
+    // their own and must be skipped — not treated as blank lines.
+    let covered_by_multiline: Vec<bool> = {
+        let mut covered = vec![false; lines.len()];
+        for (i, state) in lines.iter().enumerate() {
+            for t in &state.tokens {
+                let span_lines = t.span.end.line.saturating_sub(t.span.start.line);
+                if span_lines > 0 {
+                    for offset in 1..=span_lines {
+                        if i + offset < covered.len() {
+                            covered[i + offset] = true;
+                        }
+                    }
+                }
+            }
+        }
+        covered
+    };
+
     let mut rendered_lines: Vec<String> = Vec::new();
     let mut blank_run = 0usize;
     let mut pipe_block_stack: Vec<(usize, isize)> = Vec::new();
@@ -2063,6 +2086,12 @@
         .collect();
 
     for (line_index, state) in lines.iter().enumerate() {
+        // Lines covered by a multi-line token (e.g. interior of a sigil) have no tokens
+        // of their own — skip them entirely so they aren't treated as blank lines.
+        if covered_by_multiline.get(line_index).copied().unwrap_or(false) && state.tokens.is_empty()
+        {
+            continue;
+        }
         if state.tokens.is_empty() {
             // Suppress blank lines that are sandwiched between two consecutive `use` lines
             // belonging to the same first-segment group (e.g. both `aivi.*`).  Blank lines

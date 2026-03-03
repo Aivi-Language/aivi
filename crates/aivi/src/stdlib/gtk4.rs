@@ -479,7 +479,6 @@ osThemePreference = gtk4.osThemePreference
 
 gtkApp : { id: Text, title: Text, size: (Int, Int), model: s, view: GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError s } -> Effect GtkError Unit
 gtkApp = config => do Effect {
-  init Unit
   appId <- appNew config.id
   (w, h) = config.size
   win <- windowNew appId config.title w h
