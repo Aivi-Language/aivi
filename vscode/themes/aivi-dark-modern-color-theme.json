@@ -158,6 +158,7 @@
     "aiviUnit": "#e37a11",
     "aiviSigil": "#565656",
     "variable": "#9CDCFE",
+    "parameter": "#7DB8DE",
     "function": "#DCDCAA",
     "decorator": "#92d49d",
     "property": "#9CDCFE",

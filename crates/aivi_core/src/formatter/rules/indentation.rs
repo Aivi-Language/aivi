@@ -38,6 +38,15 @@
                 split_tokens_by_line.push(line_tokens);
                 continue;
             }
+            // If the first code token is also a closer, the line contains only
+            // closers (e.g. `})` or `})]`).  Keep them together.
+            if let Some(fc) = first_code {
+                if is_close_sym(line_tokens[fc].text.as_str()).is_some() {
+                    split_raw_lines.push(*raw);
+                    split_tokens_by_line.push(line_tokens);
+                    continue;
+                }
+            }
             // Find the matching open delimiter for the trailing closer.
             // Walk backwards through all tokens up to this point to find the
             // opener.  If the opener is on the same source line, keep the line

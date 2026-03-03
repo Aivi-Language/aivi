@@ -37,6 +37,7 @@ impl Backend {
     pub(super) const SEM_TOKEN_PATH_MID: u32 = 17;
     pub(super) const SEM_TOKEN_PATH_TAIL: u32 = 18;
     pub(super) const SEM_TOKEN_TYPE_PARAMETER: u32 = 19;
+    pub(super) const SEM_TOKEN_PARAMETER: u32 = 20;
 
     pub(super) const SEM_MOD_SIGNATURE: u32 = 0;
 
@@ -63,6 +64,7 @@ impl Backend {
                 SemanticTokenType::new("aiviPathMid"),
                 SemanticTokenType::new("aiviPathTail"),
                 SemanticTokenType::TYPE_PARAMETER,
+                SemanticTokenType::PARAMETER,
             ],
             token_modifiers: vec![SemanticTokenModifier::new("signature")],
         }
@@ -276,6 +278,15 @@ impl Backend {
             {
                 return false;
             }
+            // After a record field colon, the value is only an application head
+            // when its argument is on the same line.  Otherwise the "next" token
+            // is actually the next record label on a subsequent line.
+            if prev.kind == "symbol"
+                && prev.text == ":"
+                && next.span.start.line != token.span.start.line
+            {
+                return false;
+            }
         }
         true
     }
@@ -382,12 +393,11 @@ impl Backend {
         prev.span.end.column.saturating_add(1) == token.span.start.column
     }
 
-    /// Returns raw token indices that are the *first* identifier in a
-    /// multi-parameter lambda shorthand (`a b c => body`).  Only the head
-    /// is misclassified by `is_application_head`; subsequent params are
-    /// already correct because their prev is an expression token.
-    fn lambda_head_positions(significant: &[usize], tokens: &[CstToken]) -> HashSet<usize> {
-        let mut heads = HashSet::new();
+    /// Returns raw token indices for *all* identifiers that serve as lambda
+    /// parameters.  Covers both single-parameter lambdas (`x => body`) and
+    /// multi-parameter shorthand (`a b c => body`).
+    fn lambda_param_positions(significant: &[usize], tokens: &[CstToken]) -> HashSet<usize> {
+        let mut params = HashSet::new();
         let len = significant.len();
         for i in 0..len {
             let idx = significant[i];
@@ -410,17 +420,20 @@ impl Backend {
                     break;
                 }
             }
-            // Need at least 2 consecutive idents followed by `=>`
-            if j - i >= 2
+            // Single-parameter lambda: one ident followed by `=>`
+            // Multi-parameter lambda: 2+ consecutive idents followed by `=>`
+            if j > i
                 && j < len
                 && tokens[significant[j]].kind == "symbol"
                 && tokens[significant[j]].text == "=>"
                 && tokens[significant[j]].span.start.line == line
             {
-                heads.insert(idx);
+                for &sig_idx in &significant[i..j] {
+                    params.insert(sig_idx);
+                }
             }
         }
-        heads
+        params
     }
 
     fn signature_lines(tokens: &[CstToken]) -> HashSet<u32> {
