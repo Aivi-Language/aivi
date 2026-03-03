@@ -190,6 +190,8 @@ AndExpr        := EqExpr { "&&" EqExpr }
 EqExpr         := CmpExpr { ("==" | "!=") CmpExpr }
 CmpExpr        := AddExpr { ("<" | "<=" | ">" | ">=") AddExpr }
 AddExpr        := MulExpr { ("+" | "-" | "++") MulExpr }
+(* Note: bitwise operations (and, or, xor, shift, complement) are not language operators.
+   They are provided by the `aivi.bits` standard library module. *)
 MulExpr        := UnaryExpr { ("*" | "×" | "/" | "%") UnaryExpr }
 UnaryExpr      := ("!" | "-") UnaryExpr
                | PatchExpr

@@ -68,7 +68,8 @@ Notes:
 Some operators are **domain-resolved** when operand types are not plain `Int`. In v0.1:
 
 - Domain-resolved (when non-`Int` is involved): `+`, `-`, `*`, `×`, `/`, `%`, `<`, `<=`, `>`, `>=`
-- Not domain-resolved in v0.1 (built-in): `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`, `??`, `++`
+- Not domain-resolved (always built-in): `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`, `??`
+- Domain-resolved via stdlib-registered `(++)` operators: `++` (provided by `aivi.collections` for `List`, `Map`, and `Set`)
 
 > **Note (v0.1):** `++` is supported for `List` concatenation, `Map` merge, and `Set` union. It is **not** supported for `Text` concatenation — use text interpolation (`"Hello, {name}!"`) instead.
 
