@@ -16,7 +16,7 @@ factoryCallable = do Effect {
 @test "openapi static client has endpoint functions"
 clientEndpoints = do Effect {
   client = petStoreApi {}
-  src = client.listPets { limit: Some 10 }
+  src <- client.listPets { limit: Some 10 }
   assert True
 }
 
@@ -29,7 +29,7 @@ destructureEndpoints = do Effect {
 
 @test "openapi static config with bearer token"
 configBearerToken = do Effect {
-  client = petStoreApi { bearerToken: Some "test-token" }
-  src = client.listPets {}
+  client = petStoreApi { bearerToken: Some "test-token", headers: None, timeoutMs: None, retryCount: None, strictStatus: None, baseUrl: None }
+  src <- client.listPets {}
   assert True
 }

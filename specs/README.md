@@ -123,7 +123,6 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Minimality Proof](typed_codegen/minimality.md)
 
 ### Appendix
-- [Missing Features (v0.1)](missing_features_v0.1.md)
 - [Spec Doc Markers](doc-markers-spec.md)
 
 <!-- toc:end -->
