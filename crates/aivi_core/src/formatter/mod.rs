@@ -467,14 +467,21 @@ mod tests {
     }
 
     #[test]
-    fn format_gtk_sigil_wraps_five_plus_attributes_and_indents_nested_tags() {
+    fn format_gtk_sigil_keeps_five_plus_attributes_inline_when_source_is_inline() {
         let text = "module demo\n\nx=~<gtk><object a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\"><child><object class=\"GtkLabel\"/></child></object></gtk>\n";
+        let formatted = format_text(text);
+        assert!(formatted.contains("<object a=\"1\" b=\"2\" c=\"3\" d=\"4\" e=\"5\">"));
+        assert!(formatted.contains("\n        <child>\n"));
+        assert!(formatted.contains("\n          <object class=\"GtkLabel\" />\n"));
+    }
+
+    #[test]
+    fn format_gtk_sigil_wraps_attributes_when_source_has_newlines() {
+        let text = "module demo\n\nx=~<gtk><object\n  a=\"1\"\n  b=\"2\"\n  c=\"3\"></object></gtk>\n";
         let formatted = format_text(text);
         assert!(formatted.contains("\n      <object\n"));
         assert!(formatted.contains("\n        a=\"1\"\n"));
-        assert!(formatted.contains("\n        e=\"5\">\n"));
-        assert!(formatted.contains("\n        <child>\n"));
-        assert!(formatted.contains("\n          <object class=\"GtkLabel\" />\n"));
+        assert!(formatted.contains("\n        c=\"3\">\n"));
     }
 
     #[test]
