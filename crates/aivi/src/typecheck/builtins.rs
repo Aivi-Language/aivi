@@ -4,8 +4,10 @@ use crate::typecheck::types::{Kind, TypeEnv};
 mod collections;
 mod core_io_concurrency_html;
 mod decimal_and_networking;
-mod linalg_signal_graph_system_db;
+mod linalg;
 mod math_calendar_numbers;
+mod signal_graph;
+mod system_db;
 mod text_and_regex;
 
 impl TypeChecker {
@@ -143,7 +145,9 @@ impl TypeChecker {
         math_calendar_numbers::register(self, &mut env);
         decimal_and_networking::register(self, &mut env);
         collections::register(self, &mut env);
-        linalg_signal_graph_system_db::register(self, &mut env);
+        linalg::register(self, &mut env);
+        signal_graph::register(self, &mut env);
+        system_db::register(self, &mut env);
         self.builtins = env;
     }
 }
