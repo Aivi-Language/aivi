@@ -230,24 +230,24 @@ result = divide 10 2
     let workspace: HashMap<String, IndexedModule> = HashMap::new();
     let hints = Backend::build_inlay_hints(text, &uri, full_range(), &workspace);
     use tower_lsp::lsp_types::{InlayHintKind, InlayHintLabel};
-    let param_hints: Vec<_> = hints
+    let type_hints: Vec<_> = hints
         .iter()
-        .filter(|h| h.kind == Some(InlayHintKind::PARAMETER))
+        .filter(|h| h.kind == Some(InlayHintKind::TYPE))
         .collect();
     assert!(
-        !param_hints.is_empty(),
-        "should produce parameter name hints at call site"
+        !type_hints.is_empty(),
+        "should produce type annotation hints at call site"
     );
-    // The first parameter hint should be "numerator:"
+    // The result binding should get a type annotation hint
     assert!(
-        param_hints.iter().any(|h| {
+        type_hints.iter().any(|h| {
             if let InlayHintLabel::String(s) = &h.label {
-                s == "numerator:"
+                s == ": Int"
             } else {
                 false
             }
         }),
-        "expected 'numerator:' param hint"
+        "expected ': Int' type hint for result binding"
     );
 }
 

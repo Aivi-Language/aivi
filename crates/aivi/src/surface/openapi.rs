@@ -438,10 +438,22 @@ fn generate_schema_type_aliases(spec: &OpenAPI, span: &Span) -> Vec<ModuleItem> 
                     .enumeration
                     .iter()
                     .filter_map(|v| v.as_ref())
-                    .map(|v| TypeCtor {
-                        name: sn(&capitalize(v), span),
-                        args: Vec::new(),
-                        span: span.clone(),
+                    .map(|v| {
+                        // Avoid shadowing prelude constructors (None, Some, True, False, Ok, Err).
+                        let raw = capitalize(v);
+                        let ctor_name = if matches!(
+                            raw.as_str(),
+                            "None" | "Some" | "True" | "False" | "Ok" | "Err"
+                        ) {
+                            format!("{}{}", name, raw)
+                        } else {
+                            raw
+                        };
+                        TypeCtor {
+                            name: sn(&ctor_name, span),
+                            args: Vec::new(),
+                            span: span.clone(),
+                        }
                     })
                     .collect();
                 items.push(ModuleItem::TypeDecl(TypeDecl {
@@ -513,19 +525,19 @@ fn generate_binding_type_sig(
     binding_name: &str,
     ops: &[(String, &str, String, &Operation)],
 ) -> TypeSig {
-    let effect_wrapper = |response_ty: TypeExpr, span: &Span| -> TypeExpr {
-        TypeExpr::Apply {
-            base: Box::new(TypeExpr::Name(sn("Effect", span))),
-            args: vec![
-                TypeExpr::Apply {
-                    base: Box::new(TypeExpr::Name(sn("SourceError", span))),
-                    args: vec![TypeExpr::Name(sn("RestApi", span))],
-                    span: span.clone(),
-                },
-                response_ty,
-            ],
-            span: span.clone(),
-        }
+    // Build a type that mirrors the descriptor record produced by operation_to_expr.
+    let param_item_ty = TypeExpr::Record {
+        fields: vec![
+            (sn("name", span), TypeExpr::Name(sn("Text", span))),
+            (sn("in", span), TypeExpr::Name(sn("Text", span))),
+            (sn("required", span), TypeExpr::Name(sn("Bool", span))),
+        ],
+        span: span.clone(),
+    };
+    let params_list_ty = TypeExpr::Apply {
+        base: Box::new(TypeExpr::Name(sn("List", span))),
+        args: vec![param_item_ty],
+        span: span.clone(),
     };
 
     let mut record_fields: Vec<(SpannedName, TypeExpr)> = Vec::new();
@@ -535,83 +547,36 @@ fn generate_binding_type_sig(
     }
 
     for (_path, _method, op_id, operation) in ops {
-        let mut param_types: Vec<TypeExpr> = Vec::new();
+        let mut endpoint_fields: Vec<(SpannedName, TypeExpr)> = vec![
+            (sn("__method", span), TypeExpr::Name(sn("Text", span))),
+            (sn("__path", span), TypeExpr::Name(sn("Text", span))),
+            (sn("__params", span), params_list_ty.clone()),
+        ];
 
-        // Path parameters -> positional args
-        for p in &operation.parameters {
-            if let ReferenceOr::Item(param) = p {
-                if matches!(param, openapiv3::Parameter::Path { .. }) {
-                    let data = param.parameter_data_ref();
-                    let ty = param_format_to_type_expr(&data.format, spec, span)
-                        .unwrap_or_else(|| TypeExpr::Name(sn("Text", span)));
-                    param_types.push(ty);
-                }
-            }
-        }
-
-        // Query/header parameters -> optional record arg
-        let option_params: Vec<(SpannedName, TypeExpr)> = operation
-            .parameters
-            .iter()
-            .filter_map(|p| match p {
-                ReferenceOr::Item(param) => {
-                    if matches!(
-                        param,
-                        openapiv3::Parameter::Query { .. } | openapiv3::Parameter::Header { .. }
-                    ) {
-                        let data = param.parameter_data_ref();
-                        let base_ty = param_format_to_type_expr(&data.format, spec, span)
-                            .unwrap_or_else(|| TypeExpr::Name(sn("Text", span)));
-                        let ty = if data.required {
-                            base_ty
-                        } else {
-                            TypeExpr::Apply {
-                                base: Box::new(TypeExpr::Name(sn("Option", span))),
-                                args: vec![base_ty],
-                                span: span.clone(),
-                            }
-                        };
-                        Some((sn(&data.name, span), ty))
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            })
-            .collect();
-        if !option_params.is_empty() {
-            param_types.push(TypeExpr::Record {
-                fields: option_params,
-                span: span.clone(),
-            });
-        }
-
-        // Request body -> typed arg
+        // __requestBody is present when there is a JSON request body
         if let Some(ReferenceOr::Item(body)) = &operation.request_body {
-            if let Some(mt) = body.content.get("application/json") {
-                if let Some(schema_ref) = &mt.schema {
-                    param_types.push(schema_ref_to_type_expr(schema_ref, spec, span));
-                }
+            if body.content.contains_key("application/json") {
+                endpoint_fields.push((sn("__requestBody", span), TypeExpr::Name(sn("Text", span))));
             }
         }
 
-        // Response type
-        let response_ty = response_type_name(operation, spec)
-            .map(|name| TypeExpr::Name(sn(&name, span)))
-            .unwrap_or_else(|| TypeExpr::Name(sn("Unit", span)));
-        let result_ty = effect_wrapper(response_ty, span);
+        // __response is present when there is a 2xx JSON response
+        if response_type_name(operation, spec).is_some() {
+            endpoint_fields.push((sn("__response", span), TypeExpr::Name(sn("Text", span))));
+        }
 
-        let endpoint_ty = if param_types.is_empty() {
-            result_ty
-        } else {
-            TypeExpr::Func {
-                params: param_types,
-                result: Box::new(result_ty),
+        // __description is present when the operation has a description
+        if operation.description.is_some() {
+            endpoint_fields.push((sn("__description", span), TypeExpr::Name(sn("Text", span))));
+        }
+
+        record_fields.push((
+            sn(op_id, span),
+            TypeExpr::Record {
+                fields: endpoint_fields,
                 span: span.clone(),
-            }
-        };
-
-        record_fields.push((sn(op_id, span), endpoint_ty));
+            },
+        ));
     }
 
     TypeSig {
@@ -622,18 +587,5 @@ fn generate_binding_type_sig(
             span: span.clone(),
         },
         span: span.clone(),
-    }
-}
-
-fn param_format_to_type_expr(
-    format: &openapiv3::ParameterSchemaOrContent,
-    spec: &OpenAPI,
-    span: &Span,
-) -> Option<TypeExpr> {
-    match format {
-        openapiv3::ParameterSchemaOrContent::Schema(schema_ref) => {
-            Some(schema_ref_to_type_expr(schema_ref, spec, span))
-        }
-        _ => None,
     }
 }
