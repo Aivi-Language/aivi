@@ -1,0 +1,35 @@
+@no_prelude
+module integrationTests.syntax.operators.setConcatOperator
+
+use aivi
+use aivi.collections (domain Collections)
+use aivi.testing
+
+s1 : Set Int
+s1 = ~set{ 1, 2, 3 }
+
+s2 : Set Int
+s2 = ~set{ 3, 4, 5 }
+
+union = s1 ++ s2
+
+emptySet : Set Int
+emptySet = ~set{}
+
+@test "set ++ produces union"
+setConcatWorks = do Effect {
+  assertEq (set.size union) 5
+  assert (set.member 1 union)
+  assert (set.member 3 union)
+  assert (set.member 5 union)
+}
+
+@test "set ++ with empty right is identity"
+setConcatEmptyRight = do Effect {
+  assertEq (s1 ++ emptySet) s1
+}
+
+@test "set ++ with empty left is identity"
+setConcatEmptyLeft = do Effect {
+  assertEq (emptySet ++ s1) s1
+}

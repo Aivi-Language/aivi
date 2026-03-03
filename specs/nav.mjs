@@ -49,7 +49,8 @@ export const sidebar = [
           { text: 'Effects', link: '/syntax/effects' },
           { text: 'do Notation', link: '/syntax/do_notation' },
           { text: 'Resources', link: '/syntax/resources' },
-          { text: 'Machines', link: '/syntax/machines_runtime' }
+          { text: 'Machines', link: '/syntax/machines' },
+          { text: 'Machine Runtime', link: '/syntax/machines_runtime' }
         ]
       },
       {
@@ -222,7 +223,6 @@ export const sidebar = [
     text: 'Appendix',
     collapsed: true,
     items: [
-      { text: 'Missing Features (v0.1)', link: '/missing_features_v0.1' },
       { text: 'Spec Doc Markers', link: '/doc-markers-spec' }
     ]
   }
