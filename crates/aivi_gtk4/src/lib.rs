@@ -226,7 +226,6 @@ mod linux_impl {
         fn gtk_revealer_set_transition_type(revealer: *mut c_void, transition: c_int);
         fn gtk_revealer_set_transition_duration(revealer: *mut c_void, duration: c_uint);
 
-        fn gdk_display_get_default() -> *mut c_void;
     }
 
     #[link(name = "gio-2.0")]
