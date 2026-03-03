@@ -2334,13 +2334,16 @@ fn openapi_from_json_string() {
     assert!(result.is_ok(), "expected Ok, got {:?}", result.err());
     let res = result.expect("test");
     match &res.expr {
-        Expr::Record { fields, .. } => {
-            assert!(fields.iter().any(|f| matches!(
-                f.path.first(),
-                Some(PathSegment::Field(n)) if n.name == "listUsers"
-            )));
-        }
-        other => panic!("expected Record expr, got {other:?}"),
+        Expr::Lambda { body, .. } => match body.as_ref() {
+            Expr::Record { fields, .. } => {
+                assert!(fields.iter().any(|f| matches!(
+                    f.path.first(),
+                    Some(PathSegment::Field(n)) if n.name == "listUsers"
+                )));
+            }
+            other => panic!("expected inner Record, got {other:?}"),
+        },
+        other => panic!("expected Lambda expr, got {other:?}"),
     }
 }
 
@@ -2359,7 +2362,14 @@ fn openapi_with_server_url() {
         "openapi": "3.0.0",
         "info": { "title": "Test", "version": "1.0" },
         "servers": [{ "url": "https://api.example.com" }],
-        "paths": {}
+        "paths": {
+            "/ping": {
+                "get": {
+                    "operationId": "ping",
+                    "responses": { "200": { "description": "ok" } }
+                }
+            }
+        }
     }"#;
 
     let tmp = std::env::temp_dir().join("test_openapi_server.json");
@@ -2441,13 +2451,16 @@ fn openapi_with_post_endpoint_and_body() {
     assert!(result.is_ok());
     let res = result.expect("test");
     match &res.expr {
-        Expr::Record { fields, .. } => {
-            assert!(fields.iter().any(|f| matches!(
-                f.path.first(),
-                Some(PathSegment::Field(n)) if n.name == "createUser"
-            )));
-        }
-        other => panic!("expected Record, got {other:?}"),
+        Expr::Lambda { body, .. } => match body.as_ref() {
+            Expr::Record { fields, .. } => {
+                assert!(fields.iter().any(|f| matches!(
+                    f.path.first(),
+                    Some(PathSegment::Field(n)) if n.name == "createUser"
+                )));
+            }
+            other => panic!("expected inner Record, got {other:?}"),
+        },
+        other => panic!("expected Lambda, got {other:?}"),
     }
 }
 
@@ -2862,21 +2875,24 @@ fn openapi_with_all_http_methods() {
     assert!(result.is_ok());
     let res = result.expect("test");
     match &res.expr {
-        Expr::Record { fields, .. } => {
-            let names: Vec<&str> = fields
-                .iter()
-                .filter_map(|f| match f.path.first() {
-                    Some(PathSegment::Field(n)) => Some(n.name.as_str()),
-                    _ => None,
-                })
-                .collect();
-            assert!(names.contains(&"getResource"));
-            assert!(names.contains(&"postResource"));
-            assert!(names.contains(&"putResource"));
-            assert!(names.contains(&"deleteResource"));
-            assert!(names.contains(&"patchResource"));
-        }
-        other => panic!("expected Record, got {other:?}"),
+        Expr::Lambda { body, .. } => match body.as_ref() {
+            Expr::Record { fields, .. } => {
+                let names: Vec<&str> = fields
+                    .iter()
+                    .filter_map(|f| match f.path.first() {
+                        Some(PathSegment::Field(n)) => Some(n.name.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                assert!(names.contains(&"getResource"));
+                assert!(names.contains(&"postResource"));
+                assert!(names.contains(&"putResource"));
+                assert!(names.contains(&"deleteResource"));
+                assert!(names.contains(&"patchResource"));
+            }
+            other => panic!("expected inner Record, got {other:?}"),
+        },
+        other => panic!("expected Lambda, got {other:?}"),
     }
 }
 
@@ -3842,18 +3858,21 @@ fn openapi_with_head_and_options_methods() {
     )
     .expect("openapi_to_expr");
     match &res.expr {
-        Expr::Record { fields, .. } => {
-            let names: Vec<&str> = fields
-                .iter()
-                .filter_map(|f| match f.path.first() {
-                    Some(PathSegment::Field(n)) => Some(n.name.as_str()),
-                    _ => None,
-                })
-                .collect();
-            assert!(names.contains(&"headR"));
-            assert!(names.contains(&"optR"));
-        }
-        other => panic!("expected Record, got {other:?}"),
+        Expr::Lambda { body, .. } => match body.as_ref() {
+            Expr::Record { fields, .. } => {
+                let names: Vec<&str> = fields
+                    .iter()
+                    .filter_map(|f| match f.path.first() {
+                        Some(PathSegment::Field(n)) => Some(n.name.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                assert!(names.contains(&"headR"));
+                assert!(names.contains(&"optR"));
+            }
+            other => panic!("expected inner Record, got {other:?}"),
+        },
+        other => panic!("expected Lambda, got {other:?}"),
     }
 }
 

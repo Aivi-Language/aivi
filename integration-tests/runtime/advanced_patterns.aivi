@@ -11,8 +11,8 @@ Tree A = Leaf A | Branch (Tree A) (Tree A)
 
 treeSum : Tree Int -> Int
 treeSum = t => t match
-  | Leaf n        => n
-  | Branch l r    => (treeSum l) + (treeSum r)
+  | Leaf n     => n
+  | Branch l r => (treeSum l) + (treeSum r)
 
 @test "nested tree pattern matching"
 nestedTreeMatch = do Effect {
@@ -25,8 +25,8 @@ maxInt = a b => if a > b then a else b
 
 treeDepth : Tree A -> Int
 treeDepth = t => t match
-  | Leaf _      => 1
-  | Branch l r  => 1 + (maxInt (treeDepth l) (treeDepth r))
+  | Leaf _     => 1
+  | Branch l r => 1 + (maxInt (treeDepth l) (treeDepth r))
 
 @test "tree depth"
 treeDepthTest = do Effect {
@@ -66,14 +66,14 @@ chainedMapFilter = do Effect {
   result = [1, 2, 3, 4, 5, 6]
     |> filter (x => x > 2)
     |> map (x => x * 10)
-  assertEq result [30, 40, 50, 60]
+    assertEq result [30, 40, 50, 60]
 }
 
 @test "foldl with pipe"
 foldlPipe = do Effect {
   result = [1, 2, 3, 4, 5]
     |> foldl (acc => x => acc + x) 0
-  assertEq result 15
+    assertEq result 15
 }
 
 @test "map then foldl"
@@ -81,7 +81,7 @@ mapThenFold = do Effect {
   result = [1, 2, 3]
     |> map (x => x * x)
     |> foldl (acc => x => acc + x) 0
-  assertEq result 14
+    assertEq result 14
 }
 
 // --- Record construction and field access ---
@@ -89,10 +89,10 @@ mapThenFold = do Effect {
 @test "complex record with nested fields"
 complexRecord = do Effect {
   user = {
-    name: "Alice",
-    age: 30,
+    name: "Alice"
+    age: 30
     address: {
-      city: "Wonderland",
+      city: "Wonderland"
       zip: "12345"
     }
   }
@@ -156,7 +156,7 @@ attemptRecover = do Effect {
   val = result match
     | Ok v  => v
     | Err _ => 42
-  assertEq val 42
+    assertEq val 42
 }
 
 // --- Multi-clause function definitions ---
@@ -165,9 +165,9 @@ Shape = Circle Float | Rectangle Float Float | Point
 
 describeShape : Shape -> Text
 describeShape =
-  | Circle _       => "circle"
-  | Rectangle _ _  => "rectangle"
-  | Point          => "point"
+  | Circle _      => "circle"
+  | Rectangle _ _ => "rectangle"
+  | Point         => "point"
 
 @test "multi-clause shape"
 multiClauseShape = do Effect {
@@ -180,9 +180,9 @@ Expr = Num Int | Add Expr Expr | Mul Expr Expr
 
 eval : Expr -> Int
 eval = e => e match
-  | Num n     => n
-  | Add l r   => (eval l) + (eval r)
-  | Mul l r   => (eval l) * (eval r)
+  | Num n   => n
+  | Add l r => (eval l) + (eval r)
+  | Mul l r => (eval l) * (eval r)
 
 @test "recursive ADT evaluation"
 recursiveAdtEval = do Effect {
@@ -254,7 +254,7 @@ adtEquality = do Effect {
 
 myLength : List A -> Int
 myLength = xs => xs match
-  | []          => 0
+  | []           => 0
   | [_, ...rest] => 1 + (myLength rest)
 
 @test "recursive list length"
