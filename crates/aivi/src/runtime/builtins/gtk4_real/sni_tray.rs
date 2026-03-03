@@ -35,6 +35,14 @@
                         eprintln!("sni-tray: request_name error: {e}");
                         return;
                     }
+                    
+                    let mailfox_dbus = MailfoxDesktopObject;
+                    if let Err(e) = conn.object_server().at("/com/mailfox/desktop", mailfox_dbus).await {
+                        eprintln!("sni-tray: mailfox desktop register error: {e}");
+                    }
+                    if let Err(e) = conn.request_name("com.mailfox.desktop.tray").await {
+                        eprintln!("sni-tray: request_name mailfox desktop tray error: {e}");
+                    }
                     // Register with StatusNotifierWatcher
                     let _ = conn
                         .call_method(
@@ -159,6 +167,18 @@
             }
         }
         fn scroll(&self, _delta: i32, _orientation: &str) {}
+    }
+
+    struct MailfoxDesktopObject;
+
+    #[zbus::interface(name = "com.mailfox.Desktop")]
+    impl MailfoxDesktopObject {
+        fn action(&self, action: String) {
+            eprintln!("mailfox-dbus: Action({}) called", action);
+            if let Ok(mut q) = pending_tray_actions().lock() {
+                q.push_back(action);
+            }
+        }
     }
 
     // ── DBusMenu (com.canonical.dbusmenu) ─────────────────────────────────────
