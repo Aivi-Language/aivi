@@ -180,11 +180,11 @@ pub(super) fn push_simple(
     ));
 }
 
-pub(super) fn keywords_v01() -> HashSet<&'static str> {
+pub(crate) fn keywords_v01() -> HashSet<&'static str> {
     HashSet::from_iter(aivi::syntax::KEYWORDS_ALL.iter().copied())
 }
 
-pub(super) fn is_invisible_unicode(ch: char) -> bool {
+pub(crate) fn is_invisible_unicode(ch: char) -> bool {
     // Keep this intentionally small and explicit; we want deterministic behavior without
     // a heavy Unicode dependency in the LSP.
     matches!(
