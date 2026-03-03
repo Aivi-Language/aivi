@@ -1,27 +1,38 @@
 /// Compile-time OpenAPI spec → AIVI AST conversion.
 ///
 /// Parses an OpenAPI 3.x specification (JSON or YAML) and produces an `Expr::Record`
-/// whose fields are typed stub functions for each endpoint.
+/// whose fields are typed stub functions for each endpoint, plus synthesised
+/// `TypeAlias` / `TypeSig` items so the LSP can offer rich autocompletion.
 use crate::diagnostics::Span;
 use crate::surface::ast::*;
 use openapiv3::{
     OpenAPI, Operation, PathItem, ReferenceOr, Schema, SchemaKind, StatusCode, Type as OaType,
 };
-/// Fetch or read an OpenAPI spec, parse it, and return an `Expr::Record` representing the
-/// generated typed API module.  On failure a human-readable error string is returned.
+
+/// The result of compiling an OpenAPI spec into AIVI AST nodes.
+pub struct OpenApiGenResult {
+    /// The value expression (record of endpoint descriptors).
+    pub expr: Expr,
+    /// Synthesised module items: `TypeAlias` for each schema + one `TypeSig` for the binding.
+    pub items: Vec<ModuleItem>,
+}
+
+/// Fetch or read an OpenAPI spec, parse it, and return an `OpenApiGenResult` containing
+/// both the value expression and synthesised type items for LSP autocompletion.
 pub fn openapi_to_expr(
     source: &str,
     is_url: bool,
     base_dir: &std::path::Path,
     span: &Span,
-) -> Result<Expr, String> {
+    binding_name: &str,
+) -> Result<OpenApiGenResult, String> {
     let contents = if is_url {
         fetch_spec(source)?
     } else {
         read_spec_file(source, base_dir)?
     };
     let spec = parse_spec(&contents)?;
-    Ok(spec_to_expr(&spec, span))
+    Ok(spec_to_result(&spec, span, binding_name))
 }
 
 fn fetch_spec(url: &str) -> Result<String, String> {
@@ -57,17 +68,13 @@ fn parse_spec(contents: &str) -> Result<OpenAPI, String> {
         .map_err(|e| format!("failed to parse OpenAPI spec: {e}"))
 }
 
-// ── AST helpers ──────────────────────────────────────────────────────────────
+// -- AST helpers --------------------------------------------------------------
 
 fn sn(name: &str, span: &Span) -> SpannedName {
     SpannedName {
         name: name.to_string(),
         span: span.clone(),
     }
-}
-
-fn ident(name: &str, span: &Span) -> Expr {
-    Expr::Ident(sn(name, span))
 }
 
 fn str_lit(text: &str, span: &Span) -> Expr {
@@ -107,9 +114,9 @@ fn list(items: Vec<Expr>, span: &Span) -> Expr {
     }
 }
 
-// ── Spec → Expr ──────────────────────────────────────────────────────────────
+// -- Spec -> Result (expr + synthesised types) --------------------------------
 
-fn spec_to_expr(spec: &OpenAPI, span: &Span) -> Expr {
+fn spec_to_result(spec: &OpenAPI, span: &Span, binding_name: &str) -> OpenApiGenResult {
     let mut fields = Vec::new();
 
     // Add a __meta field with server info.
@@ -132,7 +139,20 @@ fn spec_to_expr(spec: &OpenAPI, span: &Span) -> Expr {
         fields.push(record_field(op_id, func_expr, span));
     }
 
-    record(fields, span)
+    let expr = record(fields, span);
+
+    // -- Synthesise type items for LSP ----------------------------------------
+    let mut items = Vec::new();
+
+    // TypeAlias per component schema
+    let schema_aliases = generate_schema_type_aliases(spec, span);
+    items.extend(schema_aliases);
+
+    // TypeSig for the binding itself
+    let binding_sig = generate_binding_type_sig(spec, span, binding_name, &ops);
+    items.push(ModuleItem::TypeSig(binding_sig));
+
+    OpenApiGenResult { expr, items }
 }
 
 fn collect_ops<'a>(
@@ -161,7 +181,6 @@ fn collect_ops<'a>(
 }
 
 fn derive_operation_id(method: &str, path: &str) -> String {
-    // GET /pets/{petId} → getPetsPetId
     let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
     let mut name = method.to_lowercase();
     for seg in segments {
@@ -183,12 +202,7 @@ fn capitalize(s: &str) -> String {
     }
 }
 
-/// Build a record describing an endpoint.  In the static evaluation phase we produce
-/// a **descriptor record** that the runtime REST layer can consume:
-///
-/// ```text
-/// { __method: "GET", __path: "/pets/{petId}", __params: [...], __response: "Pet" }
-/// ```
+/// Build a record describing an endpoint descriptor for the runtime.
 fn operation_to_expr(
     path: &str,
     method: &str,
@@ -200,7 +214,6 @@ fn operation_to_expr(
     fields.push(record_field("__method", str_lit(method, span), span));
     fields.push(record_field("__path", str_lit(path, span), span));
 
-    // Parameters
     let params = op
         .parameters
         .iter()
@@ -211,26 +224,19 @@ fn operation_to_expr(
         .collect::<Vec<_>>();
     fields.push(record_field("__params", list(params, span), span));
 
-    // Request body schema name
     if let Some(ReferenceOr::Item(body)) = &op.request_body {
         if let Some(mt) = body.content.get("application/json") {
             if let Some(schema_ref) = &mt.schema {
                 let type_name = schema_type_name(schema_ref, spec);
-                fields.push(record_field(
-                    "__requestBody",
-                    str_lit(&type_name, span),
-                    span,
-                ));
+                fields.push(record_field("__requestBody", str_lit(&type_name, span), span));
             }
         }
     }
 
-    // Response schema name (first 2xx response)
     if let Some(type_name) = response_type_name(op, spec) {
         fields.push(record_field("__response", str_lit(&type_name, span), span));
     }
 
-    // Description
     if let Some(desc) = &op.description {
         fields.push(record_field("__description", str_lit(desc, span), span));
     }
@@ -299,12 +305,7 @@ fn boxed_schema_type_name(schema_ref: &ReferenceOr<Box<Schema>>, spec: &OpenAPI)
 }
 
 fn ref_to_type_name(reference: &str) -> String {
-    // "#/components/schemas/Pet" → "Pet"
-    reference
-        .rsplit('/')
-        .next()
-        .unwrap_or("Unknown")
-        .to_string()
+    reference.rsplit('/').next().unwrap_or("Unknown").to_string()
 }
 
 fn inline_type_name(schema: &Schema, spec: &OpenAPI) -> String {
@@ -326,82 +327,306 @@ fn inline_type_name(schema: &Schema, spec: &OpenAPI) -> String {
     }
 }
 
-// ── Schema → Type declaration records ────────────────────────────────────────
+// -- Synthesised TypeAlias / TypeSig generation -------------------------------
 
-/// Produce a list of `(name, Expr)` pairs for each component schema, so the
-/// generated record can include a `__types` field with the schema definitions.
-pub fn schema_type_records(spec: &OpenAPI, span: &Span) -> Vec<RecordField> {
+fn schema_ref_to_type_expr(
+    schema_ref: &ReferenceOr<Schema>,
+    spec: &OpenAPI,
+    span: &Span,
+) -> TypeExpr {
+    match schema_ref {
+        ReferenceOr::Reference { reference } => {
+            TypeExpr::Name(sn(&ref_to_type_name(reference), span))
+        }
+        ReferenceOr::Item(schema) => inline_schema_to_type_expr(schema, spec, span),
+    }
+}
+
+fn boxed_schema_ref_to_type_expr(
+    schema_ref: &ReferenceOr<Box<Schema>>,
+    spec: &OpenAPI,
+    span: &Span,
+) -> TypeExpr {
+    match schema_ref {
+        ReferenceOr::Reference { reference } => {
+            TypeExpr::Name(sn(&ref_to_type_name(reference), span))
+        }
+        ReferenceOr::Item(schema) => inline_schema_to_type_expr(schema.as_ref(), spec, span),
+    }
+}
+
+fn inline_schema_to_type_expr(schema: &Schema, spec: &OpenAPI, span: &Span) -> TypeExpr {
+    match &schema.schema_kind {
+        SchemaKind::Type(OaType::String(sv)) => {
+            if let openapiv3::VariantOrUnknownOrEmpty::Item(format) = &sv.format {
+                match format {
+                    openapiv3::StringFormat::Date => return TypeExpr::Name(sn("Date", span)),
+                    openapiv3::StringFormat::DateTime => {
+                        return TypeExpr::Name(sn("DateTime", span))
+                    }
+                    _ => {}
+                }
+            }
+            TypeExpr::Name(sn("Text", span))
+        }
+        SchemaKind::Type(OaType::Integer(_)) => TypeExpr::Name(sn("Int", span)),
+        SchemaKind::Type(OaType::Number(_)) => TypeExpr::Name(sn("Float", span)),
+        SchemaKind::Type(OaType::Boolean(_)) => TypeExpr::Name(sn("Bool", span)),
+        SchemaKind::Type(OaType::Array(arr)) => {
+            let inner = arr
+                .items
+                .as_ref()
+                .map(|i| boxed_schema_ref_to_type_expr(i, spec, span))
+                .unwrap_or_else(|| TypeExpr::Name(sn("Any", span)));
+            TypeExpr::Apply {
+                base: Box::new(TypeExpr::Name(sn("List", span))),
+                args: vec![inner],
+                span: span.clone(),
+            }
+        }
+        SchemaKind::Type(OaType::Object(obj)) => {
+            let required: std::collections::HashSet<&str> =
+                obj.required.iter().map(|s| s.as_str()).collect();
+            let fields: Vec<(SpannedName, TypeExpr)> = obj
+                .properties
+                .iter()
+                .map(|(name, prop_ref)| {
+                    let ty = boxed_schema_ref_to_type_expr(prop_ref, spec, span);
+                    let ty = if required.contains(name.as_str()) {
+                        ty
+                    } else {
+                        TypeExpr::Apply {
+                            base: Box::new(TypeExpr::Name(sn("Option", span))),
+                            args: vec![ty],
+                            span: span.clone(),
+                        }
+                    };
+                    (sn(name, span), ty)
+                })
+                .collect();
+            TypeExpr::Record {
+                fields,
+                span: span.clone(),
+            }
+        }
+        _ => TypeExpr::Name(sn("Any", span)),
+    }
+}
+
+fn generate_schema_type_aliases(spec: &OpenAPI, span: &Span) -> Vec<ModuleItem> {
     let schemas = match &spec.components {
         Some(c) => &c.schemas,
         None => return Vec::new(),
     };
-    let mut out = Vec::new();
+    let mut items = Vec::new();
     for (name, schema_ref) in schemas {
         let schema = match schema_ref {
             ReferenceOr::Item(s) => s,
             ReferenceOr::Reference { .. } => continue,
         };
-        let type_expr = schema_to_type_expr(name, schema, spec, span);
-        out.push(record_field(name, type_expr, span));
-    }
-    out
-}
-
-fn schema_to_type_expr(_name: &str, schema: &Schema, spec: &OpenAPI, span: &Span) -> Expr {
-    match &schema.schema_kind {
-        SchemaKind::Type(OaType::Object(obj)) => {
-            let required: std::collections::HashSet<&str> =
-                obj.required.iter().map(|s| s.as_str()).collect();
-            let mut fields = Vec::new();
-            for (prop_name, prop_ref) in &obj.properties {
-                let type_name = boxed_schema_type_name(prop_ref, spec);
-                let type_str = if required.contains(prop_name.as_str()) {
-                    type_name
-                } else {
-                    format!("Option {type_name}")
-                };
-                fields.push(record_field(prop_name, str_lit(&type_str, span), span));
-            }
-            record(fields, span)
-        }
-        SchemaKind::Type(OaType::String(sv)) => {
-            if !sv.enumeration.is_empty() {
-                let variants: Vec<Expr> = sv
+        match &schema.schema_kind {
+            SchemaKind::Type(OaType::String(sv)) if !sv.enumeration.is_empty() => {
+                let constructors = sv
                     .enumeration
                     .iter()
                     .filter_map(|v| v.as_ref())
-                    .map(|v| str_lit(&capitalize(v), span))
+                    .map(|v| TypeCtor {
+                        name: sn(&capitalize(v), span),
+                        args: Vec::new(),
+                        span: span.clone(),
+                    })
                     .collect();
-                list(variants, span)
-            } else {
-                str_lit("Text", span)
+                items.push(ModuleItem::TypeDecl(TypeDecl {
+                    decorators: Vec::new(),
+                    name: sn(name, span),
+                    params: Vec::new(),
+                    constructors,
+                    span: span.clone(),
+                }));
+            }
+            SchemaKind::OneOf { one_of } => {
+                let constructors = one_of
+                    .iter()
+                    .map(|r| {
+                        let type_name = schema_type_name(r, spec);
+                        TypeCtor {
+                            name: sn(&type_name, span),
+                            args: vec![TypeExpr::Name(sn(&type_name, span))],
+                            span: span.clone(),
+                        }
+                    })
+                    .collect();
+                items.push(ModuleItem::TypeDecl(TypeDecl {
+                    decorators: Vec::new(),
+                    name: sn(name, span),
+                    params: Vec::new(),
+                    constructors,
+                    span: span.clone(),
+                }));
+            }
+            SchemaKind::AnyOf { any_of } => {
+                let constructors = any_of
+                    .iter()
+                    .map(|r| {
+                        let type_name = schema_type_name(r, spec);
+                        TypeCtor {
+                            name: sn(&type_name, span),
+                            args: vec![TypeExpr::Name(sn(&type_name, span))],
+                            span: span.clone(),
+                        }
+                    })
+                    .collect();
+                items.push(ModuleItem::TypeDecl(TypeDecl {
+                    decorators: Vec::new(),
+                    name: sn(name, span),
+                    params: Vec::new(),
+                    constructors,
+                    span: span.clone(),
+                }));
+            }
+            _ => {
+                let aliased = inline_schema_to_type_expr(schema, spec, span);
+                items.push(ModuleItem::TypeAlias(TypeAlias {
+                    decorators: Vec::new(),
+                    name: sn(name, span),
+                    params: Vec::new(),
+                    aliased,
+                    span: span.clone(),
+                }));
             }
         }
-        SchemaKind::Type(OaType::Integer(_)) => str_lit("Int", span),
-        SchemaKind::Type(OaType::Number(_)) => str_lit("Float", span),
-        SchemaKind::Type(OaType::Boolean(_)) => str_lit("Bool", span),
-        SchemaKind::Type(OaType::Array(arr)) => {
-            let inner = arr
-                .items
-                .as_ref()
-                .map(|i| boxed_schema_type_name(i, spec))
-                .unwrap_or_else(|| "Any".to_string());
-            str_lit(&format!("List {inner}"), span)
+    }
+    items
+}
+
+fn generate_binding_type_sig(
+    spec: &OpenAPI,
+    span: &Span,
+    binding_name: &str,
+    ops: &[(String, &str, String, &Operation)],
+) -> TypeSig {
+    let effect_wrapper = |response_ty: TypeExpr, span: &Span| -> TypeExpr {
+        TypeExpr::Apply {
+            base: Box::new(TypeExpr::Name(sn("Effect", span))),
+            args: vec![
+                TypeExpr::Apply {
+                    base: Box::new(TypeExpr::Name(sn("SourceError", span))),
+                    args: vec![TypeExpr::Name(sn("RestApi", span))],
+                    span: span.clone(),
+                },
+                response_ty,
+            ],
+            span: span.clone(),
         }
-        SchemaKind::OneOf { one_of } => {
-            let variants: Vec<Expr> = one_of
-                .iter()
-                .map(|r| str_lit(&schema_type_name(r, spec), span))
-                .collect();
-            list(variants, span)
+    };
+
+    let mut record_fields: Vec<(SpannedName, TypeExpr)> = Vec::new();
+
+    if !spec.servers.is_empty() {
+        record_fields.push((sn("__baseUrl", span), TypeExpr::Name(sn("Text", span))));
+    }
+
+    for (_path, _method, op_id, operation) in ops {
+        let mut param_types: Vec<TypeExpr> = Vec::new();
+
+        // Path parameters -> positional args
+        for p in &operation.parameters {
+            if let ReferenceOr::Item(param) = p {
+                if matches!(param, openapiv3::Parameter::Path { .. }) {
+                    let data = param.parameter_data_ref();
+                    let ty = param_format_to_type_expr(&data.format, spec, span)
+                        .unwrap_or_else(|| TypeExpr::Name(sn("Text", span)));
+                    param_types.push(ty);
+                }
+            }
         }
-        SchemaKind::AnyOf { any_of } => {
-            let variants: Vec<Expr> = any_of
-                .iter()
-                .map(|r| str_lit(&schema_type_name(r, spec), span))
-                .collect();
-            list(variants, span)
+
+        // Query/header parameters -> optional record arg
+        let option_params: Vec<(SpannedName, TypeExpr)> = operation
+            .parameters
+            .iter()
+            .filter_map(|p| match p {
+                ReferenceOr::Item(param) => {
+                    if matches!(
+                        param,
+                        openapiv3::Parameter::Query { .. }
+                            | openapiv3::Parameter::Header { .. }
+                    ) {
+                        let data = param.parameter_data_ref();
+                        let base_ty = param_format_to_type_expr(&data.format, spec, span)
+                            .unwrap_or_else(|| TypeExpr::Name(sn("Text", span)));
+                        let ty = if data.required {
+                            base_ty
+                        } else {
+                            TypeExpr::Apply {
+                                base: Box::new(TypeExpr::Name(sn("Option", span))),
+                                args: vec![base_ty],
+                                span: span.clone(),
+                            }
+                        };
+                        Some((sn(&data.name, span), ty))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            })
+            .collect();
+        if !option_params.is_empty() {
+            param_types.push(TypeExpr::Record {
+                fields: option_params,
+                span: span.clone(),
+            });
         }
-        _ => str_lit("Any", span),
+
+        // Request body -> typed arg
+        if let Some(ReferenceOr::Item(body)) = &operation.request_body {
+            if let Some(mt) = body.content.get("application/json") {
+                if let Some(schema_ref) = &mt.schema {
+                    param_types.push(schema_ref_to_type_expr(schema_ref, spec, span));
+                }
+            }
+        }
+
+        // Response type
+        let response_ty = response_type_name(operation, spec)
+            .map(|name| TypeExpr::Name(sn(&name, span)))
+            .unwrap_or_else(|| TypeExpr::Name(sn("Unit", span)));
+        let result_ty = effect_wrapper(response_ty, span);
+
+        let endpoint_ty = if param_types.is_empty() {
+            result_ty
+        } else {
+            TypeExpr::Func {
+                params: param_types,
+                result: Box::new(result_ty),
+                span: span.clone(),
+            }
+        };
+
+        record_fields.push((sn(op_id, span), endpoint_ty));
+    }
+
+    TypeSig {
+        decorators: Vec::new(),
+        name: sn(binding_name, span),
+        ty: TypeExpr::Record {
+            fields: record_fields,
+            span: span.clone(),
+        },
+        span: span.clone(),
+    }
+}
+
+fn param_format_to_type_expr(
+    format: &openapiv3::ParameterSchemaOrContent,
+    spec: &OpenAPI,
+    span: &Span,
+) -> Option<TypeExpr> {
+    match format {
+        openapiv3::ParameterSchemaOrContent::Schema(schema_ref) => {
+            Some(schema_ref_to_type_expr(schema_ref, spec, span))
+        }
+        _ => None,
     }
 }

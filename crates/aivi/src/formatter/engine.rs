@@ -13,6 +13,24 @@ use super::{BraceStyle, FormatOptions};
 // IMPORTANT: This module must remain deterministic and must not change semantics (formatting
 // should always round-trip through the parser).
 
+// Core types and token classification helpers.
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../aivi_core/src/formatter/rules/helpers.rs"
+));
+
+// Markup / GTK sigil formatting.
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../aivi_core/src/formatter/rules/sigils.rs"
+));
+
+// Matrix sigil formatting.
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../aivi_core/src/formatter/rules/matrix.rs"
+));
+
 pub fn format_text_with_options(content: &str, options: FormatOptions) -> String {
     let _ = BraceStyle::Kr; // keep the enum reachable for `include!`-local logic
     include!(concat!(

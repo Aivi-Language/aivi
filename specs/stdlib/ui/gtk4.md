@@ -381,7 +381,7 @@ gtkApp : {
 } -> Effect GtkError Unit
 ```
 
-Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `buildFromNode` → `windowSetChild` → `signalStream` → `windowPresent` → `appRun` → event loop using `channel.recv` with `toMsg`/`update`. On each state change, the `view` function is called with the new state and the resulting node tree is reconciled against the live widget tree via `reconcileNode`. If the root widget type changes, `gtkApp` automatically re-attaches the new root to the window.
+Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `buildFromNode` → `windowSetChild` → `signalStream` → `windowPresent` → event loop using `channel.recv` with `toMsg`/`update`. The GTK event loop is driven by `channel.recv`, which pumps GTK events internally via `g_main_context_iteration` — no separate `appRun` call is needed. On each state change, the `view` function is called with the new state and the resulting node tree is reconciled against the live widget tree via `reconcileNode`. If the root widget type changes, `gtkApp` automatically re-attaches the new root to the window.
 
 ### `reconcileNode` — vdom-style tree patching
 
