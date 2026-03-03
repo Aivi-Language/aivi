@@ -1,5 +1,6 @@
 use crate::surface::{Expr, Literal, PathSegment};
 
+mod coverage;
 mod parsing;
 mod sigils;
 

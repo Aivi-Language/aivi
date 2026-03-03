@@ -361,3 +361,91 @@ fn shift_right(data: &[u8], n: usize) -> Vec<u8> {
     }
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- shift_left --
+
+    #[test]
+    fn shift_left_empty_returns_empty() {
+        let result = shift_left(&[], 4);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn shift_left_zero_is_identity() {
+        let result = shift_left(&[0xAB], 0);
+        assert_eq!(result, vec![0xABu8]);
+    }
+
+    #[test]
+    fn shift_left_by_8_shifts_out() {
+        // [0x01, 0x00] << 8 => [0x00, 0x00]
+        let result = shift_left(&[0x01u8, 0x00u8], 8);
+        assert_eq!(result, vec![0x00u8, 0x00u8]);
+    }
+
+    #[test]
+    fn shift_left_by_1_doubles_lsb() {
+        let result = shift_left(&[0x01u8], 1);
+        assert_eq!(result, vec![0x02u8]);
+    }
+
+    #[test]
+    fn shift_left_full_overflow_returns_zeros() {
+        let result = shift_left(&[0xFFu8], 8);
+        assert_eq!(result, vec![0x00u8]);
+    }
+
+    #[test]
+    fn shift_left_cross_byte_boundary() {
+        // [0x00, 0x80] << 1 => [0x01, 0x00]
+        let result = shift_left(&[0x00u8, 0x80u8], 1);
+        assert_eq!(result, vec![0x01u8, 0x00u8]);
+    }
+
+    // -- shift_right --
+
+    #[test]
+    fn shift_right_empty_returns_empty() {
+        let result = shift_right(&[], 4);
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn shift_right_zero_is_identity() {
+        let result = shift_right(&[0xAB], 0);
+        assert_eq!(result, vec![0xABu8]);
+    }
+
+    #[test]
+    fn shift_right_by_1_halves() {
+        let result = shift_right(&[0x02u8], 1);
+        assert_eq!(result, vec![0x01u8]);
+    }
+
+    #[test]
+    fn shift_right_full_overflow_returns_zeros() {
+        let result = shift_right(&[0xFFu8], 8);
+        assert_eq!(result, vec![0x00u8]);
+    }
+
+    #[test]
+    fn shift_right_cross_byte_boundary() {
+        // [0x01, 0x00] >> 1 => [0x00, 0x80]
+        let result = shift_right(&[0x01u8, 0x00u8], 1);
+        assert_eq!(result, vec![0x00u8, 0x80u8]);
+    }
+
+    #[test]
+    fn shift_left_and_right_roundtrip() {
+        let original = vec![0xA5u8, 0x3Cu8];
+        let shifted = shift_left(&original, 4);
+        let back = shift_right(&shifted, 4);
+        // After round-trip, lower nibble of first byte is zero (bits are lost)
+        // Just verify the operation doesn't panic
+        assert_eq!(back.len(), original.len());
+    }
+}

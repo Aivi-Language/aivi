@@ -22,6 +22,8 @@ mod builtins_parity_tests;
 mod class_constraints_tests;
 #[cfg(test)]
 mod expected_coercions_tests;
+#[cfg(test)]
+mod infer_and_class_env_tests;
 
 pub use check::{
     check_types, check_types_including_stdlib, check_types_stdlib_checkpoint,
