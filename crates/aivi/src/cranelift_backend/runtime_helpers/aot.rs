@@ -726,7 +726,7 @@ main = do Effect { unit }
             .filter(|k: &String| {
                 !matches!(
                     k.as_str(),
-                    "True" | "False" | "Some" | "None" | "Ok" | "Err" | "Closed" | "__machine_on"
+                    "True" | "False" | "Some" | "None" | "Ok" | "Err" | "Valid" | "Invalid" | "Closed" | "__machine_on"
                 ) && !k.starts_with("aivi.")
                     && !k.starts_with("__")
             })

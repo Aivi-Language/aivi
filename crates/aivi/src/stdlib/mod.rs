@@ -65,6 +65,7 @@ mod ui;
 mod ui_layout;
 mod units;
 mod url;
+mod validation;
 mod vector;
 
 struct EmbeddedModule {
@@ -320,6 +321,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: map::MODULE_NAME,
         source: map::SOURCE,
+    },
+    EmbeddedModule {
+        name: validation::MODULE_NAME,
+        source: validation::SOURCE,
     },
 ];
 

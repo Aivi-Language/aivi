@@ -4,9 +4,9 @@ pub const SOURCE: &str = r#"
 @no_prelude
 module aivi
 export Unit, Bool, Int, Float, Text, Char, Bytes, DateTime
-export List, Option, Result, Tuple, Map, Set, Queue, Deque, Heap
+export List, Option, Result, Validation, Tuple, Map, Set, Queue, Deque, Heap
 export Source, SourceError
-export None, Some, Ok, Err, True, False
+export None, Some, Ok, Err, Valid, Invalid, True, False
 export pure, fail, attempt, load, constructorName, constructorOrdinal
 
 export text, regex, math, calendar, color

@@ -151,6 +151,7 @@ fn stdlib_additional_modules_inner() {
         root.join("integration-tests/stdlib/aivi/ui/ui.aivi"),
         root.join("integration-tests/stdlib/aivi/units/units.aivi"),
         root.join("integration-tests/stdlib/aivi/url/url.aivi"),
+        root.join("integration-tests/stdlib/aivi/validation/validation.aivi"),
         root.join("integration-tests/stdlib/aivi/vector/vector.aivi"),
     ];
 
