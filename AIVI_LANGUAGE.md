@@ -842,15 +842,28 @@ Available source APIs in v0.1: `file.read/json/csv/imageMeta/image`, `http`/`htt
 
 `@static` embeds sources at compile time: `@static schema = file.json "schema.json"` or `@static envName = env.get "AIVI_BUILD_ENV"`.
 
-`@static` can also generate typed API client modules from OpenAPI specs:
+`@static` can also generate typed, callable API clients from OpenAPI specs:
 
 ```aivi
 @static
-petStore = openapi.fromUrl ~url(https://petstore.example.com/v2/swagger.json)
+petStoreApi = openapi.fromUrl ~url(https://petstore.example.com/v2/swagger.json)
 
 @static
 internalApi = openapi.fromFile "./specs/api.yaml"
 ```
+
+The result is a factory function: pass a config record to get callable endpoint functions.
+
+```aivi
+client = petStoreApi { bearerToken: Some "sk-...", baseUrl: None, headers: None, timeoutMs: None, retryCount: None, strictStatus: None }
+pets <- client.listPets { limit: Some 10 }
+
+// Destructuring works too
+{ listPets } = petStoreApi { bearerToken: None, baseUrl: None, headers: None, timeoutMs: None, retryCount: None, strictStatus: None }
+result <- listPets {}
+```
+
+Config fields: `bearerToken : Option Text`, `headers : Option (List (Text, Text))`, `timeoutMs : Option Int`, `retryCount : Option Int`, `strictStatus : Option Bool`, `baseUrl : Option Text`.
 
 ---
 
@@ -1010,7 +1023,7 @@ Compile-time metadata only. No user-defined decorators.
 | `@debug` / `@debug(pipes, args, return, time)` | Debug tracing (with `--debug-trace`)      |
 | `@no_prelude`                                  | Skip implicit `use aivi.prelude`          |
 
-`@static` supported sources: `file.read/json/csv`, `env.get`, `openapi.fromUrl ~url(...)`, `openapi.fromFile "..."`.
+`@static` supported sources: `file.read/json/csv`, `env.get`, `openapi.fromUrl ~url(...)`, `openapi.fromFile "..."`. OpenAPI sources produce a factory function `Config -> { endpoints... }` where each endpoint is callable.
 
 Unknown decorators are compile errors.
 `@native` is only valid on top-level definitions and requires an explicit type signature.

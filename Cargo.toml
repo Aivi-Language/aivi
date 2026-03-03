@@ -2,7 +2,9 @@
 members = [
     "crates/aivi",
     "crates/aivi_core",
+    "crates/aivi_database",
     "crates/aivi_driver",
+    "crates/aivi_email",
     "crates/aivi_http_server",
     "crates/aivi_lsp",
     "crates/doc_index_gen",

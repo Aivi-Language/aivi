@@ -192,6 +192,31 @@ pub(super) fn register(checker: &mut TypeChecker, env: &mut TypeEnv) {
         },
     );
 
+    // __openapi_call : descriptor -> config -> params -> Source RestApi (Result Error Response)
+    let oa_d = checker.fresh_var_id();
+    let oa_c = checker.fresh_var_id();
+    let oa_p = checker.fresh_var_id();
+    let oa_result_ty = Type::con("Result").app(vec![error_ty.clone(), response_ty.clone()]);
+    let oa_source_ty = Type::con("Source").app(vec![Type::con("RestApi"), oa_result_ty]);
+    let oa_ty = Type::Func(
+        Box::new(Type::Var(oa_d)),
+        Box::new(Type::Func(
+            Box::new(Type::Var(oa_c)),
+            Box::new(Type::Func(
+                Box::new(Type::Var(oa_p)),
+                Box::new(oa_source_ty),
+            )),
+        )),
+    );
+    env.insert(
+        "__openapi_call".to_string(),
+        Scheme {
+            vars: vec![oa_d, oa_c, oa_p],
+            ty: oa_ty,
+            origin: None,
+        },
+    );
+
     let address_ty = Type::Record {
         fields: vec![
             ("host".to_string(), Type::con("Text")),

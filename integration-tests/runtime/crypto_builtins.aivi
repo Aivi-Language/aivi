@@ -1,0 +1,119 @@
+@no_prelude
+module integrationTests.runtime.cryptoBuiltins
+
+use aivi
+use aivi.testing
+use aivi.crypto
+use aivi.text
+use aivi.result
+
+// --- SHA hashing ---
+
+@test "sha256 produces 64-char hex"
+sha256Len = do Effect {
+  hash = sha256 "hello"
+  assertEq (text.length hash) 64
+}
+
+@test "sha256 deterministic"
+sha256Det = do Effect {
+  assertEq (sha256 "test") (sha256 "test")
+}
+
+@test "sha256 different inputs differ"
+sha256Diff = do Effect {
+  assert (sha256 "a" != sha256 "b")
+}
+
+@test "sha384 produces 96-char hex"
+sha384Len = do Effect {
+  hash = sha384 "hello"
+  assertEq (text.length hash) 96
+}
+
+@test "sha512 produces 128-char hex"
+sha512Len = do Effect {
+  hash = sha512 "hello"
+  assertEq (text.length hash) 128
+}
+
+// --- randomUuid ---
+
+@test "randomUuid produces 36-char string"
+uuidLen = do Effect {
+  id <- randomUuid
+  assertEq (text.length id) 36
+}
+
+@test "randomUuid unique"
+uuidUnique = do Effect {
+  id1 <- randomUuid
+  id2 <- randomUuid
+  assert (id1 != id2)
+}
+
+// --- toHex / fromHex ---
+
+@test "toHex and fromHex roundtrip"
+hexRoundtrip = do Effect {
+  original = crypto.fromHex "48656c6c6f"
+  original match
+    | Ok bytes => do Effect {
+        hex = crypto.toHex bytes
+        assertEq hex "48656c6c6f"
+      }
+    | Err _ => fail "fromHex failed"
+}
+
+@test "fromHex invalid"
+fromHexInvalid = do Effect {
+  result = crypto.fromHex "xyz"
+  assertEq (isErr result) True
+}
+
+// --- secureEquals ---
+
+@test "secureEquals same bytes"
+secureEqSame = do Effect {
+  result = crypto.fromHex "aabb"
+  result match
+    | Ok b => assertEq (secureEquals b b) True
+    | Err _ => fail "fromHex failed"
+}
+
+@test "secureEquals different bytes"
+secureEqDiff = do Effect {
+  r1 = crypto.fromHex "aabb"
+  r2 = crypto.fromHex "ccdd"
+  r1 match
+    | Ok b1 =>
+      r2 match
+        | Ok b2 => assertEq (secureEquals b1 b2) False
+        | Err _ => fail "fromHex failed"
+    | Err _ => fail "fromHex failed"
+}
+
+// --- randomBytes ---
+
+@test "randomBytes produces correct length"
+randomBytesLen = do Effect {
+  bytes <- randomBytes 16
+  hex = crypto.toHex bytes
+  assertEq (text.length hex) 32
+}
+
+// --- hashPassword / verifyPassword ---
+
+@test "hashPassword and verifyPassword"
+passwordRoundtrip = do Effect {
+  hash <- hashPassword "mypassword"
+  verified <- verifyPassword "mypassword" hash
+  assertEq verified True
+}
+
+@test "verifyPassword wrong password"
+passwordWrong = do Effect {
+  hash <- hashPassword "correct"
+  verified <- verifyPassword "wrong" hash
+  assertEq verified False
+}

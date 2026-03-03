@@ -1,0 +1,288 @@
+@no_prelude
+module integrationTests.runtime.jsonBuiltins
+
+use aivi
+use aivi.testing
+use aivi.json
+use aivi.result
+
+// --- jsonToText ---
+
+@test "jsonToText null"
+jsonToTextNull = do Effect {
+  assertEq (jsonToText JsonNull) "null"
+}
+
+@test "jsonToText bool true"
+jsonToTextTrue = do Effect {
+  assertEq (jsonToText (JsonBool True)) "true"
+}
+
+@test "jsonToText bool false"
+jsonToTextFalse = do Effect {
+  assertEq (jsonToText (JsonBool False)) "false"
+}
+
+@test "jsonToText int"
+jsonToTextInt = do Effect {
+  assertEq (jsonToText (JsonInt 42)) "42"
+}
+
+@test "jsonToText float"
+jsonToTextFloat = do Effect {
+  assertEq (jsonToText (JsonFloat 3.14)) "3.14"
+}
+
+@test "jsonToText string"
+jsonToTextString = do Effect {
+  assertEq (jsonToText (JsonString "hello")) "\"hello\""
+}
+
+@test "jsonToText string with escapes"
+jsonToTextEscape = do Effect {
+  result = jsonToText (JsonString "line\nnext")
+  assert (result != "")
+}
+
+@test "jsonToText empty array"
+jsonToTextEmptyArray = do Effect {
+  assertEq (jsonToText (JsonArray [])) "[]"
+}
+
+@test "jsonToText array"
+jsonToTextArray = do Effect {
+  result = jsonToText (JsonArray [JsonInt 1, JsonInt 2])
+  assertEq result "[1,2]"
+}
+
+@test "jsonToText empty object"
+jsonToTextEmptyObj = do Effect {
+  assertEq (jsonToText (JsonObject [])) "{}"
+}
+
+@test "jsonToText object"
+jsonToTextObj = do Effect {
+  result = jsonToText (JsonObject [("name", JsonString "Alice")])
+  assertEq result "{\"name\":\"Alice\"}"
+}
+
+// --- encode/decode primitives ---
+
+@test "encodeText"
+encodeTextTest = do Effect {
+  assertEq (encodeText "hello") (JsonString "hello")
+}
+
+@test "decodeText success"
+decodeTextOk = do Effect {
+  assertEq (decodeText (JsonString "hi")) (Ok "hi")
+}
+
+@test "decodeText failure"
+decodeTextErr = do Effect {
+  assertEq (isErr (decodeText (JsonInt 42))) True
+}
+
+@test "encodeInt"
+encodeIntTest = do Effect {
+  assertEq (encodeInt 99) (JsonInt 99)
+}
+
+@test "decodeInt success"
+decodeIntOk = do Effect {
+  assertEq (decodeInt (JsonInt 7)) (Ok 7)
+}
+
+@test "decodeInt failure"
+decodeIntErr = do Effect {
+  assertEq (isErr (decodeInt (JsonString "x"))) True
+}
+
+@test "encodeFloat"
+encodeFloatTest = do Effect {
+  assertEq (encodeFloat 1.5) (JsonFloat 1.5)
+}
+
+@test "decodeFloat from float"
+decodeFloatOk = do Effect {
+  assertEq (decodeFloat (JsonFloat 2.5)) (Ok 2.5)
+}
+
+@test "decodeFloat from int coercion"
+decodeFloatFromInt = do Effect {
+  assertEq (decodeFloat (JsonInt 3)) (Ok 3.0)
+}
+
+@test "decodeFloat failure"
+decodeFloatErr = do Effect {
+  assertEq (isErr (decodeFloat (JsonString "x"))) True
+}
+
+@test "encodeBool"
+encodeBoolTest = do Effect {
+  assertEq (encodeBool True) (JsonBool True)
+}
+
+@test "decodeBool success"
+decodeBoolOk = do Effect {
+  assertEq (decodeBool (JsonBool False)) (Ok False)
+}
+
+@test "decodeBool failure"
+decodeBoolErr = do Effect {
+  assertEq (isErr (decodeBool (JsonInt 1))) True
+}
+
+// --- encodeObject / encodeArray ---
+
+@test "encodeObject"
+encodeObjectTest = do Effect {
+  obj = encodeObject [("key", JsonInt 1)]
+  assertEq (jsonToText obj) "{\"key\":1}"
+}
+
+@test "encodeArray"
+encodeArrayTest = do Effect {
+  arr = encodeArray [JsonBool True, JsonNull]
+  assertEq (jsonToText arr) "[true,null]"
+}
+
+// --- decodeField ---
+
+@test "decodeField found"
+decodeFieldFound = do Effect {
+  obj = JsonObject [("name", JsonString "Bob")]
+  assertEq (decodeField "name" obj) (Ok (JsonString "Bob"))
+}
+
+@test "decodeField missing"
+decodeFieldMissing = do Effect {
+  obj = JsonObject [("name", JsonString "Bob")]
+  assertEq (isErr (decodeField "age" obj)) True
+}
+
+@test "decodeField not an object"
+decodeFieldNotObj = do Effect {
+  assertEq (isErr (decodeField "x" (JsonInt 1))) True
+}
+
+// --- requiredField ---
+
+@test "requiredField found"
+requiredFieldFound = do Effect {
+  obj = JsonObject [("id", JsonInt 1)]
+  assertEq (requiredField "id" obj) (Ok (JsonInt 1))
+}
+
+@test "requiredField missing"
+requiredFieldMissing = do Effect {
+  obj = JsonObject []
+  assertEq (isErr (requiredField "id" obj)) True
+}
+
+// --- decodeList ---
+
+@test "decodeList success"
+decodeListOk = do Effect {
+  arr = JsonArray [JsonInt 1, JsonInt 2, JsonInt 3]
+  result = decodeList decodeInt arr
+  assertEq result (Ok [1, 2, 3])
+}
+
+@test "decodeList failure in element"
+decodeListErrElem = do Effect {
+  arr = JsonArray [JsonInt 1, JsonString "bad"]
+  result = decodeList decodeInt arr
+  assertEq (isErr result) True
+}
+
+@test "decodeList not an array"
+decodeListNotArr = do Effect {
+  result = decodeList decodeInt (JsonObject [])
+  assertEq (isErr result) True
+}
+
+// --- strictFields ---
+
+@test "strictFields all allowed"
+strictFieldsOk = do Effect {
+  obj = JsonObject [("name", JsonString "X")]
+  result = strictFields ["name", "age"] obj
+  assertEq (isOk result) True
+}
+
+@test "strictFields unknown key"
+strictFieldsUnknown = do Effect {
+  obj = JsonObject [("name", JsonString "X"), ("extra", JsonNull)]
+  result = strictFields ["name"] obj
+  assertEq (isErr result) True
+}
+
+@test "strictFields not an object"
+strictFieldsNotObj = do Effect {
+  result = strictFields ["a"] (JsonInt 1)
+  assertEq (isErr result) True
+}
+
+// --- validateSchema ---
+
+@test "validateSchema required fields present"
+validateSchemaOk = do Effect {
+  schema = { required: ["name"], strict: False }
+  obj = JsonObject [("name", JsonString "Alice")]
+  issues = validateSchema schema obj
+  assertEq issues []
+}
+
+@test "validateSchema missing required field"
+validateSchemaMissing = do Effect {
+  schema = { required: ["name", "age"], strict: False }
+  obj = JsonObject [("name", JsonString "Alice")]
+  issues = validateSchema schema obj
+  assertEq (List.length issues) 1
+}
+
+@test "validateSchema not an object"
+validateSchemaNotObj = do Effect {
+  schema = { required: [], strict: False }
+  issues = validateSchema schema (JsonInt 1)
+  assertEq (List.length issues) 1
+}
+
+// --- migrateObject ---
+
+@test "migrateObject transforms entries"
+migrateObjTransform = do Effect {
+  obj = JsonObject [("old", JsonInt 1)]
+  migrated = migrateObject (entries => [("new", JsonInt 2)]) obj
+  assertEq (jsonToText migrated) "{\"new\":2}"
+}
+
+@test "migrateObject non-object passes through"
+migrateObjPassthrough = do Effect {
+  val = JsonString "hello"
+  assertEq (migrateObject (entries => entries) val) (JsonString "hello")
+}
+
+// --- renderSchemaIssue / renderSchemaIssues / renderJsonError ---
+
+@test "renderSchemaIssue produces text"
+renderIssueText = do Effect {
+  issue = { path: "$.name", message: "missing" }
+  result = renderSchemaIssue 1 issue
+  assert (result != "")
+}
+
+@test "renderSchemaIssues produces text"
+renderIssuesText = do Effect {
+  issues = [{ path: "$.a", message: "bad" }, { path: "$.b", message: "wrong" }]
+  result = renderSchemaIssues issues
+  assert (result != "")
+}
+
+@test "renderJsonError produces text"
+renderJsonErrText = do Effect {
+  err = { message: "expected Int" }
+  result = renderJsonError "$.user.id" err
+  assert (result != "")
+}
