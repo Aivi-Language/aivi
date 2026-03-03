@@ -14,78 +14,71 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 
 <!-- toc:start -->
 
-### Overview
-- [Spec Home](index)
+### Getting Started
+- [Language at a Glance](language-overview)
 - [Introduction](introduction)
-- [Missing Features (v0.1)](missing_features_v0.1)
 
-### Syntax
-#### Core Forms
-- [Bindings and Scope](syntax/bindings)
-- [Functions and Pipes](syntax/functions)
+### Language Reference
+#### Foundations
+- [Bindings & Scope](syntax/bindings)
+- [Functions & Pipes](syntax/functions)
+#### Types
 - [Primitive Types](syntax/types/primitive_types)
 - [Algebraic Data Types](syntax/types/algebraic_data_types)
 - [Closed Records](syntax/types/closed_records)
 - [Record Row Transforms](syntax/types/record_row_transforms)
-- [Classes and HKTs](syntax/types/classes_and_hkts)
+- [Classes & HKTs](syntax/types/classes_and_hkts)
 - [Expected-Type Coercions](syntax/types/expected_type_coercions)
-- [Predicates](syntax/predicates)
-#### Data & Flow
-- [Patching Records](syntax/patching)
-- [Domains, Units, and Deltas](syntax/domains)
-- [Generators](syntax/generators)
+#### Data & Patterns
 - [Pattern Matching](syntax/pattern_matching)
+- [Predicates](syntax/predicates)
+- [Patching Records](syntax/patching)
+- [Domains & Units](syntax/domains)
+- [Generators](syntax/generators)
 #### Effects & Control
 - [Effects](syntax/effects)
-- [Machines](syntax/machines_runtime)
+- [do Notation](syntax/do_notation)
 - [Resources](syntax/resources)
-- [Generic `do` Notation](syntax/do_notation)
+- [Machines](syntax/machines_runtime)
 #### Modules & Interop
 - [Modules](syntax/modules)
 - [External Sources](syntax/external_sources)
-##### Source Integrations
 - [File Sources](syntax/external_sources/file)
 - [REST/HTTP Sources](syntax/external_sources/rest_http)
 - [Environment Sources](syntax/external_sources/environment)
 - [IMAP Email Sources](syntax/external_sources/imap_email)
 - [Image Sources](syntax/external_sources/image)
 - [Compile-Time Sources](syntax/external_sources/compile_time)
-#### Notation & Grammar
-- [Operators and Context](syntax/operators)
-- [Sigils](syntax/sigils)
-##### Decorators
-- [Overview](syntax/decorators)
-- [@static](syntax/decorators/static)
-- [@native](syntax/decorators/native)
-- [@deprecated](syntax/decorators/deprecated)
-- [@debug](syntax/decorators/debug)
-- [@no_prelude](syntax/decorators/no_prelude)
-- [Comments](syntax/comments)
-- [Concrete Syntax](syntax/grammar)
+#### Notation
+- [Operators & Sigils](syntax/operators)
+- [Decorators](syntax/decorators)
+- [Grammar](syntax/grammar)
 
 ### Standard Library
-#### Core & Utils
+#### Core
 - [Prelude](stdlib/core/prelude)
+- [Option](stdlib/core/option)
+- [Result](stdlib/core/result)
 - [Text](stdlib/core/text)
 - [Logic](stdlib/core/logic)
-- [Units](stdlib/core/units)
-- [Regex](stdlib/core/regex)
 - [Collections](stdlib/core/collections)
-- [I18n](stdlib/core/i18n)
 - [Generator](stdlib/core/generator)
+- [Regex](stdlib/core/regex)
 - [Validation](stdlib/core/validation)
+- [I18n](stdlib/core/i18n)
+- [Units](stdlib/core/units)
 #### Data
 - [JSON](stdlib/data/json)
 #### Math & Science
 - [Math](stdlib/math/math)
+- [Numbers](stdlib/math/number)
 - [Vector](stdlib/math/vector)
 - [Matrix](stdlib/math/matrix)
-- [Numbers](stdlib/math/number)
+- [Linear Algebra](stdlib/math/linear_algebra)
 - [Probability](stdlib/math/probability)
 - [FFT & Signal](stdlib/math/signal)
 - [Geometry](stdlib/math/geometry)
 - [Graph](stdlib/math/graph)
-- [Linear Algebra](stdlib/math/linear_algebra)
 - [Tree](stdlib/math/tree)
 #### Time
 - [Instant](stdlib/chronos/instant)
@@ -93,26 +86,27 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [Duration](stdlib/chronos/duration)
 - [TimeZone](stdlib/chronos/timezone)
 - [Scheduler](stdlib/chronos/scheduler)
-#### System
-- [Crypto](stdlib/system/crypto)
-- [Secrets](stdlib/system/secrets)
+#### System & IO
+- [File](stdlib/system/file)
+- [Console](stdlib/system/console)
+- [Path](stdlib/system/path)
+- [URL](stdlib/system/url)
 - [System](stdlib/system/system)
 - [Log](stdlib/system/log)
 - [Concurrency](stdlib/system/concurrency)
-#### IO
-- [File](stdlib/system/file)
-- [Console](stdlib/system/console)
+#### Security
+- [Crypto](stdlib/system/crypto)
+- [Secrets](stdlib/system/secrets)
+#### Database
 - [Database](stdlib/system/database)
-- [Email](stdlib/system/email)
-- [Path](stdlib/system/path)
-- [URL](stdlib/system/url)
-#### Network
-- [HTTP](stdlib/network/http)
-- [HTTPS](stdlib/network/https)
+#### Networking
+- [HTTP & HTTPS](stdlib/network/http)
 - [HTTP Server](stdlib/network/http_server)
 - [REST](stdlib/network/rest)
 - [Sockets](stdlib/network/sockets)
 - [Streams](stdlib/network/streams)
+#### Email
+- [Email](stdlib/system/email)
 #### UI
 - [GTK4](stdlib/ui/gtk4)
 - [Layout](stdlib/ui/layout)
@@ -120,22 +114,22 @@ A high-integrity purely functional language  with on top of the Rust eco system.
 - [HTML Sigil](stdlib/ui/html)
 - [Color](stdlib/ui/color)
 
-### Runtime
-- [Concurrency](runtime/concurrency)
-- [Package Manager & Packaging](runtime/package_manager)
+### Testing
+- [Testing Module](stdlib/core/testing)
+- [@test & Mocks](syntax/decorators#test-test-declarations)
 
 ### Tooling
 - [CLI](tools/cli)
 - [LSP Server](tools/lsp_server)
 - [VSCode Extension](tools/vscode_extension)
-- [Spec Doc Markers](doc-markers-spec)
-#### Testing
-- [Testing Module](stdlib/core/testing)
-- [@test Decorator](syntax/decorators/test)
-- [Mock Expressions](syntax/decorators/mock)
+- [Package Manager](tools/package_manager)
 
-### Compiler & Backend
-- [Compiler & Backend Design](typed_codegen/design)
+### Internals
+- [Compiler & Backend](typed_codegen/design)
 - [Minimality Proof](typed_codegen/minimality)
+
+### Appendix
+- [Missing Features (v0.1)](missing_features_v0.1)
+- [Spec Doc Markers](doc-markers-spec)
 
 <!-- toc:end -->

@@ -39,7 +39,7 @@ The runner prints a summary of passed / failed tests and returns a non-zero exit
 
 ### Mocking REST/HTTP requests in tests
 
-For request-heavy code, use [`mock ... in` expressions](../../syntax/decorators/mock.md) to replace external dependencies without restructuring your production code:
+For request-heavy code, use [`mock ... in` expressions](/syntax/decorators#mock-expressions) to replace external dependencies without restructuring your production code:
 
 ```aivi
 use aivi.testing
@@ -63,7 +63,7 @@ fetchUsersWithMock =
 
 Mock expressions provide **deep scoping** — any function called within the body that
 internally references the mocked binding will see the mock value. See the
-[Mock Expressions](../../syntax/decorators/mock.md) spec for full details including
+[Mock Expressions](/syntax/decorators#mock-expressions) spec for full details including
 snapshot mocks and multiple mock bindings.
 
 ### Snapshot assertions

@@ -547,12 +547,8 @@
                 }
             }
             "GtkRevealer" => {
-                eprintln!("[DEBUG GtkRevealer] props={:?}", props);
                 if let Some(value) = props.get("reveal-child").and_then(|v| parse_bool_text(v)) {
-                    eprintln!("[DEBUG GtkRevealer] setting reveal-child={}", value);
                     unsafe { gtk_revealer_set_reveal_child(widget, if value { 1 } else { 0 }) };
-                } else {
-                    eprintln!("[DEBUG GtkRevealer] reveal-child NOT set (raw={:?})", props.get("reveal-child"));
                 }
                 if let Some(value) = props.get("transition-type") {
                     let t: c_int = match value.as_str() {

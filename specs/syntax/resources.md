@@ -60,7 +60,7 @@ All guarantees hold regardless of whether the failure is a typed error (`E`) or 
 
 ## 15.5 Cancellation
 
-Resources interact with the cancellation system (see [Concurrency](../runtime/concurrency.md)):
+Resources interact with the cancellation system (see [Concurrency](/stdlib/system/concurrency)):
 
 - Cancellation is checked at `<-` bind points. If a task is cancelled before a resource is acquired, acquisition does not run.
 - If cancellation arrives **during use** of an acquired resource, cleanup still runs. The resource block's finalizer is registered at acquisition time and cannot be skipped.

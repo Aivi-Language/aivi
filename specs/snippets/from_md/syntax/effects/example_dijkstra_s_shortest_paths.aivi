@@ -1,22 +1,20 @@
 dijkstra = do Effect {
   dists0 = Map.insert source 0.0 Map.empty
 
-  loop dists pq = {
-    result = Heap.popMin pq
+  loop state = { dists: dists0, pq: Heap.push (0.0, source) Heap.empty } => {
+    result = Heap.popMin state.pq
     result match
       | None                     => pure Unit
       | Some ((d, node), restPq) => do Effect {
-          currentDist = Map.getOrElse node infinity dists
+          currentDist = Map.getOrElse node infinity state.dists
           if d > currentDist
-            then do Effect { recurse dists restPq }
+            then do Effect { recurse { dists: state.dists, pq: restPq } }
             else do Effect {
               edges = edgesFrom graph node
-              result2 = processEdges dists d edges restPq
+              result2 = processEdges state.dists d edges restPq
               result2 match
-                | (newDists, newPq) => recurse newDists newPq
+                | (newDists, newPq) => recurse { dists: newDists, pq: newPq }
             }
         }
   }
-
-  loop dists0 (Heap.push (0.0, source) Heap.empty)
 }

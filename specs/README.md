@@ -8,78 +8,71 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 
 <!-- toc:start -->
 
-### Overview
-- [Spec Home](index.md)
+### Getting Started
+- [Language at a Glance](language-overview.md)
 - [Introduction](introduction.md)
-- [Missing Features (v0.1)](missing_features_v0.1.md)
 
-### Syntax
-#### Core Forms
-- [Bindings and Scope](syntax/bindings.md)
-- [Functions and Pipes](syntax/functions.md)
+### Language Reference
+#### Foundations
+- [Bindings & Scope](syntax/bindings.md)
+- [Functions & Pipes](syntax/functions.md)
+#### Types
 - [Primitive Types](syntax/types/primitive_types.md)
 - [Algebraic Data Types](syntax/types/algebraic_data_types.md)
 - [Closed Records](syntax/types/closed_records.md)
 - [Record Row Transforms](syntax/types/record_row_transforms.md)
-- [Classes and HKTs](syntax/types/classes_and_hkts.md)
+- [Classes & HKTs](syntax/types/classes_and_hkts.md)
 - [Expected-Type Coercions](syntax/types/expected_type_coercions.md)
-- [Predicates](syntax/predicates.md)
-#### Data & Flow
-- [Patching Records](syntax/patching.md)
-- [Domains, Units, and Deltas](syntax/domains.md)
-- [Generators](syntax/generators.md)
+#### Data & Patterns
 - [Pattern Matching](syntax/pattern_matching.md)
+- [Predicates](syntax/predicates.md)
+- [Patching Records](syntax/patching.md)
+- [Domains & Units](syntax/domains.md)
+- [Generators](syntax/generators.md)
 #### Effects & Control
 - [Effects](syntax/effects.md)
-- [Machines](syntax/machines_runtime.md)
+- [do Notation](syntax/do_notation.md)
 - [Resources](syntax/resources.md)
-- [Generic `do` Notation](syntax/do_notation.md)
+- [Machines](syntax/machines_runtime.md)
 #### Modules & Interop
 - [Modules](syntax/modules.md)
 - [External Sources](syntax/external_sources.md)
-##### Source Integrations
 - [File Sources](syntax/external_sources/file.md)
 - [REST/HTTP Sources](syntax/external_sources/rest_http.md)
 - [Environment Sources](syntax/external_sources/environment.md)
 - [IMAP Email Sources](syntax/external_sources/imap_email.md)
 - [Image Sources](syntax/external_sources/image.md)
 - [Compile-Time Sources](syntax/external_sources/compile_time.md)
-#### Notation & Grammar
-- [Operators and Context](syntax/operators.md)
-- [Sigils](syntax/sigils.md)
-##### Decorators
-- [Overview](syntax/decorators.md)
-- [@static](syntax/decorators/static.md)
-- [@native](syntax/decorators/native.md)
-- [@deprecated](syntax/decorators/deprecated.md)
-- [@debug](syntax/decorators/debug.md)
-- [@no_prelude](syntax/decorators/no_prelude.md)
-- [Comments](syntax/comments.md)
-- [Concrete Syntax](syntax/grammar.md)
+#### Notation
+- [Operators & Sigils](syntax/operators.md)
+- [Decorators](syntax/decorators.md)
+- [Grammar](syntax/grammar.md)
 
 ### Standard Library
-#### Core & Utils
+#### Core
 - [Prelude](stdlib/core/prelude.md)
+- [Option](stdlib/core/option.md)
+- [Result](stdlib/core/result.md)
 - [Text](stdlib/core/text.md)
 - [Logic](stdlib/core/logic.md)
-- [Units](stdlib/core/units.md)
-- [Regex](stdlib/core/regex.md)
 - [Collections](stdlib/core/collections.md)
-- [I18n](stdlib/core/i18n.md)
 - [Generator](stdlib/core/generator.md)
+- [Regex](stdlib/core/regex.md)
 - [Validation](stdlib/core/validation.md)
+- [I18n](stdlib/core/i18n.md)
+- [Units](stdlib/core/units.md)
 #### Data
 - [JSON](stdlib/data/json.md)
 #### Math & Science
 - [Math](stdlib/math/math.md)
+- [Numbers](stdlib/math/number.md)
 - [Vector](stdlib/math/vector.md)
 - [Matrix](stdlib/math/matrix.md)
-- [Numbers](stdlib/math/number.md)
+- [Linear Algebra](stdlib/math/linear_algebra.md)
 - [Probability](stdlib/math/probability.md)
 - [FFT & Signal](stdlib/math/signal.md)
 - [Geometry](stdlib/math/geometry.md)
 - [Graph](stdlib/math/graph.md)
-- [Linear Algebra](stdlib/math/linear_algebra.md)
 - [Tree](stdlib/math/tree.md)
 #### Time
 - [Instant](stdlib/chronos/instant.md)
@@ -87,26 +80,27 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [Duration](stdlib/chronos/duration.md)
 - [TimeZone](stdlib/chronos/timezone.md)
 - [Scheduler](stdlib/chronos/scheduler.md)
-#### System
-- [Crypto](stdlib/system/crypto.md)
-- [Secrets](stdlib/system/secrets.md)
+#### System & IO
+- [File](stdlib/system/file.md)
+- [Console](stdlib/system/console.md)
+- [Path](stdlib/system/path.md)
+- [URL](stdlib/system/url.md)
 - [System](stdlib/system/system.md)
 - [Log](stdlib/system/log.md)
 - [Concurrency](stdlib/system/concurrency.md)
-#### IO
-- [File](stdlib/system/file.md)
-- [Console](stdlib/system/console.md)
+#### Security
+- [Crypto](stdlib/system/crypto.md)
+- [Secrets](stdlib/system/secrets.md)
+#### Database
 - [Database](stdlib/system/database.md)
-- [Email](stdlib/system/email.md)
-- [Path](stdlib/system/path.md)
-- [URL](stdlib/system/url.md)
-#### Network
-- [HTTP](stdlib/network/http.md)
-- [HTTPS](stdlib/network/https.md)
+#### Networking
+- [HTTP & HTTPS](stdlib/network/http.md)
 - [HTTP Server](stdlib/network/http_server.md)
 - [REST](stdlib/network/rest.md)
 - [Sockets](stdlib/network/sockets.md)
 - [Streams](stdlib/network/streams.md)
+#### Email
+- [Email](stdlib/system/email.md)
 #### UI
 - [GTK4](stdlib/ui/gtk4.md)
 - [Layout](stdlib/ui/layout.md)
@@ -114,23 +108,23 @@ A high-integrity functional language with a Rust-first compilation pipeline.
 - [HTML Sigil](stdlib/ui/html.md)
 - [Color](stdlib/ui/color.md)
 
-### Runtime
-- [Concurrency](runtime/concurrency.md)
-- [Package Manager & Packaging](runtime/package_manager.md)
+### Testing
+- [Testing Module](stdlib/core/testing.md)
+- [@test & Mocks](syntax/decorators.md#test-test-declarations)
 
 ### Tooling
 - [CLI](tools/cli.md)
 - [LSP Server](tools/lsp_server.md)
 - [VSCode Extension](tools/vscode_extension.md)
-- [Spec Doc Markers](doc-markers-spec.md)
-#### Testing
-- [Testing Module](stdlib/core/testing.md)
-- [@test Decorator](syntax/decorators/test.md)
-- [Mock Expressions](syntax/decorators/mock.md)
+- [Package Manager](tools/package_manager.md)
 
-### Compiler & Backend
-- [Compiler & Backend Design](typed_codegen/design.md)
+### Internals
+- [Compiler & Backend](typed_codegen/design.md)
 - [Minimality Proof](typed_codegen/minimality.md)
+
+### Appendix
+- [Missing Features (v0.1)](missing_features_v0.1.md)
+- [Spec Doc Markers](doc-markers-spec.md)
 
 <!-- toc:end -->
 

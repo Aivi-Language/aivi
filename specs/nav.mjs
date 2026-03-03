@@ -1,40 +1,45 @@
 export const sidebar = [
   {
-    text: 'Overview',
+    text: 'Getting Started',
     collapsed: false,
     items: [
-      { text: 'Spec Home', link: '/' },
-      { text: 'Introduction', link: '/introduction' },
-      { text: 'Missing Features (v0.1)', link: '/missing_features_v0.1' }
+      { text: 'Language at a Glance', link: '/language-overview' },
+      { text: 'Introduction', link: '/introduction' }
     ]
   },
   {
-    text: 'Syntax',
+    text: 'Language Reference',
     collapsed: true,
     items: [
       {
-        text: 'Core Forms',
+        text: 'Foundations',
+        collapsed: false,
+        items: [
+          { text: 'Bindings & Scope', link: '/syntax/bindings' },
+          { text: 'Functions & Pipes', link: '/syntax/functions' }
+        ]
+      },
+      {
+        text: 'Types',
         collapsed: true,
         items: [
-          { text: 'Bindings and Scope', link: '/syntax/bindings' },
-          { text: 'Functions and Pipes', link: '/syntax/functions' },
           { text: 'Primitive Types', link: '/syntax/types/primitive_types' },
           { text: 'Algebraic Data Types', link: '/syntax/types/algebraic_data_types' },
           { text: 'Closed Records', link: '/syntax/types/closed_records' },
           { text: 'Record Row Transforms', link: '/syntax/types/record_row_transforms' },
-          { text: 'Classes and HKTs', link: '/syntax/types/classes_and_hkts' },
-          { text: 'Expected-Type Coercions', link: '/syntax/types/expected_type_coercions' },
-          { text: 'Predicates', link: '/syntax/predicates' }
+          { text: 'Classes & HKTs', link: '/syntax/types/classes_and_hkts' },
+          { text: 'Expected-Type Coercions', link: '/syntax/types/expected_type_coercions' }
         ]
       },
       {
-        text: 'Data & Flow',
+        text: 'Data & Patterns',
         collapsed: true,
         items: [
+          { text: 'Pattern Matching', link: '/syntax/pattern_matching' },
+          { text: 'Predicates', link: '/syntax/predicates' },
           { text: 'Patching Records', link: '/syntax/patching' },
-          { text: 'Domains, Units, and Deltas', link: '/syntax/domains' },
-          { text: 'Generators', link: '/syntax/generators' },
-          { text: 'Pattern Matching', link: '/syntax/pattern_matching' }
+          { text: 'Domains & Units', link: '/syntax/domains' },
+          { text: 'Generators', link: '/syntax/generators' }
         ]
       },
       {
@@ -42,9 +47,9 @@ export const sidebar = [
         collapsed: true,
         items: [
           { text: 'Effects', link: '/syntax/effects' },
-          { text: 'Machines', link: '/syntax/machines_runtime' },
+          { text: 'do Notation', link: '/syntax/do_notation' },
           { text: 'Resources', link: '/syntax/resources' },
-          { text: 'Generic `do` Notation', link: '/syntax/do_notation' }
+          { text: 'Machines', link: '/syntax/machines_runtime' }
         ]
       },
       {
@@ -53,40 +58,21 @@ export const sidebar = [
         items: [
           { text: 'Modules', link: '/syntax/modules' },
           { text: 'External Sources', link: '/syntax/external_sources' },
-          {
-            text: 'Source Integrations',
-            collapsed: true,
-            items: [
-              { text: 'File Sources', link: '/syntax/external_sources/file' },
-              { text: 'REST/HTTP Sources', link: '/syntax/external_sources/rest_http' },
-              { text: 'Environment Sources', link: '/syntax/external_sources/environment' },
-              { text: 'IMAP Email Sources', link: '/syntax/external_sources/imap_email' },
-              { text: 'Image Sources', link: '/syntax/external_sources/image' },
-              { text: 'Compile-Time Sources', link: '/syntax/external_sources/compile_time' }
-            ]
-          }
+          { text: 'File Sources', link: '/syntax/external_sources/file' },
+          { text: 'REST/HTTP Sources', link: '/syntax/external_sources/rest_http' },
+          { text: 'Environment Sources', link: '/syntax/external_sources/environment' },
+          { text: 'IMAP Email Sources', link: '/syntax/external_sources/imap_email' },
+          { text: 'Image Sources', link: '/syntax/external_sources/image' },
+          { text: 'Compile-Time Sources', link: '/syntax/external_sources/compile_time' }
         ]
       },
       {
-        text: 'Notation & Grammar',
+        text: 'Notation',
         collapsed: true,
         items: [
-          { text: 'Operators and Context', link: '/syntax/operators' },
-          { text: 'Sigils', link: '/syntax/sigils' },
-          {
-            text: 'Decorators',
-            collapsed: true,
-            items: [
-              { text: 'Overview', link: '/syntax/decorators' },
-              { text: '@static', link: '/syntax/decorators/static' },
-              { text: '@native', link: '/syntax/decorators/native' },
-              { text: '@deprecated', link: '/syntax/decorators/deprecated' },
-              { text: '@debug', link: '/syntax/decorators/debug' },
-              { text: '@no_prelude', link: '/syntax/decorators/no_prelude' }
-            ]
-          },
-          { text: 'Comments', link: '/syntax/comments' },
-          { text: 'Concrete Syntax', link: '/syntax/grammar' }
+          { text: 'Operators & Sigils', link: '/syntax/operators' },
+          { text: 'Decorators', link: '/syntax/decorators' },
+          { text: 'Grammar', link: '/syntax/grammar' }
         ]
       }
     ]
@@ -96,20 +82,20 @@ export const sidebar = [
     collapsed: true,
     items: [
       {
-        text: 'Core & Utils',
-        collapsed: true,
+        text: 'Core',
+        collapsed: false,
         items: [
           { text: 'Prelude', link: '/stdlib/core/prelude' },
           { text: 'Option', link: '/stdlib/core/option' },
           { text: 'Result', link: '/stdlib/core/result' },
           { text: 'Text', link: '/stdlib/core/text' },
           { text: 'Logic', link: '/stdlib/core/logic' },
-          { text: 'Units', link: '/stdlib/core/units' },
-          { text: 'Regex', link: '/stdlib/core/regex' },
           { text: 'Collections', link: '/stdlib/core/collections' },
-          { text: 'I18n', link: '/stdlib/core/i18n' },
           { text: 'Generator', link: '/stdlib/core/generator' },
-          { text: 'Validation', link: '/stdlib/core/validation' }
+          { text: 'Regex', link: '/stdlib/core/regex' },
+          { text: 'Validation', link: '/stdlib/core/validation' },
+          { text: 'I18n', link: '/stdlib/core/i18n' },
+          { text: 'Units', link: '/stdlib/core/units' }
         ]
       },
       {
@@ -124,14 +110,14 @@ export const sidebar = [
         collapsed: true,
         items: [
           { text: 'Math', link: '/stdlib/math/math' },
+          { text: 'Numbers', link: '/stdlib/math/number' },
           { text: 'Vector', link: '/stdlib/math/vector' },
           { text: 'Matrix', link: '/stdlib/math/matrix' },
-          { text: 'Numbers', link: '/stdlib/math/number' },
+          { text: 'Linear Algebra', link: '/stdlib/math/linear_algebra' },
           { text: 'Probability', link: '/stdlib/math/probability' },
           { text: 'FFT & Signal', link: '/stdlib/math/signal' },
           { text: 'Geometry', link: '/stdlib/math/geometry' },
           { text: 'Graph', link: '/stdlib/math/graph' },
-          { text: 'Linear Algebra', link: '/stdlib/math/linear_algebra' },
           { text: 'Tree', link: '/stdlib/math/tree' }
         ]
       },
@@ -147,38 +133,49 @@ export const sidebar = [
         ]
       },
       {
-        text: 'System',
+        text: 'System & IO',
         collapsed: true,
         items: [
-          { text: 'Crypto', link: '/stdlib/system/crypto' },
-          { text: 'Secrets', link: '/stdlib/system/secrets' },
+          { text: 'File', link: '/stdlib/system/file' },
+          { text: 'Console', link: '/stdlib/system/console' },
+          { text: 'Path', link: '/stdlib/system/path' },
+          { text: 'URL', link: '/stdlib/system/url' },
           { text: 'System', link: '/stdlib/system/system' },
           { text: 'Log', link: '/stdlib/system/log' },
           { text: 'Concurrency', link: '/stdlib/system/concurrency' }
         ]
       },
       {
-        text: 'IO',
+        text: 'Security',
         collapsed: true,
         items: [
-          { text: 'File', link: '/stdlib/system/file' },
-          { text: 'Console', link: '/stdlib/system/console' },
-          { text: 'Database', link: '/stdlib/system/database' },
-          { text: 'Email', link: '/stdlib/system/email' },
-          { text: 'Path', link: '/stdlib/system/path' },
-          { text: 'URL', link: '/stdlib/system/url' }
+          { text: 'Crypto', link: '/stdlib/system/crypto' },
+          { text: 'Secrets', link: '/stdlib/system/secrets' }
         ]
       },
       {
-        text: 'Network',
+        text: 'Database',
         collapsed: true,
         items: [
-          { text: 'HTTP', link: '/stdlib/network/http' },
-          { text: 'HTTPS', link: '/stdlib/network/https' },
+          { text: 'Database', link: '/stdlib/system/database' }
+        ]
+      },
+      {
+        text: 'Networking',
+        collapsed: true,
+        items: [
+          { text: 'HTTP & HTTPS', link: '/stdlib/network/http' },
           { text: 'HTTP Server', link: '/stdlib/network/http_server' },
           { text: 'REST', link: '/stdlib/network/rest' },
           { text: 'Sockets', link: '/stdlib/network/sockets' },
           { text: 'Streams', link: '/stdlib/network/streams' }
+        ]
+      },
+      {
+        text: 'Email',
+        collapsed: true,
+        items: [
+          { text: 'Email', link: '/stdlib/system/email' }
         ]
       },
       {
@@ -191,15 +188,15 @@ export const sidebar = [
           { text: 'HTML Sigil', link: '/stdlib/ui/html' },
           { text: 'Color', link: '/stdlib/ui/color' }
         ]
-      },
+      }
     ]
   },
   {
-    text: 'Runtime',
+    text: 'Testing',
     collapsed: true,
     items: [
-      { text: 'Concurrency', link: '/runtime/concurrency' },
-      { text: 'Package Manager & Packaging', link: '/runtime/package_manager' }
+      { text: 'Testing Module', link: '/stdlib/core/testing' },
+      { text: '@test & Mocks', link: '/syntax/decorators#test-test-declarations' }
     ]
   },
   {
@@ -209,24 +206,24 @@ export const sidebar = [
       { text: 'CLI', link: '/tools/cli' },
       { text: 'LSP Server', link: '/tools/lsp_server' },
       { text: 'VSCode Extension', link: '/tools/vscode_extension' },
-      { text: 'Spec Doc Markers', link: '/doc-markers-spec' },
-      {
-        text: 'Testing',
-        collapsed: true,
-        items: [
-          { text: 'Testing Module', link: '/stdlib/core/testing' },
-          { text: '@test Decorator', link: '/syntax/decorators/test' },
-          { text: 'Mock Expressions', link: '/syntax/decorators/mock' }
-        ]
-      }
+      { text: 'Package Manager', link: '/tools/package_manager' }
     ]
   },
   {
-    text: 'Compiler & Backend',
+    text: 'Internals',
     collapsed: true,
     items: [
-      { text: 'Compiler & Backend Design', link: '/typed_codegen/design' },
+      { text: 'Compiler & Backend', link: '/typed_codegen/design' },
       { text: 'Minimality Proof', link: '/typed_codegen/minimality' }
+    ]
+  },
+  {
+    text: 'Appendix',
+    collapsed: true,
+    items: [
+      { text: 'Missing Features (v0.1)', link: '/missing_features_v0.1' },
+      { text: 'Spec Doc Markers', link: '/doc-markers-spec' }
     ]
   }
 ]
+

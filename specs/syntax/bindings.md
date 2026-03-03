@@ -109,3 +109,25 @@ But much more readable for deep hierarchies.
 ### Function Definitions
 
 <<< ../snippets/from_md/syntax/bindings/function_definitions.aivi{aivi}
+
+---
+
+## Comments
+
+AIVI supports two comment styles. Comments are stripped by the lexer and do not affect program semantics.
+
+### Line comments
+
+Begin with `//` and extend to the end of the line.
+
+<<< ../snippets/from_md/syntax/comments/line_comments.aivi{aivi}
+
+### Block comments
+
+Begin with `/*` and end with `*/`. May span multiple lines. Block comments do **not** nest — `/* outer /* inner */ still open */` closes at the first `*/`.
+
+<<< ../snippets/from_md/syntax/comments/block_comments.aivi{aivi}
+
+Comments may appear anywhere whitespace is allowed. The formatter preserves comments in place.
+
+**Not supported in v0.1:** doc comments (`///` / `/** */`), nested block comments, shebangs (`#!`).
