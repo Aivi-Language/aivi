@@ -228,7 +228,11 @@ fn operation_to_expr(
         if let Some(mt) = body.content.get("application/json") {
             if let Some(schema_ref) = &mt.schema {
                 let type_name = schema_type_name(schema_ref, spec);
-                fields.push(record_field("__requestBody", str_lit(&type_name, span), span));
+                fields.push(record_field(
+                    "__requestBody",
+                    str_lit(&type_name, span),
+                    span,
+                ));
             }
         }
     }
@@ -305,7 +309,11 @@ fn boxed_schema_type_name(schema_ref: &ReferenceOr<Box<Schema>>, spec: &OpenAPI)
 }
 
 fn ref_to_type_name(reference: &str) -> String {
-    reference.rsplit('/').next().unwrap_or("Unknown").to_string()
+    reference
+        .rsplit('/')
+        .next()
+        .unwrap_or("Unknown")
+        .to_string()
 }
 
 fn inline_type_name(schema: &Schema, spec: &OpenAPI) -> String {
@@ -549,8 +557,7 @@ fn generate_binding_type_sig(
                 ReferenceOr::Item(param) => {
                     if matches!(
                         param,
-                        openapiv3::Parameter::Query { .. }
-                            | openapiv3::Parameter::Header { .. }
+                        openapiv3::Parameter::Query { .. } | openapiv3::Parameter::Header { .. }
                     ) {
                         let data = param.parameter_data_ref();
                         let base_ty = param_format_to_type_expr(&data.format, spec, span)

@@ -155,6 +155,9 @@
             decode_text(&args[0]).ok_or_else(|| invalid("gtk4.buildFromNode invalid attr name"))?;
         let val = decode_text(&args[1])
             .unwrap_or_else(|| serialize_signal_value(&args[1]));
+        if key.starts_with("prop:reveal") {
+            eprintln!("[DEBUG decode_gtk_attr] key={key:?} raw_value={:?} decoded_val={val:?}", args[1]);
+        }
         Ok((key, val))
     }
 
