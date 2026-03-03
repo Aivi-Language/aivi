@@ -9,6 +9,7 @@ aivi_driver = { path = "../aivi_driver" }
 aivi_email = { path = "../aivi_email" }
 aivi_database = { path = "../aivi_database" }
 aivi_http_server = { path = "../aivi_http_server" }
+aivi_mcp = { path = "../aivi_mcp" }
 chrono = "0.4.44"
 chrono-tz = "0.10.4"
 num-bigint = "0.4.6"

@@ -278,11 +278,12 @@ impl Backend {
             {
                 return false;
             }
-            // After a record field colon, the value is only an application head
-            // when its argument is on the same line.  Otherwise the "next" token
-            // is actually the next record label on a subsequent line.
+            // After a record field colon or block/record opener, the value is
+            // only an application head when its argument is on the same line.
+            // Otherwise the "next" token is the next field or statement on a
+            // subsequent line.
             if prev.kind == "symbol"
-                && prev.text == ":"
+                && matches!(prev.text.as_str(), ":" | "{" | ",")
                 && next.span.start.line != token.span.start.line
             {
                 return false;

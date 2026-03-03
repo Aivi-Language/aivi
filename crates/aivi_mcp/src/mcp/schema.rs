@@ -2,6 +2,9 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::sync::{Mutex, OnceLock};
 
+use aivi_driver::AiviError;
+use crate::mcp::manifest::{McpManifest, McpPolicy, specs_uri, read_bundled_spec};
+
 #[cfg(unix)]
 use std::io::BufReader;
 #[cfg(unix)]
@@ -85,7 +88,7 @@ fn handle_request(
                 "tools": manifest.tools.iter().filter(|tool| policy.allow_effectful_tools || !tool.effectful).map(|tool| {
                     serde_json::json!({
                         "name": tool.name,
-                        "description": null,
+                        "description": tool.description,
                         "inputSchema": tool.input_schema
                     })
                 }).collect::<Vec<_>>()
@@ -97,7 +100,7 @@ fn handle_request(
                 "resources": manifest.resources.iter().map(|res| {
                     serde_json::json!({
                         "name": res.name,
-                        "description": null,
+                        "description": format!("AIVI language specification: {}", res.binding),
                         "uri": specs_uri(&res.binding)
                     })
                 }).collect::<Vec<_>>()
@@ -216,7 +219,7 @@ fn execute_tool(name: &str, arguments: &serde_json::Value) -> Result<serde_json:
 fn execute_parse_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
     let args = parse_tool_args(arguments, &["target"])?;
     let target = get_required_string(args, "target")?;
-    let bundle = crate::parse_target(target)?;
+    let bundle = aivi_driver::parse_target(target)?;
 
     let mut files = Vec::new();
     let mut error_count = 0usize;
@@ -229,8 +232,8 @@ fn execute_parse_tool(arguments: &serde_json::Value) -> Result<serde_json::Value
             .iter()
             .map(|diag| {
                 match diag.severity {
-                    crate::DiagnosticSeverity::Error => file_error_count += 1,
-                    crate::DiagnosticSeverity::Warning => file_warning_count += 1,
+                    aivi_core::DiagnosticSeverity::Error => file_error_count += 1,
+                    aivi_core::DiagnosticSeverity::Warning => file_warning_count += 1,
                 }
                 diagnostic_to_json(diag)
             })
@@ -268,14 +271,14 @@ fn execute_check_tool(arguments: &serde_json::Value) -> Result<serde_json::Value
     let target = get_required_string(args, "target")?;
     let check_stdlib = get_optional_bool(args, "checkStdlib", false)?;
 
-    let pipeline = crate::Pipeline::from_target(target)?;
+    let pipeline = aivi_driver::Pipeline::from_target(target)?;
     let mut diagnostics = pipeline.parse_diagnostics().to_vec();
-    diagnostics.extend(crate::check_modules(pipeline.modules()));
-    if !crate::file_diagnostics_have_errors(&diagnostics) {
+    diagnostics.extend(aivi_core::check_modules(pipeline.modules()));
+    if !aivi_core::file_diagnostics_have_errors(&diagnostics) {
         if check_stdlib {
-            diagnostics.extend(crate::check_types_including_stdlib(pipeline.modules()));
+            diagnostics.extend(aivi_core::check_types_including_stdlib(pipeline.modules()));
         } else {
-            diagnostics.extend(crate::check_types(pipeline.modules()));
+            diagnostics.extend(aivi_core::check_types(pipeline.modules()));
         }
     }
     if !check_stdlib {
@@ -288,8 +291,8 @@ fn execute_check_tool(arguments: &serde_json::Value) -> Result<serde_json::Value
         .iter()
         .map(|diag| {
             match diag.diagnostic.severity {
-                crate::DiagnosticSeverity::Error => error_count += 1,
-                crate::DiagnosticSeverity::Warning => warning_count += 1,
+                aivi_core::DiagnosticSeverity::Error => error_count += 1,
+                aivi_core::DiagnosticSeverity::Warning => warning_count += 1,
             }
             file_diagnostic_to_json(diag)
         })
@@ -313,7 +316,7 @@ fn execute_check_tool(arguments: &serde_json::Value) -> Result<serde_json::Value
 fn execute_fmt_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
     let args = parse_tool_args(arguments, &["target"])?;
     let target = get_required_string(args, "target")?;
-    let paths = crate::resolve_target(target)?;
+    let paths = aivi_driver::resolve_target(target)?;
     if paths.len() != 1 {
         return Err(AiviError::InvalidCommand(
             "fmt expects a single file path".to_string(),
@@ -321,7 +324,7 @@ fn execute_fmt_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, 
     }
     let path = &paths[0];
     let source = std::fs::read_to_string(path)?;
-    let formatted = crate::format_text(&source);
+    let formatted = aivi_core::format_text(&source);
 
     Ok(serde_json::json!({
         "ok": true,
@@ -336,7 +339,7 @@ fn execute_fmt_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, 
 fn execute_fmt_write_tool(arguments: &serde_json::Value) -> Result<serde_json::Value, AiviError> {
     let args = parse_tool_args(arguments, &["target"])?;
     let target = get_required_string(args, "target")?;
-    let paths = crate::resolve_target(target)?;
+    let paths = aivi_driver::resolve_target(target)?;
 
     let mut processed_files = Vec::new();
     let mut changed_files = Vec::new();
@@ -347,7 +350,7 @@ fn execute_fmt_write_tool(arguments: &serde_json::Value) -> Result<serde_json::V
         }
         let path_text = path.display().to_string();
         let source = std::fs::read_to_string(&path)?;
-        let formatted = crate::format_text(&source);
+        let formatted = aivi_core::format_text(&source);
         processed_files.push(path_text.clone());
         if formatted != source {
             std::fs::write(&path, formatted)?;
@@ -747,10 +750,10 @@ fn aivi_error_code(err: &AiviError) -> &'static str {
     }
 }
 
-fn diagnostic_to_json(diagnostic: &crate::Diagnostic) -> serde_json::Value {
+fn diagnostic_to_json(diagnostic: &aivi_core::Diagnostic) -> serde_json::Value {
     let severity = match diagnostic.severity {
-        crate::DiagnosticSeverity::Error => "error",
-        crate::DiagnosticSeverity::Warning => "warning",
+        aivi_core::DiagnosticSeverity::Error => "error",
+        aivi_core::DiagnosticSeverity::Warning => "warning",
     };
     serde_json::json!({
         "code": diagnostic.code.clone(),
@@ -764,21 +767,21 @@ fn diagnostic_to_json(diagnostic: &crate::Diagnostic) -> serde_json::Value {
     })
 }
 
-fn file_diagnostic_to_json(file_diagnostic: &crate::FileDiagnostic) -> serde_json::Value {
+fn file_diagnostic_to_json(file_diagnostic: &aivi_core::FileDiagnostic) -> serde_json::Value {
     serde_json::json!({
         "path": file_diagnostic.path.clone(),
         "diagnostic": diagnostic_to_json(&file_diagnostic.diagnostic)
     })
 }
 
-fn span_to_json(span: &crate::Span) -> serde_json::Value {
+fn span_to_json(span: &aivi_core::Span) -> serde_json::Value {
     serde_json::json!({
         "start": position_to_json(&span.start),
         "end": position_to_json(&span.end)
     })
 }
 
-fn position_to_json(position: &crate::Position) -> serde_json::Value {
+fn position_to_json(position: &aivi_core::Position) -> serde_json::Value {
     serde_json::json!({
         "line": position.line,
         "column": position.column

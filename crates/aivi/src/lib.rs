@@ -3,7 +3,7 @@ mod cranelift_backend;
 mod i18n;
 mod i18n_codegen;
 pub mod intern;
-mod mcp;
+// mod mcp; (moved to aivi_mcp)
 mod pm;
 mod runtime;
 mod rust_ir;
@@ -121,7 +121,7 @@ pub use cranelift_backend::{
 pub use i18n_codegen::{
     generate_i18n_module_from_properties, parse_properties_catalog, PropertiesEntry,
 };
-pub use mcp::{
+pub use aivi_mcp::{
     bundled_specs_manifest, bundled_specs_manifest_with_ui, serve_mcp_stdio,
     serve_mcp_stdio_with_policy, McpManifest, McpPolicy, McpResource, McpTool,
 };
