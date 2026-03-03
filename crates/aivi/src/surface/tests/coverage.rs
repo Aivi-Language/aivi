@@ -2990,3 +2990,890 @@ machine Counter = {
     assert_eq!(increment.payload.len(), 1);
     assert_eq!(increment.payload[0].0.name, "amount");
 }
+
+// ─────────────────────────────────────────────────────────
+// Arena lowering: decorator with arg, suffixed, lambda, sigil
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn lower_decorator_with_arg_to_arena() {
+    let src = "module Example\n\n@deprecated \"use y\"\nx = 1\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (arena, lowered) = lower_modules_to_arena(&modules);
+    let def = lowered[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert_eq!(def.decorators.len(), 1);
+    assert!(def.decorators[0].arg.is_some());
+    assert!(matches!(
+        arena.expr(def.decorators[0].arg.unwrap()),
+        ArenaExpr::Literal(ArenaLiteral::String { .. })
+    ));
+}
+
+#[test]
+fn lower_suffixed_expr_to_arena() {
+    let src = "module Example\n\nx = (1 + 2)px\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (arena, lowered) = lower_modules_to_arena(&modules);
+    let def = lowered[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(
+        matches!(arena.expr(def.expr), ArenaExpr::Suffixed { suffix, .. } if suffix.symbol.as_str() == "px")
+    );
+}
+
+#[test]
+fn lower_lambda_to_arena() {
+    let src = "module Example\n\nf = x => y => x + y\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (arena, lowered) = lower_modules_to_arena(&modules);
+    let def = lowered[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "f" => Some(d),
+            _ => None,
+        })
+        .expect("f");
+    assert!(matches!(arena.expr(def.expr), ArenaExpr::Lambda { params, .. } if params.len() == 1));
+}
+
+#[test]
+fn lower_sigil_literal_to_arena() {
+    let src = "module Example\n\nx = ~regex/[a-z]+/i\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (arena, lowered) = lower_modules_to_arena(&modules);
+    let def = lowered[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    match arena.expr(def.expr) {
+        ArenaExpr::Literal(ArenaLiteral::Sigil { tag, flags, .. }) => {
+            assert_eq!(tag.as_str(), "regex");
+            assert_eq!(flags.as_str(), "i");
+        }
+        other => panic!("expected Sigil, got {other:?}"),
+    }
+}
+
+#[test]
+fn lower_use_decl_with_alias_to_arena() {
+    let src = "@no_prelude\nmodule Example\n\nuse some.module as SM\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (_arena, lowered) = lower_modules_to_arena(&modules);
+    let u = lowered[0]
+        .uses
+        .iter()
+        .find(|u| u.module.symbol.as_str() == "some.module")
+        .expect("use");
+    assert!(u.alias.is_some());
+    assert_eq!(u.alias.as_ref().unwrap().symbol.as_str(), "SM");
+}
+
+#[test]
+fn lower_domain_literal_def_to_arena() {
+    let src =
+        "module Example\n\ndomain Css over Text = {\n  Length = Px Float\n\n  1px = Px 1.0\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (_arena, lowered) = lower_modules_to_arena(&modules);
+    let dom = lowered[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ArenaModuleItem::DomainDecl(d) if d.name.symbol.as_str() == "Css" => Some(d),
+            _ => None,
+        })
+        .expect("Css");
+    assert!(dom
+        .items
+        .iter()
+        .any(|i| matches!(i, crate::surface::ArenaDomainItem::LiteralDef(_))));
+}
+
+#[test]
+fn lower_match_with_guard_to_arena() {
+    let src =
+        "module Example\n\nx = y match\n  | n when n > 0 => \"positive\"\n  | _ => \"other\"\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (arena, lowered) = lower_modules_to_arena(&modules);
+    let def = lowered[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    match arena.expr(def.expr) {
+        ArenaExpr::Match { arms, .. } => assert!(arms[0].guard.is_some()),
+        other => panic!("expected Match, got {other:?}"),
+    }
+}
+
+#[test]
+fn lower_block_on_item_to_arena() {
+    let src =
+        "module Example\n\nx = do Effect {\n  on SomeTransition => handleTransition\n  pure 1\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (arena, lowered) = lower_modules_to_arena(&modules);
+    let def = lowered[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    match arena.expr(def.expr) {
+        ArenaExpr::Block { items, .. } => {
+            assert!(items.iter().any(|i| matches!(i, ArenaBlockItem::On { .. })))
+        }
+        other => panic!("expected Block, got {other:?}"),
+    }
+}
+
+#[test]
+fn lower_block_recurse_item_to_arena() {
+    let src = "module Example\n\nx = generate {\n  recurse 1\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let (arena, lowered) = lower_modules_to_arena(&modules);
+    let def = lowered[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ArenaModuleItem::Def(d) if d.name.symbol.as_str() == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    match arena.expr(def.expr) {
+        ArenaExpr::Block { items, .. } => assert!(items
+            .iter()
+            .any(|i| matches!(i, ArenaBlockItem::Recurse { .. }))),
+        other => panic!("expected Block, got {other:?}"),
+    }
+}
+
+// ─────────────────────────────────────────────────────────
+// blocks.rs — loop, given, on, when/unless errors
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn parses_loop_in_do_block() {
+    let src = "module Example\n\nx = do Effect {\n  loop n = 0 => {\n    pure n\n  }\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(
+        matches!(&def.expr, Expr::Block { items, .. } if items.iter().any(|i| matches!(i, BlockItem::Let { .. })))
+    );
+}
+
+#[test]
+fn rejects_loop_outside_do_or_generate() {
+    let src = "module Example\n\nx = {\n  loop n = 0 => pure n\n}\n";
+    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1533".to_string()));
+}
+
+#[test]
+fn rejects_when_outside_do() {
+    let src = "module Example\n\nx = generate {\n  when True <- someEffect\n  yield 1\n}\n";
+    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1540".to_string()));
+}
+
+#[test]
+fn rejects_unless_outside_do() {
+    let src = "module Example\n\nx = generate {\n  unless False <- someEffect\n  yield 1\n}\n";
+    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1543".to_string()));
+}
+
+#[test]
+fn rejects_given_outside_do() {
+    let src = "module Example\n\nx = generate {\n  given True or fail \"nope\"\n  yield 1\n}\n";
+    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1541".to_string()));
+}
+
+#[test]
+fn rejects_on_outside_do() {
+    let src = "module Example\n\nx = generate {\n  on Transition => handler\n  yield 1\n}\n";
+    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1542".to_string()));
+}
+
+#[test]
+fn rejects_bind_outside_do_or_generate() {
+    let src = "module Example\n\nx = {\n  y <- someEffect\n  y\n}\n";
+    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1536".to_string()));
+}
+
+#[test]
+fn parses_given_with_match_form() {
+    let src = "module Example\n\nx = do Effect {\n  given (status > 0) or\n    | NotFound => pure \"not found\"\n    | Timeout => pure \"timeout\"\n  pure \"ok\"\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    match &def.expr {
+        Expr::Block { items, .. } => assert!(items.iter().any(|i| matches!(
+            i,
+            BlockItem::Given {
+                fail_expr: Expr::Match { .. },
+                ..
+            }
+        ))),
+        other => panic!("expected Block, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_given_with_simple_fail() {
+    let src = "module Example\n\nx = do Effect {\n  given (status > 0) or fail \"bad\"\n  pure \"ok\"\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(
+        matches!(&def.expr, Expr::Block { items, .. } if items.iter().any(|i| matches!(i, BlockItem::Given { .. })))
+    );
+}
+
+#[test]
+fn parses_on_in_do_block() {
+    let src = "module Example\n\nx = do Effect {\n  on Start => handleStart\n  pure 1\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(
+        matches!(&def.expr, Expr::Block { items, .. } if items.iter().any(|i| matches!(i, BlockItem::On { .. })))
+    );
+}
+
+#[test]
+fn parses_resource_block_with_yield_and_bind() {
+    let src = "module Example\n\nx = resource {\n  handle <- acquire\n  yield handle\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    match &def.expr {
+        Expr::Block {
+            kind: BlockKind::Resource,
+            items,
+            ..
+        } => {
+            assert!(items.iter().any(|i| matches!(i, BlockItem::Yield { .. })));
+            assert!(items.iter().any(|i| matches!(i, BlockItem::Bind { .. })));
+        }
+        other => panic!("expected Resource, got {other:?}"),
+    }
+}
+
+// ─────────────────────────────────────────────────────────
+// module.rs — decorator edge cases
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn rejects_unknown_module_decorator() {
+    let src = "@custom_thing\nmodule Example\n\nx = 1\n";
+    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1506".to_string()));
+}
+
+#[test]
+fn rejects_test_module_decorator_with_argument() {
+    let src = "@test \"nope\"\nmodule Example\n\nx = 1\n";
+    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1512".to_string()));
+}
+
+#[test]
+fn parses_use_with_domain_import() {
+    let src = "@no_prelude\nmodule Example\n\nuse some.module (domain MyDomain, foo)\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let u = modules[0]
+        .uses
+        .iter()
+        .find(|u| u.module.name == "some.module")
+        .expect("use");
+    assert_eq!(u.items.len(), 2);
+    assert!(u
+        .items
+        .iter()
+        .any(|i| i.kind == crate::surface::ScopeItemKind::Domain));
+}
+
+#[test]
+fn export_domain_name_in_export_list() {
+    let src = "module Example\n\ndomain Color over Text = {\n  red : Text\n  red = \"#ff0000\"\n}\n\nexport domain Color\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    assert!(modules[0]
+        .exports
+        .iter()
+        .any(|e| e.kind == crate::surface::ScopeItemKind::Domain && e.name.name == "Color"));
+}
+
+#[test]
+fn rejects_deprecated_with_non_string_arg() {
+    let src = "module Example\n\n@deprecated 42\nx = 1\n";
+    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1510".to_string()));
+}
+
+#[test]
+fn parses_static_decorator_no_arg() {
+    let src = "module Example\n\n@static\nx = 42\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let _ = modules.first().expect("module");
+}
+
+#[test]
+fn rejects_static_decorator_with_argument() {
+    let src = "module Example\n\n@static \"nope\"\nx = 42\n";
+    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1513".to_string()));
+}
+
+#[test]
+fn rejects_decorators_on_use() {
+    let src = "@no_prelude\nmodule Example\n\n@deprecated \"old\"\nuse some.module\n";
+    let (_m, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diag_codes(&diags).contains(&"E1507".to_string()));
+}
+
+// ─────────────────────────────────────────────────────────
+// entrypoints.rs — opaque types, multiline ctors, export-prefixed
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn parses_opaque_type_declaration() {
+    let src = "module Example\n\nHandle\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let td = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::TypeDecl(td) if td.name.name == "Handle" => Some(td),
+            _ => None,
+        })
+        .expect("Handle");
+    assert!(td.constructors.is_empty());
+}
+
+#[test]
+fn parses_opaque_type_with_params() {
+    let src = "module Example\n\nContainer A B\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let td = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::TypeDecl(td) if td.name.name == "Container" => Some(td),
+            _ => None,
+        })
+        .expect("Container");
+    assert_eq!(td.params.len(), 2);
+}
+
+#[test]
+fn parses_multiline_type_constructors() {
+    let src = "module Example\n\nShape =\n  | Circle Float\n  | Rect Float Float\n  | Point\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let td = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::TypeDecl(td) if td.name.name == "Shape" => Some(td),
+            _ => None,
+        })
+        .expect("Shape");
+    assert_eq!(td.constructors.len(), 3);
+}
+
+#[test]
+fn parses_export_class_declaration() {
+    let src = "module Example\n\nexport class Printable A = {\n  print : A -> Text\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    assert!(modules[0]
+        .exports
+        .iter()
+        .any(|e| e.name.name == "Printable"));
+}
+
+#[test]
+fn parses_export_instance_declaration() {
+    let src = "module Example\n\nclass Show A = {\n  show : A -> Text\n}\n\nexport instance Show Int = {\n  show = x => \"int\"\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    assert!(modules[0].exports.iter().any(|e| e.name.name == "Show"));
+}
+
+#[test]
+fn parses_export_machine_declaration() {
+    let src = "module Example\n\nexport machine Workflow = {\n  -> Idle : boot {}\n  Idle -> Running : start {}\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    assert!(modules[0].exports.iter().any(|e| e.name.name == "Workflow"));
+}
+
+// ─────────────────────────────────────────────────────────
+// literals_and_blocks.rs — matrix, path, map, set edge cases
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn parses_matrix_literal_4x4() {
+    let src = "module Example\n\nm = ~mat[1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16]\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "m" => Some(d),
+            _ => None,
+        })
+        .expect("m");
+    assert!(matches!(&def.expr, Expr::Record { fields, .. } if fields.len() == 16));
+}
+
+#[test]
+fn parses_path_literal_with_dot_normalization() {
+    let src = "module Example\n\np = ~path[a / . / b]\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "p" => Some(d),
+            _ => None,
+        })
+        .expect("p");
+    match &def.expr {
+        Expr::Record { fields, .. } => {
+            let segs = fields.iter().find(|f| matches!(f.path.first(), Some(PathSegment::Field(n)) if n.name == "segments")).expect("segments");
+            assert!(matches!(&segs.value, Expr::List { items, .. } if items.len() == 2));
+        }
+        other => panic!("expected Record, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_path_literal_relative_dotdot_keeps_leading() {
+    let src = "module Example\n\np = ~path[.. / b]\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "p" => Some(d),
+            _ => None,
+        })
+        .expect("p");
+    match &def.expr {
+        Expr::Record { fields, .. } => {
+            let segs = fields.iter().find(|f| matches!(f.path.first(), Some(PathSegment::Field(n)) if n.name == "segments")).expect("segments");
+            assert!(matches!(&segs.value, Expr::List { items, .. } if items.len() == 2));
+        }
+        other => panic!("expected Record, got {other:?}"),
+    }
+}
+
+#[test]
+fn parses_map_with_multiline_entries() {
+    let src = "module Example\n\nx = ~map{\n  \"a\" => 1\n  \"b\" => 2\n  \"c\" => 3\n}\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(super::expr_contains_ident(&def.expr, "Map"));
+}
+
+#[test]
+fn parses_set_with_multiline_entries() {
+    let src = "module Example\n\nx = ~set[\n  1\n  2\n  3\n]\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(super::expr_contains_ident(&def.expr, "Set"));
+}
+
+#[test]
+fn parses_record_with_all_path_segment() {
+    let src = "module Example\n\nx = { items[*]: True }\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    match &def.expr {
+        Expr::Record { fields, .. } => assert!(fields[0]
+            .path
+            .iter()
+            .any(|s| matches!(s, PathSegment::All(..)))),
+        other => panic!("expected Record, got {other:?}"),
+    }
+}
+
+// ─────────────────────────────────────────────────────────
+// helpers.rs — operators, sigils
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn parses_pipe_operator() {
+    let src = "module Example\n\nx = [1, 2, 3] |> map f\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(matches!(&def.expr, Expr::Binary { op, .. } if op == "|>"));
+}
+
+#[test]
+fn parses_coalesce_operator() {
+    let src = "module Example\n\nx = a ?? b\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(matches!(&def.expr, Expr::Binary { op, .. } if op == "??"));
+}
+
+#[test]
+fn parses_logical_and_or_precedence() {
+    let src = "module Example\n\nx = a && b || c\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(matches!(&def.expr, Expr::Binary { op, .. } if op == "||"));
+}
+
+#[test]
+fn parses_all_comparison_operators() {
+    let src =
+        "module Example\n\na = 1 < 2\nb = 1 <= 2\nc = 1 > 2\nd = 1 >= 2\ne = 1 == 2\nf = 1 != 2\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    assert_eq!(modules[0].items.len(), 6);
+}
+
+#[test]
+fn parses_concat_operator() {
+    let src = "module Example\n\nx = \"a\" ++ \"b\" ++ \"c\"\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(matches!(&def.expr, Expr::Binary { op, .. } if op == "++"));
+}
+
+#[test]
+fn parses_modulo_operator() {
+    let src = "module Example\n\nx = 10 % 3\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(matches!(&def.expr, Expr::Binary { op, .. } if op == "%"));
+}
+
+#[test]
+fn parses_sigil_slash_delimiter() {
+    let src = "module Example\n\nx = ~regex/[a-z]+/\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(
+        matches!(&def.expr, Expr::Literal(Literal::Sigil { tag, body, .. }) if tag == "regex" && body == "[a-z]+")
+    );
+}
+
+#[test]
+fn parses_sigil_with_flags() {
+    let src = "module Example\n\nx = ~regex/pattern/gi\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(matches!(&def.expr, Expr::Literal(Literal::Sigil { flags, .. }) if flags == "gi"));
+}
+
+#[test]
+fn parses_sigil_paren_delimiter() {
+    let src = "module Example\n\nx = ~css(color: red)\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(
+        matches!(&def.expr, Expr::Literal(Literal::Sigil { tag, body, .. }) if tag == "css" && body == "color: red")
+    );
+}
+
+#[test]
+fn parses_text_interpolation_expr() {
+    let src = "module Example\n\nname = \"world\"\nx = \"hello {name}!\"\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(matches!(&def.expr, Expr::TextInterpolate { .. }));
+}
+
+#[test]
+fn parses_field_section_expr() {
+    let src = "module Example\n\nx = .name\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(matches!(&def.expr, Expr::FieldSection { .. }));
+}
+
+#[test]
+fn parses_tuple_expression_3() {
+    let src = "module Example\n\nx = (1, \"hello\", True)\n";
+    let (modules, diags) = parse_modules(Path::new("test.aivi"), src);
+    assert!(diags.is_empty(), "diags: {:?}", diag_codes(&diags));
+    let def = modules[0]
+        .items
+        .iter()
+        .find_map(|i| match i {
+            ModuleItem::Def(d) if d.name.name == "x" => Some(d),
+            _ => None,
+        })
+        .expect("x");
+    assert!(matches!(&def.expr, Expr::Tuple { items, .. } if items.len() == 3));
+}
+
+// ─────────────────────────────────────────────────────────
+// openapi.rs — additional schema types
+// ─────────────────────────────────────────────────────────
+
+#[test]
+fn openapi_with_boolean_and_number_schema() {
+    use crate::diagnostics::{Position, Span};
+    use crate::surface::openapi::openapi_to_expr;
+    use std::path::PathBuf;
+    let span = Span {
+        start: Position { line: 1, column: 1 },
+        end: Position { line: 1, column: 1 },
+    };
+    let j = r#"{"openapi":"3.0.0","info":{"title":"T","version":"1.0"},"paths":{},"components":{"schemas":{"Config":{"type":"object","properties":{"enabled":{"type":"boolean"},"weight":{"type":"number"},"count":{"type":"integer"}},"required":["enabled"]}}}}"#;
+    let tmp = std::env::temp_dir().join("test_openapi_bn.json");
+    std::fs::write(&tmp, j).unwrap();
+    assert!(openapi_to_expr(
+        tmp.to_str().unwrap(),
+        false,
+        &PathBuf::from("/"),
+        &span,
+        "api"
+    )
+    .is_ok());
+}
+
+#[test]
+fn openapi_with_head_and_options_methods() {
+    use crate::diagnostics::{Position, Span};
+    use crate::surface::openapi::openapi_to_expr;
+    use std::path::PathBuf;
+    let span = Span {
+        start: Position { line: 1, column: 1 },
+        end: Position { line: 1, column: 1 },
+    };
+    let j = r#"{"openapi":"3.0.0","info":{"title":"T","version":"1.0"},"paths":{"/r":{"head":{"operationId":"headR","responses":{"200":{"description":"ok"}}},"options":{"operationId":"optR","responses":{"200":{"description":"ok"}}}}}}"#;
+    let tmp = std::env::temp_dir().join("test_openapi_ho.json");
+    std::fs::write(&tmp, j).unwrap();
+    let res = openapi_to_expr(
+        tmp.to_str().unwrap(),
+        false,
+        &PathBuf::from("/"),
+        &span,
+        "api",
+    )
+    .unwrap();
+    match &res.expr {
+        Expr::Record { fields, .. } => {
+            let names: Vec<&str> = fields
+                .iter()
+                .filter_map(|f| match f.path.first() {
+                    Some(PathSegment::Field(n)) => Some(n.name.as_str()),
+                    _ => None,
+                })
+                .collect();
+            assert!(names.contains(&"headR"));
+            assert!(names.contains(&"optR"));
+        }
+        other => panic!("expected Record, got {other:?}"),
+    }
+}
+
+#[test]
+fn openapi_with_array_schema() {
+    use crate::diagnostics::{Position, Span};
+    use crate::surface::openapi::openapi_to_expr;
+    use std::path::PathBuf;
+    let span = Span {
+        start: Position { line: 1, column: 1 },
+        end: Position { line: 1, column: 1 },
+    };
+    let j = r#"{"openapi":"3.0.0","info":{"title":"T","version":"1.0"},"paths":{},"components":{"schemas":{"UserList":{"type":"array","items":{"type":"string"}}}}}"#;
+    let tmp = std::env::temp_dir().join("test_openapi_arr.json");
+    std::fs::write(&tmp, j).unwrap();
+    assert!(openapi_to_expr(
+        tmp.to_str().unwrap(),
+        false,
+        &PathBuf::from("/"),
+        &span,
+        "api"
+    )
+    .is_ok());
+}
