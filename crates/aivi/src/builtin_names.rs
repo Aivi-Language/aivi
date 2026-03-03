@@ -75,6 +75,7 @@ pub const BUILTIN_VALUE_NAMES: &[&str] = &[
     "collections",
     "console",
     "crypto",
+    "bits",
     "logger",
     "database",
     "i18n",

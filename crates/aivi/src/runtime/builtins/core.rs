@@ -1,6 +1,7 @@
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
+use super::bits::build_bits_record;
 use super::calendar::build_calendar_record;
 use super::collections::build_collections_record;
 use super::color::build_color_record;
@@ -433,6 +434,7 @@ pub(crate) fn register_builtins(env: &Env) {
     env.set("collections".to_string(), collections);
     env.set("console".to_string(), build_console_record());
     env.set("crypto".to_string(), build_crypto_record());
+    env.set("bits".to_string(), build_bits_record());
     env.set("logger".to_string(), build_log_record());
     env.set("database".to_string(), build_database_record());
     env.set("gtk4".to_string(), build_gtk4_record());

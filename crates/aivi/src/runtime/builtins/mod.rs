@@ -1,3 +1,4 @@
+mod bits;
 mod calendar;
 mod collections;
 mod color;

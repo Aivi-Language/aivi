@@ -129,6 +129,7 @@ fn stdlib_additional_modules_inner() {
     let root = test_support::workspace_root();
     let files = [
         root.join("integration-tests/stdlib/aivi/email/email.aivi"),
+        root.join("integration-tests/stdlib/aivi/bits/bits.aivi"),
         root.join("integration-tests/stdlib/aivi/geometry/geometry.aivi"),
         root.join("integration-tests/stdlib/aivi/graph/graph.aivi"),
         root.join("integration-tests/stdlib/aivi/i18n/i18n.aivi"),

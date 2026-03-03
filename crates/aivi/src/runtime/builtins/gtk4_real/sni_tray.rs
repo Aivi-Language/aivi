@@ -136,7 +136,7 @@
 
         #[zbus(property)]
         fn item_is_menu(&self) -> bool {
-            false
+            true
         }
 
         #[zbus(property)]

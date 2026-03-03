@@ -7,16 +7,12 @@ fn binary_prec(op: &str) -> u8 {
     //  5  &&        logical and
     //  6  == !=     equality
     //  7  < <= > >= comparison
-    //  8  ^         bitwise xor
-    //  9  << >>     shift
-    // 10  + - ++    additive / concatenation
-    // 11  * × / %   multiplicative
-    // 12  <|        patch application
+    //  8  + - ++    additive / concatenation
+    //  9  * × / %   multiplicative
+    // 10  <|        patch application
     //
-    // NOTE: `|` (bitwise or) is listed in the grammar at prec 8, but it
-    //       conflicts with the `|` arm separator in single-line match
-    //       expressions. It is intentionally omitted until the parser
-    //       enforces `Sep` between match arms.
+    // Bitwise operators (^, <<, >>, |, ~) are not part of the language.
+    // Use the `aivi.bits` stdlib module instead.
     match op {
         ".." => 1,
         "|>" => 2,
@@ -25,11 +21,9 @@ fn binary_prec(op: &str) -> u8 {
         "&&" => 5,
         "==" | "!=" => 6,
         "<" | "<=" | ">" | ">=" => 7,
-        "^" => 8,
-        "<<" | ">>" => 9,
-        "++" | "+" | "-" => 10,
-        "*" | "×" | "/" | "%" => 11,
-        "<|" => 12,
+        "++" | "+" | "-" => 8,
+        "*" | "×" | "/" | "%" => 9,
+        "<|" => 10,
         _ => 0,
     }
 }

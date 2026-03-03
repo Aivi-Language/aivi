@@ -1196,14 +1196,14 @@ Always built-in: `==`, `!=`, `&&`, `||`, `|>`, `<|`, `..`.
 4. `&&` (logical and)
 5. `==`, `!=` (equality)
 6. `<`, `<=`, `>`, `>=` (comparison)
-7. `<<`, `>>` (shift)
-8. `+`, `-`, `++` (add, concat)
-9. `*`, `×`, `/`, `%` (multiply)
-10. `<|` (patch)
+7. `+`, `-`, `++` (add, concat)
+8. `*`, `×`, `/`, `%` (multiply)
+9. `<|` (patch)
 
 Unary prefix: `!` (not), `-` (negate).
 
 > **Note:** `~` is **not** a unary operator; it is exclusively a sigil prefix (e.g. `~u(...)`, `~r/.../`).
+> Bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`) are not part of AIVI syntax. Use `aivi.bits` instead.
 
 ---
 
@@ -1299,6 +1299,9 @@ topoSmoke = do Effect {
 | Acquire resource             | `handle <- managedFile "data.txt"` (inside `do Effect`)                 |
 | Write a test                 | `@test "adds correctly" myTest = do Effect { assertEq (f 1) 2 }`        |
 | Mock a dependency in test    | `mock rest.get = _ => pure [...] in do Effect { ... }`                  |
+| Bitwise AND                  | `use aivi.bits; and a b`                                                |
+| Shift bits right             | `use aivi.bits; b \|> shiftRight 8`                                     |
+| Test a single bit            | `use aivi.bits; get 0 b`                                                |
 
 ---
 
@@ -1318,4 +1321,7 @@ topoSmoke = do Effect {
 | `String`               | Type is called `Text`            | `Text`                                              |
 | `return x`             | No return statement              | Expression result is implicit; `pure x` in effects  |
 | `{ x = 1 }` in records | `=` is binding, not record field | `{ x: 1 }`                                          |
+| `a & b`, `a \| b`      | No bitwise operators             | `use aivi.bits; and a b`, `or a b`                  |
+| `a << 2`, `a >> 2`     | No shift operators               | `use aivi.bits; shiftLeft 2 a`, `shiftRight 2 a`   |
+| `~a` (bitwise not)     | `~` is for sigils only           | `use aivi.bits; complement a`                       |
 | `import X`             | No `import` keyword              | `use module.path`                                   |

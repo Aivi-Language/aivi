@@ -133,7 +133,6 @@ OpDef          := "(" Operator ")" ":" Type Sep
                | "(" Operator ")" Pattern { Pattern } "=" Expr Sep
 Operator       := "+" | "-" | "*" | "/" | "%" | "==" | "!=" | "<" | "<=" | ">" | ">=" | "&&" | "||" | "++" | "??"
                | "×"
-               | "|" | "^" | "~" | "<<" | ">>"
 DeltaLitBinding:= SuffixedNumberLit "=" Expr Sep
 
 ClassDef       := "class" UpperIdent ClassParams "=" ClassRhs Sep
@@ -189,13 +188,10 @@ CoalesceExpr   := OrExpr { "??" OrExpr }
 OrExpr         := AndExpr { "||" AndExpr }
 AndExpr        := EqExpr { "&&" EqExpr }
 EqExpr         := CmpExpr { ("==" | "!=") CmpExpr }
-CmpExpr        := BitOrExpr { ("<" | "<=" | ">" | ">=") BitOrExpr }
-BitOrExpr      := BitXorExpr { "|" BitXorExpr }
-BitXorExpr     := ShiftExpr { "^" ShiftExpr }
-ShiftExpr      := AddExpr { ("<<" | ">>") AddExpr }
+CmpExpr        := AddExpr { ("<" | "<=" | ">" | ">=") AddExpr }
 AddExpr        := MulExpr { ("+" | "-" | "++") MulExpr }
 MulExpr        := UnaryExpr { ("*" | "×" | "/" | "%") UnaryExpr }
-UnaryExpr      := ("!" | "-" | "~" ) UnaryExpr
+UnaryExpr      := ("!" | "-") UnaryExpr
                | PatchExpr
 
 PatchExpr      := AppExpr { "<|" PatchLit }
