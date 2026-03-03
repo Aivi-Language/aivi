@@ -77,7 +77,7 @@ fromHexInvalid = do Effect {
 secureEqSame = do Effect {
   result = crypto.fromHex "aabb"
   result match
-    | Ok b => assertEq (secureEquals b b) True
+    | Ok b  => assertEq (secureEquals b b) True
     | Err _ => fail "fromHex failed"
 }
 
@@ -86,11 +86,10 @@ secureEqDiff = do Effect {
   r1 = crypto.fromHex "aabb"
   r2 = crypto.fromHex "ccdd"
   r1 match
-    | Ok b1 =>
-      r2 match
-        | Ok b2 => assertEq (secureEquals b1 b2) False
-        | Err _ => fail "fromHex failed"
-    | Err _ => fail "fromHex failed"
+    | Ok b1 => r2 match
+      | Ok b2 => assertEq (secureEquals b1 b2) False
+      | Err _ => fail "fromHex failed"
+      | Err _ => fail "fromHex failed"
 }
 
 // --- randomBytes ---
@@ -106,14 +105,14 @@ randomBytesLen = do Effect {
 
 @test "hashPassword and verifyPassword"
 passwordRoundtrip = do Effect {
-  hash <- hashPassword "mypassword"
+  hash     <- hashPassword "mypassword"
   verified <- verifyPassword "mypassword" hash
   assertEq verified True
 }
 
 @test "verifyPassword wrong password"
 passwordWrong = do Effect {
-  hash <- hashPassword "correct"
+  hash     <- hashPassword "correct"
   verified <- verifyPassword "wrong" hash
   assertEq verified False
 }

@@ -63,7 +63,7 @@ jsonToTextEmptyObj = do Effect {
 @test "jsonToText object"
 jsonToTextObj = do Effect {
   result = jsonToText (JsonObject [("name", JsonString "Alice")])
-  assertEq result "{\"name\":\"Alice\"}"
+  assertEq result "\{\"name\":\"Alice\"}"
 }
 
 // --- encode/decode primitives ---
@@ -138,7 +138,7 @@ decodeBoolErr = do Effect {
 @test "encodeObject"
 encodeObjectTest = do Effect {
   obj = encodeObject [("key", JsonInt 1)]
-  assertEq (jsonToText obj) "{\"key\":1}"
+  assertEq (jsonToText obj) "\{\"key\":1}"
 }
 
 @test "encodeArray"
@@ -255,7 +255,7 @@ validateSchemaNotObj = do Effect {
 migrateObjTransform = do Effect {
   obj = JsonObject [("old", JsonInt 1)]
   migrated = migrateObject (entries => [("new", JsonInt 2)]) obj
-  assertEq (jsonToText migrated) "{\"new\":2}"
+  assertEq (jsonToText migrated) "\{\"new\":2}"
 }
 
 @test "migrateObject non-object passes through"
