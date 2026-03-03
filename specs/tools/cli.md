@@ -243,10 +243,11 @@ aivi lsp
 Starts the Model Context Protocol (MCP) server.
 
 ```bash
-aivi mcp serve <path|dir/...> [--allow-effects]
+aivi mcp serve <path|dir/...> [--allow-effects] [--ui]
 ```
 
 - `--allow-effects`: Allows the MCP server to execute tools that have side effects.
+- `--ui`: Also expose GTK UI inspector/driver tools (`aivi.gtk.*`).
 
 In v0.1, `aivi mcp serve` exposes:
 
@@ -256,6 +257,21 @@ In v0.1, `aivi mcp serve` exposes:
   - `aivi.check` (`target`, optional `checkStdlib`)
   - `aivi.fmt` (`target`, returns formatted text)
   - `aivi.fmt.write` (`target`, formats files in place; requires `--allow-effects`)
+
+When started with `--ui`, it also exposes GTK UI tools:
+
+- non-effectful:
+  - `aivi.gtk.discover` (find running AIVI UI debug sockets)
+  - `aivi.gtk.attach` (`socketPath`, `token` → `sessionId`)
+  - `aivi.gtk.hello` (`sessionId`)
+  - `aivi.gtk.listWidgets` (`sessionId`)
+  - `aivi.gtk.dumpTree` (`sessionId`, optional `rootId`)
+- effectful (require `--allow-effects`):
+  - `aivi.gtk.launch` (`target`, optional `release`)
+  - `aivi.gtk.click` (`sessionId`, `name` or `id`)
+  - `aivi.gtk.type` (`sessionId`, `name` or `id`, `text`)
+
+`aivi.gtk.launch` spawns `aivi run` with in-app UI debugging enabled (via `AIVI_UI_DEBUG=1`, `AIVI_UI_DEBUG_SOCKET`, `AIVI_UI_DEBUG_TOKEN`) and returns a `sessionId` for subsequent calls.
 
 The `<path|dir/...>` argument is accepted for compatibility and currently ignored by the MCP server;
 tool calls pass their own explicit `target` argument.
