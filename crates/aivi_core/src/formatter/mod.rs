@@ -477,7 +477,8 @@ mod tests {
 
     #[test]
     fn format_gtk_sigil_wraps_attributes_when_source_has_newlines() {
-        let text = "module demo\n\nx=~<gtk><object\n  a=\"1\"\n  b=\"2\"\n  c=\"3\"></object></gtk>\n";
+        let text =
+            "module demo\n\nx=~<gtk><object\n  a=\"1\"\n  b=\"2\"\n  c=\"3\"></object></gtk>\n";
         let formatted = format_text(text);
         assert!(formatted.contains("\n      <object\n"));
         assert!(formatted.contains("\n        a=\"1\"\n"));

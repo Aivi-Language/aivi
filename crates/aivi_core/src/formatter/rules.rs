@@ -789,7 +789,7 @@
                 let indent = " ".repeat(depth * 2);
                 // If the source tag spans multiple lines, break all attributes onto
                 // their own lines.  Otherwise keep them inline (just fix spacing).
-                let attrs_on_new_lines = attrs.len() > 0 && tag_text.contains('\n');
+                let attrs_on_new_lines = !attrs.is_empty() && tag_text.contains('\n');
                 if !attrs_on_new_lines {
                     let wrapped = attrs
                         .iter()

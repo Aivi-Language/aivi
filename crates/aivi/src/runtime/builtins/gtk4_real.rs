@@ -466,7 +466,6 @@ mod linux {
                                         0i32,
                                     )
                                     .await;
-                                    eprintln!("dbusmenu: LayoutUpdated emitted (rev={revision})");
                                 }
                             }
                         }
@@ -606,8 +605,6 @@ mod linux {
                 .lock()
                 .map(|s| s.menu_items.clone())
                 .unwrap_or_default();
-
-            eprintln!("dbusmenu: GetLayout called, {} items", items.len());
 
             let children: Vec<OwnedValue> = items
                 .iter()
