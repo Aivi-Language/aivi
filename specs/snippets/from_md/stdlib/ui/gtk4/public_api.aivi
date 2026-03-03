@@ -134,11 +134,12 @@ widgetSetLayoutManager: WidgetId -> LayoutManagerId -> Effect GtkError Unit
 
 buildFromNode: GtkNode -> Effect GtkError WidgetId
 buildWithIds: GtkNode -> Effect GtkError { root: WidgetId, widgets: Map Text WidgetId }
+reconcileNode: WidgetId -> GtkNode -> Effect GtkError WidgetId
 signalPoll: Unit -> Effect GtkError (Option GtkSignalEvent)
 signalStream: Unit -> Effect GtkError (Recv GtkSignalEvent)
 signalEmit: WidgetId -> Text -> Text -> Text -> Effect GtkError Unit
 
-gtkApp: { id: Text, title: Text, size: (Int, Int), model: s, view: GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError s } -> Effect GtkError Unit
+gtkApp: { id: Text, title: Text, size: (Int, Int), model: s, view: s -> GtkNode, toMsg: GtkSignalEvent -> Option msg, update: msg -> s -> Effect GtkError s } -> Effect GtkError Unit
 
 osOpenUri: AppId -> Text -> Effect GtkError Unit
 osShowInFileManager: Text -> Effect GtkError Unit

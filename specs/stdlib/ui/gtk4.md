@@ -89,6 +89,7 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 | `widgetSetLayoutManager` | `gtk4.widgetSetLayoutManager` |
 | `buildFromNode` | `gtk4.buildFromNode` |
 | `buildWithIds` | `gtk4.buildWithIds` |
+| `reconcileNode` | `gtk4.reconcileNode` |
 | `signalPoll` | `gtk4.signalPoll` |
 | `signalStream` | `gtk4.signalStream` |
 | `signalEmit` | `gtk4.signalEmit` |
@@ -96,6 +97,7 @@ It exposes AIVI types/functions mapped directly to runtime native bindings.
 | `osShowInFileManager` | `gtk4.osShowInFileManager` |
 | `osSetBadgeCount` | `gtk4.osSetBadgeCount` |
 | `osThemePreference` | `gtk4.osThemePreference` |
+| `gtkApp` | (AIVI-level combinator) |
 
 ## Example
 
@@ -373,20 +375,33 @@ gtkApp : {
   title:  Text,
   size:   (Int, Int),
   model:  s,
-  view:   GtkNode,
+  view:   s -> GtkNode,
   toMsg:  GtkSignalEvent -> Option msg,
   update: msg -> s -> Effect GtkError s
 } -> Effect GtkError Unit
 ```
 
-Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `buildFromNode` → `windowSetChild` → `signalStream` → `windowPresent` → `appRun` → event loop using `channel.fold` with `toMsg`/`update`.
+Internally, `gtkApp` performs: `init` → `appNew` → `windowNew` → `buildFromNode` → `windowSetChild` → `signalStream` → `windowPresent` → `appRun` → event loop using `channel.recv` with `toMsg`/`update`. On each state change, the `view` function is called with the new state and the resulting node tree is reconciled against the live widget tree via `reconcileNode`. If the root widget type changes, `gtkApp` automatically re-attaches the new root to the window.
+
+### `reconcileNode` — vdom-style tree patching
+
+`reconcileNode` diffs a new `GtkNode` tree against the live widget tree and applies minimal updates:
+
+```aivi
+reconcileNode : WidgetId -> GtkNode -> Effect GtkError WidgetId
+```
+
+Returns the root `WidgetId` — same as input when the root was patched in-place, or a new id if the root widget type changed and was rebuilt. Callers should use the returned id for subsequent reconciliation and re-attach to the window if it changed.
+
+Properties are patched, CSS classes are diffed (add/remove), and signal handlers are disconnected and reconnected when bindings change. Children are reconciled positionally: same-class children are patched, different-class children are replaced, excess children are removed, and new children are appended.
 
 #### Full example
 
 ```aivi
 Msg = TitleChanged Text | BodyChanged Text | Save
 
-editorNode = ~<gtk>
+editorView : { title: Text, body: Text } -> GtkNode
+editorView = state => ~<gtk>
   <GtkBox orientation="vertical" spacing="8">
     <GtkEntry id="titleInput" placeholderText="Title" />
     <GtkEntry id="bodyInput" placeholderText="Body" />
@@ -415,7 +430,7 @@ main = gtkApp {
   title:  "Notepad",
   size:   (640, 480),
   model:  { title: "", body: "" },
-  view:   editorNode,
+  view:   editorView,
   toMsg:  toMsg,
   update: update
 }

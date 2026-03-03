@@ -147,7 +147,7 @@ gcd = (a, b) => (a, b) match
 `.field` (with dot prefix) is shorthand for `x => x.field`:
 
 ```aivi
-users |> map .name // or map _.name or map name
+users |> map name // or map _.name
 ```
 
 ---
@@ -929,7 +929,9 @@ channel.forEach events (event =>
 
 `buildWithIds` builds a widget tree and returns `{ root: WidgetId, widgets: Map Text WidgetId }` — avoids separate `widgetById` calls.
 
-`gtkApp` provides an Elm-architecture combinator that encapsulates init, window creation, and event loop:
+`reconcileNode : WidgetId -> GtkNode -> Effect GtkError WidgetId` diffs a new node tree against the live widget tree and applies minimal updates. Returns the (possibly new) root `WidgetId`.
+
+`gtkApp` provides an Elm-architecture combinator that encapsulates init, window creation, event loop, and reconciliation:
 
 ```aivi
 main = gtkApp {
@@ -937,7 +939,9 @@ main = gtkApp {
   title:  "My App",
   size:   (800, 600),
   model:  { count: 0 },
-  view:   myNode,
+  view:   state => ~<gtk>
+    <GtkLabel label={ Int.toString state.count } />
+  </gtk>,
   toMsg:  event => event match
     | GtkClicked _ _ => Some Increment
     | _              => None,

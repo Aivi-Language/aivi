@@ -1,0 +1,88 @@
+@no_prelude
+module integrationTests.stdlib.aivi.ui.gtk4.tests
+
+use aivi
+use aivi.testing
+use aivi.ui.gtk4
+
+getClickedPair = event => event match
+  | GtkClicked wid name => (wid, name)
+  | _                   => (0, "")
+
+getInputTriple = event => event match
+  | GtkInputChanged wid name txt => (wid, name, txt)
+  | _                            => (0, "", "")
+
+getToggledTriple = event => event match
+  | GtkToggled wid name active => (wid, name, active)
+  | _                          => (0, "", False)
+
+getFocusPair = event => event match
+  | GtkFocusIn wid name => (wid, name)
+  | _                   => (0, "")
+
+TestMsg = Save | NameChanged Text | ToggledMsg Bool
+TestMsg2 = TitleChanged Text | BodyChanged Text
+
+toTestMsg = event => event match
+  | GtkClicked _ _          => Some Save
+  | GtkInputChanged _ _ txt => Some (NameChanged txt)
+  | GtkToggled _ _ active   => Some (ToggledMsg active)
+  | _                       => None
+
+toTestMsg2 = event => event match
+  | GtkInputChanged _ "titleInput" txt => Some (TitleChanged txt)
+  | GtkInputChanged _ "bodyInput" txt  => Some (BodyChanged txt)
+  | _                                  => None
+
+@test "GtkClicked carries widget name"
+signal_clicked = do Effect {
+  assertEq (getClickedPair (GtkClicked 1 "saveBtn")) (1, "saveBtn")
+}
+
+@test "GtkInputChanged carries widget name and text"
+signal_input_changed = do Effect {
+  assertEq (getInputTriple (GtkInputChanged 2 "nameInput" "hello")) (2, "nameInput", "hello")
+}
+
+@test "GtkToggled carries widget name and bool"
+signal_toggled = do Effect {
+  assertEq (getToggledTriple (GtkToggled 3 "checkBox" True)) (3, "checkBox", True)
+}
+
+@test "GtkFocusIn carries widget name"
+signal_focus = do Effect {
+  assertEq (getFocusPair (GtkFocusIn 4 "entry")) (4, "entry")
+}
+
+@test "GtkSignalEvent pattern matching with wildcard widget id"
+signal_event_pattern_matching = do Effect {
+  assertEq (toTestMsg (GtkClicked 1 "btn")) (Some Save)
+  assertEq (toTestMsg (GtkInputChanged 2 "inp" "hi")) (Some (NameChanged "hi"))
+  assertEq (toTestMsg (GtkToggled 3 "chk" True)) (Some (ToggledMsg True))
+  assertEq (toTestMsg (GtkFocusIn 4 "x")) None
+}
+
+@test "GtkSignalEvent match by widget name"
+signal_event_match_by_name = do Effect {
+  assertEq (toTestMsg2 (GtkInputChanged 1 "titleInput" "hi")) (Some (TitleChanged "hi"))
+  assertEq (toTestMsg2 (GtkInputChanged 2 "bodyInput" "lo")) (Some (BodyChanged "lo"))
+  assertEq (toTestMsg2 (GtkInputChanged 3 "other" "x")) None
+}
+
+@test "GtkNode constructors"
+gtk_node_constructors = do Effect {
+  elem = gtkElement "GtkBox" [gtkAttr "spacing" "8"] [gtkTextNode "hello"]
+  getTag = n => n match
+    | GtkElement tag _ _ => tag
+    | _                  => ""
+    assertEq (getTag elem) "GtkBox"
+}
+
+@test "gtk4 functions are accessible"
+type_signatures = do Effect {
+  // Verify functions can be referenced without calling them
+  assert (buildFromNode == buildFromNode)
+  assert (reconcileNode == reconcileNode)
+  assert (buildWithIds == buildWithIds)
+}
