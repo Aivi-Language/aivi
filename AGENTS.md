@@ -6,6 +6,10 @@ apply: always
 
 Authoritative guide for AI agents working on the AIVI language project. Covers the relationship between specifications, implementation crates, integration tests, and editor tooling.
 
+This file is located at ~/desk/mendrik/aivi where you find also the source code for AIVI.
+
+Language specs are at ~/desk/mendrik/aivi/AIVI_LANGUAGE.md
+
 ## 1. Project Structure & Relationships
 
 ### 1.1 Directory Map
