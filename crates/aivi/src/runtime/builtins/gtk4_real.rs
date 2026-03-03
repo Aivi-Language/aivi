@@ -2370,7 +2370,10 @@ mod linux {
                 Ok(effect(move |_| {
                     GTK_STATE.with(|state| {
                         let mut state = state.borrow_mut();
-                        let _ = widget_ptr(&state, widget_id, "signalEmit")?;
+                        // widget_id 0 is a sentinel for app-level signals (no widget).
+                        if widget_id != 0 {
+                            let _ = widget_ptr(&state, widget_id, "signalEmit")?;
+                        }
                         state.signal_events.push_back(SignalEventState {
                             widget_id,
                             signal: signal.clone(),

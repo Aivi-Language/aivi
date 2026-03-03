@@ -36,14 +36,13 @@ The v0.1 parser recognizes these infix operators (from lowest to highest precede
 4. `&&` (logical and)
 5. `==`, `!=` (equality)
 6. `<`, `<=`, `>`, `>=` (comparison)
-7. `|` (bitwise or)
-8. `^` (bitwise xor)
-9. `<<`, `>>` (shift)
-10. `+`, `-`, `++` (additive / collection concatenation)
-11. `*`, `×`, `/`, `%` (multiplicative)
-12. `<|` (patch   binds tighter than arithmetic, just below application; see [Patching](patching.md))
+7. `+`, `-`, `++` (additive / collection concatenation)
+8. `*`, `×`, `/`, `%` (multiplicative)
+9. `<|` (patch   binds tighter than arithmetic, just below application; see [Patching](patching.md))
 
-Unary prefix operators (not infix): `!` (not), `-` (negate), `~` (bitwise complement).
+Unary prefix operators (not infix): `!` (not), `-` (negate).
+
+> **Note:** Bitwise operators (`&`, `|`, `^`, `~`, `<<`, `>>`) are **not** part of AIVI's syntax. Use the [`aivi.bits`](../stdlib/data/bits.md) stdlib module instead.
 
 Note: `..` is **not** a general infix operator; it is a list-item construct (see 11.3).
 

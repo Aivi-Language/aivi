@@ -102,6 +102,7 @@ export const sidebar = [
         text: 'Data',
         collapsed: true,
         items: [
+          { text: 'Bits', link: '/stdlib/data/bits' },
           { text: 'JSON', link: '/stdlib/data/json' }
         ]
       },

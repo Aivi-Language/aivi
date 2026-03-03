@@ -1,0 +1,173 @@
+@no_prelude
+module integrationTests.stdlib.aivi.bits.tests
+
+use aivi
+use aivi.bits
+use aivi.testing
+
+// -- fromInt / toInt round-trip --
+
+@test "fromInt then toInt round-trips"
+test_roundTrip = do Effect {
+  assertEq (fromInt 42 |> toInt) 42
+}
+
+@test "fromInt 0 then toInt is 0"
+test_roundTrip_zero = do Effect {
+  assertEq (fromInt 0 |> toInt) 0
+}
+
+@test "fromInt -1 then toInt is -1"
+test_roundTrip_neg = do Effect {
+  assertEq (fromInt -1 |> toInt) -1
+}
+
+// -- zero / ones --
+
+@test "zero produces all-zero bytes"
+test_zero = do Effect {
+  b = zero 2
+  assertEq (toInt b) 0
+  assertEq (length b) 16
+}
+
+@test "ones produces all-one bytes"
+test_ones = do Effect {
+  b = ones 1
+  assertEq (length b) 8
+  assertEq (popCount b) 8
+}
+
+// -- and / or / xor / complement --
+
+@test "and masks correctly"
+test_and = do Effect {
+  a = fromInt 0xFF
+  b = fromInt 0x0F
+  assertEq (and a b |> toInt) 0x0F
+}
+
+@test "or combines bits"
+test_or = do Effect {
+  a = fromInt 0xF0
+  b = fromInt 0x0F
+  assertEq (or a b |> toInt) 0xFF
+}
+
+@test "xor flips differing bits"
+test_xor = do Effect {
+  a = fromInt 0xFF
+  b = fromInt 0x0F
+  assertEq (xor a b |> toInt) 0xF0
+}
+
+@test "complement inverts all bits"
+test_complement = do Effect {
+  a = fromInt 0
+  assertEq (complement a |> toInt) -1
+}
+
+// -- shiftLeft / shiftRight --
+
+@test "shiftLeft by 1 doubles"
+test_shiftLeft = do Effect {
+  assertEq (fromInt 1 |> shiftLeft 1 |> toInt) 2
+}
+
+@test "shiftRight by 1 halves"
+test_shiftRight = do Effect {
+  assertEq (fromInt 8 |> shiftRight 1 |> toInt) 4
+}
+
+@test "shiftLeft by 8 moves one byte"
+test_shiftLeft8 = do Effect {
+  assertEq (fromInt 1 |> shiftLeft 8 |> toInt) 256
+}
+
+// -- get / set / clear / toggle --
+
+@test "get returns correct bit"
+test_get = do Effect {
+  b = fromInt 1
+  assert (get 63 b)
+  assert (get 0 b == False)
+}
+
+@test "set sets a bit"
+test_set = do Effect {
+  b = fromInt 0
+  b2 = set 63 b
+  assert (get 63 b2)
+}
+
+@test "clear clears a bit"
+test_clear = do Effect {
+  b = fromInt 1
+  b2 = clear 63 b
+  assertEq (toInt b2) 0
+}
+
+@test "toggle flips a bit"
+test_toggle = do Effect {
+  b = fromInt 0
+  b2 = toggle 63 b
+  assert (get 63 b2)
+  b3 = toggle 63 b2
+  assert (get 63 b3 == False)
+}
+
+// -- length / popCount --
+
+@test "length is bytes times 8"
+test_length = do Effect {
+  assertEq (length (fromInt 0)) 64
+  assertEq (length (zero 3)) 24
+}
+
+@test "popCount counts set bits"
+test_popCount = do Effect {
+  assertEq (popCount (fromInt 0)) 0
+  assertEq (popCount (fromInt 7)) 3
+  assertEq (popCount (ones 1)) 8
+}
+
+// -- slice --
+
+@test "slice extracts sub-range"
+test_slice = do Effect {
+  b = fromInt 0x0102030405060708
+  first = slice 0 1 b
+  assertEq (toInt first) 1
+}
+
+// -- BitStream --
+
+@test "streamRead reads sequentially"
+test_streamRead = do Effect {
+  b = fromInt 0x0102030405060708
+  s = streamFromBits b
+  r1 = streamRead 2 s
+  r1 match
+    | Ok (chunk, s2) => do Effect {
+        assertEq (streamRemaining s2) 6
+      }
+    | Err msg => fail msg
+}
+
+@test "streamPeek does not advance"
+test_streamPeek = do Effect {
+  b = fromInt 0x0102030405060708
+  s = streamFromBits b
+  r = streamPeek 2 s
+  assertEq (streamRemaining s) 8
+}
+
+@test "streamSkip advances position"
+test_streamSkip = do Effect {
+  b = fromInt 0x0102030405060708
+  s = streamFromBits b
+  r = streamSkip 4 s
+  r match
+    | Ok s2   => assertEq (streamRemaining s2) 4
+    | Err msg => fail msg
+}

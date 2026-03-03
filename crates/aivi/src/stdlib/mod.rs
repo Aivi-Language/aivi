@@ -5,6 +5,7 @@ use crate::diagnostics::DiagnosticSeverity;
 use crate::surface::{parse_modules, Module};
 
 mod bigint;
+mod bits;
 mod calendar;
 mod chronos_calendar;
 mod chronos_duration;
@@ -257,6 +258,10 @@ const EMBEDDED_MODULES: &[EmbeddedModule] = &[
     EmbeddedModule {
         name: bigint::MODULE_NAME,
         source: bigint::SOURCE,
+    },
+    EmbeddedModule {
+        name: bits::MODULE_NAME,
+        source: bits::SOURCE,
     },
     EmbeddedModule {
         name: rational::MODULE_NAME,
